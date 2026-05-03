@@ -38,6 +38,7 @@ function viduCreatePath(capability: UnifiedCapability) {
 }
 
 function providerQueryUrl(root: string, provider: string, taskId: string) {
+  if (provider === 'apifox_hub') return `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
   if (provider === 'vidu') return `${root}/vidu/ent/v2/task/${encodeURIComponent(taskId)}/creations`
   if (provider === 'veo') return `${root}/veo/v1/video/query?id=${encodeURIComponent(taskId)}`
   if (provider === 'seedance2') return `${root}/v1/video/generations/${encodeURIComponent(taskId)}`
@@ -57,9 +58,21 @@ function createUrlForProvider(root: string, provider: string, capability: Unifie
 }
 
 function normalizeTaskStatus(raw: any) {
-  const rawStatus = String(raw?.data?.status ?? raw?.status ?? raw?.state ?? '').toLowerCase()
-  if (rawStatus === 'completed' || rawStatus === 'succeeded' || rawStatus === 'success') return 'succeeded'
-  if (rawStatus === 'failed' || rawStatus === 'error' || rawStatus === 'failure') return 'failed'
+  const rawStatus = String(
+    raw?.data?.status ??
+      raw?.data?.state ??
+      raw?.data?.task_status ??
+      raw?.data?.prediction?.status ??
+      raw?.data?.result?.status ??
+      raw?.status ??
+      raw?.state ??
+      raw?.task_status ??
+      raw?.prediction?.status ??
+      raw?.result?.status ??
+      '',
+  ).toLowerCase()
+  if (rawStatus === 'completed' || rawStatus === 'succeeded' || rawStatus === 'success' || rawStatus === 'done' || rawStatus === 'finish' || rawStatus === 'finished') return 'succeeded'
+  if (rawStatus === 'failed' || rawStatus === 'error' || rawStatus === 'failure' || rawStatus === 'cancelled' || rawStatus === 'canceled') return 'failed'
   return 'running'
 }
 
@@ -85,14 +98,38 @@ function pickOutputUrl(json: any) {
     String(
       json?.data?.output ??
         json?.data?.outputs?.[0] ??
+        json?.data?.output_urls?.[0] ??
+        json?.data?.outputUrls?.[0] ??
+        json?.data?.video?.url ??
+        json?.data?.video?.download_url ??
+        json?.data?.videos?.[0]?.url ??
+        json?.data?.videos?.[0]?.download_url ??
+        json?.data?.prediction?.output ??
+        json?.data?.prediction?.outputs?.[0] ??
+        json?.data?.prediction?.video_url ??
+        json?.data?.prediction?.url ??
+        json?.data?.result?.output ??
+        json?.data?.result?.outputs?.[0] ??
+        json?.data?.result?.video_url ??
+        json?.data?.result?.url ??
         json?.data?.metadata?.url ??
         json?.metadata?.url ??
         json?.output ??
+        json?.outputs?.[0] ??
+        json?.output_urls?.[0] ??
+        json?.outputUrls?.[0] ??
         json?.video_url ??
+        json?.video?.url ??
+        json?.videos?.[0]?.url ??
         json?.url ??
         '',
     ).trim()
   )
+}
+
+function isTransientQueryError(error: unknown) {
+  const message = String((error as any)?.message ?? error ?? '')
+  return /502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(message)
 }
 
 export async function queryAsyncTask(input: {
@@ -104,7 +141,22 @@ export async function queryAsyncTask(input: {
   const key = apiKey(input.credentials)
   const url = providerQueryUrl(root, cfg.videoProvider, input.taskId)
 
-  const json = await getAtlasJson(url, key, `ai666 查询视频任务 ${input.taskId}`)
+  let json: any
+  try {
+    json = await getAtlasJson(url, key, `ai666 查询视频任务 ${input.taskId}`)
+  } catch (error) {
+    const message = String((error as any)?.message ?? error ?? '')
+    if (/502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(message)) {
+      return {
+        taskId: input.taskId,
+        status: 'running',
+        outputUrls: [],
+        errorMessage: undefined,
+        raw: { transientError: message },
+      }
+    }
+    throw error
+  }
   const outputUrl = pickOutputUrl(json)
 
   return {
@@ -255,8 +307,19 @@ export async function generateVideo(input: {
   const started = Date.now()
   const timeoutMs = cfg.defaultTimeoutMs || 600000
   const pollMs = cfg.defaultPollIntervalMs || 2000
+  let lastTransientError = ''
   while (Date.now() - started < timeoutMs) {
-    const task = await queryAsyncTask({ credentials: input.credentials, taskId })
+    let task: Awaited<ReturnType<typeof queryAsyncTask>>
+    try {
+      task = await queryAsyncTask({ credentials: input.credentials, taskId })
+    } catch (error) {
+      if (isTransientQueryError(error)) {
+        lastTransientError = String((error as any)?.message ?? error)
+        await new Promise((resolve) => setTimeout(resolve, pollMs))
+        continue
+      }
+      throw error
+    }
     if (task.status === 'failed') throw new Error(task.errorMessage || `ai666 视频任务失败: ${taskId}`)
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
@@ -274,5 +337,5 @@ export async function generateVideo(input: {
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs))
   }
-  throw new Error(`ai666 视频任务超时: ${taskId}`)
+  throw new Error(`ai666 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
 }

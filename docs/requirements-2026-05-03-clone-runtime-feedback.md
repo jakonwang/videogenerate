@@ -25,3 +25,15 @@
 - 仅在渲染进程维护 UI 运行日志，不把日志写入主进程业务数据，保持前后端低耦合。
 - 单镜重试复用现有 `clone.generateShotClip` IPC，不新增主进程接口。
 - 批量重试复用现有 `clone.generateShotVideosFromStoryboard` IPC，不改变后端生成策略。
+
+## 2026-05-03 补充
+
+- 云端视频任务查询阶段遇到 `502 / 503 / 504` 这类临时网关错误时，不应立即判定失败，应继续轮询直到真正拿到视频地址或超时。
+- 任务查询结果必须兼容更多嵌套字段，避免平台返回 `output` / `outputs` / `prediction.result` / `videos` 等不同结构时工作台无法回显。
+- 查询接口在遇到临时 `504` 网关错误时，必须视为任务仍在处理中并继续轮询，不能直接写成失败。
+
+## 2026-05-03 ai666 任务回写修复
+- 已确认 ai666 / veo 的视频任务查询必须直接使用裸 `taskId`，例如 `task_xxx`；如果把模型名前缀拼进 `id`，会返回 `task_not_exist`。
+- 当平台已经生成成功，但本地工作台仍显示失败时，可先用 `scripts/query-ai666-task.cjs` 验证平台结果，再用 `scripts/recover-ai666-shot.cjs` 下载视频并回写 `clone-projects.json`。
+- 回写脚本只会匹配明确命中的任务号，避免把其它失败分镜误恢复。
+- 恢复成功后，`shotVideoOutputs[].status` 会变成 `done`，并写入 `videoPath`，同时清空 `lastError`，前端工作台刷新后即可显示视频。

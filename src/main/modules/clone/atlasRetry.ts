@@ -31,7 +31,7 @@ function isRetriableText(text: string) {
 
 function isRetriableError(error: unknown) {
   const msg = String((error as any)?.message ?? error ?? '')
-  return /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network/i.test(msg)
+  return /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network|502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error/i.test(msg)
 }
 
 async function atlasFetchWithRetry<T>(
