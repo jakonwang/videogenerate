@@ -20,6 +20,27 @@ function includesTaskId(value, taskId) {
   return String(value || '').includes(taskId)
 }
 
+function recoverShotList(shots, shotId, outPath, result, cfg, taskId) {
+  if (!Array.isArray(shots)) return shots
+  return shots.map((item) =>
+    item.id === shotId
+      ? {
+          ...item,
+          generatedClipPath: outPath,
+          generatedProvider: 'ai666',
+          generatedModel: result.json.model || cfg.startEndVideoModel || cfg.imageToVideoModel || '',
+          generatedTaskId: taskId,
+          generatedSource: 'cloud',
+          status: 'done',
+          error: '',
+          qualityStatus: 'warning',
+          qualityReasons: ['已从 ai666 历史任务查询恢复视频文件'],
+          canEnterRender: true,
+        }
+      : item,
+  )
+}
+
 function repoPaths() {
   const candidates = [
     path.join(app.getPath('userData'), 'videogenerate', 'db'),
@@ -81,23 +102,13 @@ async function main() {
     const outPath = path.join(paths.dataDir, 'viral-clone', project.id, 'shots', shotId, `recovered_ai666_${Date.now()}_${randomUUID()}.mp4`)
     await download(result.outputUrl, outPath)
     if (project.blueprint?.shots) {
-      project.blueprint.shots = project.blueprint.shots.map((item) =>
-        item.id === shotId
-          ? {
-              ...item,
-              generatedClipPath: outPath,
-              generatedProvider: 'ai666',
-              generatedModel: result.json.model || cfg.startEndVideoModel || cfg.imageToVideoModel || '',
-              generatedTaskId: taskId,
-              generatedSource: 'cloud',
-              status: 'done',
-              error: '',
-              qualityStatus: 'warning',
-              qualityReasons: ['已从 ai666 历史任务查询恢复视频文件'],
-              canEnterRender: true,
-            }
-          : item,
-      )
+      project.blueprint.shots = recoverShotList(project.blueprint.shots, shotId, outPath, result, cfg, taskId)
+    }
+    if (project.baseBlueprint?.shots) {
+      project.baseBlueprint.shots = recoverShotList(project.baseBlueprint.shots, shotId, outPath, result, cfg, taskId)
+    }
+    if (project.executionBlueprint?.shots) {
+      project.executionBlueprint.shots = recoverShotList(project.executionBlueprint.shots, shotId, outPath, result, cfg, taskId)
     }
     project.shotVideoOutputs = [
       ...(project.shotVideoOutputs || []).filter((item) => item.shotId !== shotId),

@@ -48,3 +48,8 @@
 - 分镜视频生成成功后，后端必须同时写入 `blueprint.shots[].generatedClipPath` 和 `shotVideoOutputs[].videoPath`。
 - 前端工作台以 `shotVideoOutputs` 作为展示数据源，因此单镜重试、批量生成、历史项目恢复都必须保证该字段同步。
 - 项目读取归一化阶段会根据已有 `generatedClipPath` 自动补齐缺失的 `shotVideoOutputs`，避免历史记录或异常中断后出现“平台成功但界面不显示”。
+
+## 2026-05-03 ai666 超时后成功恢复
+- ai666 / veo 视频任务可能在本地等待窗口结束后才完成；超时前必须再执行一次最终查询，若已返回视频地址则直接下载并写回，不能继续报超时。
+- ai666 视频任务等待时间最低按 10 分钟处理，避免设置值过短导致平台仍在生成时被提前标记失败。
+- 历史任务恢复脚本必须同时写入 `blueprint`、`baseBlueprint`、`executionBlueprint` 与 `shotVideoOutputs`，保证刷新工作台后仍能显示恢复视频。

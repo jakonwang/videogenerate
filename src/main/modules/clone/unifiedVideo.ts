@@ -305,7 +305,7 @@ export async function generateVideo(input: {
   if (!taskId) throw new Error(`ai666 视频任务缺少 id: ${text.slice(0, 500)}`)
 
   const started = Date.now()
-  const timeoutMs = cfg.defaultTimeoutMs || 600000
+  const timeoutMs = Math.max(Number(cfg.defaultTimeoutMs || 0), 600000)
   const pollMs = cfg.defaultPollIntervalMs || 2000
   let lastTransientError = ''
   while (Date.now() - started < timeoutMs) {
@@ -336,6 +336,26 @@ export async function generateVideo(input: {
       }
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs))
+  }
+  try {
+    const task = await queryAsyncTask({ credentials: input.credentials, taskId })
+    if (task.status === 'succeeded' && task.outputUrls[0]) {
+      await mkdir(input.outDir, { recursive: true })
+      const out = join(input.outDir, `apifox_video_${Date.now()}_${randomUUID()}.mp4`)
+      await downloadAtlasToFile(task.outputUrls[0], out, 'ai666 视频下载')
+      return {
+        provider: 'apifox_hub',
+        model,
+        endpointStyle: cfg.videoEndpointStyle,
+        baseUrl: cfg.baseUrl,
+        taskId,
+        outputPath: out,
+        raw: task.raw,
+      }
+    }
+  } catch (error) {
+    if (!isTransientQueryError(error)) throw error
+    lastTransientError = String((error as any)?.message ?? error)
   }
   throw new Error(`ai666 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
 }
