@@ -403,6 +403,8 @@ function applyProject(next: CloneProject | null) {
   current.value = next
   if (next?.referenceVideoPath) {
     referenceVideoPath.value = next.referenceVideoPath
+  } else if (next?.referenceVideoPath === '' && next?.id) {
+    referenceVideoPath.value = ''
   }
   errorText.value = next?.finalCompose?.error || next?.previewPipeline?.lastError || next?.blueprint?.scriptAnalysisError || next?.lastError || ''
   if (next?.selectedModelIdentitySnapshot?.id) {
@@ -491,7 +493,8 @@ async function pickProductImages() {
 }
 
 async function createBlueprint() {
-  if (!referenceVideoPath.value.trim()) {
+  const sourcePath = safeText(referenceSourcePath.value, '')
+  if (!sourcePath) {
     markError('请先上传参考视频。', '请先上传参考视频。')
     return
   }
@@ -500,7 +503,7 @@ async function createBlueprint() {
   setStageLog('正在分析参考视频脚本与分镜结构。')
   try {
     const res = (await window.api.clone.createBlueprint({
-      videoPath: referenceVideoPath.value.trim(),
+      videoPath: sourcePath,
       locale: 'zh-CN',
       strength: 'structure',
     })) as { project?: CloneProject }
