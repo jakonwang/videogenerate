@@ -446,8 +446,8 @@ async function refreshModels() {
 
 async function refreshCurrentProject() {
   if (!current.value?.id) return
-  const next = (await window.api.clone.refreshProjectStatus({ cloneProjectId: current.value.id })) as CloneProject
-  applyProject(next)
+  const res = (await window.api.clone.refreshProjectStatus({ cloneProjectId: current.value.id })) as { project?: CloneProject }
+  applyProject(res.project || current.value)
 }
 
 async function refreshProjectAfterFailure() {
@@ -459,7 +459,12 @@ async function refreshProjectAfterFailure() {
 }
 
 async function loadProject(projectId: string, options: { updateStageLog?: boolean } = {}) {
-  const next = (await window.api.clone.refreshProjectStatus({ cloneProjectId: projectId })) as CloneProject
+  const res = (await window.api.clone.refreshProjectStatus({ cloneProjectId: projectId })) as { project?: CloneProject }
+  const next = res.project
+  if (!next?.id) {
+    pushRuntimeLog('历史项目同步后没有返回有效项目，请刷新历史记录后重试。', 'error')
+    return
+  }
   applyProject(next)
   if (options.updateStageLog !== false) {
     setStageLog(next.finalCompose?.outputPath ? '历史项目已载入，可直接查看结果或替换分镜重新合成。' : '历史项目已载入，可从当前阶段继续推进。')
