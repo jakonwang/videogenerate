@@ -14,6 +14,8 @@ import {
   generateShotByProviderChain,
   generateShotKeyframesByProviderChain,
   generateShotVideoByProviderChain,
+  buildRealisticPrompt,
+  publicUrlForCloudFrame,
   regenerateOneShotKeyframeByProviderChain,
 } from './providers'
 import { Ai666TaskTimeoutError, createVideoTask as createAi666VideoTask, queryAsyncTask as queryAi666Task } from './unifiedVideo'
@@ -2208,6 +2210,94 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
   }
   const latest = (await cloneRepo.getProject(projectId)) || project
   return { project: latest, results }
+}
+
+async function ensureAi666SegmentVideoTask(input: {
+  project: CloneProject
+  shot: ShotSpec
+  firstFramePath: string
+  lastFramePath?: string
+  mode: CloneQualityMode
+}) {
+  const creds = await cloneRepo.getCredentials()
+  const existing = resolveShotVideoOutput(input.project, input.shot)
+  if (existing.videoPath || input.shot.generatedClipPath) {
+    return await saveSegmentDone({
+      project: input.project,
+      shot: input.shot,
+      taskId: existing.taskId,
+      provider: existing.provider || 'apifox_hub',
+      model: existing.model || videoProviderModel(creds),
+      endpointStyle: existing.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+      requestCapability: existing.requestCapability || 'video_start_end_to_video',
+      localPath: existing.videoPath || input.shot.generatedClipPath || '',
+    })
+  }
+  if (existing.taskId) {
+    const polled = await pollExistingSegmentTask({ project: input.project, shot: input.shot, waitMs: 30000 })
+    return polled.project
+  }
+  const startFrameUrl = await publicUrlForCloudFrame(creds, input.firstFramePath, 'apifox-first-frame')
+  const endFrameUrl = input.lastFramePath
+    ? await publicUrlForCloudFrame(creds, input.lastFramePath, 'apifox-last-frame')
+    : undefined
+  syncSegmentVideoOutput(input.project, input.shot, {
+    status: 'creating',
+    provider: 'apifox_hub',
+    model: videoProviderModel(creds),
+    endpointStyle: creds.apifoxHub?.videoEndpointStyle,
+    requestCapability: endFrameUrl ? 'video_start_end_to_video' : 'video_image_to_video',
+    error: undefined,
+  })
+  await cloneRepo.upsertProject(input.project)
+  const created = await createAi666VideoTask({
+    credentials: creds,
+    capability: endFrameUrl ? 'video_start_end_to_video' : 'video_image_to_video',
+    prompt: buildRealisticPrompt(input.shot, 'video'),
+    image: startFrameUrl,
+    lastImage: endFrameUrl,
+  })
+  if (created.directOutputUrl) {
+    const outDir = join(getAppPaths().dataDir, 'viral-clone', input.project.id, 'shots', input.shot.id)
+    await mkdir(outDir, { recursive: true })
+    const outPath = join(outDir, 'generated_clip.mp4')
+    await downloadAtlasToFile(created.directOutputUrl, outPath, 'ai666 直接视频下载')
+    return await saveSegmentDone({
+      project: input.project,
+      shot: input.shot,
+      provider: created.provider,
+      model: created.model,
+      endpointStyle: created.endpointStyle,
+      requestCapability: created.requestCapability,
+      videoUrl: created.directOutputUrl,
+      localPath: outPath,
+      remoteStatus: 'succeeded',
+      remoteRaw: created.raw,
+    })
+  }
+  if (!created.taskId) throw new Error('ai666 视频任务缺少 taskId')
+  replaceProjectShot(input.project, input.shot.id, {
+    status: 'generating',
+    error: '',
+    generatedProvider: created.provider,
+    generatedModel: created.model,
+    generatedTaskId: created.taskId,
+  })
+  syncSegmentVideoOutput(input.project, input.shot, {
+    status: 'remote_running',
+    provider: created.provider,
+    model: created.model,
+    endpointStyle: created.endpointStyle,
+    requestCapability: created.requestCapability,
+    taskId: created.taskId,
+    remoteStatus: 'created',
+    remoteRaw: created.raw,
+    error: undefined,
+  })
+  const saved = await cloneRepo.upsertProject(input.project)
+  const latestShot = projectBlueprintShots(saved).find((shot) => shot.id === input.shot.id) || input.shot
+  const polled = await pollExistingSegmentTask({ project: saved, shot: latestShot, waitMs: 30000 })
+  return polled.project
 }
 
 export const cloneService = {
@@ -4423,6 +4513,18 @@ export const cloneService = {
                 : shot.generatedLastFramePath || first
         if (!first) throw new Error('[未提交视频模型请求] 缺少首帧，请先生成首帧或上传图片')
         if (mode === 'high' && !last) throw new Error('[未提交视频模型请求] 高质量模式缺少尾帧，请先生成首尾帧')
+        if (videoProviderChain(creds)[0] === 'apifox_hub') {
+          const latest = (await cloneRepo.getProject(input.cloneProjectId)) || item
+          ensureCloneFlowState(latest)
+          const latestShot = projectBlueprintShots(latest).find((x) => x.id === input.shotId) || strengthenedShot
+          return await ensureAi666SegmentVideoTask({
+            project: latest,
+            shot: latestShot,
+            firstFramePath: first,
+            lastFramePath: last || first,
+            mode,
+          })
+        }
         const cloudClipHash = computeCloudClipHash({
           promptHash,
           firstFrame: first,

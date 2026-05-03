@@ -177,7 +177,7 @@ async function publicUrlForGrs(credentials: ModelCredentials, value: string, lab
   }
 }
 
-async function publicUrlForCloudFrame(credentials: ModelCredentials, value: string, label: string) {
+export async function publicUrlForCloudFrame(credentials: ModelCredentials, value: string, label: string) {
   if (isPublicHttpUrl(value)) return value
   try {
     return await toPublicUrlViaQiniu(credentials, value, `cloud-video-input/${label}`)
@@ -217,7 +217,7 @@ function shotMotionPrompt(shot: ShotSpec) {
   return map[motion] || map.static
 }
 
-function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'video') {
+export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'video') {
   const userPrompt = String(shot.aiPrompt || shot.prompt?.positive || '').trim()
   const referenceLock = buildReferenceLockText(shot, 'reference shot scene atmosphere')
   const scriptLock = buildShotScriptConstraintText(shot)
