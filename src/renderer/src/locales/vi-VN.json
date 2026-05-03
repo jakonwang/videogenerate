@@ -1,0 +1,110 @@
+{
+  "nav": {
+    "home": "Trang chu",
+    "products": "San xuat",
+    "templates": "Mau",
+    "tasks": "Tac vu",
+    "clone": "Clone"
+  },
+  "common": {
+    "confirm": "Xac nhan",
+    "cancel": "Huy",
+    "save": "Luu",
+    "language": "Ngon ngu giao dien",
+    "starting": "Dang khoi dong...",
+    "startGenerate": "Bat dau tao",
+    "remove": "Xoa"
+  },
+  "auth": {
+    "title": "Kich hoat ban quyen",
+    "subtitle": "Nhap ma ban quyen de tiep tuc su dung VideoGenerate",
+    "machineId": "Ma may",
+    "licenseKey": "Ma ban quyen",
+    "licensePlaceholder": "Nhap ma ban quyen",
+    "loading": "Dang tai...",
+    "copy": "Sao chep",
+    "copied": "Da sao chep",
+    "copyFailed": "Sao chep that bai. Vui long sao chep ma may thu cong.",
+    "keyRequired": "Vui long nhap ma ban quyen",
+    "verifyFailed": "Xac thuc ban quyen that bai",
+    "activating": "Dang kich hoat...",
+    "activate": "Kich hoat ngay"
+  },
+  "shell": {
+    "help": "Tro giup",
+    "helpTitle": "Huong dan",
+    "helpDesc": "Chon mot module de vao nhanh quy trinh tuong ung.",
+    "project": "Du an",
+    "edit": "Chinh sua",
+    "view": "Xem",
+    "export": "Xuat",
+    "openCloud": "Mo tai nguyen dam may",
+    "quickExport": "Xuat nhanh"
+  },
+  "cloneWorkflow": {
+    "uploadReference": "Tai video viral",
+    "analyzeScript": "Phan tich script viral",
+    "breakdownShots": "Tach script theo canh",
+    "generateVariants": "Tao bien the va cham diem",
+    "generateStoryboards": "Tao loat storyboard",
+    "generateVideoShots": "Tao Top 3 video shot",
+    "exportFinal": "Ghep va xuat video",
+    "currentAction": "Hanh dong hien tai",
+    "advanced": "Cai dat nang cao",
+    "retryFailed": "Thu lai muc loi",
+    "onlyMissing": "Chi bo sung muc thieu",
+    "costConfirmTitle": "Xac nhan chi phi AI video",
+    "costConfirmDesc": "Lan nay co the tao nhieu phuong an video va tang chi phi AI. Nen giu Top 3 truoc.",
+    "disabledReason": "Vui long hoan thanh buoc truoc",
+    "steps": {
+      "uploadAnalyze": "Tai va phan tich viral",
+      "modelProduct": "Dong nhat model va san pham",
+      "storyboardVideo": "Storyboard va tao video hang loat",
+      "exportFinal": "Xuat ban cuoi"
+    },
+    "actions": {
+      "uploadAnalyze": "Tai va phan tich viral (3 kich ban)",
+      "generateConsistency": "Tao tai nguyen dong nhat model/san pham",
+      "batchStoryboardVideo": "Tao storyboard hang loat va Top 3 video",
+      "exportFinal": "Ghep va xuat video"
+    },
+    "status": {
+      "running": "Dang chay",
+      "failed": "That bai",
+      "done": "Hoan tat",
+      "current": "Hien tai",
+      "pending": "Cho xu ly"
+    }
+  },
+  "tpl": {
+    "navLibrary": "Thu vien mau",
+    "navStudio": "Phong bien tap",
+    "navSubtitlePresets": "Mau phu de",
+    "navVoiceLibrary": "Thu vien giong doc",
+    "sidebarTitle": "Khong gian mau",
+    "pageSub": "Chinh sua mau, phu de, giong doc va cau truc",
+    "wsHintStudio": "Chinh sua cau truc va tham so chinh cua mau hien tai tai day.",
+    "wsHintLibrary": "Xem va tai su dung cac mau trong thu vien.",
+    "wsHintSubtitle": "Quan ly kieu phu de, bo cuc va font chu.",
+    "wsHintVoice": "Cau hinh giong doc, toc do, cao do va mix am thanh.",
+    "presetNaturalTitle": "Ban hang tu nhien",
+    "presetNaturalDesc": "Nhip do on dinh cho video gioi thieu san pham thong thuong.",
+    "presetFastTitle": "Chuyen doi nhanh",
+    "presetFastDesc": "Cat nhanh hon, nhan manh hook va chuyen doi.",
+    "presetCinematicTitle": "Ke chuyen dien anh",
+    "presetCinematicDesc": "Khung hinh on dinh hon, phong cach quang cao cao cap.",
+    "presetModalTitle": "Chon mau tham so",
+    "presetModalDesc": "Ap dung bo tham so mac dinh cho mau {name}.",
+    "symbolLibModalTitle": "Thu vien ky hieu",
+    "symbolLibHint": "Quan ly cac ky hieu thuong dung cho tieu de va phu de.",
+    "symbolLibColLabel": "Nhan",
+    "symbolLibColText": "Noi dung",
+    "symbolLibAdd": "Them ky hieu",
+    "symbolLibReset": "Khoi phuc mac dinh",
+    "symbolLibNewLabel": "Ky hieu moi",
+    "overlayGroupTitlePh": "Nhap noi dung tieu de"
+  },
+  "titleBar": {
+    "ready": "San sang"
+  }
+}

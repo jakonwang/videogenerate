@@ -1,0 +1,110 @@
+{
+  "nav": {
+    "home": "首页",
+    "products": "生产",
+    "templates": "模板",
+    "tasks": "任务",
+    "clone": "复刻"
+  },
+  "common": {
+    "confirm": "确定",
+    "cancel": "取消",
+    "save": "保存",
+    "language": "界面语言",
+    "starting": "启动中...",
+    "startGenerate": "开始生成",
+    "remove": "移除"
+  },
+  "auth": {
+    "title": "授权激活",
+    "subtitle": "输入授权码以继续使用 VideoGenerate",
+    "machineId": "机器标识",
+    "licenseKey": "授权码",
+    "licensePlaceholder": "请输入你的授权码",
+    "loading": "读取中...",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyFailed": "复制失败，请手动复制机器标识",
+    "keyRequired": "请输入授权码",
+    "verifyFailed": "授权校验失败",
+    "activating": "激活中...",
+    "activate": "立即激活"
+  },
+  "shell": {
+    "help": "帮助",
+    "helpTitle": "使用帮助",
+    "helpDesc": "选择一个模块，快速进入对应工作流。",
+    "project": "项目",
+    "edit": "编辑",
+    "view": "视图",
+    "export": "导出",
+    "openCloud": "打开云素材",
+    "quickExport": "快速出片"
+  },
+  "cloneWorkflow": {
+    "uploadReference": "上传爆款视频",
+    "analyzeScript": "分析爆款脚本",
+    "breakdownShots": "拆解分镜脚本",
+    "generateVariants": "生成脚本变体并评分",
+    "generateStoryboards": "批量生成分镜图",
+    "generateVideoShots": "生成 Top 3 视频分镜",
+    "exportFinal": "合并导出成片",
+    "currentAction": "当前动作",
+    "advanced": "高级设置",
+    "retryFailed": "重试失败项",
+    "onlyMissing": "只补缺失项",
+    "costConfirmTitle": "AI 视频费用确认",
+    "costConfirmDesc": "本次可能会生成较多视频方案，AI 成本会更高，建议默认先保留 Top 3。",
+    "disabledReason": "请先完成上一步",
+    "steps": {
+      "uploadAnalyze": "上传并分析爆款",
+      "modelProduct": "模特与产品一致性",
+      "storyboardVideo": "分镜与视频批量生成",
+      "exportFinal": "导出成片"
+    },
+    "actions": {
+      "uploadAnalyze": "上传并分析爆款（生成 3 个脚本候选）",
+      "generateConsistency": "生成模特与产品一致性素材",
+      "batchStoryboardVideo": "批量生成分镜并产出 Top 3 视频",
+      "exportFinal": "合并并导出成片"
+    },
+    "status": {
+      "running": "执行中",
+      "failed": "失败",
+      "done": "已完成",
+      "current": "当前",
+      "pending": "待处理"
+    }
+  },
+  "tpl": {
+    "navLibrary": "模板库",
+    "navStudio": "模板编辑",
+    "navSubtitlePresets": "字幕预设",
+    "navVoiceLibrary": "配音角色",
+    "sidebarTitle": "模板工作台",
+    "pageSub": "编辑模板、字幕、配音与结构参数",
+    "wsHintStudio": "在这里编辑当前模板的主要参数与结构。",
+    "wsHintLibrary": "查看、选择和复用模板库中的模板。",
+    "wsHintSubtitle": "管理字幕样式、排版与字体。",
+    "wsHintVoice": "配置配音角色、语速、音调与混音。",
+    "presetNaturalTitle": "自然带货",
+    "presetNaturalDesc": "节奏稳定，适合常规商品展示。",
+    "presetFastTitle": "快节奏转化",
+    "presetFastDesc": "切换更快，更强调钩子和转化。",
+    "presetCinematicTitle": "质感叙事",
+    "presetCinematicDesc": "镜头更稳，偏真实商业短片。",
+    "presetModalTitle": "选择模板预设",
+    "presetModalDesc": "为模板 {name} 应用一组默认参数。",
+    "symbolLibModalTitle": "符号模板库",
+    "symbolLibHint": "管理标题和字幕中常用的符号模板。",
+    "symbolLibColLabel": "标签",
+    "symbolLibColText": "内容",
+    "symbolLibAdd": "新增符号",
+    "symbolLibReset": "恢复默认",
+    "symbolLibNewLabel": "新符号",
+    "overlayGroupTitlePh": "输入标题文案"
+  },
+  "titleBar": {
+    "ready": "就绪"
+  }
+}

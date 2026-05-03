@@ -1,0 +1,771 @@
+# �求�明（持�更新�?
+## 版本记录（开�?发��?
+| 版本 | 摘� |
+|------|------|
+| **0.1.85** | **��ģ�����ݰ�������ʾ��ˢ��**�����̹���������ģ�����ݰ�ʱ����������ÿ�� AtlasCloud/OpenAI ͼƬ������ɺ�����д����Ŀ `imagePaths`��ǰ�������ڼ�ÿ 2 ��ˢ����Ŀ״̬�������̨�����ɵ���ͼ��ҳ���Կ��� 25% ��һֱ��ʾδ���ɣ�ͬʱ�޸� `/clone` �жദ��ʷ�����𻵵��µ�ģ��/�ű���������Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.82** | **Kling ͼƬģ��Ĭ��ֵ����**������ҳ Kling ͼƬģ��Ĭ������Ϊ `openai/gpt-image-1/edit`��ǰ�˳�ʼֵ��ƾ֤�־û�Ĭ��ֵ�� Kling ͼƬ����Ĭ��ģ�ͱ���һ�¡�Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.81** | **ͼƬ���ɹ�Ӧ�̲��**������ҳģ������������ͼƬ��OpenAI / Kling����Ӧ��ѡ��OpenAI ͼƬģ���� Kling ͼƬģ�ͷֿ���д��Kling ͼƬģ��֧���ֶ����� `alibaba/wan-2.7/video-edit` ���������ƣ�ģ�����ݰ��� GPT/AI ��β֡���ɰ�ͼƬ��Ӧ�̵��� OpenAI Images �� Kling ͼƬ�༭��·��δ���ö�Ӧ Key ʱ��ʾ OpenAI/Kling ��Ӧȱʧ�����ٹ̶�Ҫ�� OpenAI��Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.80** | **����ģ���ֶ�����**������ҳģ�������ڹ�Ӧ��Ԥ������֮�������ֶ�ģ���������֧����д `alibaba/wan-2.7/video-edit` �����⹩Ӧ��ģ�ͣ�Kling ģ�͹�һ������ `namespace/model` ��ʽ͸��������ǿ�ƻ��˵����� Kling ��������Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.79** | **����ģ��ѡ���޸�**������ҳģ�����ôӵ�һģ�������Ϊ����Ӧ���л���ģ��������ѡ�� Seedance ����ʱ��ʾ Seedance 2.0 / Fast��ѡ�� Kling ����ʱ��ʾ Kling Pro/Std/O3 ��ͼ����Ƶģ�ͣ������� `pickModel` ����Ϊ Seedance ֻ��ȡ `videoModelPrimary`��Kling ֻ��ȡ `videoModelFallback`�����⡰Kling ���ȵ����ύ Seedance ģ�������Ĵ��䡣Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.78** | **���̹��� GPT Image ��ģ����β֡**��`/clone` �ڲ�Ʒͼ������������ģ�����ݰ��������� OpenAI GPT Image ���ɲ�ȷ����Ŀ������ģ�زο�ͼ���־��滻�������� GPT Image ��֡/β֡������ȷ�ϣ�ʹ�ò�Ʒ�ο�ͼ��ģ�����ݰ���ԭ�־���ͼ�����µ� 1080x1920 PNG ��β֡����ȷ��ֹ����ԭ�����Ļ��ˮӡ���˺ź� UI��������Ƶ���� Seedance/Kling ͼ����Ƶ��·����ȷ�� GPT ��β֡������Ϊ��Ƶģ�����룻OpenAI Key��ͼ��ģ�ͺ��������ò��븴��ģ�����ã�ƾ֤����ʹ�� safeStorage ���档�� OpenAI Key�����ݰ�ȱʧ��OpenAI ���������ʧ��ʱ��ʾ��ʵ���󣬲����� mock/ռλͼ��������ͼƬƴ�ӽ�����ʽ��Ƭ��Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.77** | **����ϵͳ��ʵ���Ż���AI �ز��û���**��`/clone` �־����������ɸ��̷��� `real_product / model_demo / screen_recording / tutorial_talking / ui_demo / result_showcase`��Ĭ�Ϲ���¼�����������桢��ѧ�ڲ��ȷ���Ʒ��ͷ����ʾ�ʸ�Ϊ���ڷ־�����Ļ���ת�룬ֻ���̽��ࡢʱ�������𡢶�������ͷ�˶�������˳��� CTA��������ԭ�������ݡ�ˮӡ���˺š���Ļ�� UI��AI ����ǰǿ��Ҫ���Ʒ�ο�ͼ���Ʒ������Ϣ������ֹ�ѹ��˷־������ƶ� Key��mock/local/ͼƬƴ��Ƭ�ν�����ʽ���ɺͺϳɣ�����ҳ�������ɸ���/�ѹ��ˡ�״̬������ԭ����ʾ�ѹ��˷־����غ�Ԥ���Աȼ����Ϣ��Windows ��ִ�� `npm run build` ͨ�����ο���Ƶ `C:\Users\Administrator\Desktop\΢����Ƶ2026-04-30_185539_981.mp4` �� ffprobe ��֤Ϊ 1080x1920��30fps��121.467s�� |
+| **0.1.76** | **ȫ�ֲ��ֱ���ͳһ����**�����ο���Ƹ��ս�����ܱ�����������ӿ���̨��ʽ��ΪԼ 132px �Ľ��յ�����������ѹ��Ϊ 40px ���������У������������Ҽ��ͳһ������ 12px��������ֱ����Ƭ�������Ӵ�����Ϊ���ձ����У���������ҳ�涥���Ͳ����Чռλ��ҵ��ҳ��·���빦�ܲ��䡣 |
+| **0.1.75** | **������ֱ����Ƭ�����ռ�ѹ��**����� `/clone` �� `/live-slicer` �����ս������߶ȡ�ҳ�涥�� padding������ hero �߶ȣ��Լ�ֱ����Ƭ�������͵��뿨�߶ȣ���������Ϸ���Ƭ�հ�����Ƭ������ռ�ù�������⣻���ı临�����ɡ���Ƭ�����͵���ҵ���߼��� |
+| **0.1.74** | **��ҳ�����հ�ѹ��**����� `/home` �����ս���������������࣬����ҳ�����߶Ⱥ� `home-dashboard` ���� padding �µ��������������հ�ռ�ã����ı���ҳ��ڡ�����������ģ���ҵ��չʾ�� |
+| **0.1.73** | **��������Ԥ��ҳ����ο�ͼ**��`/clone` �� 4 ������Ԥ����Ϊ�ο�ͼ�ṹ������Ԥ����Ƶ���·��־�����ͼ���Ҳ���������/������Ϣ/�Ż����顢�ײ���һ��/��������/ͨ��Ԥ����������������������ͬʱѹ������ҳ���������������̿��߶ȣ������ϰ���ռ�á�ҵ����������״���������õ���Ԥ����ʧ�����Ժ�����������·�� |
+| **0.1.72** | **���̹����ο�ͼ�����ع�**��`/clone` �������� Seedance/Kling Key ���á��ο���Ƶ��������Ʒͼ��������ʾ���Ż�����β֡/�ƶ�Ƭ�����ɡ��ʼ졢����Ԥ���������������ܣ��ɼ� UI ���ο�ͼ��Ϊ��ɫ VideoGen ����̨��񣬰�������Ӣ������5 �����̿������۽��ȷ����������ϴ�/Ԥ��/AI �����������Լ��־��б� + 9:16 Ԥ�� + �Ҳ�������ķ־��滻���档�����ؿ���̨ DOM ���Ƴ��������ظ���ʾ����ʽ���ǡ�Windows ʹ�� `npm run build` ��֤��Linux �����漰·����������ҵ������ |
+| **0.1.19** | **无效入口改为�执�流程（任务���动可用化�?*：`Tasks` 新�表单持久化（产�/模板/数量/输出�录）与默认输出目录自动补�（`dataDir/exports`）；主壳层�快速�出”触�?`quickStart` 时会�动补齐参数并静默入队，不再因�选输出目录直接报错；主进�?`createBatchTasks` 在入队前�动创建输出目录，避免�径不存在导致失败。`Products` �?`assets` 工作区改为跨段聚合展示，并可按真实�位删除素材�?|
+| **0.1.18** | **主�架入口功能补�?+ 工作区路由联�?*：补�?`MainLayout` �无动作按�（帮助��置、云入口、快速�出、顶部菜单），新增�置弹层（�查更�?打开数据��/授权管理）与�助弹层（�速跳�产�?模板/任务）；`Products/Templates/Tasks` �� `?ws=` �由驱动工作区切换；`Tasks` �� `?quickStart=` ���动批量生成；`Products` �?`cloud` 工作区下改为�展示云路径素材�?|
+| **0.1.17** | **模板页����功能实�?*：原先�用� `预�` 入口已落地为�用弹层，�持一�应�?`�然平� / �节�冲�?/ 电影质感` 三�参数组合（时长、�时长�转场池、音频策略�微扰与调色等），并同�三�文��?|
+| **0.1.16** | **Stitch 界面功能化收口（全部业务页）**：将 Products/Templates/Tasks 的�级侧栏从静态展示升级为�切换工作区；新��用组件 `UiWorkspaceSidebar` 统一交互与样式，并为各页接入对应功能面板（质量巡�、字幕��一�应用、配音�色�捷切�、任务侧边配�摘�等）�?|
+| **0.1.15** | **Stitch MCP 多页面�齐（Products/Templates/Tasks�?*：基于同� Stitch 项目三张业务页（Media Library / AI Voice & Subtitles / Batch Generation）完成�级侧栏与三栏信�架构落地；修�?`TemplatesView` 结构�合�致的构建失败，并补齐三�文�键，保证����致��?|
+| **0.1.14** | **Stitch MCP 设��落地（主页+主�架�**：接�?Stitch 项目 `9440664742750942694` 的页面结构，新� Stitch 风格主页 `HomeView`，并将主框架升级为�左侧图标��?+ 顶部操作栏�；保留现有 `products/templates/tasks` 功能�由并统一视�层级�?|
+| **0.1.13** | **导入字体族名�名兼�**：修复变量字体（�?`Nunito Sans 12pt ExtraLight`）�致模板��?`Nunito Sans` 时任务报「ASS 字体不可用�的�题；渲染前会�动按 fontsdir 做族名别名解析并映射到真实可用族名�?|
+| **0.1.12** | **样片分析模板分镜数修�?*：分析并生成新模板时，不再固�?3 段；改为按样片切镜强度自动推�?1/2/3 段�并新�模板结构同步模式：分析模板默�?`fixed`，不会再�产品段位�动扩成更多分镜�?|
+| **0.1.11** | **ASS 字幕�动�位**：新�?`subtitle/placement.ts`，�过 FFmpeg 抽帧分析分镜画面 top/middle/bottom 区域复杂度，在写 ASS 前自动�择更�合的文案位�；当标�落�?bottom 时，配音字幕�动切� top，避免叠压�?|
+| **0.1.10** | **BGM �段静音洞��?*：BGM 链路 `silenceremove` 从�仅剔除片头静音”升级为“片�?+ �段长静音�动剔除（`stop_periods=-1`）�，解决部分音乐文件在分镜切换后落入静音区�致“后半�无声��?|
+| **0.1.9** | **BGM 时长对齐�复（关键�**：修复无�� `concat` 分支�?BGM `atrim` �用��时长，导致“��分镜有声、后�分镜无声”；统一按整条成片时长��?BGM�?|
+| **0.1.8** | **分镜切换 BGM 连续性��?*：在 `audio.source='keep'` �?`ducking.enabled=true` 的混音链新� **BGM floor 保底�?*，并下调侧链压缩强度（`threshold/ratio/attack/release`），避免切换分镜�� BGM �压到近静音�?|
+| **0.1.4** | **贴纸来源��**：模板贴纸从�?`fileName` 升级�?`ref(scope:fileName)+fileName+heightPx`，渲染按来源精确解析，修复�用户�入贴纸无法加载”；**字体强兼�?*：`fonts:import/list` 返回 `renderReady/message`，`fontsdir` 合并时同名自动重命名，任务启动前校验 ASS `Family Name` �命中并给出可选族名；**样片分析模板**：新�?`style:analyzeVideos`，可�?`video` �录自动分析并新建“自然实拍流”模板�?|
+| **0.1.3** | **批�内素材绝�唯�**：同�批��?**filePath** 排他，��?`qualityScore` 加权重��材�?*数量超限�动降�**：输�?N 超过�大可生成数时�动按�大�生成并提示�?*用户字体��**：�入字体解析真�?**Family Name**，并在模板默认字体时�动回�，提升字幕稳定显示�?|
+| **0.1.2** | �� iPhone MOV **apac** 不可解码音轨导致�?FFmpeg 失败�?*xfade** �?**`settb=1/30`** 统一时间基，避免多�转场报错；`ffprobe` 记录�解码音�?**`audioStreamIndex`**；素材质量提示�仅不可解码音轨」时按无原声处理�?|
+| 0.1.1 | （�前版本，�仓库历史） |
+
+## 0.1.11 ASS字幕�动�位�?026-04-11�?- 新�文件：`src/main/modules/subtitle/placement.ts`，在任务分镜�抽样提取画面，分�评分 `top / middle / bottom` 区域复杂度�?- 任务队列：`src/main/modules/tasks/queue.ts` �?`buildAss(...)` 前接入自动�位结果，写�?`titlePlacement` �?`ttsPlacement`�?- 选位策略：`middle` 仅在明显更干�时才会命�，避免�繁占用画面�心；`bottom` 明显优于 `top` 时允许标题落底�?- 冲突规避：当标�命� `bottom` 时，配音字幕�动切换�?`top`，避免标题与配音字幕重叠�?- 失败回�：当抽帧分析失败或无有效样本时，�动回�到默认位�（标� `top`、配音字�?`bottom`），不阻塞生成�?- 使用说明：默认自动开�，无�前�新�配�即可生效；Windows 测试�?Linux 部署均兼容（依赖 FFmpeg 基�能力）�?
+## 0.1.12 样片分析模板分镜数修正（2026-04-11�?- `src/main/modules/style/analyzeVideos.ts` 新�按分析摘�推�分镜结构逻辑�?  - 单镜�?弱切镜：生成 1 段（`hook`�?  - �等切镜：生�?2 段（`hook/show`�?  - �切或较�杂节�：生�?3 段（`hook/show/detail`�?- 模板新�字� `segmentSyncMode`（`follow_product` / `fixed`）：
+  - 常�模板默� `follow_product`，继�按产品�位补全
+  - “分析并生成新模板�默�?`fixed`，保持分析得到的段数，不再�产品段位�动扩�
+- 前�模板�?`syncTemplatesToProduct` 已按 `segmentSyncMode` 生效，解决�样片只�?1 �分镜却�扩�?4 段�的�题�?
+## 0.1.13 导入字体族名�名兼容�?026-04-11�?- �题：部分变量字体导入后真实族名带轴信�或字重后�（例�?`Nunito Sans 12pt ExtraLight`），用户在模板中�写常见族� `Nunito Sans` 会触发任务前校验失败�?- �复�?  - `src/main/lib/fontResolve.ts` 新�族名别名归�化与解析（去�?`12pt` 轴后�、常见字重后�）；
+  - 新� `resolveAssFontFamilyForFontsDir(...)`，在任务�?ASS 前把模板族名映射�?fontsdir �真实�用族名；
+  - `src/main/modules/tasks/queue.ts` 接入上述解析后再�?`assertAssFontFamilyAvailable` 校验�?- 使用说明：模板中��写常见族名（�?`Nunito Sans`），系统会自动匹配到�渲染的实际族名并正常出字�?
+## 0.1.14 Stitch MCP 设��落地（2026-04-11�?- 设�来源：通过 Stitch MCP 读取项目 `9440664742750942694`，以 `Project Home` 页面结构作为桌面�入口改版基线�?- �由改��?  - 新� `src/renderer/src/ui/views/HomeView.vue`
+  - `src/renderer/src/router/index.ts` 新� `home` 子路由，根路径默认重定向�?`home`
+- 主�架改动�
+  - `src/renderer/src/ui/MainLayout.vue` 改为 Stitch 风格壳层：左侧图标�航、顶部操作栏、主内�画�
+  - 导航保留并联通现�?`products/templates/tasks`，不破坏原有业务流程
+- 国际化：
+  - 新� `nav.home`、`shell.*`、`home.*` 文��?  - 同��?`zh-CN / en-US / vi-VN`
+- 使用说明�?  - �动应用后默�进入新主页
+  - 点击左侧导航�进入原有产品、模板�任务页�?  - �次仅� UI 架构与入口体验，不变更渲染引擎与任务生成逻辑
+
+## 0.1.15 Stitch MCP 多页面�齐�2026-04-11�?- 设�来源：继续通过 Stitch MCP 读取项目 `9440664742750942694`，�齐以下页面结构与层级�?  - `Media Library`
+  - `AI Voice & Subtitles`
+  - `Batch Generation`
+- 页面改动�?  - `src/renderer/src/ui/views/ProductsView.vue`：新增与设��一致的次级左侧导航区（媒体库信�架构），并保持原有素材�理主流程不变�?  - `src/renderer/src/ui/views/TemplatesView.vue`：新增�级左侧导航区（AI 工具信息架构）；�复模板页根�器��合�致的编译错��?  - `src/renderer/src/ui/views/TasksView.vue`：升级为三栏布局（左资源侧栏 + ��任务工作�?+ 右侧批量设置摘�），�齐 Batch Generation 版式�?- 国际化补齐：
+  - 新� `products.nav*`、`tpl.nav*`、`tasks.nav*` �?`tasks.rightPanelTitle/tasks.sidebar*` 文�键�?  - 同��?`zh-CN / en-US / vi-VN`，避免界面出现硬编码英文�?- 验证�?  - 已执�?`npm run build`，主进程/预加�?渲染进程构建均�过�?  - �发测试环境为 Windows，代码未引入平台专属�径�辑，Linux 部署兼��不受影响�?
+## 0.1.16 Stitch 界面功能化收口（2026-04-11�?- 新��用组件：`src/renderer/src/ui/components/UiWorkspaceSidebar.vue`
+  - 统一次级侧栏的标题�副标���中态与切换交互，减�?`Products/Templates/Tasks` 重�代码�?- 页面功能化改��
+  - `src/renderer/src/ui/views/ProductsView.vue`
+    - 左侧工作区切换接入真实状态（`media_library / ai_tools / timeline / cloud / assets`）�?    - `ai_tools` 工作区�加当前段位�题素材统计与“一�补全元数�”入口（复用现有 `backfillActiveSegmentMedia`）�?    - `timeline` 工作区可直接按�位切换并定位素材�?  - `src/renderer/src/ui/views/TemplatesView.vue`
+    - 左侧工作区切换接入真实状态（`library / studio / subtitle_presets / voice_library`）�?    - 新��字幕��快捷应用�：��将�中模板切换�?`white_shadow / yellow_box`�?    - 新��配音�色�捷切换�：在侧栏快速�择并写入�中模板 TTS voice�?  - `src/renderer/src/ui/views/TasksView.vue`
+    - 左侧工作区切换接入真实状态（`media / audio / text_scripts / effects / transitions`）�?    - 右侧设置面板改为按工作区展示对应摘�（输出�录�BGM/ducking、文案与配音、调�?�扰�转场池）�?    - `media` 工作区新增�打�输出�录�快捷按��?- 国际化补齐：
+  - 新� `products.ws*`、`tpl.ws*`、`tasks.ws*` 文�键，已同�?`zh-CN / en-US / vi-VN`�?- 验证�?  - 已执�?`npm run build`，构建�过（Windows �发环境）�?
+## 0.1.19 无效入口改为�执�流程（2026-04-11�?- �题�?  - 主壳层�快速�出”在任务页未配置输出�录时会直接报错，用户感知为�按�无效”�?  - `Tasks` 页刷新后�持久化上次�择，重复操作成�高，导致�速操作入口实用�差�?  - 主进程入队未保证输出�录存�，部分路径场�会在渲染阶�失败�?  - `Products` �?`assets` 工作区�前�做跨段聚合，实际价�偏低�?- 实现�?  - `src/renderer/src/ui/views/TasksView.vue`
+    - 新�任务表单本地持久化（`videogenerate-tasks-form`）；
+    - 刷新时自动恢复上次产�?模板/数量/输出�录�?    - 当输出目录为空时，自动补齐默认目�?`dataDir/exports`�?    - `quickStart` �由触发改为�静默校�?+ �动补齐后�动�，不再直接弹错打断�?  - `src/main/modules/tasks/createBatchTasks.ts`
+    - 入队前� `outDir` 执� `mkdir(..., { recursive: true })`，确保输出路径可用�?  - `src/renderer/src/ui/views/ProductsView.vue`
+    - `assets` 工作区改为跨�有�位聚合素材并显示�位标��?    - 删除动作按素材真实�位执�，避免��/无效删除�?- 使用说明�?  - 现在点击主壳层�快速�出”会优先使用上�任务配�；��使用会�动落到应用数��录�?`exports`�?  - 若已存在�用产品与模板，会直接尝试入队；若素材不足，仍按原有业务提示原因（不是“按�无效”）�?
+## 0.1.18 主�架入口功能补�?+ 工作区路由联��2026-04-11�?- �题�?  - `src/renderer/src/ui/MainLayout.vue` ���?设置/云图�?�速�出及顶部菜单�前仅展示，无真实动作�?  - 业务页工作区状�与�由未联动，无法从壳层入口稳定跳转到指定工作区�?  - Products �?`cloud` 工作区仅有摘要，素材区仍显示�通�素材，�体现工作区�义�?- 实现�?  - `src/renderer/src/ui/MainLayout.vue`
+    - 顶部菜单（项�?编辑/视图/导出）接入真实跳��
+    - 云按��直接进入 `Products` �?`cloud` 工作区；
+    - �速�出按钮跳�?`Tasks` 并携�?`quickStart` 触发�����
+    - 新�帮助弹层（�速跳�产�?模板/任务）与设置弹层（�查更新�打�数据�录�授权�理）�?  - `src/renderer/src/ui/views/ProductsView.vue`
+    - 新� `?ws=` �由解析并驱动工作区切��?    - `cloud` 工作区下素材列表改为仅展示云�径素材（`\\\\`/`smb:`/`nfs:`）�?  - `src/renderer/src/ui/views/TemplatesView.vue`
+    - 新� `?ws=` �由解析并驱动工作区切�（`library/studio/subtitle_presets/voice_library`）�?  - `src/renderer/src/ui/views/TasksView.vue`
+    - 新� `?ws=` �由解析并驱动工作区切��?    - 新� `?quickStart=` �由触发批量生成（用于壳层“快速�出”入口）�?- 国际化：
+  - 补充 `shell.*` 新文案键（帮�?设置/更新状�?数据�录提示等），已同� `zh-CN / en-US / vi-VN`�?- 使用说明�?  - 现在�直接点击主壳层右上��快速�出”进入任务页并尝试启��
+  - 若缺少产�?模板/输出�录，仍会按原有校验提示补齐后再生成�?  - 壳层“云”按�会直接进入产品页云工作区，素材区�显示云路径素材，便于排查同�来源�?
+## 0.1.17 模板页��功能实现（2026-04-11�?- �题：模板编辑区顶� `预�` 按钮此前为�用状�，仅作占位，无法实际�用参数�?- 实现�?  - `src/renderer/src/ui/views/TemplatesView.vue` 新����择弹层与应用�辑�?    - 预�类型：`natural / fast / cinematic`
+    - 应用字�：`totalDurationSec`、`skipStartSec`、`randomizeOrder`、`segmentDurationSec`、`segmentFx`、`jitter`、`transition`、`audio`、`aspectUnifyMode`、`colorGrade`（电影������?`assSubtitle`�?  - 预�应用后�动展��标模板并切�?`全局设置`，继��视化�调�?- 国际化：
+  - 新� `tpl.preset*` 文�键并同� `zh-CN / en-US / vi-VN`�?- 验证�?  - 已执�?`npm run build`，�过�?
+## ��
+
+�发一�桌面�件（Electron + Vue3 + Node.js），用于批量生成�视�，�持产品素材�理、模板结构�随机生成�去重�FFmpeg 拼接渲染、队列任务与进度显示�?
+## 终�用户使用说明书（多���?
+面向**�终用�?*（非�发人员）的操作�明，与版本功能同�维护：
+
+| �� | 文件 |
+|------|------|
+| **0.1.85** | **��ģ�����ݰ�������ʾ��ˢ��**�����̹���������ģ�����ݰ�ʱ����������ÿ�� AtlasCloud/OpenAI ͼƬ������ɺ�����д����Ŀ `imagePaths`��ǰ�������ڼ�ÿ 2 ��ˢ����Ŀ״̬�������̨�����ɵ���ͼ��ҳ���Կ��� 25% ��һֱ��ʾδ���ɣ�ͬʱ�޸� `/clone` �жദ��ʷ�����𻵵��µ�ģ��/�ű���������Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.82** | **Kling ͼƬģ��Ĭ��ֵ����**������ҳ Kling ͼƬģ��Ĭ������Ϊ `openai/gpt-image-1/edit`��ǰ�˳�ʼֵ��ƾ֤�־û�Ĭ��ֵ�� Kling ͼƬ����Ĭ��ģ�ͱ���һ�¡�Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.81** | **ͼƬ���ɹ�Ӧ�̲��**������ҳģ������������ͼƬ��OpenAI / Kling����Ӧ��ѡ��OpenAI ͼƬģ���� Kling ͼƬģ�ͷֿ���д��Kling ͼƬģ��֧���ֶ����� `alibaba/wan-2.7/video-edit` ���������ƣ�ģ�����ݰ��� GPT/AI ��β֡���ɰ�ͼƬ��Ӧ�̵��� OpenAI Images �� Kling ͼƬ�༭��·��δ���ö�Ӧ Key ʱ��ʾ OpenAI/Kling ��Ӧȱʧ�����ٹ̶�Ҫ�� OpenAI��Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.80** | **����ģ���ֶ�����**������ҳģ�������ڹ�Ӧ��Ԥ������֮�������ֶ�ģ���������֧����д `alibaba/wan-2.7/video-edit` �����⹩Ӧ��ģ�ͣ�Kling ģ�͹�һ������ `namespace/model` ��ʽ͸��������ǿ�ƻ��˵����� Kling ��������Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.79** | **����ģ��ѡ���޸�**������ҳģ�����ôӵ�һģ�������Ϊ����Ӧ���л���ģ��������ѡ�� Seedance ����ʱ��ʾ Seedance 2.0 / Fast��ѡ�� Kling ����ʱ��ʾ Kling Pro/Std/O3 ��ͼ����Ƶģ�ͣ������� `pickModel` ����Ϊ Seedance ֻ��ȡ `videoModelPrimary`��Kling ֻ��ȡ `videoModelFallback`�����⡰Kling ���ȵ����ύ Seedance ģ�������Ĵ��䡣Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.78** | **���̹��� GPT Image ��ģ����β֡**��`/clone` �ڲ�Ʒͼ������������ģ�����ݰ��������� OpenAI GPT Image ���ɲ�ȷ����Ŀ������ģ�زο�ͼ���־��滻�������� GPT Image ��֡/β֡������ȷ�ϣ�ʹ�ò�Ʒ�ο�ͼ��ģ�����ݰ���ԭ�־���ͼ�����µ� 1080x1920 PNG ��β֡����ȷ��ֹ����ԭ�����Ļ��ˮӡ���˺ź� UI��������Ƶ���� Seedance/Kling ͼ����Ƶ��·����ȷ�� GPT ��β֡������Ϊ��Ƶģ�����룻OpenAI Key��ͼ��ģ�ͺ��������ò��븴��ģ�����ã�ƾ֤����ʹ�� safeStorage ���档�� OpenAI Key�����ݰ�ȱʧ��OpenAI ���������ʧ��ʱ��ʾ��ʵ���󣬲����� mock/ռλͼ��������ͼƬƴ�ӽ�����ʽ��Ƭ��Windows ��ִ�� `npm run build` ͨ���� |
+| **0.1.77** | **����ϵͳ��ʵ���Ż���AI �ز��û���**��`/clone` �־����������ɸ��̷��� `real_product / model_demo / screen_recording / tutorial_talking / ui_demo / result_showcase`��Ĭ�Ϲ���¼�����������桢��ѧ�ڲ��ȷ���Ʒ��ͷ����ʾ�ʸ�Ϊ���ڷ־�����Ļ���ת�룬ֻ���̽��ࡢʱ�������𡢶�������ͷ�˶�������˳��� CTA��������ԭ�������ݡ�ˮӡ���˺š���Ļ�� UI��AI ����ǰǿ��Ҫ���Ʒ�ο�ͼ���Ʒ������Ϣ������ֹ�ѹ��˷־������ƶ� Key��mock/local/ͼƬƴ��Ƭ�ν�����ʽ���ɺͺϳɣ�����ҳ�������ɸ���/�ѹ��ˡ�״̬������ԭ����ʾ�ѹ��˷־����غ�Ԥ���Աȼ����Ϣ��Windows ��ִ�� `npm run build` ͨ�����ο���Ƶ `C:\Users\Administrator\Desktop\΢����Ƶ2026-04-30_185539_981.mp4` �� ffprobe ��֤Ϊ 1080x1920��30fps��121.467s�� |
+| **0.1.76** | **ȫ�ֲ��ֱ���ͳһ����**�����ο���Ƹ��ս�����ܱ�����������ӿ���̨��ʽ��ΪԼ 132px �Ľ��յ�����������ѹ��Ϊ 40px ���������У������������Ҽ��ͳһ������ 12px��������ֱ����Ƭ�������Ӵ�����Ϊ���ձ����У���������ҳ�涥���Ͳ����Чռλ��ҵ��ҳ��·���빦�ܲ��䡣 |
+| **0.1.75** | **������ֱ����Ƭ�����ռ�ѹ��**����� `/clone` �� `/live-slicer` �����ս������߶ȡ�ҳ�涥�� padding������ hero �߶ȣ��Լ�ֱ����Ƭ�������͵��뿨�߶ȣ���������Ϸ���Ƭ�հ�����Ƭ������ռ�ù�������⣻���ı临�����ɡ���Ƭ�����͵���ҵ���߼��� |
+| **0.1.74** | **��ҳ�����հ�ѹ��**����� `/home` �����ս���������������࣬����ҳ�����߶Ⱥ� `home-dashboard` ���� padding �µ��������������հ�ռ�ã����ı���ҳ��ڡ�����������ģ���ҵ��չʾ�� |
+| **0.1.73** | **��������Ԥ��ҳ����ο�ͼ**��`/clone` �� 4 ������Ԥ����Ϊ�ο�ͼ�ṹ������Ԥ����Ƶ���·��־�����ͼ���Ҳ���������/������Ϣ/�Ż����顢�ײ���һ��/��������/ͨ��Ԥ����������������������ͬʱѹ������ҳ���������������̿��߶ȣ������ϰ���ռ�á�ҵ����������״���������õ���Ԥ����ʧ�����Ժ�����������·�� |
+| **0.1.72** | **���̹����ο�ͼ�����ع�**��`/clone` �������� Seedance/Kling Key ���á��ο���Ƶ��������Ʒͼ��������ʾ���Ż�����β֡/�ƶ�Ƭ�����ɡ��ʼ졢����Ԥ���������������ܣ��ɼ� UI ���ο�ͼ��Ϊ��ɫ VideoGen ����̨��񣬰�������Ӣ������5 �����̿������۽��ȷ����������ϴ�/Ԥ��/AI �����������Լ��־��б� + 9:16 Ԥ�� + �Ҳ�������ķ־��滻���档�����ؿ���̨ DOM ���Ƴ��������ظ���ʾ����ʽ���ǡ�Windows ʹ�� `npm run build` ��֤��Linux �����漰·����������ҵ������ |
+| �体中�?| **`docs/user-manual-zh-CN.md`** |
+| English | **`docs/user-manual-en-US.md`** |
+| Tiếng Việt | **`docs/user-manual-vi-VN.md`** |
+
+发�或打包分享时，�将�应��说明书一并提供（或转�?PDF/HTML）�?
+## 国际化（i18n�?
+- **依赖**：渲染进�?**`vue-i18n@9`** + **`pinia`**（`package.json` 已声明）�?- **词典**：`src/renderer/src/locales/zh-CN.json`、`en-US.json`、`vi-VN.json`；键名按模块划分（`nav` / `common` / `tasks` / `products` / `tpl` 模板�?/ `titleBar` / `preview` / `dialog` 等）�?*产品、模板�任�?*三主视图与顶栏�分页���弹窗等界面文�已接�?`vue-i18n`；新增可见文案须同�补全三��?- **��状�?*：`src/renderer/src/stores/appSettings.ts` �?`locale` 写入 **`localStorage`**（键 **`videogenerate-app-settings`**）�未存过则按 **`navigator.language`** �?`src/shared/locale.ts` �?**`normalizeAppLocale`** 映射�?`zh-CN` / `en-US` / `vi-VN`�?- **Vue 集成**：`src/renderer/src/i18n.ts` 创建 `i18n` 实例；`main.ts` �?`app.use(pinia)` �?`app.use(i18n)`。侧边栏 **`UiLocaleSelect.vue`**（`ui-select` 风格）位于�航栏底�，切换时调用 store �?**`setLocale`**（更�?`i18n.global.locale`、持久化�?*`window.api.setUiLocale`**）�?- **主进�?*：IPC **`app:setUiLocale`** / **`app:getUiLocale`**；应用就�时�?`app.getLocale()` 初�化内部默�（随后以渲染进程同步为准）�?*`fs:pickFiles` / `fs:pickDir`** 在调用方�� `title` 时，使用 `src/main/lib/dialogDefaults.ts` 按当�?UI ��给出默��话框标题（与系统按���无关，仅�定义标�字符串）�?
+## Windows 安�包（NSIS）与�动更�
+
+- **打包命令**：`npm run dist`（生�?NSIS 安�程序�?`release/`）；`npm run dist:dir` 仅输出绿色版�� `release/win-unpacked`（便于快速验证）�?- **electron-builder**：配�� **`package.json` �?`build`**�?*NSIS**：`oneClick: false`（向导安装，�选安装目录）、`allowToChangeInstallationDirectory: true`、`deleteAppDataOnUninstall: true`（卸载时删除应用 **userData**，含 Electron 配置与本应用 `videogenerate` 数据�录，请提示终�用户备份）�?- **原生依赖**：当�?**`npmRebuild: false`**，避免在�?Visual Studio 的机器上�?`node-gyp` 失败；若�在目标环境重�?`bufferutil` 等，�在安装构建链后改� `true` 或使�?`electron-builder install-app-deps`�?- **electron-updater**：依�?**`electron-updater`**；�辑�?**`src/main/lib/updater.ts`**。仅 **`app.isPackaged`** 且更新基�**非占位�**时启�：`provider: 'generic'`，URL 来自�境变� **`VG_UPDATE_BASE_URL`**（未设置时使用占�?`https://YOUR_UPDATE_URL`，��?*不会**发起�查）。可�?**`VG_UPDATE_CHECK_DELAY_MS`**（默�?`8000`）延迟���查，避免拖慢�动�?- **更新服务�?*：在 HTTPS 静�目录发�?**`latest.yml`**（及 electron-builder 生成�?`.exe`、`.blockmap` 等）。将 **`VG_UPDATE_BASE_URL`** �?**`package.json` �?`build.publish.url`** 替换为同�真实�录（� `https://cdn.example.com/videogenerate/releases`）�版�号�?**`package.json` version** 递��?- **IPC �?UI**：主进程�?**`update-downloaded`** 时向渲染进程发�?**`updater:update-downloaded`**（含 `version`）�?*preload** 暴露 **`window.api.updater`**�?*`App.vue`** 挂载 **`UpdateReadyModal.vue`**（居�模�：「新版本已就��?「立即重�更新」调�?**`quitAndInstall`** /「稍后更新�关�）�文案键 **`update.*`** 在三�?JSON �维护�?
+## 授权与防盗版（发卡平台）
+
+- **接口文档**：以仓库 **`docs/client-desktop-api.md`** 为准；验�?URL �?**`{API根}/index.php/api/client/verifyLicense`**，`POST`，`Content-Type: application/x-www-form-urlencoded`，字�?**`license_key`、`machine_id`**；响�?**`code === 0` �?`data.valid === true`** 视为成功�?- **默� API �?*：`https://videotool.banono-us.com`（� **`src/shared/licenseApi.ts`**）�打�?部署�通过�境变� **`VG_LICENSE_API_BASE`** 覆盖（无尾斜杠）�?- **机器�?*：主进程使用 **`node-machine-id`** �?**`machineIdSync(true)`**（原�?ID，与文档「同�安�实例�终相同」一致）；IPC **`license:getMachineId`** / **`license:verify`** �?**`src/main/lib/license.ts`** 注册�?*preload** 暴露 **`window.api.license`**，由渲染进程调用�?*实际 HTTP 请求仅在主进程发�?*，避免浏览器 CORS�?- **�地卡�**：渲染进�?**`localStorage`** �?**`videogenerate-license-key`**（常�?**`LICENSE_STORAGE_KEY`**）�验证失败或过期时守�逻辑会清除�键�?- **�活页**�?*`src/renderer/src/ui/views/AuthView.vue`**（路�?**`#/auth`**）：�读机器�?+ 复制、卡密输入��激活软件�；失败展示服务�?**`msg`** 或兜底文案�?- **��**�?*`vue-router`** 使用 **`createWebHashHistory`**（兼�?`file://` 与生�?`loadFile`）�?*`src/renderer/src/router/index.ts`** �?**`beforeEach`**：非���由进入前调�?**`ensureLicensed()`**�?*`src/renderer/src/lib/licenseSession.ts`**）静默校验；无卡密或校验失败�?**`replace` �?`auth`**。同�会话校验成功会缓存，避免每�子�由跳�都�求接口�?- **布局**：业务界面在 **`MainLayout.vue`**（侧�?+ **`RouterView`**）；�?**`App.vue`** �?**`RouterView` + 更新弹窗**�?- **i18n**：激活相关键 **`auth.*`** �同� **`zh-CN` / `en-US` / `vi-VN`**�?
+## 功能模块
+
+### 产品系统
+
+- **段位槽与模板对齐**：主进程 **`productsRepo.ensureSegmentBucketsFromTemplates()`**（IPC **`products:ensureSegmentBucketsFromTemplates`**）会读取�有模板的 **`structure`**，把出现的�位�合并进每�产品� **`assets`**（缺失则�?**`[]`**）�在 **产品 / 模板 / 任务** 页刷新时都会调用，避免�只在模板里加了新��产�?JSON 没有�?key」�致引擎认为该�永远无素材；用户仍�在各段位�?*实际添加视�文�**�?- �持产品类型：手机壳��环
+- 每个产品绑定素材（按“��器”分类，**段名��定义**，不限于 hook/show/detail）：
+  - 段名建�：`hook`（开头钩子）、`show`（展示�）、`detail`（细节�）、`scene1/scene2/...` �?- 素材信息保存�?  - 文件�径�文件名、文件大�?  - 视�真实时长（通过 ffprobe 获取�?  - 素材质量元信�（�过 ffprobe �速分析）�?    - 分辨率（width/height）�FPS、码率（bitrate�?    - 质量评分 `qualityScore`�?~100）与�题列� `qualityIssues`（�：�屏素�?分辨率偏�?帧率偏低/码率偏低/时长异常�?    - 随机引擎会�高分素�**加权抽取**，降低�抽到坑素材导致观感�?卡顿”的概率
+  - 视�缩略图（添加素材时� ffmpeg 抽帧生成�?*主进程�取图片并返� Base64 DataURL**，前�直接绑定避免�地路径安全限制；同时磁盘缓存�?cache �录�?  - 点击素材卡片�沉浸式��（全屏��?+ HTML5 video controls�?  - 大量素材分页：素材网格支持分页（上一�?下一�?+ 每页 12/24/48），减少 DOM 节点避免卡顿
+- 素材批量管理：支持���模式��当前�位素材进�批量�择与批量删除（�页全�?清空/删除已�）
+- **长��切分��?*（产品页）：在�添加素材�旁提供幽灵按钮 **「✂�?长��切分�入�?*；用户单选长视�后弹窗��?*期望每�时�**（默�?3 秒，范围 1�?00）�主进程 **`media:segmentSplit`** 调用 **`src/main/modules/media/segmentSplit.ts`**：FFmpeg **`-c copy -f segment -segment_time <�? -reset_timestamps 1`**，输�?`part_%03d.<ext>` �?**`userData/videogenerate/cache/segment_clips/<uuid>/`**（持久路径，供产�?JSON 引用）�切片完成后按与「添加素材�相同流�?**ffprobe + 缩略�?* 回填�?**`products:upsert`** 追加�?*当前段位**；渲染进程显示进度（切片阶�不�定进度条 + 回填阶�分步进度）�?*`fs:pickFiles`** �� **`multiple: false`** 单�文件�?- **拖放批量导入**（产品页）：在已选中产品的右�?Tab+素材区�层绑�?**`dragover` / `drop`（`preventDefault`�?* �?**`dragenter` / `dragleave`**；拖入系统文件时显示半�明蓝色蒙层（文�?**`products.dropImportHint`**）�渲染进程从 **`DataTransfer.files`** 读取 Electron 注入�?**`path`** 作为根路径，调用 IPC **`fs:collectVideoFilesFromDrop`**；主进程 **`src/main/lib/collectVideoFiles.ts`** 对目录�归收集 **`.mp4/.mov/.mkv/.webm/.m4v`**，�文件按扩展名过滤，去重后返回绝对路径列�；随后与「添加素材�共�?**`importVideoPathsToSegmentCore`**（乐观写�?+ **`media:getInfo`** 回填）�切片�入进�中或当前�位正在添加素材时忽略拖放�?- **画面标�（多组候�）**（模板页）：「标题配�?�?画面标��使�?*分组卡片**编辑（每组：**标��?* + **符号�?*，�号区可多�）�?*添加��?* 即��?A/B 候�；保存进模�?JSON �?**`titleOverlay.textPool`**（`string[]`，每项为 `标�\n符号区`）�每条成�?**`pickTitleOverlayPoolEntry`** 随机抽一组；若历史数��将�组合并进一条且�空�，引擎会��条再按空�拆子组后随机抽�条（�?**`src/main/modules/random/engine.ts`**）�?*符号模板�?*（快捷插�?/ 管理弹窗）存 **`localStorage`**�?*`videogenerate-overlay-symbol-templates`**），与模�?JSON �立；实现� **`src/renderer/src/lib/overlaySymbolTemplates.ts`**�?- **画面调色（手�?EQ�?*（模板页）：新� Tab **「画面调色�?*，提�?**��**�?1~1，默�?0）�?*对比**�?2~2，默�?1）�?*饱和**�?~3，默�?1）�启用后在渲染链��对每段素材在进入 concat/�场前追�?FFmpeg **`eq=brightness=...:contrast=...:saturation=...`**。与「轻量色彩微扰�叠加方式：**�度相�**�?*对比/饱和相乘**（微扰围�?1.0）�实现：模板字� **`colorGrade`**（`src/main/modules/templates/types.ts`），方�字� **`plan.colorGrade`**（`src/main/modules/random/engine.ts`），渲染：`src/main/modules/ffmpeg/render.ts`�?- **画幅统一模式（智能居�裁切充满�**（模板页）：在�全�设置」新增下拉�画幅统�模式】��?*完整展示（留黑边�?* / **充满屏幕（居�裁切�**。渲染链�在片段进� concat/�场前统一�?1080x1920：\n  - **完整展示**：`scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black`\n  - **充满屏幕**：`scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920`\n  模板字� `aspectUnifyMode`（默�?`contain_pad`）；方�字� `plan.aspectUnifyMode`；实现� `src/main/modules/ffmpeg/render.ts`�?- **3D LUT（lut3d）��?*（模板页）：预留�� **`resources/luts/`** 存放 `.cube`；主进程读取该目录文件名列表（IPC：`luts:list`）供模板页�画面调�?�?风格滤镜」下拉�择。模板字�?`lut3d.fileName` 保存文件名；方�阶段解析为绝�路�?`plan.lut3d.filePath`。渲染在字幕挂载前追�?**`lut3d=file='...`**（路径转义�则� `subtitles` 同：反斜杠转 `/`、盘符冒号转�?`\:`、单引号�义）。实现：`src/main/lib/luts.ts`、`src/main/modules/ffmpeg/render.ts`、`src/main/index.ts`、`src/preload/index.ts`�?- **字体导入（用户自带字体）**：模板页「ASS 字幕 �?字体」新�?**导入字体** 按钮，�择 `.ttf/.otf/.ttc/.woff2` 后�制� `userData/videogenerate/fonts/`（Windows：`%APPDATA%\\<AppName>\\videogenerate\\fonts`；以实际 `app.getPath('userData')` 为准）�`fonts:import` 返回 `fileName/familyName/renderReady/message`，用�?UI 直接提示�用�；`woff2` 会提示兼容�险（建�优先 ttf/otf/ttc）�IPC：`fonts:import` / `fonts:listUser`，实现：`src/main/lib/userFonts.ts`、`src/main/lib/fontResolve.ts`、`src/main/index.ts`、`src/preload/index.ts`�?- **字体候�列�（内� + 用户�?*：模板页字体输入框��优先显示可渲染 `Family Name`（去重后），并在任务�动前校验模板�选族名在��?`fontsdir` ��命中，避免进�?FFmpeg 后才报错�?  - 内置 `resources/fonts/` �的字体文件（随构�/打包提供�?  - 用户导入�?`userData/videogenerate/fonts/` 的字体文�?  IPC：`fonts:list`（返回内���?文件与用户目�?文件），实现：`src/main/lib/fontResolve.ts`、`src/main/index.ts`、`src/preload/index.ts`、`src/renderer/src/ui/views/TemplatesView.vue`�?- **彩色贴纸库（Overlay�?*：�留��?**`resources/stickers/`** 存放透明背景 PNG/WebP（动�?爱心等）。`stickers:list` 返回 `ref/scope/fileName/displayName`，模板保�?`sticker.ref + sticker.fileName + sticker.heightPx`。渲染阶段按 `ref` 精确解析来源（`bundled:` / `user:`），�复用户�入贴纸不生效问题；旧模板仅�?`fileName` 时自动回�解析（优�?user �?bundled）�?- **贴纸导入**：模板页「画面标�?�?彩色贴纸」提�?**导入** 按钮，�择 `.png/.webp` 后�制� `userData/videogenerate/stickers/` 并自动刷新列�；当内置与用户贴纸同名时，UI 通过 `ref` 区分来源并可稳定命中�?
+### 样片风格分析（模板页�?
+- 新� IPC�?*`style:analyzeVideos`**，输入目录（默� `./video`），递归分析视�参数（时长、FPS、分辨率、码率�音轨占比�轻量切镜�向）并返回�?  - `summary`：分析摘要（��位时长�主分辨率�cuts/10s 等）
+  - `suggestedTemplatePayload`：建�模板参数（自然实拍流�
+- 模板页新增入口�?*分析并生成新模板**」：
+  - 仅分析，不�入素材到产�
+  - ��创建新模板（不�盖现有模板�?  - 默�输出保� `1080x1920@30fps`
+
+### 任务系统（批量生成）
+
+- **A/B 测试 CSV 报表**：每条��渲染完成（任务状�?`done`）后，主进程会在输出�录下追加写�?`Video_Batch_Report_YYYYMMDD.csv`。\n
+  - 写入方式：`appendFile` 逐�追加；若文件不存在则先写�?**UTF�? BOM（\\ufeff�? 表头**，确�?Excel 打开��/越南�不乱码�\n
+  - 字�：输出文件名�Hook 素材名（�?hook 段��文件名）�TTS 文��BGM 文件名�生成�时（ms）�\n
+  - 实现：`src/main/lib/batchReport.ts`、`src/main/modules/tasks/queue.ts`（done 时写入并�?`reportPath` 回填到任务�象）�任务页在批次完成后显示「�?查看数据报表」并调用 `shell:openPath` 打开�?CSV�?
+### 模板系统
+
+- �持��结构�?*任意段数/任意段名**�? 段�? 段�? 段等都可�?- 模板�配置每�时长范围与混剪参数（按段名绑定�?- 段落同�：模板页会以�当前�择产品”的段�器为基准动态渲染流程图与高级控制；当产品新增�（� `scene1`）时，会�动为模板补齐该�的默�参数并�动保存�?- �持轻量混�参数�?  - 段时长范围（�?1~2 秒）
+  - 随机裁剪（基于素材真实时长随�?start�?  - 轻微缩放与位�移动（更像真人剪辑�?*默�已调得更克�**，避免���?晃动过夸张�）
+  - 速度�扰（默�更轻：每� 0.99~1.01，输出时长保持不变）
+  - 轻量色彩�扰（默�更轻：�� ±0.01、��?0.99~1.01、饱�?0.99~1.03、色�?±1.2°�?  - �选背�音乐（BGM�?  - 部分顺序打乱�?*保留�?N �?*，其余�随机打乱�?
+### 随机引擎
+
+- 随机选择素材（按段位�?- 随机裁剪视�（每�从素材�随机�取片段）
+- 安全区智能�剪（避�无效片头）：
+  - �� `skipStartSec`（默�?1.5s�?  - 当素材时长足够时，截取起点从 \([skipStartSec, duration - inputDuration]\) 区间随机生成
+- 随机视��时长：7�?5 秒（时长逻辑�洽�?  - 先按各�时长范围随机抽样得到初始时�
+  - 若初始�和不在总时长区间内，则按权重等比例缩放到区间边�?  - 再做每� min/max clamp，并按权重分摊残�，尽量�近�标�时�?- �持部分顺序打乱（降低重��测�险�
+
+#### 批�内素材��性（Critical Requirement�?
+- **��**：同��任务批�（Batch）生成的 \(N\) 条成片之间，任何��原���素材文件（�?**`filePath`** 为准�?*�允��使用��?*�?- **实现要点**�?  - 在批次�划生成阶�维�?**已使用素材池（Used Assets Registry�?*，以 **`filePath`（物理路径）** 为键进�绝对排他�?  - 选材时先从��素材中 **过滤掉已使用��**，再在剩余集合里 **均匀随机**抽取�?*禁�使用 `qualityScore` 加权**导致高分素材在同�批��反��中（唯�性优先级�高）�?  - 当且仅当某条 plan 通过去重/相似度等校验并�正式加入队列后，才会将其消�的 `filePath` 提交写入 Used Assets Registry（避免�尝试失败��致素材��费）�?
+#### 余量�查与阻断（强制）
+
+- **规则**：任务启动前按模板结构统计每�段位在�单条成片中出现次数”，计算批�需要的�小素材量�?  - 若模板结构中某�位出现次数� \(k\)，批次生�?\(N\) 条，则��位至少��?\(N \times k\) �?*不同 `filePath`**�?- **默��为（已调整�?*：若用户输入 \(N\) 超过当前素材在�批次内��”�则下的�大可生成�?\(N_{max}\)，系统会�?  - �动将�次生成数量降�?\(N_{max}\) 并继��始生�?  - 提示用户当前�多可生成多少条（例�：`�多只能生�?Nmax 条，已自动按 Nmax 条开始生成`�?- **阻断条件（仅当无法生成任何一条）**：当 \(N_{max} = 0\) 时仍会中�并提示�?  - `素材数量不足以支持生�?N 条不重���，请补充素材或减少生成数量。`
+
+### 去重系统
+
+- 使用 hash（SHA-256）避免重复组�?- hash 输入包含：�位素�?ID、�剪�始时间��剪时长、模�?ID、产�?ID �?- 去重增强�?  - 组合 hash 覆盖裁剪参数 + 运动参数 + BGM
+  - **批�内素材���?*：不再按“��?比例”限制重复使�，�是�?**`filePath` 绝�排�**（�上节�?  - 相似度控制：与近期组合的 Jaccard 相似�?> 70% 跳过
+
+### 视�渲�
+
+- 使用 FFmpeg�?  - 单�进� `filter_complex` 完成裁剪 + 画幅 + 混剪运动 + concat
+  - �� BGM 混音
+  - ��**画面标�**（ASS 烧录、无 TTS）：文�池按��条�，每条成片随机一行；按���时长显示在顶部居中偏上
+  - �持可�?**Edge-TTS 配音**：任务启动时�?*配音文��?*随机抽取，实时生�?`.mp3` 参与混音�?Ducking（与画面标��辑�立�?  - �持高� ASS：可无配音仅标�；若�?TTS 则按词边界时间轴叠字；两者并存时标�居上�配音字幕居�?  - �持转场（当前：`xfade fade`）与音��接（`acrossfade`�?  - 默�更�单：�?`fade`，时�?0.08~0.16，避免转场过强影响�感与�高级感�?  - **随机�场池（极致去重�?*：模板可勾���转场特效组成�随机转场池”（fade/slideleft/slideright/pixelize/circlecrop），每个�场点会从池中随机� 1 ���?`xfade=transition=<name>`，并与同��?`acrossfade` 的时长保持一致（仍受相邻片�时长上限约束）�?  - **�切（Hard Cut�?*：转场池新� **`hardcut`（无�场�?*。随机命�后�?*跳过 xfade/acrossfade**，直接按时间轴拼接（concat）前后�，适用于�卡�?重低�?�节�带货����?  - **酷炫�场扩�**：新�?`wipeup`、`squeezev`、`squeezeh`（均�?FFmpeg `xfade` �?transition 名称）�?  - **极�转场时�?*：模板转场时长最小�允许下探到 **0.05s**（�前后�会强制�?�?.06s）；仍会按相邻片段时长自动限幅，避免 offset 负数�?  - **智能镜像翻转（极致去重）**：模板可对每�段位勾��允许随机水平镜像（50%）��方案阶段命�后，在����滤镜链追�?`hflip`（在裁剪/调色之后、fps/format 之前），不影响音频链�与标签闭��?  - �� BGM ducking（侧链压缩，让人�?原声更突出）
+  - 容错与标准化�?    - 无音轨素材自动补静音（`anullsrc`�?    - �有��进�?concat/xfade 前强制做 9:16 `scale+pad` 标准�?    - 音�统��?48k/stereo，降低滤镜链�裂�率
+    - **filter_complex 分支�致�?*：拼接产出的 `[outa]` 必须����条链�消费。若已启�?TTS �?*不保留原�?*（或模板选择**静音原声**），则� `[outa]` 使用 `anullsink` 丢弃�?*不再**并�生成仅供�占位�的 `[outa_n]`/`[outa_m]`，否则易出现�连接输出并报错：`Filter anull:default has an unconnected output` / `Invalid argument`�?*补充稳定�?*：`xfade` 多�音频链尾不再使� `anull` 改挂 `[outa]`，改�?`aformat+aresample` 承接；仅 TTS 配音、不与原声混音时直接使用 `[voice0]` 作为后级主轨标�，避免多余� `anull` ��。实现� `src/main/modules/ffmpeg/render.ts`�?    - **iPhone MOV / apac �?xfade 时间�?*�?      - 部分�?iPhone 录制�?`.MOV` �?AAC 外还�?**apac**（空间声）等 FFmpeg **无法解码**的音�；�?`ffprobe` 将�条音轨记为不可解码，�?`[0:a:0]` 会指向错�流�致滤镜失败�?*处理**：`probe.ts` �把�可解码」的音�流记�?`hasAudio`，并记录�?**`audioStreamIndex`**；`render.ts` �?`[i:<index>]` 拉原声；仅存�?apac 等不�解码轨�?`hasAudio=false`，自动走 `anullsrc` 静音�充（与模板�保留原声�一致时仍无�用原声）。产品素材质量�明�会提示�无法解码的音�轨」�?      - 多� **`xfade`** 时，前一节输出时间基常为 **1/1000000**，新段经 **`fps=30`** �?**1/30**，会触发 `First input link main timebase ... do not match ... xfade timebase`�?*处理**：每�?`xfade` 前�两�视��?**`settb=1/30`** 再叠化（实现�?`render.ts`）�?- �持批量生成（�次下�?N �任务�
+
+### 任务系统
+
+- **真机�码��**：任务列表中�?**已完�?* 成片提供 **「�?�码�?*（`TasksView`）�主进程 **`preview:getMobilePlayUrl`** ��/复用 **`previewHttpServer`**（`src/main/lib/previewHttpServer.ts`）：`http` 模块监听 **`0.0.0.0:47820`–`47859`** ��用�口，仅响�?**`GET /p/<taskId>`**；根�?**`taskQueue.getTask`** 校验状�为 **`done`** 后流式返�?**`outPath`** 对应文件，支�?**`Range`** �?**`Accept-Ranges`**（便于手机�拖动进度），并带 **`Access-Control-Allow-Origin: *`**。局域网地址�?**`getLanIPv4()`**（`src/main/lib/lanAddress.ts`）从 **`os.networkInterfaces()`** 读取。渲染进程使�?**`qrcode`** 生成二维�?DataURL（`TasksView.vue`）��出应用前 **`before-quit`** 关闭预� HTTP 服务�?- 队列处理（可配置并发，基�实现默� 1�?- UI 显示进度、状态�日�?- 主进程�过 IPC 向渲染进程推送任务事�?- �持暂�/继续（暂停后不再�动新任务，已运�任务会继续完成�?  - 优化实现：暂停时会中止�在运�的 FFmpeg 进程，将任务标��?`paused`；继�时会� `paused` 任务重新入队并从头渲染（�?Win/Linux 稳定�?- 任务列表交互优化�?  - 输出文件列默认仅显示文件名（避免绝�路径过长影响阅读�?  - 已完成任务支持�一�在文件夹�显示”（调用 `shell.showItemInFolder(fullPath)` 高亮定位生成文件）及 **手机�码局域网��**（�上条�?  - 输出�录输入�长文本显示�尾（RTL + ellipsis），避免 UI �?
+### FFmpeg / FFprobe 安�包�径（asar�?
+- 打包�?`ffmpeg-static` / `ffprobe-static` 的默认路径落�?**`app.asar`** 内，**无法 `spawn` 原生 exe**（Windows �?`ENOENT`）�?*`build.asarUnpack`** 已把二�解包到 **`app.asar.unpacked`**�?- 主进程统��?**`src/main/lib/binariesPath.ts`** �?**`app.isPackaged`** 时将�径中� **`app.asar`** 替换�?**`app.asar.unpacked`**（并 `existsSync` 校验），�?**`probe.ts` / `runner.ts` / `encoders.ts`** 使用�?
+## ��栈约�
+
+- Electron 桌面应用
+- 前�：Vue3 + Tailwind（统�风格�?- 后�：Node.js（主进程模块化，低�合高内聚）
+- 视��理：FFmpeg（默认使�?`ffmpeg-static`，兼�?Win/Linux�?
+## 使用说明（基�版本�?
+1. 在�产品�里创建产品，并为各�“��器”添加素材��?   - �点�新段�新增任意�名的�器
+   - 添加后可在网格中看到素材列表（缩略图 + 文件�?+ 时长），�持�条移除
+2. 在�任务�里选择产品、�置批量数量、输出目录，点击�始生�?3. 任务队列会�个渲染，生�?`.mp4` 输出文件；重复组合会�动跳过并重�?   - 若你输入生成数量�?\(N\)，但“加入队列�少�?\(N\)，�常表示：在当前素材数量下，�?**hash 去重 / 相似度限�?/ 单素材使用上�?* 影响，可用的“唯�组合”不足�?   - **新安装默认产品各段位无素�?*时，会出�?**0/N**，主因是 **`buildRandomPlan` 无法选材**（并非去重）。��?UI 会给�?**`queueHintMissingAssets`** 类�明；解决方式：先到「产品�为模板涉及�?*每一�?*至少添加�条���?   - **界面有缩略图但入�?0 �?*：��?**`ffprobe` 读盘失败**（重�?换机后旧绝�路径失效�源文件移动删除、网�?U 盘断�）��前�报为 `missing_assets`；现主因归为 **`plan_build_failed`**，并�?**`meta.planError`** 附带�次异常摘要�产品�位�与模�?**`hook` / `HOOK`** 等大小写不一致时，统��?**`src/shared/productAssets.ts`** 忽略大小写取素材列表�?   - 其它情况�?UI 按主因区分：`missing_assets` / `plan_build_failed` / `dedupe` / `similarity` / `overuse` / `generic`。解决方式：增加各�素材数量，或后�版本在模板中加入“放宽去重�开关�?
+## 使用说明（高级混��
+
+- **模板页展�编辑**�?  - **结构**：可新�/删除/上下移动段，�� 2/4/5 段等任意结构
+  - **总时�?*：�置生成视��时长范围（默� 7~15 秒）
+  - **跳过片头**：`skipStartSec` 默� 1.5s（更容易从有效画面开始）
+  - **顺序**：可选不打乱/部分打乱（�常保留 Hook，打乱后�段位�
+  - **画面标�（无配音�?*：独立文案池与开关；**每项为一�?*（组内��标题�后�行为符号装饰行�?*组内换�保�**），**组与组之间在编辑框中空一�?*分隔；每条��?*随机抽一�?*入片（`pickTitleOverlayPoolEntry` + `buildAss`：`white_shadow` 时标�?符号双样�?+ `\\N`）�?*整条视�时长�?*显示�?*水平居中、靠�?*（启用�画面标题�即烧录�?*不依�?*勾��ASS」）�?*不调�?* Edge-TTS�?  - **配音（Edge-TTS�?*：独立开关与**�立文案�?*；仅勾��启用配音�时才��?TTS 并混音�可与画面标题并存：**画面标�**�?*上方**；配音朗读与随配音字幕在**底部**（勿把�配音文案�当成顶部标题��顶部�填「画面标题�区并勾选启�）�?  - **文�池格�?*�?*画面标�**�?*配音文��?*均为�?*每�一条��?*，每条成�?*随机��?*」，空�忽略；多�不会在同一条成片里全部叠出。配音区仍可用一�?`---`（至�?3 �?`-`）在编辑器里分块，保存后每块��多�，生成时仍�**按�**纳入候�池�?  - **ASS 字幕**�?*标�上�**为距**顶边**的像素（越大越远离顶边，观感越接近�居�偏上」�非贴顶）；**配音下距**为距**底边**的像素（越大越远离底边，观感越接近�居�偏下」�非贴底）�默认约 `360/360`（� `src/shared/assDefaults.ts`）�实现上画面标��?ASS `Alignment=8`、配音字幕用 `Alignment=2`。勾选�ASS」仅影响**随配音滚动的字幕**；画面标题只要启用�画面标题�即会烧录�?  - **模板 Tab**�?*�场混�**（�度/色彩�扰�xfade、BGM、Ducking）与 **标�配�**（画面标题�Edge-TTS、字幕样式）分两页，避免单页过长�?  - **文��?UI**：画面标�?/ 配音文�大输入框为深色层级（`ui-pool-textarea`：内阴影、圆角�focus �?`border-white/20` + 品牌�?`ring-teal`）；失焦�动整理并触发�地保存时，约 340ms 内显示�同步文案池…�与旋转图标，并触发�次轻��光（`ui-pool-shimmer`），避免无反馈感�?  - **原声**：可选�保�?静音”�静音仅影响素材原声，配�?BGM 仍会正常叠加输出�?  - **BGM**：支持�择**多个**背景音乐文件并�置音量�0~100%），生成时每条��会从已选列表中**随机�?1 �?*�配输出�?*`plan.bgm` 仅含单个 `filePath`**，FFmpeg **全局�� 1 �?BGM �?`-i`**。�辑集中�?**`src/main/lib/bgmPaths.ts`**（`pickSingleBgmPathFromTemplate` / `resolveSoleBgmPathForRender`）；任务队列在探测前会把 `plan.bgm` 规范为单�径，避�?`filePaths` �入�致多轨叠加�?    - **任务日志**：若出现 `BGM：未�测到音轨，已�动跳过` / `探测失败，已�动跳过`，�明该文件�判定无音�，成片不会有 BGM；常见音频格式在 ffprobe 偶发不识�时仍�**尝试混音**并打日志说明�?    - **��**：模板里 **Ducking（侧链）** ��时，有人在�话/原声较大�?BGM 会�压低；若仍�得整体偏轻，��当**调高 BGM 音量滑块**（混音已关闭 `amix` 的过度归�化，相�更容易�清）�?  - **段参�?*：每段可设置时长范围、缩放范围（zoom）�位移范围（moveX/moveY�?
+## 字体兼�（多��字幕�?
+- **�标��**：越南�（含 ệ�ươ��?等）、中文简、英�、印尼�拉丁、泰文等；�过 **Google Fonts** 提供�?**Noto Sans SC + Noto Sans + Noto Sans Thai + Nunito（`ital,wght@0,700;1,700`，含 **Bold Italic** 圆润标��?* �?**woff2** 分片同目录共存，�?**libass + FreeType** 选形。任务侧 `pickAssFontFamilyForRender` 对模板仍返回 **`Noto Sans SC`**�?*`white_shadow` 成片**�?`ass.ts` 内将默� Noto 族名映射�?**`Nunito`** 作为显示体（同目录含 Noto 便于缺字回�）�?- **内置流程**：`npm run setup:fonts`（`scripts/ensure-bundled-fonts.mjs`）��?Google Fonts **CSS API**（含上述族与字重），解析全部 **gstatic woff2** 并下载到 `resources/fonts/`；`npm run build` �尾执� `copy-font-resources` 复制�?`out/main/resources/fonts/`。开发时�用项�根下 `resources/fonts/`（`process.cwd()`），无需依赖系统字体�?  - **更新（重要）**：为兼�部� Windows �境�?FFmpeg/libass **无法加载 woff2** 的情况（会报 `Error opening memory font '*.woff2'` 并�致渲染失败），当�?`setup:fonts` 改为同� **OTF/TTF** �?`resources/fonts/`（NotoSansSC + NotoSans + NotoSansThai + Nunito 变量字体），以保证字幕烧录稳定�?- **强制 FFmpeg**：`subtitles` 滤镜**始终**�?**`fontsdir=<绝�路径目�>`**（目录内为上�?woff2 集合），**禁�**省略 `fontsdir` �?libass 走系统回�。未解析到任何字体目录时，任务在�?ASS / 渲染�?*失败**（`assertFontsDirForSubtitles`）�?- **探测顺序**（`src/main/lib/fontResolve.ts`）：�?内置 `resources/fonts`（含 `.videogenerate-fonts-ready` 或任�?`.woff2/.otf/.ttf`）；�?`userData/videogenerate/fonts/` 下单文件；③ 系统字体�径�?- **UTF-8**：ASS 文件使用 Node **`utf8`** 写入；字符串链路保持 Unicode；FFmpeg 子进程在�?Windows 上附�?`LC_ALL`/`LANG`=`C.UTF-8`�?- **注意**：若运�环� FFmpeg ��?**FreeType 过旧**、无法加�?**woff2**，�在�机换用较�?**ffmpeg-static** 或自行往 `resources/fonts` 放入 **TTF/OTF** �?Noto（同族名��?ASS �致）�?- **用户导入字体（TTF/OTF）不显示怎么�?*（常见坑）：
+  - **先确认渲染��否能“看见�字体文�?*：应用会�?`resources/fonts/`（内�）�?`userData/videogenerate/fonts/`（用户�入）合并为字幕渲染� `fontsdir`。若你只导入到用户目录但仍不显示，先�查�目录下�否真的有 `.ttf/.otf/.ttc` 文件（以及文件是否损�?0字节）�?  - **再确认你�写的�“字体族名�，不是文件�?*：ASS �?`Style: ... Fontname=xxx ...` ��?**字体族名（Family name�?*，它经常与文件名不同。模板页下拉里用户字体默认用“文件名去扩展名”作为���，若你的字体族名不等于这个值，就会出现“字幕�辑执�了但画面没�/回�失败”�?    - Windows 查看族名方式：右�字体文�?`.ttf/.otf` �?**属�?* �?**详细信息** �?找到 **字体名称/字体系列**（不同系统字段名略有�异），把该�填到模板的「ASS 字体」里（可直接手动输入替换下拉值）�?    - 族名示例：文件叫 `MyFont-Bold.ttf`，族名可能是 `My Font`；��?ASS 必须�?`My Font` 才能命中�?
+### ASS 生成�?FFmpeg `subtitles`（实现�点�
+
+- **已废�?drawtext**：成片字幕统��?Node 写入 **ASS**（`[Script Info]` / `[V4+ Styles]` / `[Events]`），�?**`subtitles`** 滤镜烧录；样式定义� `src/main/modules/subtitle/ass.ts`。��?**`white_shadow`（网感柔描边�?*：样式名 **`MainContent`**（顶栏）/ **`MainContentBottom`**（配音底栏）；`PrimaryColour` `&H00FFFFFF`，`OutlineColour` **暖深灰�** `&H00332B2A`（ABGR），`Outline=3`，`Shadow=0`，`BackColour` `&H00000000`，`BorderStyle=1`�?*`Bold=1`、`Italic=1`**，顶/底�齐� `marginV` 与实现一致；默�显示字� **`Nunito`**（`assDefaults` �?**`ASS_POP_TITLE_FONT_FAMILY`** �?**`ASS_STYLE_MAIN_CONTENT`** 等常量）�?*`yellow_box`** 使用 **`YellowCaptionTop` / `YellowCaptionBottom`**（非粗斜体）�?- **Pop-in 动画**：`white_shadow` 成片（`ass.ts`）使�?**`ASS_WHITE_SHADOW_DIALOGUE_PREFIX`**�?*`\\fn`+粗斜�?缩放**），写在 **`escAssText` 之前**�?*`ASS_POP_IN_DIALOGUE_PREFIX`** 为纯 **fad+缩放**，供�?**`\\r`** 切换样式组合�?*`generateAssFile`** 标�+符号行双样式时用此前�，避�?**`\\fn`** �?**`\\r`** 抢形）�任务队列里�顶标题与配音字幕每�?**Dialogue** 仍带 **`ASS_WHITE_SHADOW_DIALOGUE_PREFIX`**�?- **工具函数**：`src/main/modules/subtitle/generateAssFile.ts` 提供 **`generateAssFile(titleText, symbolRowText, durationSec, outputPath, options?)`**（UTF-8、`mkdir` 父目录）�?*`symbolRowText`** 为空时仅单� **`MainContent`** + `ASS_WHITE_SHADOW_DIALOGUE_PREFIX`；非空时�?**双样�?* **`TitleText` / `SymbolRow`**（均�?**Bold+Italic**、同色暖灰描边）�?*Dialogue** 文本�?**`ASS_POP_IN_DIALOGUE_PREFIX` + `{\rTitleText}�{\rSymbolRow}\N�`**（ASS 换� **`\\N`**），符号行字号约为标�?**0.68**�?*符号行池**候�维护在 **`src/shared/symbolRowPool.json`**（UTF-8），�?**`src/shared/symbolRowPool.ts`** 导出 **`SYMBOL_ROW_POOL`**�?*`pickRandomSymbolRow()`** 供调用方随机抽取。默认标题字号与 **`ASS_DEFAULT_FONT_SIZE`**（PlayResY=1920 �?**70**）�齐�?- **Windows ��**：`subtitles` 滤镜参数字�串� `src/main/modules/ffmpeg/render.ts` 内同文件函数 **`escapePathForFfmpegSubtitlesFilter`** 处理：`\\` �?`/`，盘符冒�?`:` �?`\:`，单引号�义，避�?Win 下路径解析失败�?- **调用约定**：`renderVideo` 在拼 `subtitles` �?`fontsdir` 前� ASS �径与字体�录路�?*��?*调用上述函数�?*不再**从独�?`ffmpegSubtitlesPath.ts` 模块 import，避免遗�?import 或打包后�绑定导致的运行时报�?`is not defined`�?
+- **临时文件**：渲染前在任务临时目录生�?`.ass`；`renderVideo` �?**`finally`** �?**`fs.unlink`** 删除该临时文件（成功或失败均清理），防�占盘�?
+## 性能优化说明（已实现�?
+- **并发控制**：FFmpeg 同时�多运�?3 �任务（Promise 并发，队列调度）
+- **FFmpeg 优化**：每�视�使�?**单� ffmpeg 进程** 通过 `filter_complex` 完成裁剪+画幅+拼接，避免中间文件与多进程开�
+- **流畅度稳定化（已实现�?*�?  - **恒定帧率（CFR�?*：输出强�?`fps=30` + `-fps_mode cfr`，降�?VFR 输入导致的��感卡�?不顺�?  - **音�时间基��?*：�音频链加�?`aresample=async=1:first_pts=0`，降低拼接后“轻�卡�?漂移�?- **�件编码自动�择（已实现�?*�?  - Windows **默�不� NVENC**：`ffmpeg-static` ��绑定较新�?NVENC API，��机器显卡驱动偏旧会�?`Required: 12.1 Found: 11.1`。默认顺序为�?*QSV（探测�过）→ `libx264`**�?  - ��?NVIDIA �编时，�显式�置�境变�?**`VG_HWENC=nvenc`**（或 `on` / `try` / `hw` / `1` / `yes`），将先�?1 帧试编码再�用 `h264_nvenc`；失败则仍回� QSV / `libx264`�?  - **二�保�**：�式渲染若仍出�?NVENC/QSV 打开失败，会 **清空探测缓存并以 `libx264` 重试**�?  - 强制�用软编：`VG_HWENC=off`（Linux 部署默� `libx264`，后�再�?VAAPI�?- **去重优化**：hash 去重使用内存缓存，定时批量落盘，避免每�组合都读�?JSON
+- **UI 流畅**：进�?日志通过 IPC 推�，并在主进程做节流，避免高频更新�致卡�?
+## UI 风格规范（已实现�?
+- **整体**：深色主题（偏剪辑软件�格），提高信息密度，缩小间距，圆�?+ 阴影强调层级
+- **光影与层级（Linear/Vercel 风格�?*�?  - **全局底色**：`bg-[#0E0E11]`（极暗黑灰）
+  - **导航/顶栏**：`bg-[#18181B]` + `border-r/b border-white/5`
+  - **卡片/面板**：`bg-white/[0.03]` + `border border-white/10` + `shadow-lg shadow-black/50`
+  - **输入�?*：`bg-black/20`，常�?`border-white/10`，聚�?`border-white/20` + `ring-white/10`
+  - **实现方式**：�过全局样式 `src/renderer/src/styles.css` �?`ui-app/ui-nav/ui-topbar/ui-card/ui-panel/ui-input/ui-select` 统一约束，页�仅做少量覆盖�?- **布局**�?  - 应用级左侧�航（产�/模板/任务�?  - 产品页：左侧产品列表固定宽度，中间为“时间轴结构卡片（Hook �?Show �?Detail）�?  - 模板页：流程图结构展示（段时长范�?+ 素材数量），�持点击展�（基�版先预留编辑入口�?  - 任务页：进度条必备，任务状�中文化展示，显示已完成/总数，并限制渲染条数避免卡顿
+
+### 深色模式光影与层级（全局规范�?
+- **主体背景（App �底层�?*：`bg-[#0E0E11]`（极暗黑灰，避免“�黑”）
+- **侧边�?顶栏**：`bg-[#18181B]`（zinc-900），并加极细边界线：`border-r border-b border-white/5`
+- **卡片/面板**：在 `bg-white/[0.03]` 基�上�加更�高级�的层级感，推荐使用**极轻�渐�?*（�卡片从主背��“浮起来”）：\n
+  - `bg-gradient-to-b from-white/[0.06] to-white/[0.025]`\n
+  - 仍保持：`border border-white/10` + `shadow-lg shadow-black/50`
+- **输入框质�?*�?  - 底色：`bg-black/20`
+  - 默�边框：`border-white/10`
+  - Focus：`border-white/20` + `ring-1 ring-white/10`
+
+### 前�统一样式类（推荐�?
+为减少页面里重��?class，已�?`src/renderer/src/styles.css` 提供�组可复用类：
+
+- **布局**：`ui-app` / `ui-nav` / `ui-topbar`
+- **容器**：`ui-card` / `ui-panel`
+- **表单**：`ui-input` / `ui-select`
+
+### 强调色与按钮体系（全�规范�?
+- **主动作（Primary/Accent�?*：用于�开始生�?/ 添加素材”等关键动作，使用低饱和蓝紫渐变（避免廉价感�?  - 推荐：`bg-gradient-to-b from-indigo-500 to-indigo-600`
+  - Hover：`hover:from-indigo-400 hover:to-indigo-500`
+  - 文�：`text-white` + 极轻 `text-shadow`
+- **危险动作（Danger�?*：避免大面积红色实心块，统一为幽�?描边按钮
+  - `text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/20`
+- **进度条（Progress Bar�?*：更克制、更专业
+  - 高度：`h-1.5`
+  - 轨道：`bg-white/10`
+  - �充：`bg-gradient-to-r from-blue-500 to-indigo-500`（可加轻�发光阴影�
+
+### 产品页素材卡片（细节�?
+- **底部信息�?*：使用渐变半透明�罩替代��黑条�，并�文件�?时长两�对齐：\n
+  - �罩：`bg-gradient-to-t from-black/80 to-transparent`\n
+  - 布局：`flex justify-between` + 文件�?`truncate`
+
+## UI 细节打磨（组件质感）
+
+### 模板页：结构排序标�（Badge/Tag�?
+- **��**：替换粗糙的 �?�?x 按钮感，改为现代化胶�?Tag，保持深色主题一致��?- **样式规范**�?  - 胶囊形状：`rounded-full`
+  - 底色：`bg-white/5`
+  - 边�：`border border-white/10`
+  - 图标：使�?SVG 图标（� `ChevronUp` / `ChevronDown` / `X`），默� `text-gray-400`，hover 变亮
+  - **拖拽排序**：支持拖拽调整顺序，Tag 左侧提供 `GripVertical`�? 点把手）作为拖拽暗示
+
+### 产品页：极简空状�?
+- **��**：当某�位没有素材时，提供更�产品化”的空状态，而不��文本�?- **样式规范**�?  - 容器：`border-2 border-dashed border-white/10 rounded-xl`
+  - ��图标：柔�?SVG（� `FolderOpen`），颜色 `text-zinc-500`
+  - 提示文�：居中、克制，正文 `text-zinc-500`
+
+## 跨平台验证与部署注意�?.1.4�?- �发与回归测试�境：Windows（重点验证盘符路径�反斜杠�径�中文路径）�?- 生产部署�境：Linux（重点验证目录权限�可执�权限�字体目录�权限）�?- 字体建�优先使用 `ttf/otf/ttc`；`woff2` �导入但在部�?ffmpeg/libass 组合下可能不�用�?- 贴纸必须�?`ref`（`bundled:*` / `user:*`）持久化与渲染，避免内置与用户同名素材冲突�?- 验收建�：同�模板至少�?Windows �?Linux 各渲�?1 次，�认字体命�、贴纸来源�ASS 字幕烧录�致�?
+
+## 0.1.5 音�稳定策略�?026-04-11�?- 新��固�?BGM 模式”使用�范：�需整条视�仅保�?1 首背�音乐且音量不随场�变化，建�设�?`audio.source='mute'` �?`audio.ducking.enabled=false`�?- 固定 BGM 模式下，视�原声不参与混音，避免因素材原声音量波动导致背景音乐�侧链压低�?- �动化测试脚�?`test/auto_generate_10_videos.electron.cjs` 已默认启用固�?BGM 模式，用�?Windows 测试�?Linux 部署�致�回归�?
+
+## 0.1.6 �动化多场�同BGM测试�?026-04-11�?- �动化脚�?`test/auto_generate_10_videos.electron.cjs` 新�固定配乐参数：� 7 �入参�指定单一 BGM 文件（例�?`... "E:\跨�电商\！手机壳\测试文件夹\music\1.mp3"`）�?- 默�开�多场�测试：当素材数量允�时强�?`hook/show/detail` 三�结构，验证多场�切换下背�音乐连续性�?- 默�开�“单曲全程�策略：模板写入 `bgm.filePaths=[固定BGM]`，并配合 `audio.source='mute' + ducking=false`，确保场�切换不改曲�不压低�?
+
+## 0.1.7 BGM片头静音�复�?026-04-11�?- 渲染链路 `src/main/modules/ffmpeg/render.ts` �?BGM ��新� `silenceremove`（`start_threshold=-50dB`），�动剔除配乐开头静音后再按成片时长裁切�?- 解决�视�（�?2~4 秒）恰好落在配乐前�静音区时�有音轨但听起来无声”的�题�?- Windows �发与 Linux 部署均可�（依� FFmpeg 常�音频滤镜，无平台专属实现）�?
+## 0.1.8 分镜切换�时静音抑制�?026-04-11�?- 适用场景：`audio.source='keep'` �?`audio.ducking.enabled=true`（保留原声并�?BGM 侧链压低）�?- 渲染链路 `src/main/modules/ffmpeg/render.ts` �?ducking 分支新� **BGM floor 保底�?*：`bgm0 -> volume(bgmFloorVol) -> bgmfloor`，与 `sidechaincompress` 后的 `bgmd` 先混合为 `bgmsafe`，再与主轨混音输出�?- 同�将侧链参数� `threshold=0.02 / ratio=8 / attack=20 / release=250` 调整�?`threshold=0.025 / ratio=6 / attack=25 / release=220`，降低切镜瞬时过压�致的�听感掉到近静音”�?- 验证建�：Windows �发环境与 Linux 部署�境均用同�模板进��场�生成，重点监�分镜切换�?BGM 连续性�?
+## 0.1.9 分镜后无声修复（2026-04-11�?- �题：在无��?`concat` 分支�，BGM �� `atrim` 曾使�?`currentDur`，��在该分��能仍�首�时长，导致“��分镜有声、后�分镜背景音乐消失”�?- �复：`render.ts` 统一用整条成片时长（优先 `plan.totalDurationSec`，兜�?`segments.durationSec` 求和）作�?`finalDur`，BGM 与主音�时轴�齐�?- 影响范围：Windows �发与 Linux 部署均生效（FFmpeg 参数级修复，无平台专属�辑）�?
+## 0.1.10 BGM�段静音洞�复（2026-04-11�?- �题：部分用户音乐文件��在中段存在较长静音洞（非片头），当成片时间轴落入该区间时会出现���分镜有声，后�分镜像静音��?- �复：`src/main/modules/ffmpeg/render.ts` �?BGM �� `silenceremove` 增强为：
+  - 片头静音剔除：`start_periods=1:start_threshold=-45dB`
+  - �段静音循�剔除：`stop_periods=-1:stop_duration=0.1:stop_threshold=-40dB`
+- 说明：保�?`atrim=0:finalDur` �?`-stream_loop -1`，确保剔静后仍�盖整条成片时长�?## 0.1.20 打包版本更新�?026-04-11�?- `package.json` 版本号升级到 `0.1.20`，用于本次新安�包发布�?- Windows �发环境执�?`npm run dist` 生成 NSIS 安�包，产物输出目录�?`release/`�?
+## 0.1.21 复刻工坊（结构�刻版，TikTok 越南市场�?- 新�独立业务流：`上传参���?-> AI拆解 -> 分镜补料 -> 批量生成 -> 人工终�`，入口路�?`/clone`，并在主导航新���刻工坊”�?- 新�主进程模块：`src/main/modules/clone/*`，定�?`CloneProject/CloneBlueprint/ShotSpec/AiProviderTask` 等核心类型�?- 新� IPC�?  - `clone:analyzeReference`
+  - `clone:getProject`
+  - `clone:updateShot`
+  - `clone:generateAiShots`
+  - `clone:createReplicas`
+  - `clone:listProjects` / `clone:removeProject`
+- 新� preload API：`window.api.clone.*` 全链�映射�?- 参���分析链�：`ffprobe -> 场景切分 -> 关键帧抽�?轻量规则) -> 文��架归纳`，输出可编辑复刻蓝图（脚�框架、分镜�素材需求�AI提示词）�?- 分镜补料�持三态：`pending/uploaded/ai`，并�持�镜头�核状�：`pending/keep/reject`�?- 模型适配策略：`Runway �?-> Pika 回�`，无密钥时可�用本� mock 以便流程联调；AI生成素材默�回�到产品素材池（按 purpose 映射段位）�?- 批量复刻：一�生�?N 条文案变体并复用现有 `products/templates/tasks` 渲染链路入队，默认人工终审闭��?- �证存�：主进程优先使用 `electron safeStorage` 加密存储，兼�?Windows �发与 Linux 部署�?
+### 使用说明（�刻工坊�
+1. 进入 `复刻工坊` 页面，�择�地参考��，默���为越南�（可切换�文）�?2. 点击“开始拆解参考���，等待生成复刻蓝图�?3. 对每�分镜选择素材来源：上传素材或�� AI 补镜头；必�时调整�/反向提示词�?4. 点击“生成已勾�?AI 分镜”补齐缺口素材�?5. 设置复刻数量与输出目录，点击“创建�刻任务”，系统会自动入现有任务队列�?6. 在�刻页按分镜审核状�（保留/淘汰）完成人工终审�?
+### 跨平台注�?- Windows：建�用于日常�发与功能回归（上�?拆解/补料/入队）�?- Linux：上线前至少执�一次同模板渲染验证，重点�查模型调用�密钥解密�任务队列与输出�径权限�?- 首期仅支持本地参考��输入，不支持平台链接抓取�?
+
+## 0.1.22 复刻工坊 2.0（同脚本跨产�?+ 质量优先�?- 复刻工程与产品解耦：`CloneProject` �?`baseBlueprint` 为核心，不再依赖单一产品出片�?- 新�会话模� `ReplicaSession`：每次生成前选择�标产品，系统派生会话模板并批量入队�?- 新�接口�?  - `clone:createSession({ cloneProjectId, targetProductId, count, outputDir, qualityProfile, variantStrength })`
+  - `clone:listSessionResults({ cloneProjectId, sessionId?, filters? })`
+  - `clone:updateSessionReview({ cloneProjectId, taskId, reviewStatus })`
+- 保留兼�：旧接� `clone:createReplicas`、`clone:updateReplicaReview` 仍可调用，内部转发到新会话链��?- 质量优先质�：会话结果按时长偏差、分辨率门��音频轨、黑帧比例进行真实�测，并输出原因用于�核筛��?- 前�复刻页升级为三层�?  - 蓝图层（拆解 + 分镜补料 + AI补镜头）
+  - 出片层（�标产� + 文�变体强� + 批量会话�?  - 审核层（按会�?状�?低分筛�，保留/淘汰持久化）
+
+## 0.1.23 复刻工坊 2.1（�尾帧约� + 先图后��）
+- 新�两阶�链�：先生成每个分镜的�尾帧关�图，再基于�尾帧生成分镜��，�后�用现有任务系统批量出片�?- 新� IPC�?  - `clone:generateShotKeyframes({ cloneProjectId, shotIds, targetProductId, providerPolicy })`
+  - `clone:regenerateShotKeyframe({ cloneProjectId, shotId, which, promptOverrides })`
+  - `clone:generateShotVideos({ cloneProjectId, sessionId, shotIds, consistencyMode, providerPolicy })`
+- `clone:createSession` 增加 `pipelineMode: "keyframe_then_video"`（默认）�?- 类型升级�?  - `ShotSpec.keyframes`（`startFrame/endFrame/styleHints/consistencyMode`�?  - `ShotKeyframeSpec`、`ShotKeyframeAsset`、`ShotVideoGenTask`
+  - `ReplicaSession.pipelineStats`（关�帧�过率�分镜�过率�重生�数�
+- UI 升级：�刻页流程明��?`蓝图 -> 关键�?-> 分镜视� -> 批量出片 -> 审核`，分镜卡增加首帧/尾帧预�与重生入口�?- 默�策略：`AI按产品生成�尾�`、`�约束`、`Runway�?+ Pika备`；无 Key �� mock 联调�?
+### 使用说明（�刻工�?2.1�?1. 先上传参考��并完成拆解�?2. 勾�需�?AI 补齐的分镜，点击“生成�尾帧��?3. �查每�分镜的�帧/尾帧，必要时点�重生��?重生尾帧”�?4. 选择约束模式（默认软约束），点击“生成分镜����?5. 选择�标产品与数量，创建会话批量出片�?
+### 跨平台注意（Windows ��?/ Linux 部署�?- Windows：路径包��文与空格时，关键帧��使用安全协�?`vg://file?path=...`，避�?`file://` 兼�问题�?- Linux：确保临时目录与导出�录可写，模型密钥解密能力��（主进程安全存储），并验� FFmpeg �执�权限�?
+
+## 0.1.24 复刻工坊 2.1 升级（爆款分�?+ 分镜替换 + 先帧后��）
+- 保持原入�?`/clone` 与既�?`clone:*` 体系不变，在现有复刻工坊上做增强�?- 分析链路升级：`clone:analyzeReference` 新�爆款拆镜能力（ffprobe 元数�?+ 切镜 + 分镜缩略图输出），并在蓝图分镜中补充 role/motion/transition/caption 等字段�?- 数据兼�：`src/main/modules/clone/repo.ts` 增加分镜迁移归一化，旧项�缺失新字段时�动补默��，不破坏旧字�与旧任务�?- 新�分镜�强接口�?  - `clone:updateShotEnhanced`
+  - `clone:generateShotFrames`
+  - `clone:generateShotClip`
+  - `clone:renderPreview`
+- 新� AI 抽象层（�?mock，后��替换真实模型）：
+  - `generateImageFromPrompt()`
+  - `generateVideoFromFrames()`
+  - `generateVideoFromImage()`
+- 新�单条��渲染�?`renderViralCloneBatch`（先用于单条预�，后续扩展批量�异化）�?- 复刻页面改�成三栏增强结构（左：参考��?产品�?参数；中：分镜时间轴；右：分镜编辑器），并新增底部��操作区�?- 文件�录�范：新增生成文件写�?`userData/videogenerate/viral-clone/{projectId}/...`�?- 兼�与构建：本次变更已� Windows �发环境执�?`npm run build` 通过；Linux 部署沿用相同�径策略�?FFmpeg 能力�?
+
+## 0.1.25 复刻工坊 2.1 继续升级（批量出�?+ 模板沉淀�?- 在现�?`/clone` 流程上补齐三项能力：
+  - `clone:renderBatch`：按当前分镜素材批量生成 N 条��，输出批量报告�?  - `clone:saveCloneTemplate`：将当前复刻蓝图保存为固定结构模板�?  - `clone:convertToNormalTemplate`：将复刻蓝图映射为普通模板（segment 结构 + 时长区间）�?- 批量渲染�?`src/main/modules/clone/renderViralCloneBatch.ts` 增强�?  - �持失败重试（`maxRetry`）�?  - 生成 `batch-report.json`，�录每条结果成�?失败和分镜素材来源�?  - 默�尝试将参���音轨作为全�?BGM 混入，避免�场�时背�音乐���?- 复刻页面 `src/renderer/src/ui/views/CloneView.vue` 增强�?  - 打��批量生成��保存为复刻模板”�转为普通模板�按��?  - 批量完成后展示报告路径�?- 兼���明�
+  - 不新增入口，不改�由，不破坏�?`clone:*` 接口�?  - 旧项�数据继续通过 `clone/repo.ts` 迁移逻辑兜底�?  - Windows �发与 Linux 部署均沿�?Node + FFmpeg 通用链路�?
+
+## 0.1.26 Runway ģ�����淶���޸���2026-04-30��
+- ���⣺���̹��� 2.1 ����Ƶģ������ֵ����ʹ���ڲ��������� `veo3_1_fast`������ Runway API ʵ��ö�٣��� `veo3.1_fast`����һ�£����� `clone:generateShotClip` ���� 400 У��ܾ���
+- �޸����� `src/main/modules/clone/providers.ts` ���� Runway ģ�����淶��ӳ�䣨�»���/���ַ� -> �ٷ�ö�٣���������Ƶ����Ĭ��ģ������Ϊ `veo3.1_fast`��
+- ǰ�ˣ�`src/renderer/src/ui/views/CloneView.vue` ��ģ��ѡ��ֵͬ��Ϊ Runway �ٷ�ֵ��`veo3.1_fast` / `veo3.1`����
+- ��֤��ʹ����ʵ Runway API ��С����ʵ�⣬`veo3.1_fast / veo3.1 / veo3 / gen4_turbo` ���ɴ�������`veo3_1_fast` �ᱻ������ж�Ϊ�Ƿ�ģ��ֵ��
+- ʹ��˵��������ʷ�������Դ��ֵ�������ֶ�Ǩ�ƣ������̻��Զ��淶�����������ƶˡ�
+
+## 0.1.27 ���̹���Ĭ��ģ�ͳɱ��Ż���2026-04-30��
+- Ŀ�꣺���͸��̹��� AI ���ɳɱ������ֿ���������
+- Ĭ�ϲ��Ե�����
+  - ��β֡��`gen4_image_turbo`�����֣�
+  - ��Ƶ��ģ�ͣ�`gen4_turbo`
+  - ��Ƶ����ģ�ͣ�`gen3a_turbo`���ɸ߳ɱ�ģ�͵���Ϊ�ͳɱ���
+- ǰ��ģ������������ǰ�� `gen3a_turbo`�����ڰ�Ԥ��ѡ��
+- ���ݣ���ʷ��Ŀ�����ƻ����û��Կ��ֶ��л�Ϊ Veo ϵ�С�
+
+## 0.1.28 ���̹������� GRSAI Sora2��2026-04-30��
+- �����С����̹��� 2.1������ǿ��������ģ�顣
+- ������Ƶ��Ӧ�̣�`grsai`�������� `runway/pika` ���ݡ�
+- ����ƾ֤�����ã�`grsaiApiKey`��`grsaiHost`��Ĭ�� `https://api.grsai.com`����`videoProviderPrimary`��`videoProviderFallback`��
+- `generateShotClip` ���Ȱ���Ӧ����ִ�У�֧�� `Runway -> GRSAI -> Pika`������ҳ���л���/���˹�Ӧ�̣���
+- GRSAI �������������̣���
+  - ��������`POST /v1/video/sora-video`
+  - ��ѯ�����`POST /v1/draw/result`
+  - ������غ�д��־�Ŀ¼������ `generatedProvider/generatedTaskId`��
+- �ȶ��ԣ��Ե��������ؽṹ�����ֶμ��ݣ�`id/taskId/task_id`��`url/video_url/output`����
+- Windows ������ Linux ����������ʹ�ñ�׼ `fetch` + �����ļ��������̣���ƽ̨ר��������
+- ʹ��˵����
+  1. �ڸ��̹���������� `GRSAI Key` �� `GRSAI Host`��
+  2. ѡ����Ƶ����Ӧ��=GRSAI(Sora2)��������Ϊ���˹�Ӧ�̣���
+  3. ��������β֡���ٵ㡰���ɷ־�Ƭ�Ρ���
+
+## 0.1.29 ���̹����Ƴ� Runway ��Ƶ���루2026-04-30��
+- ���û�Ҫ��ͣ�� Runway ��Ƶ������·��`clone:generateShotClip` ���ٵ��� Runway API��
+- ��Ƶ��Ӧ��Ĭ����·����Ϊ `GRSAI -> Pika`������ Pika ��Ϊռλ���ˣ���
+- ���̹���ҳ���Ƴ� Runway Key ������ Runway ��Ӧ��ѡ�������ѡ��
+- ��ʷ���ݼ��ݣ�����Ŀ�Ｔʹ���� Runway �ֶΣ�Ҳ���ᴥ�� Runway ��Ƶ����
+- ���� Windows ������� `npm run build` ͨ����֤��Linux �����߼�����ͨ�á�
+
+## 0.1.30 复刻工坊恢� Runway-only 云�生成�?026-04-30�?- 按用户最新�求恢�并限定复刻工坊 2.1 �使�?Runway API，��生成阶段不再调�?GRSAI/Pika�?- 官方文档依据�?  - `POST /v1/image_to_video`
+  - 请求头必须带 `Authorization: Bearer <Runway API Key>` �?`X-Runway-Version: 2024-11-06`
+  - `promptImage` �持�尾帧数组：`[{ uri, position: "first" }, { uri, position: "last" }]`
+  - `duration` 按模型约束�理：`gen4_turbo/gen3a_turbo` 使用 `5/10`，`gen4.5/Veo` 使用 `2~10` 整数�?  - 竖屏比例按模型�理：`gen4_turbo/gen3a_turbo` 使用 `768:1280`，`gen4.5/Veo` 使用 `720:1280`
+- 主进程变更：
+  - `src/main/modules/clone/providers.ts` �?`generateShotVideoByProviderChain()` 改为 Runway-only，并记录 `provider/model/taskId`
+  - `src/main/modules/clone/service.ts` �?`generateShotClip()`、`generateShotFrames()`、`generateShotVideos()` 强制使用 Runway 链路
+  - `src/main/modules/clone/repo.ts` 默�策略与历史项目迁移统一�?`fallbackChain: ["runway"]`
+- 前�变更�?  - 复刻工坊页面仅保�?Runway Key、�尾帧模型���模型�择
+  - 移除 GRSAI/Pika 供应商�择入口，避�?UI 选择与后�执�链�不一�?- 使用说明�?  1. 在�刻工坊左侧�写有�?Runway API Key�?  2. 选择首尾帧模型，默� `gen4_image_turbo`�?  3. 选择视�模型，默�低成本 `gen4_turbo`�?  4. 上传产品参�图后，先点击�生成�尾帧�，再点击�生成分镜片段��?  5. 若已�� Runway Key，生成失败会直接显示 Runway 返回的真实错�，不会静默降� mock�?- 跨平台�明�
+  - Windows �发环境使用同� Node `fetch` + FFmpeg 文件保存链路�?  - Linux 部署�境无�平台专属代码，但必须保证用户数据�录与输出�录可写，且服务器能��?Runway API�?
+
+## 0.1.31 复刻工坊真实感�强�2026-04-30�?- �题：用户反�?AI 复刻结果“太假�，主�原因是原�分镜提示词过短（� `hook/detail/social_proof`），导致云�模型�由发挥，产品�致�和手机实拍质感不足�?- 后�增强�?  - `src/main/modules/clone/providers.ts` 新�真实实� Prompt 构建逻辑�?  - 首帧、尾帧�图生��都会自动补充：真实 TikTok UGC、手机手持拍摄�自然光、真实手部�真实阴影�产品一致��不�?Logo/图�/宝石/文字/水印、不使用 CGI/3D 渲染等约束�?  - 按分�?role �?motion �动补充镜头目的和运动描述�?- 默�模型：质量优先默���模型从 `gen4_turbo` 调整�?`gen4.5`；用户仍�手动切�?`gen4_turbo/gen3a_turbo` 节省成本�?- 使用建��?  1. 真实优先时�择 `Gen-4.5`�?  2. 产品参�图必须清晰，建�不低� 640x640，产品主体完整�无�挡�?  3. 产品卖点尽量写真实场�，例如�真人手持�环靠近耳朵展示，�内�然光，轻�手持晃动”�?  4. 不建�用纯白底商品图直接生成所有分镜，�好上�?1~3 张不同�度产品图�?- 兼��：不改变现�?`clone:*` IPC，不破坏旧项�；旧项目再�生成时会自动使用新的真实感提示词�强�?
+
+## 0.1.32 复刻工坊切换 Seedance 2.0 / Kling 3.0�?026-04-30�?- 按用户�求移除复刻工�?2.1 �?Runway 接入，��生成供应商统一切换�?`Seedance 2.0` �?`Kling 3.0`�?- 主进程供应商链路：默�?`Seedance -> Kling`，Seedance 使用 Kinovi 文档�?`POST /api/v1/jobs/createTask`，Kling 使用 `POST /api/generate` �?`GET /api/status`�?- �证字段调整：新�?`seedanceApiKey/seedanceHost/klingApiKey/klingHost`，历�?Runway/Pika/GRSAI 字�不再参与执行链��?- 前�调整：�刻工坊左侧配置区改� Seedance Key、Kling Key、��供应商选择和�应模型选择；不再展�?Runway Key �?Runway 模型�?- 默�模型：Seedance 使用 `seedance-20`，可�?`seedance2-fast`；Kling 使用 `pro-image-to-video`，可�?`std-image-to-video` / `o3-std-image-to-video`�?- 重�使用�明：Seedance/Kling 文档均�求图生视�输入图片为�网可访�?URL。本地图片当前会先按 data URI 兼�提交；若供应商拒绝，需要后�接入对象存储上传或使用公网图� URL�?- 兼��：旧�刻项目仍可打开，旧策略会迁移到 `seedance/kling` fallbackChain；Windows �发和 Linux 部署都走标准 Node fetch + FFmpeg 文件保存链路�?
+
+## 0.1.33 复刻工坊流程与提示词优化�?026-04-30�?- �复�刻�?Seedance/Kling 模型下拉选项乱码，清理前�和供应商层残留的�号文案�?- 复刻页新增流程状态条：显示下�步�参考��状态�分镜完成数、成片片段完成数、产品参考图数量�?- 新�当前分镜智能提示词：按分镜角色、产品卖点�真�?TikTok UGC、手机手持�产品一致�和负向约束�动生� Prompt�?- 新��一�生成当前分镜”：�动�用提示词�生成�尾帧�生成分镜片段，并完成后切到下一�分镜�?- 新��补齐所�?AI 分镜”：跳过锁定分镜和已上传素材分镜，只补齐�完成� AI 分镜，减少重复手动点击�?- 操作建�：先上传爆���并分析，再上�?1-3 张清晰产品参考图，填写产品卖点，然后使用“一�生成当前分镜”�镜�查；�认�格稳定后再使用“补齐所�?AI 分镜”和“批量生成��?
+
+## 0.1.34 复刻工坊云�模型强制执�修复�?026-04-30�?- �题：用户反�分镜片段仍显示�地生成�原因是�?Seedance/Kling Key �?Key �保存时，旧�辑允� `allowMockWhenNoKey` 回��� FFmpeg mock，�致看起来没有调用云�模型�?- �复：`generateShotVideoByProviderChain` 不再在分镜��生成阶段回��� mock；没�?Seedance/Kling Key 时直接报错�?- �复：复刻页保存模型配�时强�?`allowMockWhenNoKey=false`，页面显示云�?Key 状�，并提示�不会静默回��地��?- 说明：�尾帧当前仍��地锚点帧，用于�?Seedance/Kling 图生视�模型提供输入；真�的视�片段必须�?Seedance/Kling 云�接口生成�?- 验收：若没有�� Key，点击�一�生成当前分�?生成分镜片��会提示�配�?Key；若�� Key，失败会显示供应商返回的真实错�，不再生成本地假视��?
+
+## 0.1.35 复刻工坊对标产品化升级（2026-04-30�?
+- �标：吸收参�软件在“爆款�刻工作流�分镜资产�理、任务状态��核沉淀”上的优点，但不复制其品牌或界面�?
+- 页面升级：`src/renderer/src/ui/views/CloneView.vue`
+  - 顶部新�六阶�状态条：参考���爆款分析�分镜替�、云�生成、批量出片��核沉淀�?
+  - 新�爆款分析摘要区，展示脚�框架（钩�?痛点/方�/证明/行动）�时长�镜头类型�运动方式与分析 notes�?
+  - 分镜列表增强为资产�理面板，显示缩略图、时间范围��色、替换模式�素材需求�状态与失败原因�?
+  - 当前分镜编辑区�加“�用提示� / 重生首尾�?/ 生成片� / ��当前分�?/ 跳过”操作，并展示�帧、尾帧�云�片��供应商、模型和任务 ID�?
+  - 批量出片区新增本地�核面板，批量完成后�按待�?保留/淘汰筛�，并可直接预�结果�?
+- 主进程�强：`src/main/modules/clone/service.ts`
+  - �� `regenerateShotKeyframe` �?`creds` 声明前使用的风险�?
+  - `generateShotClip` �始时写入 `generating` 状�，失败时写�?`failed` 与真实错�原因，前�刷新后可直接看到云�失败信息�?
+- 兼��：
+  - 不新增路由，不新增并行模块，继续复用 `/clone` 与现�?`clone:*` IPC�?
+  - 视�生成仍�使用 Seedance 2.0 / Kling 3.0；没�?Key 时不静默回��地假视��?
+  - Windows �发与 Linux 部署仍沿�?Node `path`、FFmpeg 和标�?`fetch` 链路�?
+- 使用说明�?
+  1. 进入复刻工坊，先选择�地爆款参考��并点击“上传并分析爆�����?
+  2. 查看爆�分析摘要，�认脚�结构和分镜时间轴�?
+  3. �� Seedance/Kling Key、�择供应商与模型，上�?1-3 张产品参考图并填写产品卖点�?
+  4. 在分镜资产面板�镜�查，�上传视�替�、上传图片图生���AI 云�生成或跳过锁定�?
+  5. 使用“一�当前分镜”�镜生成；稳定后�用�补齐所�?AI 分镜”�?
+  6. 生成单条预�确认效果，再批量生成；批量完成后在审核面板标�保留或淘汰�?
+
+## 0.1.36 复刻工坊禁�本地图片拼接冒� AI 视��?026-04-30�?
+- �题：用户反�批量结果仍像图片拼接�排查发现历史项��分镜片��记录� `generatedSource=mock`、`generatedProvider=local`、`generatedModel=mock-i2v`，这些是�� FFmpeg 静�图/首尾帧拼接结果，不是 Seedance/Kling 云�生成视��?
+- �复�?
+  - `src/main/modules/clone/repo.ts` 迁移历史项目时，�动�?`mock/local/mock-i2v/mock-image2video` 片�判为无效，清�?`generatedClipPath` 并写入失败原因�?
+  - `src/main/modules/clone/service.ts` 的��和批量出片�接受手动上传视�或 `generatedSource=cloud` �?provider �?`seedance/kling` 的云�片��?
+  - 云�片�下载后增加质量验收：低码率或长时间冻结会直接失败，避免静�图视�进入成片�?
+  - `src/renderer/src/ui/views/CloneView.vue` 明确显示“本地假片�无效�，提示重新调用 Seedance/Kling�?
+- 使用说明：历史已生成�?mock 片�不会再�当作完成片�；�要填写有�?Seedance/Kling Key 后，逐镜点击“生成片段�或“一�当前分镜”重新生成�?
+- 验证：已执� `npm run build` 通过�?
+
+## 0.1.37 Seedance Ark �ӿ�ʶ������Կ������2026-04-30��
+- ���⣺�û��ṩ `ark-` ǰ׺ Seedance ��Կ����ʱ����ʵ���԰������� Kinovi ���ݽӿ� `https://kinovi.ai/api/v1/jobs/createTask`�����·��� `Invalid API Key`���޷��ж���ʵ Seedance/Ark ��Կ״̬��
+- �޸���
+  - `src/main/modules/clone/providers.ts` ���� Ark Seedance ���䣺`ark-` ǰ׺ Key ���ɽ `volces.com` host ���� `POST /api/v3/contents/generations/tasks`����ѯ�� `GET /api/v3/contents/generations/tasks/{taskId}`��
+  - Ĭ�� Seedance host ����Ϊ `https://ark.cn-beijing.volces.com`��Ĭ��ģ�͵���Ϊ `doubao-seedance-2-0-260128`���������ʹ�� Kinovi ���������ֶ��� Seedance Host �Ļ� `https://kinovi.ai` ��ʹ�� Kinovi Key��
+  - Ark Prompt ���Զ����� `--ratio 9:16 --fps 24 --dur N`������������ʵ TikTok UGC����Ʒһ���ԡ���β֡Լ������ʾ�ʡ�
+- ���νӿ�ʵ�⣺
+  - ��ǰ Kinovi �ӿ�ʹ���û��ṩ�� `ark-...dd87f` ���� `401 Invalid API Key`��
+  - Ark/��ɽ�ӿ�ʹ��ͬһ Key ���� `401 Unauthorized`��˵���� Key �ڵ�ǰ endpoint ��δͨ����֤������������ʵ AI Ƭ�Ρ�
+- ʹ��˵�������̹���������д��Ч�Ļ�ɽ���� Ark Seedance Key�����˺���Ҫ��ͨ��Ӧ Seedance ģ��Ȩ�ޣ�����д���� Kinovi Key����Ҫͬ������ Kinovi Host����֤ʧ��ʱҳ�����ʾ��Ӧ����ʵ���󣬲�����˱���ͼƬƴ�ӡ�
+
+## 0.1.38 Seedance BytePlus Ark �ӿ�������2026-04-30��
+- ���⣺�û��ṩ�Ŀ���ʾ��ʵ��ʹ�� BytePlus ��̫ Ark��`https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks`��ģ��Ϊ `dreamina-seedance-2-0-260128`�������й�����ɽ `ark.cn-beijing.volces.com` / `doubao-seedance-*`��
+- �޸���
+  - `src/main/modules/clone/providers.ts` Ĭ�� Seedance Host ��Ϊ BytePlus Ark��Ark host ʶ��ͬʱ֧�� `bytepluses.com` �� `volces.com`��
+  - Ark �������Ϊʾ��һ�½ṹ������ `model/content/generate_audio/ratio/duration/watermark`��ͼƬ����� `role=reference_image`��
+  - Ĭ�� Seedance ģ�͸�Ϊ `dreamina-seedance-2-0-260128`��Fast ѡ��Ϊ `dreamina-seedance-2-0-fast-260128`��
+  - `pickError` ֧�ֽ��� Ark ���صĶ����ʹ���ҳ���չʾ `SetLimitExceeded: ...` ������ʵʧ��ԭ��
+  - `src/renderer/src/ui/views/CloneView.vue` ��������ʱ����д�� Kinovi Host��ģ������ͬ��Ϊ BytePlus Seedance��
+- ���νӿ�ʵ�⣺
+  - ʹ���û��ṩ�� `ark-...dd87f` ���� BytePlus Ark ��������ɹ����������� ID��
+  - ��ѯ���񷵻�ʧ�ܣ�`SetLimitExceeded`���˺��Ѵﵽ `dreamina-seedance-2-0` ģ���������ƣ��赽 Model Activation ������ر� Safe Experience Mode �������
+- ʹ��˵�������̹�����д BytePlus Ark Key �󣬿�ֱ��ʹ��Ĭ�� Host ��Ĭ��ģ�ͣ��������ʧ����ʾ `SetLimitExceeded`�������˺�/ģ�ͷ������ƣ���Ҫ�� BytePlus ����̨���������Ǳ���ͼƬƴ�ӻ�ӿڵ�ַ����
+
+## 0.1.39 Seedance BytePlus ʧ��ԭ��͸���������޸���2026-04-30��
+- ���⣺�û���д BytePlus Ark Key ������ʾ�����ؼ�Ƭ����Ч�����Ų鷢�֣�
+  - BytePlus Ark ��������ɳɹ��������� ID������ѯ����״̬���� `failed` / `SetLimitExceeded`��
+  - ����ѯ�߼��������ʧ���̵���������ѯ��������ʾ��ʱ�����ɱ��ؼ�Ƭ�Σ�ǰ�˿�������ʵ�ƶ˴���
+  - ���������� AI �־����������κ����� `generatedClipPath` �ķ־�����ʹ��Ƭ���� `mock/local` ���ؼ�Ƭ�Ρ�
+- �޸���
+  - `src/main/modules/clone/providers.ts` �� Seedance ��ѯ���� `failed/error/cancelled` �����׳� Ark ���ص���ʵ���󣬲����̵���
+  - `src/main/modules/clone/service.ts` ����������Ƭ�ο�ʼʱ��վ� `generatedClipPath/generatedSource/generatedProvider/generatedModel/generatedTaskId`��ʧ��ʱҲ������ղ�д����ʵ���󣬱���ɱ��ؼ�Ƭ�μ���ռλ��
+  - `src/renderer/src/ui/views/CloneView.vue` �ġ��������� AI �־���ֻ������Ч�ƶ�Ƭ�Σ������������ؼ�Ƭ�Ρ�
+- ���νӿ�ʵ�⣺
+  - ʹ���û� Key �����ٷ�ʾ������ɹ����������� ID��
+  - ��ѯ����ʧ��ԭ��Ϊ `SetLimitExceeded: Your account [3000913978] has reached the set inference limit for the [dreamina-seedance-2-0] model...`��
+- ʹ��˵������ǰ Key �Ľӿڵ�ַ��ģ��������֤�����ã�����ʧ�ܵĸ����� BytePlus ����̨�и�ģ���Ѵﵽ��������/��ȫ����ģʽ��ͣ�����������ƺ󣬸��̹�����������ƶ����ɣ�������˱���ͼƬƴ�ӡ�
+
+## 0.1.40 ���̹�������ִ�н�����ʾ��2026-04-30��
+- ���⣺���̹�����ǰ��Ҫ�����ײ���Ϣ��ʾ��ҳ��������û���������ǰִ��״̬����������Ϊû���κ���Ϣ�����̿�ס��
+- �޸���
+  - `src/renderer/src/ui/views/CloneView.vue` ��������ִ��״̬��壬λ�ڸ���ҳ�����׶����·���
+  - �����ʾ����ǰ״̬����ִ��/ִ����/�����/ʧ�ܣ�����ǰ������⡢�������顢���Ȱٷֱȡ��������������������� 5 ��ִ����־��
+  - �����ο���Ƶ��������β֡�������ƶ�Ƭ�Ρ�һ����ǰ�־����������� AI �־�������Ԥ�����������ɶ���ʵʱ���¶������ȡ�
+  - ����ʱֱ���ڶ�����ɫ�����չʾ��ʵ�������� BytePlus `SetLimitExceeded`������ֻ�ڵײ���ʾ��
+- ʹ��˵���������������/������ť�����Ȳ鿴ҳ�涥����ִ��״̬��������ʧ�ܣ����������̶���ʾ�ڶ���������Ҫ�������ײ����ҡ�
+- ��֤����ִ�� `npm run build` ͨ����
+
+## 0.1.41 Seedance 2.0 ��β֡��ɫ���� BytePlus �ĵ���2026-04-30��
+- �ο��ĵ����û��ṩ BytePlus ModelArk ����ʾ�� `https://docs.byteplus.com/en/docs/ModelArk/1520757`��
+- ���⣺���̹����� Seedance 2.0 ���ô�ǰ����֡��β֡����Ϊ `reference_image` ���룬���ʺ���ͨ�ο�ͼ���������ϡ���β֡ͼ����Ƶ����Լ�����塣
+- �޸���`src/main/modules/clone/providers.ts` �� Ark Seedance �����Ϊ����֡ͼƬ `role=first_frame`��β֡ͼƬ `role=last_frame`������β֡·����ͬʱֻ����֡�������ظ�ͬͼ������塣
+- ʵ�⣺ʹ���û��ṩ�� BytePlus Ark Key �͹ٷ�ʾ��ͼƬ��`first_frame/last_frame` ������ɳɹ��������񲢷��� task id����������ʧ���Ҵ���Ϊ `SetLimitExceeded`���������˺�ģ����������/��ȫ����ģʽ��ͣ��
+- ��֤����ִ�� `npm run build` ͨ����
+
+## 0.1.42 复刻工坊�文编码修复�?026-04-30�?
+- �题：`src/renderer/src/ui/views/CloneView.vue` 在前序修改后出现�见中文乱码，页面标��阶段流程�项�配置、分镜资产�当前分镜编辑�批量�核按钮和顶部执行状态均显示�?`????`，影�?Windows �测试判断�?
+- �复：恢��刻工�?2.2 页面�有主要可见中文文案，包含“参考��?-> 爆�分� -> 分镜替换 -> 云�生成 -> 批量出片 -> 审核沉淀”�顶部�执行中/已完�?失败/待执行��云�?Key 提示、�不回��地假视���本地假片�无效提示和批量审核操作�?
+- 使用说明：进�?`/clone` 后，首屏顶部会直接显示当前流程和执�进度；点击分析、生成片段�一�当前分镜、补齐所�?AI 分镜、单条��或批量生成时，应优先查看顶部执行状态和错�详情�?
+- 验证：需�?Windows PowerShell 执� `npm run build`，再执� `npm run dev` 打开 Electron 应用�认页�不再出现 `????` 乱码�?
+
+## 0.1.43 复刻工坊高级提示词与干净首尾帧（2026-04-30�?
+- �题：用户反�云�生成结果“不高级、很奇�”，�图显示模型把参���中�?TikTok 水印、字幕和原人物局部一起带入了生成结果。根因是提示词仍偏模板拼接，且�尾帧默认直接从参���抽取，容易把脏元素作为图生视�锚点�?
+- �复�?
+  - `src/renderer/src/ui/views/CloneView.vue` 的��用提示词�升级为干净高级广告提示词，明确区分“�刻镜头结�?运动节��和“不要�制水印、字幕�账号�贴纸�平�?UI、原人物�份��?
+  - `src/main/modules/clone/providers.ts` 的最终��?prompt 同�加强，Seedance/Kling 调用前会�动追加高级真实广告�产品一致��去水印去字幕和禁�产品变形约束�?
+  - 首尾帧生成改为优先使用用户上传的产品参�图作为干净锚点；只有没有产品参考图时才从参考��截帧，并�掉上下容易包含平台水�?字幕的区域�?
+- 使用说明：建�先上传清晰产品参考图，再点击“�用提示词�或“一�当前分镜”�AI 视�生成前应先��?AI Prompt/Negative Prompt，确认没有�求复制参���中的水印�字幕�账号或原人物身份�?
+- 验证：需执� `npm run build` 通过后，再用同一参���重新生成分镜�尾帧和云�片�；旧的已生成片段不会自动变好，�要重新生成�?
+
+## 0.1.44 复刻工坊 2.2 质量优先生成链路�?026-04-30�?
+- 范围：仅增强现有 `/clone` 复刻工坊 2.2，不新�独立模块或并�路由�?
+- 生成链路：新增质量模�?`fast / standard / high`，默认高质量。高质量模式按�结构化 Prompt -> 产品参�图锁定 -> 首尾�?-> 图生视� -> 质� -> 不合格自动重试�执行；重试��?2 次，失败后标�?failed，不允�进入拼接�?
+- Prompt：重写分镜提示词生成逻辑，按 shot role、product description、camera framing、camera movement、scene、lighting、action、text safety、realism、duration target 组织；明��复刻节�/时长/��/字幕位置/运动/卖点顺序/CTA，不复刻原人物�水印�账号�字幕原文和无关人脸�?
+- 产品锁定：新增商品类�?`earrings / phone_case / clothes / toy / general`，分�注入产品�致�约束；�持主图�细节图、佩�?使用图��格参�图四类参�图组合�?
+- 质量�测：新� `qualityCheckShot`，�查文件存在�时长���?:16 比例、黑屏比例�冻�?静��险、码率过低�mock/local、产品参考图缺失等；结果写入每个分镜�?`qualityStatus / qualityScore / qualityReasons / retryCount / generatedClipDurationSec / generatedClipWidth / generatedClipHeight`�?
+- mock 防护：新�?`isMock` 字�，历�?mock/local 继续迁移为无效；正式 `renderPreview/renderBatch` 前会阻� failed、mock、缺失�未质�、时长异常分镜进入合成；合成器内部也拒绝 mock/local�?
+- UI：�刻工�?2.2 左侧增加商品类型、质量模式�主�?细节�?佩戴�?风格图�择与产品图诊断；分镜卡片显示素材来源�质�状��失败原因�重试�数、分辨率、时长�是否可出片；右侧当前分镜�加“优化提示词 / 质�当前片� / 重生失败片���?
+- 使用说明：建�先上传白底主� + 佩戴�?+ 细节图，再�择商品类型和高质量模式，点击�优化提示词”后生成首尾帧和云�片�；旧片段需要重新生成才会进入新质�链路�?
+- 验证：已执� `npm run build` 通过。Windows �发和 Linux 部署仍使�?Node path、FFmpeg/FFprobe 与标�?fetch 链路�?
+
+## 0.1.45 复刻工坊 IPC 传参克隆错��复�?026-04-30�?
+- �题：点击“优化提示词/生成首尾帧�时�?`An object could not be cloned`，��?AI Prompt 没有写入页面，也无法继续生成首尾帧�?
+- 原因：前�� Vue 响应式数�?对象直接作为 IPC payload 传给 Electron 主进程，structured clone 无法克隆 Proxy 对象�?
+- �复：`src/renderer/src/ui/views/CloneView.vue` �?`patchCurrentShot` 和产品图诊断传参前统���为纯 JSON 对象；所有产品参考图数组都转为普通字符串数组；�尾帧生成统�使用主图/细节�?佩戴�?风格图组合�?
+- 验证：已执� `npm run build` 通过。重新点击�优化提示词”后，AI Prompt/Negative Prompt 应立即写入当前分镜文�框�?
+
+## 0.1.46 复刻工坊云�片�质��判修复�?026-04-30�?- �题：新生成�?Seedance/Kling 云�视�已经返回成功，但质�仍�取旧分镜上� `generatedSource=local` 状�，导致�报�mock/local 片�不�出片”�?- �复：`src/main/modules/clone/service.ts` 在云�返回片�后，使用显�?`cloud` 上下文进�?`qualityCheckShot`，并写入真实 provider/model/taskId，避免旧 mock/local 状�污染本次质��?- 时长策略：Seedance 等云�模型常�最�输出� 5 秒；当原分镜�标时长小� 5 秒时，质�允�可裁切的云���片��过，最终合成仍�?`renderViralCloneBatch` �?`shot.durationSec` 裁切到目标时长�?- 使用说明：遇�?3 秒左右分镜返�?5 秒云�片�时，不再直接判失败；�果片�过�、过长到不可裁切、黑屏�冻结�比例异常或仍是 mock/local，仍会阻止出片�?
+
+## 0.1.47 Stitch 极简工作台界面�齐�2026-04-30�?- 设�来源：� Stitch 项目 `9440664742750942694` 读取并下载三�?screen：`模板批量合成�?- 极简版`、`爆��刻实验�?- 极简版`、`智能直播切片工作�?- 极简版`，参考文件保存在 `.stitch-ref/` �录�?- 主壳层：`src/renderer/src/ui/MainLayout.vue` 从深色图标窄栏调整为浅色 Creator Studio 侧边栏，保留现有产品、模板�任务��刻入口，并新�前���?`live-slicer`�?- 任务页：`src/renderer/src/ui/views/TasksView.vue` 对齐“模板批量合成器”极�工作台，增加顶部合成状�卡、Turbo Mode 右侧卡片，保留原有批量生成�暂停�继�、二维码预��打�报告等业务�辑�?- 复刻页：`src/renderer/src/ui/views/CloneView.vue` 对齐“爆款�刻实验室�浅色三栏结构，同时清理历史乱码导致�?Vue 模板/脚本�裂文案，保留现有复刻工�?2.2 �?Seedance/Kling、提示词优化、�尾帧�质�、批量�核链路�?- 直播切片页：新� `src/renderer/src/ui/views/LiveSlicerView.vue`，作为现有前�工作台入口展� AI Highlights、竖屏���自动重构图和字幕样式�置；本次不新�后�切片业务模块�?- 全局样式：`src/renderer/src/styles.css` 追加 Stitch minimal workspace theme overrides，统�白色面板、浅灰画布�紫蓝主按钮和表单控件���?- 验证：已执� Windows PowerShell `npm run build` 通过�?
+
+## 0.1.48 VideoGen Studio 深色专业工作台界��2026-04-30�?- 设�来源：按用户提供�?`ChatGPT Image 2026�?�?0�?14_50_47.png`，并结合 Stitch 项目 `9440664742750942694` 的深色专业工作台设�系统（The Precision Canvas）实现�?- 全局样式：`src/renderer/src/styles.css` 新� VideoGen Studio 深色覆盖层，统一应用深蓝黑背�、深色面板�紫色主按钮、紧凑表单和低�比层级�?- 主布�：`src/renderer/src/ui/MainLayout.vue` 改为深色左侧工作台�航，保留现有路由入口，统一品牌区�Pro 标识、快速�出和�置弹窗视��?- 复刻工坊：`src/renderer/src/ui/views/CloneView.vue` 改为三栏专业工作台结构：左侧项目与素材输入，�间分镜时间轴和整体信�，右侧当前分镜编辑与生成预��?- 进度提示：�刻页�屏新�横向阶段条和执行状态面板，显示“参考���爆款分析�分镜替�、云�生成、批量出片�等步��进度条、错�详情和最近执行日志�?- 业务保持：本次只调整现有“�刻工�?2.2”界面和�见提示文案，不新增独立模块，不改� Seedance/Kling、提示词优化、�尾帧�质�、mock 禁�出片等后�链路�?- 使用说明：进�?`/clone` 后优先查看顶部��条和执行状态；失败时错�会显示在首屏红色提示区，右侧分镜编辑区继�提供“优化提示词、质�当前片��重新生成帧、应用并保存”等操作�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.49 AI视�工业生产系统��系统重构�?026-04-30�?- �标：�次不按局�?UI 优化处理，�是建立“AI视�工业生产系� UI”的统一视�系统与交互系统�?- 设�系统：新�?`src/renderer/src/design-system/`，包�?`tokens.ts`、`theme.ts`、基�组件 `Button/Card/Input/Tag`，以及布�组件 `MainLayout/Sidebar/Topbar`�?- Design Tokens：统�深色分层、主色�成�?警告/错�、文字层级�边框�圆角�间距和动画时长，作为后�页面生成与维护的��视�基准�?- 主壳层：`src/renderer/src/ui/MainLayout.vue` 改为复用设�系� `DsMainLayout`，全应用统一 220px Sidebar、顶部控制条和工作区容器�?- 组件适配：`UiButton`、`UiCard`、`UiChip`、`UiWorkspaceSidebar` 改为设�系统�配层，保留旧调�?API，�产品�模板�任务��页等既有页面自动继承统�按钮、卡片�Tag、侧栏�格�?- 全局样式：`src/renderer/src/styles.css` 新� `ds-*` 样式体系，统�深色控制台�hover scale/glow、�中边�发光�输�?focus glow、状�?Tag �?shimmer/失败震动动画�?- 复刻工坊：`src/renderer/src/ui/views/CloneView.vue` 进一步收敛为生产控制台三栏布�，中间分镜卡片显示缩略图、时长�状态，选中态为�色边框发光；右�?Inspector 增加 AI 控制面板，包�多��生成�自动�优、�尾帧一致��产品锁定和风格控制�?- 业务保持：本次只重构视�系统�布�系统和交互反馈系统，不改变现�?Seedance/Kling、Prompt、�尾帧�质�、批量合成�IPC 和主进程业务逻辑�?- 使用说明：后�新�页面必须优先��?`design-system` 下的 tokens、components、layout；不允�页面自行定义随机�色或重复�按�?卡片/标�组件�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.50 复刻工坊界面去拥挤化�正�?026-04-30�?- �题：设�系统重构后，�刻工坊� 1920 宽度下三栏过窄，表格文字和按�大量换�，右侧 Inspector 信息密度过高，��不够高级�?- �复�?  - `src/renderer/src/styles.css` 调整主工作区 padding、Sidebar 宽度、三栏�度比例，�刻工作台最大�度收敛� 1780px 并居��?  - `src/renderer/src/ui/views/CloneView.vue` 将�刻页主布局改为 `clone-workbench-grid`，左侧素材区 280px，中间工作区��?760px，右�?Inspector 420px�?  - 分镜表格改为固定�小�度并横向滚�，表头和单元格强制单行省略，避免�文�拆成逐字换��?  - 右侧 Inspector 从窄的左右硬分栏改为纵向分区，��?尾帧/生成片�改为横向三卡��，降低拥挤感�?  - 按钮、Tag、关�操作文本统一 `white-space: nowrap`，避免�自动�齐”�控制面板�等�词换行�?- 业务保持：仅调整布局、间距和排版，不改变复刻工坊的分析�生成�质�、合成业务�辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.51 全屏操作区与窄图标�航�2026-04-30�?- �题：左侧文字导航占用过�横向空间，复刻工坊主操作区无法充分铺开，影响分镜�表格和 Inspector 的信�展示�?- �复�?  - `src/renderer/src/design-system/layout/Sidebar.vue` 为�航项补� `title`，窄栏模式下通过�停提示保留�义�?  - `src/renderer/src/styles.css` 将全� Sidebar �?240px 改为 76px 图标栏，隐藏品牌文字、�航文字和底部按�文字，仅保留图标入口�?  - 主工作区取消复刻页最大�度限制，`clone-workbench` 改为全�铺�，�操作界�优先占满屏幕�?  - 窄栏底部��、帮助��置、新建项�按钮做压缩�配，避免继�撑开侧栏�?- 业务保持：仅改变全局导航展示方式与操作区空间分配，不改变任何功能入口和业务�辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.52 窄�航��显示与�刻页溢出修复�?026-04-30�?- �题：窄图标�航后��选择框文字�隐藏，�刻工坊三栏在当前窗口�度下仍有横向溢出�?- �复�?  - `src/renderer/src/styles.css` 恢�窄导航内��选择框文字显示，压缩�?54px 紧凑选择�，不再�明隐藏�?  - 复刻工坊主网格改为自适应：左�?`minmax(250px, 280px)`，中�?`minmax(620px, 1fr)`，右�?`minmax(320px, 380px)`，减少固定�度导致的页面溢出�?  - 降低工作区左�?padding，分镜表格最小�度� 1110px 调整�?980px，并同�列宽�?  - �?1680px 以下右侧首帧/尾帧/片���自动改为单列，避�?Inspector 内部�向撑��?- 业务保持：仅调整布局响应式和��选择显示，不改变任何生成、分析�质�、合成�辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.53 去除重�二级侧栏与隐藏�实现直播切片入口�?026-04-30�?- �题：产品、模板�任务页在全�图标导航之�又出现左侧二级大菜单，占用大量操作空间且层级重复；直播切片仅有展示页，没有完整后�业务实现，作为�式入口会�导用户�?- �复�?  - `src/renderer/src/ui/components/UiWorkspaceSidebar.vue` 从左侧大侧栏改为顶部�向分段栏，保留�?`v-model/items/footerText` 接口，产�?模板/任务页无�改业务即�统一收敛�?  - `src/renderer/src/styles.css` 增加 `ds-workspace-switcher` 样式，并覆盖旧页�?`grid-cols-[220px...]` / `grid-cols-[300px...]` 外层网格，�内容区占满宽度�?  - `src/renderer/src/ui/MainLayout.vue` 移除直播切片导航项�?  - `src/renderer/src/router/index.ts` 移除 `/live-slicer` �由，避免进入�实现的半成品模块�?- 业务保持：产品�模板�任务页内部真实业务逻辑不变；仅删除�完整实现的直�切片正式入口�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.21 UI 降�杂度重构�?026-04-30�?- 全局导航收敛为：首页、产品�模板��刻工坊、任务；顶部项目/编辑/视图/导出、云入口、快速�出统一折叠到右上��更多�菜单�?- 首页改为�单入口：欢迎�、一�主按�“开始生成����三��捷卡片�最近任务�最近模板，减少控制台式信息�声�?- 产品页改为两栏：左侧产品列表，右侧当前�位素材；AI 工具、时间线、云空间、跨段资产等低�能力保留在“高级素材工具�折叠区�?- 模板页改为模板列表�分镜结构流程图、当前��置三块主�图；字幕�配音�BGM、LUT、ASS 字幕细节等放入高级�置�?- 复刻工坊 2.2 改为 5 步向导：上传爆����上传产品图、分镜替�、生成���批量�出；Prompt、Negative Prompt、质�细节、�尾帧细节默认折叠�?- 任务页改为当前批次进�?+ 任务列表为主；产�?模板/数量/输出�录等参数放入“批量�置”折叠面板�?- 使用说明：普通用户按页面主按�或�下�步�完成主流程；需要精细控制时再展�高级设置/更�操作�?- 验证：Windows PowerShell 执� `npm run build` 通过；未引入平台专属�径�辑，Linux 部署兼��不受影响�?
+
+## 0.1.54 �大功能页深色工作台�齐�?026-04-30�?
+- 设�来源：按用户参考图并结�?Stitch 项目 `9440664742750942694` 的深�?Precision Canvas 工作台�范落地�?
+- 主�架：左侧恢复完整�航 `首页 / 产品 / 模板 / 复刻工坊 / 直播切片 / 任务`，顶部保留帮助��知、用户和更�菜单；统一深蓝黑背�、半透明卡片、紫色主按钮、细边��?8-12px 圆��?
+- 页面：`HomeView` 改为欢迎�、主按钮、快捷卡片�最近任务和�近模板；`ProductsView` 保持真实素材管理逻辑并调整为产品列表 + 素材网格；`TemplatesView` 改为模板列表 + 分镜流程�?+ 当前段�置；`TasksView` 改为任务列表 + 批��情；`LiveSlicerView` 恢� `/live-slicer` 入口并统�工作台�格�?
+- �复：清�?`Topbar` 损坏换����?直播切片乱码，以及任务页历史乱码字�串导致的构建失败�?
+- 业务保持：未改动主进�?IPC、Seedance/Kling、�刻质�、任务队列和 FFmpeg 链路；Windows 测试�?Linux 部署仍使用�用 Node/path 链路�?
+- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.55 产品/模板页真实功能入口恢复（2026-04-30�?
+- �题：上一�?UI 降�杂度后，产品页和模板页的部分真实能力仍在脚�和主进程�，但界面入口�隐藏，用户无法继�操作�?
+- 产品页：恢��更多功�?高级素材工具”，包含工作区切�、AI 质量补全、新增分镜�位、删除当前�位、跨段资产�图、云�径统计�分页�单素材删除和长视�切分�入入口；保留主界面的产品列�?+ 素材网格清晰结构�?
+- 模板页：恢�模板高级编辑能力，包含分镜新�?删除/上移/下移、�时长�转场�随机分镜顺序�模板���从 video �录分析生成模板�字幕���ASS 字体选择与�入、字幕�号库�Edge-TTS 配音角色、BGM 添加/清空/移除、LUT、贴纸�择与�入�?
+- 架构：仅恢�现有前�入口并�用已有函数� IPC，不新�并行业务模块，不�?Seedance/Kling、任务队列�FFmpeg 渲染链路�?
+- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.21 模板页真实功能入口恢复（2026-04-30�?- �标：��?UI 降�杂度后模板页功能入口缺失的�题，恢�原有模板�置能力，不新�并行业务模块�?- 模板�?`TemplatesView` 的高级编辑区按真实业务分区恢复：
+  - `素材�?结构同�`：产品�择、模板跟随产品��?固定结构、手动新增�位、立即同步入口�?  - `模板工作台`：�时长�跳过片头�随机顺序�转场范围�原声策略�画幅统�、Ducking、分段时长�Zoom、Move、�度�扰��色�扰�基�调色、BGM、� BGM 移除、BGM 音量、LUT、贴纸�贴纸高度�?  - `字幕预�`：画面标题开关�标题分组��号行�插入�号组��号库�理、ASS 字幕�关�字幕���字体�字号�标题上距�配音下距�字体�入�?  - `配音库`：Edge-TTS �关��色选择、配音文案池、�速�音调�TTS 音量、混音比例�保留原声�?- 保持后� IPC、任务渲染�FFmpeg、模板数�结构不变；本次只恢�现有字段的�操�?UI�?- Windows �发环境已执� `npm run build` 通过；Linux 部署逻辑�引入平台专属�径�?
+
+## 0.1.56 模板页顶部工具区压缩�?026-04-30�?- �题：模板页�分镜与样片分析”使用独立大卡片，占用�屏过�空间，削弱模板列表与分镜结构的视�重点�?- �复：`src/renderer/src/ui/views/TemplatesView.vue` 将�区域改为紧凑横向工具条，保留新增分镜�样片目录分析和分析摘�显示能力，但移除大标��明和大面积留白�?- 业务保持：不改变模板新��位、样片分析生成模板�模板高级�置、任务渲染和 IPC 逻辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.57 参�图舒�暗色界面统��?026-04-30�?- 设�来源：参�用户提供的 `ChatGPT Image 2026�?�?0�?16_18_58.png`，并继续遵循 Stitch 项目 `9440664742750942694` �?Precision Canvas 深色工作台基线�?- 全局样式：`src/renderer/src/styles.css` 新�舒适暗色�盖层，统一深蓝黑背��?12px 左侧导航�?6px 顶栏�?280px 内��度、低对比卡片、紫色主按钮、紧凑输入��?Tabs�?- 首页：`HomeView.vue` 重写为参考图风格，采用居�欢迎�、单�主按�、三张快捷入口卡、最近任务和�近模板；同时�复�页�见中文乱码�?- 业务保持：不改变产品、模板��刻、任务�直�切片� IPC 和后�业务逻辑；本次以统一视�比例和�读�为主�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.58 左侧菜单两字化与参�图样式收敛�?026-04-30�?- �题：左侧菜单文�长度不统一，`复刻工坊/直播切片` 与参考图不一致；菜单项背�和�中态过重，观感不像用户参�图�?- �复：`src/renderer/src/ui/MainLayout.vue` 将�航统一�?`主页 / 产品 / 模板 / 复刻 / 切片 / 任务`�?- 样式：`src/renderer/src/styles.css` 将侧栏调整为 132px，普通菜单项改为透明背景，�中项改为更克制的紫色胶囊渐变，统一图标尺��字号�间距和圆�；窄屏仍自动收缩为图标栏�?- 业务保持：仅调整导航文�和视�样式，不改变路由�IPC 和业务功能�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.59 全局字体与字重优化（2026-04-30�?- �题：当前界面� Windows 下中文字体�感偏粗、发糊，侧边菜单、标题�按�大量使�?`font-black` �?850 以上字重，�致参�图应有的克制高级感�破坏�?- �复：`src/renderer/src/styles.css` 新�全�排版覆盖层，统一使用 Inter + 系统 UI + Microsoft YaHei UI / PingFang SC / Noto Sans SC 的跨平台字体栈，并开�字体抗锯齿与�读�优化�?- 字重策略：将 `font-black/font-extrabold` 收敛�?760，将按钮、菜单�Tabs 控制�?650-680，�文保�?400，避免中文粗体过重；�通中文文�统一取消额�字距，保留��类大写标签的轻量层级�?- 范围：影响�页、产品�模板��刻、切片�任务等�有现有页面的字体显示，不改变�由�IPC、Seedance/Kling、任务队列或任何业务逻辑�?- 使用说明：后�新�页面应复用全局字体栈，不�在单页内重新定义随机字体或超重字重；中文标题优先使� 650-760 字重�?- 验证：需�?Windows PowerShell 执� `npm run build`，并打开主界面�查菜单�标题�按�文字�否更清晰、更接近参�图�?
+
+## 0.1.60 三大工作流信�架构重�划�?026-04-30�?- �标：将原�级��?`产品 / 模板 / 任务` 收敛为同��?`生产` 模块，主导航调整�?`主页 / 生产 / 复刻 / 切片`，减少系统割裂感�?- �由：保�?`/products`、`/templates`、`/tasks` 深链接不变，新� `/production` 作为生产模块�名并重定向�?`/products`�?- 导航：`/products`、`/templates`、`/tasks`、`/production` 统一高亮左侧 `生产`；`/clone` 高亮 `复刻`，`/live-slicer` 高亮 `切片`�?- 生产模块：新�?`ProductionTabs` 顶部三��航，固定为 `产品素材 / 模板结构 / 批量任务`，并复用到产品�模板�任务三�页面，不新�大侧栏�?- 首页：改为三条工作流入口：常规生产�爆款�刻、直�切片；主按钮进入生产模块，最近任务和�近模板保留�?- 业务保持：未改动 IPC、Seedance/Kling、FFmpeg、任务队列�产品素材�模板编辑和批量生成业务逻辑�?- 使用说明：普通用户从首页选择三条工作流；常�批量出片进� `生产` 后按 `产品素材 -> 模板结构 -> 批量任务` 完成�?
+
+## 0.1.61 导航视����?Key 与直�切片真实化修复�?026-04-30�?- �题：三大工作流收敛后，左侧�航仍叠加历史�栏样式，��比例�异；复刻工坊� Seedance/Kling Key 设置入口不�显眼；直播切片页面展示了尚�接入后��?AI 高光/字幕/重构能力，�易�导为已实现�?- 导航�复：`src/renderer/src/styles.css` 增加��?shell 覆盖，将左侧栏收敛为 104px 紧凑按钮式�航，隐藏长品牌名，保�?`主页 / 生产 / 复刻 / 切片` 两字入口，减少大面积�色块和文字拥挤�?- 复刻�复：`src/renderer/src/ui/views/CloneView.vue` 在�刻页�屏恢��云�模型配置”卡片，直接展示 Seedance Key、Kling Key、主供应商�模型名和保存按�；生成前仍自动保存配�，�式出片仍�� mock/图片拼接�?- 切片�复：`src/renderer/src/ui/views/LiveSlicerView.vue` 改为真实�用流程：选择�地直�录制/长�������置每�时长�调用已�?`media.segmentSplit` FFmpeg 切片接口、展示输出片段并�持打�文件/输出�录�?- 能力边界：AI 高光识别、自动字幕�竖屏重构尚�接入后�，页面改为明�提示“待后�接入”，不再展示�点击假按��?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.62 复刻设置收敛与切片单屏优化（2026-04-30�?- 复刻工坊：移除�屏大面�“云�模型配置”卡片，改为页头右侧“模型�置”轻量弹层，保留 Seedance/Kling Key、主供应商�模型名和保存�辑；生成前仍使用原有凭证保存与云�生成链路�?- 直播切片：重�?`LiveSlicerView.vue` 为紧凑单屏工作台，保留真�?FFmpeg 固定时长切片、�����输出片段列表�打�原��和打开输出�录功能；�接入�?AI 高光/字幕/竖屏重构仅放入�明折叠区，不展示成�执�假按钮�?- 导航视�：追加�终侧栏�盖样式，改为横向图�+两字文字的小胶囊菜单，减少紫色大块�上下堆叠和占屏宽度�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.63 侧栏风格切换与长视���修复�?026-04-30�?- 侧栏：在全局样式�尾追加新的�?rail 风格，主导航收敛�?92px 宽�图标在上文字在下的小型入口，�中态改为青�侧边指示与柔和背�，隐藏品牌长文�和底部冗余用户信息，减少压�感�?- 直播切片：重新写�?`LiveSlicerView.vue` 正常�文内容，避免历史编码损坏；��区增�?`slicer-video-frame` 固定舞台，��使�?`object-fit: contain` 居中显示，横�?长��不会�裁切或撑爆页��?- 业务保持：不�?FFmpeg `media.segmentSplit`、文件�择、打�原���打�输出�录等真实切片逻辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.64 直播切片 9:16 预�自适应�?026-04-30�?- �题：直播切片导�?9:16 竖屏视�时，��仍套用�向舞台，画面看起来��向�切放大�?- �复：`LiveSlicerView.vue` 监听视� `loadedmetadata`，按 `videoWidth/videoHeight` �动识��屏或竖屏；竖屏��给预���加 `is-portrait` 状��?- 样式：`styles.css` 为竖屏��添�?9:16 舞台，并�?`.slicer-video` 使用高优先级 `object-fit: contain`，避免历史全� cover 样式干扰�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.65 直播切片预�比例手动切��?026-04-30�?- �题：部分手�?9:16 视�带旋转元数�，浏览器 `videoWidth/videoHeight` �能返回横向编码尺寸，导致�动识�仍显示不符合用户预期�?- �复：切片页默认使用竖屏��舞台，并新增���比例�切�：竖� / �� / �动�异常旋�或平台下载��可手动固定为竖屏�?- 样式：竖屏舞台默�?9:16，横屏舞台才使用 16:9；��仍强制 `object-fit: contain`，避免�切�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.66 直播切片竖屏画布垂直居中�?026-04-30�?- �题：竖屏预�虽然切换到 9:16，但画布使用 `height: 100%` 贴满预�区域，视�上没有在黑色舞台内垂直居中�?- �复：� `.slicer-preview` 改为 flex 双轴居中；竖�?`.slicer-video-frame` 使用固定 9:16 比例�?`height: min(92%, 620px)`，�手机画布在预�区域水平�垂直居�显示�?- �屏：�屏模式仍保留 16:9 舞台，并同样限制�大高度，避免撑爆页面�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.67 首页按参考图重构�?026-04-30�?- 首页：`HomeView.vue` 按用户参考图重写�?VideoGen Dashboard：紫�?Hero、主按钮“开始生成����三张快捷入口卡、最近任务和�近模板两栏�?- 真实数据：最近任务继�读�?`window.api.tasks.list()`，最近模板继�读�?`window.api.templates.list()`；任务进度�状态�模板名称仍来自现有业务数据�?- 视�：`styles.css` 新��页专用样式，包�参�图�的深色背�、紫色播�?Hero、卡片�进度条、Tag 和两栏布�；同时将主侧栏调整为参�图宽侧栏样式�?- 业务保持：不�?IPC、任务队列�模板�产品��刻、切片等后�逻辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.68 首页参�图比例缩小�?026-04-30�?- �题�?.1.67 首页对齐参�图后整体比例偏大，�屏展示压�感较强�?- �复：� `styles.css` 追加首页紧凑比例覆盖，将侧栏、内容边距�Hero 高度、主按钮、快捷卡、底部面板�缩略图、字号和间距整体缩小�?10-15%�?- 业务保持：不�?`HomeView.vue` 数据读取、路由跳�、任�?模板真实数据逻辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.69 直播切片按参考图重构并接入输出目录（2026-04-30�?- 页面：`LiveSlicerView.vue` 按用户参考图重构为左侧��?结果、右侧分析��?导出设置的工作台布局，包�导入区�识�模式卡�最�?�大片段时长�输出格式�画质�输出目录�开始分析和打开输出�录�?- 功能：�入视��开始智能分析�批量�出�有片段均接入现有 FFmpeg `media.segmentSplit`；识�模式作为策略选择 UI，当前实际切片仍使用固定时长 FFmpeg 链路，不展示不可用的 AI 高光假结果�?- 后�：`splitVideoToSegmentFiles`、`media:segmentSplit`、preload API �� `outputDir` �?`outputFormat`；�择输出�录后切片�直接写入用户指定�录，MP4/原格式可选�?- 样式：`styles.css` 新� `live-*` 专用样式，�齐参�图的深色卡片�紫色按�、右侧�置面板和结果区�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.70 直播切片内�区溢出�正（2026-04-30�?- �题：直播切片页�用首页全局工作区大边距后，右侧设置栏在 1920 宽窗口下�挤出内�区，出现横向溢出；�部比例也偏�参考��?- �复：使�?`.ds-workspace:has(.live-slicer-workbench)` 对切片页单独收紧工作�?padding，并�?`live-slicer-grid` 设置 `minmax(0,1fr) + 340/360px` 右栏、`min-width:0` �?`overflow-x:hidden`�?- 视�：切片页卡片�上传区、右侧�置面板、按�、输入�和间距整体缩小，贴近参考图比例；窄宽度下自动切到单列，避免�向滚动�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.71 壳层顶部对齐�正�?026-04-30�?- �题：侧栏品牌区与右上顶部操作栏不在同�水平基线上，视�上与参考�不�致�?- �复：� `styles.css` 追加壳层顶部对齐覆盖，将侧栏顶部 padding 调整�?32px，品牌区固定 48px 高并垂直居中；Topbar 固定 72px 高，右上��/通知/用户/更�按�在栏内垂直居��?- 范围：仅调整全局 shell 顶部对齐，不改页�业务逻辑�?- 验证：Windows PowerShell 执� `npm run build` 通过�?
+
+## 0.1.78 �������������ڶ���ο���
+- �������������ָ�Ϊ��������̨�˵����������ȵ���Ϊ 232px���˵����֡�ͼ�ꡢƷ����ͬ���Ŵ󣬱����˻���խͼ������
+- �������������ֽ��գ����������Ҽ��ͳһΪ 26px�����ٶ����ͱ�Ե�հף�ͬʱ������Ƹ��е������ݺ����С�
+- С���ڿ��ȵ��� 1181px ʱ���Զ��۵�Ϊͼ���������֤ Windows С�����Ժ� Linux ���𻷾��²�����������
+## 0.1.79 ���̹��������������ο�����̨
+- ���̹��������ӡ������ + ������迨Ƭ������Ϊ�ο����еĽ��չ���̨ͷ�������⡢˵�����ƶ�״̬�Ͳ�����ť�������У����Ͷ���ռ�ߡ�
+- 5 �����̸�Ϊϸ�ֶε�����ʽ��ѡ��̬ʹ����ɫϸ�ߺ���������������ʹ�ô������Ƭ�������ڵ�����������
+- ����ԭ�и������̡�ģ�����á���һ��������Ԥ�������������߼����������Ӿ���������Ϣ�㼶��
+## 0.1.80 ���̹�����ƵԤ����·�޸������
+- �޸����̹����� 1 ��ѡ����Ƶ���м�Ԥ������ʾ��״̬�����⣺ǰ������ `referencePreviewPath`������ʹ���ѷ�����Ŀ·��������ֱ��ʹ�ø�ѡ��� `refPath`��ѡ���ļ���������Ԥ����
+- ����ý��Э�� `vg://file` ���� `Range` ����֧�֣����� `206 Content-Range / Content-Length / Accept-Ranges`������ Chromium `<video>` �Ա��� MP4/MOV ��Ԫ���ݼ��ء����ź��϶��ȶ��ԡ�
+- Ԥ������������������ʾ�������Ƶ�����Э�����ʧ�ܣ�ҳ����ʾ�ɼ���ʾ�������û�ֻ�����ڿ���״̬��
+- Windows ���ԣ�`C:\Users\Administrator\Desktop\����.mp4` �ɱ� ffprobe ʶ��Ϊ H.264/AAC��576x1024��16.439s��FFmpeg ��֡�ɹ���`npm run build` ͨ����
+## 0.1.83 AtlasCloud ͳһͼƬ/��Ƶģ�ͽ��루2026-04-30��
+- ���̹���ԭ Kling ͼƬ/��Ƶ��Ӧ�̲�λ��Ϊ AtlasCloud ���أ�Ĭ�� Host Ϊ `https://api.atlascloud.ai`��ͼƬ�ӿ�ʹ�� `/api/v1/model/generateImage`����Ƶ�ӿ�ʹ�� `/api/v1/model/generateVideo`��
+- ���ز�Ʒͼ����֡��β֡�ڵ��� AtlasCloud ǰ��ͨ�� `/api/v1/model/uploadMedia` �ϴ����������񷵻� prediction id ��ͳһ��ѯ `/api/v1/model/prediction/{id}` ��ȡ��� URL��
+- ͼƬģ��Ĭ�� `openai/gpt-image-1/edit`����Ƶģ��Ĭ�� `kling-v2.0`����֧���ֶ����� AtlasCloud �ĵ��е�����ģ�����ơ�
+- ʹ��˵����ģ��������ѡ�� AtlasCloud ���Ȼ�ͼƬ AtlasCloud������д AtlasCloud API Key��Seedance/Ark Key �������� AtlasCloud �ӿڡ�
+- ��֤��Windows PowerShell ִ�� `npm run build` ͨ����
+## 0.1.84 AtlasCloud uploadMedia download_url �����޸���2026-04-30��
+- �޸� AtlasCloud `/api/v1/model/uploadMedia` �ɹ����� `data.download_url` ʱ������Ϊ missing url �����⡣
+- ͼƬ��· `gptImage.ts` ����Ƶ��· `providers.ts` �� URL ���������� `download_url / downloadUrl / file_url` ���� `data.*` ��ʽ��
+- �����û��ṩ�� uploadMedia ��Ӧ������֤�ɽ����� OSS ͼƬ URL��Windows PowerShell ִ�� `npm run build` ͨ����`r`n## 0.1.85 ��ģ�����ݰ�������ʾ��ˢ�£�2026-04-30��
+- �޸����̹���������ģ�����ݰ�ʱ����̨�����ɵ���ͼƬ��ǰ����ͣ���� 25% �����Ҳ���ʾ����ͼ�����⡣
+- ��������ÿ�� AtlasCloud/OpenAI ͼƬ������ɺ��������ļ�·��д����Ŀ `modelIdentityPacks[].imagePaths`�����ٵ� 4 ��ȫ����ɺ�ű��档
+- ǰ�������ݰ������ڼ�ÿ 2 ��ˢ����Ŀ״̬���û����Կ��������ͼƬ���ų��֣�ʧ��ʱ����������ͼƬ����ʾ��ʵ����
+- ͬ���޸� `/clone` ��ʷ��������ɵ�ģ��ͽű���������Windows PowerShell ִ�� `npm run build` ͨ����
+
+## 0.1.86 - GRS.AI ????????????
+- ?????? GRS.AI ??????? `/v1/draw/completions`???? `/v1/video/veo`??????? `/v1/draw/result`?
+- ???????????????????? Seedance?AtlasCloud?OpenAI?GRS.AI Key?Host ??????
+- ??????? `openai / atlascloud / grsai`???????? `seedance / atlascloud / grsai`??? `kling` ?????? AtlasCloud?
+- ???? GRS.AI ????????? API Key ?? `/client/grsai/getCredits`????????????????????????
+- GRS.AI ???????????????????????? URL????????? AtlasCloud/OpenAI ???????? URL?
+- ?????Windows PowerShell `npm run build` ????
+
+
+## 0.1.88 - ??????????
+- ????????????????????AccessKey?SecretKey?Bucket????????????????
+- GRS.AI ????????????????????????????? URL ?? `urls` ???
+- GRS.AI ??????????/????????????????? URL ?? `firstFrameUrl` / `lastFrameUrl`?
+- ???????????????? token ??????????? SDK??? Windows ??? Linux ???
+- Windows PowerShell ?? `npm run build` ???
+
+## 0.1.89 - ?? GRS.AI OSS ?????2026-05-01?
+- ???????????? GRS.AI OSS ID / OSS Path ????
+- GRS.AI ??????? `oss-id` / `oss-path`?????????????????????
+- ????????????????????????????? URL????? GRS.AI ??/?????
+- ? `clone-settings.json` ???????? OSS ???????????????
+
+## 0.1.90 图片/视频模型严格按选择切换（2026-05-01）
+- 复刻工坊模型设置中，图片生成只读取“图片供应商”和该供应商对应的图片模型：OpenAI 使用 `openaiImageModel`，AtlasCloud 使用 `klingImageModel`，GRS.AI 使用 `grsaiImageModel`。
+- 视频生成只读取“视频供应商”和该供应商对应的视频模型：Seedance 使用 `videoModelPrimary`，AtlasCloud 使用 `videoModelFallback`，GRS.AI 使用 `grsaiVideoModel`。
+- 移除图片链路在 OpenAI 未配置 Key 时自动切换到 GRS.AI/AtlasCloud 的行为；未配置当前所选供应商 Key 时直接提示对应 Key 缺失。
+- 移除视频链路自动串联备用供应商的行为；用户选择 Seedance/AtlasCloud/GRS.AI 后，生成请求只提交到当前选中的供应商，避免模型名与供应商错配。
+- 使用说明：修改模型设置后先保存配置，再生成身份包、AI 首尾帧或视频片段；如果选择 GRS.AI 图片和 GRS.AI 视频，需要分别填写图片模型与视频模型，二者不会互相覆盖。
+## 0.1.91 复刻工坊可见乱码修复（2026-05-01）
+- 修复复刻工坊产品参考图步骤底部主按钮乱码，按钮文案统一为“下一步：分镜替换”。
+- 修复运行日志和失败状态中的历史编码损坏文案，改为“开始：...”和“执行失败，请查看错误详情”。
+- 使用说明：模型设置未配置当前图片供应商 Key 时，按钮仍会禁用并显示对应供应商 Key 缺失提示；配置后按钮可正常进入下一步。
+## 0.1.92 GRS.AI 图片供应商生成身份包修复（2026-05-01）
+- 修复复刻工坊选择“图片供应商：GRS.AI GPT Image”后，生成新模特身份包仍提示“未配置 OpenAI API Key”的问题。
+- 生成身份包和 AI 首尾帧请求现在会把当前图片供应商、GRS.AI Key、GRS.AI Host、GRS.AI 图片模型作为顶层参数传给主进程，主进程优先使用本次点击时的选择，不再依赖旧保存配置回退到 OpenAI。
+- 使用说明：选择 GRS.AI GPT Image 后，只要填写 GRS.AI API Key 和图片模型即可生成身份包；OpenAI API Key 为空不会阻断 GRS.AI 图片链路。
+## 0.1.93 GRS.AI 身份包生成链路重构与旧进程排查（2026-05-01）
+- 修复复刻工坊批量补齐 AI 分镜时仍走旧普通首尾帧接口的问题：当已生成并选择新模特身份包时，批量补齐也统一调用 `generateGptShotFrames`，并透传当前图片供应商、GRS.AI Key、Host 和图片模型。
+- 主进程图片供应商标签恢复为正常中文，避免日志和错误提示继续出现乱码。
+- 身份包生成失败提示中增加当前图片供应商解析结果；如果用户已选择 GRS.AI 但仍看到 OpenAI Key 缺失，优先检查是否存在未退出的旧 Electron 主进程。
+- 使用说明：修改模型设置后先保存配置；开发环境需要完全退出旧 Electron 窗口和 `npm run dev` 进程后重新启动，否则主进程 IPC 可能仍使用旧逻辑。
+## 0.1.94 七牛云上传区域自动重试（2026-05-01）
+- 修复 GRS.AI 生成身份包上传本地参考图时，七牛 Bucket 区域和上传域名不匹配导致 `incorrect region` 失败的问题。
+- 七牛上传模块现在会先使用用户保存的上传域名；如果七牛返回 `please use xxx.qiniup.com`，自动切换到返回的正确区域上传域名并重试一次。
+- 修复七牛上传模块中的历史乱码错误提示，缺少七牛配置或上传失败时显示正常中文。
+- 使用说明：Bucket `videowarehouse` 当前七牛提示应使用 `https://up-as0.qiniup.com`；也可以在模型设置里手动填写该上传域名，程序仍会在区域错误时自动纠正。
+## 0.1.95 AtlasCloud 视频生成接口对齐（2026-05-01）
+- 修复分镜视频生成选择 AtlasCloud 时，历史 Kling Host `kling3api.com` 与 AtlasCloud `/api/v1/model/uploadMedia` 路径混用导致 404 的问题。
+- AtlasCloud 视频供应商现在强制使用 `https://api.atlascloud.ai`，不再透传旧 Kling Host。
+- AtlasCloud 图生视频按官方示例调用 `/api/v1/model/generateVideo`，请求字段使用 `model / prompt / image / last_image / aspect_ratio / duration / resolution / seed`，不再调用 `/api/v1/model/uploadMedia`。
+- 本地首尾帧会先通过七牛云转换为公网 URL，再提交给 AtlasCloud；轮询仍使用 `/api/v1/model/prediction/{id}`。
+- AtlasCloud 默认视频模型更新为 `google/veo3.1-lite/start-end-frame-to-video`；修改模型设置后保存配置再生成分镜。
+## 0.1.96 AtlasCloud Veo 参数收敛（2026-05-01）
+- 修复 AtlasCloud `google/veo3.1-lite/start-end-frame-to-video` 返回 `Your use case is currently not supported` 时错误提示乱码的问题。
+- AtlasCloud Veo 请求严格对齐用户提供示例：`aspect_ratio` 对 Google/Veo 模型使用 `16:9`，保留 `model / prompt / image / last_image / duration / resolution / seed`，移除额外 `negative_prompt`。
+- AtlasCloud 默认视频模型统一为 `google/veo3.1-lite/start-end-frame-to-video`，避免残留历史 `kling-v2.0`。
+- 若 AtlasCloud 后端仍返回用例不支持，界面会显示清晰中文提示，建议切换模型、比例或分辨率。
+## 0.1.97 AtlasCloud Veo 3.1 Lite 时长对齐（2026-05-01）
+- 修复复刻工坊分镜视频选择 AtlasCloud `google/veo3.1-lite/start-end-frame-to-video` 时，按原分镜 3-5 秒提交为 `duration: 4` 导致 AtlasCloud/Gemini 返回 `Your use case is currently not supported` 的问题。
+- AtlasCloud 视频接口继续严格按用户选择的 AtlasCloud 供应商执行，不回退到 Seedance/GRS.AI；接口仍使用 `/api/v1/model/generateVideo` 和 `/api/v1/model/prediction/{id}`。
+- 对 `google/veo3.1-lite/start-end-frame-to-video` 固定提交 `duration: 8`、`resolution: 720p`、`seed: -1`，并保留 `model / prompt / image / last_image / aspect_ratio` 字段，与 AtlasCloud 示例调用保持一致。
+- 使用说明：分镜原始时长小于 8 秒时，AtlasCloud Veo 仍会生成 8 秒片段，后续合成链路按分镜时长裁切/拼接；如果 AtlasCloud 仍返回 use case 不支持，需要检查账号模型权限、首尾帧公网 URL 可访问性和输入图片比例。
+## 0.1.98 AtlasCloud 分镜时长与竖屏标准化（2026-05-01）
+- 修复复刻工坊 AtlasCloud 返回 `1280x720` 横屏片段后直接进入质检导致“分辨率比例异常”的问题：云端返回视频会先保留 raw 原片，再用 FFmpeg 标准化为 `1080x1920` 竖屏、30fps、H.264。
+- 撤销 `google/veo3.1-lite/start-end-frame-to-video` 固定 8 秒提交策略，AtlasCloud 视频请求重新按分镜长度映射为 4/6/8 秒，避免短分镜被强制生成 8 秒造成成本过高。
+- 正式分镜文件按原分镜 `durationSec` 裁切后再质检、保存和拼接，保证批量补齐与单条生成都使用分镜本身的长度。
+- AtlasCloud 视频请求固定使用 `aspect_ratio: 9:16`，符合当前复刻/拼接链路的竖屏短视频目标；如果云端仍返回横屏，也会在入库前统一转竖屏。
+- 使用说明：`raw_shot_video_*.mp4` 是云端原始返回文件，`shot_video_*.mp4` 是用于质检和最终拼接的标准化分镜文件。
+## 0.1.99 复刻视频方向跟随参考爆款（2026-05-01）
+- 修复复刻工坊把分镜视频方向固定写死为 `9:16` 的问题，现改为以用户导入的参考爆款视频分辨率为准：横屏参考走 `16:9`，竖屏参考走 `9:16`。
+- 参考视频分析阶段会把原视频宽高与目标比例写入蓝图，后续分镜 prompt、AtlasCloud 请求参数、云端返回后的 FFmpeg 标准化和质检比例校验都统一读取这个参考比例。
+- 因此如果参考爆款本身是横屏，生成分镜、质检与拼接也会保持横屏；如果参考爆款是竖屏，则全链路保持竖屏。
+- 使用说明：旧项目如果在本次修复前已分析过，建议重新导入参考视频或重新执行分析，使蓝图写入最新参考比例后再生成分镜。
+## 0.2.00 分镜操作区收敛与 AI 首尾帧耗时优化（2026-05-01）
+- 分镜替换页将“补齐所有 AI 分镜”从“当前分镜操作”面板移出，改放到左侧分镜列表区域，更符合批量动作定位，避免与单分镜操作混在一起。
+- 一键生成当前分镜、批量补齐分镜时，如果当前分镜已经确认过 AI 首尾帧，不再重复调用远端首尾帧生成，直接进入视频片段生成。
+- AtlasCloud 图片链路上传参考图时改为并行上传，不再逐张串行上传同一批参考图，减少 AI 首尾帧等待时间。
+- 使用说明：AI 首尾帧 `both` 仍然是先首帧、再尾帧的两段式生成，因为尾帧提示词会显式依赖首帧结果保持人物与场景连续性；本次优化主要解决重复生成和参考图重复串行上传造成的额外等待。
+## 0.2.01 AtlasCloud 自动重试与复刻耗时计时表（2026-05-01）
+- AtlasCloud 图片/视频链路新增统一重试封装：对 502/503/504、Cloudflare Bad Gateway、网络抖动等临时故障自动按指数退避重试，覆盖图片任务提交、视频任务提交、prediction 轮询、媒体下载与 uploadMedia 上传，降低 generateGptShotFrames 和 generateShotClip 因网关抖动导致的随机失败。
+- AtlasCloud 失败提示增加当前参数上下文：当返回 Your use case is currently not supported 时，错误中会带出最终 model / aspect_ratio / duration / resolution，方便直接核对模型、比例和时长组合，而不是只看到泛化报错。
+- 复刻工坊运行条下方新增高级耗时面板，显示总耗时、当前阶段耗时和阶段计时表；开始分析、生成 AI 首尾帧、提交云端任务、轮询刷新等步骤都会按阶段累计，便于观察爆款复刻从开始到出结果的耗时分布。
+- 使用说明：AtlasCloud 502 属于云端临时波动时现在会自动重试；如果仍报 use case not supported，优先根据错误里回显的参数切换模型或时长档位。Windows 已执行 
+pm run build 通过。
+
+## 0.2.02 AtlasCloud Veo 3.1 Lite 固定 8 秒修正（2026-05-01）
+- 复刻工坊再次核对 AtlasCloud 官方模型页后，确认 google/veo3.1-lite/start-end-frame-to-video 当前能力为固定 8 second duration，并非通用 4/6/8 秒。
+- 主进程提交 AtlasCloud 视频任务时，对该模型强制使用 duration=8；其他 AtlasCloud 视频模型仍保持按分镜时长映射 4/6/8 秒。
+- 使用说明：如果参考分镜本身只有 2-5 秒，AtlasCloud 仍会先生成 8 秒原片，随后本地继续按分镜原始时长裁切、质检和拼接，不影响最终成片长度，只是该特定模型的云端计费时长无法再压缩到 4 秒。
+- Windows 已执行 
+pm run build 通过。
+
+## 0.2.03 AI ģ�����ݰ�����Ϊ���ؽ�ɫ�⣨2026-05-01��
+- �����̹���ԭ���ġ���Ŀ����ģ�����ݰ�������Ϊ�������ɸ��õı��� AI ģ�ؽ�ɫ�⡱������ȫ�� `modelIdentityLibrary` �־û��ṹ����ǰ��Ŀ������ `selectedModelIdentityId` �� `selectedModelIdentitySnapshot` ���á�
+- ������ AI ģ��ʱ���������ȴ���ȫ�ֽ�ɫ��¼��ʵʱд�������е�ͼƬ����ɺ��Զ��ѵ�ǰ��Ŀ�л����½�ɫ����ɫ������ `AIģ�� 001 / 002 / 003...` �Զ�������
+- `/clone` ��Ʒͼ�����Ϊ������ AI ģ�ؿ⡱������֧�ֲ鿴��ǰ��ѡ��ɫ���ӽ�ɫ��ѡ�����н�ɫ�������½�ɫ����������ɫ��ɾ����ɫ��
+- ����Ŀ���ݣ�����ʷ��Ŀֻ�� `modelIdentityPacks`���״ζ�ȡʱ�Զ�Ǩ�Ƶ�ȫ�ֽ�ɫ�Ⲣ������Ŀ���ã����ֶα���Ϊ���ݾ��񣬲�����Ϊ������Դ��
+- ��ɫ�ز�Ŀ¼����ĿĿ¼Ǩ��Ϊȫ��Ŀ¼��`dataDir/viral-clone/identity-library/<identityId>`��ɾ����ɫʱ��ͬʱɾ���ý�ɫ�ı����ز�Ŀ¼��������ɾ����ʷ��Ŀ��������Ƶ��־��ļ���
+- ɾ���������ʾ�������Ŀ���õĽ�ɫ�Ѵӱ��ؽ�ɫ��ɾ����ҳ�����ȷ��ʾ����ǰ��Ŀ���õ� AI ģ����ɾ����������ѡ�񡱣����ᾲĬ�滻Ϊ������ɫ��
+- AI ��β֡�������־����ɡ������������·ͳһ��ȡ��ǰ��Ŀѡ�еı��� AI ģ�أ�δѡ���ɫʱ����ذ�ť���û���ʾ�ȴӱ��� AI ģ�ؿ�ѡ��/���ɡ�
+- ʹ��˵����
+  - �� `/clone` �� 2 �������� AI ģ�ؿ⡱����ѡ�����н�ɫ�������������� AI ģ�ء������½�ɫ��
+  - ������ɺ�ý�ɫ����뱾����ɫ�⣬��������������Ŀ��ֱ�Ӹ��á�
+  - ����������������޸Ľ�ɫ�����ƣ������ɾ������ɾ����ɫ��¼�ͽ�ɫ�ز�Ŀ¼��������ɾ����ʷ��Ŀ�Ѿ����ɵ���Ƶ�����
+  - Windows ��������ͨ����Ŀ¼���ļ�����ʹ�� Node ��ƽ̨ API��Linux ����ɼ��ݡ�
+
+## 0.2.04 ���� AI ģ�ؿ�����븴��ҳѡ����������2026-05-01��
+- ��������һ��������ģ�ء���·��Ϊ /models����Ϊȫ�� AI ģ�ؿ��Ψһ����������ڣ����ٹ��ڡ��������������ڲ���
+- ��������ģ�ؿ�ҳ�棬֧��ȫ��������״̬ɸѡ���������ȿ�Ƭ���������鿴����������ɾ�����Լ������� AI ģ�ء�
+- ������ AI ģ�ؼ����������� generateModelIdentityPack(cloneProjectId, ...) �����̽ӿڣ���˶���ģ�ؿ�ҳ��Ҫ����ѡ��һ��������Ŀ��Ϊ��Դ�����ģ�����д��Ʒ���͡���Ʒ����Ͳο�ͼ�����ɡ�
+- /clone �� 2 �����ٳе�ģ�ؿ���������ְ��ֻ��������ǰ��ѡģ�ؿ�Ƭ��������ѡ��ģ�ء���塢��ǰ��ģ�ؿ⡱��ť���Լ���ɫʧЧ��ʾ��
+- ����ҳ������ѡ����Ĭ�Ͻ�չʾ status=done �Ŀ���ģ�أ���������Ŀ�����ɡ���������ɾ��ģ�ء�
+- ��ʷ�쳣��ɫ���� AI?? 001 �ڶ�ȡ��ɫ��ʱ�Զ�����Ϊ AIģ�� 001������������������Ⱦ���档
+- ʹ��˵������Ҫ���������ģ��ʱ�����붥����ģ�ء�ҳ��ͳһ���������� /clone ��ֻ��Ϊ��ǰ��Ŀѡ������ģ�أ�����Ŀ���õ�ģ���ѱ�ɾ��������ҳ����ʾ����ѡ�񣬲����Զ��滻��������ɫ��
+
+## 0.2.05 ���̹�����Ʒͼ�����Ӿ���ԭ��2026-05-01��
+- �� Stitch MCP ��Ŀ `9440664742750942694` �С����̹��� 2.2 - ���ؼ���ԭ�桱���û��ṩ�� 2026-05-01 ��ɫ��Ƹ壬����У׼ `/clone` �� 2 �������Ӿ�������
+- ����ҳ��Ǹ�Ϊ��Ƹ�һ�µ� 204px ��ർ����56px ������������Լ 1280px ������̨���ȣ����ʹ�ǰ��������������������λ��ɵ��Ӿ�ƫ�
+- ��Ʒͼ��������ѹ��Ϊ��Ƹ���϶��С��¶��в��֣���Ʒ�ο�ͼ���Ʒ�趨ͬ�ţ�AI ģ�ؿ�������ͳ��ͬ�ţ��ײ���һ��/��һ��/����ݸ������������Ƹ塣
+- ��Ʒ�ο�ͼ�ϴ�����������ο�ͼ����Ʒ�趨������AI ģ�ؿ�Ƭ������ͳ�����ֿ�ͳһΪ��ɫ�����ʸС���ɫ����ť�͵ͶԱ���ߣ����������հ׺Ϳ�Ƭ���ߡ�
+- �޸�����ҳ�ɼ������İ��������� `aria-label` �롰�������ֶλָ�Ϊ�������ġ�
+- ʹ��˵�������� `/clone` ���л����� 2 �����ϴ���Ʒͼ��������Ӧ��ͬʱ������Ʒ�ο�ͼ����Ʒ�趨��AI ģ�ؿ⡢����ͳ�ƺ͵ײ���������Windows ��������ִ�� `npm run build` ��֤��
+
+## 0.2.06 �ϴ���Ʒͼ��Ƹ����ն��루2026-05-01��
+- ʹ�� Stitch MCP screen `7484860514673190569` �Ľ�ͼ `.stitch-ref/clone-product-upload-design-2026-05-01.png` ��Ϊ `/clone` �� 2 �����ϴ���Ʒͼ������Ψһ�Ӿ���׼��
+- ������ͳ�������롰���������������Ƭ��չʾ����ṹ���֡�ǰ 3 ��ǿ�ȡ���Ʒչʾ�����ȡ�AI ���ɷ��յ����֣�������Ƹ��Ҳ������顣
+- ������ `/clone` ר����ʽ׷�ӵ� CSS �ļ�ĩβ������ɰ� 0.1.x ��ʷ���ǲ��ٴθ��ǲ������ȡ����������Ͳ�Ʒͼ���������
+- ��������ǰ��˷��룺����ֻ���� Vue ģ��ɼ��ṹ�� CSS ��ʽ�����������̡�IPC���ƶ����ɡ�ģ�ؿ���ļ������߼���
+- ʹ��˵��������Ӧ�ý��� `/clone`���л����� 2 �����ϴ���Ʒͼ����Ӧ���ϴ���Ƹ���ʾ������ɫ����̨����Ʒ�ο�ͼ����Ʒ�趨��AI ģ�ؿ⡢����ͳ�ƺ͵ײ���������
+
+## 0.2.08 �ϴ���Ʒͼ�����ʸ���ȫ�ֿǲ�һ����������2026-05-01��
+- ���� 0.2.07 Ϊ׷���ͼ�ֲ��������� `/clone` ���������С��ȫ�ֿǲ�����⣺����ҳ�����ָ�Ϊ��Ӧ������һ�µĿ��������������پֲ�ѹ����С�˵���
+- �ϴ���Ʒͼ�������������� Stitch �ϴ���Ƹ壬�����Ż��ص�Ӳ���ѹ��תΪ�������ʸУ���ǿ��ɫ������Ƭ��Ρ���ɫѡ��̬���ο�ͼ��Ƭ���ϴ���塢��Ʒ�趨������ģ�ؿ⿨Ƭ���Ӿ����¶ȡ�
+- ��Ʒͼ����Ʒ�趨��AI ģ�ؿ������ͳ������Ŵ󵽵�ǰȫ�ֲ��������¸�Э���Ŀ��ȣ�������濴��������ͨ��̨������
+- ʹ��˵�������������������ں���� `/clone` �� 2 ������߲˵�Ӧ������ҳ�汣��һ�£���Ʒͼ���������ָ߼���ɫ����̨���
+
+## 0.2.10 �ϴ���Ʒͼ��������ع�ȫ�ֿǲ㣨2026-05-01��
+- ���� /clone �� 2 ����ǰ��ҳ���ǲ������ȵ��½�������С��������ҳ�������һ�µ����⣺����ҳ�����ָ�Ϊȫ�� 200px ���������������ָ�Ϊȫ�ֽ��ո߶ȡ�
+- �ϴ���Ʒͼ�����������ο� Stitch screen 7484860514673190569����ֻ������������������Ʒ�ο�ͼ����Ʒ�趨��AI ģ�ؿ⡢����ͳ�ƺ͵ײ�������ͳһѹ���е��ܶȣ�����ʹ�ô�ſ�Ƭ�ʹ��ֺš�
+- ��ʽ���ǲ�׷���� styles.css �ļ�ĩβ��������ʷ 0.2.07/0.2.08/0.2.09 ���Ǽ���Ӱ�����ձ�����
+- ʹ��˵�������������������ں���� /clone �� 2 ������߲˵�Ӧ������ҳ�汣��һ�£��ϴ���Ʒͼ����Ӧ���ֽ��ո߼���ɫ����̨Ч����
+
+## 0.2.11 �ϴ���Ʒͼ�����ܶ�������2026-05-01��
+- �����û���ͼ�������� Stitch �ϴ���Ʒͼ��Ƹ壬������ 2 ���ϰ�����Ȼ���ߡ�AI ģ�ؿⱻ������һ�������⡣
+- ѹ����Ʒ�ο�ͼ�ڲ��Ÿ���ο�ͼ�����иߡ��ϴ�����ࡢ��ť�߶ȡ������ֺźͿ�Ƭ padding��ʹ��Ʒ�ο�ͼ���Ʒ�趨���ӽ���Ƹ���������ձ�����
+- ͬ��ѹ�� AI ģ�ؿ������ͳ�ƿ�Ƭ�߶ȣ���֤�ڳ��� 1920x1080 Windows �����������ܿ����ϴ���Ʒͼ����Ʒ�趨��AI ģ�ؿ⡢����ͳ�ƺ͵ײ�������ڡ�
+- ʹ��˵�������������������ں���� /clone �� 2 ����飬���ɴ�������ʾ��ߴ磬���˳��� Electron ���̱��⻺�档
+
+## 0.2.12 ��Ʒ�ο�ͼ�ϴ�չʾ������2026-05-01��
+- �޸������ϴ���Ʒ�ο�ͼ��ͼƬ���Զ��зֵ������ͼ��������ͼ�����Ч�������ͼ�ȹ̶������λ�������û��о�ͼƬ��ʾ��������������⡣
+- �� 2 ����Ʒ�ο�ͼ�����Ϊͳһ�ϴ�ͼƬ���������ϴ����ͼƬ���ο�ͼ 01/02/03 ˳��ƽ��չʾ����λ��ʾ���ϴ��Ӻţ����ٰ���ͨ����ͼǿ�б���ӽǷ��ࡣ
+- �ڲ��Ա�������ͼ/ϸ��/ʹ��/������������ݽṹ����������·�����ֺ�˺� AI ��β֡���ɲ������ݡ�
+- ʹ��˵������������ϴ���ѡȡ�ļ���ͼƬӦֻ�����ڲ�Ʒ�ο�ͼ����ͼ�����У���Ʒ�趨����ֻ��ʾ�ο�ͼ�����Ͳ�Ʒ������
+
+## 0.2.13 ��Ʒ�ο�ͼɾ��������2026-05-01��
+- Ϊ /clone �� 2 ����Ʒ�ο�ͼ����ͼ����ɾ�����ܣ�ÿ�����ϴ�ͼƬ���Ͻ���ʾԲ�� �� ��ť�������ֻɾ����ǰͼƬ��
+- ɾ����ť����ֹ�¼�ð�ݣ������󴥷�����ѡ���ļ������� Enter/Space Ҳ֧��ɾ�������ֻ����ɷ����ԡ�
+- ɾ�����ͬ���ؽ��ڲ���ͼ��ϸ��ͼ��ʹ��ͼ�����ͼ�������飬������ִ�в�Ʒ�ο�ͼ��ϣ���֤���� AI ������·��ȡ������ͼƬ�б���
+- ʹ��˵�����ϴ���Ʒ�ο�ͼ�󣬵������ͼ���Ͻ� �� ���Ƴ���ͼƬ����λ���Զ��ָ�Ϊ���ϴ�״̬��
+
+## 0.2.14 ��Ʒ�ο�ͼ��λ���ϴ���2026-05-01��
+- �޸��������ο�ͼ�����ϴ���ͼƬʼ����ʾ����һ��λ�õ����⡣
+- �����ϴ�/����ϴ������������׷��ͼƬ���б�ĩβ�������������ͼ������ֻ�滻��λ�õ�ͼƬ��
+- �ϴ����滻��ɾ���󶼻�ͬ���ؽ��ڲ�ͼƬ�������飬��֤����˳��� AI ������·��ȡ��ͼƬ˳��һ�¡�
+- ʹ��˵������Ҫ��������ͼʱ��������ϴ�����Ҫָ��ĳ��λ��ʱ�����Ӧ�����ϴ����滻��
+
+## 0.2.15 ����־���������һ����������2026-05-01��
+- Ϊ���̷־����� referenceLock �ṹ��Լ������¼����������������̬����Ʒչʾ��������ͷ��ͼ���˶�·�������뱣��������滻��ͽ�ֹ�Ĭ��ǿ��Ϊ hard_reference_motion��
+- ������Ƶ���������·־�ʱ���Զ�д�� referenceLock������Ŀ��ȡʱ��������з־���ɫ����������ͷ�� visualPrompt �Զ�����Ĭ�� referenceLock����������ݱ�����
+- AI ��β֡ prompt���ṹ���־� prompt ���ƶ�ͼ����Ƶ prompt ͳһע�� referenceLock��Ҫ���滻����Ͳ�Ʒ��ǿ����ԭ�־��ı�����𡢶�����ʽ�����ơ���ͼ����ͷ������˶����ࡣ
+- Prompt ���� hash ���� referenceLock�����⸴�þɿ��� prompt ���ɵ���β֡����ƵƬ�Ρ�
+- ʹ��˵�������·���������Ƶ�ɻ�ø������ķ־�Լ��������ĿҲ��ֱ�Ӽ������ɣ��������������� AI ��β֡����ƵƬ����ʹ���µĶ�������������ʾ�ʡ�
+
+## 0.2.16 GRS.AI ����ű����־�������2026-05-01��
+- `/clone` �ο���Ƶ������������Ϊ��ffprobe ��ȡ��Ƶ��Ϣ�������з֡�ÿ���־���ȡ��֡/��֡/β֡������ GRS.AI Chat Completions ���ݽӿ�����ģ̬�ű��������ٰ�ȫ�ֽű���ÿ���־��Ľű��İ�����������ͷ����ƷչʾĿ�ġ�������ʾ��д�� `CloneProject.baseBlueprint.shots`��
+- ���� `src/main/modules/clone/aiScriptAnalyzer.ts`��Ĭ������ `{grsaiHost}/v1/chat/completions`��Ĭ��ģ�� `gemini-3.1-pro`��֧�ֺ��� `https://grsaiapi.com` �͹��� `https://grsai.dakka.com.cn`������ʹ�� `Authorization: Bearer <grsaiApiKey>`��`stream:false`����ͨ��ÿ���־���/��/β֡ data URL ��ģ�Ͱ�ʱ���᷵���ȶ� JSON��
+- `ShotSpec` �����ű����ֶΣ�`scriptText`��`scriptRole`��`narrationText`��`onScreenText`��`visualDescription`��`actionDescription`��`cameraDescription`��`productFocus`��`generationPrompt`��`negativePrompt`��`scriptConfidence`��`analysisNotes`��`CloneBlueprint` ���� `globalScript` �� `scriptAnalysisError`��
+- ������·ͳһ��ȡ�ű�Լ������β֡ prompt���ṹ���־� prompt���ƶ�ͼ����Ƶ prompt �� prompt cache hash �����뵥�־��ű��ֶΣ�����ֻ��ͨ�� prompt ��ɶ����������������߼�ƫ��ԭ���
+- ���� `clone:reanalyzeShotScript` IPC�����ڵ������·�����ǰ�־���`clone:updateShotEnhanced` ֧�ֱ����û��ֶ��༭�Ľű��ֶΣ���ͬ��д�뵱ǰ��ͼ�������ͼ��
+- `/clone` UI �� AI ������Ƭ��ʾ����ű���ܡ������߼��ͽű���ɫ�ֲ����־��༭���������ű����ݡ���壬�ɱ༭��ɫ���ű��İ�������������������������ͷ��������Ʒ�ص��������ʾ�ʣ���֧�����·����͸�����ʾ�ʡ�
+- �ݴ�����δ���� GRS.AI Key���ӿ�ʧ�ܻ򷵻ط� JSON ʱ�������ɼٽű�����Ŀ�Ա������������зֺ͹ؼ�֡�����з־� `scriptConfidence=0`��������ʾ�ű�����ʧ�ܣ����ֶ���д������ Key �����·�����ֻ����ʽ���û������� `CLONE_SCRIPT_ANALYZER_MOCK=1` ʱ���������� mock��
+- ʹ��˵������ģ������������ GRS.AI Key �� Host �����·����ο���Ƶ���ɻ�ýű����־�Լ��������Ŀ��ʱ���Զ����������ֶΣ����������·����Ի����ʵ�ű����ڲ�����Ļ�ͷ־������߼���Windows ��ִ�� `npm run typecheck` �� `npm run build` ͨ�����ļ�·���� FFmpeg ���ü���ʹ�� Node ��ƽ̨ API��Linux ������ݡ�

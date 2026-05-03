@@ -1,0 +1,47 @@
+{
+  "sourceDir": "E:\\跨境电商\\！手机壳\\测试文件夹\\1",
+  "referenceDir": "D:\\phpstudy_pro\\WWW\\videogenerate\\video",
+  "musicDir": "E:\\跨境电商\\！手机壳\\测试文件夹\\music",
+  "outputDir": "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112",
+  "targetCount": 6,
+  "createdAt": "2026-04-11T06:22:22.013Z",
+  "productId": "141520f7-7bb2-49e8-adb3-04332caf962a",
+  "templateId": "d401cfee-e889-4dd6-9a81-766bcb893c65",
+  "settings": {
+    "bgmEnabled": true,
+    "bgmCount": 7,
+    "bgmSelectedCount": 1,
+    "bgmMode": "single-fixed",
+    "bgmSelectedFiles": [
+      "1.mp3"
+    ],
+    "bgmVolume": 0.9,
+    "titleEnabled": true,
+    "titlePoolCount": 10,
+    "sceneCount": 3,
+    "sceneKeys": [
+      "hook",
+      "show",
+      "detail"
+    ],
+    "assFontFamily": "Noto Sans SC",
+    "assPreset": "white_shadow",
+    "lockBgmMode": true
+  },
+  "summary": {
+    "totalTasks": 6,
+    "done": 6,
+    "error": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "outputs": [
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112\\自动化测试产品-含配乐文字-20260411_132113_自动化测试模板-含配乐文字-20260411_132113_1775888491923_896bf8c9.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112\\自动化测试产品-含配乐文字-20260411_132113_自动化测试模板-含配乐文字-20260411_132113_1775888491923_4100cdb6.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112\\自动化测试产品-含配乐文字-20260411_132113_自动化测试模板-含配乐文字-20260411_132113_1775888491922_3dd9cd76.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112\\自动化测试产品-含配乐文字-20260411_132113_自动化测试模板-含配乐文字-20260411_132113_1775888491922_c1646c60.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112\\自动化测试产品-含配乐文字-20260411_132113_自动化测试模板-含配乐文字-20260411_132113_1775888491922_b4536950.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\user_request_afterfix2_20260411_132112\\自动化测试产品-含配乐文字-20260411_132113_自动化测试模板-含配乐文字-20260411_132113_1775888491921_0e6c0ee0.mp4"
+  ],
+  "errors": []
+}

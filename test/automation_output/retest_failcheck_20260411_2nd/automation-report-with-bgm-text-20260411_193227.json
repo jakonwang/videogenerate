@@ -1,0 +1,46 @@
+{
+  "sourceDir": "E:\\跨境电商\\！手机壳\\测试文件夹\\1",
+  "referenceDir": "D:\\phpstudy_pro\\WWW\\videogenerate\\video",
+  "musicDir": "E:\\跨境电商\\！手机壳\\测试文件夹\\music",
+  "outputDir": "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\retest_failcheck_20260411_2nd",
+  "targetCount": 5,
+  "createdAt": "2026-04-11T12:32:27.893Z",
+  "productId": "0ae99e3e-412d-4ff4-9d02-3d89ece250a7",
+  "templateId": "2ce1d3e9-c18a-444c-8baa-0166587c971a",
+  "settings": {
+    "bgmEnabled": true,
+    "bgmCount": 7,
+    "bgmSelectedCount": 1,
+    "bgmMode": "single-fixed",
+    "bgmSelectedFiles": [
+      "1.mp3"
+    ],
+    "bgmVolume": 0.9,
+    "titleEnabled": true,
+    "titlePoolCount": 10,
+    "sceneCount": 3,
+    "sceneKeys": [
+      "hook",
+      "show",
+      "detail"
+    ],
+    "assFontFamily": "Noto Sans SC",
+    "assPreset": "white_shadow",
+    "lockBgmMode": true
+  },
+  "summary": {
+    "totalTasks": 5,
+    "done": 5,
+    "error": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "outputs": [
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\retest_failcheck_20260411_2nd\\自动化测试产品-含配乐文字-20260411_193133_自动化测试模板-含配乐文字-20260411_193133_1775910707813_ae011f48.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\retest_failcheck_20260411_2nd\\自动化测试产品-含配乐文字-20260411_193133_自动化测试模板-含配乐文字-20260411_193133_1775910707812_843fb589.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\retest_failcheck_20260411_2nd\\自动化测试产品-含配乐文字-20260411_193133_自动化测试模板-含配乐文字-20260411_193133_1775910707812_a20b692b.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\retest_failcheck_20260411_2nd\\自动化测试产品-含配乐文字-20260411_193133_自动化测试模板-含配乐文字-20260411_193133_1775910707812_9beb6f3d.mp4",
+    "D:\\phpstudy_pro\\WWW\\videogenerate\\test\\automation_output\\retest_failcheck_20260411_2nd\\自动化测试产品-含配乐文字-20260411_193133_自动化测试模板-含配乐文字-20260411_193133_1775910707811_71274a52.mp4"
+  ],
+  "errors": []
+}

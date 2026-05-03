@@ -1,0 +1,95 @@
+{
+  "name": "videogenerate",
+  "productName": "VideoGenerate",
+  "description": "批量短视频生成（Electron + Vue3）",
+  "author": "VideoGenerate",
+  "private": true,
+  "version": "0.1.20",
+  "main": "out/main/index.js",
+  "scripts": {
+    "setup:fonts": "node scripts/ensure-bundled-fonts.mjs",
+    "copy-fonts": "node scripts/copy-font-resources.mjs",
+    "predev": "node scripts/ensure-bundled-fonts.mjs",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build && node scripts/copy-font-resources.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "preview": "electron-vite preview",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@vueuse/core": "^12.5.0",
+    "bufferutil": "^4.1.0",
+    "electron-updater": "^6.8.3",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "fontkit": "^2.0.4",
+    "lucide-vue-next": "^0.515.0",
+    "node-edge-tts": "^1.2.10",
+    "node-machine-id": "^1.1.12",
+    "p-queue": "^8.1.0",
+    "pinia": "^3.0.4",
+    "qrcode": "^1.5.4",
+    "utf-8-validate": "^6.0.6",
+    "vue": "^3.5.13",
+    "vue-i18n": "^9.14.5",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "@eslint/js": "^9.20.0",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.13.10",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "electron": "^34.2.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0",
+    "eslint": "^9.20.1",
+    "globals": "^15.15.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.videogenerate.app",
+    "productName": "VideoGenerate",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "deleteAppDataOnUninstall": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://YOUR_UPDATE_URL"
+    }
+  }
+}

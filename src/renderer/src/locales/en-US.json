@@ -1,0 +1,110 @@
+{
+  "nav": {
+    "home": "Home",
+    "products": "Production",
+    "templates": "Templates",
+    "tasks": "Tasks",
+    "clone": "Clone"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "save": "Save",
+    "language": "Interface Language",
+    "starting": "Starting...",
+    "startGenerate": "Start Generate",
+    "remove": "Remove"
+  },
+  "auth": {
+    "title": "License Activation",
+    "subtitle": "Enter your license key to continue using VideoGenerate",
+    "machineId": "Machine ID",
+    "licenseKey": "License Key",
+    "licensePlaceholder": "Enter your license key",
+    "loading": "Loading...",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed. Please copy the machine ID manually.",
+    "keyRequired": "Please enter a license key",
+    "verifyFailed": "License verification failed",
+    "activating": "Activating...",
+    "activate": "Activate Now"
+  },
+  "shell": {
+    "help": "Help",
+    "helpTitle": "Help",
+    "helpDesc": "Choose a module to jump into the related workflow.",
+    "project": "Project",
+    "edit": "Edit",
+    "view": "View",
+    "export": "Export",
+    "openCloud": "Open Cloud Assets",
+    "quickExport": "Quick Export"
+  },
+  "cloneWorkflow": {
+    "uploadReference": "Upload Viral Video",
+    "analyzeScript": "Analyze Viral Script",
+    "breakdownShots": "Break Down Shot Script",
+    "generateVariants": "Generate Script Variants & Score",
+    "generateStoryboards": "Batch Generate Storyboards",
+    "generateVideoShots": "Generate Top 3 Video Shots",
+    "exportFinal": "Merge and Export Final Video",
+    "currentAction": "Current Action",
+    "advanced": "Advanced Settings",
+    "retryFailed": "Retry Failed Items",
+    "onlyMissing": "Only Fill Missing Items",
+    "costConfirmTitle": "AI Video Cost Confirmation",
+    "costConfirmDesc": "This run may generate many video plans and increase AI costs. Keeping Top 3 first is recommended.",
+    "disabledReason": "Please complete the previous step first",
+    "steps": {
+      "uploadAnalyze": "Upload & Analyze Viral",
+      "modelProduct": "Model & Product Consistency",
+      "storyboardVideo": "Storyboard & Video Batch",
+      "exportFinal": "Export Final"
+    },
+    "actions": {
+      "uploadAnalyze": "Upload and Analyze Viral (3 Script Candidates)",
+      "generateConsistency": "Generate Model/Product Consistency Assets",
+      "batchStoryboardVideo": "Batch Storyboards and Generate Top 3 Videos",
+      "exportFinal": "Merge and Export Final Video"
+    },
+    "status": {
+      "running": "Running",
+      "failed": "Failed",
+      "done": "Done",
+      "current": "Current",
+      "pending": "Pending"
+    }
+  },
+  "tpl": {
+    "navLibrary": "Template Library",
+    "navStudio": "Template Studio",
+    "navSubtitlePresets": "Subtitle Presets",
+    "navVoiceLibrary": "Voice Library",
+    "sidebarTitle": "Template Workspace",
+    "pageSub": "Edit templates, subtitles, voice and structure settings",
+    "wsHintStudio": "Edit the current template structure and main settings here.",
+    "wsHintLibrary": "Browse and reuse templates from the library.",
+    "wsHintSubtitle": "Manage subtitle styles, layout and fonts.",
+    "wsHintVoice": "Configure voice roles, rate, pitch and mix.",
+    "presetNaturalTitle": "Natural Commerce",
+    "presetNaturalDesc": "Stable pacing for regular product showcases.",
+    "presetFastTitle": "Fast Conversion",
+    "presetFastDesc": "Faster cuts with stronger hook and conversion focus.",
+    "presetCinematicTitle": "Cinematic Story",
+    "presetCinematicDesc": "Steadier shots for premium commercial style.",
+    "presetModalTitle": "Choose Template Preset",
+    "presetModalDesc": "Apply a preset parameter set to template {name}.",
+    "symbolLibModalTitle": "Symbol Template Library",
+    "symbolLibHint": "Manage reusable symbol snippets for titles and subtitles.",
+    "symbolLibColLabel": "Label",
+    "symbolLibColText": "Content",
+    "symbolLibAdd": "Add Symbol",
+    "symbolLibReset": "Reset Default",
+    "symbolLibNewLabel": "New Symbol",
+    "overlayGroupTitlePh": "Enter title copy"
+  },
+  "titleBar": {
+    "ready": "Ready"
+  }
+}

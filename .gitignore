@@ -1,0 +1,25 @@
+node_modules
+dist
+dist-electron
+out
+release
+.DS_Store
+*.log
+.env
+.env.*
+tmp
+tmp-*
+.codex-logs
+.stitch-ref
+video
+
+# app data (local)
+.videogenerate
+
+# 可选：不提交大体积字体时忽略（保留 resources/fonts/README.md）
+resources/fonts/*.otf
+resources/fonts/*.ttf
+resources/fonts/*.woff2
+resources/fonts/.videogenerate-fonts-ready
+out/main/resources/fonts/
+
