@@ -62,8 +62,11 @@ function normalizeTaskId(model, taskId) {
   return `${rawModel}:${rawTaskId}`
 }
 
-async function queryOnce(root, apiKey, provider, taskId, label) {
-  const url = `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
+function officialRestBaseUrl(root) {
+  return /\/api\/v1\/?$/i.test(root) ? root.replace(/\/+$/, '') : `${root}/api/v1`
+}
+
+async function queryOnce(url, apiKey, provider, taskId, label) {
   const res = await fetch(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -101,10 +104,11 @@ async function main() {
   const model = cfg.startEndVideoModel || cfg.imageToVideoModel || cfg.referenceVideoModel || cfg.textToVideoModel || ''
   const root = String(cfg.baseUrl || '').replace(/\/+$/, '')
   const attempts = []
-  attempts.push(await queryOnce(root, cfg.apiKey, cfg.videoProvider, taskId, 'raw_task_id'))
+  attempts.push(await queryOnce(`${officialRestBaseUrl(root)}/model/prediction/${encodeURIComponent(taskId)}`, cfg.apiKey, cfg.videoProvider, taskId, 'official_rest_raw_task_id'))
+  attempts.push(await queryOnce(`${root}/v1/video/query?id=${encodeURIComponent(taskId)}`, cfg.apiKey, cfg.videoProvider, taskId, 'legacy_query_raw_task_id'))
   const normalizedTaskId = normalizeTaskId(model, taskId)
   if (normalizedTaskId !== taskId) {
-    attempts.push(await queryOnce(root, cfg.apiKey, cfg.videoProvider, normalizedTaskId, 'normalized_task_id'))
+    attempts.push(await queryOnce(`${officialRestBaseUrl(root)}/model/prediction/${encodeURIComponent(normalizedTaskId)}`, cfg.apiKey, cfg.videoProvider, normalizedTaskId, 'official_rest_normalized_task_id'))
   }
   console.log(JSON.stringify({
     taskId,

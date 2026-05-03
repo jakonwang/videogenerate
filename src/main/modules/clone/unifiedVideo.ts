@@ -37,10 +37,14 @@ function viduCreatePath(capability: UnifiedCapability) {
   return '/vidu/ent/v2/reference2video'
 }
 
-function providerQueryUrl(root: string, provider: string, taskId: string) {
-  if (provider === 'apifox_hub') return `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
+function providerQueryUrl(root: string, provider: string, taskId: string, endpointStyle = '') {
+  if (provider === 'apifox_hub') {
+    return endpointStyle === 'official_rest'
+      ? `${officialRestBaseUrl(root)}/model/prediction/${encodeURIComponent(taskId)}`
+      : `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
+  }
   if (provider === 'vidu') return `${root}/vidu/ent/v2/task/${encodeURIComponent(taskId)}/creations`
-  if (provider === 'veo') return `${root}/veo/v1/video/query?id=${encodeURIComponent(taskId)}`
+  if (provider === 'veo') return `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
   if (provider === 'seedance2') return `${root}/v1/video/generations/${encodeURIComponent(taskId)}`
   if (provider === 'jimeng') return `${root}/v1/video/generations/${encodeURIComponent(taskId)}`
   if (provider === 'openai_video' || provider === 'sora' || provider === 'grok') return `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
@@ -132,6 +136,20 @@ function isTransientQueryError(error: unknown) {
   return /502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(message)
 }
 
+function pickTaskErrorMessage(json: any) {
+  return String(
+    json?.data?.error?.message ??
+      json?.data?.error ??
+      json?.data?.message ??
+      json?.data?.fail_reason ??
+      json?.error?.message ??
+      json?.error ??
+      json?.message ??
+      json?.fail_reason ??
+      '',
+  ).trim()
+}
+
 export async function queryAsyncTask(input: {
   credentials: ModelCredentials
   taskId: string
@@ -139,7 +157,7 @@ export async function queryAsyncTask(input: {
   const cfg = input.credentials.apifoxHub!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
-  const url = providerQueryUrl(root, cfg.videoProvider, input.taskId)
+  const url = providerQueryUrl(root, cfg.videoProvider, input.taskId, cfg.videoEndpointStyle)
 
   let json: any
   try {
@@ -163,7 +181,7 @@ export async function queryAsyncTask(input: {
     taskId: input.taskId,
     status: normalizeTaskStatus(json),
     outputUrls: outputUrl ? [outputUrl] : [],
-    errorMessage: String(json?.data?.error ?? json?.error ?? json?.message ?? json?.fail_reason ?? '').trim() || undefined,
+    errorMessage: pickTaskErrorMessage(json) || undefined,
     raw: json,
   }
 }
