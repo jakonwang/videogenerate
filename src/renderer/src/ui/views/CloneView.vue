@@ -609,9 +609,14 @@ async function generateShotVideos() {
   try {
     const res = (await window.api.clone.generateShotVideosFromStoryboard({
       cloneProjectId: current.value.id,
-    })) as { project?: CloneProject }
+    })) as { project?: CloneProject; queueSummary?: { total: number; done: number; failed: number; skipped: number } }
     applyProject(res.project || current.value)
-    setStageLog('分镜视频生成完成，可在合成前检查区替换个别分镜。', 'success')
+    const summary = res.queueSummary
+    if (summary?.failed) {
+      setStageLog(`分镜视频已按顺序执行完成：成功 ${summary.done} 条，失败 ${summary.failed} 条。失败分镜已跳过，可点击重新生成分镜视频或单镜重试。`, 'error')
+    } else {
+      setStageLog('分镜视频已按脚本顺序全部生成完成，可在合成前检查区替换个别分镜。', 'success')
+    }
   } catch (error: any) {
     markError(error?.message ?? error, '分镜视频生成失败。')
     await refreshProjectAfterFailure()

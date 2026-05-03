@@ -2364,85 +2364,134 @@ export const cloneService = {
   async generateShotVideosFromStoryboardFrames(input: {
     cloneProjectId: string
   }) {
-    const project = await cloneRepo.getProject(input.cloneProjectId)
+    let project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
     const shots = projectBlueprintShots(project)
       .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
       .filter((shot) => String((shot as any).storyboardFramePath ?? '').trim())
     if (!shots.length) throw new Error('请先生成分镜拼图并裁切')
+    let done = 0
+    let failed = 0
+    let skipped = 0
+    const errors: Array<{ shotId: string; index: number; reason: string }> = []
     for (const shot of shots) {
       const framePath = String((shot as any).storyboardFramePath ?? '').trim()
-      if (!framePath) continue
-      syncShotVideoOutput(project, {
-        shotId: shot.id,
-        source: 'generated',
-        status: 'generating',
-        updatedAt: now(),
-      })
-      await cloneRepo.upsertProject(project)
-      const next = await this.updateShotEnhanced({
-        cloneProjectId: project.id,
-        shotId: shot.id,
-        replaceMode: 'upload_image_to_video',
-        uploadedImagePath: framePath,
-        forceAi: true,
-        scriptText: shot.scriptText,
-        generationPrompt: shot.generationPrompt,
-      })
-      await this.generateShotClip({
-        cloneProjectId: project.id,
-        shotId: shot.id,
-      })
-      const latest = await cloneRepo.getProject(project.id)
-      const latestShot = latest?.blueprint?.shots.find((item) => item.id === shot.id)
-      syncShotVideoOutput(project, {
-        shotId: shot.id,
-        source: 'generated',
-        videoPath: String(latestShot?.generatedClipPath ?? '').trim() || undefined,
-        provider: String(latestShot?.generatedProvider ?? '').trim() || undefined,
-        model: String(latestShot?.generatedModel ?? '').trim() || undefined,
-        durationSec: Number(latestShot?.generatedClipDurationSec ?? 0) || undefined,
-        status: latestShot?.generatedClipPath ? 'done' : 'failed',
-        error: String(latestShot?.error ?? '').trim() || undefined,
-        updatedAt: now(),
-      })
-      if (latestShot?.generatedClipPath) {
-        replaceProjectShot(project, shot.id, {
-          generatedClipPath: latestShot.generatedClipPath,
-          generatedSource: latestShot.generatedSource,
-          generatedProvider: latestShot.generatedProvider,
-          generatedModel: latestShot.generatedModel,
-          generatedClipDurationSec: latestShot.generatedClipDurationSec,
-          generatedClipWidth: latestShot.generatedClipWidth,
-          generatedClipHeight: latestShot.generatedClipHeight,
-          qualityStatus: latestShot.qualityStatus,
-          qualityScore: latestShot.qualityScore,
-          qualityReasons: latestShot.qualityReasons,
-          canEnterRender: latestShot.canEnterRender,
-          retrySuggestion: latestShot.retrySuggestion,
-          freezeRatio: latestShot.freezeRatio,
-          blackFrameRatio: latestShot.blackFrameRatio,
-          productVisibilityScore: latestShot.productVisibilityScore,
-          status: latestShot.status,
-          error: latestShot.error,
-        })
-      } else {
-        replaceProjectShot(project, shot.id, {
-          status: latestShot?.status ?? 'failed',
-          error: latestShot?.error || '分镜视频生成后未返回可用视频文件',
-        })
+      if (!framePath) {
+        skipped += 1
+        continue
       }
-      await cloneRepo.upsertProject(project)
-      void next
+      try {
+        syncShotVideoOutput(project, {
+          shotId: shot.id,
+          source: 'generated',
+          status: 'generating',
+          updatedAt: now(),
+        })
+        await cloneRepo.upsertProject(project)
+        await this.updateShotEnhanced({
+          cloneProjectId: project.id,
+          shotId: shot.id,
+          replaceMode: 'upload_image_to_video',
+          uploadedImagePath: framePath,
+          forceAi: true,
+          scriptText: shot.scriptText,
+          generationPrompt: shot.generationPrompt,
+        })
+        await this.generateShotClip({
+          cloneProjectId: project.id,
+          shotId: shot.id,
+        })
+        const latest = await cloneRepo.getProject(project.id)
+        project = latest ?? project
+        ensureCloneFlowState(project)
+        const latestShot = project.blueprint?.shots.find((item) => item.id === shot.id)
+        syncShotVideoOutput(project, {
+          shotId: shot.id,
+          source: 'generated',
+          videoPath: String(latestShot?.generatedClipPath ?? '').trim() || undefined,
+          provider: String(latestShot?.generatedProvider ?? '').trim() || undefined,
+          model: String(latestShot?.generatedModel ?? '').trim() || undefined,
+          durationSec: Number(latestShot?.generatedClipDurationSec ?? 0) || undefined,
+          status: latestShot?.generatedClipPath ? 'done' : 'failed',
+          error: String(latestShot?.error ?? '').trim() || undefined,
+          updatedAt: now(),
+        })
+        if (latestShot?.generatedClipPath) {
+          done += 1
+          replaceProjectShot(project, shot.id, {
+            generatedClipPath: latestShot.generatedClipPath,
+            generatedSource: latestShot.generatedSource,
+            generatedProvider: latestShot.generatedProvider,
+            generatedModel: latestShot.generatedModel,
+            generatedTaskId: latestShot.generatedTaskId,
+            generatedClipDurationSec: latestShot.generatedClipDurationSec,
+            generatedClipWidth: latestShot.generatedClipWidth,
+            generatedClipHeight: latestShot.generatedClipHeight,
+            qualityStatus: latestShot.qualityStatus,
+            qualityScore: latestShot.qualityScore,
+            qualityReasons: latestShot.qualityReasons,
+            canEnterRender: latestShot.canEnterRender,
+            retrySuggestion: latestShot.retrySuggestion,
+            freezeRatio: latestShot.freezeRatio,
+            blackFrameRatio: latestShot.blackFrameRatio,
+            productVisibilityScore: latestShot.productVisibilityScore,
+            status: latestShot.status,
+            error: latestShot.error,
+          })
+        } else {
+          failed += 1
+          const reason = latestShot?.error || '分镜视频生成后未返回可用视频文件'
+          errors.push({ shotId: shot.id, index: Number(shot.index ?? 0), reason })
+          replaceProjectShot(project, shot.id, {
+            status: latestShot?.status ?? 'failed',
+            error: reason,
+          })
+        }
+        await cloneRepo.upsertProject(project)
+      } catch (error: any) {
+        failed += 1
+        const reason = String(error?.message ?? error ?? '分镜视频生成失败')
+        errors.push({ shotId: shot.id, index: Number(shot.index ?? 0), reason })
+        const latest = (await cloneRepo.getProject(project.id)) ?? project
+        ensureCloneFlowState(latest)
+        replaceProjectShot(latest, shot.id, {
+          status: 'failed',
+          error: reason,
+          qualityStatus: 'failed',
+          qualityReasons: [reason],
+          canEnterRender: false,
+        })
+        syncShotVideoOutput(latest, {
+          shotId: shot.id,
+          source: 'generated',
+          status: 'failed',
+          error: reason,
+          updatedAt: now(),
+        })
+        patchWorkflowV2(latest, 'generate_shot_videos', 'generate_shot_videos', 'running')
+        project = await cloneRepo.upsertProject(latest)
+      }
     }
-    patchWorkflowV2(project, 'generate_shot_videos', 'generate_shot_videos', 'done')
-    patchWorkflowV2(project, 'review_replace_shots', 'review_replace_shots', 'running')
-    syncFinalCompose(project, { status: 'ready' })
+    const summaryError = errors.length
+      ? `已跳过 ${failed} 个失败分镜，可在分镜视频卡片点击重新生成。`
+      : ''
+    patchWorkflowV2(project, failed ? 'generate_shot_videos' : 'review_replace_shots', 'generate_shot_videos', failed ? 'failed' : 'done', summaryError)
+    if (!failed) {
+      patchWorkflowV2(project, 'review_replace_shots', 'review_replace_shots', 'running')
+      syncFinalCompose(project, { status: 'ready' })
+      project.lastError = ''
+      setProjectErrorContext(project, null)
+    } else {
+      syncFinalCompose(project, { status: 'idle', error: summaryError })
+      project.lastError = summaryError
+    }
     const saved = await cloneRepo.upsertProject(project)
     return {
       project: saved,
       shotVideoOutputs: saved.shotVideoOutputs ?? [],
+      queueSummary: { total: shots.length, done, failed, skipped },
+      errors,
     }
   },
 
