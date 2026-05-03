@@ -26,6 +26,7 @@ import type {
   ClonePromptCacheEntry,
   CloneFrameCacheEntry,
   CloneCloudClipCacheEntry,
+  CloneShotVideoOutput,
 } from './types'
 import { buildReferenceLock } from './prompt'
 
@@ -809,7 +810,7 @@ function normalizeProject(p: CloneProject): CloneProject {
       reviewStatus: s?.reviewStatus ?? 'pending',
     }
   }
-  const normalizedBlueprint = p.baseBlueprint ?? p.blueprint ?? null
+  const normalizedBlueprint = p.blueprint ?? p.baseBlueprint ?? null
   const normalizedShots = (normalizedBlueprint?.shots ?? []).map((s, i) => normalizeShot(s as any, i))
   const blueprintAspectRatio = inferAspectRatio(
     normalizedBlueprint?.referenceAspectRatio,
@@ -923,6 +924,27 @@ function normalizeProject(p: CloneProject): CloneProject {
         updatedAt: Number(item?.updatedAt ?? now()),
       }))
     : []
+  const generatedShotOutputs = (bp?.shots ?? [])
+    .filter((shot: any) => String(shot?.id ?? '').trim() && String(shot?.generatedClipPath ?? '').trim())
+    .map((shot: any) => ({
+      shotId: String(shot.id).trim(),
+      source: 'generated' as const,
+      videoPath: String(shot.generatedClipPath).trim(),
+      provider: String(shot.generatedProvider ?? '').trim() || undefined,
+      model: String(shot.generatedModel ?? '').trim() || undefined,
+      durationSec: typeof shot.generatedClipDurationSec === 'number' ? Number(shot.generatedClipDurationSec) : undefined,
+      status: 'done' as const,
+      error: String(shot.error ?? '').trim() || undefined,
+      updatedAt: Number((p as any).updatedAt ?? now()),
+    }))
+  const mergedShotVideoOutputs = new Map<string, CloneShotVideoOutput>()
+  for (const output of shotVideoOutputs) {
+    if (output.shotId) mergedShotVideoOutputs.set(output.shotId, output)
+  }
+  for (const output of generatedShotOutputs) {
+    const existing = mergedShotVideoOutputs.get(output.shotId)
+    if (!existing?.videoPath) mergedShotVideoOutputs.set(output.shotId, output)
+  }
   const finalCompose = (p as any).finalCompose && typeof (p as any).finalCompose === 'object'
     ? {
         status:
@@ -1002,7 +1024,7 @@ function normalizeProject(p: CloneProject): CloneProject {
     selectedScriptVariantId: String((p as any).selectedScriptVariantId ?? '').trim() || undefined,
     storyboardGridBatches,
     storyboardFrames,
-    shotVideoOutputs,
+    shotVideoOutputs: Array.from(mergedShotVideoOutputs.values()),
     finalCompose,
     previewPipeline: (p as any).previewPipeline
       ? {

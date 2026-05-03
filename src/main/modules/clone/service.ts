@@ -4080,34 +4080,38 @@ export const cloneService = {
       }
       throw new Error(reason)
     }
-    item.blueprint = {
-      ...item.blueprint,
-      shots: item.blueprint.shots.map((s) =>
-        s.id === shot.id
-          ? {
-              ...s,
-              generatedClipPath: out,
-              status: 'done',
-              sourceMode: 'ai',
-              generatedProvider: generatedProvider || s.generatedProvider,
-              generatedModel: generatedModel || s.generatedModel,
-              generatedTaskId: generatedTaskId || s.generatedTaskId,
-              generatedSource: 'cloud',
-              isMock: false,
-              qualityStatus: quality?.passed ? 'passed' : mode === 'high' ? 'failed' : 'warning',
-              qualityScore: quality?.score,
-              qualityReasons: quality?.reasons ?? [],
-              retrySuggestion: quality?.reasons?.length ? (quality.passed ? '质量通过' : '建议优先替换真实视频素材或降低镜头复杂度') : undefined,
-              retryCount: quality?.passed ? Math.max(0, Number(shot.retryCount || 0)) : maxAttempts - 1,
-              generatedClipDurationSec: quality?.meta.durationSec,
-              generatedClipWidth: quality?.meta.width,
-              generatedClipHeight: quality?.meta.height,
-              canEnterRender: Boolean(quality?.passed || mode !== 'high'),
-              error: '',
-            }
-          : s,
-      ),
+    const generatedShotPatch: Partial<ShotSpec> = {
+      generatedClipPath: out,
+      status: 'done',
+      sourceMode: 'ai',
+      generatedProvider: generatedProvider || shot.generatedProvider,
+      generatedModel: generatedModel || shot.generatedModel,
+      generatedTaskId: generatedTaskId || shot.generatedTaskId,
+      generatedSource: 'cloud',
+      isMock: false,
+      qualityStatus: quality?.passed ? 'passed' : mode === 'high' ? 'failed' : 'warning',
+      qualityScore: quality?.score,
+      qualityReasons: quality?.reasons ?? [],
+      retrySuggestion: quality?.reasons?.length ? (quality.passed ? '质量通过' : '建议优先替换真实视频素材或降低镜头复杂度') : undefined,
+      retryCount: quality?.passed ? Math.max(0, Number(shot.retryCount || 0)) : maxAttempts - 1,
+      generatedClipDurationSec: quality?.meta.durationSec,
+      generatedClipWidth: quality?.meta.width,
+      generatedClipHeight: quality?.meta.height,
+      canEnterRender: Boolean(quality?.passed || mode !== 'high'),
+      error: '',
     }
+    replaceProjectShot(item, shot.id, generatedShotPatch)
+    syncShotVideoOutput(item, {
+      shotId: shot.id,
+      source: 'generated',
+      videoPath: out,
+      provider: generatedShotPatch.generatedProvider,
+      model: generatedShotPatch.generatedModel,
+      durationSec: quality?.meta.durationSec,
+      status: 'done',
+      error: undefined,
+      updatedAt: now(),
+    })
     patchQueueJobStatus(item, shot.id, 'done', quality?.passed ? Number(shot.retryCount ?? 0) : maxAttempts - 1)
     return await cloneRepo.upsertProject(item)
   },
