@@ -935,7 +935,7 @@ onUnmounted(() => {
               <h2>根据分镜图和脚本生成视频片段</h2>
             </div>
             <div class="panel-actions">
-              <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">生成分镜视频</button>
+              <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">继续生成剩余分镜视频</button>
             </div>
           </div>
 

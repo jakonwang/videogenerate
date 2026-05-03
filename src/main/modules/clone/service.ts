@@ -2377,6 +2377,23 @@ export const cloneService = {
     const errors: Array<{ shotId: string; index: number; reason: string }> = []
     for (const shot of shots) {
       const framePath = String((shot as any).storyboardFramePath ?? '').trim()
+      const existingOutput = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
+      const existingVideoPath = String(existingOutput?.videoPath || (shot as any).generatedClipPath || '').trim()
+      if (existingVideoPath && (existingOutput?.status === 'done' || shot.status === 'done')) {
+        done += 1
+        syncShotVideoOutput(project, {
+          shotId: shot.id,
+          source: existingOutput?.source ?? 'generated',
+          videoPath: existingVideoPath,
+          provider: existingOutput?.provider || String((shot as any).generatedProvider ?? '').trim() || undefined,
+          model: existingOutput?.model || String((shot as any).generatedModel ?? '').trim() || undefined,
+          durationSec: existingOutput?.durationSec || Number((shot as any).generatedClipDurationSec ?? 0) || undefined,
+          status: 'done',
+          error: undefined,
+          updatedAt: existingOutput?.updatedAt ?? now(),
+        })
+        continue
+      }
       if (!framePath) {
         skipped += 1
         continue
