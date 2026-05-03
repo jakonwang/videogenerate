@@ -280,8 +280,12 @@ const api = {
     }) => ipcRenderer.invoke('clone:generateGptShotFrames', payload),
     confirmGptShotFrames: (payload: { cloneProjectId: string; shotId: string; confirmed?: boolean }) =>
       ipcRenderer.invoke('clone:confirmGptShotFrames', payload),
-    generateShotClip: (payload: { cloneProjectId: string; shotId: string }) =>
+    generateShotClip: (payload: { cloneProjectId: string; shotId: string; forceRegenerate?: boolean }) =>
       ipcRenderer.invoke('clone:generateShotClip', payload),
+    refreshProjectStatus: (payload: { cloneProjectId: string }) =>
+      ipcRenderer.invoke('clone:refreshProjectStatus', payload),
+    syncShotVideoTask: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:syncShotVideoTask', payload),
     qualityCheckCurrentShot: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:qualityCheckCurrentShot', payload),
     diagnoseProductImages: (payload: { imagePaths: string[] }) =>

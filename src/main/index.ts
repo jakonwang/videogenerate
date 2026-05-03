@@ -443,6 +443,9 @@ function wireIpc() {
   ipcMain.handle('clone:getProject', async (_e, payload: { cloneProjectId: string }) => {
     return await cloneService.getProject(payload)
   })
+  ipcMain.handle('clone:refreshProjectStatus', async (_e, payload: { cloneProjectId: string }) => {
+    return await cloneService.reconcileRemoteStoryboardVideos(payload)
+  })
   ipcMain.handle('clone:reanalyzeShotScript', async (_e, payload: { cloneProjectId: string; shotId: string }) => {
     return await cloneService.reanalyzeShotScript(payload)
   })
@@ -754,7 +757,11 @@ function wireIpc() {
   )
   ipcMain.handle(
     'clone:generateShotClip',
-    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.generateShotClip(payload),
+    async (_e, payload: { cloneProjectId: string; shotId: string; forceRegenerate?: boolean }) => cloneService.generateShotClip(payload),
+  )
+  ipcMain.handle(
+    'clone:syncShotVideoTask',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.syncShotVideoTask(payload),
   )
   ipcMain.handle(
     'clone:qualityCheckCurrentShot',

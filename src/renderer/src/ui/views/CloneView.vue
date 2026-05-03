@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 type ProjectSummary = {
@@ -51,14 +51,27 @@ type StoryboardFrame = {
 }
 
 type ShotVideoOutput = {
+  segmentId?: string
+  index?: number
   shotId: string
   source: 'generated' | 'uploaded_replacement'
   videoPath?: string
+  localPath?: string
+  videoUrl?: string
+  taskId?: string
+  previousTaskIds?: string[]
   provider?: string
   model?: string
+  requestCapability?: string
+  endpointStyle?: string
+  remoteStatus?: string
+  remoteRaw?: unknown
   durationSec?: number
   status: string
   error?: string
+  retryCount?: number
+  lastPollAt?: number
+  completedAt?: number
 }
 
 type FinalCompose = {
@@ -180,7 +193,15 @@ const referenceSourcePath = computed(() => current.value?.referenceVideoPath || 
 const visibleProductThumbs = computed(() => productRefs.value.slice(0, 9))
 const visibleHistory = computed(() => historySorted.value.slice(0, 8))
 const isDraftingNewProject = computed(() => Boolean(referenceVideoPath.value.trim()) && !current.value?.id)
-const failedShotOutputs = computed(() => shotVideoOutputs.value.filter((item) => item.status === 'failed' || Boolean(item.error)))
+const failedShotOutputs = computed(() =>
+  shotVideoOutputs.value.filter((item) => item.status === 'failed' || item.status === 'polling_timeout' || Boolean(item.error)),
+)
+const retryableShotOutputs = computed(() =>
+  shotVideoOutputs.value.filter((item) => {
+    const status = String(item.status || '').toLowerCase()
+    return status === 'failed' || status === 'pending' || status === 'idle' || status === 'polling_timeout' || status === 'remote_running'
+  }),
+)
 const generationFailureText = computed(
   () =>
     errorText.value ||
@@ -191,7 +212,7 @@ const generationFailureText = computed(
     '',
 )
 const hasGenerationFailure = computed(() => Boolean(generationFailureText.value || failedShotOutputs.value.length))
-const canRetryShotVideos = computed(() => Boolean(current.value?.id && storyboardFrames.value.length))
+const canRetryShotVideos = computed(() => Boolean(current.value?.id && retryableShotOutputs.value.length))
 
 const statusTone = computed(() => {
   if (errorText.value) return 'danger'
@@ -333,6 +354,14 @@ function humanStatus(status?: string) {
       return '已裁切'
     case 'generating':
       return '生成中'
+    case 'creating':
+      return '创建任务中'
+    case 'remote_running':
+      return '云端生成中'
+    case 'polling_timeout':
+      return '待继续查询'
+    case 'downloading':
+      return '下载中'
     case 'ready':
       return '已就绪'
     case 'composing':
@@ -415,7 +444,7 @@ async function refreshModels() {
 
 async function refreshCurrentProject() {
   if (!current.value?.id) return
-  const next = (await window.api.clone.getProject({ cloneProjectId: current.value.id })) as CloneProject
+  const next = (await window.api.clone.refreshProjectStatus({ cloneProjectId: current.value.id })) as CloneProject
   applyProject(next)
 }
 
@@ -428,7 +457,7 @@ async function refreshProjectAfterFailure() {
 }
 
 async function loadProject(projectId: string, options: { updateStageLog?: boolean } = {}) {
-  const next = (await window.api.clone.getProject({ cloneProjectId: projectId })) as CloneProject
+  const next = (await window.api.clone.refreshProjectStatus({ cloneProjectId: projectId })) as CloneProject
   applyProject(next)
   if (options.updateStageLog !== false) {
     setStageLog(next.finalCompose?.outputPath ? '历史项目已载入，可直接查看结果或替换分镜重新合成。' : '历史项目已载入，可从当前阶段继续推进。')
@@ -609,18 +638,46 @@ async function generateShotVideos() {
   try {
     const res = (await window.api.clone.generateShotVideosFromStoryboard({
       cloneProjectId: current.value.id,
-    })) as { project?: CloneProject; queueSummary?: { total: number; done: number; failed: number; skipped: number } }
+    })) as { project?: CloneProject; queueSummary?: { total: number; done: number; failed: number; skipped: number; pending?: number; timeout?: number } }
     applyProject(res.project || current.value)
     const summary = res.queueSummary
-    if (summary?.failed) {
-      setStageLog(`分镜视频已按顺序执行完成：成功 ${summary.done} 条，失败 ${summary.failed} 条。失败分镜已跳过，可点击重新生成分镜视频或单镜重试。`, 'error')
+    if (summary?.failed || summary?.pending || summary?.timeout) {
+      setStageLog(`分镜视频已继续执行：成功 ${summary.done || 0} 条，失败 ${summary.failed || 0} 条，云端待同步 ${summary.pending || 0} 条。失败或超时分镜可继续查询结果，不会重新扣费生成。`, 'error')
     } else {
       setStageLog('分镜视频已按脚本顺序全部生成完成，可在合成前检查区替换个别分镜。', 'success')
     }
   } catch (error: any) {
     markError(error?.message ?? error, '分镜视频生成失败。')
     await refreshProjectAfterFailure()
-    setStageLog('分镜视频生成失败，请根据右侧提示修正后点击重新生成。', 'error')
+    setStageLog('分镜视频生成失败，请先继续查询结果，不要直接重新生成。', 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function syncFailedShotVideo(shotId: string) {
+  if (!current.value?.id) return
+  loading.value = true
+  errorText.value = ''
+  setStageLog(`正在继续查询 ${shotLabel(shotId)} 的云端任务结果。`)
+  try {
+    const res = (await window.api.clone.syncShotVideoTask({
+      cloneProjectId: current.value.id,
+      shotId,
+    })) as { project?: CloneProject; task?: { taskId?: string; status?: string; errorMessage?: string }; synced?: boolean }
+    applyProject(res.project || current.value)
+    const taskId = String(res.task?.taskId || current.value?.shotVideoOutputs?.find((item) => item.shotId === shotId)?.taskId || '').trim()
+    if (res.synced) {
+      setStageLog(`${shotLabel(shotId)} 已从云端同步成功。${taskId ? ` taskId=${taskId}` : ''}`, 'success')
+    } else if (res.task?.status === 'failed') {
+      setStageLog(`${shotLabel(shotId)} 云端仍然失败。${taskId ? ` taskId=${taskId}` : ''}`, 'error')
+    } else {
+      setStageLog(`${shotLabel(shotId)} 暂未拿到最终结果，保留 taskId 继续查询。${taskId ? ` taskId=${taskId}` : ''}`, 'info')
+    }
+  } catch (error: any) {
+    markError(error?.message ?? error, `${shotLabel(shotId)} 云端状态同步失败。`)
+    await refreshProjectAfterFailure()
+    setStageLog(`${shotLabel(shotId)} 云端状态同步失败，请检查 taskId 后继续查询。`, 'error')
   } finally {
     loading.value = false
   }
@@ -659,18 +716,38 @@ async function regenerateShotClip(shotId: string) {
   if (!current.value?.id) return
   loading.value = true
   errorText.value = ''
-  setStageLog(`正在重新生成 ${shotLabel(shotId)}。`)
+  setStageLog(`正在放弃旧任务并强制重新生成 ${shotLabel(shotId)}。`)
   try {
     const res = (await window.api.clone.generateShotClip({
       cloneProjectId: current.value.id,
       shotId,
+      forceRegenerate: true,
     })) as { project?: CloneProject }
     applyProject(res.project || current.value)
-    setStageLog(`${shotLabel(shotId)} 重新生成完成。`, 'success')
+    setStageLog(`${shotLabel(shotId)} 强制重新生成已提交。`, 'success')
   } catch (error: any) {
-    markError(error?.message ?? error, `${shotLabel(shotId)} 重新生成失败。`)
+    markError(error?.message ?? error, `${shotLabel(shotId)} 强制重新生成失败。`)
     await refreshProjectAfterFailure()
-    setStageLog(`${shotLabel(shotId)} 重新生成失败，请检查右侧错误上下文。`, 'error')
+    setStageLog(`${shotLabel(shotId)} 强制重新生成失败，请检查右侧错误上下文。`, 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function refreshRemoteStatus() {
+  if (!current.value?.id) return
+  loading.value = true
+  errorText.value = ''
+  setStageLog('正在同步所有云端分镜任务状态。')
+  try {
+    const res = (await window.api.clone.refreshProjectStatus({
+      cloneProjectId: current.value.id,
+    })) as { project?: CloneProject }
+    applyProject(res.project || current.value)
+    setStageLog('云端状态同步完成。', 'success')
+  } catch (error: any) {
+    markError(error?.message ?? error, '云端状态同步失败。')
+    setStageLog('云端状态同步失败，请稍后再试。', 'error')
   } finally {
     loading.value = false
   }
@@ -935,6 +1012,7 @@ onUnmounted(() => {
               <h2>根据分镜图和脚本生成视频片段</h2>
             </div>
             <div class="panel-actions">
+              <button class="ghost-button small" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">同步云端状态</button>
               <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">继续生成剩余分镜视频</button>
             </div>
           </div>
@@ -955,15 +1033,28 @@ onUnmounted(() => {
                 <span>{{ safeText(item.provider, '--') }} / {{ safeText(item.model, '--') }}</span>
                 <span>{{ formatDuration(item.durationSec) }}</span>
               </div>
+              <div class="shot-meta task-meta">
+                <span>taskId: {{ safeText(item.taskId, '--') }}</span>
+                <span>remote: {{ safeText(item.remoteStatus, '--') }}</span>
+              </div>
               <div v-if="item.error" class="shot-error">{{ safeText(item.error, '生成失败') }}</div>
               <button
-                v-if="item.status === 'failed' || item.error"
+                v-if="item.status === 'failed' || item.status === 'polling_timeout' || item.error"
                 class="primary-button small full-width"
+                type="button"
+                :disabled="loading"
+                @click="syncFailedShotVideo(item.shotId)"
+              >
+                继续查询结果
+              </button>
+              <button
+                v-if="item.status === 'failed' || item.status === 'polling_timeout' || item.error"
+                class="danger-button small full-width"
                 type="button"
                 :disabled="loading"
                 @click="regenerateShotClip(item.shotId)"
               >
-                重新生成该分镜
+                放弃旧任务并重新生成
               </button>
             </div>
             <div v-if="!shotVideoOutputs.length" class="empty-state section-empty">拼图裁切完成后，这里会按分镜顺序展示视频生成结果。</div>
@@ -995,13 +1086,13 @@ onUnmounted(() => {
               </div>
               <div v-if="item.error" class="shot-error">{{ safeText(item.error, '生成失败') }}</div>
               <button
-                v-if="item.status === 'failed' || item.error"
+                v-if="item.status === 'failed' || item.status === 'polling_timeout' || item.error"
                 class="primary-button small full-width"
                 type="button"
                 :disabled="loading"
-                @click="regenerateShotClip(item.shotId)"
+                @click="syncFailedShotVideo(item.shotId)"
               >
-                重新生成该分镜
+                继续查询结果
               </button>
               <button class="ghost-button small full-width" type="button" :disabled="loading" @click="replaceShotVideo(item.shotId)">上传替换视频</button>
             </div>
@@ -1094,9 +1185,9 @@ onUnmounted(() => {
             <div v-if="hasGenerationFailure" class="meta-card danger-card failure-card">
               <span>生成失败</span>
               <strong>{{ safeText(generationFailureText, '任务失败') }}</strong>
-              <em>请检查右侧调用上下文后重新生成。</em>
-              <button class="primary-button small full-width failure-action" type="button" :disabled="loading || !canRetryShotVideos" @click="generateShotVideos">
-                重新生成分镜视频
+              <em>云端任务可能仍在生成或已完成，本地暂未同步。请点击继续查询，不会重新扣费生成。</em>
+              <button class="primary-button small full-width failure-action" type="button" :disabled="loading || !failedShotOutputs.length" @click="syncFailedShotVideo(failedShotOutputs[0].shotId)">
+                继续查询结果
               </button>
             </div>
             <div class="runtime-log-panel">

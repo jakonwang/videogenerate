@@ -910,31 +910,62 @@ function normalizeProject(p: CloneProject): CloneProject {
     : []
   const shotVideoOutputs = Array.isArray((p as any).shotVideoOutputs)
     ? (p as any).shotVideoOutputs.map((item: any) => ({
+        segmentId: String(item?.segmentId ?? item?.shotId ?? '').trim() || undefined,
+        index: typeof item?.index === 'number' ? Number(item.index) : undefined,
         shotId: String(item?.shotId ?? '').trim(),
         source: item?.source === 'uploaded_replacement' ? 'uploaded_replacement' : 'generated',
         videoPath: String(item?.videoPath ?? '').trim() || undefined,
+        localPath: String(item?.localPath ?? item?.videoPath ?? '').trim() || undefined,
+        videoUrl: String(item?.videoUrl ?? '').trim() || undefined,
+        taskId: String(item?.taskId ?? '').trim() || undefined,
+        previousTaskIds: Array.isArray(item?.previousTaskIds) ? item.previousTaskIds.map(String).filter(Boolean) : undefined,
         provider: String(item?.provider ?? '').trim() || undefined,
         model: String(item?.model ?? '').trim() || undefined,
+        requestCapability: item?.requestCapability,
+        endpointStyle: String(item?.endpointStyle ?? '').trim() || undefined,
+        remoteStatus: String(item?.remoteStatus ?? '').trim() || undefined,
+        remoteRaw: item?.remoteRaw,
         durationSec: typeof item?.durationSec === 'number' ? Number(item.durationSec) : undefined,
         status:
-          item?.status === 'generating' || item?.status === 'done' || item?.status === 'failed'
-            ? item.status
+          item?.status === 'creating' ||
+          item?.status === 'remote_running' ||
+          item?.status === 'polling_timeout' ||
+          item?.status === 'downloading' ||
+          item?.status === 'generating' ||
+          item?.status === 'done' ||
+          item?.status === 'failed' ||
+          item?.status === 'success' ||
+          item?.status === 'completed'
+            ? item.status === 'success' || item.status === 'completed'
+              ? 'done'
+              : item.status
             : 'idle',
         error: String(item?.error ?? '').trim() || undefined,
+        retryCount: typeof item?.retryCount === 'number' ? Number(item.retryCount) : undefined,
+        createdAt: Number(item?.createdAt ?? now()),
+        lastPollAt: Number(item?.lastPollAt ?? 0) || undefined,
+        completedAt: Number(item?.completedAt ?? 0) || undefined,
         updatedAt: Number(item?.updatedAt ?? now()),
       }))
     : []
   const generatedShotOutputs = (bp?.shots ?? [])
     .filter((shot: any) => String(shot?.id ?? '').trim() && String(shot?.generatedClipPath ?? '').trim())
     .map((shot: any) => ({
+      segmentId: String(shot.id).trim(),
+      index: Number(shot.index ?? 0),
       shotId: String(shot.id).trim(),
       source: 'generated' as const,
       videoPath: String(shot.generatedClipPath).trim(),
+      localPath: String(shot.generatedClipPath).trim(),
+      videoUrl: String(shot.generatedClipPath).trim(),
+      taskId: String(shot.generatedTaskId ?? '').trim() || undefined,
       provider: String(shot.generatedProvider ?? '').trim() || undefined,
       model: String(shot.generatedModel ?? '').trim() || undefined,
       durationSec: typeof shot.generatedClipDurationSec === 'number' ? Number(shot.generatedClipDurationSec) : undefined,
       status: 'done' as const,
       error: String(shot.error ?? '').trim() || undefined,
+      createdAt: Number((p as any).createdAt ?? now()),
+      completedAt: Number((p as any).updatedAt ?? now()),
       updatedAt: Number((p as any).updatedAt ?? now()),
     }))
   const mergedShotVideoOutputs = new Map<string, CloneShotVideoOutput>()
@@ -944,6 +975,15 @@ function normalizeProject(p: CloneProject): CloneProject {
   for (const output of generatedShotOutputs) {
     const existing = mergedShotVideoOutputs.get(output.shotId)
     if (!existing?.videoPath) mergedShotVideoOutputs.set(output.shotId, output)
+  }
+  for (const [shotId, output] of mergedShotVideoOutputs.entries()) {
+    if (!output.segmentId) {
+      mergedShotVideoOutputs.set(shotId, {
+        ...output,
+        segmentId: shotId,
+        index: Number(output.index ?? normalizedBlueprint?.shots.find((shot: any) => String(shot.id) === shotId)?.index ?? 0),
+      })
+    }
   }
   const finalCompose = (p as any).finalCompose && typeof (p as any).finalCompose === 'object'
     ? {

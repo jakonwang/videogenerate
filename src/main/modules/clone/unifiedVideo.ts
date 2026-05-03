@@ -131,6 +131,48 @@ function pickOutputUrl(json: any) {
   )
 }
 
+function pickAllOutputUrls(json: any): string[] {
+  const values: unknown[] = [
+    pickOutputUrl(json),
+    json?.data?.videoUrl,
+    json?.data?.video_url,
+    json?.data?.url,
+    json?.data?.output?.url,
+    json?.data?.output?.video_url,
+    json?.data?.output_url,
+    json?.data?.outputUrl,
+    json?.data?.output?.[0],
+    json?.data?.outputs?.[0],
+    json?.data?.output_urls?.[0],
+    json?.data?.outputUrls?.[0],
+    json?.data?.result?.videoUrl,
+    json?.data?.result?.video_url,
+    json?.data?.result?.url,
+    json?.data?.result?.output?.url,
+    json?.data?.result?.output?.video_url,
+    json?.data?.result?.outputs?.[0],
+    json?.data?.prediction?.videoUrl,
+    json?.data?.prediction?.video_url,
+    json?.data?.prediction?.url,
+    json?.data?.prediction?.output?.url,
+    json?.data?.prediction?.outputs?.[0],
+    json?.result?.videoUrl,
+    json?.result?.video_url,
+    json?.result?.url,
+    json?.output?.url,
+    json?.output?.video_url,
+    json?.videoUrl,
+    json?.video_url,
+    json?.url,
+  ]
+  if (Array.isArray(json?.data?.output)) values.push(...json.data.output)
+  if (Array.isArray(json?.data?.outputs)) values.push(...json.data.outputs)
+  if (Array.isArray(json?.data?.videos)) values.push(...json.data.videos.map((item: any) => item?.url || item?.video_url || item?.download_url))
+  if (Array.isArray(json?.outputs)) values.push(...json.outputs)
+  if (Array.isArray(json?.videos)) values.push(...json.videos.map((item: any) => item?.url || item?.video_url || item?.download_url))
+  return Array.from(new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean)))
+}
+
 function isTransientQueryError(error: unknown) {
   const message = String((error as any)?.message ?? error ?? '')
   return /502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(message)
@@ -148,6 +190,18 @@ function pickTaskErrorMessage(json: any) {
       json?.fail_reason ??
       '',
   ).trim()
+}
+
+export class Ai666TaskTimeoutError extends Error {
+  taskId: string
+  lastTransientError?: string
+
+  constructor(taskId: string, lastTransientError?: string) {
+    super(`ai666 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
+    this.name = 'Ai666TaskTimeoutError'
+    this.taskId = taskId
+    this.lastTransientError = lastTransientError
+  }
 }
 
 export async function queryAsyncTask(input: {
@@ -180,8 +234,139 @@ export async function queryAsyncTask(input: {
   return {
     taskId: input.taskId,
     status: normalizeTaskStatus(json),
-    outputUrls: outputUrl ? [outputUrl] : [],
+    outputUrls: pickAllOutputUrls(json).length ? pickAllOutputUrls(json) : outputUrl ? [outputUrl] : [],
     errorMessage: pickTaskErrorMessage(json) || undefined,
+    raw: json,
+  }
+}
+
+export async function createVideoTask(input: {
+  credentials: ModelCredentials
+  capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
+  prompt: string
+  image?: string
+  lastImage?: string
+}) {
+  const cfg = input.credentials.apifoxHub!
+  const root = baseUrl(input.credentials)
+  const key = apiKey(input.credentials)
+  const model = modelForCapability(cfg, input.capability)
+  if (!model) throw new Error(`未配置 ${input.capability} 对应的视频模型`)
+
+  const url = createUrlForProvider(root, cfg.videoProvider, input.capability, cfg.videoEndpointStyle)
+  let body: Record<string, any> = {
+    model,
+    prompt: input.prompt,
+    aspect_ratio: '9:16',
+    duration: 8,
+    resolution: '720p',
+    seed: -1,
+  }
+
+  if (cfg.videoProvider === 'vidu') {
+    body = {
+      model,
+      prompt: input.prompt,
+      aspect_ratio: '9:16',
+      duration: 8,
+      ...(input.image ? { image: input.image } : {}),
+      ...(input.lastImage ? { last_image: input.lastImage } : {}),
+    }
+  } else if (cfg.videoProvider === 'veo') {
+    body = {
+      model,
+      prompt: input.prompt,
+      images: [input.image, input.lastImage].filter(Boolean),
+      enhance_prompt: true,
+      aspect_ratio: '9:16',
+    }
+  } else if (cfg.videoProvider === 'jimeng') {
+    body = {
+      model,
+      prompt: input.prompt,
+      image_url: input.image,
+      last_image_url: input.lastImage,
+      metadata: {
+        aspect_ratio: '9:16',
+        duration: 8,
+      },
+    }
+  } else if (cfg.videoProvider === 'seedance2') {
+    body = {
+      model,
+      content: [
+        { type: 'text', text: input.prompt },
+        ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
+        ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
+      ],
+      generate_audio: false,
+      ratio: '9:16',
+      duration: 5,
+      watermark: false,
+    }
+  } else if (cfg.videoProvider === 'kling') {
+    body = {
+      model,
+      prompt: input.prompt,
+      ...(input.image ? { image: input.image } : {}),
+      ...(input.lastImage ? { last_image: input.lastImage } : {}),
+      aspect_ratio: '9:16',
+      duration: 8,
+      resolution: '720p',
+      seed: -1,
+    }
+  } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora' || cfg.videoProvider === 'grok') {
+    body =
+      cfg.videoEndpointStyle === 'openai_video'
+        ? {
+            model,
+            prompt: input.prompt,
+            images: [input.image, input.lastImage].filter(Boolean),
+            aspect_ratio: '9:16',
+            enhance_prompt: true,
+          }
+        : {
+            model,
+            prompt: input.prompt,
+            ...(input.image ? { image: input.image } : {}),
+            ...(input.lastImage ? { last_image: input.lastImage } : {}),
+            aspect_ratio: '9:16',
+            duration: 8,
+            resolution: '720p',
+            seed: -1,
+          }
+  } else {
+    if (input.image) body.image = input.image
+    if (input.lastImage) body.last_image = input.lastImage
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  const text = await res.text()
+  let json: any = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch {
+    json = { raw: text }
+  }
+  if (!res.ok) throw new Error(`ai666 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  const directOutputUrl = pickOutputUrl(json)
+  const taskId = pickTaskId(json)
+  if (!taskId && !directOutputUrl) throw new Error(`ai666 视频任务缺少 id: ${text.slice(0, 500)}`)
+  return {
+    provider: 'apifox_hub',
+    model,
+    endpointStyle: cfg.videoEndpointStyle,
+    baseUrl: cfg.baseUrl,
+    requestCapability: input.capability,
+    taskId: taskId || undefined,
+    directOutputUrl: directOutputUrl || undefined,
     raw: json,
   }
 }
@@ -375,5 +560,5 @@ export async function generateVideo(input: {
     if (!isTransientQueryError(error)) throw error
     lastTransientError = String((error as any)?.message ?? error)
   }
-  throw new Error(`ai666 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
+  throw new Ai666TaskTimeoutError(taskId, lastTransientError || undefined)
 }

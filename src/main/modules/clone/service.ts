@@ -16,6 +16,7 @@ import {
   generateShotVideoByProviderChain,
   regenerateOneShotKeyframeByProviderChain,
 } from './providers'
+import { Ai666TaskTimeoutError, createVideoTask as createAi666VideoTask, queryAsyncTask as queryAi666Task } from './unifiedVideo'
 import { productsRepo } from '../products/repo'
 import { templatesRepo } from '../templates/repo'
 import { getMediaInfo } from '../media/info'
@@ -91,9 +92,32 @@ import type {
 import type { MediaAsset, Product } from '../products/types'
 import { queryGrsCredits } from './grsai'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent } from './aiResponse'
+import { downloadAtlasToFile } from './atlasRetry'
 
 function now() {
   return Date.now()
+}
+
+function normalizeVideoShotStatus(value: unknown) {
+  const status = String(value ?? '').trim().toLowerCase()
+  if (status === 'success' || status === 'completed') return 'done'
+  if (
+    status === 'done' ||
+    status === 'failed' ||
+    status === 'pending' ||
+    status === 'generating' ||
+    status === 'idle' ||
+    status === 'creating' ||
+    status === 'remote_running' ||
+    status === 'polling_timeout' ||
+    status === 'downloading'
+  )
+    return status
+  return 'pending'
+}
+
+function isCompletedVideoShotStatus(value: unknown) {
+  return ['done', 'success', 'completed'].includes(String(value ?? '').trim().toLowerCase())
 }
 
 const WORKFLOW_V2_STEPS: CloneWorkflowV2Step[] = [
@@ -1853,6 +1877,339 @@ async function patchShotRuntimeState(input: {
   return await cloneRepo.upsertProject(input.project)
 }
 
+async function checkLocalTaskStatus(input: {
+  project: CloneProject
+  shot: ShotSpec
+}) {
+  const existingOutput = input.project.shotVideoOutputs?.find((item) => item.shotId === input.shot.id)
+  const existingVideoPath = String(existingOutput?.videoPath || input.shot.generatedClipPath || '').trim()
+  if (existingVideoPath) {
+    return {
+      skip: true as const,
+      status: 'done' as const,
+      videoPath: existingVideoPath,
+      taskId: String(existingOutput?.taskId ?? input.shot.generatedTaskId ?? '').trim() || undefined,
+    }
+  }
+  const sceneVideoPath = join(getAppPaths().dataDir, 'viral-clone', input.project.id, 'scene_videos', `${input.shot.id}.mp4`)
+  try {
+    const fileStat = await stat(sceneVideoPath)
+    if (fileStat.isFile() && fileStat.size > 0) {
+      return {
+        skip: true as const,
+        status: 'done' as const,
+        videoPath: sceneVideoPath,
+        taskId: String(existingOutput?.taskId ?? input.shot.generatedTaskId ?? '').trim() || undefined,
+      }
+    }
+  } catch {}
+  return { skip: false as const }
+}
+
+function resolveShotVideoOutput(project: CloneProject, shot: ShotSpec): CloneShotVideoOutput {
+  ensureCloneFlowState(project)
+  const existing = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
+  return {
+    segmentId: existing?.segmentId || shot.id,
+    index: Number(existing?.index ?? shot.index ?? 0),
+    shotId: shot.id,
+    source: existing?.source ?? 'generated',
+    videoPath: existing?.videoPath || shot.generatedClipPath || undefined,
+    localPath: existing?.localPath || existing?.videoPath || shot.generatedClipPath || undefined,
+    videoUrl: existing?.videoUrl,
+    taskId: existing?.taskId || shot.generatedTaskId || undefined,
+    previousTaskIds: existing?.previousTaskIds ?? [],
+    provider: existing?.provider || shot.generatedProvider || undefined,
+    model: existing?.model || shot.generatedModel || undefined,
+    requestCapability: existing?.requestCapability,
+    endpointStyle: existing?.endpointStyle,
+    remoteStatus: existing?.remoteStatus,
+    remoteRaw: existing?.remoteRaw,
+    durationSec: existing?.durationSec || shot.generatedClipDurationSec || undefined,
+    status: existing?.status || (shot.generatedClipPath ? 'done' : 'idle'),
+    error: existing?.error || shot.error || undefined,
+    retryCount: existing?.retryCount ?? Number(shot.retryCount ?? 0),
+    createdAt: existing?.createdAt ?? now(),
+    lastPollAt: existing?.lastPollAt,
+    completedAt: existing?.completedAt,
+    updatedAt: existing?.updatedAt ?? now(),
+  }
+}
+
+function syncSegmentVideoOutput(project: CloneProject, shot: ShotSpec, patch: Partial<CloneShotVideoOutput>) {
+  const previous = resolveShotVideoOutput(project, shot)
+  syncShotVideoOutput(project, {
+    ...previous,
+    ...patch,
+    segmentId: patch.segmentId || previous.segmentId || shot.id,
+    index: Number(patch.index ?? previous.index ?? shot.index ?? 0),
+    shotId: shot.id,
+    source: patch.source || previous.source || 'generated',
+    localPath: patch.localPath || patch.videoPath || previous.localPath || previous.videoPath,
+    videoPath: patch.videoPath || patch.localPath || previous.videoPath,
+    updatedAt: now(),
+  } as CloneShotVideoOutput)
+}
+
+function isRecoverableVideoStatus(status: unknown) {
+  return ['creating', 'remote_running', 'polling_timeout', 'generating', 'failed'].includes(String(status ?? '').toLowerCase())
+}
+
+function isCloudTerminalFailure(status: unknown) {
+  return ['failed', 'error', 'cancelled', 'canceled', 'expired'].includes(String(status ?? '').toLowerCase())
+}
+
+function ai666PollingTimeoutMessage() {
+  return '本地等待超时，但云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。'
+}
+
+async function saveSegmentDone(input: {
+  project: CloneProject
+  shot: ShotSpec
+  taskId?: string
+  provider?: string
+  model?: string
+  endpointStyle?: string
+  requestCapability?: CloneShotVideoOutput['requestCapability']
+  videoUrl?: string
+  localPath: string
+  remoteStatus?: string
+  remoteRaw?: unknown
+}) {
+  const quality = await qualityCheckShot({
+    shot: {
+      ...input.shot,
+      generatedSource: 'cloud',
+      generatedProvider: input.provider || input.shot.generatedProvider,
+      generatedModel: input.model || input.shot.generatedModel,
+      generatedTaskId: input.taskId || input.shot.generatedTaskId,
+      isMock: false,
+    },
+    filePath: input.localPath,
+    firstFramePath: input.shot.generatedFirstFramePath || input.shot.uploadedImagePath || input.shot.gptFirstFramePath,
+    source: 'cloud',
+  })
+  replaceProjectShot(input.project, input.shot.id, {
+    generatedClipPath: input.localPath,
+    generatedSource: 'cloud',
+    generatedProvider: input.provider || input.shot.generatedProvider,
+    generatedModel: input.model || input.shot.generatedModel,
+    generatedTaskId: input.taskId || input.shot.generatedTaskId,
+    status: 'done',
+    error: '',
+    qualityStatus: quality.passed ? 'passed' : 'warning',
+    qualityScore: quality.score,
+    qualityReasons: quality.reasons,
+    generatedClipDurationSec: quality.meta.durationSec,
+    generatedClipWidth: quality.meta.width,
+    generatedClipHeight: quality.meta.height,
+    canEnterRender: true,
+  })
+  syncSegmentVideoOutput(input.project, input.shot, {
+    taskId: input.taskId,
+    provider: input.provider,
+    model: input.model,
+    endpointStyle: input.endpointStyle,
+    requestCapability: input.requestCapability,
+    remoteStatus: input.remoteStatus || 'succeeded',
+    remoteRaw: input.remoteRaw,
+    videoUrl: input.videoUrl,
+    localPath: input.localPath,
+    videoPath: input.localPath,
+    durationSec: quality.meta.durationSec,
+    status: 'done',
+    error: undefined,
+    completedAt: now(),
+  })
+  patchQueueJobStatus(input.project, input.shot.id, 'done', Number(input.shot.retryCount ?? 0))
+  input.project.lastError = ''
+  setProjectErrorContext(input.project, null)
+  return await cloneRepo.upsertProject(input.project)
+}
+
+async function pollExistingSegmentTask(input: {
+  project: CloneProject
+  shot: ShotSpec
+  waitMs?: number
+  allowFailed?: boolean
+}) {
+  const creds = await cloneRepo.getCredentials()
+  const currentOutput = resolveShotVideoOutput(input.project, input.shot)
+  const taskId = String(currentOutput.taskId || input.shot.generatedTaskId || '').trim()
+  if (!taskId) throw new Error('当前分镜没有可继续查询的 taskId')
+  const started = Date.now()
+  const pollMs = Math.max(1000, Number(creds.apifoxHub?.defaultPollIntervalMs ?? 2000) || 2000)
+  const waitMs = Math.max(0, Number(input.waitMs ?? 0))
+  let lastTask: Awaited<ReturnType<typeof queryAi666Task>> | null = null
+  do {
+    const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
+    ensureCloneFlowState(latestProject)
+    const latestShot = projectBlueprintShots(latestProject).find((item) => item.id === input.shot.id) || input.shot
+    try {
+      syncSegmentVideoOutput(latestProject, latestShot, {
+        status: 'remote_running',
+        taskId,
+        provider: currentOutput.provider || videoProviderLabel(creds),
+        model: currentOutput.model || videoProviderModel(creds),
+        endpointStyle: currentOutput.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+        requestCapability: currentOutput.requestCapability || 'video_start_end_to_video',
+        lastPollAt: now(),
+        error: undefined,
+      })
+      await cloneRepo.upsertProject(latestProject)
+      lastTask = await queryAi666Task({ credentials: creds, taskId })
+      const remoteStatus = String(lastTask.status || '').trim()
+      if (lastTask.status === 'succeeded' && lastTask.outputUrls[0]) {
+        syncSegmentVideoOutput(latestProject, latestShot, {
+          status: 'downloading',
+          taskId,
+          remoteStatus,
+          remoteRaw: lastTask.raw,
+          videoUrl: lastTask.outputUrls[0],
+          lastPollAt: now(),
+          error: undefined,
+        })
+        await cloneRepo.upsertProject(latestProject)
+        const outDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', latestShot.id)
+        await mkdir(outDir, { recursive: true })
+        const outPath = join(outDir, 'generated_clip.mp4')
+        await downloadAtlasToFile(lastTask.outputUrls[0], outPath, 'ai666 继续查询下载')
+        const saved = await saveSegmentDone({
+          project: latestProject,
+          shot: latestShot,
+          taskId,
+          provider: currentOutput.provider || videoProviderLabel(creds),
+          model: currentOutput.model || videoProviderModel(creds),
+          endpointStyle: currentOutput.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+          requestCapability: currentOutput.requestCapability || 'video_start_end_to_video',
+          videoUrl: lastTask.outputUrls[0],
+          localPath: outPath,
+          remoteStatus,
+          remoteRaw: lastTask.raw,
+        })
+        return { project: saved, task: lastTask, synced: true, status: 'done' as const }
+      }
+      if (lastTask.status === 'failed' || isCloudTerminalFailure(lastTask.raw?.status ?? lastTask.raw?.data?.status)) {
+        const reason = lastTask.errorMessage || `ai666 视频任务失败: ${taskId}`
+        replaceProjectShot(latestProject, latestShot.id, {
+          status: 'failed',
+          error: reason,
+          generatedTaskId: taskId,
+          generatedProvider: currentOutput.provider || videoProviderLabel(creds),
+          generatedModel: currentOutput.model || videoProviderModel(creds),
+        })
+        syncSegmentVideoOutput(latestProject, latestShot, {
+          status: 'failed',
+          taskId,
+          remoteStatus,
+          remoteRaw: lastTask.raw,
+          error: reason,
+          lastPollAt: now(),
+        })
+        latestProject.lastError = `[${videoProviderLabel(creds)} / ${videoProviderModel(creds)}] ${reason}`
+        setProjectErrorContext(latestProject, {
+          ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
+          action: 'poll_existing_segment_task',
+          taskId,
+          message: reason,
+          responseSnippet: JSON.stringify(lastTask.raw).slice(0, 500),
+        })
+        const saved = await cloneRepo.upsertProject(latestProject)
+        return { project: saved, task: lastTask, synced: false, status: 'failed' as const }
+      }
+      syncSegmentVideoOutput(latestProject, latestShot, {
+        status: 'remote_running',
+        taskId,
+        remoteStatus,
+        remoteRaw: lastTask.raw,
+        lastPollAt: now(),
+        error: undefined,
+      })
+      await cloneRepo.upsertProject(latestProject)
+    } catch (error: any) {
+      const reason = String(error?.message ?? error)
+      syncSegmentVideoOutput(latestProject, latestShot, {
+        status: 'polling_timeout',
+        taskId,
+        remoteStatus: 'remote_unknown',
+        remoteRaw: { error: reason },
+        lastPollAt: now(),
+        error: `${ai666PollingTimeoutMessage()} taskId=${taskId}`,
+      })
+      setProjectErrorContext(latestProject, {
+        ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
+        action: 'poll_existing_segment_task',
+        taskId,
+        message: ai666PollingTimeoutMessage(),
+        responseSnippet: reason,
+      })
+      const saved = await cloneRepo.upsertProject(latestProject)
+      return { project: saved, task: lastTask, synced: false, status: 'polling_timeout' as const }
+    }
+    if (Date.now() - started >= waitMs) break
+    await new Promise((resolve) => setTimeout(resolve, pollMs))
+  } while (true)
+
+  const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
+  const latestShot = projectBlueprintShots(latestProject).find((item) => item.id === input.shot.id) || input.shot
+  syncSegmentVideoOutput(latestProject, latestShot, {
+    status: 'polling_timeout',
+    taskId,
+    remoteStatus: lastTask?.status || 'running',
+    remoteRaw: lastTask?.raw,
+    lastPollAt: now(),
+    error: `${ai666PollingTimeoutMessage()} taskId=${taskId}`,
+  })
+  setProjectErrorContext(latestProject, {
+    ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
+    action: 'poll_existing_segment_task',
+    taskId,
+    message: ai666PollingTimeoutMessage(),
+    responseSnippet: JSON.stringify(lastTask?.raw ?? {}).slice(0, 500),
+  })
+  const saved = await cloneRepo.upsertProject(latestProject)
+  return { project: saved, task: lastTask, synced: false, status: 'polling_timeout' as const }
+}
+
+async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
+  let project = await cloneRepo.getProject(projectId)
+  if (!project) throw new Error('复刻项目不存在')
+  ensureCloneFlowState(project)
+  const results: Array<{ shotId: string; status: string; taskId?: string; synced?: boolean; error?: string }> = []
+  const shots = projectBlueprintShots(project).sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+  for (const shot of shots) {
+    const output = resolveShotVideoOutput(project, shot)
+    const local = await checkLocalTaskStatus({ project, shot })
+    if (local.skip) {
+      syncSegmentVideoOutput(project, shot, {
+        status: 'done',
+        taskId: local.taskId || output.taskId,
+        videoPath: local.videoPath,
+        localPath: local.videoPath,
+        error: undefined,
+        completedAt: output.completedAt || now(),
+      })
+      replaceProjectShot(project, shot.id, {
+        status: 'done',
+        generatedClipPath: local.videoPath,
+        generatedTaskId: local.taskId || output.taskId,
+        error: '',
+      })
+      project = await cloneRepo.upsertProject(project)
+      results.push({ shotId: shot.id, status: 'done', taskId: local.taskId || output.taskId, synced: true })
+      continue
+    }
+    if (!output.taskId) continue
+    if (output.status === 'done') continue
+    if (!isRecoverableVideoStatus(output.status)) continue
+    const polled = await pollExistingSegmentTask({ project, shot, waitMs: 0 })
+    project = polled.project
+    results.push({ shotId: shot.id, status: polled.status, taskId: output.taskId, synced: polled.synced })
+  }
+  const latest = (await cloneRepo.getProject(projectId)) || project
+  return { project: latest, results }
+}
+
 export const cloneService = {
   async createCloneBlueprintFromReference(input: {
       videoPath: string
@@ -2364,6 +2721,7 @@ export const cloneService = {
   async generateShotVideosFromStoryboardFrames(input: {
     cloneProjectId: string
   }) {
+    await reconcileRemoteStoryboardVideosInternal(input.cloneProjectId)
     let project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
@@ -2374,23 +2732,28 @@ export const cloneService = {
     let done = 0
     let failed = 0
     let skipped = 0
+    let timeout = 0
+    let pending = 0
     const errors: Array<{ shotId: string; index: number; reason: string }> = []
     for (const shot of shots) {
       const framePath = String((shot as any).storyboardFramePath ?? '').trim()
-      const existingOutput = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
-      const existingVideoPath = String(existingOutput?.videoPath || (shot as any).generatedClipPath || '').trim()
-      const existingGeneratedSource: ShotSpec['generatedSource'] =
-        (shot as any).generatedSource === 'local'
-          ? 'local'
-          : (shot as any).generatedSource === 'mock'
-            ? 'mock'
-            : 'cloud'
-      if (existingVideoPath) {
+      if (isCompletedVideoShotStatus((shot as any).status)) {
+        const existingOutput = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
+        if (existingOutput?.videoPath || String((shot as any).generatedClipPath ?? '').trim()) {
+          skipped += 1
+          continue
+        }
+      }
+      const localTask = await checkLocalTaskStatus({ project, shot })
+      if (localTask.skip) {
         done += 1
+        const existingOutput = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
+        const finalTaskId = String(localTask.taskId ?? existingOutput?.taskId ?? (shot as any).generatedTaskId ?? '').trim() || undefined
         syncShotVideoOutput(project, {
           shotId: shot.id,
           source: existingOutput?.source ?? 'generated',
-          videoPath: existingVideoPath,
+          videoPath: localTask.videoPath,
+          taskId: finalTaskId,
           provider: existingOutput?.provider || String((shot as any).generatedProvider ?? '').trim() || undefined,
           model: existingOutput?.model || String((shot as any).generatedModel ?? '').trim() || undefined,
           durationSec: existingOutput?.durationSec || Number((shot as any).generatedClipDurationSec ?? 0) || undefined,
@@ -2399,25 +2762,46 @@ export const cloneService = {
           updatedAt: existingOutput?.updatedAt ?? now(),
         })
         replaceProjectShot(project, shot.id, {
-          generatedClipPath: existingVideoPath,
-          generatedSource: existingGeneratedSource,
+          generatedClipPath: localTask.videoPath,
+          generatedSource: (shot as any).generatedSource === 'mock' ? 'mock' : 'cloud',
           generatedProvider: existingOutput?.provider || String((shot as any).generatedProvider ?? '').trim() || undefined,
           generatedModel: existingOutput?.model || String((shot as any).generatedModel ?? '').trim() || undefined,
+          generatedTaskId: finalTaskId,
           generatedClipDurationSec: existingOutput?.durationSec || Number((shot as any).generatedClipDurationSec ?? 0) || undefined,
           status: 'done',
           error: '',
         })
+        project = await cloneRepo.upsertProject(project)
         continue
       }
       if (!framePath) {
+        const shotStatus = normalizeVideoShotStatus((shot as any).status)
+        if (shotStatus === 'failed' || shotStatus === 'pending' || shotStatus === 'idle' || shotStatus === 'generating') {
+          skipped += 1
+          continue
+        }
         skipped += 1
+        continue
+      }
+      const existingBeforeCreate = resolveShotVideoOutput(project, shot)
+      if (existingBeforeCreate.taskId && existingBeforeCreate.status !== 'done') {
+        const polled = await pollExistingSegmentTask({ project, shot, waitMs: 30000 })
+        project = polled.project
+        if (polled.status === 'done') done += 1
+        else if (polled.status === 'failed') failed += 1
+        else {
+          timeout += 1
+          pending += 1
+        }
         continue
       }
       try {
         syncShotVideoOutput(project, {
           shotId: shot.id,
           source: 'generated',
-          status: 'generating',
+          status: 'creating',
+          provider: videoProviderLabel(await cloneRepo.getCredentials()),
+          model: videoProviderModel(await cloneRepo.getCredentials()),
           updatedAt: now(),
         })
         await cloneRepo.upsertProject(project)
@@ -2442,10 +2826,11 @@ export const cloneService = {
           shotId: shot.id,
           source: 'generated',
           videoPath: String(latestShot?.generatedClipPath ?? '').trim() || undefined,
+          taskId: String(latestShot?.generatedTaskId ?? '').trim() || undefined,
           provider: String(latestShot?.generatedProvider ?? '').trim() || undefined,
           model: String(latestShot?.generatedModel ?? '').trim() || undefined,
           durationSec: Number(latestShot?.generatedClipDurationSec ?? 0) || undefined,
-          status: latestShot?.generatedClipPath ? 'done' : 'failed',
+          status: latestShot?.generatedClipPath ? 'done' : 'polling_timeout',
           error: String(latestShot?.error ?? '').trim() || undefined,
           updatedAt: now(),
         })
@@ -2471,34 +2856,58 @@ export const cloneService = {
             status: latestShot.status,
             error: latestShot.error,
           })
+          project = await cloneRepo.upsertProject(project)
         } else {
-          failed += 1
+          const latestOutput = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
+          if (latestOutput?.taskId) {
+            timeout += 1
+            pending += 1
+          } else {
+            failed += 1
+          }
           const reason = latestShot?.error || '分镜视频生成后未返回可用视频文件'
-          errors.push({ shotId: shot.id, index: Number(shot.index ?? 0), reason })
+          errors.push({ shotId: shot.id, index: Number(shot.index ?? 0), reason: latestOutput?.taskId ? `${ai666PollingTimeoutMessage()} taskId=${latestOutput.taskId}` : reason })
           replaceProjectShot(project, shot.id, {
-            status: latestShot?.status ?? 'failed',
-            error: reason,
+            status: latestOutput?.taskId ? 'generating' : latestShot?.status ?? 'failed',
+            error: latestOutput?.taskId ? `${ai666PollingTimeoutMessage()} taskId=${latestOutput.taskId}` : reason,
           })
+          project = await cloneRepo.upsertProject(project)
         }
-        await cloneRepo.upsertProject(project)
       } catch (error: any) {
-        failed += 1
         const reason = String(error?.message ?? error ?? '分镜视频生成失败')
-        errors.push({ shotId: shot.id, index: Number(shot.index ?? 0), reason })
         const latest = (await cloneRepo.getProject(project.id)) ?? project
         ensureCloneFlowState(latest)
+        const latestOutput = resolveShotVideoOutput(latest, latest.blueprint?.shots.find((item) => item.id === shot.id) || shot)
+        if (latestOutput.taskId) {
+          timeout += 1
+          pending += 1
+        } else {
+          failed += 1
+        }
+        errors.push({
+          shotId: shot.id,
+          index: Number(shot.index ?? 0),
+          reason: latestOutput.taskId ? `${ai666PollingTimeoutMessage()} taskId=${latestOutput.taskId}` : reason,
+        })
         replaceProjectShot(latest, shot.id, {
-          status: 'failed',
-          error: reason,
-          qualityStatus: 'failed',
-          qualityReasons: [reason],
+          status: latestOutput.taskId ? 'generating' : 'failed',
+          error: latestOutput.taskId ? `${ai666PollingTimeoutMessage()} taskId=${latestOutput.taskId}` : reason,
+          qualityStatus: latestOutput.taskId ? 'unchecked' : 'failed',
+          qualityReasons: latestOutput.taskId ? [] : [reason],
           canEnterRender: false,
+          generatedTaskId: latest.blueprint?.shots.find((item) => item.id === shot.id)?.generatedTaskId,
         })
         syncShotVideoOutput(latest, {
           shotId: shot.id,
           source: 'generated',
-          status: 'failed',
-          error: reason,
+          status: latestOutput.taskId ? 'polling_timeout' : 'failed',
+          error: latestOutput.taskId ? `${ai666PollingTimeoutMessage()} taskId=${latestOutput.taskId}` : reason,
+          taskId: latestOutput.taskId || latest.blueprint?.shots.find((item) => item.id === shot.id)?.generatedTaskId,
+          provider: latestOutput.provider,
+          model: latestOutput.model,
+          remoteStatus: latestOutput.remoteStatus,
+          remoteRaw: latestOutput.remoteRaw,
+          lastPollAt: latestOutput.lastPollAt,
           updatedAt: now(),
         })
         patchWorkflowV2(latest, 'generate_shot_videos', 'generate_shot_videos', 'running')
@@ -2522,7 +2931,7 @@ export const cloneService = {
     return {
       project: saved,
       shotVideoOutputs: saved.shotVideoOutputs ?? [],
-      queueSummary: { total: shots.length, done, failed, skipped },
+      queueSummary: { total: shots.length, done, failed, skipped, pending, timeout, doneCount: done, pendingCount: pending, failedCount: failed, timeoutCount: timeout },
       errors,
     }
   },
@@ -2771,9 +3180,11 @@ export const cloneService = {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
     syncProjectBlueprintLayers(item)
+    await reconcileRemoteStoryboardVideosInternal(item.id)
+    const latest = (await cloneRepo.getProject(input.cloneProjectId)) || item
     return {
-      ...item,
-      pipelineStatus: pipelineStatusFromProject(item),
+      ...latest,
+      pipelineStatus: pipelineStatusFromProject(latest),
     }
   },
 
@@ -2781,6 +3192,22 @@ export const cloneService = {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
     return pipelineStatusFromProject(item)
+  },
+
+  async syncShotVideoTask(input: { cloneProjectId: string; shotId: string }) {
+    const project = await cloneRepo.getProject(input.cloneProjectId)
+    if (!project || !project.blueprint) throw new Error('复刻项目不存在')
+    ensureCloneFlowState(project)
+    const shot = project.blueprint.shots.find((item) => item.id === input.shotId)
+    if (!shot) throw new Error('分镜不存在')
+    const taskId = String(project.shotVideoOutputs?.find((item) => item.shotId === shot.id)?.taskId ?? shot.generatedTaskId ?? '').trim()
+    if (!taskId) throw new Error('当前分镜没有可同步的 taskId')
+    const result = await pollExistingSegmentTask({ project, shot, waitMs: 0, allowFailed: true })
+    return { project: result.project, task: result.task, synced: result.synced, status: result.status }
+  },
+
+  async reconcileRemoteStoryboardVideos(input: { cloneProjectId: string }) {
+    return await reconcileRemoteStoryboardVideosInternal(input.cloneProjectId)
   },
 
     async listProjects() {
@@ -3844,6 +4271,7 @@ export const cloneService = {
   async generateShotClip(input: {
     cloneProjectId: string
     shotId: string
+    forceRegenerate?: boolean
   }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
@@ -3906,6 +4334,22 @@ export const cloneService = {
     if (!hasProductLock(shot, shot.productReferenceImagePaths)) {
       throw new Error('[未提交视频模型请求] 请先上传产品参考图或填写产品锁定信息')
     }
+    const existingOutput = resolveShotVideoOutput(item, shot)
+    if (existingOutput.taskId && !input.forceRegenerate) {
+      const polled = await pollExistingSegmentTask({ project: item, shot, waitMs: 30000 })
+      return polled.project
+    }
+    if (existingOutput.taskId && input.forceRegenerate) {
+      syncSegmentVideoOutput(item, shot, {
+        previousTaskIds: Array.from(new Set([...(existingOutput.previousTaskIds ?? []), existingOutput.taskId])),
+        taskId: undefined,
+        remoteStatus: undefined,
+        remoteRaw: undefined,
+        error: undefined,
+        status: 'creating',
+      })
+      await cloneRepo.upsertProject(item)
+    }
     patchQueueJobStatus(item, shot.id, 'running', Number(shot.retryCount ?? 0))
     await patchShotRuntimeState({
       project: item,
@@ -3920,7 +4364,7 @@ export const cloneService = {
         generatedSource: undefined,
         generatedProvider: undefined,
         generatedModel: undefined,
-        generatedTaskId: undefined,
+        generatedTaskId: input.forceRegenerate ? undefined : shot.generatedTaskId,
         isMock: false,
       },
     })
@@ -4069,10 +4513,15 @@ export const cloneService = {
     } catch (e: any) {
       const creds = await cloneRepo.getCredentials()
       const hasKey = hasCloudVideoKey(creds)
+      const latest = await cloneRepo.getProject(input.cloneProjectId)
+      const preservedTaskId = String(
+        latest?.blueprint?.shots.find((x) => x.id === input.shotId)?.generatedTaskId ||
+          generatedTaskId ||
+          '',
+      ).trim()
       const reason = hasKey
         ? `${videoProviderLabel(creds)} 云端AI生成失败: ` + String(e?.message ?? e)
         : `未配置 ${videoProviderLabel(creds)} API Key，无法调用云端图生视频模型`
-      const latest = await cloneRepo.getProject(input.cloneProjectId)
       if (latest) {
         await patchShotRuntimeState({
           project: latest,
@@ -4084,7 +4533,7 @@ export const cloneService = {
             generatedSource: undefined,
             generatedProvider: undefined,
             generatedModel: undefined,
-            generatedTaskId: undefined,
+            generatedTaskId: preservedTaskId || undefined,
             isMock: false,
             qualityStatus: 'failed',
             qualityScore: quality?.score ?? 0,
@@ -4097,6 +4546,7 @@ export const cloneService = {
           source: 'generated',
           status: 'failed',
           error: reason,
+          taskId: preservedTaskId || undefined,
           provider: videoProviderLabel(creds),
           model: videoProviderModel(creds),
           updatedAt: now(),
@@ -4105,6 +4555,7 @@ export const cloneService = {
         setProjectErrorContext(latest, {
           ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
           action: 'generate_shot_clip',
+          taskId: preservedTaskId || undefined,
           message: reason,
           responseSnippet: String(e?.message ?? e),
         })
@@ -4137,6 +4588,7 @@ export const cloneService = {
       shotId: shot.id,
       source: 'generated',
       videoPath: out,
+      taskId: generatedShotPatch.generatedTaskId,
       provider: generatedShotPatch.generatedProvider,
       model: generatedShotPatch.generatedModel,
       durationSec: quality?.meta.durationSec,

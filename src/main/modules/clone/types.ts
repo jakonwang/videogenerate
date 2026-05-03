@@ -552,14 +552,28 @@ export type CloneStoryboardFrame = {
 }
 
 export type CloneShotVideoOutput = {
+  segmentId?: string
+  index?: number
   shotId: string
   source: 'generated' | 'uploaded_replacement'
   videoPath?: string
+  localPath?: string
+  videoUrl?: string
+  taskId?: string
+  previousTaskIds?: string[]
   provider?: string
   model?: string
+  requestCapability?: UnifiedCapability
+  endpointStyle?: string
+  remoteStatus?: string
+  remoteRaw?: unknown
   durationSec?: number
-  status: 'idle' | 'generating' | 'done' | 'failed'
+  status: 'idle' | 'creating' | 'remote_running' | 'polling_timeout' | 'downloading' | 'generating' | 'done' | 'failed'
   error?: string
+  retryCount?: number
+  createdAt?: number
+  lastPollAt?: number
+  completedAt?: number
   updatedAt: number
 }
 
