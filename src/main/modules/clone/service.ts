@@ -2379,7 +2379,13 @@ export const cloneService = {
       const framePath = String((shot as any).storyboardFramePath ?? '').trim()
       const existingOutput = project.shotVideoOutputs?.find((item) => item.shotId === shot.id)
       const existingVideoPath = String(existingOutput?.videoPath || (shot as any).generatedClipPath || '').trim()
-      if (existingVideoPath && (existingOutput?.status === 'done' || shot.status === 'done')) {
+      const existingGeneratedSource: ShotSpec['generatedSource'] =
+        (shot as any).generatedSource === 'local'
+          ? 'local'
+          : (shot as any).generatedSource === 'mock'
+            ? 'mock'
+            : 'cloud'
+      if (existingVideoPath) {
         done += 1
         syncShotVideoOutput(project, {
           shotId: shot.id,
@@ -2391,6 +2397,15 @@ export const cloneService = {
           status: 'done',
           error: undefined,
           updatedAt: existingOutput?.updatedAt ?? now(),
+        })
+        replaceProjectShot(project, shot.id, {
+          generatedClipPath: existingVideoPath,
+          generatedSource: existingGeneratedSource,
+          generatedProvider: existingOutput?.provider || String((shot as any).generatedProvider ?? '').trim() || undefined,
+          generatedModel: existingOutput?.model || String((shot as any).generatedModel ?? '').trim() || undefined,
+          generatedClipDurationSec: existingOutput?.durationSec || Number((shot as any).generatedClipDurationSec ?? 0) || undefined,
+          status: 'done',
+          error: '',
         })
         continue
       }
