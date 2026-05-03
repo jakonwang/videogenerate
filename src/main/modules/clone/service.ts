@@ -2358,7 +2358,8 @@ export const cloneService = {
       project.outputDir = join(getAppPaths().dataDir, 'viral-clone', project.id, 'outputs')
       project.status = 'analyzed'
       project.workflowV2 = defaultWorkflowV2()
-      patchWorkflowV2(project, 'upload_analyze_script', 'upload_analyze_script', 'done')
+      patchWorkflowV2(project, 'generate_script_variants', 'upload_analyze_script', 'done')
+      patchWorkflowV2(project, 'generate_script_variants', 'generate_script_variants', 'running')
       syncProjectBlueprintLayers(project)
       const saved = await cloneRepo.upsertProject(project)
       const provider = summarizeProjectProviders(saved)
