@@ -106,5 +106,53 @@
   },
   "titleBar": {
     "ready": "San sang"
+  },
+  "cloneView": {
+    "videoStage": {
+      "title": "Tao video theo canh",
+      "description": "Xem, tao va thu lai tung canh.",
+      "primaryAction": "Tiep tuc tao cac canh con lai",
+      "listTab": "Danh sach canh",
+      "settingsTab": "Cai dat tao",
+      "retryFailed": "Thu lai canh loi",
+      "refreshStatus": "Lam moi trang thai",
+      "filters": {
+        "all": "Tat ca",
+        "ready": "Hoan tat",
+        "failed": "That bai",
+        "pending": "Cho xu ly"
+      },
+      "stats": {
+        "ordered": "Tao theo thu tu",
+        "failedPending": "Canh loi cho truy van"
+      },
+      "columns": {
+        "shot": "Canh",
+        "frame": "Khung hinh",
+        "script": "Mo ta / Loi thoai",
+        "duration": "Thoi luong",
+        "motion": "Chuyen dong",
+        "status": "Trang thai",
+        "actions": "Thao tac"
+      },
+      "noFrame": "Chua co khung hinh",
+      "actionPreview": "Xem truoc",
+      "actionRegenerate": "Tao lai",
+      "actionRetryQuery": "Truy van lai",
+      "previewTag": "Xem truoc truc tiep",
+      "previewTitle": "Khung xem truoc",
+      "emptyPreviewTitle": "Chua co canh de xem",
+      "emptyPreviewDescription": "Chon canh ben trai hoac doi tao xong.",
+      "currentShot": "Canh hien tai",
+      "notSelected": "Chua chon",
+      "scriptTitle": "Kich ban canh",
+      "noScript": "Canh nay chua co noi dung kich ban.",
+      "motionLabel": "Chuyen dong",
+      "productRoleLabel": "Vai tro san pham",
+      "referenceFrame": "Khung tham chieu",
+      "noReferenceFrame": "Chua co khung tham chieu",
+      "modelLabel": "Mo hinh",
+      "taskIdLabel": "Ma tac vu"
+    }
   }
 }

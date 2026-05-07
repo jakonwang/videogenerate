@@ -888,6 +888,7 @@ export type ModelCredentials = {
   videoModelFallback?: string
   grsaiVideoModel?: string
   grsaiAnalysisModel?: string
+  chatProviderPrimary?: 'apifox_hub' | 'grsai'
   videoProviderPrimary?: AiProviderName
   videoProviderFallback?: AiProviderName
   openaiApiKey?: string

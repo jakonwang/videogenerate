@@ -26,3 +26,24 @@ defineProps<{
     </div>
   </div>
 </template>
+
+<style scoped>
+.ds-shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100%;
+}
+
+.ds-shell__main {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 88px minmax(0, 1fr);
+}
+
+.ds-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+</style>

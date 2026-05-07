@@ -20,6 +20,7 @@ const router = createRouter({
         { path: 'production', name: 'production', redirect: { name: 'products' } },
         { path: 'models', name: 'models', component: () => import('@/ui/views/ModelLibraryView.vue') },
         { path: 'clone', name: 'clone', component: () => import('@/ui/views/CloneView.vue') },
+        { path: 'settings', name: 'settings', component: () => import('@/ui/views/SettingsView.vue') },
         { path: 'products', name: 'products', component: () => import('@/ui/views/ProductsView.vue') },
         { path: 'templates', name: 'templates', component: () => import('@/ui/views/TemplatesView.vue') },
         { path: 'live-slicer', name: 'live-slicer', component: () => import('@/ui/views/LiveSlicerView.vue') },

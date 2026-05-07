@@ -18,7 +18,15 @@ import {
   publicUrlForCloudFrame,
   regenerateOneShotKeyframeByProviderChain,
 } from './providers'
-import { Ai666TaskTimeoutError, createVideoTask as createAi666VideoTask, queryAsyncTask as queryAi666Task } from './unifiedVideo'
+import {
+  Ai666TaskTimeoutError,
+  createVideoTask as createAi666VideoTask,
+  pollTask as pollAi666Task,
+  queryAsyncTask as queryAi666Task,
+  recoverTaskById as recoverAi666TaskById,
+  syncRemoteTaskResult as syncAi666RemoteTaskResult,
+  submitTask as submitAi666Task,
+} from './unifiedVideo'
 import { productsRepo } from '../products/repo'
 import { templatesRepo } from '../templates/repo'
 import { getMediaInfo } from '../media/info'
@@ -65,6 +73,7 @@ import type {
   CloneFinalComposeStatus,
   ClonePipelineStatus,
   ClonePreviewPipelineStatus,
+  CloneBlueprint,
   CloneProject,
   CloneReviewStatus,
   CloneScriptVariantCandidate,
@@ -584,7 +593,7 @@ function videoProviderLabel(credentials: ModelCredentials) {
 
 function videoProviderModel(credentials: ModelCredentials) {
   const p = videoProviderChain(credentials)[0]
-  if (p === 'kling') return String(credentials.videoModelFallback ?? '').trim() || 'kling-v1'
+  if (p === 'kling') return String(credentials.videoModelPrimary ?? '').trim() || 'google/veo3.1-lite/start-end-frame-to-video'
   if (p === 'grsai') return String(credentials.grsaiVideoModel ?? '').trim() || 'grsai-video'
   if (p === 'apifox_hub') {
     return (
@@ -1953,6 +1962,26 @@ function syncSegmentVideoOutput(project: CloneProject, shot: ShotSpec, patch: Pa
   } as CloneShotVideoOutput)
 }
 
+function existingShotVideoOutput(project: CloneProject, shotId: string) {
+  return project.shotVideoOutputs?.find((item) => item.shotId === shotId)
+}
+
+function shotVideoExistsLocally(output?: CloneShotVideoOutput) {
+  const path = String(output?.videoPath || output?.localPath || '').trim()
+  return Boolean(path)
+}
+
+async function canReuseShotVideo(output?: CloneShotVideoOutput) {
+  if (!shotVideoExistsLocally(output)) return false
+  const path = String(output?.videoPath || output?.localPath || '').trim()
+  try {
+    const file = await stat(path)
+    return file.isFile() && file.size > 0
+  } catch {
+    return false
+  }
+}
+
 function isRecoverableVideoStatus(status: unknown) {
   return ['creating', 'remote_running', 'polling_timeout', 'generating', 'failed'].includes(String(status ?? '').toLowerCase())
 }
@@ -2326,7 +2355,7 @@ export const cloneService = {
     } catch (error: any) {
       setProjectErrorContext(
         project,
-        creds.apifoxHub?.enabled
+        creds.chatProviderPrimary === 'apifox_hub'
           ? {
               ...apifoxContextByCapability(creds, 'chat_completion'),
               action: 'create_blueprint',
@@ -3235,7 +3264,7 @@ export const cloneService = {
     cloneProjectId: string
     shotId: string
   }) {
-    const item = await cloneRepo.getProject(input.cloneProjectId)
+    let item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('复刻项目或蓝图不存在')
     const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('分镜不存在')
@@ -5208,35 +5237,128 @@ export const cloneService = {
     consistencyMode?: ConsistencyMode
     providerPolicy?: { chain?: AiProviderName[] }
   }) {
-    const item = await cloneRepo.getProject(input.cloneProjectId)
+    let item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
+    let blueprint = item.blueprint
     const creds = await cloneRepo.getCredentials()
     let product = await ensureProjectAssetBankProduct(item)
     const outDir = join(getAppPaths().tmpDir, 'clone-shot-videos', item.id)
     await mkdir(outDir, { recursive: true })
     const chain = videoProviderChain(creds) as any
     const targetIds = new Set((input.shotIds ?? []).map((x) => String(x)))
-    for (const shot of item.blueprint.shots) {
+    for (const shot of blueprint.shots) {
       if (!targetIds.has(shot.id)) continue
       assertShotEligibleForAi(shot)
       if (!hasProductLock(shot, shot.productReferenceImagePaths)) throw new Error('分镜 #' + (shot.index + 1) + ' 缺少产品参考图或产品锁定信息')
+      const existing = resolveShotVideoOutput(item, shot)
+      if (await canReuseShotVideo(existing)) {
+        const reusedPath = String(existing.videoPath || existing.localPath || '').trim()
+        if (reusedPath) {
+          blueprint = {
+            ...blueprint,
+            shots: blueprint.shots.map((s) =>
+              s.id === shot.id
+                ? {
+                    ...s,
+                    generatedClipPath: reusedPath,
+                    generatedSource: 'cloud',
+                    generatedProvider: existing.provider || s.generatedProvider,
+                    generatedModel: existing.model || s.generatedModel,
+                    generatedTaskId: existing.taskId || s.generatedTaskId,
+                    status: 'done',
+                    error: '',
+                  }
+                : s,
+            ),
+          }
+          syncSegmentVideoOutput(item, shot, {
+            status: 'done',
+            taskId: existing.taskId,
+            provider: existing.provider,
+            model: existing.model,
+            endpointStyle: existing.endpointStyle,
+            requestCapability: existing.requestCapability,
+            remoteStatus: existing.remoteStatus || 'done',
+            remoteRaw: existing.remoteRaw,
+            videoUrl: existing.videoUrl || reusedPath,
+            localPath: reusedPath,
+            videoPath: reusedPath,
+            error: undefined,
+            completedAt: existing.completedAt || now(),
+          })
+          continue
+        }
+      }
+      if ((existing.status === 'done' || existing.status === 'remote_running' || existing.status === 'downloading') && existing.taskId) {
+        const recovered = await recoverAi666TaskById({ credentials: creds, taskId: existing.taskId, outDir })
+        if (recovered.synced && recovered.outputPath) {
+          const saved = await saveSegmentDone({
+            project: item,
+            shot,
+            taskId: existing.taskId,
+            provider: existing.provider || 'apifox_hub',
+            model: existing.model || videoProviderModel(creds),
+            endpointStyle: existing.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+            requestCapability: existing.requestCapability || 'video_start_end_to_video',
+            videoUrl: recovered.task.outputUrls[0],
+            localPath: recovered.outputPath,
+            remoteStatus: recovered.task.status,
+            remoteRaw: recovered.task.raw,
+          })
+          item = saved
+          blueprint = item.blueprint as CloneBlueprint
+          product = await ensureProjectAssetBankProduct(item)
+          continue
+        }
+        if (recovered.task.status === 'failed') {
+          syncSegmentVideoOutput(item, shot, {
+            status: 'failed',
+            taskId: existing.taskId,
+            provider: existing.provider,
+            model: existing.model,
+            endpointStyle: existing.endpointStyle,
+            requestCapability: existing.requestCapability,
+            remoteStatus: recovered.task.status,
+            remoteRaw: recovered.task.raw,
+            error: recovered.task.errorMessage || '云端任务失败',
+            lastPollAt: now(),
+          })
+          item = await cloneRepo.upsertProject(item)
+          blueprint = item.blueprint as CloneBlueprint
+          continue
+        }
+      }
+      if (existing.status !== 'idle' && existing.status !== 'failed' && existing.status !== 'polling_timeout') {
+        continue
+      }
       const startPath = shot.keyframes?.startFrame?.filePath
       const endPath = shot.keyframes?.endFrame?.filePath
       if (!startPath || !endPath) throw new Error('分镜 ' + (shot.index + 1) + ' 缺少首尾帧，无法生成视频')
-      const taskId = randomUUID()
-      item.aiTasks.unshift({
-        id: taskId,
-        projectId: item.id,
-        shotId: shot.id,
-        taskType: 'shot_video',
-        provider: chain[0] ?? 'seedance',
-        status: 'running',
-        createdAt: now(),
-        updatedAt: now(),
-      })
-      await cloneRepo.upsertProject(item)
       try {
-        const generated = await generateShotVideoByProviderChain({
+        const current = resolveShotVideoOutput(item, shot)
+        let generated = null as Awaited<ReturnType<typeof generateShotVideoByProviderChain>> | null
+        if (current.taskId) {
+          const recovered = await recoverAi666TaskById({ credentials: creds, taskId: current.taskId, outDir })
+          if (recovered.synced && recovered.outputPath) {
+            const saved = await saveSegmentDone({
+              project: item,
+              shot,
+              taskId: current.taskId,
+              provider: current.provider || 'apifox_hub',
+              model: current.model || videoProviderModel(creds),
+              endpointStyle: current.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+              requestCapability: current.requestCapability || 'video_start_end_to_video',
+              videoUrl: recovered.task.outputUrls[0],
+              localPath: recovered.outputPath,
+              remoteStatus: recovered.task.status,
+              remoteRaw: recovered.task.raw,
+            })
+            item = saved
+            product = await ensureProjectAssetBankProduct(item)
+            continue
+          }
+        }
+        generated = await generateShotVideoByProviderChain({
           shot,
           outDir,
           startFramePath: startPath,
@@ -5248,9 +5370,10 @@ export const cloneService = {
         const segment = segmentKeyByPurpose(shot.purpose)
         const appended = await upsertAssetToProduct({ product, segment, filePath: generated.outputFilePath })
         product = appended.product
-        item.blueprint = {
-          ...item.blueprint,
-          shots: item.blueprint.shots.map((s) =>
+        const taskId = String(generated.remoteTaskId || current.taskId || shot.generatedTaskId || '').trim()
+        blueprint = {
+          ...blueprint,
+          shots: blueprint.shots.map((s) =>
             s.id === shot.id ? { ...s, sourceMode: 'ai', aiEnabled: true, aiGeneratedAssetId: appended.asset.id } : s,
           ),
         }
@@ -5267,11 +5390,32 @@ export const cloneService = {
             : t,
         )
       } catch (e: any) {
-        item.aiTasks = item.aiTasks.map((t) =>
-          t.id === taskId ? { ...t, status: 'error', error: String(e?.message ?? e), updatedAt: now() } : t,
-        )
+        const reason = String(e?.message ?? e)
+        const current = resolveShotVideoOutput(item, shot)
+        syncSegmentVideoOutput(item, shot, {
+          status: current.taskId ? 'polling_timeout' : 'failed',
+          taskId: current.taskId,
+          provider: current.provider,
+          model: current.model,
+          endpointStyle: current.endpointStyle,
+          requestCapability: current.requestCapability || 'video_start_end_to_video',
+          remoteStatus: current.remoteStatus,
+          remoteRaw: current.remoteRaw,
+          error: reason,
+          lastPollAt: now(),
+        })
+        item.lastError = reason
+        setProjectErrorContext(item, {
+          ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
+          action: 'generate_shot_clip',
+          taskId: current.taskId,
+          message: reason,
+          responseSnippet: reason,
+        })
+        item = await cloneRepo.upsertProject(item)
       }
     }
+    item.blueprint = blueprint
     item.productId = product.id
     item.status = 'materials_ready'
     return await cloneRepo.upsertProject(item)

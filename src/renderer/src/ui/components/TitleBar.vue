@@ -30,7 +30,7 @@ async function close() {
 </script>
 
 <template>
-  <div class="ui-topbar flex h-10 items-center border-b">
+  <div class="ui-topbar flex h-10 items-center border-b border-white/5 bg-[#09111f]">
     <!-- 可拖拽区 -->
     <div class="flex min-w-0 flex-1 items-center gap-2 px-3" style="-webkit-app-region: drag">
       <div class="h-2 w-2 rounded-full bg-teal-500"></div>

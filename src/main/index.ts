@@ -890,6 +890,7 @@ function wireIpc() {
         videoModelFallback?: string
         grsaiVideoModel?: string
         grsaiAnalysisModel?: string
+        chatProviderPrimary?: 'apifox_hub' | 'grsai'
         videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
         videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
@@ -920,6 +921,7 @@ function wireIpc() {
         videoModelFallback: payload?.videoModelFallback,
         grsaiVideoModel: payload?.grsaiVideoModel,
         grsaiAnalysisModel: payload?.grsaiAnalysisModel,
+        chatProviderPrimary: payload?.chatProviderPrimary,
         videoProviderPrimary: payload?.videoProviderPrimary,
         videoProviderFallback: payload?.videoProviderFallback,
         openaiApiKey: payload?.openaiApiKey,

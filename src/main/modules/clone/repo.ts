@@ -457,6 +457,7 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     videoModelFallback: normalizeAi666VideoModel(parsed?.videoModelFallback, 'veo_3_1-fast'),
     grsaiVideoModel: normalizeAi666VideoModel(parsed?.grsaiVideoModel, 'grok-video-3'),
     grsaiAnalysisModel: String(parsed?.grsaiAnalysisModel ?? '').trim() || 'gpt-5.2',
+    chatProviderPrimary: parsed?.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub',
     videoProviderPrimary: normalizeVideoProvider(parsed?.videoProviderPrimary, 'apifox_hub'),
     videoProviderFallback: normalizeVideoProvider(parsed?.videoProviderFallback, 'kling'),
     openaiApiKey: String(parsed?.openaiApiKey ?? '').trim() || undefined,

@@ -21,12 +21,12 @@ function apiKey(credentials: ModelCredentials) {
 function modelForCapability(cfg: NonNullable<ModelCredentials['apifoxHub']>, capability: UnifiedCapability) {
   const selected =
     capability === 'video_text_to_video'
-      ? cfg.textToVideoModel || cfg.imageToVideoModel || cfg.startEndVideoModel || cfg.referenceVideoModel
+      ? cfg.textToVideoModel
       : capability === 'video_image_to_video'
-        ? cfg.imageToVideoModel || cfg.startEndVideoModel || cfg.referenceVideoModel || cfg.textToVideoModel
+        ? cfg.imageToVideoModel
         : capability === 'video_start_end_to_video'
-          ? cfg.startEndVideoModel || cfg.imageToVideoModel || cfg.referenceVideoModel || cfg.textToVideoModel
-          : cfg.referenceVideoModel || cfg.startEndVideoModel || cfg.imageToVideoModel || cfg.textToVideoModel
+          ? cfg.startEndVideoModel
+          : cfg.referenceVideoModel
   return String(selected || '').trim()
 }
 
@@ -238,6 +238,44 @@ export async function queryAsyncTask(input: {
     errorMessage: pickTaskErrorMessage(json) || undefined,
     raw: json,
   }
+}
+
+export async function pollTask(input: {
+  credentials: ModelCredentials
+  taskId: string
+}) {
+  return await queryAsyncTask(input)
+}
+
+export async function submitTask(input: {
+  credentials: ModelCredentials
+  capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
+  prompt: string
+  image?: string
+  lastImage?: string
+}) {
+  return await createVideoTask(input)
+}
+
+export async function syncRemoteTaskResult(input: {
+  credentials: ModelCredentials
+  taskId: string
+  outDir: string
+}) {
+  const task = await queryAsyncTask({ credentials: input.credentials, taskId: input.taskId })
+  if (task.status !== 'succeeded' || !task.outputUrls[0]) return { task, outputPath: undefined as string | undefined, synced: false }
+  await mkdir(input.outDir, { recursive: true })
+  const out = join(input.outDir, `apifox_video_${Date.now()}_${randomUUID()}.mp4`)
+  await downloadAtlasToFile(task.outputUrls[0], out, 'ai666 视频下载')
+  return { task, outputPath: out, synced: true }
+}
+
+export async function recoverTaskById(input: {
+  credentials: ModelCredentials
+  taskId: string
+  outDir: string
+}) {
+  return await syncRemoteTaskResult(input)
 }
 
 export async function createVideoTask(input: {

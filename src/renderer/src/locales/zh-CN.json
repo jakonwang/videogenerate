@@ -106,5 +106,53 @@
   },
   "titleBar": {
     "ready": "就绪"
+  },
+  "cloneView": {
+    "videoStage": {
+      "title": "分镜生成视频",
+      "description": "查看、生成与重试镜头。",
+      "primaryAction": "继续生成剩余分镜视频",
+      "listTab": "分镜列表",
+      "settingsTab": "生成设置",
+      "retryFailed": "批量重试失败",
+      "refreshStatus": "刷新状态",
+      "filters": {
+        "all": "全部",
+        "ready": "已完成",
+        "failed": "失败",
+        "pending": "待完成"
+      },
+      "stats": {
+        "ordered": "按顺序生成",
+        "failedPending": "失败待查"
+      },
+      "columns": {
+        "shot": "镜头",
+        "frame": "分镜画面",
+        "script": "画面描述 / 台词",
+        "duration": "时长",
+        "motion": "运镜",
+        "status": "状态",
+        "actions": "操作"
+      },
+      "noFrame": "暂无分镜",
+      "actionPreview": "预览",
+      "actionRegenerate": "重新生成",
+      "actionRetryQuery": "继续查询",
+      "previewTag": "实时预览",
+      "previewTitle": "预览侧栏",
+      "emptyPreviewTitle": "暂无可预览镜头",
+      "emptyPreviewDescription": "请先在左侧选择镜头，或等待视频生成完成。",
+      "currentShot": "当前镜头",
+      "notSelected": "未选择",
+      "scriptTitle": "分镜脚本",
+      "noScript": "当前镜头暂无脚本文案",
+      "motionLabel": "运镜",
+      "productRoleLabel": "产品角色",
+      "referenceFrame": "参考分镜",
+      "noReferenceFrame": "暂无参考帧",
+      "modelLabel": "模型",
+      "taskIdLabel": "任务 ID"
+    }
   }
 }

@@ -303,7 +303,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
     }
   }
 
-  if (input.credentials.apifoxHub?.enabled) {
+  if (input.credentials.chatProviderPrimary === 'apifox_hub') {
     const apifox = await generateChatCompletion({
       credentials: input.credentials,
       system: 'You are a strict JSON-only multimodal video script analyst.',

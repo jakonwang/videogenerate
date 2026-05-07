@@ -626,29 +626,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="models-library-page">
-    <header class="models-page-topbar">
-      <div class="models-page-topbar__spacer"></div>
-      <div class="models-page-topbar__search">
-        <Search class="h-4 w-4" />
-        <input type="text" placeholder="搜索模型、关键词..." />
-        <span>Ctrl K</span>
-      </div>
-      <div class="models-page-topbar__actions">
-        <button type="button" class="models-page-topbar__icon">
-          <HelpCircle class="h-4 w-4" />
-        </button>
-        <button type="button" class="models-page-topbar__icon has-badge">
-          <Bell class="h-4 w-4" />
-          <b>3</b>
-        </button>
-        <button type="button" class="models-page-topbar__user">
-          <span class="models-page-topbar__avatar"></span>
-          <span>Creator</span>
-          <ChevronDown class="h-4 w-4" />
-        </button>
-      </div>
-    </header>
-
     <section class="models-shell">
       <div class="models-shell__main">
         <section class="models-hero">
@@ -1047,6 +1024,8 @@ onBeforeUnmount(() => {
   gap: 14px;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  align-content: start;
   color: #f4f8ff;
 }
 
@@ -1055,110 +1034,14 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr) 346px;
   gap: 12px;
   align-items: start;
+  min-height: 0;
 }
 
 .models-shell__main {
   display: grid;
   gap: 12px;
   min-width: 0;
-}
-
-.models-page-topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 324px auto;
-  align-items: center;
-  gap: 18px;
-  min-height: 42px;
-}
-
-.models-page-topbar__search {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 42px;
-  border: 1px solid rgba(108, 128, 158, 0.14);
-  border-radius: 14px;
-  padding: 0 14px;
-  background: rgba(13, 22, 36, 0.9);
-  color: #dbe4f0;
-}
-
-.models-page-topbar__search input {
-  width: 100%;
-  background: transparent;
-  color: #edf3ff;
-  font-size: 13px;
-  outline: none;
-}
-
-.models-page-topbar__search input::placeholder {
-  color: #6f8197;
-}
-
-.models-page-topbar__search span {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid rgba(108, 128, 158, 0.1);
-  border-radius: 10px;
-  color: #8a9cb2;
-  font-size: 12px;
-}
-
-.models-page-topbar__actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.models-page-topbar__icon,
-.models-page-topbar__user {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 42px;
-  border: 1px solid rgba(108, 128, 158, 0.14);
-  border-radius: 14px;
-  background: rgba(13, 22, 36, 0.9);
-  color: #eef3ff;
-}
-
-.models-page-topbar__icon {
-  width: 42px;
-}
-
-.models-page-topbar__icon.has-badge b {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: #8b5cf6;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.models-page-topbar__user {
-  gap: 10px;
-  padding: 0 14px 0 10px;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.models-page-topbar__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 35%, rgba(255, 232, 177, 0.95), transparent 22%),
-    linear-gradient(135deg, #95a977, #f4b786 48%, #5d3c2f);
+  min-height: 0;
 }
 
 .models-hero,
@@ -1323,6 +1206,7 @@ onBeforeUnmount(() => {
   grid-template-columns: 276px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+  min-height: 0;
 }
 
 .models-panel {
@@ -1335,6 +1219,8 @@ onBeforeUnmount(() => {
 
 .models-catalog-panel {
   padding: 14px 14px 12px;
+  min-height: 0;
+  overflow: visible;
 }
 
 .models-detail-panel {
@@ -2179,14 +2065,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1240px) {
-  .models-page-topbar {
-    grid-template-columns: 1fr;
-  }
-
-  .models-page-topbar__spacer {
-    display: none;
-  }
-
   .models-hero {
     grid-template-columns: 1fr;
     gap: 18px;
@@ -2195,6 +2073,10 @@ onBeforeUnmount(() => {
   .models-shell,
   .models-layout {
     grid-template-columns: 1fr;
+  }
+
+  .models-detail-panel {
+    position: static;
   }
 
   .models-card-grid {

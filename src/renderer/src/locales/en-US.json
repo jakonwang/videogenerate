@@ -106,5 +106,53 @@
   },
   "titleBar": {
     "ready": "Ready"
+  },
+  "cloneView": {
+    "videoStage": {
+      "title": "Generate Shot Videos",
+      "description": "View, generate, and retry shots.",
+      "primaryAction": "Continue Generating Remaining Shots",
+      "listTab": "Shot List",
+      "settingsTab": "Generation Settings",
+      "retryFailed": "Retry Failed",
+      "refreshStatus": "Refresh Status",
+      "filters": {
+        "all": "All",
+        "ready": "Ready",
+        "failed": "Failed",
+        "pending": "Pending"
+      },
+      "stats": {
+        "ordered": "Generated in order",
+        "failedPending": "Failed pending query"
+      },
+      "columns": {
+        "shot": "Shot",
+        "frame": "Frame",
+        "script": "Script / Dialogue",
+        "duration": "Duration",
+        "motion": "Motion",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "noFrame": "No Frame",
+      "actionPreview": "Preview",
+      "actionRegenerate": "Regenerate",
+      "actionRetryQuery": "Retry Query",
+      "previewTag": "Live Preview",
+      "previewTitle": "Preview Panel",
+      "emptyPreviewTitle": "No Preview Available",
+      "emptyPreviewDescription": "Select a shot on the left or wait for generation to finish.",
+      "currentShot": "Current Shot",
+      "notSelected": "Not selected",
+      "scriptTitle": "Shot Script",
+      "noScript": "No script copy for this shot yet.",
+      "motionLabel": "Motion",
+      "productRoleLabel": "Product Role",
+      "referenceFrame": "Reference Frame",
+      "noReferenceFrame": "No reference frame",
+      "modelLabel": "Model",
+      "taskIdLabel": "Task ID"
+    }
   }
 }

@@ -352,6 +352,7 @@ const api = {
         videoModelFallback?: string
         grsaiVideoModel?: string
         grsaiAnalysisModel?: string
+        chatProviderPrimary?: 'apifox_hub' | 'grsai'
         videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
         videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
@@ -381,6 +382,7 @@ const api = {
       videoModelFallback?: string
       grsaiVideoModel?: string
       grsaiAnalysisModel?: string
+      chatProviderPrimary?: 'apifox_hub' | 'grsai'
       videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
       videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string

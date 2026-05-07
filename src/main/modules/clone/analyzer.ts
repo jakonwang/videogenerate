@@ -33,6 +33,24 @@ function pickByLocale(locale: CloneLocale, vi: string, zh: string) {
   return locale === 'zh-CN' ? zh : vi
 }
 
+function inferLocaleFromPath(videoPath: string): CloneLocale {
+  const text = String(videoPath || '').toLowerCase()
+  if (/[\\\/](vn|vi|vietnam|tieng-viet|vietsub)[\\\/]/.test(text) || /(^|[\W_])(vn|vi|vietnam|vietsub)([\W_]|$)/.test(text)) {
+    return 'vi-VN'
+  }
+  return 'vi-VN'
+}
+
+function inferBlueprintMarketBySignals(signal?: string): CloneBlueprint['market'] {
+  const text = String(signal || '').trim().toLowerCase()
+  if (!text) return 'GLOBAL'
+  if (text.includes('vi') || text.includes('viet') || text.includes('vietnam') || text.includes('vn')) return 'VN'
+  if (text.includes('thai') || text.includes('thailand') || text.includes('th')) return 'TH'
+  if (text.includes('us') || text.includes('united states') || text.includes('english')) return 'US'
+  if (text.includes('zh') || text.includes('china') || text.includes('chinese')) return 'GLOBAL'
+  return 'GLOBAL'
+}
+
 function mapRoleToPurpose(role: ViralShotRole): ShotPurpose {
   if (role === 'hook') return 'hook'
   if (role === 'product_closeup' || role === 'model_scene') return 'problem'
@@ -425,7 +443,7 @@ function buildShot(input: {
 
 export async function analyzeReferenceVideo(input: {
   videoPath: string
-  locale: CloneLocale
+  locale?: CloneLocale
   outputDir: string
   credentials?: ModelCredentials
 }): Promise<{
@@ -433,7 +451,7 @@ export async function analyzeReferenceVideo(input: {
   blueprint: CloneBlueprint
 }> {
   const videoPath = String(input.videoPath ?? '').trim()
-  const locale: CloneLocale = input.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN'
+  const locale: CloneLocale = input.locale === 'zh-CN' ? 'zh-CN' : input.locale === 'vi-VN' ? 'vi-VN' : inferLocaleFromPath(videoPath)
   const meta = await probeMedia(videoPath)
   const duration = Math.max(3, Number(meta.durationSec ?? 0))
   const referenceWidth = Number(meta.width ?? 0)
@@ -484,6 +502,13 @@ export async function analyzeReferenceVideo(input: {
   }
 
   const blueprint: CloneBlueprint = {
+    market: inferBlueprintMarketBySignals(globalScript?.language || locale),
+    localization: {
+      language: String(globalScript?.language || locale).trim() || locale,
+      currencyStyle: inferBlueprintMarketBySignals(globalScript?.language || locale) === 'VN' ? 'VND' : 'local',
+      subtitleStyle: 'social-commerce-bold',
+      culturalNotes: [],
+    },
     videoSummary: summarizeVideoStructure(locale, shots, eligibleCount, filteredCount),
     productCategory: inferProductCategory(shots),
     totalDurationSec: round3(duration),

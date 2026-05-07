@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import { i18n } from '@/i18n'
 import UpdateReadyModal from './components/UpdateReadyModal.vue'
 import { useAppSettingsStore } from '@/stores/appSettings'
+import DesignInspectorOverlay from './components/DesignInspectorOverlay.vue'
 
 const appSettings = useAppSettingsStore()
+const route = useRoute()
 const updateModalOpen = ref(false)
 const updateVersion = ref('')
+const showDesignInspectorOverlay = computed(() => import.meta.env.DEV && !route.path.includes('/clone'))
 
 let offUpdaterDownloaded: (() => void) | null = null
 
@@ -30,6 +33,7 @@ onUnmounted(() => {
 <template>
   <div class="h-screen w-screen overflow-hidden bg-[#0E0E11]">
     <RouterView />
+    <DesignInspectorOverlay v-if="showDesignInspectorOverlay" />
     <UpdateReadyModal
       :open="updateModalOpen"
       :version="updateVersion"
