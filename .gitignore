@@ -12,6 +12,8 @@ tmp-*
 .codex-logs
 .stitch-ref
 video
+automation/hermes-agent/config.local.json
+automation/hermes-agent/*.local.json
 
 # app data (local)
 .videogenerate

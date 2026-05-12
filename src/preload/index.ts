@@ -2,12 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   getPaths: () => ipcRenderer.invoke('app:getPaths'),
+  getWebApiInfo: () => ipcRenderer.invoke('app:getWebApiInfo'),
   setUiLocale: (locale: string) => ipcRenderer.invoke('app:setUiLocale', locale),
   getUiLocale: () => ipcRenderer.invoke('app:getUiLocale'),
 
   pickFiles: (opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) =>
     ipcRenderer.invoke('fs:pickFiles', opts ?? {}),
   pickDir: (opts: { title?: string }) => ipcRenderer.invoke('fs:pickDir', opts),
+  readFileAsBase64: (input: { path: string }) => ipcRenderer.invoke('fs:readFileAsBase64', input),
   collectVideoFilesFromDrop: (roots: string[]) =>
     ipcRenderer.invoke('fs:collectVideoFilesFromDrop', roots) as Promise<string[]>,
 
@@ -39,7 +41,15 @@ const api = {
   },
 
   clone: {
-    createBlueprint: (payload: { videoPath: string; locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure' }) =>
+    createDraftProject: (payload?: { locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure'; title?: string; description?: string }) =>
+      ipcRenderer.invoke('clone:createDraftProject', payload ?? {}),
+    updateProjectMeta: (payload: { cloneProjectId: string; title?: string; description?: string }) =>
+      ipcRenderer.invoke('clone:updateProjectMeta', payload),
+    listProjectSummaries: (payload?: { query?: string; status?: string; archived?: boolean }) =>
+      ipcRenderer.invoke('clone:listProjectSummaries', payload ?? {}),
+    getProjectSummary: (payload: { cloneProjectId: string }) =>
+      ipcRenderer.invoke('clone:getProjectSummary', payload),
+    createBlueprint: (payload: { videoPath: string; locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure'; cloneProjectId?: string }) =>
       ipcRenderer.invoke('clone:createBlueprint', payload),
     analyzeReference: (payload: { videoPath: string; locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure' }) =>
       ipcRenderer.invoke('clone:analyzeReference', payload),
@@ -53,6 +63,10 @@ const api = {
       generateModelPack?: boolean
       forceRegenerateModelPack?: boolean
     }) => ipcRenderer.invoke('clone:prepareMaterials', payload),
+    saveProjectProductImages: (payload: {
+      cloneProjectId: string
+      productReferenceImagePaths?: string[]
+    }) => ipcRenderer.invoke('clone:saveProjectProductImages', payload),
     generateVariants: (payload: {
       cloneProjectId: string
       targetProductId?: string
@@ -81,6 +95,7 @@ const api = {
     }) => ipcRenderer.invoke('clone:replaceShotVideo', payload),
     composeCloneVideo: (payload: {
       cloneProjectId: string
+      outputDir?: string
     }) => ipcRenderer.invoke('clone:composeCloneVideo', payload),
     generatePreviewBatch: (payload: {
       cloneProjectId: string

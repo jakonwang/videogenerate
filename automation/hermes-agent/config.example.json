@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "hermes": {
+    "mode": "wsl",
+    "distro": "Ubuntu",
+    "workspaceLinuxPath": "/mnt/d/phpstudy_pro/WWW/videogenerate",
+    "gatewayBaseUrl": "http://127.0.0.1:18400/v1",
+    "gatewayHealthUrl": "http://127.0.0.1:18400/health",
+    "gatewayStartCommand": "cd /mnt/d/phpstudy_pro/WWW/videogenerate && hermes gateway --host 0.0.0.0 --port 18400",
+    "startupTimeoutMs": 45000
+  },
+  "workspace": {
+    "rootPath": "D:\\phpstudy_pro\\WWW\\videogenerate",
+    "writeWhitelist": [
+      "D:\\phpstudy_pro\\WWW\\videogenerate"
+    ],
+    "blockedWritePaths": [
+      "D:\\phpstudy_pro\\WWW\\videogenerate\\release",
+      "D:\\phpstudy_pro\\WWW\\videogenerate\\video",
+      "D:\\phpstudy_pro\\WWW\\videogenerate\\.git"
+    ],
+    "requiredDocs": [
+      "AGENTS.md",
+      "docs/requirements.md"
+    ]
+  },
+  "execution": {
+    "shell": "powershell",
+    "defaultTimeoutMs": 1800000,
+    "allowedCommands": [
+      "npm run typecheck:api",
+      "npm run typecheck:web-next",
+      "npm run build:web-next",
+      "npm run typecheck",
+      "npm run build",
+      "npm run dev:api",
+      "npm run dev:web-next"
+    ]
+  },
+  "reporting": {
+    "outputDir": "tmp/hermes-agent-runs"
+  }
+}

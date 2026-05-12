@@ -1,10 +1,43 @@
-import { app } from 'electron'
 import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 
+type AppPathRuntimeOptions = {
+  userDataDir?: string
+  dataDir?: string
+}
+
+let runtimeOverrides: AppPathRuntimeOptions = {}
+
+export function configureAppPathRuntime(options: AppPathRuntimeOptions) {
+  runtimeOverrides = {
+    ...runtimeOverrides,
+    ...options,
+  }
+}
+
+function resolveElectronUserData() {
+  if (runtimeOverrides.userDataDir) return runtimeOverrides.userDataDir
+  if (typeof require !== 'function') return ''
+  try {
+    const electron = require('electron') as typeof import('electron')
+    if (electron?.app?.isReady?.()) {
+      return electron.app.getPath('userData')
+    }
+  } catch {
+    // Ignore and fall back to process-level storage.
+  }
+  return ''
+}
+
 export function getAppPaths() {
-  const userData = app.getPath('userData')
-  const dataDir = join(userData, 'videogenerate')
+  const userData =
+    resolveElectronUserData() ||
+    process.env.VIDEOGENERATE_USER_DATA_DIR ||
+    process.cwd()
+  const dataDir =
+    runtimeOverrides.dataDir ||
+    process.env.VIDEOGENERATE_DATA_DIR ||
+    join(userData, '.videogenerate')
   const dbDir = join(dataDir, 'db')
   const tmpDir = join(dataDir, 'tmp')
   const cacheDir = join(dataDir, 'cache')

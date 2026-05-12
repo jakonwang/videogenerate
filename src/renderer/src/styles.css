@@ -4352,6 +4352,31 @@ h3,
   padding: 0 34px 28px !important;
 }
 
+.ds-workspace:has(.clone-task-list-page) {
+  overflow-x: hidden !important;
+  padding: 0 18px 24px !important;
+  background: none !important;
+}
+
+.ds-shell__main:has(.clone-task-list-page) {
+  background: none !important;
+}
+
+.app-shell:has(.clone-task-list-page) .app-shell__body,
+.app-shell:has(.clone-task-list-page) .app-shell__layout,
+.app-shell:has(.clone-task-list-page) .ds-shell,
+.app-shell:has(.clone-task-list-page) .ds-shell__main,
+.app-shell:has(.clone-task-list-page) .ds-workspace,
+.clone-task-list-page,
+.clone-task-list-shell,
+.clone-task-list-main,
+.clone-content-grid,
+.clone-grid-main {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
 .clone-ref-page {
   width: 100%;
   max-width: 1480px;
@@ -15189,4 +15214,18 @@ h2 {
   .home-dashboard__aside {
     grid-template-rows: auto auto !important;
   }
+}
+
+/* Final workspace padding overrides. Keep this block at the end so older page-specific
+   !important rules do not re-expand the main work area. */
+.ds-workspace {
+  padding: 5px !important;
+}
+
+.ds-workspace:has(.home-page),
+.ds-workspace:has(.home-dashboard),
+.ds-workspace:has(.home-dashboard-v2),
+.ds-workspace:has(.clone-ref-page),
+.ds-workspace:has(.live-slicer-workbench) {
+  padding: 5px !important;
 }

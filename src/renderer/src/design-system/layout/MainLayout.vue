@@ -45,5 +45,6 @@ defineProps<{
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  padding: 5px !important;
 }
 </style>

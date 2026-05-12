@@ -1,0 +1,100 @@
+import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
+import { useCloneProjectWorkspaceCompose } from './useCloneProjectWorkspace.compose'
+import { useCloneProjectWorkspaceMaterials } from './useCloneProjectWorkspace.materials'
+import { useCloneProjectWorkspaceProject } from './useCloneProjectWorkspace.project'
+import { useCloneProjectWorkspaceScript } from './useCloneProjectWorkspace.script'
+import { useCloneProjectWorkspaceStoryboard } from './useCloneProjectWorkspace.storyboard'
+import { useCloneProjectWorkspaceVideo } from './useCloneProjectWorkspace.video'
+import type {
+  CloneProjectLike,
+  UseCloneProjectWorkspaceOptions,
+} from './useCloneProjectWorkspace.shared'
+
+export type { CloneProjectLike, UseCloneProjectWorkspaceOptions } from './useCloneProjectWorkspace.shared'
+
+export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
+  options: UseCloneProjectWorkspaceOptions<TProject>,
+) {
+  const shotLabel = (shotId: string) => options.shotLabel?.(shotId) || `分镜 ${shotId}`
+
+  const projectLayer = useCloneProjectWorkspaceProject(options)
+  const {
+    applyProject,
+    refreshCurrentProject,
+    ensureCurrentProjectReady,
+    refreshProjectAfterFailure,
+    loadProject,
+    waitForStoryboardFrames,
+  } = projectLayer
+
+  const materialsLayer = useCloneProjectWorkspaceMaterials(options, {
+    applyProject,
+    loadProject,
+    refreshProjectAfterFailure,
+  })
+  const { pickReferenceVideo, bindProductImages, bindModelIdentity } = materialsLayer
+
+  const scriptLayer = useCloneProjectWorkspaceScript(options, {
+    applyProject,
+    refreshProjectAfterFailure,
+  })
+  const { createBlueprint, generateScriptVariants, selectScriptVariant } = scriptLayer
+
+  const storyboardLayer = useCloneProjectWorkspaceStoryboard(options, {
+    applyProject,
+    refreshProjectAfterFailure,
+    waitForStoryboardFrames,
+  })
+  const {
+    syncProductImagesToProject,
+    removeProductImage,
+    clearProductImages,
+    generateStoryboardGrids,
+    regenerateStoryboardFrame,
+  } = storyboardLayer
+
+  const videoLayer = useCloneProjectWorkspaceVideo(options, {
+    applyProject,
+    ensureCurrentProjectReady,
+    refreshProjectAfterFailure,
+  })
+  const {
+    generateShotVideos,
+    syncFailedShotVideo,
+    replaceShotVideo,
+    regenerateShotClip,
+    refreshRemoteStatus,
+  } = videoLayer
+
+  const composeLayer = useCloneProjectWorkspaceCompose(options, {
+    applyProject,
+    ensureCurrentProjectReady,
+    refreshProjectAfterFailure,
+  })
+  const { composeFinalVideo } = composeLayer
+
+  return {
+    applyProject,
+    refreshCurrentProject,
+    ensureCurrentProjectReady,
+    refreshProjectAfterFailure,
+    loadProject,
+    pickReferenceVideo,
+    bindProductImages,
+    bindModelIdentity,
+    createBlueprint,
+    generateScriptVariants,
+    selectScriptVariant,
+    syncProductImagesToProject,
+    removeProductImage,
+    clearProductImages,
+    generateStoryboardGrids,
+    regenerateStoryboardFrame,
+    generateShotVideos,
+    syncFailedShotVideo,
+    replaceShotVideo,
+    regenerateShotClip,
+    refreshRemoteStatus,
+    composeFinalVideo,
+  }
+}

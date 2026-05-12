@@ -1,0 +1,50 @@
+{
+  "id": "fix-web-next-build",
+  "goal": "修复 apps/web-next 的构建问题，并在不改动业务边界的前提下让检查通过。",
+  "workspace": "D:\\phpstudy_pro\\WWW\\videogenerate",
+  "scope": {
+    "allowedPaths": [
+      "apps/web-next",
+      "services/api",
+      "docs"
+    ],
+    "forbiddenPaths": [
+      "release",
+      "video",
+      ".git"
+    ]
+  },
+  "acceptance": {
+    "checks": [
+      "npm run typecheck:api",
+      "npm run typecheck:web-next",
+      "npm run build:web-next"
+    ],
+    "doneWhen": "所有 checks 退出码均为 0，且不违反 AGENTS.md 和 docs/requirements.md。"
+  },
+  "runtime": {
+    "startCommands": [
+      "npm run dev:api",
+      "npm run dev:web-next"
+    ],
+    "healthChecks": [
+      {
+        "name": "web-api",
+        "url": "http://127.0.0.1:18080/me",
+        "expectStatus": 401,
+        "timeoutMs": 20000
+      },
+      {
+        "name": "web-next",
+        "url": "http://127.0.0.1:18280",
+        "expectStatus": 200,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "notes": [
+    "必须先读取 AGENTS.md 与 docs/requirements.md。",
+    "不允许修改当前仓库外文件。",
+    "无法修复时只输出失败报告，不允许破坏性回滚。"
+  ]
+}

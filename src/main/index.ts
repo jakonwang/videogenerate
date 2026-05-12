@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from 'electron'
 import { join } from 'node:path'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { ensureAppDirs, getAppPaths } from './lib/paths'
 import { productsRepo } from './modules/products/repo'
@@ -27,8 +27,10 @@ import { listBundledStickers, toStickerRef } from './lib/stickers'
 import { importUserStickers, listUserStickerFiles, userStickersDir } from './lib/userStickers'
 import { getLanIPv4 } from './lib/lanAddress'
 import { ensurePreviewHttpServer, stopPreviewHttpServer } from './lib/previewHttpServer'
+import { ensureWebApiServer, getWebApiServerPort, stopWebApiServer } from './lib/webApiServer'
 import { cloneRepo } from './modules/clone/repo'
 import { cloneService } from './modules/clone/service'
+import { webPlatformRepo } from './modules/web-platform/repo'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -160,6 +162,10 @@ function wireIpc() {
   registerLicenseIpc()
 
   ipcMain.handle('app:getPaths', async () => getAppPaths())
+  ipcMain.handle('app:getWebApiInfo', async () => ({
+    port: getWebApiServerPort(),
+    baseUrl: getWebApiServerPort() ? `http://127.0.0.1:${getWebApiServerPort()}` : '',
+  }))
 
   ipcMain.handle('app:setUiLocale', async (_e, locale: string) => {
     mainUiLocale = normalizeAppLocale(locale)
@@ -209,6 +215,13 @@ function wireIpc() {
 
   ipcMain.handle('fs:collectVideoFilesFromDrop', async (_e, roots: string[]) => {
     return await collectVideoFilesFromDropRoots(Array.isArray(roots) ? roots.map((x) => String(x)) : [])
+  })
+
+  ipcMain.handle('fs:readFileAsBase64', async (_e, input: { path: string }) => {
+    const targetPath = String(input?.path || '').trim()
+    if (!targetPath) throw new Error('文件路径不能为空')
+    const buffer = await readFile(targetPath)
+    return buffer.toString('base64')
   })
 
   ipcMain.handle('luts:list', async () => {
@@ -302,8 +315,17 @@ function wireIpc() {
   })
 
   ipcMain.handle(
+    'clone:createDraftProject',
+    async (
+      _e,
+      payload: { locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure'; title?: string; description?: string },
+    ) => {
+      return await cloneService.createDraftProject(payload)
+    },
+  )
+  ipcMain.handle(
     'clone:createBlueprint',
-    async (_e, payload: { videoPath: string; locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure' }) => {
+    async (_e, payload: { videoPath: string; locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure'; cloneProjectId?: string }) => {
       return await cloneService.createCloneBlueprintFromReference(payload)
     },
   )
@@ -333,6 +355,18 @@ function wireIpc() {
       },
     ) => {
       return await cloneService.prepareCloneMaterials(payload)
+    },
+  )
+  ipcMain.handle(
+    'clone:saveProjectProductImages',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        productReferenceImagePaths?: string[]
+      },
+    ) => {
+      return await cloneService.saveProjectProductImages(payload)
     },
   )
   ipcMain.handle(
@@ -415,6 +449,7 @@ function wireIpc() {
       _e,
       payload: {
         cloneProjectId: string
+        outputDir?: string
       },
     ) => {
       return await cloneService.composeCloneFinalVideo(payload)
@@ -443,8 +478,21 @@ function wireIpc() {
   ipcMain.handle('clone:getProject', async (_e, payload: { cloneProjectId: string }) => {
     return await cloneService.getProject(payload)
   })
+  ipcMain.handle(
+    'clone:updateProjectMeta',
+    async (_e, payload: { cloneProjectId: string; title?: string; description?: string }) => {
+      return await cloneService.updateProjectMeta(payload)
+    },
+  )
+  ipcMain.handle('clone:getProjectSummary', async (_e, payload: { cloneProjectId: string }) => {
+    return await cloneService.getProjectSummary(payload)
+  })
   ipcMain.handle('clone:refreshProjectStatus', async (_e, payload: { cloneProjectId: string }) => {
-    return await cloneService.reconcileRemoteStoryboardVideos(payload)
+    const project = await cloneService.getProject(payload)
+    return {
+      project,
+      results: [],
+    }
   })
   ipcMain.handle('clone:reanalyzeShotScript', async (_e, payload: { cloneProjectId: string; shotId: string }) => {
     return await cloneService.reanalyzeShotScript(payload)
@@ -530,6 +578,12 @@ function wireIpc() {
   ipcMain.handle('clone:listProjects', async () => {
     return await cloneService.listProjects()
   })
+  ipcMain.handle(
+    'clone:listProjectSummaries',
+    async (_e, payload?: { query?: string; status?: string; archived?: boolean }) => {
+      return await cloneService.listProjectSummaries(payload)
+    },
+  )
   ipcMain.handle('clone:listModelIdentityLibrary', async () => {
     return await cloneService.listModelIdentityLibrary()
   })
@@ -1040,7 +1094,9 @@ app.whenReady().then(async () => {
   await productsRepo.ensureSeed()
   await templatesRepo.ensureSeed()
   await cloneRepo.ensureSeed()
+  await webPlatformRepo.ensureSeed()
   await wireMediaProtocol()
+  await ensureWebApiServer()
   createWindow()
   wireIpc()
   registerUpdaterIpc(() => mainWindow)
@@ -1053,5 +1109,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void stopPreviewHttpServer()
+  void stopWebApiServer()
 })
 

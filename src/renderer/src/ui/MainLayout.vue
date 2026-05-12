@@ -8,6 +8,7 @@ import TitleBar from './components/TitleBar.vue'
 import UiLocaleSelect from './components/UiLocaleSelect.vue'
 import DsMainLayout from '../design-system/layout/MainLayout.vue'
 import { useDesignInspectorStore } from '@/stores/designInspector'
+import { useWebSessionStore } from '@/stores/webSession'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,8 +17,17 @@ const helpOpen = ref(false)
 const moreOpen = ref(false)
 const shellSearch = ref('')
 const designInspector = useDesignInspectorStore()
+const webSession = useWebSessionStore()
 const { enabled: designInspectorEnabled } = storeToRefs(designInspector)
 const showDesignInspectorToggle = computed(() => import.meta.env.DEV)
+const topUserName = computed(() => webSession.user?.displayName || 'Creator')
+const topUserPlan = computed(() => webSession.subscription?.planName || '桌面版')
+const topWalletBalance = computed(() => webSession.wallet?.balanceCredits ?? 0)
+const sidebarPlanLabel = computed(() => webSession.subscription?.planName || '桌面授权版')
+const sidebarPlanDesc = computed(() =>
+  webSession.wallet ? `算力余额 ${topWalletBalance.value}` : '本地工作台模式',
+)
+const topStatusText = computed(() => (webSession.wallet ? '已连接本地工作台' : '桌面端离线模式'))
 
 const navItems = computed(() => [
   { to: '/home', icon: House, label: '主页', active: route.path.includes('/home') },
@@ -52,6 +62,10 @@ function openLicenseCenter() {
   void router.push('/auth')
 }
 
+function openBillingCenter() {
+  void router.push('/billing')
+}
+
 function onTopMenuClick(key: string) {
   moreOpen.value = false
   if (key === 'project') {
@@ -82,26 +96,10 @@ function onTopMenuClick(key: string) {
       >
         <template #sidebar-footer>
           <div class="app-shell__sidebar-footer">
-            <div class="app-shell__sidebar-status">
-              <div class="app-shell__sidebar-status-head">
-                <span>系统状态</span>
-                <strong>正常运行</strong>
-              </div>
-              <div class="app-shell__sidebar-meter">
-                <label>GPU 负载</label>
-                <div><span style="width: 68%"></span></div>
-                <em>68%</em>
-              </div>
-              <div class="app-shell__sidebar-meter">
-                <label>API 配额</label>
-                <div><span style="width: 82%"></span></div>
-                <em>82%</em>
-              </div>
-            </div>
             <div class="app-shell__sidebar-plan">
               <div class="app-shell__sidebar-plan-copy">
-                <strong>企业版</strong>
-                <span>有效期至 2025-12-31</span>
+                <strong>{{ sidebarPlanLabel }}</strong>
+                <span>{{ sidebarPlanDesc }}</span>
               </div>
               <button class="app-shell__sidebar-plan-action" @click="openLicenseCenter">
                 升级套餐
@@ -135,15 +133,15 @@ function onTopMenuClick(key: string) {
               <div class="app-topbar-chip">
                 <span class="app-topbar-chip-dot is-green"></span>
                 <div>
-                  <strong>GPU 运行中</strong>
-                  <small>2/4</small>
+                  <strong>工作台状态</strong>
+                  <small>{{ topStatusText }}</small>
                 </div>
               </div>
               <div class="app-topbar-chip">
                 <span class="app-topbar-chip-dot is-violet"></span>
                 <div>
-                  <strong>API 额度</strong>
-                  <small>82%</small>
+                  <strong>算力余额</strong>
+                  <small>{{ topWalletBalance }}</small>
                 </div>
               </div>
             </div>
@@ -168,9 +166,13 @@ function onTopMenuClick(key: string) {
               <button class="app-top-user">
                 <div class="app-top-user__avatar">C</div>
                 <div class="app-top-user__copy">
-                  <span>创意无限</span>
-                  <small>Pro</small>
+                  <span>{{ topUserName }}</span>
+                  <small>{{ topUserPlan }}</small>
                 </div>
+              </button>
+              <button class="app-top-icon" title="会员与钱包" @click="openBillingCenter">
+                <UserCircle class="h-4 w-4" />
+                <span>钱包</span>
               </button>
               <div class="relative">
               <button
@@ -258,8 +260,8 @@ function onTopMenuClick(key: string) {
 .app-shell :deep(.ds-sidebar) {
   width: 248px;
   min-width: 248px;
-  padding: 10px 16px 16px;
-  gap: 16px;
+  padding: 12px 14px 16px;
+  gap: 14px;
   align-items: stretch;
   border-right: 1px solid rgba(148, 163, 184, 0.1);
   background:
@@ -306,11 +308,11 @@ function onTopMenuClick(key: string) {
 }
 
 .app-shell :deep(.ds-sidebar__item) {
-  min-height: 56px;
+  min-height: 54px;
   justify-content: flex-start;
   gap: 12px;
-  padding: 0 16px;
-  border-radius: 18px;
+  padding: 0 14px;
+  border-radius: 16px;
   border: 1px solid transparent;
   background: transparent;
   color: #d2d8e6;
@@ -326,10 +328,11 @@ function onTopMenuClick(key: string) {
 }
 
 .app-shell :deep(.ds-sidebar__item.is-active) {
-  background: linear-gradient(135deg, #6d5dff, #7f6fff);
-  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(135deg, rgba(109, 93, 255, 0.96), rgba(127, 111, 255, 0.92));
+  border-color: rgba(255, 255, 255, 0.1);
   color: #ffffff;
-  box-shadow: 0 14px 30px rgba(109, 93, 255, 0.28);
+  box-shadow: 0 12px 24px rgba(109, 93, 255, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .app-shell :deep(.ds-sidebar__item svg) {
@@ -343,26 +346,15 @@ function onTopMenuClick(key: string) {
   gap: 10px;
 }
 
-.app-shell__sidebar-status {
-  display: grid;
-  gap: 9px;
-  padding: 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background:
-    radial-gradient(circle at 100% 0, rgba(109, 93, 255, 0.12), transparent 30%),
-    rgba(13, 23, 41, 0.76);
-}
-
 .app-shell__sidebar-plan {
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(109, 93, 255, 0.22);
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(109, 93, 255, 0.16);
   background:
-    radial-gradient(circle at 100% 0, rgba(109, 93, 255, 0.22), transparent 40%),
-    linear-gradient(180deg, rgba(16, 24, 46, 0.9), rgba(10, 17, 31, 0.96));
+    radial-gradient(circle at 100% 0, rgba(109, 93, 255, 0.16), transparent 40%),
+    linear-gradient(180deg, rgba(14, 22, 40, 0.88), rgba(10, 17, 31, 0.94));
 }
 
 .app-shell__sidebar-plan-copy {
@@ -372,7 +364,7 @@ function onTopMenuClick(key: string) {
 
 .app-shell__sidebar-plan-copy strong {
   color: #f8fafc;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -382,60 +374,13 @@ function onTopMenuClick(key: string) {
 }
 
 .app-shell__sidebar-plan-action {
-  min-height: 40px;
-  border-radius: 14px;
-  border: 1px solid rgba(109, 93, 255, 0.34);
-  background: rgba(109, 93, 255, 0.14);
+  min-height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(109, 93, 255, 0.28);
+  background: rgba(109, 93, 255, 0.1);
   color: #ddd6fe;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.app-shell__sidebar-status-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.app-shell__sidebar-status-head span {
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.app-shell__sidebar-status-head strong {
-  color: #86efac;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.app-shell__sidebar-meter {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.app-shell__sidebar-meter label,
-.app-shell__sidebar-meter em {
-  color: #cbd5e1;
   font-size: 11px;
-  font-style: normal;
-}
-
-.app-shell__sidebar-meter div {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-}
-
-.app-shell__sidebar-meter div > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #6d5dff, #22d3ee);
+  font-weight: 700;
 }
 
 .app-sidebar-footer-action,
@@ -486,9 +431,9 @@ function onTopMenuClick(key: string) {
 }
 
 .app-shell :deep(.ds-topbar) {
-  min-height: 62px;
-  height: 62px;
-  padding: 0 10px 0 14px;
+  min-height: 64px;
+  height: 64px;
+  padding: 0 12px 0 16px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.06);
   background: linear-gradient(180deg, rgba(10, 17, 30, 0.995), rgba(8, 14, 26, 0.985));
   backdrop-filter: blur(12px);
@@ -526,8 +471,8 @@ function onTopMenuClick(key: string) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 8px;
   border-left: 1px solid rgba(148, 163, 184, 0.12);
 }
 
@@ -538,14 +483,14 @@ function onTopMenuClick(key: string) {
 
 .app-topbar-chip strong {
   color: #dbe5f2;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .app-topbar-chip small {
-  color: #f8fbff;
-  font-size: 11px;
-  font-weight: 700;
+  color: #9fb0cf;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .app-topbar-chip-dot {
@@ -570,10 +515,10 @@ function onTopMenuClick(key: string) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  width: min(560px, 100%);
-  height: 38px;
+  width: min(440px, 100%);
+  height: 42px;
   padding: 0 14px;
-  border-radius: 13px;
+  border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.14);
   background: rgba(10, 19, 36, 0.82);
   color: #cbd5e1;
@@ -614,9 +559,9 @@ function onTopMenuClick(key: string) {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 36px;
+  min-height: 38px;
   padding: 0 11px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.12);
   background: rgba(13, 23, 41, 0.58);
   color: #e2e8f0;
@@ -648,7 +593,7 @@ function onTopMenuClick(key: string) {
 }
 
 .app-top-icon {
-  min-width: 36px;
+  min-width: 38px;
 }
 
 .app-top-user {
@@ -725,7 +670,7 @@ function onTopMenuClick(key: string) {
 }
 
 .app-shell :deep(.ds-workspace) {
-  padding: 6px 14px 14px;
+  padding: 4px 10px 10px;
   overflow: auto;
   background: transparent;
 }

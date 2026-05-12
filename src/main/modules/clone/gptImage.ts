@@ -296,6 +296,7 @@ async function generateProviderImage(input: GenerateImageInput) {
     return (await generateApifoxImage({
       credentials: input.credentials,
       prompt: input.prompt,
+      imagePaths: input.imagePaths,
       outDir: input.outDir,
       filePrefix: input.filePrefix,
       capability: input.imagePaths?.length ? 'image_edit' : 'image_generate',
@@ -364,10 +365,10 @@ export function buildIdentityPackPrompt(input: {
 
 function productLock(productType: CloneProductType) {
   const common =
-    'The product must match the user reference product images exactly: same color, shape, material, pattern, holes, pins, layout and decorative details. Do not add logo or redesign the product.'
-  if (productType === 'earrings') return `${common} Earrings must keep the same dangling structure, metal texture, pearls or zircon details if any.`
-  if (productType === 'phone_case') return `${common} Phone case camera hole, border and printed pattern must remain identical.`
-  if (productType === 'clothes') return `${common} Clothing cut, fabric, collar, sleeves and pattern must remain identical.`
+    'The product must match the user reference product images exactly: same color, shape, material, pattern, holes, pins, layout and decorative details. First identify the uploaded product category correctly, then preserve that exact product as the single source of truth. Product fidelity has higher priority than styling, beauty retouching or scene decoration. Do not add logo, do not redesign the product, do not output a similar generic product.'
+  if (productType === 'earrings') return `${common} Earrings must keep the same dangling structure, metal texture, pearls or zircon details if any. If the reference person is wearing different earrings, remove them and replace them with the uploaded earrings only.`
+  if (productType === 'phone_case') return `${common} Phone case camera hole, border and printed pattern must remain identical. If another case or phone accessory exists in the reference shot, replace only that case layer with the uploaded case.`
+  if (productType === 'clothes') return `${common} Clothing cut, fabric, collar, sleeves and pattern must remain identical. If the reference outfit conflicts with the uploaded product, replace only the relevant clothing item with the uploaded product.`
   return common
 }
 
@@ -404,9 +405,10 @@ export function buildGptFramePrompt(input: {
     `Camera motion target: ${String(shot.motion || 'static')}. Keep changes restrained and realistic.`,
     isEnd
       ? 'The ending frame must keep the same new model, same product, same outfit, same location, same lighting, same emotion and same camera setup as the provided start frame. Only allow subtle hand, expression or camera-position continuation.'
-      : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model and replace only the product with the user product.',
+      : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model and replace the original worn or held item with the uploaded user product only. Do not preserve the old accessory if it conflicts with the uploaded product.',
     `Product selling points: ${input.productPoints || shot.materialNeed || 'clear product texture and usage value'}.`,
     'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters, no platform controls.',
+    'Do not change product category, product structure, product color, metal material, gemstone layout, surface pattern or product proportions.',
     'Realistic smartphone TikTok social-commerce style, natural skin texture, natural hands, clean background, product sharp and clearly visible.',
   ].join('\n')
 }

@@ -127,30 +127,45 @@ export function buildProductLockText(
   const lines = [
     'Product lock: keep the exact product identity from the uploaded references.',
     'The uploaded product reference images are the single source of truth.',
+    'First identify what the uploaded product actually is and preserve that exact category and structure in the final image.',
+    'Product fidelity has higher priority than model styling, outfit styling, decorative atmosphere and background beauty.',
     'Do not redesign, stylize, simplify, beautify, or replace the product with a generic equivalent.',
     'Do not generate a similar product. Reproduce the exact same product only.',
+    'If the reference shot contains another accessory or another worn item, replace that item with the uploaded user product only.',
+    'Do not keep the original accessory if it conflicts with the uploaded user product.',
     productDescription ? `Product description: ${productDescription.trim()}` : '',
     productRefs.length ? `Reference count: ${productRefs.length}` : '',
   ]
   const specific: Record<CloneProductType, string[]> = {
     earrings: [
+      'Identify the product as earrings or ear jewelry first, then place only this exact product on the ear or in the hand display.',
       'Keep earring shape, metal color, dangling structure, pearl or zircon placement, and left-right wearing proportion.',
       'Keep the exact hook shape, pendant count, pendant spacing, stone size, stone position and metal thickness.',
+      'If the model originally wears different earrings, remove them and replace them with the uploaded earrings only.',
       'Do not add chains, stones, logo, extra charms, or alter the hook and pendant structure.',
     ],
     phone_case: [
+      'Identify the product as a phone case first, then ensure the visible case is the uploaded case only.',
       'Keep case pattern, color, camera hole placement, edge shape, and printed graphic unchanged.',
+      'If the reference shot contains a different phone accessory, replace only the case layer with the uploaded case.',
       'Do not redesign the print or change the phone model appearance.',
     ],
     clothes: [
+      'Identify the product as clothing first, then keep that exact clothing item as the hero product.',
       'Keep clothing silhouette, color, fabric texture, neckline, sleeves, cuffs, and print unchanged.',
+      'If the model outfit conflicts with the uploaded clothing product, replace only the relevant clothing piece with the uploaded product.',
       'Do not alter the cut, fit, or fabric category.',
     ],
     toy: [
+      'Identify the product as a toy or figurine first, then keep that exact character/object identity.',
       'Keep toy shape, facial details, color blocks, proportions, and material feel unchanged.',
       'Do not turn it into a different character or change the face.',
     ],
-    general: ['Keep the main product appearance consistent with the references.'],
+    general: [
+      'Identify the exact product category from the uploaded references before generating the image.',
+      'Keep the main product appearance consistent with the references.',
+      'If another object occupies the same display position in the reference shot, replace that object with the uploaded product only.',
+    ],
   }
   return [...lines, ...specific[productType]].filter(Boolean).join('\n')
 }
@@ -168,6 +183,9 @@ export function buildCloneNegativePrompt(productType: CloneProductType, shotType
     'no deformed hands',
     'no duplicate product',
     'no product redesign',
+    'no changed product category',
+    'no changed product color',
+    'no changed product structure',
   ]
   const productSpecific: Record<CloneProductType, string[]> = {
     earrings: ['no wrong earring structure', 'no extra gemstone', 'no extra chain', 'no ear deformation'],

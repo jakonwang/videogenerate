@@ -33,12 +33,42 @@ function grsHeaders(credentials: ModelCredentials, key: string) {
   }
 }
 
+function formatGrsNetworkError(error: any, url: string) {
+  const message = String(error?.message ?? error ?? '').trim()
+  const causeCode = String(error?.cause?.code ?? '').trim()
+  const host = (() => {
+    try {
+      return new URL(url).host
+    } catch {
+      return url
+    }
+  })()
+  if (causeCode === 'UND_ERR_CONNECT_TIMEOUT') {
+    return `GRS.AI 连接超时：无法连接到 ${host}，请检查网络、代理或供应商服务状态后重试`
+  }
+  if (causeCode === 'ECONNREFUSED') {
+    return `GRS.AI 连接被拒绝：${host} 当前不可用，请检查 Host 配置或供应商服务状态`
+  }
+  if (causeCode === 'ENOTFOUND') {
+    return `GRS.AI 域名解析失败：${host}，请检查 Host 配置是否正确`
+  }
+  if (message.toLowerCase().includes('fetch failed')) {
+    return `GRS.AI 请求失败：${host} 无法访问，请检查网络、代理或供应商服务状态`
+  }
+  return message || `GRS.AI 请求失败：${host} 无法访问`
+}
+
 async function postJson(url: string, key: string, body: any, credentials?: ModelCredentials) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: credentials ? grsHeaders(credentials, key) : { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body ?? {}),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: credentials ? grsHeaders(credentials, key) : { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    })
+  } catch (error: any) {
+    throw new Error(formatGrsNetworkError(error, url))
+  }
   const text = await res.text().catch(() => '')
   let json: any = null
   try {

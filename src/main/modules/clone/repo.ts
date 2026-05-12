@@ -1,7 +1,11 @@
 ﻿import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { readFile, readdir } from 'node:fs/promises'
-import { app, safeStorage } from 'electron'
+import {
+  decryptRuntimeString,
+  encryptRuntimeString,
+  isRuntimeEncryptionAvailable,
+} from '../../lib/runtimeCrypto'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { getAppPaths } from '../../lib/paths'
 import type {
@@ -45,6 +49,13 @@ const cloneSettingsPath = () => join(getAppPaths().dbDir, 'clone-settings.json')
 
 function now() {
   return Date.now()
+}
+
+function defaultCloneProjectTitle(createdAt: number) {
+  const d = new Date(Number(createdAt || now()))
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `未命名复刻任务 ${date} ${time}`
 }
 
 function sanitizeCloneDbText(raw: string) {
@@ -602,9 +613,12 @@ function normalizeGlobalScript(value: any) {
 
 function encryptCredentials(input: ModelCredentials): CloneSettingsShape {
   const text = JSON.stringify(input)
-  const canSecure = safeStorage.isEncryptionAvailable()
+  const canSecure = isRuntimeEncryptionAvailable()
   if (canSecure) {
-    const encrypted = safeStorage.encryptString(text).toString('base64')
+    const encrypted = encryptRuntimeString(text)
+    if (!encrypted) {
+      return { plaintextCredentials: input }
+    }
     return {
       encryptedCredentials: encrypted,
       plaintextCredentials: input,
@@ -616,8 +630,10 @@ function encryptCredentials(input: ModelCredentials): CloneSettingsShape {
 function decryptCredentials(settings: CloneSettingsShape): ModelCredentials {
   if (settings.encryptedCredentials) {
     try {
-      const buf = Buffer.from(settings.encryptedCredentials, 'base64')
-      const text = safeStorage.decryptString(buf)
+      const text = decryptRuntimeString(settings.encryptedCredentials)
+      if (!text) {
+        throw new Error('runtime encryption unavailable')
+      }
       return normalizeCredentials(JSON.parse(text))
     } catch (error) {
       if (settings.plaintextCredentials) {
@@ -864,6 +880,7 @@ function normalizeProject(p: CloneProject): CloneProject {
           ? item.shotScripts.map((shot: any, shotIndex: number) => ({
               shotId: String(shot?.shotId ?? '').trim(),
               shotIndex: Number(shot?.shotIndex ?? shotIndex),
+              timeRange: String(shot?.timeRange ?? shot?.time_range ?? '').trim() || undefined,
               scriptText: String(shot?.scriptText ?? '').trim(),
               scriptRole: normalizeScriptRole(shot?.scriptRole),
               visualDescription: String(shot?.visualDescription ?? '').trim(),
@@ -901,12 +918,13 @@ function normalizeProject(p: CloneProject): CloneProject {
     ? (p as any).storyboardFrames.map((item: any, index: number) => ({
         id: String(item?.id ?? randomUUID()),
         shotId: String(item?.shotId ?? '').trim(),
-        batchId: String(item?.batchId ?? '').trim(),
-        frameIndex: Number(item?.frameIndex ?? index),
+        batchId: String(item?.batchId ?? '').trim() || undefined,
+        frameIndex: Number.isFinite(Number(item?.frameIndex)) ? Number(item?.frameIndex) : index,
         imagePath: String(item?.imagePath ?? '').trim() || undefined,
         aspectRatio: '9:16' as const,
         status: item?.status === 'cropped' || item?.status === 'failed' ? item.status : 'idle',
         error: String(item?.error ?? '').trim() || undefined,
+        updatedAt: Number(item?.updatedAt ?? now()) || now(),
       }))
     : []
   const shotVideoOutputs = Array.isArray((p as any).shotVideoOutputs)
@@ -1002,6 +1020,33 @@ function normalizeProject(p: CloneProject): CloneProject {
     : undefined
   return {
     ...p,
+    userId: String((p as any)?.userId ?? '').trim() || undefined,
+    subscriptionPlanId: String((p as any)?.subscriptionPlanId ?? '').trim() || undefined,
+    billingStatus:
+      (p as any)?.billingStatus === 'not_required' ||
+      (p as any)?.billingStatus === 'pending' ||
+      (p as any)?.billingStatus === 'paid' ||
+      (p as any)?.billingStatus === 'failed'
+        ? (p as any).billingStatus
+        : undefined,
+    estimatedCost: typeof (p as any)?.estimatedCost === 'number' ? Number((p as any).estimatedCost) : undefined,
+    actualCost: typeof (p as any)?.actualCost === 'number' ? Number((p as any).actualCost) : undefined,
+    deductionStatus:
+      (p as any)?.deductionStatus === 'none' ||
+      (p as any)?.deductionStatus === 'reserved' ||
+      (p as any)?.deductionStatus === 'charged' ||
+      (p as any)?.deductionStatus === 'refunded'
+        ? (p as any).deductionStatus
+        : undefined,
+    assetStorageProvider:
+      (p as any)?.assetStorageProvider === 'local_fs' ||
+      (p as any)?.assetStorageProvider === 'qiniu' ||
+      (p as any)?.assetStorageProvider === 'web_object_storage'
+        ? (p as any).assetStorageProvider
+        : undefined,
+    title: String((p as any)?.title ?? '').trim() || defaultCloneProjectTitle(Number((p as any)?.createdAt ?? now())),
+    description: String((p as any)?.description ?? '').trim() || undefined,
+    archived: Boolean((p as any)?.archived ?? false),
     locale: p.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN',
     strength: 'structure',
     policy: {
@@ -1255,12 +1300,17 @@ export const cloneRepo = {
     strength: CloneStrength
     referenceVideoPath: string
     referenceVideoName: string
+    title?: string
+    description?: string
   }): Promise<CloneProject> {
     const db = await readJsonFile<CloneDbShape>(cloneDbPath(), { projects: [] })
     const item: CloneProject = {
       id: randomUUID(),
       createdAt: now(),
       updatedAt: now(),
+      title: String(input.title ?? '').trim() || defaultCloneProjectTitle(now()),
+      description: String(input.description ?? '').trim() || undefined,
+      archived: false,
       status: 'draft',
       locale: input.locale,
       strength: input.strength,
@@ -1360,7 +1410,6 @@ export const cloneRepo = {
 
 
   async ensureSeed() {
-    if (!app.isReady()) return
     await readJsonFile<CloneDbShape>(cloneDbPath(), { projects: [] })
     await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
   },

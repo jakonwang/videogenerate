@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { ensureLicensed } from '@/lib/licenseSession'
+import { validateStoredWebSession } from '@/lib/webApiClient'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -19,7 +20,9 @@ const router = createRouter({
         { path: 'home', name: 'home', component: () => import('@/ui/views/HomeView.vue') },
         { path: 'production', name: 'production', redirect: { name: 'products' } },
         { path: 'models', name: 'models', component: () => import('@/ui/views/ModelLibraryView.vue') },
-        { path: 'clone', name: 'clone', component: () => import('@/ui/views/CloneView.vue') },
+        { path: 'clone', name: 'clone', component: () => import('@/ui/views/CloneTaskListView.vue') },
+        { path: 'clone/:projectId', name: 'clone-project', component: () => import('@/ui/views/CloneView.vue') },
+        { path: 'billing', name: 'billing', component: () => import('@/ui/views/BillingView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/ui/views/SettingsView.vue') },
         { path: 'products', name: 'products', component: () => import('@/ui/views/ProductsView.vue') },
         { path: 'templates', name: 'templates', component: () => import('@/ui/views/TemplatesView.vue') },
@@ -32,6 +35,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   if (to.meta.public) return true
+  if (await validateStoredWebSession()) return true
   const ok = await ensureLicensed()
   if (!ok) {
     return { name: 'auth', replace: true }

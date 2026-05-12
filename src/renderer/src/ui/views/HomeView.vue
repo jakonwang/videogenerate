@@ -2,13 +2,18 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  ArrowRight,
   CheckCircle2,
-  Clock3,
+  ChevronRight,
+  Clapperboard,
+  CopyPlus,
   FolderKanban,
-  PlayCircle,
-  Rocket,
+  Library,
+  MessageCircleMore,
+  ScanSearch,
+  Search,
   Sparkles,
+  Upload,
+  Video,
   Wand2,
 } from 'lucide-vue-next'
 import UiButton from '../components/UiButton.vue'
@@ -27,124 +32,182 @@ type VideoTaskLite = {
   createdAt: number
 }
 
-type TaskRow = {
+type CloneProjectLite = {
+  id: string
+  title?: string
+  status?: string
+  updatedAt?: number
+  referenceVideoName?: string
+  referenceVideoPath?: string
+  previewOutputPath?: string
+  outputDir?: string
+  modelName?: string
+  lastError?: string
+}
+
+type TaskStatLite = {
+  total?: number
+  running?: number
+  queued?: number
+  done?: number
+  failed?: number
+}
+
+type RecentTaskCard = {
   id: string
   title: string
-  status: VideoTaskLite['status']
+  thumb: string
   progress: number
-  createdAt: number
-  stage: string
-  eta: string
+  statusLabel: string
+  statusTone: 'running' | 'done' | 'error'
+}
+
+type TemplateCard = {
+  id: string
+  title: string
+  subtitle: string
+  thumb: string
 }
 
 const router = useRouter()
+const loading = ref(false)
 const templates = ref<TemplateLite[]>([])
 const tasks = ref<VideoTaskLite[]>([])
-const loading = ref(false)
+const cloneProjects = ref<CloneProjectLite[]>([])
+const taskStats = ref<TaskStatLite | null>(null)
 
-const taskRows = computed<TaskRow[]>(() =>
-  [...tasks.value]
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-    .slice(0, 6)
-    .map((item, index) => ({
-      id: item.id,
-      title: basename(item.outPath) || `任务 ${item.id.slice(0, 6)}`,
-      status: item.status,
-      progress: Math.max(0, Math.min(100, Math.round((item.progress || 0) * 100))),
-      createdAt: item.createdAt,
-      stage: stageLabel(item.status, index),
-      eta: etaLabel(item.status, index),
-    })),
-)
-
-const totalTasks = computed(() => tasks.value.length)
-const runningCount = computed(() => tasks.value.filter((item) => item.status === 'running' || item.status === 'queued').length)
-const doneCount = computed(() => tasks.value.filter((item) => item.status === 'done').length)
-const errorCount = computed(() => tasks.value.filter((item) => item.status === 'error' || item.status === 'cancelled').length)
-const successRate = computed(() => (totalTasks.value ? Number(((doneCount.value / totalTasks.value) * 100).toFixed(1)) : 0))
-const todayMinutes = computed(() => doneCount.value * 18 + runningCount.value * 9)
-const estimatedRevenue = computed(() => doneCount.value * 128 + runningCount.value * 36)
-const topTemplates = computed(() => templates.value.slice(0, 4))
-const currentTask = computed(() => taskRows.value[0] || null)
-const nextActionText = computed(() => {
-  if (runningCount.value) return '继续查看运行中的生成任务'
-  if (topTemplates.value.length) return '从模板或爆款复刻开始新任务'
-  return '上传参考视频并创建第一条复刻任务'
-})
-
-const kpiCards = computed(() => [
-  { title: '今日生成', value: doneCount.value, note: runningCount.value ? `进行中 ${runningCount.value}` : '暂无运行任务', icon: PlayCircle },
-  { title: '今日耗时', value: `${todayMinutes.value} 分钟`, note: '统计当前任务工作量', icon: Clock3 },
-  { title: '成功率', value: `${successRate.value}%`, note: errorCount.value ? `失败 ${errorCount.value}` : '稳定运行中', icon: CheckCircle2 },
-  { title: '任务总数', value: totalTasks.value, note: currentTask.value ? '可从历史继续恢复' : '等待新任务', icon: FolderKanban },
-  { title: '预计收益', value: `¥ ${estimatedRevenue.value}`, note: '按当前完成任务估算', icon: Rocket },
-])
-
-const workflowNodes = computed(() => [
-  { title: '参考分析', state: doneCount.value ? 'done' : 'active', desc: '提炼参考视频结构与节奏' },
-  { title: '脚本评分', state: runningCount.value ? 'active' : doneCount.value ? 'done' : 'idle', desc: '生成多版脚本并择优' },
-  { title: '分镜生成', state: runningCount.value > 1 ? 'active' : 'idle', desc: '输出镜头与素材布局' },
-  { title: '视频生成', state: runningCount.value ? 'active' : 'idle', desc: '逐镜头生成可用片段' },
-  { title: '合成导出', state: currentTask.value?.status === 'done' ? 'done' : 'idle', desc: '检查并导出最终成片' },
-])
-
-const quickActions = [
-  { title: '新建爆款复刻', desc: '进入 `/clone` 工作流', route: '/clone' },
-  { title: '查看任务中心', desc: '跟进全部任务状态', route: '/tasks' },
-  { title: '进入模板库', desc: '选择现有模板继续生产', route: '/templates' },
+const staticTemplateThumbs = [
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=640&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=640&q=80',
+  'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=640&q=80',
+  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=640&q=80',
 ]
 
-const notices = computed(() => [
-  currentTask.value
-    ? `当前最新任务：${currentTask.value.title}`
-    : '当前没有任务，建议从爆款复刻开始',
-  runningCount.value ? `有 ${runningCount.value} 条任务正在运行` : '当前没有运行中的任务',
-  errorCount.value ? `有 ${errorCount.value} 条任务需要处理异常` : '系统运行稳定',
-])
+const quickCreateItems = [
+  {
+    title: '爆款复刻',
+    desc: '上传参考视频，AI 分析生成',
+    icon: CopyPlus,
+    route: '/clone',
+  },
+  {
+    title: '批量生成',
+    desc: '批量生成多个视频任务',
+    icon: FolderKanban,
+    route: '/tasks',
+  },
+  {
+    title: '直播切片',
+    desc: '智能切片直播长视频',
+    icon: Clapperboard,
+    route: '/live-slicer',
+  },
+  {
+    title: '模板应用',
+    desc: '使用模板快速生成视频',
+    icon: Library,
+    route: '/templates',
+  },
+]
 
-const heroStats = computed(() => [
-  { label: '运行中', value: runningCount.value || 0 },
-  { label: '已完成', value: doneCount.value || 0 },
-  { label: '模板可用', value: topTemplates.value.length || 0 },
+const assistantPrompts = [
+  '分析参考视频，生成爆款脚本',
+  '推荐适合当前内容的模板',
+  '优化视频节奏和转化点',
+]
+
+const sortedTasks = computed(() =>
+  [...tasks.value].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)),
+)
+
+const sortedCloneProjects = computed(() =>
+  [...cloneProjects.value].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)),
+)
+
+const runningCount = computed(
+  () =>
+    taskStats.value?.running ??
+    tasks.value.filter((item) => item.status === 'running' || item.status === 'queued').length,
+)
+
+const doneCount = computed(
+  () =>
+    taskStats.value?.done ??
+    tasks.value.filter((item) => item.status === 'done').length,
+)
+
+const failedCount = computed(
+  () =>
+    taskStats.value?.failed ??
+    tasks.value.filter((item) => item.status === 'error' || item.status === 'cancelled').length,
+)
+
+const recentTasks = computed<RecentTaskCard[]>(() => {
+  const cloneRows = sortedCloneProjects.value.slice(0, 4)
+  return cloneRows.map((item, index) => {
+    const status = normalizeProjectStatus(item.status)
+    return {
+      id: item.id,
+      title: item.title || basename(item.referenceVideoName || item.referenceVideoPath || item.outputDir || `项目 ${index + 1}`),
+      thumb: previewImageFor(item, index),
+      progress: projectProgress(status, index),
+      statusLabel: status.label,
+      statusTone: status.tone,
+    }
+  })
+})
+
+const templateCards = computed<TemplateCard[]>(() =>
+  templates.value.slice(0, 4).map((item, index) => ({
+    id: item.id,
+    title: item.name || `模板 ${index + 1}`,
+    subtitle: `使用 ${(12.5 - index * 1.4).toFixed(1)}w`,
+    thumb: staticTemplateThumbs[index % staticTemplateThumbs.length],
+  })),
+)
+
+const currentWorkflowStep = computed(() => {
+  if (doneCount.value) return 5
+  if (runningCount.value >= 3) return 4
+  if (runningCount.value >= 2) return 3
+  if (runningCount.value >= 1) return 2
+  return 1
+})
+
+const workflowNodes = computed(() => [
+  { key: 1, title: '参考分析' },
+  { key: 2, title: '脚本生成' },
+  { key: 3, title: '分镜设计' },
+  { key: 4, title: '分镜视频' },
+  { key: 5, title: '成片合成' },
+  { key: 6, title: '发布导出' },
 ])
 
 function basename(input: string) {
   return (input ?? '').split(/[/\\]/).pop() ?? input
 }
 
-function formatTime(ts: number) {
-  if (!ts) return '--'
-  const d = new Date(ts)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${hh}:${mm}`
+function previewImageFor(item: CloneProjectLite, index: number) {
+  const path = item.previewOutputPath || item.referenceVideoPath || ''
+  if (path) return `file:///${path.replace(/\\/g, '/')}`
+  return staticTemplateThumbs[index % staticTemplateThumbs.length]
 }
 
-function stageLabel(status: VideoTaskLite['status'], index: number) {
-  if (status === 'done') return '已完成导出'
-  if (status === 'error' || status === 'cancelled') return '等待异常处理'
-  return ['脚本评分', '分镜生成', '视频生成', '合成导出', '参考分析', '继续处理中'][index] ?? '继续处理中'
+function normalizeProjectStatus(status?: string) {
+  const text = String(status || '').toLowerCase()
+  if (text.includes('done') || text.includes('complete') || text.includes('success')) {
+    return { label: '已完成', tone: 'done' as const }
+  }
+  if (text.includes('fail') || text.includes('error') || text.includes('cancel')) {
+    return { label: '异常', tone: 'error' as const }
+  }
+  return { label: '生成中', tone: 'running' as const }
 }
 
-function etaLabel(status: VideoTaskLite['status'], index: number) {
-  if (status === 'done') return '-'
-  if (status === 'error' || status === 'cancelled') return '--'
-  return ['08:20', '12:10', '15:30', '06:40', '04:15', '09:00'][index] ?? '06:00'
-}
-
-function statusLabel(status: VideoTaskLite['status']) {
-  if (status === 'done') return '完成'
-  if (status === 'error' || status === 'cancelled') return '失败'
-  if (status === 'paused') return '暂停'
-  if (status === 'running' || status === 'queued') return '运行中'
-  return '等待中'
-}
-
-function statusClass(status: VideoTaskLite['status']) {
-  if (status === 'done') return 'is-done'
-  if (status === 'error' || status === 'cancelled') return 'is-error'
-  if (status === 'paused') return 'is-paused'
-  return 'is-running'
+function projectProgress(status: { tone: 'running' | 'done' | 'error' }, index: number) {
+  if (status.tone === 'done') return 100
+  if (status.tone === 'error') return 38
+  return Math.max(22, Math.min(92, 72 - index * 18))
 }
 
 function go(path: string) {
@@ -154,8 +217,16 @@ function go(path: string) {
 async function refresh() {
   loading.value = true
   try {
-    templates.value = await window.api.templates.list()
-    tasks.value = await window.api.tasks.list()
+    const [templateRows, taskRows, statsRows, cloneRows] = await Promise.all([
+      window.api.templates.list(),
+      window.api.tasks.list(),
+      window.api.tasks.stats(),
+      window.api.clone.listProjects(),
+    ])
+    templates.value = Array.isArray(templateRows) ? (templateRows as TemplateLite[]) : []
+    tasks.value = Array.isArray(taskRows) ? (taskRows as VideoTaskLite[]) : []
+    taskStats.value = (statsRows || null) as TaskStatLite | null
+    cloneProjects.value = Array.isArray(cloneRows) ? (cloneRows as CloneProjectLite[]) : []
   } finally {
     loading.value = false
   }
@@ -166,184 +237,158 @@ onMounted(refresh)
 
 <template>
   <div class="home-page">
-    <section class="home-hero">
-      <div class="home-hero__copy">
-        <span class="home-kicker">AI Production Console</span>
-        <h1>首页只保留任务入口、当前状态和下一步。</h1>
-        <p>这里不做复杂编辑，只承担总览和调度。你可以直接开始复刻、查看当前任务，或者从模板继续生产。</p>
-        <div class="hero-stats">
-          <article v-for="item in heroStats" :key="item.label" class="hero-stat">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </article>
-        </div>
-        <div class="home-hero__actions">
-          <UiButton @click="go('/clone')">
-            <Sparkles class="h-4 w-4" />
-            开始爆款复刻
-          </UiButton>
-          <UiButton variant="ghost" @click="go('/tasks')">
-            <ArrowRight class="h-4 w-4" />
-            查看任务中心
-          </UiButton>
-        </div>
-      </div>
-
-      <div class="home-hero__status">
-        <div class="hero-status-card">
-          <span>当前任务</span>
-          <strong>{{ currentTask ? currentTask.title : '暂无运行任务' }}</strong>
-          <em>{{ currentTask ? `${currentTask.stage} · ${statusLabel(currentTask.status)}` : '可立即创建新任务' }}</em>
-          <div v-if="currentTask" class="hero-status-card__foot">
-            <span>进度 {{ currentTask.progress }}%</span>
-            <span>预计 {{ currentTask.eta }}</span>
-          </div>
-        </div>
-        <div class="hero-status-card hero-status-card--accent">
-          <span>下一步</span>
-          <strong>{{ nextActionText }}</strong>
-          <em>首页只负责判断，不负责编辑。</em>
-        </div>
-      </div>
-    </section>
-
-    <section class="kpi-grid">
-      <article v-for="item in kpiCards" :key="item.title" class="kpi-card">
-        <div class="kpi-card__head">
-          <component :is="item.icon" class="h-4 w-4" />
-          <span>{{ item.title }}</span>
-        </div>
-        <strong>{{ item.value }}</strong>
-        <small>{{ item.note }}</small>
-      </article>
-    </section>
-
-    <section class="home-layout">
+    <section class="home-grid">
       <div class="home-main">
-        <UiCard class="panel-card">
-          <div class="panel-head">
-            <div>
-              <span class="section-kicker">Tasks</span>
-              <h2>进行中任务</h2>
-              <p>首屏直接看到任务、进度、阶段和剩余时间。</p>
+        <UiCard class="hero-card">
+          <div class="hero-card__copy">
+            <h1>
+              让 AI 帮你批量生产
+              <span>高质量短视频</span>
+            </h1>
+            <p>从灵感到爆款，只需 7 步自动完成</p>
+            <div class="hero-card__actions">
+              <UiButton @click="go('/clone')">
+                <Sparkles class="h-4 w-4" />
+                开始新任务
+              </UiButton>
+              <UiButton variant="ghost" @click="go('/clone')">
+                <Upload class="h-4 w-4" />
+                导入参考视频
+              </UiButton>
             </div>
-            <UiButton variant="ghost" @click="refresh">{{ loading ? '刷新中' : '刷新' }}</UiButton>
           </div>
 
-          <div v-if="!taskRows.length && !loading" class="empty-card">
-            <strong>还没有任务</strong>
-            <p>上传一条参考视频后，系统会自动推进分析、脚本、分镜和成片流程。</p>
-            <UiButton @click="go('/clone')">开始新任务</UiButton>
-          </div>
-
-          <div v-else class="task-list">
-            <div class="task-list__head">
-              <span>任务</span>
-              <span>进度 / 剩余</span>
-              <span>状态</span>
+          <div class="hero-card__visual">
+            <div class="hero-orbit hero-orbit--left top-4">智能分析</div>
+            <div class="hero-orbit hero-orbit--left mid-1">脚本生成</div>
+            <div class="hero-orbit hero-orbit--left mid-2">分镜设计</div>
+            <div class="hero-cube">
+              <span>AI</span>
             </div>
-            <article v-for="item in taskRows" :key="item.id" class="task-row">
-              <div class="task-row__main">
-                <span class="task-dot" :class="statusClass(item.status)"></span>
-                <div>
+            <div class="hero-orbit hero-orbit--right top-4">分镜视频</div>
+            <div class="hero-orbit hero-orbit--right mid-1">成片合成</div>
+            <div class="hero-orbit hero-orbit--right mid-2">发布导出</div>
+          </div>
+        </UiCard>
+
+        <div class="content-grid">
+          <UiCard class="section-card recent-card">
+            <div class="section-head">
+              <strong>最近任务</strong>
+              <button class="section-link" type="button" @click="go('/tasks')">
+                查看全部
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </div>
+
+            <div class="recent-list">
+              <article v-for="item in recentTasks" :key="item.id" class="recent-row">
+                <img :src="item.thumb" alt="task-preview" />
+                <div class="recent-row__main">
                   <strong>{{ item.title }}</strong>
-                  <small>{{ item.stage }} · {{ formatTime(item.createdAt) }}</small>
+                  <div class="recent-progress">
+                    <span class="recent-progress__track">
+                      <span class="recent-progress__fill" :style="{ width: `${item.progress}%` }"></span>
+                    </span>
+                    <em v-if="item.statusTone === 'running'">{{ item.progress }}%</em>
+                    <em v-else-if="item.statusTone === 'done'" class="is-success">已完成</em>
+                    <em v-else class="is-error">异常</em>
+                  </div>
                 </div>
-              </div>
-              <div class="task-row__meta">
-                <div class="task-progress">
-                  <span class="task-progress__track">
-                    <span class="task-progress__fill" :class="statusClass(item.status)" :style="{ width: `${item.progress}%` }"></span>
-                  </span>
-                  <small>{{ item.progress }}%</small>
+              </article>
+            </div>
+          </UiCard>
+
+          <UiCard class="section-card template-card-panel">
+            <div class="section-head">
+              <strong>推荐模板</strong>
+              <button class="section-link" type="button" @click="go('/templates')">
+                更多模板
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </div>
+
+            <div class="template-strip">
+              <article v-for="item in templateCards" :key="item.id" class="template-tile">
+                <img :src="item.thumb" alt="template-preview" />
+                <div class="template-tile__copy">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.subtitle }}</span>
                 </div>
-                <span>{{ item.eta }}</span>
-                <strong class="task-pill" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</strong>
-              </div>
-            </article>
-          </div>
-        </UiCard>
-
-        <UiCard class="panel-card">
-          <div class="panel-head">
-            <div>
-              <span class="section-kicker">Workflow</span>
-              <h2>流程状态</h2>
-              <p>只展示主生产流程，不堆叠额外说明。</p>
+              </article>
             </div>
-            <button class="text-link" type="button" @click="go('/clone')">进入工作流</button>
+          </UiCard>
+        </div>
+
+        <UiCard class="section-card workflow-card">
+          <div class="section-head">
+            <strong>生产流程</strong>
           </div>
 
-          <div class="workflow-list">
-            <article v-for="item in workflowNodes" :key="item.title" class="workflow-node" :class="`workflow-node--${item.state}`">
-              <span class="workflow-node__index"></span>
-              <div>
-                <strong>{{ item.title }}</strong>
-                <small>{{ item.desc }}</small>
+          <div class="workflow-track">
+            <div
+              v-for="node in workflowNodes"
+              :key="node.key"
+              class="workflow-step"
+              :class="{
+                'is-done': node.key < currentWorkflowStep,
+                'is-active': node.key === currentWorkflowStep,
+                'is-next': node.key > currentWorkflowStep,
+              }"
+            >
+              <div class="workflow-step__dot">
+                <CheckCircle2 v-if="node.key < currentWorkflowStep" class="h-4 w-4" />
+                <span v-else>{{ node.key }}</span>
               </div>
-            </article>
-          </div>
-        </UiCard>
-
-        <UiCard class="panel-card">
-          <div class="panel-head">
-            <div>
-              <span class="section-kicker">Templates</span>
-              <h2>推荐模板</h2>
-              <p>模板区只保留少量高频入口，避免首页过重。</p>
+              <strong>{{ node.title }}</strong>
             </div>
-            <UiButton variant="ghost" @click="go('/templates')">查看全部</UiButton>
-          </div>
-
-          <div v-if="!topTemplates.length && !loading" class="template-empty">暂无模板，可从任务结果沉淀模板。</div>
-
-          <div v-else class="template-grid">
-            <article v-for="item in topTemplates" :key="item.id" class="template-card">
-              <div class="template-card__badge">
-                <Wand2 class="h-4 w-4" />
-              </div>
-              <strong>{{ item.name }}</strong>
-              <small>适合继续生成相近风格的视频内容</small>
-            </article>
           </div>
         </UiCard>
       </div>
 
       <aside class="home-side">
         <UiCard class="side-card">
-          <div class="panel-head">
-            <div>
-              <span class="section-kicker">Quick Start</span>
-              <h2>快速创建</h2>
-              <p>固定放右侧，不跟主内容争抢视觉。</p>
-            </div>
+          <div class="section-head">
+            <strong>快速创建</strong>
           </div>
 
-          <div class="quick-list">
-            <button v-for="item in quickActions" :key="item.title" class="quick-item" type="button" @click="go(item.route)">
-              <div>
-                <strong>{{ item.title }}</strong>
-                <small>{{ item.desc }}</small>
+          <div class="quick-create-list">
+            <button v-for="item in quickCreateItems" :key="item.title" class="quick-create-item" type="button" @click="go(item.route)">
+              <div class="quick-create-item__icon">
+                <component :is="item.icon" class="h-4 w-4" />
               </div>
-              <ArrowRight class="h-4 w-4" />
+              <div class="quick-create-item__copy">
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.desc }}</span>
+              </div>
             </button>
           </div>
         </UiCard>
 
-        <UiCard class="side-card">
-          <div class="panel-head">
-            <div>
-              <span class="section-kicker">Overview</span>
-              <h2>运行摘要</h2>
-              <p>右侧只看关键提醒和全局状态。</p>
+        <UiCard class="side-card assistant-card">
+          <div class="section-head">
+            <strong>AI 助手</strong>
+          </div>
+
+          <div class="assistant-visual">
+            <div class="assistant-avatar">
+              <MessageCircleMore class="h-9 w-9" />
             </div>
           </div>
 
-          <div class="notice-list">
-            <article v-for="item in notices" :key="item" class="notice-item">
-              <span class="notice-dot"></span>
-              <span>{{ item }}</span>
-            </article>
+          <div class="assistant-panel">
+            <span>你好！我可以帮你：</span>
+            <button v-for="item in assistantPrompts" :key="item" class="assistant-suggestion" type="button">
+              <ScanSearch class="h-4 w-4" />
+              <strong>{{ item }}</strong>
+            </button>
+          </div>
+
+          <div class="assistant-input">
+            <input type="text" placeholder="输入你的问题..." />
+            <button type="button">
+              <Sparkles class="h-4 w-4" />
+            </button>
           </div>
         </UiCard>
       </aside>
@@ -354,450 +399,469 @@ onMounted(refresh)
 <style scoped>
 .home-page {
   display: grid;
-  gap: 14px;
+  gap: 0;
   min-height: 100%;
-  padding: 16px;
-  background:
-    radial-gradient(circle at 16% 0, rgba(109, 93, 255, 0.12), transparent 24%),
-    radial-gradient(circle at 84% 10%, rgba(34, 211, 238, 0.08), transparent 18%),
-    linear-gradient(180deg, #060b16 0%, #08111f 100%);
+  padding: 0 2px 8px;
   color: #f8fafc;
 }
 
-.home-page :deep(.ui-card),
-.kpi-card,
-.hero-status-card,
-.task-row,
-.workflow-node,
-.template-card,
-.quick-item,
-.notice-item,
-.template-empty,
-.empty-card {
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, rgba(17, 28, 49, 0.92), rgba(8, 17, 31, 0.94));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+.section-head,
+.hero-card__actions,
+.assistant-input,
+.section-link,
+.quick-create-item,
+.workflow-track,
+.workflow-step {
+  display: flex;
+  align-items: center;
 }
 
-.home-hero {
+.section-head strong,
+.quick-create-item__copy strong,
+.template-tile__copy strong,
+.recent-row__main strong,
+.workflow-step strong {
+  color: #eef3ff;
+}
+
+.home-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) 310px;
   gap: 14px;
-}
-
-.home-hero__copy,
-.home-hero__status {
-  display: grid;
-  gap: 12px;
-}
-
-.home-hero__copy {
-  padding: 24px;
-  border-radius: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background:
-    radial-gradient(circle at right top, rgba(109, 93, 255, 0.18), transparent 28%),
-    linear-gradient(180deg, rgba(11, 18, 33, 0.98), rgba(8, 13, 25, 0.98));
-}
-
-.home-kicker {
-  color: #8ea0c7;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.home-hero__copy h1 {
-  margin: 0;
-  font-size: clamp(28px, 2.2vw, 40px);
-  line-height: 1.1;
-}
-
-.home-hero__copy p,
-.panel-head p,
-.hero-status-card em,
-.kpi-card small,
-.task-row small,
-.workflow-node small,
-.template-card small,
-.quick-item small {
-  margin: 0;
-  color: #93a2c1;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.section-kicker {
-  display: inline-block;
-  margin-bottom: 6px;
-  color: #7f91b8;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.home-hero__actions,
-.panel-head,
-.task-row__main,
-.task-row__meta,
-.task-progress,
-.quick-item,
-.notice-item,
-.kpi-card__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.home-hero__actions {
-  flex-wrap: wrap;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.hero-stat {
-  display: grid;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.hero-stat span {
-  color: #8ea0c7;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.hero-stat strong {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.hero-status-card {
-  display: grid;
-  gap: 8px;
-  padding: 18px;
-}
-
-.hero-status-card span,
-.kpi-card__head span {
-  color: #8ea0c7;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.hero-status-card strong,
-.kpi-card strong {
-  font-size: 22px;
-}
-
-.hero-status-card__foot {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.hero-status-card__foot span {
-  color: #b8c5e3;
-  font-size: 11px;
-}
-
-.hero-status-card--accent {
-  border-color: rgba(109, 93, 255, 0.32);
-  background:
-    radial-gradient(circle at left top, rgba(109, 93, 255, 0.16), transparent 30%),
-    linear-gradient(180deg, rgba(17, 28, 49, 0.92), rgba(8, 17, 31, 0.94));
-}
-
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.kpi-card {
-  display: grid;
-  gap: 8px;
-  padding: 14px 16px;
-}
-
-.home-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px;
+  margin-top: 2px;
 }
 
 .home-main,
 .home-side,
-.task-list,
-.workflow-list,
-.template-grid,
-.quick-list,
-.notice-list {
+.content-grid,
+.recent-list,
+.quick-create-list,
+.assistant-panel {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
-.panel-card,
+.hero-card,
+.section-card,
 .side-card {
-  padding: 14px !important;
+  padding: 18px !important;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(109, 93, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(11, 18, 33, 0.98), rgba(8, 13, 25, 0.98));
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.panel-head {
-  justify-content: space-between;
-  align-items: flex-start;
+.hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(420px, 0.8fr);
+  gap: 20px;
+  min-height: 352px;
 }
 
-.panel-head h2 {
+.hero-card__copy {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  padding: 8px 10px;
+}
+
+.hero-card__copy h1 {
   margin: 0;
+  font-size: clamp(40px, 4vw, 58px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+.hero-card__copy h1 span {
+  display: block;
+  color: #7d6bff;
+}
+
+.hero-card__copy p,
+.quick-create-item__copy span,
+.template-tile__copy span,
+.assistant-panel span {
+  margin: 0;
+  color: #95a5c8;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.hero-card__visual {
+  position: relative;
+  min-height: 300px;
+}
+
+.hero-cube {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 168px;
+  height: 168px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.36), transparent 24%),
+    linear-gradient(135deg, rgba(81, 112, 255, 0.9), rgba(148, 90, 255, 0.72));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 20px 80px rgba(109, 93, 255, 0.42),
+    inset 0 1px 18px rgba(255, 255, 255, 0.26);
+}
+
+.hero-cube::before,
+.hero-cube::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(109, 93, 255, 0.24);
+}
+
+.hero-cube::before {
+  width: 280px;
+  height: 280px;
+}
+
+.hero-cube::after {
+  width: 360px;
+  height: 360px;
+}
+
+.hero-cube span {
+  color: #f8faff;
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.hero-orbit {
+  position: absolute;
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(12, 20, 36, 0.84);
+  color: #dce5ff;
+  font-size: 13px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.hero-orbit--left.top-4 {
+  top: 10px;
+  left: 24px;
+}
+
+.hero-orbit--left.mid-1 {
+  top: 96px;
+  left: -4px;
+}
+
+.hero-orbit--left.mid-2 {
+  bottom: 42px;
+  left: 26px;
+}
+
+.hero-orbit--right.top-4 {
+  top: 8px;
+  right: 24px;
+}
+
+.hero-orbit--right.mid-1 {
+  top: 96px;
+  right: -2px;
+}
+
+.hero-orbit--right.mid-2 {
+  bottom: 22px;
+  right: 20px;
+}
+
+.content-grid {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
+}
+
+.section-head {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.section-head strong {
   font-size: 18px;
 }
 
-.task-list__head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px 80px;
+.section-link {
+  gap: 4px;
+  color: #8ea0c7;
+  font-size: 13px;
+}
+
+.recent-list {
   gap: 12px;
-  padding: 0 4px;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
-.task-row {
-  justify-content: space-between;
-  padding: 12px;
-  border-color: rgba(148, 163, 184, 0.12);
-  background:
-    linear-gradient(180deg, rgba(12, 20, 36, 0.92), rgba(9, 16, 29, 0.92)),
-    rgba(10, 19, 36, 0.78);
+.recent-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.task-row__main,
-.task-row__meta {
-  min-width: 0;
+.recent-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
-.task-row__main {
+.recent-row img,
+.template-tile img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.recent-row img {
+  height: 60px;
+}
+
+.recent-row__main {
+  display: grid;
+  gap: 10px;
+}
+
+.recent-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recent-progress__track {
   flex: 1;
-}
-
-.task-row__meta {
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.task-row__main strong,
-.template-card strong,
-.quick-item strong,
-.workflow-node strong,
-.notice-item span {
-  color: #eef3ff;
-}
-
-.task-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #22d3ee;
-}
-
-.task-dot.is-done,
-.task-progress__fill.is-done {
-  background: #22c55e;
-}
-
-.task-dot.is-error,
-.task-progress__fill.is-error {
-  background: #ef4444;
-}
-
-.task-dot.is-paused,
-.task-progress__fill.is-paused {
-  background: #f59e0b;
-}
-
-.task-progress {
-  min-width: 128px;
-}
-
-.task-progress__track {
-  width: 96px;
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.task-progress__fill {
+.recent-progress__fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #22d3ee, #6d5dff);
+  background: linear-gradient(90deg, #7d6bff, #59a7ff);
 }
 
-.task-pill {
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 11px;
+.recent-progress em {
+  color: #cfd8ef;
+  font-size: 12px;
+  font-style: normal;
 }
 
-.task-pill.is-running {
-  color: #d7f8ff;
-  border-color: rgba(34, 211, 238, 0.2);
-  background: rgba(34, 211, 238, 0.1);
+.recent-progress em.is-success {
+  color: #53d08f;
 }
 
-.task-pill.is-done {
-  color: #d9ffe7;
-  border-color: rgba(34, 197, 94, 0.2);
-  background: rgba(34, 197, 94, 0.1);
+.recent-progress em.is-error {
+  color: #ff7d7d;
 }
 
-.task-pill.is-error {
-  color: #ffd8d8;
-  border-color: rgba(239, 68, 68, 0.22);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.task-pill.is-paused {
-  color: #ffe9c7;
-  border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(245, 158, 11, 0.1);
-}
-
-.workflow-node {
+.template-strip {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.template-tile {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.template-tile img {
+  height: 210px;
+}
+
+.template-tile__copy {
+  display: grid;
+  gap: 4px;
   padding: 12px;
 }
 
-.workflow-node__index {
-  width: 14px;
-  height: 14px;
-  margin-top: 3px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.2);
+.workflow-card {
+  gap: 18px;
 }
 
-.workflow-node--done .workflow-node__index {
-  background: #22c55e;
-}
-
-.workflow-node--active .workflow-node__index {
-  background: #6d5dff;
-  box-shadow: 0 0 0 6px rgba(109, 93, 255, 0.12);
-}
-
-.workflow-node--active {
-  border-color: rgba(109, 93, 255, 0.24);
-}
-
-.template-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.template-card {
-  display: grid;
+.workflow-track {
+  justify-content: space-between;
   gap: 10px;
-  padding: 14px;
-  min-height: 132px;
 }
 
-.template-card__badge {
-  width: 38px;
-  height: 38px;
+.workflow-step {
+  flex: 1;
+  gap: 10px;
+  justify-content: center;
+  color: #8698bf;
+}
+
+.workflow-step__dot {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.workflow-step.is-done .workflow-step__dot {
+  color: #53d08f;
+  border-color: rgba(83, 208, 143, 0.26);
+}
+
+.workflow-step.is-active .workflow-step__dot {
+  color: #fff;
+  border-color: rgba(125, 107, 255, 0.4);
+  background: linear-gradient(135deg, rgba(109, 93, 255, 0.94), rgba(133, 92, 246, 0.82));
+  box-shadow: 0 0 0 8px rgba(109, 93, 255, 0.12);
+}
+
+.workflow-step strong {
+  font-size: 16px;
+}
+
+.quick-create-item {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+}
+
+.quick-create-item__icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(109, 93, 255, 0.94), rgba(133, 92, 246, 0.78));
+  color: #fff;
+}
+
+.quick-create-item__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.assistant-card {
+  gap: 16px;
+}
+
+.assistant-visual {
+  display: grid;
+  place-items: center;
+  padding: 10px 0 2px;
+}
+
+.assistant-avatar {
+  width: 108px;
+  height: 108px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #9ab7ff;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.22), transparent 26%),
+    linear-gradient(135deg, rgba(109, 93, 255, 0.84), rgba(78, 160, 255, 0.54));
+  box-shadow:
+    0 0 0 10px rgba(109, 93, 255, 0.08),
+    0 20px 56px rgba(109, 93, 255, 0.28);
+}
+
+.assistant-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #d8e1f7;
+  text-align: left;
+}
+
+.assistant-input {
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 10px 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.assistant-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #eef3ff;
+  font-size: 14px;
+}
+
+.assistant-input button {
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border-radius: 12px;
-  color: #d6deff;
-  background: rgba(109, 93, 255, 0.16);
+  background: linear-gradient(135deg, rgba(109, 93, 255, 0.94), rgba(133, 92, 246, 0.78));
+  color: #fff;
 }
 
-.template-empty,
-.empty-card {
-  padding: 18px;
-}
-
-.empty-card {
-  display: grid;
-  gap: 10px;
-}
-
-.quick-item {
-  justify-content: space-between;
-  text-align: left;
-  padding: 12px;
-  border-color: rgba(148, 163, 184, 0.12);
-}
-
-.notice-item {
-  padding: 12px;
-  align-items: flex-start;
-}
-
-.notice-dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: #22d3ee;
-}
-
-.text-link {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(15, 23, 42, 0.72);
-  color: #cbd5e1;
-  font-size: 12px;
-}
-
-@media (max-width: 1320px) {
-  .home-hero,
-  .home-layout,
-  .kpi-grid,
-  .template-grid {
+@media (max-width: 1400px) {
+  .hero-card {
     grid-template-columns: 1fr;
   }
 
-  .hero-stats {
+  .content-grid,
+  .home-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 900px) {
-  .task-list__head {
-    display: none;
+@media (max-width: 980px) {
+  .workflow-track {
+    flex-wrap: wrap;
   }
 
-  .task-row {
-    display: grid;
-    gap: 10px;
+  .template-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .home-page {
+    padding: 0 0 8px;
   }
 
-  .task-row__meta {
-    justify-content: flex-start;
+  .template-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

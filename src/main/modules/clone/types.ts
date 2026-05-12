@@ -493,6 +493,14 @@ export type CloneGlobalScript = {
   sellingLogic: string
   hook: string
   cta: string
+  content?: string
+  cameraMotion?: string
+  shotScale?: string
+  lighting?: string
+  colorTone?: string
+  subjectAction?: string
+  environment?: string
+  reversePrompt?: string
 }
 
 export type CloneScriptCandidate = {
@@ -512,6 +520,7 @@ export type CloneScriptVariantCandidate = {
   shotScripts: Array<{
     shotId: string
     shotIndex: number
+    timeRange?: string
     scriptText: string
     scriptRole: ScriptRole
     visualDescription: string
@@ -543,12 +552,13 @@ export type CloneStoryboardGridBatch = {
 export type CloneStoryboardFrame = {
   id: string
   shotId: string
-  batchId: string
-  frameIndex: number
+  batchId?: string
+  frameIndex?: number
   imagePath?: string
   aspectRatio: '9:16'
   status: 'idle' | 'cropped' | 'failed'
   error?: string
+  updatedAt?: number
 }
 
 export type CloneShotVideoOutput = {
@@ -590,6 +600,21 @@ export type CloneConsistencyAssetsSnapshot = {
   referenceImages?: string[]
   modelReferenceImages?: string[]
   productReferenceImages?: string[]
+  productAnalysis?: {
+    category: string
+    summary: string
+    coreSubject: string
+    connectionStructure: string
+    materialDetails: string
+    wearingPosition: string
+    surfaceDetails: string
+    colorDetails: string
+    geometryDetails: string
+    sizeScale: string
+    matchingRules: string[]
+    rawDescription: string
+    updatedAt: number
+  }
   status?: 'saved' | 'generated'
   provider?: string
   updatedAt: number
@@ -822,6 +847,16 @@ export type CloneProject = {
   id: string
   createdAt: number
   updatedAt: number
+  userId?: string
+  subscriptionPlanId?: string
+  billingStatus?: 'not_required' | 'pending' | 'paid' | 'failed'
+  estimatedCost?: number
+  actualCost?: number
+  deductionStatus?: 'none' | 'reserved' | 'charged' | 'refunded'
+  assetStorageProvider?: 'local_fs' | 'qiniu' | 'web_object_storage'
+  title?: string
+  description?: string
+  archived?: boolean
   status: CloneProjectStatus
   locale: CloneLocale
   strength: CloneStrength
@@ -867,6 +902,31 @@ export type CloneProject = {
   policy: CloneGenerationPolicy
   lastError?: string
   lastErrorContext?: ClonePipelineErrorContext
+}
+
+export type CloneProjectSummary = {
+  id: string
+  title: string
+  description?: string
+  archived?: boolean
+  status: CloneProjectStatus | ClonePreviewPipelineStatus['status'] | string
+  createdAt: number
+  updatedAt: number
+  currentStep: CloneWorkflowV2Step
+  progressPercent: number
+  referenceVideoName: string
+  referenceVideoPath: string
+  coverAssetPath: string
+  previewOutputPath: string
+  previewReportPath: string
+  outputDir: string
+  finalOutputPath: string
+  selectedModelIdentityName: string
+  productReferenceImageCount: number
+  shotCount: number
+  generatedImageCount: number
+  generatedVideoCount: number
+  lastError: string
 }
 
 export type ModelCredentials = {

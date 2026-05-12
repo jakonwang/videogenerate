@@ -33,33 +33,33 @@ defineProps<{
 .panel-head {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
 }
 
 .stage-head {
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 .stage-head__main {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
-  padding: 2px 0;
+  padding: 0;
 }
 
 .stage-head__main h2 {
   margin: 0;
-  font-size: 18px;
-  line-height: 1.2;
+  font-size: 16px;
+  line-height: 1.15;
 }
 
 .stage-head__main p {
   margin: 0;
   color: #93a2c1;
-  font-size: 12px;
-  line-height: 1.5;
-  max-width: 620px;
+  font-size: 10px;
+  line-height: 1.4;
+  max-width: 520px;
 }
 
 .stage-head__actions {
@@ -67,24 +67,24 @@ defineProps<{
   align-items: flex-start;
   gap: 8px;
   flex-wrap: wrap;
-  padding-top: 2px;
+  padding-top: 0;
   margin-left: auto;
-  padding-left: 16px;
+  padding-left: 10px;
 }
 
 .stage-head__aux {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  min-height: 34px;
-  padding: 0 2px 10px;
+  min-height: 22px;
+  padding: 2px 2px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .stage-head__aux :deep(span) {
   color: #8fa0c4;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.4;
 }
 

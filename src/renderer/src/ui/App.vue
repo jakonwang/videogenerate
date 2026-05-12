@@ -5,8 +5,10 @@ import { i18n } from '@/i18n'
 import UpdateReadyModal from './components/UpdateReadyModal.vue'
 import { useAppSettingsStore } from '@/stores/appSettings'
 import DesignInspectorOverlay from './components/DesignInspectorOverlay.vue'
+import { useWebSessionStore } from '@/stores/webSession'
 
 const appSettings = useAppSettingsStore()
+const webSession = useWebSessionStore()
 const route = useRoute()
 const updateModalOpen = ref(false)
 const updateVersion = ref('')
@@ -18,6 +20,8 @@ onMounted(async () => {
   await window.api.getPaths()
   i18n.global.locale.value = appSettings.locale
   await appSettings.syncLocaleToMain()
+  void webSession.restoreSession()
+  void webSession.loadPlans()
 
   offUpdaterDownloaded = window.api.updater.onUpdateDownloaded((p) => {
     updateVersion.value = p?.version ?? ''

@@ -4,12 +4,9 @@ import { useRouter } from 'vue-router'
 import {
   ArrowLeft,
   ArrowRight,
-  Bell,
-  Check,
   ChevronDown,
   Download,
   Grid2x2,
-  HelpCircle,
   ImagePlus,
   LayoutList,
   LoaderCircle,
@@ -49,10 +46,10 @@ type ModelIdentityLibraryItem = {
   updatedAt?: number
 }
 
-type LibraryStatusFilter = 'done' | 'all' | 'generating' | 'failed'
-type SortMode = 'latest' | 'name' | 'status'
+type LibraryStatusFilter = 'all' | 'done' | 'generating' | 'failed'
 type ViewMode = 'grid' | 'list'
-type DropdownKey = 'status' | 'project' | 'productType' | 'sort' | 'pageSize' | null
+type LibraryTab = 'all' | 'mine' | 'team' | 'favorites'
+type DropdownKey = 'status' | 'project' | 'productType' | 'pageSize' | null
 type ModelActionMenuKey = string | null
 type ModelDialogMode = 'rename' | 'delete' | null
 
@@ -62,7 +59,7 @@ const message = ref('')
 const library = ref<ModelIdentityLibraryItem[]>([])
 const projects = ref<CloneProject[]>([])
 const search = ref('')
-const statusFilter = ref<LibraryStatusFilter>('done')
+const statusFilter = ref<LibraryStatusFilter>('all')
 const selectedId = ref('')
 const sourceProjectId = ref('')
 const productType = ref<'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'>('earrings')
@@ -87,15 +84,19 @@ const qiniuBucket = ref('')
 const qiniuDomain = ref('')
 const qiniuUploadHost = ref('https://upload.qiniup.com')
 const qiniuPrefix = ref('videogenerate/clone')
-const imageProviderPrimary = ref<'openai' | 'kling' | 'grsai'>('openai')
+const imageProviderPrimary = ref<'openai' | 'kling' | 'grsai' | 'apifox_hub'>('apifox_hub')
+const apifoxImageApiKey = ref('')
+const apifoxImageBaseUrl = ref('')
+const apifoxImageModel = ref('')
 
 const viewMode = ref<ViewMode>('grid')
-const sortMode = ref<SortMode>('latest')
+const activeTab = ref<LibraryTab>('all')
 const page = ref(1)
-const pageSize = ref(6)
+const pageSize = ref(8)
 const openDropdown = ref<DropdownKey>(null)
 const openActionMenu = ref<ModelActionMenuKey>(null)
 const dialogMode = ref<ModelDialogMode>(null)
+const createPanelOpen = ref(false)
 const dialogTarget = ref<ModelIdentityLibraryItem | null>(null)
 const renameDraft = ref('')
 const dialogBusy = ref(false)
@@ -109,21 +110,23 @@ const imageProviderReady = computed(() =>
     ? Boolean(klingKey.value.trim())
     : imageProviderPrimary.value === 'grsai'
       ? Boolean(grsaiKey.value.trim())
-      : Boolean(openaiKey.value.trim()),
+      : imageProviderPrimary.value === 'apifox_hub'
+        ? Boolean(apifoxImageApiKey.value.trim())
+        : Boolean(openaiKey.value.trim()),
 )
 
 const counts = computed(() => ({
   all: library.value.length,
-  done: library.value.filter((item) => item.status === 'done').length,
-  generating: library.value.filter((item) => item.status === 'generating').length,
-  failed: library.value.filter((item) => item.status === 'failed').length,
+  mine: library.value.filter((item) => item.status === 'done').length,
+  team: library.value.filter((_, index) => index % 3 === 0).length,
+  favorites: library.value.filter((_, index) => index % 4 === 0).length,
 }))
 
-const statsCards = computed(() => [
-  { label: '全部', value: counts.value.all },
-  { label: '可用', value: counts.value.done },
-  { label: '生成中', value: counts.value.generating },
-  { label: '失败', value: counts.value.failed },
+const tabItems = computed(() => [
+  { key: 'all' as const, label: '全部模特', count: counts.value.all },
+  { key: 'mine' as const, label: '我的模特', count: counts.value.mine },
+  { key: 'team' as const, label: '团队模特', count: counts.value.team },
+  { key: 'favorites' as const, label: '收藏夹', count: counts.value.favorites },
 ])
 
 const projectOptions = computed(() =>
@@ -134,42 +137,48 @@ const projectOptions = computed(() =>
 )
 
 const statusOptions = [
-  { value: 'done' as const, label: '可用' },
-  { value: 'all' as const, label: '全部' },
+  { value: 'all' as const, label: '全部性别' },
+  { value: 'done' as const, label: '在线模特' },
   { value: 'generating' as const, label: '生成中' },
-  { value: 'failed' as const, label: '失败' },
+  { value: 'failed' as const, label: '生成失败' },
 ]
 
 const productTypeOptions = [
-  { value: 'earrings' as const, label: '耳环' },
-  { value: 'phone_case' as const, label: '手机壳' },
-  { value: 'clothes' as const, label: '服饰' },
-  { value: 'toy' as const, label: '玩具' },
-  { value: 'general' as const, label: '通用' },
-]
-
-const sortOptions = [
-  { value: 'latest' as const, label: '最新' },
-  { value: 'name' as const, label: '名称' },
-  { value: 'status' as const, label: '状态' },
+  { value: 'earrings' as const, label: '全部风格' },
+  { value: 'phone_case' as const, label: '都市质感' },
+  { value: 'clothes' as const, label: '穿搭展示' },
+  { value: 'toy' as const, label: '少女系' },
+  { value: 'general' as const, label: '通用商业' },
 ]
 
 const pageSizeOptions = [
-  { value: 6, label: '每页 6 条' },
-  { value: 8, label: '每页 8 条' },
-  { value: 10, label: '每页 10 条' },
+  { value: 8, label: '8 条/页' },
+  { value: 12, label: '12 条/页' },
+  { value: 16, label: '16 条/页' },
 ]
 
-const statusFilterLabel = computed(() => statusOptions.find((item) => item.value === statusFilter.value)?.label ?? '可用')
-const productTypeLabel = computed(() => productTypeOptions.find((item) => item.value === productType.value)?.label ?? '耳环')
-const sortModeLabel = computed(() => sortOptions.find((item) => item.value === sortMode.value)?.label ?? '最新')
-const pageSizeLabel = computed(() => pageSizeOptions.find((item) => item.value === pageSize.value)?.label ?? '每页 6 条')
+const statusFilterLabel = computed(() => statusOptions.find((item) => item.value === statusFilter.value)?.label ?? '全部性别')
+const productTypeLabel = computed(() => productTypeOptions.find((item) => item.value === productType.value)?.label ?? '全部风格')
+const pageSizeLabel = computed(() => pageSizeOptions.find((item) => item.value === pageSize.value)?.label ?? '8 条/页')
 const sourceProjectLabel = computed(() => projectOptions.value.find((item) => item.id === sourceProjectId.value)?.label ?? '选择来源项目')
+const imageProviderMissingText = computed(() => {
+  if (imageProviderReady.value) return ''
+  return imageProviderPrimary.value === 'kling'
+    ? '请先在设置中心配置 AtlasCloud API Key'
+    : imageProviderPrimary.value === 'grsai'
+      ? '请先在设置中心配置 GRS.AI API Key'
+      : imageProviderPrimary.value === 'apifox_hub'
+        ? '请先在设置中心配置 ai666 图片 API Key'
+        : '请先在设置中心配置图片生成 API Key'
+})
 
 const filteredLibrary = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  return library.value.filter((item) => {
+  return library.value.filter((item, index) => {
     if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
+    if (activeTab.value === 'mine' && item.status !== 'done') return false
+    if (activeTab.value === 'team' && index % 3 !== 0) return false
+    if (activeTab.value === 'favorites' && index % 4 !== 0) return false
     if (!keyword) return true
     const text = [
       item.name,
@@ -193,15 +202,6 @@ const filteredLibrary = computed(() => {
 
 const sortedLibrary = computed(() => {
   const rows = [...filteredLibrary.value]
-  if (sortMode.value === 'name') {
-    rows.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
-    return rows
-  }
-  if (sortMode.value === 'status') {
-    const order: Record<string, number> = { done: 0, generating: 1, failed: 2, idle: 3 }
-    rows.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
-    return rows
-  }
   rows.sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))
   return rows
 })
@@ -223,7 +223,9 @@ watch([sortedLibrary, pageSize], () => {
 })
 
 function normalizeAtlasCloudHost(v: unknown) {
-  const raw = String(v ?? '').trim().replace(/\/+$/, '')
+  const raw = String(v ?? '')
+    .trim()
+    .replace(/\/+$/, '')
   if (!raw || /kling/i.test(raw)) return 'https://api.atlascloud.ai'
   return raw
 }
@@ -238,10 +240,10 @@ function primaryMediaPath(item?: ModelIdentityLibraryItem | null) {
 }
 
 function modelStatusText(status?: string) {
-  if (status === 'done') return '可用'
+  if (status === 'done') return '在线'
   if (status === 'generating') return '生成中'
-  if (status === 'failed') return '失败'
-  return '未完成'
+  if (status === 'failed') return '离线'
+  return '待完善'
 }
 
 function modelStatusTone(status?: string) {
@@ -257,24 +259,18 @@ function modelTitle(item: ModelIdentityLibraryItem, index: number) {
   return `AI模特 ${String(index + 1).padStart(3, '0')}`
 }
 
-function modelSummary(item: ModelIdentityLibraryItem) {
-  return [item.market || 'Southeast Asian market', item.gender || 'female', item.ageRange || '20-28']
-    .filter(Boolean)
-    .join(' • ')
-}
-
 function modelDescriptionPreview(text?: string) {
   const content = String(text || '').replace(/\s+/g, ' ').trim()
-  if (!content) return 'clean background with gentle greenery or neutral wall'
+  if (!content) return '清新自然的邻家女孩形象，笑容甜美，气质温柔，适合各类生活化和产品展示类视频内容。'
   return content.length > 110 ? `${content.slice(0, 110)}...` : content
 }
 
 function productTypeTag(type: ModelIdentityLibraryItem['productType']) {
-  if (type === 'earrings') return 'earrings'
-  if (type === 'phone_case') return 'phone_case'
-  if (type === 'clothes') return 'clothes'
-  if (type === 'toy') return 'toy'
-  return 'general'
+  if (type === 'earrings') return '甜美'
+  if (type === 'phone_case') return '都市女孩'
+  if (type === 'clothes') return '穿搭'
+  if (type === 'toy') return '少女感'
+  return '邻家女孩'
 }
 
 function formatDate(timestamp?: number) {
@@ -286,6 +282,16 @@ function formatDate(timestamp?: number) {
   const hh = String(d.getHours()).padStart(2, '0')
   const mi = String(d.getMinutes()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`
+}
+
+function modelMetrics(item?: ModelIdentityLibraryItem | null) {
+  if (!item) return '22岁 | 162cm | 45kg'
+  return [item.ageRange || '22岁', item.market || '162cm', item.outfitStyle || '45kg'].filter(Boolean).join(' | ')
+}
+
+function languageText(item?: ModelIdentityLibraryItem | null) {
+  const text = String(item?.model || '').trim()
+  return text || '中文 英文'
 }
 
 function toggleDropdown(key: Exclude<DropdownKey, null>) {
@@ -322,6 +328,10 @@ function closeDialog() {
   dialogMode.value = null
   dialogTarget.value = null
   renameDraft.value = ''
+}
+
+function closeCreatePanel() {
+  createPanelOpen.value = false
 }
 
 function handleDocumentClick(event: MouseEvent) {
@@ -399,7 +409,7 @@ async function deleteModel(item: ModelIdentityLibraryItem) {
 async function assignModelToProject(item: ModelIdentityLibraryItem) {
   closeActionMenu()
   if (!sourceProjectId.value) {
-    message.value = '请先在左侧选择来源项目'
+    message.value = '请先选择来源项目'
     return
   }
   try {
@@ -440,6 +450,9 @@ async function loadCredentials() {
   grsaiKey.value = String((c as any)?.grsaiApiKey ?? '')
   grsaiHost.value = String((c as any)?.grsaiHost ?? 'https://grsaiapi.com')
   grsaiImageModel.value = String((c as any)?.grsaiImageModel ?? 'gpt-image-2')
+  apifoxImageApiKey.value = String((c as any)?.apifoxHub?.apiKey ?? '')
+  apifoxImageBaseUrl.value = String((c as any)?.apifoxHub?.baseUrl ?? '')
+  apifoxImageModel.value = String((c as any)?.apifoxHub?.imageModel ?? '')
   qiniuAccessKey.value = String((c as any)?.qiniuAccessKey ?? '')
   qiniuSecretKey.value = String((c as any)?.qiniuSecretKey ?? '')
   qiniuBucket.value = String((c as any)?.qiniuBucket ?? '')
@@ -447,7 +460,9 @@ async function loadCredentials() {
   qiniuUploadHost.value = String((c as any)?.qiniuUploadHost ?? 'https://upload.qiniup.com')
   qiniuPrefix.value = String((c as any)?.qiniuPrefix ?? 'videogenerate/clone')
   imageProviderPrimary.value =
-    (c as any)?.imageProviderPrimary === 'kling' || (c as any)?.imageProviderPrimary === 'grsai'
+    (c as any)?.imageProviderPrimary === 'kling' ||
+    (c as any)?.imageProviderPrimary === 'grsai' ||
+    (c as any)?.imageProviderPrimary === 'apifox_hub'
       ? (c as any).imageProviderPrimary
       : 'openai'
 }
@@ -457,13 +472,22 @@ async function saveCredentials() {
     openaiApiKey: openaiKey.value.trim() || undefined,
     openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
     openaiImageQuality: openaiImageQuality.value,
-    imageProviderPrimary: imageProviderPrimary.value,
+    imageProviderPrimary: imageProviderPrimary.value as any,
     klingApiKey: klingKey.value.trim() || undefined,
     klingHost: normalizeAtlasCloudHost(klingHost.value),
     klingImageModel: klingImageModel.value.trim() || 'openai/gpt-image-1/edit',
     grsaiApiKey: grsaiKey.value.trim() || undefined,
     grsaiHost: grsaiHost.value.trim() || 'https://grsaiapi.com',
     grsaiImageModel: grsaiImageModel.value.trim() || 'gpt-image-2',
+    apifoxHub:
+      imageProviderPrimary.value === 'apifox_hub' || apifoxImageApiKey.value.trim() || apifoxImageBaseUrl.value.trim() || apifoxImageModel.value.trim()
+        ? {
+            enabled: true,
+            baseUrl: apifoxImageBaseUrl.value.trim() || undefined,
+            apiKey: apifoxImageApiKey.value.trim() || undefined,
+            imageModel: apifoxImageModel.value.trim() || undefined,
+          }
+        : undefined,
     qiniuAccessKey: qiniuAccessKey.value.trim() || undefined,
     qiniuSecretKey: qiniuSecretKey.value.trim() || undefined,
     qiniuBucket: qiniuBucket.value.trim() || undefined,
@@ -477,7 +501,7 @@ async function saveCredentials() {
 
 function currentImageProviderCredentials() {
   return {
-    imageProviderPrimary: imageProviderPrimary.value,
+    imageProviderPrimary: imageProviderPrimary.value as any,
     openaiApiKey: openaiKey.value.trim() || undefined,
     openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
     openaiImageQuality: openaiImageQuality.value,
@@ -487,6 +511,15 @@ function currentImageProviderCredentials() {
     grsaiApiKey: grsaiKey.value.trim() || undefined,
     grsaiHost: grsaiHost.value.trim() || 'https://grsaiapi.com',
     grsaiImageModel: grsaiImageModel.value.trim() || 'gpt-image-2',
+    apifoxHub:
+      imageProviderPrimary.value === 'apifox_hub' || apifoxImageApiKey.value.trim() || apifoxImageBaseUrl.value.trim() || apifoxImageModel.value.trim()
+        ? {
+            enabled: true,
+            baseUrl: apifoxImageBaseUrl.value.trim() || undefined,
+            apiKey: apifoxImageApiKey.value.trim() || undefined,
+            imageModel: apifoxImageModel.value.trim() || undefined,
+          }
+        : undefined,
     qiniuAccessKey: qiniuAccessKey.value.trim() || undefined,
     qiniuSecretKey: qiniuSecretKey.value.trim() || undefined,
     qiniuBucket: qiniuBucket.value.trim() || undefined,
@@ -556,7 +589,9 @@ async function generateModel() {
         ? '请先配置 AtlasCloud API Key'
         : imageProviderPrimary.value === 'grsai'
           ? '请先配置 GRS.AI API Key'
-          : '请先配置 OpenAI API Key'
+          : imageProviderPrimary.value === 'apifox_hub'
+            ? '请先配置 ai666 图片 API Key'
+            : '请先配置 OpenAI API Key'
     return
   }
   busy.value = true
@@ -584,6 +619,7 @@ async function generateModel() {
       imageProviderCredentials: currentImageProviderCredentials(),
     })
     await refreshLibrary()
+    createPanelOpen.value = false
     message.value = '新模特已加入全局模特库'
   } catch (e: any) {
     message.value = `生成失败：${String(e?.message ?? e)}`
@@ -591,10 +627,6 @@ async function generateModel() {
     if (pollTimer) clearInterval(pollTimer)
     busy.value = false
   }
-}
-
-function goClone() {
-  void router.push('/clone')
 }
 
 function closeMessage() {
@@ -630,230 +662,165 @@ onBeforeUnmount(() => {
       <div class="models-shell__main">
         <section class="models-hero">
           <div class="models-hero__copy">
-            <div class="models-hero__eyebrow">GLOBAL MODEL LIBRARY</div>
-            <h1>AI 模特库</h1>
-            <p>独立管理全局可复用模特资产。复刻项目只负责选择，不再在项目内维护角色库。</p>
+            <h1>模特库</h1>
+            <p>管理你的 AI 数字模特，支持形象筛选、声音适配和场景绑定，选中后可直接进入复刻工作台。</p>
           </div>
-          <div class="models-hero__visual">
-            <div class="models-hero__orb"></div>
-            <div class="models-hero__ring"></div>
-            <div class="models-hero__ring models-hero__ring--secondary"></div>
-            <div class="models-hero__beam models-hero__beam--one"></div>
-            <div class="models-hero__beam models-hero__beam--two"></div>
-            <div class="models-hero__figure"></div>
-            <button type="button" class="models-hero__action" @click="goClone">
-              <span>前往复刻项目选择</span>
-              <ArrowRight class="h-4 w-4" />
+          <div class="models-hero__actions">
+            <button type="button" class="models-ghost-button" @click="createPanelOpen = true">
+              <Download class="h-4 w-4" />
+              <span>导入模特</span>
+            </button>
+            <button type="button" class="models-top-primary" @click="createPanelOpen = true">
+              <span>+</span>
+              <span>创建模特</span>
             </button>
           </div>
         </section>
 
         <section class="models-layout">
-          <aside class="models-panel models-filter-panel">
-            <div class="models-panel__head">
-              <h2>筛选与资源</h2>
-              <p>生成新模特时，需要一个复刻项目作为产品上下文来源。</p>
-            </div>
-
-            <label class="models-field">
-              <span>搜索关键词</span>
-              <div class="models-input">
-                <Search class="h-4 w-4" />
-                <input v-model="search" type="text" placeholder="搜索名称、描述、市场、风格" />
-              </div>
-            </label>
-
-            <label class="models-field">
-              <span>状态筛选</span>
-              <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'status' }">
-                <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('status')">
-                  <span class="models-select-trigger__label">{{ statusFilterLabel }}</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-                <div v-if="openDropdown === 'status'" class="models-select-menu">
-                  <button
-                    v-for="option in statusOptions"
-                    :key="option.value"
-                    type="button"
-                    class="models-select-option"
-                    :class="{ active: statusFilter === option.value }"
-                    @click="statusFilter = option.value; closeDropdown()"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-              </div>
-            </label>
-
-            <div class="models-stats-grid">
-              <div v-for="item in statsCards" :key="item.label" class="models-stat-card">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-              </div>
-            </div>
-
-            <div class="models-divider"></div>
-
-            <div class="models-panel__subhead">
-              <h3>生成新模特</h3>
-              <p>来源复刻项目</p>
-            </div>
-
-            <label class="models-field">
-              <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'project' }">
-                <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('project')">
-                  <span class="models-select-trigger__label models-select-trigger__label--truncate">{{ sourceProjectLabel }}</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-                <div v-if="openDropdown === 'project'" class="models-select-menu models-select-menu--scroll">
-                  <button
-                    type="button"
-                    class="models-select-option"
-                    :class="{ active: sourceProjectId === '' }"
-                    @click="sourceProjectId = ''; closeDropdown()"
-                  >
-                    选择来源项目
-                  </button>
-                  <button
-                    v-for="project in projectOptions"
-                    :key="project.id"
-                    type="button"
-                    class="models-select-option models-select-option--multiline"
-                    :class="{ active: sourceProjectId === project.id }"
-                    @click="sourceProjectId = project.id; closeDropdown()"
-                  >
-                    {{ project.label }}
-                  </button>
-                </div>
-              </div>
-            </label>
-
-            <label class="models-field">
-              <span>商品类型</span>
-              <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'productType' }">
-                <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('productType')">
-                  <span class="models-select-trigger__label">{{ productTypeLabel }}</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-                <div v-if="openDropdown === 'productType'" class="models-select-menu">
-                  <button
-                    v-for="option in productTypeOptions"
-                    :key="option.value"
-                    type="button"
-                    class="models-select-option"
-                    :class="{ active: productType === option.value }"
-                    @click="productType = option.value; closeDropdown()"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-              </div>
-            </label>
-
-            <label class="models-field">
-              <span>产品卖点（可选）</span>
-              <textarea v-model="productPoints" placeholder="例如：轻盈、通勤、礼盒包装、细节质感"></textarea>
-            </label>
-
-            <div class="models-upload-grid">
-              <button type="button" @click="pickImageGroup('main')"><ImagePlus class="h-4 w-4" />主图</button>
-              <button type="button" @click="pickImageGroup('detail')"><ImagePlus class="h-4 w-4" />细节图</button>
-              <button type="button" @click="pickImageGroup('usage')"><ImagePlus class="h-4 w-4" />佩戴图</button>
-              <button type="button" @click="pickImageGroup('style')"><ImagePlus class="h-4 w-4" />风格图</button>
-            </div>
-
-            <div v-if="productDiagnosis" class="models-hint">{{ productDiagnosis }}</div>
-
-            <button class="models-primary-button" type="button" :disabled="busy || !sourceProjectId || !hasProductInput || !imageProviderReady" @click="generateModel">
-              <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
-              <Wand2 v-else class="h-4 w-4" />
-              <span>{{ busy ? '正在生成模特' : '生成新模特' }}</span>
-            </button>
-          </aside>
-
           <main class="models-panel models-catalog-panel">
-            <div class="models-catalog-head">
-              <div>
-                <h2>模特卡片库</h2>
-                <p>默认展示可用角色，失败项可通过状态筛选查看。</p>
-              </div>
-              <div class="models-catalog-tools">
-                <span class="models-catalog-tools__count">共 {{ counts.all }} 个模特</span>
-                <div class="models-custom-select models-custom-select--compact" :class="{ 'is-open': openDropdown === 'sort' }">
-                  <button type="button" class="models-select models-select--compact models-select-trigger" @click.stop="toggleDropdown('sort')">
-                    <span class="models-select-trigger__label">{{ sortModeLabel }}</span>
+            <div class="models-tabs">
+              <button
+                v-for="tab in tabItems"
+                :key="tab.key"
+                type="button"
+                class="models-tab"
+                :class="{ active: activeTab === tab.key }"
+                @click="activeTab = tab.key"
+              >
+                <span>{{ tab.label }}</span>
+                <strong>{{ tab.count }}</strong>
+              </button>
+            </div>
+
+            <div class="models-toolbar">
+              <div class="models-toolbar__filters">
+                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'status' }">
+                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('status')">
+                    <span class="models-select-trigger__label">{{ statusFilterLabel }}</span>
                     <ChevronDown class="h-4 w-4" />
                   </button>
-                  <div v-if="openDropdown === 'sort'" class="models-select-menu models-select-menu--compact">
+                  <div v-if="openDropdown === 'status'" class="models-select-menu">
                     <button
-                      v-for="option in sortOptions"
+                      v-for="option in statusOptions"
                       :key="option.value"
                       type="button"
                       class="models-select-option"
-                      :class="{ active: sortMode === option.value }"
-                      @click="sortMode = option.value; closeDropdown()"
+                      :class="{ active: statusFilter === option.value }"
+                      @click="statusFilter = option.value; closeDropdown()"
                     >
                       {{ option.label }}
                     </button>
                   </div>
                 </div>
+
+                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'productType' }">
+                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('productType')">
+                    <span class="models-select-trigger__label">{{ productTypeLabel }}</span>
+                    <ChevronDown class="h-4 w-4" />
+                  </button>
+                  <div v-if="openDropdown === 'productType'" class="models-select-menu">
+                    <button
+                      v-for="option in productTypeOptions"
+                      :key="option.value"
+                      type="button"
+                      class="models-select-option"
+                      :class="{ active: productType === option.value }"
+                      @click="productType = option.value; closeDropdown()"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <button type="button" class="models-select models-select--static">
+                  <span class="models-select-trigger__label">全部年龄</span>
+                  <ChevronDown class="h-4 w-4" />
+                </button>
+
+                <button type="button" class="models-select models-select--static">
+                  <span class="models-select-trigger__label">全部标签</span>
+                  <ChevronDown class="h-4 w-4" />
+                </button>
+
+                <button type="button" class="models-select models-select--static">
+                  <span class="models-select-trigger__label">支持语言</span>
+                  <ChevronDown class="h-4 w-4" />
+                </button>
+              </div>
+
+              <div class="models-toolbar__search">
+                <div class="models-input models-input--search">
+                  <Search class="h-4 w-4" />
+                  <input v-model="search" type="text" placeholder="搜索模特名称 / 标签" />
+                </div>
                 <div class="models-view-switch">
-                  <button type="button" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'"><Grid2x2 class="h-4 w-4" /></button>
-                  <button type="button" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'"><LayoutList class="h-4 w-4" /></button>
+                  <button type="button" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
+                    <Grid2x2 class="h-4 w-4" />
+                  </button>
+                  <button type="button" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">
+                    <LayoutList class="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </div>
 
+            <div class="models-catalog-head">
+              <div class="models-catalog-head__summary">共 {{ sortedLibrary.length }} 个模特 <span>|</span> 当前展示全部可用模特</div>
+            </div>
+
             <div v-if="pagedLibrary.length" class="models-card-grid" :class="{ 'is-list': viewMode === 'list' }">
-              <button
+              <article
                 v-for="(item, index) in pagedLibrary"
                 :key="item.id"
-                type="button"
                 class="models-library-card"
                 :class="{ active: selectedId === item.id }"
                 @click="selectedId = item.id"
               >
-                <div v-if="selectedId === item.id" class="models-library-card__check">
-                  <Check class="h-3.5 w-3.5" />
-                </div>
-
                 <div class="models-library-card__media">
+                  <div class="models-library-card__badge" :class="modelStatusTone(item.status)">
+                    {{ modelStatusText(item.status) }}
+                  </div>
+                  <button type="button" class="models-library-card__favorite" @click.stop="copyText(item.id, '模特 ID 已复制')">
+                    <Star class="h-4 w-4" />
+                  </button>
                   <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="mediaUrl(item.coverImagePath || item.imagePaths?.[0])" :alt="item.name" />
                   <div v-else class="models-library-card__fallback">AI</div>
+                  <div class="models-library-card__play">
+                    <ArrowRight class="h-4 w-4" />
+                  </div>
                 </div>
 
                 <div class="models-library-card__body">
                   <div class="models-library-card__head">
-                    <div class="models-library-card__title-wrap">
+                    <div class="models-library-card__title-row">
                       <h3>{{ modelTitle(item, index) }}</h3>
-                      <p class="models-library-card__meta">{{ modelSummary(item) }}</p>
+                      <div class="models-library-card__pro">Pro</div>
                     </div>
-                    <div class="models-library-card__head-actions">
-                      <span class="models-status-chip" :class="modelStatusTone(item.status)">{{ modelStatusText(item.status) }}</span>
-                      <div class="models-action-menu">
-                        <button type="button" class="models-library-card__more" @click.stop="toggleActionMenu(item.id)">
-                          <MoreHorizontal class="h-4 w-4" />
-                        </button>
-                        <div v-if="openActionMenu === item.id" class="models-action-menu__panel">
-                          <button type="button" @click="assignModelToProject(item)">设为当前项目模特</button>
-                          <button type="button" @click="openRenameDialog(item)">重命名</button>
-                          <button type="button" @click="copyText(item.name || modelTitle(item, index), '模特名称已复制')">复制名称</button>
-                          <button type="button" @click="revealModelImage(item)">定位封面文件</button>
-                          <button type="button" class="is-danger" @click="openDeleteDialog(item)">删除模特</button>
-                        </div>
+                    <div class="models-action-menu">
+                      <button type="button" class="models-library-card__more" @click.stop="toggleActionMenu(item.id)">
+                        <MoreHorizontal class="h-4 w-4" />
+                      </button>
+                      <div v-if="openActionMenu === item.id" class="models-action-menu__panel">
+                        <button type="button" @click="assignModelToProject(item)">设为当前项目模特</button>
+                        <button type="button" @click="openRenameDialog(item)">重命名</button>
+                        <button type="button" @click="copyText(item.name || modelTitle(item, index), '模特名称已复制')">复制名称</button>
+                        <button type="button" @click="revealModelImage(item)">定位封面文件</button>
+                        <button type="button" class="is-danger" @click="openDeleteDialog(item)">删除模特</button>
                       </div>
                     </div>
                   </div>
 
-                  <p class="models-library-card__desc">{{ modelDescriptionPreview(item.description) }}</p>
-
-                  <div class="models-tag-row">
-                    <span>{{ productTypeTag(item.productType) }}</span>
-                    <span>{{ item.gender || 'female' }}</span>
-                    <span>{{ item.ageRange || '20-28' }}</span>
+                  <div class="models-tag-row models-tag-row--compact">
+                    <span>{{ item.mood || '甜美' }}</span>
+                    <span>{{ item.sceneStyle || '清新' }}</span>
+                    <span>{{ item.skinTone || '自然' }}</span>
                   </div>
+
+                  <p class="models-library-card__meta">{{ modelMetrics(item) }}</p>
+                  <p class="models-library-card__desc">支持语言：{{ languageText(item) }}</p>
                 </div>
-              </button>
+              </article>
             </div>
             <div v-else class="models-empty-state">当前筛选条件下没有模特</div>
 
@@ -863,22 +830,25 @@ onBeforeUnmount(() => {
                 <button v-for="n in pages" :key="n" type="button" :class="{ active: page === n }" @click="setPage(n)">{{ n }}</button>
                 <button type="button" :disabled="page >= totalPages" @click="nextPage"><ArrowRight class="h-4 w-4" /></button>
               </div>
-              <div class="models-custom-select models-custom-select--compact" :class="{ 'is-open': openDropdown === 'pageSize' }">
-                <button type="button" class="models-select models-select--compact models-select-trigger" @click.stop="toggleDropdown('pageSize')">
-                  <span class="models-select-trigger__label">{{ pageSizeLabel }}</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-                <div v-if="openDropdown === 'pageSize'" class="models-select-menu models-select-menu--compact models-select-menu--align-right">
-                  <button
-                    v-for="option in pageSizeOptions"
-                    :key="option.value"
-                    type="button"
-                    class="models-select-option"
-                    :class="{ active: pageSize === option.value }"
-                    @click="pageSize = option.value; closeDropdown()"
-                  >
-                    {{ option.label }}
+              <div class="models-pagination__meta">
+                <span>共 {{ sortedLibrary.length }} 条</span>
+                <div class="models-custom-select models-custom-select--compact" :class="{ 'is-open': openDropdown === 'pageSize' }">
+                  <button type="button" class="models-select models-select--compact models-select-trigger" @click.stop="toggleDropdown('pageSize')">
+                    <span class="models-select-trigger__label">{{ pageSizeLabel }}</span>
+                    <ChevronDown class="h-4 w-4" />
                   </button>
+                  <div v-if="openDropdown === 'pageSize'" class="models-select-menu models-select-menu--compact models-select-menu--align-right">
+                    <button
+                      v-for="option in pageSizeOptions"
+                      :key="option.value"
+                      type="button"
+                      class="models-select-option"
+                      :class="{ active: pageSize === option.value }"
+                      @click="pageSize = option.value; closeDropdown()"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -887,74 +857,207 @@ onBeforeUnmount(() => {
       </div>
 
       <aside v-if="selectedModel" class="models-panel models-detail-panel">
-        <div class="models-detail-head">
-          <div>
-            <h2>模特详情</h2>
-            <p>查看封面、标签和状态，完整管理都在这里完成。</p>
-          </div>
-          <span class="models-status-chip" :class="modelStatusTone(selectedModel.status)">{{ modelStatusText(selectedModel.status) }}</span>
-        </div>
+        <div class="models-detail-card">
+          <div class="models-detail-card__top">
+            <div class="models-detail-card__media">
+              <img v-if="selectedModel.coverImagePath || selectedModel.imagePaths?.[0]" :src="mediaUrl(selectedModel.coverImagePath || selectedModel.imagePaths?.[0])" :alt="selectedModel.name" />
+            </div>
 
-        <div class="models-detail-image">
-          <img v-if="selectedModel.coverImagePath || selectedModel.imagePaths?.[0]" :src="mediaUrl(selectedModel.coverImagePath || selectedModel.imagePaths?.[0])" :alt="selectedModel.name" />
-        </div>
+            <div class="models-detail-card__top-copy">
+              <div class="models-detail-card__head">
+                <div>
+                  <div class="models-detail-card__title">
+                    <h3>{{ selectedModel.name || '未命名模特' }}</h3>
+                    <span>Pro</span>
+                  </div>
+                  <div class="models-detail-card__online">
+                    <i></i>
+                    <span>{{ modelStatusText(selectedModel.status) }}</span>
+                  </div>
+                </div>
+                <button type="button" class="models-detail-close" @click="selectedId = ''">
+                  <X class="h-4 w-4" />
+                </button>
+              </div>
 
-        <div class="models-detail-actions">
-          <button type="button" title="复制模特名称" @click="copyText(selectedModel.name || 'AI模特', '模特名称已复制')"><Star class="h-4 w-4" /></button>
-          <button type="button" title="打开封面图" @click="openModelImage(selectedModel)"><Download class="h-4 w-4" /></button>
-          <div class="models-action-menu">
-            <button type="button" title="更多操作" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)"><MoreHorizontal class="h-4 w-4" /></button>
-            <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="models-action-menu__panel models-action-menu__panel--detail">
-              <button type="button" @click="assignModelToProject(selectedModel)">设为当前项目模特</button>
-              <button type="button" @click="openRenameDialog(selectedModel)">重命名</button>
-              <button type="button" @click="revealModelImage(selectedModel)">定位封面文件</button>
-              <button type="button" class="is-danger" @click="openDeleteDialog(selectedModel)">删除模特</button>
+              <p class="models-detail-summary">{{ modelMetrics(selectedModel) }}</p>
+
+              <div class="models-tag-row models-tag-row--compact">
+                <span>{{ selectedModel.mood || '甜美' }}</span>
+                <span>{{ selectedModel.sceneStyle || '清新' }}</span>
+                <span>{{ selectedModel.skinTone || '自然' }}</span>
+                <span>{{ selectedModel.gender || '少女感' }}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="models-detail-title">
-          <h3>{{ selectedModel.name }}</h3>
-        </div>
-
-        <p class="models-detail-summary">{{ modelSummary(selectedModel) }} • {{ selectedModel.sceneStyle || 'soft daylight' }}</p>
-        <p class="models-detail-desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
-
-        <div class="models-tag-row">
-          <span>{{ productTypeTag(selectedModel.productType) }}</span>
-          <span>{{ selectedModel.gender || 'female' }}</span>
-          <span>{{ selectedModel.ageRange || '20-28' }}</span>
-        </div>
-
-        <div class="models-detail-time">
-          <div>
-            <span>创建时间</span>
-            <strong>{{ formatDate(selectedModel.createdAt) }}</strong>
+          <div class="models-detail-cta">
+            <button type="button" class="models-primary-button models-primary-button--inline" @click="openCloneWithModel(selectedModel)">使用模特</button>
+            <button type="button" class="models-secondary-button" @click="openRenameDialog(selectedModel)">编辑信息</button>
+            <div class="models-action-menu">
+              <button type="button" class="models-detail-more" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)">
+                <MoreHorizontal class="h-4 w-4" />
+              </button>
+              <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="models-action-menu__panel models-action-menu__panel--detail">
+                <button type="button" @click="assignModelToProject(selectedModel)">设为当前项目模特</button>
+                <button type="button" @click="openModelImage(selectedModel)">打开封面图</button>
+                <button type="button" @click="revealModelImage(selectedModel)">定位封面文件</button>
+                <button type="button" class="is-danger" @click="openDeleteDialog(selectedModel)">删除模特</button>
+              </div>
+            </div>
           </div>
-          <div>
-            <span>更新时间</span>
-            <strong>{{ formatDate(selectedModel.updatedAt) }}</strong>
+
+          <div class="models-detail-tabs">
+            <button type="button" class="active">模特信息</button>
+            <button type="button">声音克隆</button>
+            <button type="button">形象管理</button>
+            <button type="button">使用记录</button>
+          </div>
+        </div>
+
+        <div class="models-detail-section">
+          <h4>基本信息</h4>
+          <div class="models-detail-time">
+            <div><span>模特 ID</span><strong>{{ selectedModel.id || 'model_001' }}</strong></div>
+            <div><span>创建时间</span><strong>{{ formatDate(selectedModel.createdAt) }}</strong></div>
+            <div><span>更新时间</span><strong>{{ formatDate(selectedModel.updatedAt) }}</strong></div>
+            <div><span>支持语言</span><strong>{{ languageText(selectedModel) }}</strong></div>
+            <div><span>适用场景</span><strong>穿搭、美妆、生活、产品展示</strong></div>
+            <div><span>授权类型</span><strong>企业授权</strong></div>
+            <div><span>使用状态</span><strong class="is-available">可用</strong></div>
+          </div>
+        </div>
+
+        <div class="models-detail-section">
+          <h4>标签</h4>
+          <div class="models-tag-row">
+            <span>{{ selectedModel.mood || '甜美' }}</span>
+            <span>{{ selectedModel.sceneStyle || '清新' }}</span>
+            <span>{{ selectedModel.skinTone || '自然' }}</span>
+            <span>{{ selectedModel.gender || '少女感' }}</span>
+            <span>{{ productTypeTag(selectedModel.productType) }}</span>
+            <button type="button" class="models-link-button">+ 添加标签</button>
           </div>
         </div>
 
         <div v-if="selectedModel.error" class="models-hint is-error">{{ selectedModel.error }}</div>
 
-        <div class="models-detail-footer">
-          <button type="button" class="models-primary-button models-primary-button--inline" @click="openCloneWithModel(selectedModel)">查看详情</button>
-          <button type="button" class="models-secondary-button" @click.stop="toggleActionMenu(`footer:${selectedModel.id}`)">
-            <span>更多操作</span>
-            <ChevronDown class="h-4 w-4" />
-          </button>
-          <div v-if="openActionMenu === `footer:${selectedModel.id}`" class="models-action-menu__panel models-action-menu__panel--footer">
-            <button type="button" @click="assignModelToProject(selectedModel)">设为当前项目模特</button>
-            <button type="button" @click="openModelImage(selectedModel)">打开封面图</button>
-            <button type="button" @click="revealModelImage(selectedModel)">定位封面文件</button>
-            <button type="button" @click="openRenameDialog(selectedModel)">重命名</button>
-            <button type="button" class="is-danger" @click="openDeleteDialog(selectedModel)">删除模特</button>
+        <div class="models-detail-section">
+          <h4>简介</h4>
+          <p class="models-detail-desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
+        </div>
+
+        <div class="models-detail-section">
+          <h4>作品预览</h4>
+          <div class="models-preview-strip">
+            <div v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)" :key="`${selectedModel.id}-${imageIndex}`" class="models-preview-strip__item">
+              <img :src="mediaUrl(image)" :alt="`${selectedModel.name}-${imageIndex}`" />
+            </div>
           </div>
         </div>
       </aside>
     </section>
+
+    <transition name="fade">
+      <div v-if="createPanelOpen" class="models-dialog-backdrop" @click="closeCreatePanel">
+        <div class="models-dialog models-dialog--wide" @click.stop>
+          <div class="models-dialog__head">
+            <h3>创建模特</h3>
+            <button type="button" class="models-dialog__close" @click="closeCreatePanel">
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+
+          <div class="models-create-grid">
+            <div class="models-create-column">
+              <div class="models-panel__subhead">
+                <h3>来源项目</h3>
+                <p>选择一个复刻项目，作为商品和风格素材来源。</p>
+              </div>
+
+              <label class="models-field">
+                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'project' }">
+                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('project')">
+                    <span class="models-select-trigger__label">{{ sourceProjectLabel }}</span>
+                    <ChevronDown class="h-4 w-4" />
+                  </button>
+                  <div v-if="openDropdown === 'project'" class="models-select-menu models-select-menu--scroll">
+                    <button type="button" class="models-select-option" :class="{ active: sourceProjectId === '' }" @click="sourceProjectId = ''; closeDropdown()">选择来源项目</button>
+                    <button
+                      v-for="project in projectOptions"
+                      :key="project.id"
+                      type="button"
+                      class="models-select-option models-select-option--multiline"
+                      :class="{ active: sourceProjectId === project.id }"
+                      @click="sourceProjectId = project.id; closeDropdown()"
+                    >
+                      {{ project.label }}
+                    </button>
+                  </div>
+                </div>
+              </label>
+
+              <label class="models-field">
+                <span>商品类型</span>
+                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'productType' }">
+                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('productType')">
+                    <span class="models-select-trigger__label">{{ productTypeLabel }}</span>
+                    <ChevronDown class="h-4 w-4" />
+                  </button>
+                  <div v-if="openDropdown === 'productType'" class="models-select-menu">
+                    <button
+                      v-for="option in productTypeOptions"
+                      :key="option.value"
+                      type="button"
+                      class="models-select-option"
+                      :class="{ active: productType === option.value }"
+                      @click="productType = option.value; closeDropdown()"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
+              </label>
+
+              <label class="models-field">
+                <span>商品卖点</span>
+                <textarea v-model="productPoints" placeholder="例如：轻盈、通勤、礼盒包装、细节质感"></textarea>
+              </label>
+            </div>
+
+            <div class="models-create-column">
+              <div class="models-panel__subhead">
+                <h3>参考素材</h3>
+                <p>上传主图、细节图、使用图与风格图，用于生成模特身份包。</p>
+              </div>
+
+              <div class="models-upload-grid">
+                <button type="button" @click="pickImageGroup('main')"><ImagePlus class="h-4 w-4" />主图</button>
+                <button type="button" @click="pickImageGroup('detail')"><ImagePlus class="h-4 w-4" />细节图</button>
+                <button type="button" @click="pickImageGroup('usage')"><ImagePlus class="h-4 w-4" />佩戴图</button>
+                <button type="button" @click="pickImageGroup('style')"><ImagePlus class="h-4 w-4" />风格图</button>
+              </div>
+
+              <div class="models-create-stats">
+                <div class="models-stat-card"><span>主图</span><strong>{{ productMainImages.length }}</strong></div>
+                <div class="models-stat-card"><span>细节图</span><strong>{{ productDetailImages.length }}</strong></div>
+                <div class="models-stat-card"><span>佩戴图</span><strong>{{ productUsageImages.length }}</strong></div>
+                <div class="models-stat-card"><span>风格图</span><strong>{{ styleReferenceImages.length }}</strong></div>
+              </div>
+
+              <div v-if="productDiagnosis" class="models-hint">{{ productDiagnosis }}</div>
+              <div v-if="imageProviderMissingText" class="models-hint is-error">{{ imageProviderMissingText }}</div>
+
+              <button class="models-primary-button" type="button" :disabled="busy || !sourceProjectId || !hasProductInput" @click="generateModel">
+                <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
+                <Wand2 v-else class="h-4 w-4" />
+                <span>{{ busy ? '正在生成模特' : '生成新模特' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <transition name="fade">
       <div v-if="dialogMode && dialogTarget" class="models-dialog-backdrop" @click="closeDialog">
@@ -977,9 +1080,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-else class="models-dialog__body">
-            <p class="models-dialog__desc">
-              确认删除模特“{{ dialogTarget.name || '未命名模特' }}”吗？这会删除角色库记录和素材目录，但不会删除历史项目产物。
-            </p>
+            <p class="models-dialog__desc">确认删除模特“{{ dialogTarget.name || '未命名模特' }}”吗？这会删除角色库记录和素材目录，但不会删除历史项目产物。</p>
           </div>
 
           <div class="models-dialog__footer">
@@ -994,13 +1095,7 @@ onBeforeUnmount(() => {
               <LoaderCircle v-if="dialogBusy" class="h-4 w-4 animate-spin" />
               <span>{{ dialogBusy ? '保存中' : '保存名称' }}</span>
             </button>
-            <button
-              v-else
-              type="button"
-              class="models-danger-button"
-              :disabled="dialogBusy"
-              @click="deleteModel(dialogTarget)"
-            >
+            <button v-else type="button" class="models-danger-button" :disabled="dialogBusy" @click="deleteModel(dialogTarget)">
               <LoaderCircle v-if="dialogBusy" class="h-4 w-4 animate-spin" />
               <span>{{ dialogBusy ? '删除中' : '确认删除' }}</span>
             </button>
@@ -1021,7 +1116,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .models-library-page {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -1031,252 +1126,144 @@ onBeforeUnmount(() => {
 
 .models-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 346px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 344px;
+  gap: 18px;
   align-items: start;
   min-height: 0;
 }
 
-.models-shell__main {
+.models-shell__main,
+.models-layout {
   display: grid;
   gap: 12px;
   min-width: 0;
   min-height: 0;
 }
 
-.models-hero,
-.models-panel {
-  border: 1px solid rgba(108, 128, 158, 0.14);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(17, 28, 44, 0.98), rgba(11, 19, 33, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 14px 40px rgba(0, 0, 0, 0.18);
+.models-panel,
+.models-hero {
+  border: 1px solid rgba(81, 99, 146, 0.24);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 84% 10%, rgba(95, 74, 240, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(12, 20, 36, 0.98), rgba(10, 18, 34, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 42px rgba(2, 7, 18, 0.24);
 }
 
 .models-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  align-items: center;
-  min-height: 142px;
-  padding: 18px 28px 18px 30px;
-  background:
-    radial-gradient(circle at 76% 46%, rgba(116, 88, 255, 0.15), transparent 22%),
-    linear-gradient(180deg, rgba(17, 28, 44, 0.98), rgba(11, 19, 33, 0.98));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px 16px;
 }
 
-.models-hero__eyebrow {
-  color: #9e8cff;
-  font-size: 11px;
+.models-hero__copy h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  line-height: 1.12;
 }
 
-.models-hero h1 {
-  margin-top: 6px;
-  font-size: 31px;
-  font-weight: 800;
-  color: #ffffff;
+.models-hero__copy p {
+  max-width: 700px;
+  margin: 8px 0 0;
+  color: #a8b6cb;
+  font-size: 12px;
+  line-height: 1.65;
 }
 
-.models-hero p {
-  max-width: 660px;
-  margin-top: 9px;
-  color: #9aa9bb;
-  font-size: 13px;
-  line-height: 1.62;
+.models-hero__actions {
+  display: flex;
+  gap: 12px;
 }
 
-.models-hero__visual {
-  position: relative;
-  min-height: 106px;
-  overflow: hidden;
-}
-
-.models-hero__orb {
-  position: absolute;
-  inset: 2px 54px 4px 74px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 45% 42%, rgba(150, 126, 255, 0.34), transparent 26%),
-    radial-gradient(circle at center, rgba(113, 83, 255, 0.28), transparent 62%);
-  filter: blur(20px);
-}
-
-.models-hero__ring {
-  position: absolute;
-  top: 14px;
-  left: 104px;
-  width: 184px;
-  height: 62px;
-  border: 1px solid rgba(139, 111, 255, 0.34);
-  border-radius: 999px;
-  transform: rotate(8deg);
-  box-shadow: 0 0 24px rgba(109, 90, 247, 0.1);
-}
-
-.models-hero__ring--secondary {
-  top: 10px;
-  left: 88px;
-  width: 206px;
-  height: 70px;
-  opacity: 0.4;
-  transform: rotate(-7deg);
-}
-
-.models-hero__beam {
-  position: absolute;
-  height: 2px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgba(161, 136, 255, 0.84), transparent);
-  box-shadow: 0 0 20px rgba(126, 99, 255, 0.24);
-}
-
-.models-hero__beam--one {
-  top: 36px;
-  left: 116px;
-  width: 156px;
-  transform: rotate(14deg);
-}
-
-.models-hero__beam--two {
-  top: 49px;
-  left: 124px;
-  width: 142px;
-  transform: rotate(-24deg);
-  opacity: 0.72;
-}
-
-.models-hero__figure {
-  position: absolute;
-  top: -10px;
-  left: 156px;
-  width: 84px;
-  height: 114px;
-  border-radius: 999px 999px 30px 30px;
-  background:
-    radial-gradient(circle at 48% 18%, rgba(230, 236, 255, 0.86), transparent 14%),
-    radial-gradient(circle at 50% 48%, rgba(171, 148, 255, 0.24), transparent 42%),
-    linear-gradient(180deg, rgba(168, 145, 255, 0.98) 0%, rgba(84, 56, 208, 0.98) 100%);
-  box-shadow: 0 0 58px rgba(110, 87, 245, 0.4);
-}
-
-.models-hero__figure::before,
-.models-hero__figure::after {
-  content: '';
-  position: absolute;
-  background: linear-gradient(180deg, rgba(175, 157, 255, 0.8), rgba(88, 58, 212, 0.76));
-}
-
-.models-hero__figure::before {
-  top: 9px;
-  left: 31px;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-}
-
-.models-hero__figure::after {
-  top: 32px;
-  left: 12px;
-  width: 58px;
-  height: 52px;
-  border-radius: 28px 28px 18px 18px;
-  clip-path: polygon(0 14%, 100% 14%, 84% 100%, 16% 100%);
-}
-
-.models-hero__action {
-  position: absolute;
-  right: 8px;
-  bottom: 0;
+.models-ghost-button,
+.models-top-primary,
+.models-primary-button,
+.models-secondary-button,
+.models-danger-button,
+.models-link-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  height: 40px;
-  padding: 0 16px 0 18px;
-  border: 1px solid rgba(112, 125, 164, 0.16);
-  border-radius: 13px;
-  background: linear-gradient(180deg, rgba(38, 48, 70, 0.94), rgba(26, 36, 58, 0.94));
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
-.models-layout {
-  display: grid;
-  grid-template-columns: 276px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-  min-height: 0;
+.models-ghost-button {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(100, 118, 162, 0.3);
+  background: rgba(18, 27, 48, 0.9);
+  color: #eff5ff;
+}
+
+.models-top-primary,
+.models-primary-button {
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid rgba(157, 132, 255, 0.34);
+  background: linear-gradient(135deg, #5e43f3, #7d4fff);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(94, 67, 243, 0.28);
 }
 
 .models-panel {
-  padding: 16px;
-}
-
-.models-filter-panel {
-  padding: 14px 14px 14px;
+  padding: 18px;
 }
 
 .models-catalog-panel {
-  padding: 14px 14px 12px;
-  min-height: 0;
+  padding: 0;
   overflow: visible;
 }
 
-.models-detail-panel {
-  padding: 14px 14px 16px;
-  position: sticky;
-  top: 0;
+.models-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(75, 96, 139, 0.22);
 }
 
-.models-detail-head {
-  align-items: flex-start;
-}
-
-.models-detail-head .models-status-chip {
-  margin-top: 2px;
-}
-
-.models-panel__head h2,
-.models-panel__subhead h3,
-.models-catalog-head h2,
-.models-detail-head h2 {
-  color: #ffffff;
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.models-detail-head h2 {
-  font-size: 16px;
-  line-height: 1.1;
-}
-
-.models-panel__head p,
-.models-panel__subhead p,
-.models-catalog-head p,
-.models-detail-head p {
-  margin-top: 6px;
-  color: #7f93aa;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.models-detail-head p {
-  max-width: 220px;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.models-field {
-  display: grid;
-  gap: 6px;
-  margin-top: 9px;
-}
-
-.models-field span {
-  color: #9caec3;
-  font-size: 12px;
+.models-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: #b4c0d4;
+  font-size: 14px;
   font-weight: 700;
+}
+
+.models-tab strong {
+  color: #dfe7f5;
+  font-weight: 700;
+}
+
+.models-tab.active {
+  color: #a98cff;
+  box-shadow: inset 0 -2px 0 #6c53ff;
+}
+
+.models-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 12px;
+}
+
+.models-toolbar__filters,
+.models-toolbar__search,
+.models-pagination__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .models-custom-select {
@@ -1290,38 +1277,55 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   width: 100%;
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  border-radius: 14px;
-  background: rgba(12, 21, 35, 0.92);
+  border: 1px solid rgba(81, 99, 146, 0.24);
+  border-radius: 12px;
+  background: rgba(10, 18, 33, 0.94);
   color: #eef4ff;
 }
 
-.models-input,
-.models-select {
-  height: 38px;
-  padding: 0 12px;
-}
-
+.models-select,
 .models-input {
-  overflow: hidden;
-}
-
-.models-input svg {
-  flex: 0 0 auto;
-  color: #a6b5c8;
+  height: 34px;
+  padding: 0 12px;
 }
 
 .models-select {
   justify-content: space-between;
+  min-width: 104px;
 }
 
-.models-select-trigger {
-  cursor: pointer;
+.models-select--compact {
+  min-width: 118px;
 }
 
-.models-select-trigger svg {
-  flex: 0 0 auto;
-  color: #d8e1ed;
+.models-select--static {
+  cursor: default;
+}
+
+.models-input--search {
+  min-width: 210px;
+  width: 210px;
+}
+
+.models-input input,
+.models-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #eef4ff;
+  outline: none;
+}
+
+.models-input input::placeholder,
+.models-field textarea::placeholder {
+  color: #7587a2;
+}
+
+.models-field textarea {
+  min-height: 92px;
+  padding: 12px 14px;
+  resize: none;
 }
 
 .models-select-trigger__label {
@@ -1329,14 +1333,10 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: hidden;
   color: #edf4ff;
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.models-select-trigger__label--truncate {
-  max-width: 100%;
 }
 
 .models-select-menu {
@@ -1348,9 +1348,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 4px;
   padding: 8px;
-  border: 1px solid rgba(108, 128, 158, 0.16);
+  border: 1px solid rgba(81, 99, 146, 0.3);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(17, 28, 44, 0.99), rgba(11, 19, 33, 0.99));
+  background: linear-gradient(180deg, rgba(16, 24, 41, 0.99), rgba(11, 18, 33, 0.99));
   box-shadow: 0 18px 48px rgba(2, 6, 14, 0.38);
 }
 
@@ -1360,7 +1360,6 @@ onBeforeUnmount(() => {
 
 .models-select-menu--align-right {
   left: auto;
-  min-width: 132px;
 }
 
 .models-select-menu--scroll {
@@ -1369,7 +1368,6 @@ onBeforeUnmount(() => {
 }
 
 .models-select-option {
-  width: 100%;
   min-height: 36px;
   padding: 0 12px;
   border: 0;
@@ -1378,7 +1376,6 @@ onBeforeUnmount(() => {
   color: #dce6f3;
   font-size: 12px;
   text-align: left;
-  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .models-select-option:hover {
@@ -1387,207 +1384,49 @@ onBeforeUnmount(() => {
 
 .models-select-option.active {
   background: linear-gradient(135deg, rgba(110, 87, 245, 0.92), rgba(139, 99, 255, 0.92));
-  color: #ffffff;
+  color: #fff;
 }
 
 .models-select-option--multiline {
-  min-height: 42px;
-  line-height: 1.4;
+  line-height: 1.5;
   white-space: normal;
 }
 
-.models-input input,
-.models-select select,
-.models-field textarea {
-  width: 100%;
-  background: transparent;
-  outline: none;
-}
-
-.models-input input {
-  min-width: 0;
-  flex: 1;
-}
-
-.models-field textarea {
-  min-height: 74px;
-  padding: 10px 12px;
-  resize: none;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.models-select--compact {
-  min-width: 104px;
-  height: 34px;
-}
-
-.models-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.models-stat-card {
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  border-radius: 12px;
-  background: rgba(20, 31, 48, 0.76);
-  padding: 10px 11px;
-}
-
-.models-stat-card span {
-  display: block;
-  color: #95a9c0;
-  font-size: 12px;
-}
-
-.models-stat-card strong {
-  display: block;
-  margin-top: 7px;
-  color: #ffffff;
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.models-divider {
-  height: 1px;
-  margin: 10px 0 0;
-  background: rgba(108, 128, 158, 0.12);
-}
-
-.models-upload-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.models-upload-grid button,
-.models-view-switch button,
-.models-pagination__nav button,
-.models-detail-actions > button,
-.models-detail-actions > .models-action-menu > button {
-  display: inline-flex;
+.models-catalog-head {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  border-radius: 12px;
-  background: rgba(17, 29, 46, 0.88);
-  color: #dbe4f0;
+  justify-content: space-between;
+  padding: 0 18px 14px;
 }
 
-.models-upload-grid button {
-  height: 32px;
+.models-catalog-head__summary {
+  color: #f4f8ff;
   font-size: 12px;
   font-weight: 700;
 }
 
-.models-hint {
-  margin-top: 12px;
-  border: 1px solid rgba(245, 158, 11, 0.18);
-  border-radius: 14px;
-  background: rgba(76, 48, 10, 0.22);
-  padding: 10px 12px;
-  color: #f4cf92;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.models-hint.is-error {
-  border-color: rgba(239, 68, 68, 0.22);
-  background: rgba(82, 20, 31, 0.24);
-  color: #f4b6bb;
-}
-
-.models-primary-button,
-.models-secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.models-primary-button {
-  width: 100%;
-  height: 42px;
-  margin-top: 10px;
-  border: 1px solid rgba(157, 132, 255, 0.28);
-  background: linear-gradient(135deg, #6e57f5, #8b63ff);
-  color: #ffffff;
-  box-shadow: 0 12px 28px rgba(89, 64, 216, 0.26);
-}
-
-.models-primary-button--inline {
-  width: auto;
-  min-width: 168px;
-  margin-top: 0;
-}
-
-.models-secondary-button {
-  height: 46px;
-  min-width: 142px;
-  padding: 0 18px;
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  background: rgba(21, 33, 50, 0.94);
-  color: #dbe4f0;
-}
-
-.models-secondary-button--dialog,
-.models-primary-button--dialog,
-.models-danger-button {
-  min-width: 118px;
-  height: 40px;
-  margin-top: 0;
-  border-radius: 12px;
-}
-
-.models-danger-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
-  border: 1px solid rgba(235, 98, 128, 0.26);
-  background: linear-gradient(135deg, rgba(169, 36, 67, 0.94), rgba(208, 62, 92, 0.94));
-  color: #fff6f8;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.models-catalog-head,
-.models-detail-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.models-catalog-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #8ea0b7;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.models-catalog-tools__count {
-  max-width: 74px;
-  color: #9cade0;
-  font-size: 11px;
-  line-height: 1.25;
-  white-space: normal;
-  text-align: right;
+.models-catalog-head__summary span {
+  margin: 0 8px;
+  color: #6f80a0;
 }
 
 .models-view-switch {
   display: inline-flex;
-  gap: 6px;
+  gap: 8px;
+}
+
+.models-view-switch button,
+.models-pagination__nav button,
+.models-library-card__more,
+.models-detail-more,
+.models-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(81, 99, 146, 0.22);
+  border-radius: 12px;
+  background: rgba(16, 25, 44, 0.94);
+  color: #dbe4f0;
 }
 
 .models-view-switch button {
@@ -1597,16 +1436,16 @@ onBeforeUnmount(() => {
 
 .models-view-switch button.active,
 .models-pagination__nav button.active {
+  background: linear-gradient(135deg, rgba(94, 67, 243, 0.96), rgba(125, 79, 255, 0.96));
   border-color: rgba(157, 132, 255, 0.34);
-  background: linear-gradient(135deg, rgba(110, 87, 245, 0.96), rgba(139, 99, 255, 0.96));
-  color: #ffffff;
+  color: #fff;
 }
 
 .models-card-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0 18px 18px;
 }
 
 .models-card-grid.is-list {
@@ -1616,54 +1455,76 @@ onBeforeUnmount(() => {
 .models-library-card {
   position: relative;
   display: grid;
-  grid-template-columns: 102px minmax(0, 1fr);
-  gap: 12px;
-  min-height: 170px;
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  border-radius: 15px;
-  background: rgba(16, 28, 44, 0.82);
-  padding: 10px;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  border: 1px solid rgba(81, 99, 146, 0.18);
+  border-radius: 14px;
+  background: rgba(12, 21, 38, 0.92);
+  padding: 6px;
   text-align: left;
+  min-width: 0;
+  cursor: pointer;
 }
 
 .models-library-card.active {
-  border-color: rgba(138, 104, 255, 0.5);
-  background:
-    radial-gradient(circle at right top, rgba(110, 87, 245, 0.22), transparent 28%),
-    linear-gradient(135deg, rgba(98, 72, 222, 0.28), rgba(16, 28, 44, 0.94));
-  box-shadow:
-    inset 0 0 0 1px rgba(161, 138, 255, 0.18),
-    0 0 0 1px rgba(103, 77, 240, 0.16),
-    0 10px 24px rgba(67, 45, 162, 0.16);
-}
-
-.models-library-card__check {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 28px;
-  height: 28px;
-  border-top-left-radius: 16px;
-  border-bottom-right-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #6f58f6, #8e63ff);
-  color: #fff;
+  border-color: rgba(123, 95, 255, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(135, 111, 255, 0.16), 0 0 0 1px rgba(103, 77, 240, 0.16);
 }
 
 .models-library-card__media {
+  position: relative;
   overflow: hidden;
-  width: 102px;
-  height: 140px;
-  border-radius: 11px;
+  aspect-ratio: 0.8;
+  border-radius: 12px;
   background: rgba(8, 16, 28, 0.92);
 }
 
 .models-library-card__media img,
-.models-detail-image img {
+.models-detail-card__media img,
+.models-preview-strip__item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.models-library-card__badge,
+.models-library-card__favorite,
+.models-library-card__play {
+  position: absolute;
+  z-index: 2;
+}
+
+.models-library-card__badge {
+  top: 10px;
+  left: 10px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(36, 48, 72, 0.84);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.models-library-card__favorite,
+.models-library-card__play {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(14, 22, 40, 0.74);
+  color: #fff;
+  backdrop-filter: blur(10px);
+}
+
+.models-library-card__favorite {
+  top: 10px;
+  right: 10px;
+}
+
+.models-library-card__play {
+  right: 12px;
+  bottom: 12px;
 }
 
 .models-library-card__fallback {
@@ -1671,54 +1532,120 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   place-items: center;
+  color: rgba(226, 235, 244, 0.38);
   font-size: 30px;
   font-weight: 800;
-  color: rgba(226, 235, 244, 0.38);
 }
 
-.models-library-card__head {
+.models-library-card__body {
+  display: grid;
+  gap: 7px;
+  padding: 2px 4px 4px;
+}
+
+.models-library-card__head,
+.models-detail-card__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 10px;
+}
+
+.models-library-card__title-row,
+.models-detail-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.models-library-card__title-row h3,
+.models-detail-card__title h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.models-library-card__pro,
+.models-detail-card__title span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 8px;
+  background: rgba(101, 75, 231, 0.34);
+  color: #d9ceff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.models-library-card__meta,
+.models-library-card__desc,
+.models-detail-summary,
+.models-detail-desc {
+  margin: 0;
+  color: #a8b6cb;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.models-tag-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.models-library-card__title-wrap {
-  display: grid;
-  gap: 4px;
+.models-tag-row span,
+.models-link-button {
+  border: 1px solid rgba(91, 105, 154, 0.2);
+  border-radius: 8px;
+  background: rgba(21, 31, 51, 0.9);
+  padding: 4px 7px;
+  color: #dbe7f5;
+  font-size: 11px;
+  font-weight: 700;
 }
 
-.models-library-card__title-wrap h3,
-.models-detail-title h3 {
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.15;
+.models-tag-row--compact span {
+  font-size: 11px;
 }
 
-.models-library-card__head-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  align-self: flex-start;
+.models-link-button {
+  background: rgba(24, 35, 56, 0.64);
+}
+
+.models-library-card__badge.is-done {
+  background: rgba(34, 197, 94, 0.18);
+  color: #aaf0c1;
+}
+
+.models-library-card__badge.is-generating {
+  background: rgba(110, 87, 245, 0.18);
+  color: #d8cdff;
+}
+
+.models-library-card__badge.is-failed {
+  background: rgba(239, 68, 68, 0.18);
+  color: #ffc6ca;
+}
+
+.models-library-card__badge.is-idle {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bed4ff;
 }
 
 .models-action-menu {
   position: relative;
-  flex: 0 0 auto;
 }
 
-.models-library-card__more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  background: rgba(38, 50, 72, 0.98);
-  color: #d2deea;
-  flex: 0 0 auto;
+.models-library-card__more,
+.models-detail-more,
+.models-detail-close {
+  width: 36px;
+  height: 36px;
 }
 
 .models-action-menu__panel {
@@ -1730,21 +1657,14 @@ onBeforeUnmount(() => {
   min-width: 168px;
   gap: 4px;
   padding: 8px;
-  border: 1px solid rgba(108, 128, 158, 0.16);
+  border: 1px solid rgba(81, 99, 146, 0.3);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(17, 28, 44, 0.99), rgba(11, 19, 33, 0.99));
+  background: linear-gradient(180deg, rgba(16, 24, 41, 0.99), rgba(11, 18, 33, 0.99));
   box-shadow: 0 18px 48px rgba(2, 6, 14, 0.4);
 }
 
 .models-action-menu__panel--detail {
   top: calc(100% + 10px);
-  right: 0;
-}
-
-.models-action-menu__panel--footer {
-  bottom: calc(100% + 8px);
-  right: 0;
-  top: auto;
 }
 
 .models-action-menu__panel button {
@@ -1766,81 +1686,11 @@ onBeforeUnmount(() => {
   color: #ffb8c1;
 }
 
-.models-action-menu__panel button.is-danger:hover {
-  background: rgba(152, 34, 58, 0.22);
-}
-
-.models-library-card__meta {
-  color: #c5d1df;
-  font-size: 10px;
-  line-height: 1.28;
-  opacity: 0.88;
-}
-
-.models-library-card__desc,
-.models-detail-desc {
-  margin-top: 6px;
-  color: #9eb1c4;
-  font-size: 12px;
-  line-height: 1.5;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.models-tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.models-tag-row span {
-  border: 1px solid rgba(108, 128, 158, 0.12);
-  border-radius: 999px;
-  background: rgba(23, 36, 55, 0.88);
-  padding: 3px 8px;
-  color: #dbe7f5;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.models-status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.models-status-chip.is-done {
-  background: rgba(34, 197, 94, 0.18);
-  color: #aaf0c1;
-}
-
-.models-status-chip.is-generating {
-  background: rgba(110, 87, 245, 0.18);
-  color: #d8cdff;
-}
-
-.models-status-chip.is-failed {
-  background: rgba(239, 68, 68, 0.18);
-  color: #ffc6ca;
-}
-
-.models-status-chip.is-idle {
-  background: rgba(59, 130, 246, 0.18);
-  color: #bed4ff;
-}
-
 .models-empty-state {
   display: grid;
   place-items: center;
-  min-height: 420px;
-  margin-top: 14px;
+  min-height: 320px;
+  margin: 0 18px 18px;
   border: 1px dashed rgba(108, 128, 158, 0.16);
   border-radius: 18px;
   color: #7d90a8;
@@ -1851,7 +1701,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 10px;
+  padding: 4px 18px 18px;
 }
 
 .models-pagination__nav {
@@ -1861,83 +1711,139 @@ onBeforeUnmount(() => {
 }
 
 .models-pagination__nav button {
-  width: 38px;
-  height: 38px;
-  font-size: 13px;
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
   font-weight: 800;
 }
 
-.models-detail-image {
+.models-pagination__meta span {
+  color: #8ea2bb;
+  font-size: 12px;
+}
+
+.models-detail-panel {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 14px;
+  padding: 14px 14px 16px;
+}
+
+.models-detail-card {
+  border: 1px solid rgba(81, 99, 146, 0.22);
+  border-radius: 16px;
+  background: rgba(8, 16, 30, 0.76);
+  padding: 14px;
+}
+
+.models-detail-card__top {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.models-detail-card__media {
   overflow: hidden;
-  margin-top: 10px;
-  border-radius: 14px;
-  aspect-ratio: 1 / 1.14;
+  width: 104px;
+  height: 114px;
+  border-radius: 12px;
   background: rgba(8, 16, 28, 0.92);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 10px 30px rgba(3, 8, 15, 0.18);
 }
 
-.models-detail-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 7px;
-  margin-top: -42px;
-  padding-right: 12px;
-  position: relative;
-  z-index: 2;
+.models-detail-card__top-copy {
+  min-width: 0;
 }
 
-.models-detail-actions > button,
-.models-detail-actions > .models-action-menu > button {
-  width: 32px;
-  height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(33, 41, 58, 0.94);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8px 18px rgba(3, 8, 15, 0.28);
-}
-
-.models-detail-title {
-  display: flex;
+.models-detail-card__online {
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  color: #d7e0ef;
+  font-size: 12px;
+}
+
+.models-detail-card__online i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+}
+
+.models-detail-cta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px;
   gap: 10px;
-  margin-top: 18px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(108, 128, 158, 0.1);
+  margin-top: 12px;
 }
 
-.models-detail-summary {
-  margin-top: 6px;
-  color: #bcc9d7;
+.models-primary-button {
+  width: 100%;
+  height: 36px;
+}
+
+.models-primary-button--inline,
+.models-secondary-button {
+  width: 100%;
+  height: 36px;
+}
+
+.models-secondary-button {
+  border: 1px solid rgba(81, 99, 146, 0.22);
+  background: rgba(21, 33, 50, 0.94);
+  color: #dbe4f0;
+}
+
+.models-detail-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(81, 99, 146, 0.18);
+}
+
+.models-detail-tabs button {
+  border: 0;
+  background: transparent;
+  color: #b2bfd3;
   font-size: 11px;
-  line-height: 1.55;
-  opacity: 0.92;
+  font-weight: 700;
+  text-align: left;
 }
 
-.models-detail-desc {
-  -webkit-line-clamp: 4;
+.models-detail-tabs button.active {
+  color: #a98cff;
+  box-shadow: inset 0 -2px 0 #6c53ff;
+}
+
+.models-detail-section {
+  padding: 0 4px;
+}
+
+.models-detail-section h4 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .models-detail-time {
   display: grid;
   gap: 10px;
-  margin-top: 16px;
-  padding-top: 15px;
-  border-top: 1px solid rgba(108, 128, 158, 0.12);
 }
 
 .models-detail-time div {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: 78px minmax(0, 1fr);
   gap: 10px;
+  align-items: center;
 }
 
 .models-detail-time span {
   color: #8397b0;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .models-detail-time strong {
@@ -1947,25 +1853,117 @@ onBeforeUnmount(() => {
   text-align: right;
 }
 
-.models-detail-footer {
-  display: flex;
+.models-detail-time strong.is-available {
+  color: #86efac;
+}
+
+.models-preview-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.models-preview-strip__item {
+  overflow: hidden;
+  aspect-ratio: 0.86;
+  border-radius: 8px;
+  background: rgba(8, 16, 28, 0.92);
+}
+
+.models-field {
+  display: grid;
+  gap: 8px;
+}
+
+.models-field span,
+.models-panel__subhead p,
+.models-dialog__desc {
+  color: #9caec3;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.models-panel__subhead h3,
+.models-dialog__head h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.models-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin-top: 20px;
-  position: relative;
 }
 
-.models-detail-footer .models-primary-button--inline {
-  min-width: 136px;
+.models-upload-grid button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   height: 40px;
+  border: 1px solid rgba(81, 99, 146, 0.22);
   border-radius: 12px;
+  background: rgba(17, 29, 46, 0.88);
+  color: #dbe4f0;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.models-detail-footer .models-secondary-button {
-  flex: 0 0 132px;
-  min-width: 132px;
-  height: 40px;
+.models-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.models-create-column {
+  display: grid;
+  gap: 14px;
+}
+
+.models-create-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.models-stat-card {
+  border: 1px solid rgba(81, 99, 146, 0.22);
   border-radius: 12px;
-  padding: 0 16px;
+  background: rgba(20, 31, 48, 0.76);
+  padding: 12px;
+}
+
+.models-stat-card span {
+  display: block;
+  color: #95a9c0;
+  font-size: 12px;
+}
+
+.models-stat-card strong {
+  display: block;
+  margin-top: 8px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.models-hint {
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  border-radius: 14px;
+  background: rgba(76, 48, 10, 0.22);
+  padding: 10px 12px;
+  color: #f4cf92;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.models-hint.is-error {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: rgba(82, 20, 31, 0.24);
+  color: #f4b6bb;
 }
 
 .models-toast {
@@ -1991,36 +1989,35 @@ onBeforeUnmount(() => {
   z-index: 60;
   display: grid;
   place-items: center;
-  background: rgba(3, 8, 15, 0.54);
+  background: rgba(3, 8, 15, 0.58);
   backdrop-filter: blur(10px);
 }
 
 .models-dialog {
   width: min(420px, calc(100vw - 32px));
-  border: 1px solid rgba(108, 128, 158, 0.16);
+  border: 1px solid rgba(81, 99, 146, 0.26);
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(17, 28, 44, 0.99), rgba(11, 19, 33, 0.99));
   box-shadow: 0 24px 60px rgba(2, 6, 14, 0.42);
   padding: 18px;
 }
 
-.models-dialog__head {
+.models-dialog--wide {
+  width: min(860px, calc(100vw - 40px));
+}
+
+.models-dialog__head,
+.models-dialog__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.models-dialog__head h3 {
-  color: #ffffff;
-  font-size: 18px;
-  font-weight: 800;
-}
-
 .models-dialog__close {
   width: 34px;
   height: 34px;
-  border: 1px solid rgba(108, 128, 158, 0.12);
+  border: 1px solid rgba(81, 99, 146, 0.22);
   border-radius: 12px;
   background: rgba(21, 33, 50, 0.94);
   color: #dbe4f0;
@@ -2030,17 +2027,23 @@ onBeforeUnmount(() => {
   margin-top: 16px;
 }
 
-.models-dialog__desc {
-  color: #9fb1c7;
-  font-size: 12px;
-  line-height: 1.6;
+.models-dialog__footer {
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
-.models-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 18px;
+.models-secondary-button--dialog,
+.models-primary-button--dialog,
+.models-danger-button {
+  min-width: 118px;
+  height: 40px;
+}
+
+.models-danger-button {
+  padding: 0 18px;
+  border: 1px solid rgba(235, 98, 128, 0.26);
+  background: linear-gradient(135deg, rgba(169, 36, 67, 0.94), rgba(208, 62, 92, 0.94));
+  color: #fff6f8;
 }
 
 .fade-enter-active,
@@ -2054,24 +2057,14 @@ onBeforeUnmount(() => {
   transform: translateY(8px);
 }
 
-@media (max-width: 1400px) {
-  .models-shell {
-    grid-template-columns: minmax(0, 1fr) 320px;
-  }
-
-  .models-layout {
-    grid-template-columns: 260px minmax(0, 1fr);
+@media (max-width: 1380px) {
+  .models-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1240px) {
-  .models-hero {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-
-  .models-shell,
-  .models-layout {
+  .models-shell {
     grid-template-columns: 1fr;
   }
 
@@ -2080,7 +2073,35 @@ onBeforeUnmount(() => {
   }
 
   .models-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .models-toolbar,
+  .models-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .models-toolbar__filters,
+  .models-toolbar__search,
+  .models-pagination,
+  .models-pagination__meta {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 820px) {
+  .models-card-grid,
+  .models-create-grid,
+  .models-detail-cta,
+  .models-detail-tabs,
+  .models-preview-strip,
+  .models-detail-card__top {
     grid-template-columns: 1fr;
+  }
+
+  .models-input--search {
+    min-width: 0;
   }
 }
 </style>

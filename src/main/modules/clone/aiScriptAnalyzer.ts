@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
-import { cleanAiText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
+import { cleanAiText, extractJsonObjectText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
 import { generateChatCompletion } from './unifiedChat'
 import type { CloneGlobalScript, CloneLocale, ModelCredentials, ScriptRole, ShotSpec } from './types'
 
@@ -54,6 +54,21 @@ export type ScriptShotAnalysis = {
 export type ScriptAnalysisResult = {
   globalScript: CloneGlobalScript
   shots: ScriptShotAnalysis[]
+}
+
+export type ProductAnalysisResult = {
+  category: string
+  summary: string
+  coreSubject: string
+  connectionStructure: string
+  materialDetails: string
+  wearingPosition: string
+  surfaceDetails: string
+  colorDetails: string
+  geometryDetails: string
+  sizeScale: string
+  matchingRules: string[]
+  rawDescription: string
 }
 
 type AnalyzeInput = {
@@ -192,6 +207,97 @@ export function applyScriptAnalysisToShots(shots: ShotSpec[], result: ScriptAnal
   })
 }
 
+export async function analyzeProductStructureWithGrs(input: {
+  credentials: ModelCredentials
+  productReferenceImagePaths: string[]
+  productCategory?: string
+  locale: CloneLocale
+}): Promise<ProductAnalysisResult> {
+  const refs = (input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
+  if (!refs.length) {
+    return {
+      category: cleanText(input.productCategory, 'general'),
+      summary: 'No product references provided.',
+      coreSubject: '',
+      connectionStructure: '',
+      materialDetails: '',
+      wearingPosition: '',
+      surfaceDetails: '',
+      colorDetails: '',
+      geometryDetails: '',
+      sizeScale: '',
+      matchingRules: [],
+      rawDescription: '',
+    }
+  }
+
+  const key = String(input.credentials.grsaiApiKey || '').trim()
+  if (!key) throw new Error('未配置 GRS.AI API Key，无法分析商品结构')
+  const host = cleanHost(input.credentials.grsaiHost)
+  const model = cleanText(input.credentials.grsaiAnalysisModel, 'gemini-3.1-pro')
+  const content: any[] = [
+    {
+      type: 'text',
+      text: [
+        'You are a senior product-structure analyst for AI image generation.',
+        'Analyze the uploaded product images in extreme detail and output JSON only.',
+        'Break the product down like peeling an onion: start from category, then core subject, then connection structure, then surface/material, then color, then geometry, then wearing or display position, then matching rules.',
+        'Do not only output the product name. Output the physical structure and visual details that help an image model place it on a model with high fidelity.',
+        'The result will be used as the highest-priority product lock for generating model-on-product storyboard images.',
+        `Target language: ${input.locale === 'zh-CN' ? 'Chinese' : 'Vietnamese'}.`,
+        'Return JSON only with this shape:',
+        '{"category":"","summary":"","coreSubject":"","connectionStructure":"","materialDetails":"","wearingPosition":"","surfaceDetails":"","colorDetails":"","geometryDetails":"","sizeScale":"","matchingRules":[],"rawDescription":""}',
+        `Known product category hint: ${cleanText(input.productCategory, 'general')}`,
+      ].join('\n'),
+    },
+  ]
+  for (const filePath of refs.slice(0, 6)) {
+    content.push({ type: 'text', text: `reference image: ${filePath}` })
+    content.push({ type: 'image_url', image_url: { url: await imageDataUrl(filePath) } })
+  }
+
+  const res = await fetch(`${host}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model,
+      stream: false,
+      temperature: 0.2,
+      messages: [
+        { role: 'system', content: 'You are a strict JSON-only product-structure analyst.' },
+        { role: 'user', content },
+      ],
+    }),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(`商品结构分析失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  const contentText = extractModelMessageContent(text)
+  const jsonText = extractJsonObjectText(contentText)
+  let parsed: any
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch (error: any) {
+    throw new Error(`商品结构分析解析失败。provider=grsai model=${model} response=${cleanAiText(contentText).slice(0, 320)} reason=${String(error?.message ?? error)}`)
+  }
+  return {
+    category: cleanText(parsed?.category, cleanText(input.productCategory, 'general')),
+    summary: cleanText(parsed?.summary, ''),
+    coreSubject: cleanText(parsed?.coreSubject, ''),
+    connectionStructure: cleanText(parsed?.connectionStructure, ''),
+    materialDetails: cleanText(parsed?.materialDetails, ''),
+    wearingPosition: cleanText(parsed?.wearingPosition, ''),
+    surfaceDetails: cleanText(parsed?.surfaceDetails, ''),
+    colorDetails: cleanText(parsed?.colorDetails, ''),
+    geometryDetails: cleanText(parsed?.geometryDetails, ''),
+    sizeScale: cleanText(parsed?.sizeScale, ''),
+    matchingRules: Array.isArray(parsed?.matchingRules) ? parsed.matchingRules.map((item: unknown) => cleanText(item, '')).filter(Boolean) : [],
+    rawDescription: cleanText(parsed?.rawDescription, ''),
+  }
+}
+
 function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult {
   const rawGlobal =
     (parsed?.global_analysis && typeof parsed.global_analysis === 'object' ? parsed.global_analysis : null) ||
@@ -204,6 +310,14 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
     sellingLogic: cleanText(rawGlobal.sellingLogic || rawGlobal.conversion_strategy, ''),
     hook: cleanText(rawGlobal.hook || rawGlobal.hook_strategy, ''),
     cta: cleanText(rawGlobal.cta || rawGlobal.conversion_strategy, ''),
+    content: cleanText(rawGlobal.content || rawGlobal.full_analysis || rawGlobal.analysis_text, ''),
+    cameraMotion: cleanText(rawGlobal.cameraMotion || rawGlobal.camera_motion, ''),
+    shotScale: cleanText(rawGlobal.shotScale || rawGlobal.shot_scale, ''),
+    lighting: cleanText(rawGlobal.lighting, ''),
+    colorTone: cleanText(rawGlobal.colorTone || rawGlobal.color_tone, ''),
+    subjectAction: cleanText(rawGlobal.subjectAction || rawGlobal.subject_action, ''),
+    environment: cleanText(rawGlobal.environment || rawGlobal.background_environment, ''),
+    reversePrompt: cleanText(rawGlobal.reversePrompt || rawGlobal.reverse_prompt || rawGlobal.seedance_prompt, ''),
   }
 
   const rawShots = Array.isArray(parsed?.shots) ? parsed.shots : []
@@ -277,13 +391,23 @@ function buildInstruction(input: AnalyzeInput) {
     `Output language: ${language}.`,
     `Target market: ${input.targetMarket || input.locale}. Product category: ${input.productCategory || 'general'}.`,
     'Analyze the uploaded viral reference video shot by shot. This is not a generic summary. It is a structured reconstruction script used to regenerate a new ecommerce short video.',
-    'For every shot, extract: selling purpose, person position, product position, scene, emotion, camera movement, on-screen text content with position and size, product display method, narration or subtitle meaning, an AI-video-ready generation prompt, and the must-avoid list.',
+    'Sample the video at 1 frame per second and use the sampled frames together with shot boundaries to reconstruct the visual language accurately.',
+    'For every shot, you must analyze and preserve these dimensions in the JSON fields and analysis notes:',
+    '1. Camera movement type and speed: push, pull, pan, tilt, track, orbit, handheld or static, with specific speed description.',
+    '2. Shot size changes: wide, full, medium, close-up, extreme close-up, with time points if the framing changes inside the shot.',
+    '3. Lighting type, direction and color temperature: natural or artificial, front/side/back light, and approximate Kelvin value.',
+    '4. Color tendency and tone: dominant colors, saturation level, and warm/cool tendency.',
+    '5. Subject action and expression: precise movement, pose, gesture, gaze and expression changes.',
+    '6. Background environment details: location, props, texture, depth, blur and environmental cues.',
+    'Map the above analysis into these output fields: cameraDescription, visualDescription, actionDescription, sceneDescription, emotionDescription, textOverlay, productFocus and analysisNotes.',
+    'The generation_prompt field must be a complete Jingmeng/Seedance-ready prompt written in this order: timeline + subject + scene + action + camera + atmosphere.',
+    'The generation_prompt must be directly usable for image-to-video or reference-video recreation, concise but specific, and should include motion rhythm, framing, lighting, color mood and environment cues.',
     'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. When speech is unclear, infer the script from the visuals.',
     'Return ONLY valid JSON. No markdown. No explanation outside JSON.',
     'Use script_role values only from: hook,pain_point,solution,show,detail,proof,offer,cta,transition,unknown.',
     'Prioritize realistic ecommerce reconstruction, reusable prompt detail, and mobile-native visual language.',
     'JSON shape:',
-    '{"global_analysis":{"video_type":"","target_audience":"","core_selling_point":"","hook_strategy":"","conversion_strategy":"","emotion_curve":"","recommended_product_type":""},"shots":[{"shot_id":"","time_range":"","script_role":"","script_text":"","narration_text":"","on_screen_text":"","visual_description":"","subject_position":{"person":"","product":"","text":""},"scene":{"location":"","background":"","lighting":"","style":""},"emotion":{"tone":"","intensity":1},"action":"","camera":{"shot_type":"","movement":"","angle":""},"product_display":{"method":"","focus_point":"","selling_point":""},"text_overlay":{"content":"","position":"","font_size":"medium","style":"","color":"","animation":""},"transition":"","generation_prompt":"","negative_prompt":"","script_confidence":0.8,"analysis_notes":[]}],"key_shots":[{"shot_id":"","reason":""}]}',
+    '{"global_analysis":{"video_type":"","target_audience":"","core_selling_point":"","hook_strategy":"","conversion_strategy":"","emotion_curve":"","recommended_product_type":"","content":"","camera_motion":"","shot_scale":"","lighting":"","color_tone":"","subject_action":"","environment":"","reverse_prompt":""},"shots":[{"shot_id":"","time_range":"","script_role":"","script_text":"","narration_text":"","on_screen_text":"","visual_description":"","subject_position":{"person":"","product":"","text":""},"scene":{"location":"","background":"","lighting":"","style":""},"emotion":{"tone":"","intensity":1},"action":"","camera":{"shot_type":"","movement":"","angle":""},"product_display":{"method":"","focus_point":"","selling_point":""},"text_overlay":{"content":"","position":"","font_size":"medium","style":"","color":"","animation":""},"transition":"","generation_prompt":"","negative_prompt":"","script_confidence":0.8,"analysis_notes":[]}],"key_shots":[{"shot_id":"","reason":""}]}',
     'Shot timeline:',
     timeline,
   ].join('\n')

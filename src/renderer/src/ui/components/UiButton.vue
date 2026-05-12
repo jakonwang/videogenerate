@@ -1,5 +1,13 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
+defineOptions({
+  inheritAttrs: false,
+})
+
 import DsButton from '../../design-system/components/Button.vue'
+
+const emit = defineEmits<{
+  click: [event: MouseEvent]
+}>()
 
 const props = withDefaults(
   defineProps<{
@@ -18,7 +26,13 @@ const variantMap = {
 </script>
 
 <template>
-  <DsButton :variant="variantMap[props.variant]" :disabled="props.disabled" size="md">
+  <DsButton
+    v-bind="$attrs"
+    :variant="variantMap[props.variant]"
+    :disabled="props.disabled"
+    size="md"
+    @click="emit('click', $event)"
+  >
     <slot />
   </DsButton>
 </template>
