@@ -1,18 +1,20 @@
 ﻿import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { runFfmpeg } from '../ffmpeg/runner'
 import { createGrsImageTask, isPublicHttpUrl, requireGrsKey, waitGrsResult } from './grsai'
 import { toPublicUrlViaQiniu } from './qiniu'
 import { downloadAtlasToBuffer, getAtlasJson, pickAtlasOutputUrl, postAtlasJson, uploadAtlasMedia } from './atlasRetry'
+import { resolveApifoxHubCredentials } from './apifoxProfile'
 import { generateImage as generateApifoxImage } from './unifiedImage'
 import type { CloneProductType, ImageProviderName, ModelCredentials, ModelIdentityPack, ShotSpec } from './types'
-import { buildReferenceLockText, buildShotScriptConstraintText } from './prompt'
+import { buildNoSpeakingInstruction, buildReferenceLockText, buildShotScriptConstraintText } from './prompt'
 
 type GenerateImageInput = {
   credentials: ModelCredentials
   prompt: string
+  negativePrompt?: string
   imagePaths?: string[]
   outDir: string
   filePrefix: string
@@ -32,6 +34,50 @@ function imageProvider(credentials: ModelCredentials): ImageProviderName {
     return credentials.imageProviderPrimary
   }
   return 'openai'
+}
+
+function hasProviderCredential(credentials: ModelCredentials, provider: ImageProviderName) {
+  if (provider === 'kling') return Boolean(String(credentials.klingApiKey || '').trim())
+  if (provider === 'grsai') return Boolean(String(credentials.grsaiApiKey || '').trim())
+  if (provider === 'apifox_hub') return Boolean(String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey || '').trim())
+  return Boolean(String(credentials.openaiApiKey || '').trim())
+}
+
+function imageProviderCandidates(credentials: ModelCredentials): ImageProviderName[] {
+  const preferred = imageProvider(credentials)
+  const fallbackOrder: ImageProviderName[] = ['apifox_hub', 'openai', 'kling', 'grsai']
+  const out: ImageProviderName[] = []
+  for (const provider of [preferred, ...fallbackOrder]) {
+    if (out.includes(provider)) continue
+    if (!hasProviderCredential(credentials, provider)) continue
+    out.push(provider)
+  }
+  return out
+}
+
+function withImageProvider(credentials: ModelCredentials, provider: ImageProviderName): ModelCredentials {
+  if (provider === 'openai') {
+    return {
+      ...credentials,
+      imageProviderPrimary: 'openai',
+    }
+  }
+  return {
+    ...credentials,
+    imageProviderPrimary: provider,
+  }
+}
+
+function isRetryableImageProviderError(error: unknown) {
+  const message = String((error as any)?.message ?? error ?? '').toLowerCase()
+  return (
+    message.includes('连接超时') ||
+    message.includes('task timeout') ||
+    message.includes('fetch failed') ||
+    message.includes('无法访问') ||
+    message.includes('connection') ||
+    message.includes('timeout')
+  )
 }
 
 function klingImageModel(credentials: ModelCredentials) {
@@ -255,6 +301,7 @@ async function postKlingImage(input: GenerateImageInput) {
     input_fidelity: 'high',
     output_format: 'jpeg',
     prompt: input.prompt,
+    negative_prompt: String(input.negativePrompt || '').trim() || undefined,
     quality: imageQuality(input.credentials),
     size: '1024x1536',
   }
@@ -277,6 +324,7 @@ async function postGrsImage(input: GenerateImageInput) {
   const created = await createGrsImageTask({
     credentials: input.credentials,
     prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
     urls,
   })
   const outputUrl = created.directUrl || (created.taskId ? (await waitGrsResult(input.credentials, created.taskId)).outputUrl : '')
@@ -291,20 +339,60 @@ async function postGrsImage(input: GenerateImageInput) {
 }
 
 async function generateProviderImage(input: GenerateImageInput) {
-  const provider = imageProvider(input.credentials)
-  if (provider === 'apifox_hub') {
-    return (await generateApifoxImage({
-      credentials: input.credentials,
-      prompt: input.prompt,
-      imagePaths: input.imagePaths,
-      outDir: input.outDir,
-      filePrefix: input.filePrefix,
-      capability: input.imagePaths?.length ? 'image_edit' : 'image_generate',
-    })).outputPath
+  const providers = imageProviderCandidates(input.credentials)
+  if (!providers.length) {
+    return await postEditImage(input)
   }
-  if (provider === 'kling') return await postKlingImage(input)
-  if (provider === 'grsai') return await postGrsImage(input)
-  return await postEditImage(input)
+  const errors: string[] = []
+  for (let index = 0; index < providers.length; index += 1) {
+    const provider = providers[index]
+    const scopedInput = {
+      ...input,
+      credentials: withImageProvider(input.credentials, provider),
+    }
+    try {
+      if (provider === 'apifox_hub') {
+        return (await generateApifoxImage({
+          credentials: scopedInput.credentials,
+          prompt: scopedInput.prompt,
+          negativePrompt: scopedInput.negativePrompt,
+          imagePaths: scopedInput.imagePaths,
+          outDir: scopedInput.outDir,
+          filePrefix: scopedInput.filePrefix,
+          capability: scopedInput.imagePaths?.length ? 'image_edit' : 'image_generate',
+        })).outputPath
+      }
+      if (provider === 'kling') return await postKlingImage(scopedInput)
+      if (provider === 'grsai') return await postGrsImage(scopedInput)
+      return await postEditImage(scopedInput)
+    } catch (error: any) {
+      const text = String(error?.message ?? error ?? '').trim() || 'unknown error'
+      errors.push(`${provider}: ${text}`)
+      const isLast = index >= providers.length - 1
+      if (!isRetryableImageProviderError(error) || isLast) {
+        throw new Error(errors.join(' | '))
+      }
+    }
+  }
+  throw new Error(errors.join(' | ') || '图片生成失败')
+}
+
+async function buildMockImageFromReference(input: GenerateImageInput) {
+  await mkdir(input.outDir, { recursive: true })
+  const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
+  const source = refs.find((item) => existsSync(item))
+  if (!source) {
+    throw new Error('缺少可用参考图，无法生成本地测试图片')
+  }
+  const ext = extname(source).toLowerCase() || '.png'
+  const rawPath = join(input.outDir, `${input.filePrefix}_mock_raw_${Date.now()}_${randomUUID()}${ext}`)
+  await copyFile(source, rawPath)
+  return await finalizeImageOutput({
+    rawPath,
+    outDir: input.outDir,
+    filePrefix: `${input.filePrefix}_mock`,
+    normalizeOutput: input.normalizeOutput,
+  })
 }
 
 export function defaultModelIdentityDescription(productType: CloneProductType) {
@@ -387,6 +475,7 @@ export function buildGptFramePrompt(input: {
   modelPack: ModelIdentityPack
   productPoints?: string
   which: 'start' | 'end'
+  compiledPrompt?: string
 }) {
   const shot = input.shot
   const isEnd = input.which === 'end'
@@ -396,6 +485,7 @@ export function buildGptFramePrompt(input: {
     isEnd
       ? `Generate the ending keyframe for shot ${shot.index + 1}. It must be a small continuation from the provided GPT start frame.`
       : `Generate the opening keyframe for shot ${shot.index + 1}.`,
+    input.compiledPrompt ? `Product identity lock for this frame:\n${String(input.compiledPrompt).trim()}` : '',
     identityText(input.modelPack),
     scriptLock,
     referenceLock,
@@ -403,6 +493,7 @@ export function buildGptFramePrompt(input: {
     `Reference shot translation: ${String(shot.visualPrompt || shot.visual || 'use only composition, framing, action rhythm and camera grammar from the reference shot').trim()}.`,
     `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration target: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
     `Camera motion target: ${String(shot.motion || 'static')}. Keep changes restrained and realistic.`,
+    buildNoSpeakingInstruction(),
     isEnd
       ? 'The ending frame must keep the same new model, same product, same outfit, same location, same lighting, same emotion and same camera setup as the provided start frame. Only allow subtle hand, expression or camera-position continuation.'
       : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model and replace the original worn or held item with the uploaded user product only. Do not preserve the old accessory if it conflicts with the uploaded product.',
@@ -422,6 +513,27 @@ export async function generateModelIdentityPackImages(input: {
   onImageGenerated?: (filePath: string, index: number) => Promise<void> | void
 }) {
   const profile = defaultModelIdentityDescription(input.productType)
+  if (
+    input.credentials.allowMockWhenNoKey &&
+    !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(input.credentials.openaiApiKey ?? '').trim() &&
+    !String(input.credentials.klingApiKey ?? '').trim() &&
+    !String(input.credentials.grsaiApiKey ?? '').trim()
+  ) {
+    const imagePaths: string[] = []
+    for (let i = 0; i < 9; i += 1) {
+      const path = await buildMockImageFromReference({
+        credentials: input.credentials,
+        prompt: `mock model identity ${i + 1}`,
+        imagePaths: input.productReferenceImagePaths,
+        outDir: input.outDir,
+        filePrefix: `model_identity_${i + 1}`,
+      })
+      imagePaths.push(path)
+      await input.onImageGenerated?.(path, i)
+    }
+    return { profile, imagePaths, model: 'mock-image' }
+  }
   const prompts = [
     'clean white background front portrait, neutral expression',
     'clean white background left three-quarter portrait',
@@ -454,10 +566,20 @@ export async function generateModelIdentityPackImages(input: {
 export async function generateGptShotFrameImage(input: {
   credentials: ModelCredentials
   prompt: string
+  negativePrompt?: string
   outDir: string
   filePrefix: string
   imagePaths: string[]
   normalizeOutput?: 'vertical_9_16' | 'preserve'
 }) {
+  if (
+    input.credentials.allowMockWhenNoKey &&
+    !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(input.credentials.openaiApiKey ?? '').trim() &&
+    !String(input.credentials.klingApiKey ?? '').trim() &&
+    !String(input.credentials.grsaiApiKey ?? '').trim()
+  ) {
+    return await buildMockImageFromReference(input)
+  }
   return await generateProviderImage(input)
 }

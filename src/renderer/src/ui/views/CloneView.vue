@@ -68,6 +68,7 @@ type StoryboardFrame = {
   imagePath?: string
   status: string
   error?: string
+  retryCount?: number
   updatedAt?: number
 }
 
@@ -93,7 +94,12 @@ type BlueprintShot = {
   gptLastFramePath?: string
   generatedFirstFramePath?: string
   generatedLastFramePath?: string
+  generatedClipPath?: string
+  qualityStatus?: 'unchecked' | 'pending' | 'passed' | 'warning' | 'failed'
+  qualityReasons?: string[]
+  canEnterRender?: boolean
   locked?: boolean
+  retryCount?: number
 }
 
 type ShotVideoOutput = {
@@ -129,6 +135,7 @@ type FinalCompose = {
 type CloneProject = {
   id: string
   status: string
+  runMode?: 'auto' | 'manual'
   referenceVideoPath: string
   referenceVideoName: string
   selectedModelIdentitySnapshot?: {
@@ -171,6 +178,15 @@ type CloneProject = {
   lastError?: string
   workflowV2?: {
     currentStep?: string
+  }
+  autoFlowStatus?: {
+    enabled?: boolean
+    status?: string
+    targetStage?: 'storyboard_video_generation' | 'final_compose'
+    currentStage?: string
+    imageRetryLimit?: number
+    videoRetryLimit?: number
+    lastSummary?: string
   }
   previewPipeline?: {
     status?: 'idle' | 'running' | 'preview_ready' | 'background_running' | 'done' | 'failed'
@@ -327,6 +343,8 @@ const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath |
 const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), '默认项目输出目录'))
 const localComposeErrorText = computed(() => safeText(current.value?.finalCompose?.error || composeLocalError.value, ''))
 const pipelineErrorContext = computed(() => current.value?.pipelineStatus?.errorContext || null)
+const configuredVideoProvider = computed(() => safeText(current.value?.pipelineStatus?.configuredProviderSummary?.video?.provider, '--'))
+const configuredVideoModel = computed(() => safeText(current.value?.pipelineStatus?.configuredProviderSummary?.video?.model, '--'))
 const activeImageProvider = computed(() => safeText(current.value?.pipelineStatus?.activeProviderSummary?.image?.provider, '--'))
 const activeImageModel = computed(() => safeText(current.value?.pipelineStatus?.activeProviderSummary?.image?.model, '--'))
 const workflowStep = computed(() => current.value?.workflowV2?.currentStep || 'upload_analyze_script')
@@ -350,10 +368,48 @@ const storyboardFrameBlockReason = computed(() => {
 const failedShotOutputs = computed(() =>
   shotVideoOutputs.value.filter((item) => item.status === 'failed' || item.status === 'polling_timeout' || Boolean(item.error)),
 )
+const failedStoryboardFrames = computed(() => storyboardFrames.value.filter((item) => !item.imagePath && Boolean(item.error)))
+const runModeLabel = computed(() => (current.value?.runMode === 'auto' ? '自动运行' : '手动运行'))
+const autoFlowCurrentStageLabel = computed(() => {
+  const stage = String(current.value?.autoFlowStatus?.currentStage || '').trim()
+  if (stage === 'analyze') return '参考分析'
+  if (stage === 'materials') return '一致性素材准备'
+  if (stage === 'script') return '脚本生成'
+  if (stage === 'storyboard_images') return '分镜图片'
+  if (stage === 'storyboard_videos') return '分镜视频'
+  if (stage === 'quality_gate') return '最终门禁'
+  if (stage === 'final_compose') return '最终成片'
+  return '待开始'
+})
+const autoFlowTargetLabel = computed(() => (current.value?.autoFlowStatus?.targetStage === 'final_compose' ? '最终成片' : '分镜视频'))
+const gateBlockedShots = computed(() =>
+  blueprintShots.value.filter((shot) => {
+    const shotStatus = String(shot.status || '').toLowerCase()
+    const qualityStatus = String(shot.qualityStatus || '').toLowerCase()
+    const hasClip = Boolean(String(shot.generatedClipPath || '').trim())
+    return qualityStatus === 'failed' || shot.canEnterRender !== true || shotStatus === 'failed' || shotStatus === 'polling_timeout' || Boolean(shot.error) || !hasClip
+  }),
+)
+const gatePassAllowed = computed(() => Boolean(blueprintShots.value.length) && gateBlockedShots.value.length === 0)
+const gateFailureSummary = computed(() => {
+  const first = gateBlockedShots.value[0]
+  if (!first) return '全部镜头已通过最终门禁，可进入最终成片。'
+  const reason = first.error || first.qualityReasons?.join('；') || '镜头未通过生产质检'
+  return `当前有 ${gateBlockedShots.value.length} 个镜头阻塞最终成片，首个失败镜头 #${Number(first.index ?? 0) + 1}：${reason}`
+})
+const autoFlowSummary = computed(() =>
+  safeText(
+    current.value?.autoFlowStatus?.lastSummary,
+    current.value?.runMode === 'auto'
+      ? '自动运行会在素材齐备后持续推进，并在最终成片前执行硬门禁。'
+      : '手动运行按阶段推进，但最终成片同样受硬门禁约束。',
+  ),
+)
+const autoFlowRunning = computed(() => current.value?.autoFlowStatus?.status === 'running')
 const retryableShotOutputs = computed(() =>
   shotVideoOutputs.value.filter((item) => {
     const status = String(item.status || '').toLowerCase()
-    return status === 'failed' || status === 'pending' || status === 'idle' || status === 'polling_timeout' || status === 'remote_running'
+    return status === 'failed' || status === 'pending' || status === 'idle' || status === 'polling_timeout' || status === 'remote_running' || status === 'downloading'
   }),
 )
 const generationFailureText = computed(
@@ -786,6 +842,7 @@ const {
   generateStoryboardGrids: generateStoryboardGridsInWorkspace,
   regenerateStoryboardFrame: regenerateStoryboardFrameInWorkspace,
   generateShotVideos: generateShotVideosInWorkspace,
+  autoRunToStoryboardVideos: autoRunToStoryboardVideosInWorkspace,
   syncFailedShotVideo: syncFailedShotVideoInWorkspace,
   replaceShotVideo: replaceShotVideoInWorkspace,
   regenerateShotClip: regenerateShotClipInWorkspace,
@@ -883,6 +940,21 @@ async function toggleFrameLock(shotId: string) {
   } finally {
     loading.value = false
   }
+}
+
+function canContinueSyncShot(item?: ShotVideoOutput | null) {
+  if (!item) return false
+  if (Boolean(String(item.videoPath || '').trim())) return false
+  if (!String(item.taskId || '').trim()) return false
+  const status = String(item.status || '').toLowerCase()
+  const remoteStatus = String(item.remoteStatus || '').toLowerCase()
+  return (
+    status === 'failed' ||
+    status === 'polling_timeout' ||
+    status === 'remote_running' ||
+    status === 'downloading' ||
+    remoteStatus === 'succeeded'
+  )
 }
 
 function storyBeatDisplayIndex(beat: StoryBeat, fallbackIndex = 0) {
@@ -1070,6 +1142,14 @@ async function generateShotVideos() {
   await generateShotVideosInWorkspace()
 }
 
+async function autoRunToStoryboardVideos() {
+  await autoRunToStoryboardVideosInWorkspace({
+    variantCount: variantCount.value,
+    productReferenceImagePaths: effectiveProductRefs.value,
+    selectedModelIdentityId: selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id,
+  })
+}
+
 async function syncFailedShotVideo(shotId: string) {
   await syncFailedShotVideoInWorkspace(shotId)
 }
@@ -1132,9 +1212,15 @@ async function revealFinalOutput() {
 }
 
 let timer: number | null = null
+let offRuntimeLog: (() => void) | null = null
 
 onMounted(async () => {
   pushRuntimeLog(stageLog.value)
+  offRuntimeLog = window.api.clone.onRuntimeLog?.((payload) => {
+    const text = safeText(payload?.message, '')
+    if (!text) return
+    pushRuntimeLog(text, payload?.level || 'info')
+  })
   await refreshModels()
   const projectId = routeProjectId.value
   if (!projectId) {
@@ -1167,6 +1253,8 @@ watch(
 
 onUnmounted(() => {
   if (timer) window.clearInterval(timer)
+  offRuntimeLog?.()
+  offRuntimeLog = null
 })
 </script>
 
@@ -1357,6 +1445,9 @@ onUnmounted(() => {
           <div class="variant-workbench">
             <CloneStageHeader tag="脚本生成" title="绑定素材并生成脚本候选" description="先选择模特和商品图，再生成多条按时间段拆分的脚本候选。">
               <template #actions>
+                <button class="ghost-button small secondary-action" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
+                  {{ autoFlowRunning ? '自动运行中' : current?.runMode === 'auto' ? '继续自动运行' : '从当前阶段开始自动运行' }}
+                </button>
                 <label class="inline-control">
                   <span>数量</span>
                   <input v-model.number="variantCount" class="count-input" type="number" min="1" max="6" />
@@ -1364,11 +1455,27 @@ onUnmounted(() => {
                 <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants">生成候选脚本</button>
               </template>
               <template #aux>
+                <span>运行模式：{{ runModeLabel }}</span>
+                <span>自动目标：{{ autoFlowTargetLabel }}</span>
+                <span>当前阶段：{{ autoFlowCurrentStageLabel }}</span>
                 <span>当前候选：{{ scriptVariants.length }}</span>
                 <span>当前选择：{{ selectedVariantId ? '已选脚本' : '未选脚本' }}</span>
                 <span>商品图：{{ effectiveProductRefs.length }} 张</span>
+                <span>自动流程：{{ autoFlowSummary }}</span>
               </template>
             </CloneStageHeader>
+
+            <div class="clone-run-mode-banner" :class="current?.runMode === 'auto' ? 'is-auto' : 'is-manual'">
+              <div class="clone-run-mode-banner__main">
+                <span class="clone-run-mode-banner__badge">{{ runModeLabel }}</span>
+                <strong>{{ current?.runMode === 'auto' ? '系统会自动推进到最终门禁，并在全部镜头通过后才进入最终成片。' : '当前任务按手动方式推进，但最终成片仍必须通过统一硬门禁。' }}</strong>
+                <span>{{ autoFlowSummary }}</span>
+              </div>
+              <div class="clone-run-mode-banner__stats">
+                <span>阻塞镜头：{{ gateBlockedShots.length }}</span>
+                <span>允许成片：{{ gatePassAllowed ? '允许' : '禁止' }}</span>
+              </div>
+            </div>
 
             <div class="variant-layout">
               <aside class="variant-summary-panel">
@@ -1494,6 +1601,7 @@ onUnmounted(() => {
             </template>
             <template #aux>
               <span>图片结果：{{ storyboardFrames.length }}</span>
+              <span>失败图片：{{ failedStoryboardFrames.length }}</span>
               <span>当前候选：{{ selectedVariantId ? '已选脚本' : '未选脚本' }}</span>
               <span>锁定分镜：{{ blueprintShots.filter((shot) => shot.locked).length }}</span>
               <span>图片供应商：{{ activeImageProvider }}</span>
@@ -1561,6 +1669,7 @@ onUnmounted(() => {
                     <span>
                       {{ blueprintShots.find((shot) => shot.id === frame.shotId)?.locked ? '已锁定' : frame.imagePath ? '已生成' : humanStatus(frame.status) }}
                     </span>
+                    <span v-if="typeof frame.retryCount === 'number' && frame.retryCount > 0">已重试 {{ frame.retryCount }} 次</span>
                   </div>
                   <div class="frame-card__actions">
                     <button class="ghost-button small" type="button" :disabled="!frame.imagePath" @click="openFramePreview(frame)">
@@ -1591,11 +1700,19 @@ onUnmounted(() => {
               <button class="ghost-button small" type="button" :disabled="loading" @click="selectStage('compose')">进入最终成片</button>
             </template>
             <template #aux>
+              <span>运行模式：{{ runModeLabel }}</span>
               <span>当前分镜：{{ shotVideoOutputs.length }}</span>
               <span>失败分镜：{{ failedShotOutputs.length }}</span>
+              <span>自动状态：{{ safeText(current?.autoFlowStatus?.status, '--') }}</span>
+              <span>最终门禁：{{ gatePassAllowed ? '已放行' : '已阻塞' }}</span>
               <span>当前项目：{{ safeText(current?.title || current?.blueprint?.title || current?.referenceVideoName || current?.id, '未选择项目') }}</span>
             </template>
           </CloneStageHeader>
+
+          <div class="clone-gate-summary" :class="gatePassAllowed ? 'is-pass' : 'is-blocked'">
+            <strong>{{ gatePassAllowed ? '最终门禁已通过' : '最终门禁未通过' }}</strong>
+            <span>{{ gateFailureSummary }}</span>
+          </div>
 
           <div v-if="shotVideoOutputs.length" class="shot-workbench shot-workbench--reference">
             <div class="video-stage-layout video-stage-layout--workarea">
@@ -1682,6 +1799,7 @@ onUnmounted(() => {
                           <span class="shot-reference-status-copy">
                             <strong>{{ humanStatus(item.status) }}</strong>
                             <small>{{ safeText(item.remoteStatus, item.videoPath ? tr('cloneView.videoStage.filters.ready') : tr('cloneView.videoStage.filters.pending')) }}</small>
+                            <small v-if="typeof item.retryCount === 'number'">重试 {{ item.retryCount }} / 2</small>
                           </span>
                         </span>
                         <span class="shot-reference-cell shot-reference-cell--actions">
@@ -1695,7 +1813,7 @@ onUnmounted(() => {
                             重新生成
                           </button>
                           <button
-                            v-if="item.status === 'failed' || item.status === 'polling_timeout' || item.error"
+                            v-if="canContinueSyncShot(item)"
                             class="ghost-button small action-button"
                             type="button"
                             :disabled="loading"
@@ -1758,6 +1876,8 @@ onUnmounted(() => {
                       <CloneDataCard class="meta-card compact-meta-grid">
                         <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
                         <strong>{{ safeText(selectedShotOutput ? humanStatus(selectedShotOutput.status) : '--', '--') }}</strong>
+                        <span>当前配置视频模型</span>
+                        <strong>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</strong>
                         <span>{{ tr('cloneView.videoStage.modelLabel') }}</span>
                         <strong>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</strong>
                         <span>{{ tr('cloneView.videoStage.taskIdLabel') }}</span>
@@ -1796,13 +1916,20 @@ onUnmounted(() => {
         <article v-if="visibleStageKey === 'compose'" class="panel panel-compose-stage">
           <CloneStageHeader tag="" title="成片合成" description="本地合成最终成片，预览结果并导出到目标文件夹">
             <template #actions>
-              <button class="primary-button small" type="button" :disabled="loading" @click="composeFinalVideo">{{ finalButtonLabel }}</button>
+              <button class="primary-button small" :class="{ 'is-warning': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo">{{ finalButtonLabel }}</button>
             </template>
             <template #aux>
+              <span>运行模式：{{ runModeLabel }}</span>
               <span>可检查片段：{{ shotVideoOutputs.length }} 条</span>
+              <span>最终门禁：{{ gatePassAllowed ? '允许成片' : '禁止成片' }}</span>
               <span>输出状态：{{ finalOutputPath ? '已有成片' : '待合成' }}</span>
             </template>
           </CloneStageHeader>
+
+          <div class="clone-gate-summary" :class="gatePassAllowed ? 'is-pass' : 'is-blocked'">
+            <strong>{{ gatePassAllowed ? '全部镜头已放行，可进入最终成片。' : '当前任务仍被最终门禁拦截。' }}</strong>
+            <span>{{ gateFailureSummary }}</span>
+          </div>
 
           <div class="compose-workbench">
             <section class="compose-main-stage">
@@ -1875,7 +2002,7 @@ onUnmounted(() => {
                       <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="selectedShotId = item.shotId" title="预览">▶</button>
                       <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="replaceShotVideo(item.shotId)" title="替换">↺</button>
                       <button
-                        v-if="item.status === 'failed' || item.status === 'polling_timeout' || item.error"
+                        v-if="canContinueSyncShot(item)"
                         class="ghost-button small icon-button"
                         type="button"
                         :disabled="loading"
@@ -1900,7 +2027,7 @@ onUnmounted(() => {
                   <button
                     class="ghost-button small"
                     type="button"
-                    :disabled="loading || !(selectedShotOutput && (selectedShotOutput.status === 'failed' || selectedShotOutput.status === 'polling_timeout' || selectedShotOutput.error))"
+                    :disabled="loading || !canContinueSyncShot(selectedShotOutput)"
                     @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"
                   >
                     继续查询当前镜头
@@ -3144,6 +3271,83 @@ onUnmounted(() => {
 .variant-workbench {
   display: grid;
   gap: 10px;
+}
+
+.clone-run-mode-banner,
+.clone-gate-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.clone-run-mode-banner.is-auto {
+  border-color: rgba(34, 211, 238, 0.34);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.18), rgba(15, 23, 42, 0.88));
+}
+
+.clone-run-mode-banner.is-manual {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: linear-gradient(135deg, rgba(71, 85, 105, 0.2), rgba(15, 23, 42, 0.9));
+}
+
+.clone-run-mode-banner__main,
+.clone-gate-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.clone-run-mode-banner__badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.clone-run-mode-banner__main strong,
+.clone-gate-summary strong {
+  font-size: 14px;
+  color: #f8fafc;
+}
+
+.clone-run-mode-banner__main span,
+.clone-run-mode-banner__stats span,
+.clone-gate-summary span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.clone-run-mode-banner__stats {
+  display: grid;
+  gap: 6px;
+  min-width: 124px;
+  justify-items: end;
+}
+
+.clone-gate-summary.is-pass {
+  border-color: rgba(74, 222, 128, 0.32);
+  background: linear-gradient(135deg, rgba(22, 101, 52, 0.22), rgba(15, 23, 42, 0.9));
+}
+
+.clone-gate-summary.is-blocked {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.24), rgba(15, 23, 42, 0.92));
+}
+
+.primary-button.is-warning {
+  background: linear-gradient(135deg, #b45309, #dc2626);
+  box-shadow: 0 14px 30px rgba(185, 28, 28, 0.25);
 }
 
 .variant-layout {

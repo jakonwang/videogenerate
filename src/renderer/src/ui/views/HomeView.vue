@@ -37,9 +37,11 @@ type CloneProjectLite = {
   title?: string
   status?: string
   updatedAt?: number
+  coverAssetPath?: string
   referenceVideoName?: string
   referenceVideoPath?: string
   previewOutputPath?: string
+  finalOutputPath?: string
   outputDir?: string
   modelName?: string
   lastError?: string
@@ -188,7 +190,7 @@ function basename(input: string) {
 }
 
 function previewImageFor(item: CloneProjectLite, index: number) {
-  const path = item.previewOutputPath || item.referenceVideoPath || ''
+  const path = item.coverAssetPath || item.finalOutputPath || item.previewOutputPath || item.referenceVideoPath || ''
   if (path) return `file:///${path.replace(/\\/g, '/')}`
   return staticTemplateThumbs[index % staticTemplateThumbs.length]
 }

@@ -2,9 +2,11 @@
 import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import PQueue from 'p-queue'
 import { getFfmpegExecutable } from '../../lib/binariesPath'
 import { getAppPaths } from '../../lib/paths'
 import { cloneRepo } from './repo'
+import { resolveApifoxHubCredentials, resolveApifoxHubProfile } from './apifoxProfile'
 import { analyzeReferenceVideo } from './analyzer'
 import { analyzeProductStructureWithGrs, analyzeReferenceScriptWithGrs, applyScriptAnalysisToShots } from './aiScriptAnalyzer'
 import { generateShotVariantsWithAi } from './variantGenerator'
@@ -45,10 +47,14 @@ import {
   buildCloneNegativePrompt,
   buildProductLockText,
   buildRealismInstruction,
+  buildNoSpeakingInstruction,
+  sanitizeGeneratedVideoPrompt,
+  sanitizeNegativePrompt,
   buildTextSafetyInstruction,
   buildShotScriptConstraintText,
   expandCommercialVideoPrompt,
 } from './prompt'
+import { generateChatCompletion } from './unifiedChat'
 import {
   computeCloudClipHash,
   computeImagePromptHash,
@@ -100,11 +106,13 @@ import type {
   CloneScriptCandidate,
   CloneWorkflowV2Step,
   CloneProjectSummary,
+  CloneRunMode,
 } from './types'
 import type { MediaAsset, Product } from '../products/types'
 import { queryGrsCredits } from './grsai'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent } from './aiResponse'
 import { downloadAtlasToFile } from './atlasRetry'
+import { promptConsistencyService } from './prompt-consistency/service'
 
 function now() {
   return Date.now()
@@ -130,6 +138,38 @@ function normalizeVideoShotStatus(value: unknown) {
 
 function isCompletedVideoShotStatus(value: unknown) {
   return ['done', 'success', 'completed'].includes(String(value ?? '').trim().toLowerCase())
+}
+
+const AUTO_CLONE_IMAGE_RETRY_LIMIT = 2
+const AUTO_CLONE_VIDEO_RETRY_LIMIT = 2
+
+function ensureAutoFlowStatus(project: CloneProject) {
+  project.autoFlowStatus ??= {
+    enabled: false,
+    targetStage: 'final_compose',
+    status: 'idle',
+    imageRetryLimit: AUTO_CLONE_IMAGE_RETRY_LIMIT,
+    videoRetryLimit: AUTO_CLONE_VIDEO_RETRY_LIMIT,
+  }
+  if (!project.autoFlowStatus.imageRetryLimit) project.autoFlowStatus.imageRetryLimit = AUTO_CLONE_IMAGE_RETRY_LIMIT
+  if (!project.autoFlowStatus.videoRetryLimit) project.autoFlowStatus.videoRetryLimit = AUTO_CLONE_VIDEO_RETRY_LIMIT
+  return project.autoFlowStatus
+}
+
+function setAutoFlowStage(
+  project: CloneProject,
+  stage: NonNullable<CloneProject['autoFlowStatus']>['currentStage'],
+  status?: NonNullable<CloneProject['autoFlowStatus']>['status'],
+  summary?: string,
+) {
+  const autoFlow = ensureAutoFlowStatus(project)
+  autoFlow.enabled = true
+  autoFlow.targetStage = project.runMode === 'auto' ? 'final_compose' : 'storyboard_video_generation'
+  autoFlow.currentStage = stage
+  if (status) autoFlow.status = status
+  if (summary !== undefined) autoFlow.lastSummary = summary || undefined
+  if (status === 'running') autoFlow.lastStartedAt = now()
+  if (status === 'done' || status === 'partial_failed' || status === 'failed') autoFlow.lastCompletedAt = now()
 }
 
 const WORKFLOW_V2_STEPS: CloneWorkflowV2Step[] = [
@@ -214,6 +254,43 @@ function snippetText(value: unknown, limit = 320) {
   return trimText(value).slice(0, limit)
 }
 
+function normalizeRunMode(value: unknown): CloneRunMode {
+  return value === 'auto' ? 'auto' : 'manual'
+}
+
+function validateProjectReadyForFinalCompose(project: CloneProject) {
+  const shots = project.blueprint?.shots ?? []
+  const outputMap = getShotVideoOutputMap(project)
+  if (!shots.length) return { ok: false as const, reason: '当前没有可用于成片的镜头' }
+  const failed = shots.filter((shot) => {
+    const shotStatus = String(shot.status || '').toLowerCase()
+    const qualityStatus = String(shot.qualityStatus || '').toLowerCase()
+    const hasRenderableClip = Boolean(
+      String(shot.uploadedAssetPath || shot.generatedClipPath || outputMap.get(String(shot.id))?.videoPath || outputMap.get(String(shot.id))?.localPath || '').trim(),
+    )
+    const qualityReasons = Array.isArray(shot.qualityReasons) ? shot.qualityReasons.map((item) => String(item || '').trim()).filter(Boolean) : []
+    const onlyDurationMismatch =
+      qualityStatus === 'failed' &&
+      qualityReasons.length > 0 &&
+      qualityReasons.every((reason) => reason.includes('时长偏离目标')) &&
+      hasRenderableClip
+    return (
+      (qualityStatus === 'failed' && !onlyDurationMismatch) ||
+      (shot.canEnterRender !== true && !onlyDurationMismatch) ||
+      shotStatus === 'failed' ||
+      shotStatus === 'polling_timeout' ||
+      Boolean(shot.error) ||
+      (!String(shot.generatedClipPath || '').trim() && !String(shot.uploadedAssetPath || '').trim())
+    )
+  })
+  if (!failed.length) return { ok: true as const }
+  const first = failed[0]
+  return {
+    ok: false as const,
+    reason: `最终门禁未通过：${failed.length} 个镜头未达标，首个失败镜头 #${Number(first.index ?? 0) + 1} ${String(first.error || first.qualityReasons?.join('；') || '未通过生产质检')}`.trim(),
+  }
+}
+
 function buildErrorContext(input: {
   provider?: string
   model?: string
@@ -244,7 +321,12 @@ function setProjectErrorContext(project: CloneProject, input: Parameters<typeof 
 }
 
 function apifoxContextByCapability(credentials: ModelCredentials, capability: 'chat_completion' | 'image_generate' | 'image_edit' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video' | 'video_text_to_video') {
-  const cfg = credentials.apifoxHub
+  const cfg =
+    capability === 'chat_completion'
+      ? resolveApifoxHubCredentials(credentials, 'chat')
+      : capability === 'image_generate' || capability === 'image_edit'
+        ? resolveApifoxHubCredentials(credentials, 'image')
+        : resolveApifoxHubCredentials(credentials, 'video')
   if (!cfg?.enabled) return {}
   if (capability === 'chat_completion') {
     return {
@@ -280,6 +362,22 @@ function apifoxContextByCapability(credentials: ModelCredentials, capability: 'c
   }
 }
 
+function normalizePipelineErrorContext(
+  project: CloneProject,
+  errorContext?: ClonePipelineStatus['errorContext'],
+): ClonePipelineStatus['errorContext'] {
+  if (!errorContext) return undefined
+  const capability = String(errorContext.requestCapability || '').trim().toLowerCase()
+  const taskId = String(errorContext.taskId || '').trim()
+  if (!capability.startsWith('video_') || !taskId) return errorContext
+  const outputs = project.shotVideoOutputs ?? []
+  const hasActiveTask = outputs.some((item) => String(item.taskId || '').trim() === taskId)
+  if (hasActiveTask) return errorContext
+  const hasShotTask = (project.blueprint?.shots ?? []).some((item) => String(item.generatedTaskId || '').trim() === taskId)
+  if (hasShotTask) return errorContext
+  return undefined
+}
+
 function pipelineStatusFromProject(project: CloneProject, errorContext?: ClonePipelineStatus['errorContext']): ClonePipelineStatus {
   const workflowStep = project.workflowV2?.currentStep ?? 'upload_analyze_script'
   const providerSummary = summarizeProjectProviders(project)
@@ -288,12 +386,14 @@ function pipelineStatusFromProject(project: CloneProject, errorContext?: ClonePi
     previewPipeline: project.previewPipeline,
     activeProviderSummary: providerSummary.activeProviderSummary,
     activeModelSummary: providerSummary.activeModelSummary,
-    errorContext: errorContext ?? project.lastErrorContext,
+    configuredProviderSummary: providerSummary.configuredProviderSummary,
+    errorContext: normalizePipelineErrorContext(project, errorContext ?? project.lastErrorContext),
   }
 }
 
 function summarizeProjectProviders(project: CloneProject) {
-  const videoProvider = project.policy?.fallbackChain?.[0] ?? 'seedance'
+  const credentials = cloneRepo.getCredentialsSync()
+  const videoProvider = project.policy?.fallbackChain?.[0] ?? videoProviderChain(credentials)[0] ?? 'seedance'
   const imageProvider = project.baseBlueprint?.consistencyAssets?.provider === 'ai666'
     ? ('apifox_hub' as ImageProviderName)
     : 'openai'
@@ -307,6 +407,14 @@ function summarizeProjectProviders(project: CloneProject) {
   const scriptModel = project.scriptVariantCandidates?.length
     ? 'script-variant-pipeline'
     : String(project.baseBlueprint?.globalScript?.language ?? '')
+  const configuredVideoProvider = videoProviderChain(credentials)[0] ?? 'seedance'
+  const configuredVideoModel = videoProviderModel(credentials)
+  const configuredImageProvider = generatedImageProvider(credentials)
+  const configuredImageModel = imageProviderModel(credentials)
+  const configuredScriptProvider = credentials.chatProviderPrimary === 'apifox_hub' ? 'apifox_hub' : 'grsai'
+  const configuredScriptModel = configuredScriptProvider === 'apifox_hub'
+    ? String(resolveApifoxHubCredentials(credentials, 'chat')?.chatModel ?? '').trim()
+    : String(credentials.grsaiAnalysisModel ?? '').trim()
   return {
     activeProviderSummary: {
       video: {
@@ -328,6 +436,20 @@ function summarizeProjectProviders(project: CloneProject) {
       video: String(videoModel || ''),
       image: String(imageModel || ''),
       script: String(scriptModel || ''),
+    },
+    configuredProviderSummary: {
+      video: {
+        provider: configuredVideoProvider,
+        model: String(configuredVideoModel || ''),
+      },
+      image: {
+        provider: configuredImageProvider,
+        model: String(configuredImageModel || ''),
+      },
+      script: {
+        provider: configuredScriptProvider,
+        model: String(configuredScriptModel || ''),
+      },
     },
   }
 }
@@ -591,7 +713,16 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     project.baseBlueprint?.consistencyAssets?.productReferenceImages?.length ??
     project.blueprint?.consistencyAssets?.productReferenceImages?.length ??
     0
+  const firstProductImage =
+    String(
+      project.blueprint?.consistencyAssets?.productReferenceImages?.[0] ||
+      project.baseBlueprint?.consistencyAssets?.productReferenceImages?.[0] ||
+      project.blueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? [])[0] ||
+      project.baseBlueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? [])[0] ||
+      '',
+    ).trim()
   const coverAssetPath =
+    firstProductImage ||
     String(project.finalCompose?.outputPath || '').trim() ||
     String(project.previewPipeline?.previewOutputPath || '').trim() ||
     String(project.referenceVideoPath || '').trim()
@@ -601,6 +732,7 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     title: ensureProjectTitle(project),
     description: String(project.description || '').trim() || undefined,
     archived: Boolean(project.archived ?? false),
+    runMode: normalizeRunMode(project.runMode),
     createdAt: Number(project.createdAt || 0),
     updatedAt: project.updatedAt,
     currentStep: project.workflowV2?.currentStep ?? 'upload_analyze_script',
@@ -631,7 +763,7 @@ function hasCloudVideoKey(credentials: ModelCredentials) {
   const p = videoProviderChain(credentials)[0]
   if (p === 'kling') return Boolean(String(credentials.klingApiKey ?? '').trim())
   if (p === 'grsai') return Boolean(String(credentials.grsaiApiKey ?? '').trim())
-  if (p === 'apifox_hub') return Boolean(String(credentials.apifoxHub?.apiKey ?? '').trim())
+  if (p === 'apifox_hub') return Boolean(String(resolveApifoxHubCredentials(credentials, 'video')?.apiKey ?? '').trim())
   return Boolean(String(credentials.seedanceApiKey ?? '').trim())
 }
 
@@ -639,7 +771,7 @@ function videoProviderLabel(credentials: ModelCredentials) {
   const p = videoProviderChain(credentials)[0]
   if (p === 'kling') return 'AtlasCloud'
   if (p === 'grsai') return 'GRS.AI'
-  if (p === 'apifox_hub') return 'ai666'
+  if (p === 'apifox_hub') return resolveApifoxHubProfile(credentials, 'video') === 'ai666' ? 'AI666' : 'VectorEngine'
   return 'Seedance'
 }
 
@@ -648,12 +780,13 @@ function videoProviderModel(credentials: ModelCredentials) {
   if (p === 'kling') return String(credentials.videoModelPrimary ?? '').trim() || 'google/veo3.1-lite/start-end-frame-to-video'
   if (p === 'grsai') return String(credentials.grsaiVideoModel ?? '').trim() || 'grsai-video'
   if (p === 'apifox_hub') {
+    const hub = resolveApifoxHubCredentials(credentials, 'video')
     return (
       String(
-        credentials.apifoxHub?.referenceVideoModel ||
-          credentials.apifoxHub?.startEndVideoModel ||
-          credentials.apifoxHub?.imageToVideoModel ||
-          credentials.apifoxHub?.textToVideoModel ||
+        hub?.referenceVideoModel ||
+          hub?.startEndVideoModel ||
+          hub?.imageToVideoModel ||
+          hub?.textToVideoModel ||
           '',
       ).trim() || 'apifox-video'
     )
@@ -763,7 +896,7 @@ function syncFinalCompose(project: CloneProject, patch: Partial<CloneFinalCompos
   project.finalCompose = {
     status: patch.status,
     outputPath: patch.outputPath ?? project.finalCompose?.outputPath,
-    error: patch.error ?? project.finalCompose?.error,
+    error: patch.status === 'done' ? patch.error : patch.error ?? project.finalCompose?.error,
     updatedAt: now(),
   }
   return project.finalCompose
@@ -782,6 +915,14 @@ function composeWholeScriptFromShots(shots: ShotSpec[]) {
     .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
     .map((shot, idx) => `#${idx + 1} ${shot.scriptRole || 'unknown'}\n${String(shot.scriptText || shot.generationPrompt || shot.visualDescription || '').trim()}`)
     .join('\n\n')
+}
+
+function buildShotTimeRange(shot: Pick<ShotSpec, 'startSec' | 'endSec' | 'durationSec'>) {
+  const startSec = Number(shot.startSec || 0)
+  const fallbackEnd = startSec + Number(shot.durationSec || 0)
+  const requestedEnd = Number(shot.endSec ?? fallbackEnd)
+  const clampedEnd = Math.max(startSec + 0.5, Math.min(requestedEnd, startSec + 8))
+  return `${startSec.toFixed(1)}s-${clampedEnd.toFixed(1)}s`
 }
 
 async function generateWholeScriptVariantsWithAi(input: {
@@ -827,9 +968,12 @@ async function generateWholeScriptVariantsWithAi(input: {
     `Variant count: ${input.variantCount}.`,
     'Every variant must keep shot order unchanged and output per-shot time-range script content.',
     'Each shotScripts item must explicitly describe what happens in that time range, in a form like "0s-3s 做什么".',
+    'Every single shot must be 8.0 seconds or shorter. Never output any shot longer than 8 seconds.',
+    'If a source beat feels longer than 8 seconds, split it into finer consecutive sub-shots while keeping the same story logic and shot order.',
     'Keep the same overall selling structure and shot count, but vary hook wording, scene framing, action details, transitions, persuasion style, and product emphasis.',
     'You must incorporate the bound model identity and product reference context when generating the variants.',
     'Do not remove shots. Do not change shot order. Do not add watermark, logo, subtitles, platform UI, or unrelated branding.',
+    'Each shotScripts item must stay within its own time range, and that time range itself must not exceed 8 seconds.',
     'Return JSON only.',
     'JSON shape:',
     '{"variants":[{"title":"","summary":"","reason":"","score":8.6,"shotScripts":[{"shotId":"","shotIndex":0,"timeRange":"0.0s-3.0s","scriptText":"","scriptRole":"hook","visualDescription":"","actionDescription":"","cameraDescription":"","generationPrompt":""}]}]}',
@@ -838,6 +982,36 @@ async function generateWholeScriptVariantsWithAi(input: {
     'Source shots:',
     sourceScript,
   ].join('\n')
+
+  if (input.credentials.chatProviderPrimary === 'apifox_hub') {
+    const apifox = await generateChatCompletion({
+      credentials: input.credentials,
+      system: 'You are a strict JSON-only full-video script variant generator.',
+      prompt,
+    })
+    if (!apifox.content) throw new Error(`整片脚本变体生成失败。provider=${apifox.provider} model=${apifox.model} response为空`)
+    const jsonText = extractJsonObjectText(apifox.content)
+    let parsed: any
+    try {
+      parsed = JSON.parse(jsonText)
+    } catch (error: any) {
+      throw new Error(
+        `整片脚本变体解析失败。provider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 320)} reason=${String(error?.message || error)}`,
+      )
+    }
+    const rawVariants = Array.isArray(parsed?.variants) ? parsed.variants : []
+    if (!rawVariants.length) {
+      throw new Error(`整片脚本变体结果为空。provider=${apifox.provider} model=${apifox.model} response=${cleanAiText(apifox.content).slice(0, 320)}`)
+    }
+    return rawVariants.map((item: any, index: number) => ({
+      id: randomUUID(),
+      title: String(item?.title || `脚本变体 ${index + 1}`).trim(),
+      summary: String(item?.summary || '').trim(),
+      reason: String(item?.reason || '').trim(),
+      score: Number(item?.score || 0) || 0,
+      shotScripts: Array.isArray(item?.shotScripts) ? item.shotScripts : [],
+    }))
+  }
 
   const res = await fetch(`${host}/v1/chat/completions`, {
     method: 'POST',
@@ -936,16 +1110,33 @@ function imageProviderLabel(credentials: ModelCredentials) {
   const p = imageProviderName(credentials)
   if (p === 'kling') return 'AtlasCloud 图片'
   if (p === 'grsai') return 'GRS.AI 图片'
-  if (p === 'apifox_hub') return 'ai666 图片'
-  return 'ai666 图片'
+  if (p === 'apifox_hub') return `${resolveApifoxHubProfile(credentials, 'image') === 'ai666' ? 'AI666' : 'VectorEngine'} 图片`
+  return 'VectorEngine 图片'
 }
 
 function imageProviderModel(credentials: ModelCredentials) {
   const p = imageProviderName(credentials)
   if (p === 'kling') return String(credentials.klingImageModel ?? '').trim() || 'openai/gpt-image-1/edit'
   if (p === 'grsai') return String(credentials.grsaiImageModel ?? '').trim() || 'gpt-image-2'
-  if (p === 'apifox_hub') return String(credentials.apifoxHub?.imageModel ?? '').trim() || 'apifox-image'
-  return String(credentials.apifoxHub?.imageModel ?? credentials.openaiImageModel ?? '').trim() || 'apifox-image'
+  if (p === 'apifox_hub') return String(resolveApifoxHubCredentials(credentials, 'image')?.imageModel ?? '').trim() || 'apifox-image'
+  return String(resolveApifoxHubCredentials(credentials, 'image')?.imageModel ?? credentials.openaiImageModel ?? '').trim() || 'apifox-image'
+}
+
+function compactStoryboardImageRefs(input: {
+  productRefs: string[]
+  modelPackRefs: string[]
+  thumbnailPath?: string
+  startFramePath?: string
+  mode: 'start' | 'end'
+}) {
+  const productRefs = Array.from(new Set(input.productRefs.map((item) => String(item || '').trim()).filter(Boolean)))
+  const modelPackRefs = Array.from(new Set(input.modelPackRefs.map((item) => String(item || '').trim()).filter(Boolean)))
+  const thumbnailRefs = input.thumbnailPath ? [String(input.thumbnailPath).trim()].filter(Boolean) : []
+  const startFrameRefs = input.startFramePath ? [String(input.startFramePath).trim()].filter(Boolean) : []
+  if (input.mode === 'end') {
+    return Array.from(new Set([...startFrameRefs, ...productRefs.slice(0, 2), ...modelPackRefs.slice(0, 1), ...thumbnailRefs])).slice(0, 5)
+  }
+  return Array.from(new Set([...productRefs.slice(0, 3), ...modelPackRefs.slice(0, 2), ...thumbnailRefs])).slice(0, 5)
 }
 
 function generatedImageProvider(credentials: ModelCredentials) {
@@ -957,6 +1148,15 @@ function generatedImageProvider(credentials: ModelCredentials) {
 }
 
 function assertImageProviderKey(credentials: ModelCredentials, action: string) {
+  if (
+    credentials.allowMockWhenNoKey &&
+    !String(credentials.klingApiKey ?? '').trim() &&
+    !String(credentials.grsaiApiKey ?? '').trim() &&
+    !String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(credentials.openaiApiKey ?? '').trim()
+  ) {
+    return
+  }
   const p = imageProviderName(credentials)
   if (p === 'kling') {
     if (String(credentials.klingApiKey ?? '').trim()) return
@@ -966,9 +1166,31 @@ function assertImageProviderKey(credentials: ModelCredentials, action: string) {
     if (String(credentials.grsaiApiKey ?? '').trim()) return
     throw new Error(`未配置 GRS.AI API Key，无法${action}`)
   }
-  if (String(credentials.apifoxHub?.apiKey ?? '').trim()) return
+  if (String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey ?? '').trim()) return
   if (String(credentials.openaiApiKey ?? '').trim()) return
-  throw new Error(`未配置 ai666 API Key，无法${action}。当前图片供应商解析为 ${p}。`)
+  throw new Error(`未配置 VectorEngine API Key，无法${action}。当前图片供应商解析为 ${p}。`)
+}
+
+function isLocalMockTestMode(credentials: ModelCredentials) {
+  return (
+    credentials.allowMockWhenNoKey &&
+    !String(credentials.klingApiKey ?? '').trim() &&
+    !String(credentials.grsaiApiKey ?? '').trim() &&
+    !String(credentials.seedanceApiKey ?? '').trim() &&
+    !String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(credentials.openaiApiKey ?? '').trim()
+  )
+}
+
+function isImageTaskMapping(taskId?: string, provider?: string, model?: string) {
+  const taskText = String(taskId || '').trim().toLowerCase()
+  const providerText = String(provider || '').trim().toLowerCase()
+  const modelText = String(model || '').trim().toLowerCase()
+  return (
+    taskText.startsWith('gpt_frame_') ||
+    providerText.includes('image') ||
+    modelText.includes('image')
+  )
 }
 
 function mergeImageProviderOverrides(credentials: ModelCredentials, input: Partial<ModelCredentials>): ModelCredentials {
@@ -987,6 +1209,12 @@ function mergeImageProviderOverrides(credentials: ModelCredentials, input: Parti
     grsaiApiKey: input.grsaiApiKey ?? credentials.grsaiApiKey,
     grsaiHost: input.grsaiHost ?? credentials.grsaiHost,
     grsaiImageModel: input.grsaiImageModel ?? credentials.grsaiImageModel,
+    apifoxHub: input.apifoxHub
+      ? {
+          ...(resolveApifoxHubCredentials(credentials, 'image') ?? {}),
+          ...input.apifoxHub,
+        }
+      : resolveApifoxHubCredentials(credentials, 'image'),
     qiniuAccessKey: input.qiniuAccessKey ?? credentials.qiniuAccessKey,
     qiniuSecretKey: input.qiniuSecretKey ?? credentials.qiniuSecretKey,
     qiniuBucket: input.qiniuBucket ?? credentials.qiniuBucket,
@@ -1000,6 +1228,11 @@ function mergeImageProviderOverrides(credentials: ModelCredentials, input: Parti
 function normalizeProductType(v?: string): CloneProductType {
   if (v === 'earrings' || v === 'phone_case' || v === 'clothes' || v === 'toy') return v
   return 'general'
+}
+
+function consistencyRuntimeMode(shot: ShotSpec, strictConsistencyMode?: boolean): ConsistencyMode {
+  if (shot.consistencyMode === 'strict' || strictConsistencyMode) return 'hard'
+  return 'soft'
 }
 
 function normalizeQualityMode(v?: string): CloneQualityMode {
@@ -1213,6 +1446,22 @@ function movementForShot(shot: ShotSpec) {
   return map[motion] ?? map.static
 }
 
+function hasLegacyClonePromptArtifacts(value: unknown) {
+  const text = String(value ?? '').trim().toLowerCase()
+  if (!text) return false
+  return (
+    text.includes('shot script lock:') ||
+    text.includes('script role:') ||
+    text.includes('generation prompt:') ||
+    text.includes('analysis notes:') ||
+    text.includes('reference lock mode:') ||
+    text.includes('must preserve:') ||
+    text.includes('script confidence:') ||
+    text.includes('aggregate chat model not enabled') ||
+    /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(text)
+  )
+}
+
 function buildStructuredShotPrompt(input: {
   shot: ShotSpec
   productType?: CloneProductType
@@ -1221,7 +1470,10 @@ function buildStructuredShotPrompt(input: {
   retryAttempt?: number
 }) {
   const shot = input.shot
-  if (String(shot.aiPrompt || '').trim()) return String(shot.aiPrompt || '').trim()
+  const existingPrompt = String(shot.aiPrompt || '').trim()
+  if (existingPrompt && !hasLegacyClonePromptArtifacts(existingPrompt)) {
+    return sanitizeGeneratedVideoPrompt(existingPrompt)
+  }
   const productType = normalizeProductType(input.productType ?? shot.productType)
   const blueprint = {
     totalDurationSec: Number(shot.durationSec || 3),
@@ -1245,7 +1497,7 @@ function buildStructuredShotPrompt(input: {
     analysisNotes: [],
     transcript: '',
   }
-  return buildCloneShotPrompt({
+  const prompt = buildCloneShotPrompt({
     blueprint,
     shot: {
       ...shot,
@@ -1261,7 +1513,19 @@ function buildStructuredShotPrompt(input: {
       qualityMode: normalizeQualityMode(shot.qualityMode),
       productPoints: [input.productPoints || shot.materialNeed, input.productAnalysisText || ''].filter(Boolean).join('\n'),
     },
-  }).positive
+  })
+  return sanitizeGeneratedVideoPrompt([prompt.positive, buildNoSpeakingInstruction()].filter(Boolean).join('\n\n'))
+}
+
+function normalizeLegacyShotPromptForPersistence(shot: ShotSpec) {
+  const existingPrompt = String(shot.aiPrompt || '').trim()
+  if (!existingPrompt) return undefined
+  const cleaned = sanitizeGeneratedVideoPrompt(existingPrompt)
+  if (!cleaned) return undefined
+  if (hasLegacyClonePromptArtifacts(existingPrompt) || cleaned !== existingPrompt) {
+    return cleaned
+  }
+  return existingPrompt
 }
 
 function buildVideoPlanShotPrompt(input: {
@@ -1315,7 +1579,7 @@ function buildVideoPlanShotPrompt(input: {
 }
 
 function defaultQualityNegativePrompt() {
-  return 'cgi, 3d render, cartoon, anime, plastic toy, fake product, changed color, changed shape, changed pattern, extra logo, watermark, text, subtitles, random letters, browser UI, ChatGPT, software screen, screen recording, tutorial overlay, account name, platform controls, bad hands, deformed ear, blurry jewelry, low resolution, overexposed, duplicate earrings, wrong product, extra accessories, distorted face, unrealistic skin, floating object, messy background'
+  return 'cgi, 3d render, cartoon, anime, plastic toy, fake product, changed color, changed shape, changed pattern, extra logo, watermark, text, titles, subtitles, captions, labels, packaging text, slogans, random letters, browser UI, ChatGPT, software screen, screen recording, tutorial overlay, account name, platform controls, typographic elements, bad hands, deformed ear, blurry jewelry, low resolution, overexposed, duplicate earrings, wrong product, extra accessories, distorted face, unrealistic skin, floating object, messy background'
 }
 
 function segmentKeyByPurpose(purpose: ShotSpec['purpose']): string {
@@ -1750,7 +2014,7 @@ function getEffectiveShotState(shot: ShotSpec, output?: CloneShotVideoOutput) {
   }
 }
 
-function buildPreflightIssues(shots: ShotSpec[], project?: CloneProject | null) {
+function buildPreflightIssues(shots: ShotSpec[], project?: CloneProject | null, options?: { allowMockCompose?: boolean }) {
   const issues: string[] = []
   const outputMap = getShotVideoOutputMap(project)
   for (const shot of shots) {
@@ -1772,19 +2036,13 @@ function buildPreflightIssues(shots: ShotSpec[], project?: CloneProject | null) 
     }
     const hasCloud = isCloudGeneratedShot(cloudLikeShot)
     if (shot.status === 'failed') issues.push((label + ': 处于失败状态 ' + (shot.error || '')).trim())
-    if (shot.isMock || shot.generatedSource === 'mock') issues.push(label + ': mock 片段不可出片')
+    if ((shot.isMock || shot.generatedSource === 'mock') && !options?.allowMockCompose) {
+      issues.push(label + ': mock 片段不可出片')
+    }
     if (!hasUpload && !hasCloud) issues.push(label + ': 缺少可用视频')
     if (effective.generatedClipPath && !hasCloud && !hasUpload) issues.push(label + ': AI 片段不是合格云端结果')
-    if (hasCloud && !effective.canEnterRender) issues.push(label + ': AI 片段未通过生产质检')
-    const generatedDuration = Number(shot.generatedClipDurationSec || outputMap.get(String(shot.id))?.durationSec || shot.durationSec || 0)
-    const targetDuration = Number(shot.durationSec || 0)
-    const cloudDurationOk =
-      hasCloud &&
-      generatedDuration >= Math.max(0.2, targetDuration - 0.6) &&
-      generatedDuration <= targetDuration + 0.8
-    if (hasCloud && !cloudDurationOk && Math.abs(generatedDuration - targetDuration) > 0.6) {
-      issues.push(label + ': 时长异常')
-    }
+    if (hasCloud && !effective.canEnterRender && !options?.allowMockCompose) issues.push(label + ': AI 片段未通过生产质检')
+    // 合成阶段会按复刻分镜时长重新裁剪已有视频片段，因此时长偏差本身不再阻塞出片。
   }
   return issues
 }
@@ -2017,6 +2275,25 @@ function replaceProductRefsIntoShot(shot: ShotSpec, refs: string[]): ShotSpec {
   }
 }
 
+function collectProjectProductReferenceImages(project: CloneProject): string[] {
+  const refs = new Set<string>()
+  for (const item of project.baseBlueprint?.consistencyAssets?.productReferenceImages ?? []) {
+    const text = String(item || '').trim()
+    if (text) refs.add(text)
+  }
+  for (const item of project.blueprint?.consistencyAssets?.productReferenceImages ?? []) {
+    const text = String(item || '').trim()
+    if (text) refs.add(text)
+  }
+  for (const shot of projectBlueprintShots(project)) {
+    for (const item of shot.productReferenceImagePaths ?? []) {
+      const text = String(item || '').trim()
+      if (text) refs.add(text)
+    }
+  }
+  return Array.from(refs)
+}
+
 async function assertCloudMotionVideo(filePath: string) {
   const meta = await probeMedia(filePath)
   const durationSec = Number(meta.durationSec || 0)
@@ -2077,6 +2354,17 @@ async function checkLocalTaskStatus(input: {
   shot: ShotSpec
 }) {
   const existingOutput = input.project.shotVideoOutputs?.find((item) => item.shotId === input.shot.id)
+  if (existingOutput && isImageTaskMapping(existingOutput.taskId, existingOutput.provider, existingOutput.model)) {
+    syncShotVideoOutput(input.project, {
+      ...existingOutput,
+      taskId: undefined,
+      provider: undefined,
+      model: undefined,
+      status: 'idle',
+      error: undefined,
+      updatedAt: now(),
+    })
+  }
   const existingVideoPath = String(existingOutput?.videoPath || input.shot.generatedClipPath || '').trim()
   if (existingVideoPath) {
     return {
@@ -2217,6 +2505,18 @@ function reorderProjectCollections(project: CloneProject, shotIds: string[]) {
 
 function syncSegmentVideoOutput(project: CloneProject, shot: ShotSpec, patch: Partial<CloneShotVideoOutput>) {
   const previous = resolveShotVideoOutput(project, shot)
+  const hasLocalPath = Object.prototype.hasOwnProperty.call(patch, 'localPath')
+  const hasVideoPath = Object.prototype.hasOwnProperty.call(patch, 'videoPath')
+  const nextLocalPath = hasLocalPath
+    ? patch.localPath
+    : hasVideoPath
+      ? patch.videoPath
+      : (previous.localPath || previous.videoPath)
+  const nextVideoPath = hasVideoPath
+    ? patch.videoPath
+    : hasLocalPath
+      ? patch.localPath
+      : previous.videoPath
   syncShotVideoOutput(project, {
     ...previous,
     ...patch,
@@ -2224,8 +2524,8 @@ function syncSegmentVideoOutput(project: CloneProject, shot: ShotSpec, patch: Pa
     index: Number(patch.index ?? previous.index ?? shot.index ?? 0),
     shotId: shot.id,
     source: patch.source || previous.source || 'generated',
-    localPath: patch.localPath || patch.videoPath || previous.localPath || previous.videoPath,
-    videoPath: patch.videoPath || patch.localPath || previous.videoPath,
+    localPath: nextLocalPath,
+    videoPath: nextVideoPath,
     updatedAt: now(),
   } as CloneShotVideoOutput)
 }
@@ -2258,8 +2558,13 @@ function isCloudTerminalFailure(status: unknown) {
   return ['failed', 'error', 'cancelled', 'canceled', 'expired'].includes(String(status ?? '').toLowerCase())
 }
 
+function isMissingRemoteVideoTask(input: { errorMessage?: string; raw?: any }) {
+  const message = String(input.errorMessage || input.raw?.error || input.raw?.message || input.raw?.terminalError || '').trim()
+  return /task_not_exist/i.test(message)
+}
+
 function ai666PollingTimeoutMessage() {
-  return '本地等待超时，但云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。'
+  return '本地等待超时，但 VectorEngine 云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。'
 }
 
 async function saveSegmentDone(input: {
@@ -2337,7 +2642,8 @@ async function pollExistingSegmentTask(input: {
   const taskId = String(currentOutput.taskId || input.shot.generatedTaskId || '').trim()
   if (!taskId) throw new Error('当前分镜没有可继续查询的 taskId')
   const started = Date.now()
-  const pollMs = Math.max(1000, Number(creds.apifoxHub?.defaultPollIntervalMs ?? 2000) || 2000)
+  const videoHub = resolveApifoxHubCredentials(creds, 'video')
+  const pollMs = Math.max(1000, Number(videoHub?.defaultPollIntervalMs ?? 2000) || 2000)
   const waitMs = Math.max(0, Number(input.waitMs ?? 0))
   let lastTask: Awaited<ReturnType<typeof queryAi666Task>> | null = null
   do {
@@ -2350,7 +2656,7 @@ async function pollExistingSegmentTask(input: {
         taskId,
         provider: currentOutput.provider || videoProviderLabel(creds),
         model: currentOutput.model || videoProviderModel(creds),
-        endpointStyle: currentOutput.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+        endpointStyle: currentOutput.endpointStyle || videoHub?.videoEndpointStyle,
         requestCapability: currentOutput.requestCapability || 'video_start_end_to_video',
         lastPollAt: now(),
         error: undefined,
@@ -2372,14 +2678,14 @@ async function pollExistingSegmentTask(input: {
         const outDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', latestShot.id)
         await mkdir(outDir, { recursive: true })
         const outPath = join(outDir, 'generated_clip.mp4')
-        await downloadAtlasToFile(lastTask.outputUrls[0], outPath, 'ai666 继续查询下载')
+        await downloadAtlasToFile(lastTask.outputUrls[0], outPath, 'VectorEngine 继续查询下载')
         const saved = await saveSegmentDone({
           project: latestProject,
           shot: latestShot,
           taskId,
           provider: currentOutput.provider || videoProviderLabel(creds),
           model: currentOutput.model || videoProviderModel(creds),
-          endpointStyle: currentOutput.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+          endpointStyle: currentOutput.endpointStyle || videoHub?.videoEndpointStyle,
           requestCapability: currentOutput.requestCapability || 'video_start_end_to_video',
           videoUrl: lastTask.outputUrls[0],
           localPath: outPath,
@@ -2389,21 +2695,28 @@ async function pollExistingSegmentTask(input: {
         return { project: saved, task: lastTask, synced: true, status: 'done' as const }
       }
       if (lastTask.status === 'failed' || isCloudTerminalFailure(lastTask.raw?.status ?? lastTask.raw?.data?.status)) {
-        const reason = lastTask.errorMessage || `ai666 视频任务失败: ${taskId}`
+        const reason = lastTask.errorMessage || `VectorEngine 视频任务失败: ${taskId}`
+        const missingRemoteTask = isMissingRemoteVideoTask(lastTask)
         replaceProjectShot(latestProject, latestShot.id, {
           status: 'failed',
           error: reason,
-          generatedTaskId: taskId,
+          generatedTaskId: missingRemoteTask ? undefined : taskId,
           generatedProvider: currentOutput.provider || videoProviderLabel(creds),
           generatedModel: currentOutput.model || videoProviderModel(creds),
         })
         syncSegmentVideoOutput(latestProject, latestShot, {
           status: 'failed',
-          taskId,
+          previousTaskIds: missingRemoteTask
+            ? Array.from(new Set([...(currentOutput.previousTaskIds ?? []), taskId]))
+            : currentOutput.previousTaskIds,
+          taskId: missingRemoteTask ? undefined : taskId,
           remoteStatus,
           remoteRaw: lastTask.raw,
           error: reason,
           lastPollAt: now(),
+          videoPath: missingRemoteTask ? undefined : currentOutput.videoPath,
+          localPath: missingRemoteTask ? undefined : currentOutput.localPath,
+          videoUrl: missingRemoteTask ? undefined : currentOutput.videoUrl,
         })
         latestProject.lastError = `[${videoProviderLabel(creds)} / ${videoProviderModel(creds)}] ${reason}`
         setProjectErrorContext(latestProject, {
@@ -2603,21 +2916,42 @@ async function ensureAi666SegmentVideoTask(input: {
   mode: CloneQualityMode
 }) {
   const creds = await cloneRepo.getCredentials()
-  clearInvalidVideoTaskMapping(input.project, input.shot, 'before-ai666-create')
+  clearInvalidVideoTaskMapping(input.project, input.shot, 'before-vectorengine-create')
   const existing = resolveShotVideoOutput(input.project, input.shot)
+  console.log('[clone-debug] ensure-vectorengine-task:existing-output', {
+    projectId: input.project.id,
+    shotId: input.shot.id,
+    taskId: existing.taskId,
+    videoPath: existing.videoPath,
+    localPath: existing.localPath,
+    remoteStatus: existing.remoteStatus,
+    shotGeneratedClipPath: input.shot.generatedClipPath,
+  })
   if (existing.videoPath || input.shot.generatedClipPath) {
+    console.log('[clone-debug] ensure-vectorengine-task:reuse-existing-video', {
+      projectId: input.project.id,
+      shotId: input.shot.id,
+      taskId: existing.taskId,
+      videoPath: existing.videoPath || input.shot.generatedClipPath,
+    })
     return await saveSegmentDone({
       project: input.project,
       shot: input.shot,
       taskId: existing.taskId,
       provider: existing.provider || 'apifox_hub',
       model: existing.model || videoProviderModel(creds),
-      endpointStyle: existing.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+      endpointStyle: existing.endpointStyle || resolveApifoxHubCredentials(creds, 'video')?.videoEndpointStyle,
       requestCapability: existing.requestCapability || 'video_start_end_to_video',
       localPath: existing.videoPath || input.shot.generatedClipPath || '',
     })
   }
   if (existing.taskId) {
+    console.log('[clone-debug] ensure-vectorengine-task:poll-existing-task', {
+      projectId: input.project.id,
+      shotId: input.shot.id,
+      taskId: existing.taskId,
+      remoteStatus: existing.remoteStatus,
+    })
     const polled = await pollExistingSegmentTask({ project: input.project, shot: input.shot, waitMs: 30000 })
     return polled.project
   }
@@ -2629,12 +2963,12 @@ async function ensureAi666SegmentVideoTask(input: {
     status: 'creating',
     provider: 'apifox_hub',
     model: videoProviderModel(creds),
-    endpointStyle: creds.apifoxHub?.videoEndpointStyle,
+    endpointStyle: resolveApifoxHubCredentials(creds, 'video')?.videoEndpointStyle,
     requestCapability: endFrameUrl ? 'video_start_end_to_video' : 'video_image_to_video',
     error: undefined,
   })
   await cloneRepo.upsertProject(input.project)
-  console.log('[clone-debug] create-ai666-video-task:start', {
+  console.log('[clone-debug] create-vectorengine-video-task:start', {
     projectId: input.project.id,
     shotId: input.shot.id,
     capability: endFrameUrl ? 'video_start_end_to_video' : 'video_image_to_video',
@@ -2653,7 +2987,7 @@ async function ensureAi666SegmentVideoTask(input: {
     const outDir = join(getAppPaths().dataDir, 'viral-clone', input.project.id, 'shots', input.shot.id)
     await mkdir(outDir, { recursive: true })
     const outPath = join(outDir, 'generated_clip.mp4')
-    await downloadAtlasToFile(created.directOutputUrl, outPath, 'ai666 直接视频下载')
+    await downloadAtlasToFile(created.directOutputUrl, outPath, 'VectorEngine 直接视频下载')
     return await saveSegmentDone({
       project: input.project,
       shot: input.shot,
@@ -2667,8 +3001,8 @@ async function ensureAi666SegmentVideoTask(input: {
       remoteRaw: created.raw,
     })
   }
-  if (!created.taskId) throw new Error('ai666 视频任务缺少 taskId')
-  console.log('[clone-debug] create-ai666-video-task:done', {
+  if (!created.taskId) throw new Error('VectorEngine 视频任务缺少 taskId')
+  console.log('[clone-debug] create-vectorengine-video-task:done', {
     projectId: input.project.id,
     shotId: input.shot.id,
     taskId: created.taskId,
@@ -2700,11 +3034,12 @@ async function ensureAi666SegmentVideoTask(input: {
 }
 
 export const cloneService = {
-  async createDraftProject(input?: { locale?: CloneLocale; strength?: 'structure'; title?: string; description?: string }) {
+  async createDraftProject(input?: { locale?: CloneLocale; strength?: 'structure'; title?: string; description?: string; runMode?: CloneRunMode }) {
     const locale: CloneLocale = input?.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN'
     const project = await cloneRepo.createProject({
       locale,
       strength: input?.strength ?? 'structure',
+      runMode: normalizeRunMode(input?.runMode),
       referenceVideoPath: '',
       referenceVideoName: '',
       title: input?.title,
@@ -2890,14 +3225,7 @@ export const cloneService = {
     patchWorkflowV2(project, 'generate_script_variants', 'generate_script_variants', 'running')
     const count = Math.max(1, Math.min(6, Math.floor(Number(input.variantCount || 3))))
     if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特。')
-    const boundProductRefs = Array.from(
-      new Set(
-        projectBlueprintShots(project)
-          .flatMap((shot) => shot.productReferenceImagePaths ?? [])
-          .map((item) => String(item || '').trim())
-          .filter(Boolean),
-      ),
-    )
+    const boundProductRefs = collectProjectProductReferenceImages(project)
     if (!boundProductRefs.length) throw new Error('请先上传商品图。')
     const productAnalysis = (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis
     const productAnalysisText = buildProductStructureDescription({
@@ -2941,7 +3269,7 @@ export const cloneService = {
             shotIndex,
             timeRange:
               String(hit?.timeRange || hit?.time_range || '').trim() ||
-              `${Number(shot.startSec || 0).toFixed(1)}s-${Number(shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 0)).toFixed(1)}s`,
+              buildShotTimeRange(shot),
             scriptText: String(hit?.scriptText || shot.scriptText || '').trim(),
             scriptRole: (String(hit?.scriptRole || shot.scriptRole || 'unknown').trim() || 'unknown') as ShotSpec['scriptRole'],
             visualDescription: String(hit?.visualDescription || shot.visualDescription || '').trim(),
@@ -2982,7 +3310,7 @@ export const cloneService = {
       const creds = await cloneRepo.getCredentials()
       setProjectErrorContext(
         project,
-        creds.apifoxHub?.enabled
+        creds.chatProviderPrimary === 'apifox_hub'
           ? {
               ...apifoxContextByCapability(creds, 'chat_completion'),
               action: 'generate_script_variants',
@@ -3038,7 +3366,7 @@ export const cloneService = {
           return {
             shotId: shot.id,
             shotIndex: Number(shot.index || 0),
-            timeRange: `${Number(shot.startSec || 0).toFixed(1)}s-${Number(shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 0)).toFixed(1)}s`,
+            timeRange: buildShotTimeRange(shot),
             scriptText: String(chosen?.scriptText || shot.scriptText || '').trim(),
             scriptRole: chosen?.scriptRole || shot.scriptRole || 'unknown',
             visualDescription: String(chosen?.visualDescription || shot.visualDescription || '').trim(),
@@ -3125,6 +3453,236 @@ export const cloneService = {
     return {
       project: saved,
       selectedScriptVariantId: saved.selectedScriptVariantId,
+    }
+  },
+
+  async autoRunCloneToStoryboardVideos(input: {
+    cloneProjectId: string
+    variantCount?: number
+    selectedModelIdentityId?: string
+    productReferenceImagePaths?: string[]
+    autoBindModelPack?: boolean
+  }) {
+    let project = await cloneRepo.getProject(input.cloneProjectId)
+    if (!project) throw new Error('复刻项目不存在')
+    ensureCloneFlowState(project)
+    ensureAutoFlowStatus(project)
+    setAutoFlowStage(project, 'analyze', 'running', '自动复制流程启动')
+    await cloneRepo.upsertProject(project)
+
+    if (input.selectedModelIdentityId && project.selectedModelIdentityId !== input.selectedModelIdentityId) {
+      project = await this.selectProjectModelIdentity({
+        cloneProjectId: project.id,
+        identityId: input.selectedModelIdentityId,
+      })
+    }
+    if (input.productReferenceImagePaths?.length) {
+      project = await this.saveProjectProductImages({
+        cloneProjectId: project.id,
+        productReferenceImagePaths: input.productReferenceImagePaths,
+      })
+    }
+    if (!String(project.referenceVideoPath || '').trim()) throw new Error('请先绑定参考视频')
+    if (!project.baseBlueprint?.shots?.length) {
+      const analyzed = await this.createCloneBlueprintFromReference({
+        cloneProjectId: project.id,
+        videoPath: project.referenceVideoPath,
+        locale: project.locale,
+        strength: 'structure',
+      })
+      project = analyzed.project
+    }
+
+    setAutoFlowStage(project, 'materials', 'running', '自动准备一致性素材')
+    await cloneRepo.upsertProject(project)
+    project = (
+      await this.prepareCloneMaterials({
+        cloneProjectId: project.id,
+        productReferenceImagePaths: input.productReferenceImagePaths,
+        generateModelPack: input.autoBindModelPack ?? false,
+      })
+    ).project
+
+    const boundProductRefs = collectProjectProductReferenceImages(project)
+    if (!boundProductRefs.length) throw new Error('请先绑定商品图')
+    if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特')
+
+    setAutoFlowStage(project, 'script', 'running', '自动生成并选择最高分脚本')
+    await cloneRepo.upsertProject(project)
+    const variantResult = await this.generateScriptVariantsForProject({
+      cloneProjectId: project.id,
+      variantCount: Math.max(1, Math.min(6, Number(input.variantCount ?? 3) || 3)),
+    })
+    project = variantResult.project
+    const topCandidate = [...(project.scriptVariantCandidates ?? [])].sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0]
+    if (!topCandidate?.id) throw new Error('脚本候选生成失败，未产出可用候选')
+    const selectedResult = await this.selectScriptVariantForProject({
+      cloneProjectId: project.id,
+      variantId: topCandidate.id,
+    })
+    project = selectedResult.project
+
+    setAutoFlowStage(project, 'storyboard_images', 'running', '自动生成分镜图片')
+    await cloneRepo.upsertProject(project)
+    const frameResult = await this.generateStoryboardGridsForProject({
+      cloneProjectId: project.id,
+      productReferenceImagePaths: boundProductRefs,
+      selectedModelIdentityId: project.selectedModelIdentitySnapshot?.id,
+    })
+    project = frameResult.project
+
+    const frameRetryErrors: Array<{ shotId: string; index: number; reason: string }> = []
+    const frameRetryCandidates = (await cloneRepo.getProject(project.id))?.blueprint?.shots ?? []
+    for (const shot of frameRetryCandidates) {
+      const hasFrame = Boolean(String(shot.gptFirstFramePath || shot.generatedFirstFramePath || '').trim())
+      if (hasFrame) continue
+      let latestFrameError = String(shot.gptFrameError || shot.error || '分镜图片生成失败').trim()
+      for (let attempt = 1; attempt <= AUTO_CLONE_IMAGE_RETRY_LIMIT; attempt += 1) {
+        try {
+          const retryProject = await this.generateGptShotFrames({
+            cloneProjectId: project.id,
+            shotId: shot.id,
+            which: 'both',
+            productReferenceImagePaths: boundProductRefs,
+          })
+          const latestShot = retryProject.blueprint?.shots.find((item) => item.id === shot.id)
+          if (latestShot) {
+            replaceProjectShot(retryProject, shot.id, {
+              retryCount: attempt,
+              error: String(latestShot.error || '').trim(),
+              gptFrameError: String(latestShot.gptFrameError || '').trim(),
+            })
+          }
+          project = await cloneRepo.upsertProject(retryProject)
+          if (String(latestShot?.gptFirstFramePath || latestShot?.generatedFirstFramePath || '').trim()) {
+            latestFrameError = ''
+            break
+          }
+        } catch (error: any) {
+          latestFrameError = String(error?.message ?? error ?? '分镜图片生成失败')
+          const latest = (await cloneRepo.getProject(project.id)) || project
+          replaceProjectShot(latest, shot.id, {
+            retryCount: attempt,
+            gptFrameError: latestFrameError,
+            error: latestFrameError,
+            status: 'failed',
+          })
+          project = await cloneRepo.upsertProject(latest)
+        }
+      }
+      const latest = await cloneRepo.getProject(project.id)
+      const latestShot = latest?.blueprint?.shots.find((item) => item.id === shot.id)
+      const recovered = Boolean(String(latestShot?.gptFirstFramePath || latestShot?.generatedFirstFramePath || '').trim())
+      if (!recovered) {
+        frameRetryErrors.push({
+          shotId: shot.id,
+          index: Number(shot.index ?? 0),
+          reason: latestFrameError || String(latestShot?.gptFrameError || latestShot?.error || '分镜图片生成失败'),
+        })
+      }
+      if (latest) {
+        latest.storyboardFrames = projectBlueprintShots(latest)
+          .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+          .map((item, index) => ({
+            id: latest.storyboardFrames?.find((frame) => frame.shotId === item.id)?.id || randomUUID(),
+            shotId: item.id,
+            imagePath: String(item.gptFirstFramePath || item.generatedFirstFramePath || '').trim() || undefined,
+            aspectRatio: '9:16' as const,
+            status: String(item.gptFirstFramePath || item.generatedFirstFramePath || '').trim() ? 'cropped' : 'failed',
+            error: String(item.gptFrameError || item.error || '').trim() || undefined,
+            retryCount: Number(item.retryCount ?? 0) || undefined,
+            frameIndex: index,
+            updatedAt: now(),
+          }))
+        project = await cloneRepo.upsertProject(latest)
+      }
+    }
+
+    setAutoFlowStage(project, 'storyboard_videos', 'running', '自动生成分镜视频')
+    await cloneRepo.upsertProject(project)
+    const videoResult = await this.generateShotVideosFromStoryboardFrames({
+      cloneProjectId: project.id,
+      maxAutoRetryPerShot: AUTO_CLONE_VIDEO_RETRY_LIMIT,
+    } as any)
+    project = videoResult.project
+    const partialFailureCount = frameRetryErrors.length + Number(videoResult.queueSummary?.failed ?? 0) + Number(videoResult.queueSummary?.timeout ?? 0)
+    const doneSummary = partialFailureCount
+      ? `自动流程执行完成，分镜视频阶段部分失败：失败镜头 ${partialFailureCount} 个`
+      : '自动流程已完成分镜视频生成，进入最终门禁检查'
+    setAutoFlowStage(project, 'storyboard_videos', partialFailureCount ? 'partial_failed' : 'done', doneSummary)
+    project.lastError = partialFailureCount ? doneSummary : ''
+    project = await cloneRepo.upsertProject(project)
+    if (!partialFailureCount && project.runMode === 'auto') {
+      return await this.autoRunCloneToFinalGate({
+        cloneProjectId: project.id,
+        queueSummary: videoResult.queueSummary,
+        frameErrors: frameRetryErrors,
+        videoErrors: videoResult.errors ?? [],
+      })
+    }
+    return {
+      project,
+      queueSummary: videoResult.queueSummary,
+      frameErrors: frameRetryErrors,
+      videoErrors: videoResult.errors ?? [],
+    }
+  },
+
+  async autoRunCloneToFinalGate(input: {
+    cloneProjectId: string
+    queueSummary?: any
+    frameErrors?: Array<{ shotId: string; index: number; reason: string }>
+    videoErrors?: Array<{ shotId: string; index: number; reason: string }>
+  }) {
+    let project = await cloneRepo.getProject(input.cloneProjectId)
+    if (!project) throw new Error('复刻项目不存在')
+    ensureCloneFlowState(project)
+    ensureAutoFlowStatus(project)
+    setAutoFlowStage(project, 'quality_gate', 'running', '自动执行最终门禁检查')
+    project = await cloneRepo.upsertProject(project)
+
+    const latestShots = project.blueprint?.shots ?? []
+    const blockedShots = latestShots
+      .filter((shot) => shot.canEnterRender !== true || String(shot.qualityStatus || '').toLowerCase() === 'failed' || Boolean(shot.error))
+      .map((shot) => ({
+        shotId: shot.id,
+        index: Number(shot.index ?? 0),
+        reason: String(shot.error || shot.qualityReasons?.join('；') || '未通过最终门禁'),
+      }))
+
+    if (blockedShots.length) {
+      const reason = `最终门禁未通过：${blockedShots.length} 个镜头需人工修复`
+      setAutoFlowStage(project, 'quality_gate', 'failed', reason)
+      syncFinalCompose(project, { status: 'idle', error: reason })
+      project.lastError = reason
+      project = await cloneRepo.upsertProject(project)
+      return {
+        project,
+        queueSummary: input.queueSummary,
+        frameErrors: input.frameErrors ?? [],
+        videoErrors: input.videoErrors ?? [],
+        blockedShots,
+      }
+    }
+
+    setAutoFlowStage(project, 'final_compose', 'running', '自动进入最终成片合成')
+    project = await cloneRepo.upsertProject(project)
+    const composed = await this.composeCloneFinalVideo({ cloneProjectId: project.id, outputDir: project.outputDir })
+    const latest = composed.project
+    setAutoFlowStage(
+      latest,
+      'final_compose',
+      latest.finalCompose?.status === 'done' ? 'done' : 'failed',
+      latest.finalCompose?.status === 'done' ? '自动流程已完成最终成片' : String(latest.finalCompose?.error || '最终合成失败'),
+    )
+    const saved = await cloneRepo.upsertProject(latest)
+    return {
+      project: saved,
+      queueSummary: input.queueSummary,
+      frameErrors: input.frameErrors ?? [],
+      videoErrors: input.videoErrors ?? [],
+      blockedShots: [],
+      finalCompose: saved.finalCompose,
     }
   },
 
@@ -3239,6 +3797,7 @@ export const cloneService = {
     const generated = await this.generateAllShotFrames({
       cloneProjectId: input.cloneProjectId,
       onlyMissing: false,
+      which: 'start',
       shotIds: shots.map((shot) => shot.id),
       productReferenceImagePaths: refs,
     })
@@ -3286,6 +3845,7 @@ export const cloneService = {
 
   async generateShotVideosFromStoryboardFrames(input: {
     cloneProjectId: string
+    maxAutoRetryPerShot?: number
   }) {
     await reconcileRemoteStoryboardVideosInternal(input.cloneProjectId)
     let project = await cloneRepo.getProject(input.cloneProjectId)
@@ -3324,6 +3884,7 @@ export const cloneService = {
     let skipped = 0
     let timeout = 0
     let pending = 0
+    const maxAutoRetryPerShot = Math.max(0, Number(input.maxAutoRetryPerShot ?? 0))
     const errors: Array<{ shotId: string; index: number; reason: string }> = []
     for (const shot of shots) {
       clearInvalidVideoTaskMapping(project, shot, 'before-stage4-generate-loop')
@@ -3375,7 +3936,11 @@ export const cloneService = {
         continue
       }
       const existingBeforeCreate = resolveShotVideoOutput(project, shot)
-      if (existingBeforeCreate.taskId && existingBeforeCreate.status !== 'done') {
+      if (
+        existingBeforeCreate.taskId &&
+        existingBeforeCreate.status !== 'done' &&
+        !isImageTaskMapping(existingBeforeCreate.taskId, existingBeforeCreate.provider, existingBeforeCreate.model)
+      ) {
         console.log('[clone-debug] poll-existing-shot-video-task', {
           projectId: project.id,
           shotId: shot.id,
@@ -3395,12 +3960,72 @@ export const cloneService = {
         continue
       }
       try {
+        const creds = await cloneRepo.getCredentials()
+        const compiled = promptConsistencyService.compileAndPersist({
+          projectId: project.id,
+          shot,
+          projectShotCount: shots.length,
+          productReferenceImagePaths: shot.productReferenceImagePaths,
+        })
+        replaceProjectShot(project, shot.id, {
+          compiledPrompt: compiled.finalPrompt,
+          compiledNegativePrompt: compiled.finalNegativePrompt,
+          promptCompilerVersion: compiled.compilerVersion,
+          consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
+        })
+        project = await cloneRepo.upsertProject(project)
+        if (isLocalMockTestMode(creds)) {
+          const shotDir = join(getAppPaths().dataDir, 'viral-clone', project.id, 'shots', shot.id, 'mock-video')
+          await mkdir(shotDir, { recursive: true })
+          const startFramePath = String(shot.gptFirstFramePath || shot.generatedFirstFramePath || framePath).trim()
+          const endFramePath = String(shot.gptLastFramePath || shot.generatedLastFramePath || startFramePath).trim()
+          const generated = await generateShotVideoByProviderChain({
+            shot: {
+              ...shot,
+              compiledPrompt: compiled.finalPrompt,
+              compiledNegativePrompt: compiled.finalNegativePrompt,
+              promptCompilerVersion: compiled.compilerVersion,
+              consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
+            },
+            outDir: shotDir,
+            startFramePath,
+            endFramePath,
+            consistencyMode: consistencyRuntimeMode(shot, compiled.strictConsistencyMode),
+            credentials: creds,
+            chain: ['seedance'],
+            compiledPrompt: compiled.finalPrompt,
+            compiledNegativePrompt: compiled.finalNegativePrompt,
+          })
+          replaceProjectShot(project, shot.id, {
+            generatedClipPath: generated.outputFilePath,
+            generatedSource: 'mock',
+            generatedProvider: generated.provider,
+            generatedModel: generated.model,
+            generatedTaskId: generated.remoteTaskId,
+            status: 'done',
+            error: '',
+          })
+          syncShotVideoOutput(project, {
+            shotId: shot.id,
+            source: 'generated',
+            videoPath: generated.outputFilePath,
+            taskId: generated.remoteTaskId,
+            provider: generated.provider,
+            model: generated.model,
+            status: 'done',
+            error: undefined,
+            updatedAt: now(),
+          })
+          project = await cloneRepo.upsertProject(project)
+          done += 1
+          continue
+        }
         syncShotVideoOutput(project, {
           shotId: shot.id,
           source: 'generated',
           status: 'creating',
-          provider: videoProviderLabel(await cloneRepo.getCredentials()),
-          model: videoProviderModel(await cloneRepo.getCredentials()),
+          provider: videoProviderLabel(creds),
+          model: videoProviderModel(creds),
           updatedAt: now(),
         })
         await cloneRepo.upsertProject(project)
@@ -3422,14 +4047,39 @@ export const cloneService = {
             productAnalysisText,
           }),
         })
-        await this.generateShotClip({
-          cloneProjectId: project.id,
-          shotId: shot.id,
-        })
-        const latest = await cloneRepo.getProject(project.id)
+        let latest: CloneProject | null = null
+        let latestShot: ShotSpec | undefined
+        let videoSucceeded = false
+        for (let attempt = 0; attempt <= maxAutoRetryPerShot; attempt += 1) {
+          await this.generateShotClip({
+            cloneProjectId: project.id,
+            shotId: shot.id,
+            forceRegenerate: attempt > 0,
+          })
+          latest = await cloneRepo.getProject(project.id)
+          latestShot = latest?.blueprint?.shots.find((item) => item.id === shot.id)
+          if (latestShot) {
+            replaceProjectShot(latest!, shot.id, { retryCount: attempt })
+            syncShotVideoOutput(latest!, {
+              shotId: shot.id,
+              source: 'generated',
+              retryCount: attempt,
+              status: String(latestShot.generatedClipPath || '').trim() ? 'done' : 'polling_timeout',
+              updatedAt: now(),
+            })
+            latest = await cloneRepo.upsertProject(latest!)
+          }
+          if (String(latestShot?.generatedClipPath || '').trim()) {
+            videoSucceeded = true
+            break
+          }
+          const taskId = String(latestShot?.generatedTaskId || '').trim()
+          if (taskId) break
+        }
+        if (!latest) latest = await cloneRepo.getProject(project.id)
         project = latest ?? project
         ensureCloneFlowState(project)
-        const latestShot = project.blueprint?.shots.find((item) => item.id === shot.id)
+        latestShot = project.blueprint?.shots.find((item) => item.id === shot.id)
         syncShotVideoOutput(project, {
           shotId: shot.id,
           source: 'generated',
@@ -3440,9 +4090,10 @@ export const cloneService = {
           durationSec: Number(latestShot?.generatedClipDurationSec ?? 0) || undefined,
           status: latestShot?.generatedClipPath ? 'done' : 'polling_timeout',
           error: String(latestShot?.error ?? '').trim() || undefined,
+          retryCount: Number(latestShot?.retryCount ?? 0) || undefined,
           updatedAt: now(),
         })
-        if (latestShot?.generatedClipPath) {
+        if (videoSucceeded && latestShot?.generatedClipPath) {
           done += 1
           replaceProjectShot(project, shot.id, {
             generatedClipPath: latestShot.generatedClipPath,
@@ -3463,6 +4114,7 @@ export const cloneService = {
             productVisibilityScore: latestShot.productVisibilityScore,
             status: latestShot.status,
             error: latestShot.error,
+            retryCount: latestShot.retryCount,
           })
           project = await cloneRepo.upsertProject(project)
         } else {
@@ -3486,6 +4138,7 @@ export const cloneService = {
         const latest = (await cloneRepo.getProject(project.id)) ?? project
         ensureCloneFlowState(latest)
         const latestOutput = resolveShotVideoOutput(latest, latest.blueprint?.shots.find((item) => item.id === shot.id) || shot)
+        const nextRetryCount = Math.min(maxAutoRetryPerShot, Number(latest.blueprint?.shots.find((item) => item.id === shot.id)?.retryCount ?? shot.retryCount ?? 0))
         if (latestOutput.taskId) {
           timeout += 1
           pending += 1
@@ -3504,6 +4157,7 @@ export const cloneService = {
           qualityReasons: latestOutput.taskId ? [] : [reason],
           canEnterRender: false,
           generatedTaskId: latest.blueprint?.shots.find((item) => item.id === shot.id)?.generatedTaskId,
+          retryCount: nextRetryCount,
         })
         syncShotVideoOutput(latest, {
           shotId: shot.id,
@@ -3515,6 +4169,7 @@ export const cloneService = {
           model: latestOutput.model,
           remoteStatus: latestOutput.remoteStatus,
           remoteRaw: latestOutput.remoteRaw,
+          retryCount: nextRetryCount,
           lastPollAt: latestOutput.lastPollAt,
           updatedAt: now(),
         })
@@ -3603,6 +4258,14 @@ export const cloneService = {
     const project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
+    const gate = validateProjectReadyForFinalCompose(project)
+    if (!gate.ok) {
+      patchWorkflowV2(project, 'review_replace_shots', 'review_replace_shots', 'failed', gate.reason)
+      syncFinalCompose(project, { status: 'idle', error: gate.reason })
+      project.lastError = gate.reason
+      await cloneRepo.upsertProject(project)
+      throw new Error(gate.reason)
+    }
     patchWorkflowV2(project, 'compose_final_video', 'compose_final_video', 'running')
     syncFinalCompose(project, { status: 'composing', error: undefined })
     await cloneRepo.upsertProject(project)
@@ -4564,6 +5227,9 @@ export const cloneService = {
         productReferenceImagePaths: refs,
       })
       snapshotProject = next as CloneProject
+      if (refs.length) {
+        snapshotProject = updateProjectShots(snapshotProject, (shot) => replaceProductRefsIntoShot(shot, refs))
+      }
     }
     const selectedPackId = snapshotProject.selectedModelIdentityPackId || snapshotProject.selectedModelIdentityId
     const generatedPack = selectedPackId ? await cloneRepo.getModelIdentity(selectedPackId) : undefined
@@ -4856,6 +5522,11 @@ export const cloneService = {
     shotId: string
     productReferenceImagePaths?: string[]
   }) {
+    console.log('[clone-debug] generate-shot-frames:requested', {
+      projectId: input.cloneProjectId,
+      shotId: input.shotId,
+      productReferenceImageCount: input.productReferenceImagePaths?.length ?? 0,
+    })
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
     const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
@@ -4872,12 +5543,25 @@ export const cloneService = {
     const productUsageImages = shot.productUsageImages ?? []
     const styleReferenceImages = shot.styleReferenceImages ?? []
     const mergedRefs = [productMainImage, ...productDetailImages, ...productUsageImages, ...styleReferenceImages].filter(Boolean).map(String)
+    console.log('[clone-debug] generate-shot-frames:prepared', {
+      projectId: item.id,
+      shotId: shot.id,
+      productMainImage,
+      mergedReferenceImageCount: mergedRefs.length,
+    })
     if (!hasProductLock(shot, mergedRefs)) throw new Error('请先上传产品参考图或填写产品锁定信息')
     const productAnalysisText = buildProductStructureDescription({
       category: normalizeProductType(item.baseBlueprint?.productCategory || shot.productType || 'general'),
       ...(((item.baseBlueprint?.consistencyAssets as any)?.productAnalysis ?? {}) as any),
     })
     const creds = await cloneRepo.getCredentials()
+    console.log('[clone-debug] generate-shot-frames:provider-check', {
+      projectId: item.id,
+      shotId: shot.id,
+      videoProviderPrimary: creds.videoProviderPrimary,
+      videoModelPrimary: creds.videoModelPrimary,
+      hasCloudVideoKey: hasCloudVideoKey(creds),
+    })
     if (!hasCloudVideoKey(creds)) throw new Error(`未配置 ${videoProviderLabel(creds)} API Key，正式生成不能使用本地 mock 或图片拼接`)
     let generatedProvider = ''
     let generatedModel = ''
@@ -4899,6 +5583,15 @@ export const cloneService = {
         credentials: creds,
         chain: videoProviderChain(creds) as any,
       })
+      console.log('[clone-debug] generate-shot-frames:provider-generated', {
+        projectId: item.id,
+        shotId: shot.id,
+        provider: frames.startFrame.provider,
+        model: frames.startFrame.model,
+        taskId: frames.startFrame.taskId,
+        startFramePath: frames.startFrame.filePath,
+        endFramePath: frames.endFrame.filePath,
+      })
       generatedProvider = frames.startFrame.provider
       generatedModel = frames.startFrame.model
       generatedTaskId = frames.startFrame.taskId
@@ -4906,6 +5599,11 @@ export const cloneService = {
       if (first !== frames.startFrame.filePath) await copyFile(frames.startFrame.filePath, first)
       if (last !== frames.endFrame.filePath) await copyFile(frames.endFrame.filePath, last)
     } catch (e: any) {
+      console.log('[clone-debug] generate-shot-frames:failed', {
+        projectId: item.id,
+        shotId: shot.id,
+        message: String(e?.message ?? e ?? ''),
+      })
       throw new Error(`${videoProviderLabel(creds)} 首尾帧生成失败: ` + String(e?.message ?? e))
     }
     item.blueprint = {
@@ -4997,6 +5695,12 @@ export const cloneService = {
     await mkdir(outDir, { recursive: true })
     const productType = normalizeProductType(latestShot.productType)
     const which = input.which ?? 'both'
+    const compiled = promptConsistencyService.compileAndPersist({
+      projectId: latest.id,
+      shot: latestShot,
+      projectShotCount: latest.blueprint.shots.length,
+      productReferenceImagePaths: refs,
+    })
     const promptHash = computePromptHash({
       shot: latestShot,
       productRefs: refs,
@@ -5019,6 +5723,12 @@ export const cloneService = {
         lastPath = cachedFrame.imagePaths[1] || firstPath || lastPath
       } else {
       if (which === 'start' || which === 'both') {
+        const startRefs = compactStoryboardImageRefs({
+          productRefs: refs,
+          modelPackRefs: pack.imagePaths,
+          thumbnailPath: latestShot.thumbnailPath,
+          mode: 'start',
+        })
         firstPath = await generateGptShotFrameImage({
           credentials: creds,
           outDir,
@@ -5029,12 +5739,20 @@ export const cloneService = {
             modelPack: pack,
             productPoints: latestShot.aiPrompt || latestShot.materialNeed,
             which: 'start',
+            compiledPrompt: compiled.finalPrompt,
           }),
-          imagePaths: [...refs, ...pack.imagePaths, latestShot.thumbnailPath].filter(Boolean).map(String),
+          negativePrompt: compiled.finalNegativePrompt,
+          imagePaths: startRefs,
         })
       }
       if (which === 'end' || which === 'both') {
-        const endRefs = [firstPath, ...refs, ...pack.imagePaths, latestShot.thumbnailPath].filter(Boolean).map(String)
+        const endRefs = compactStoryboardImageRefs({
+          productRefs: refs,
+          modelPackRefs: pack.imagePaths,
+          thumbnailPath: latestShot.thumbnailPath,
+          startFramePath: firstPath,
+          mode: 'end',
+        })
         lastPath = await generateGptShotFrameImage({
           credentials: creds,
           outDir,
@@ -5045,7 +5763,9 @@ export const cloneService = {
             modelPack: pack,
             productPoints: latestShot.aiPrompt || latestShot.materialNeed,
             which: 'end',
+            compiledPrompt: compiled.finalPrompt,
           }),
+          negativePrompt: compiled.finalNegativePrompt,
           imagePaths: endRefs,
         })
       }
@@ -5069,8 +5789,9 @@ export const cloneService = {
           modelPack: pack,
           productPoints: latestShot.aiPrompt || latestShot.materialNeed,
           which: 'start',
+          compiledPrompt: compiled.finalPrompt,
         }),
-        negativePrompt: buildCloneNegativePrompt(productType, latestShot.shotType),
+        negativePrompt: compiled.finalNegativePrompt || buildCloneNegativePrompt(productType, latestShot.shotType),
         model: imageProviderModel(creds),
         qualityMode: normalizeQualityMode(latestShot.qualityMode),
         createdAt: now(),
@@ -5098,6 +5819,10 @@ export const cloneService = {
                 generatedTaskId: `gpt_frame_${randomUUID()}`,
                 promptHash,
                 imagePromptHash,
+                compiledPrompt: compiled.finalPrompt,
+                compiledNegativePrompt: compiled.finalNegativePrompt,
+                promptCompilerVersion: compiled.compilerVersion,
+                consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
                 qualityStatus: 'unchecked',
                 qualityReasons: [],
                 status: 'ready',
@@ -5170,15 +5895,41 @@ export const cloneService = {
     shotId: string
     forceRegenerate?: boolean
   }) {
+    console.log('[clone-debug] generate-shot-clip:requested', {
+      projectId: input.cloneProjectId,
+      shotId: input.shotId,
+      forceRegenerate: Boolean(input.forceRegenerate),
+    })
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
     const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('锟斤拷锟斤拷失锟斤拷')
+    console.log('[clone-debug] generate-shot-clip:loaded-shot', {
+      projectId: item.id,
+      shotId: shot.id,
+      realismRisk: shot.realismRisk,
+      forceAi: Boolean(shot.forceAi),
+      replaceMode: shot.replaceMode,
+      gptFrameConfirmed: Boolean(shot.gptFrameConfirmed),
+      generatedFirstFramePath: String(shot.generatedFirstFramePath || '').trim(),
+      generatedLastFramePath: String(shot.generatedLastFramePath || '').trim(),
+      gptFirstFramePath: String(shot.gptFirstFramePath || '').trim(),
+      gptLastFramePath: String(shot.gptLastFramePath || '').trim(),
+      uploadedImagePath: String(shot.uploadedImagePath || '').trim(),
+      productReferenceImageCount: Array.isArray(shot.productReferenceImagePaths) ? shot.productReferenceImagePaths.length : 0,
+    })
     clearInvalidVideoTaskMapping(item, shot, 'before-generate-shot-clip')
     assertShotEligibleForAi(shot)
     assertShotHasScriptPrompt(shot)
     const matchedLocalAsset = await matchLocalAssetsForShot(item, shot)
     if (matchedLocalAsset) {
+      console.log('[clone-debug] generate-shot-clip:matched-local-asset', {
+        projectId: item.id,
+        shotId: shot.id,
+        assetId: matchedLocalAsset.asset.id,
+        filePath: matchedLocalAsset.asset.filePath,
+        score: matchedLocalAsset.candidate.score,
+      })
       const localQuality = await productionQualityCheckShot({
         shot: {
           ...shot,
@@ -5226,10 +5977,21 @@ export const cloneService = {
       return (await cloneRepo.getProject(input.cloneProjectId)) as CloneProject
     }
     if (shot.realismRisk === 'high' && !shot.forceAi) {
+      console.log('[clone-debug] generate-shot-clip:blocked-realism-risk', {
+        projectId: item.id,
+        shotId: shot.id,
+        realismRisk: shot.realismRisk,
+        forceAi: Boolean(shot.forceAi),
+      })
       patchQueueJobStatus(item, shot.id, 'skipped', Number(shot.retryCount ?? 0))
       throw new Error('[未提交视频模型请求] 当前分镜真实感风险高，默认建议上传真实视频素材，不自动 AI 生成。若需继续，请先开启“强制 AI 生成”。')
     }
     if (!hasProductLock(shot, shot.productReferenceImagePaths)) {
+      console.log('[clone-debug] generate-shot-clip:blocked-missing-product-lock', {
+        projectId: item.id,
+        shotId: shot.id,
+        productReferenceImageCount: Array.isArray(shot.productReferenceImagePaths) ? shot.productReferenceImagePaths.length : 0,
+      })
       throw new Error('[未提交视频模型请求] 请先上传产品参考图或填写产品锁定信息')
     }
     const existingOutput = resolveShotVideoOutput(item, shot)
@@ -5245,7 +6007,7 @@ export const cloneService = {
       const polled = await pollExistingSegmentTask({ project: item, shot, waitMs: 30000 })
       return polled.project
     }
-    if (existingOutput.taskId && input.forceRegenerate) {
+    if (input.forceRegenerate && (existingOutput.taskId || existingOutput.videoPath || existingOutput.localPath || shot.generatedClipPath)) {
       console.log('[clone-debug] generate-shot-clip:force-regenerate-clear-old-output', {
         projectId: item.id,
         shotId: shot.id,
@@ -5255,7 +6017,13 @@ export const cloneService = {
         previousModel: existingOutput.model,
       })
       syncSegmentVideoOutput(item, shot, {
-        previousTaskIds: Array.from(new Set([...(existingOutput.previousTaskIds ?? []), existingOutput.taskId])),
+        previousTaskIds: Array.from(
+          new Set(
+            [...(existingOutput.previousTaskIds ?? []), existingOutput.taskId].filter(
+              (value): value is string => Boolean(String(value || '').trim()),
+            ),
+          ),
+        ),
         taskId: undefined,
         provider: undefined,
         model: undefined,
@@ -5268,7 +6036,22 @@ export const cloneService = {
         status: 'creating',
         completedAt: undefined,
       })
+      replaceProjectShot(item, shot.id, {
+        generatedClipPath: undefined,
+        generatedTaskId: undefined,
+        generatedProvider: undefined,
+        generatedModel: undefined,
+        generatedSource: undefined,
+        error: '',
+        status: 'generating',
+      })
+      item.lastError = ''
+      setProjectErrorContext(item, null)
       await cloneRepo.upsertProject(item)
+    }
+    if (input.forceRegenerate) {
+      item.lastError = ''
+      setProjectErrorContext(item, null)
     }
     patchQueueJobStatus(item, shot.id, 'running', Number(shot.retryCount ?? 0))
     await patchShotRuntimeState({
@@ -5301,9 +6084,22 @@ export const cloneService = {
       category: normalizeProductType(item.baseBlueprint?.productCategory || shot.productType || 'general'),
       ...(((item.baseBlueprint?.consistencyAssets as any)?.productAnalysis ?? {}) as any),
     })
+    const compiled = promptConsistencyService.compileAndPersist({
+      projectId: item.id,
+      shot,
+      projectShotCount: item.blueprint.shots.length,
+      productReferenceImagePaths: shot.productReferenceImagePaths,
+    })
     try {
       const creds = await cloneRepo.getCredentials()
       const chain = videoProviderChain(creds) as any
+      console.log('[clone-debug] generate-shot-clip:provider-chain', {
+        projectId: item.id,
+        shotId: shot.id,
+        providerChain: chain,
+        videoProviderPrimary: creds.videoProviderPrimary,
+        videoModelPrimary: creds.videoModelPrimary,
+      })
       let lastQualityReasons: string[] = []
       let lastFailure: Error | null = null
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -5331,6 +6127,10 @@ export const cloneService = {
             retryAttempt: attempt,
           }),
           negativePrompt: shot.negativePrompt || defaultQualityNegativePrompt(),
+          compiledPrompt: compiled.finalPrompt,
+          compiledNegativePrompt: compiled.finalNegativePrompt,
+          promptCompilerVersion: compiled.compilerVersion,
+          consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
         }
         const first =
           shot.uploadedImagePath && shot.replaceMode === 'upload_image_to_video'
@@ -5346,9 +6146,23 @@ export const cloneService = {
               : shot.gptFrameConfirmed && shot.gptLastFramePath
                 ? shot.gptLastFramePath
                 : shot.generatedLastFramePath || first
+        console.log('[clone-debug] generate-shot-clip:attempt-input', {
+          projectId: item.id,
+          shotId: shot.id,
+          attempt,
+          mode,
+          firstFramePath: first,
+          lastFramePath: last,
+        })
         if (!first) throw new Error('[未提交视频模型请求] 缺少首帧，请先生成首帧或上传图片')
         if (mode === 'high' && !last) throw new Error('[未提交视频模型请求] 高质量模式缺少尾帧，请先生成首尾帧')
         if (videoProviderChain(creds)[0] === 'apifox_hub') {
+          console.log('[clone-debug] generate-shot-clip:delegate-vectorengine', {
+            projectId: item.id,
+            shotId: shot.id,
+            attempt,
+            mode,
+          })
           const latest = (await cloneRepo.getProject(input.cloneProjectId)) || item
           ensureCloneFlowState(latest)
           const latestShot = projectBlueprintShots(latest).find((x) => x.id === input.shotId) || strengthenedShot
@@ -5401,9 +6215,20 @@ export const cloneService = {
           outDir: shotDir,
           startFramePath: first,
           endFramePath: last || first,
-          consistencyMode: mode === 'high' ? 'hard' : (shot.keyframes?.consistencyMode ?? 'soft'),
+          consistencyMode: mode === 'high' ? 'hard' : consistencyRuntimeMode(shot, compiled.strictConsistencyMode),
           credentials: creds,
           chain,
+          compiledPrompt: compiled.finalPrompt,
+          compiledNegativePrompt: compiled.finalNegativePrompt,
+        })
+        console.log('[clone-debug] generate-shot-clip:provider-generated', {
+          projectId: item.id,
+          shotId: shot.id,
+          attempt,
+          provider: generated.provider,
+          model: generated.model,
+          remoteTaskId: generated.remoteTaskId,
+          outputFilePath: generated.outputFilePath,
         })
         out = generated.outputFilePath
         await assertCloudMotionVideo(out)
@@ -5448,6 +6273,12 @@ export const cloneService = {
         }
       }
     } catch (e: any) {
+      console.log('[clone-debug] generate-shot-clip:failed', {
+        projectId: item.id,
+        shotId: input.shotId,
+        forceRegenerate: Boolean(input.forceRegenerate),
+        message: String(e?.message ?? e ?? ''),
+      })
       const creds = await cloneRepo.getCredentials()
       const hasKey = hasCloudVideoKey(creds)
       const latest = await cloneRepo.getProject(input.cloneProjectId)
@@ -5500,6 +6331,14 @@ export const cloneService = {
       }
       throw new Error(reason)
     }
+    console.log('[clone-debug] generate-shot-clip:completed', {
+      projectId: item.id,
+      shotId: shot.id,
+      generatedProvider,
+      generatedModel,
+      generatedTaskId,
+      outputFilePath: out,
+    })
     const generatedShotPatch: Partial<ShotSpec> = {
       generatedClipPath: out,
       status: 'done',
@@ -5519,6 +6358,10 @@ export const cloneService = {
       generatedClipHeight: quality?.meta.height,
       canEnterRender: Boolean(quality?.passed || mode !== 'high'),
       error: '',
+      compiledPrompt: compiled.finalPrompt,
+      compiledNegativePrompt: compiled.finalNegativePrompt,
+      promptCompilerVersion: compiled.compilerVersion,
+      consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
     }
     replaceProjectShot(item, shot.id, generatedShotPatch)
     syncShotVideoOutput(item, {
@@ -5537,40 +6380,142 @@ export const cloneService = {
     return await cloneRepo.upsertProject(item)
   },
 
+  async getShotConsistencyReport(input: { cloneProjectId: string; shotId: string }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item || !item.blueprint) throw new Error('复刻项目不存在')
+    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    if (!shot) throw new Error('分镜不存在')
+    return promptConsistencyService.getShotConsistencyReport(item.id, shot.id) || promptConsistencyService.previewShotConsistencyPrompt(item.id, shot)
+  },
+
+  async getShotImagePromptPreview(input: { cloneProjectId: string; shotId: string }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item || !item.blueprint) throw new Error('复刻项目不存在')
+    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    if (!shot) throw new Error('分镜不存在')
+    const pack = selectedIdentityPack(item)
+    if (!pack || pack.status !== 'done' || !pack.imagePaths.length) {
+      throw new Error('请先生成并确认新模特身份包')
+    }
+    const refs = [
+      shot.productMainImage,
+      ...(shot.productDetailImages ?? []),
+      ...(shot.productUsageImages ?? []),
+      ...(shot.styleReferenceImages ?? []),
+      ...(shot.productReferenceImagePaths ?? []),
+    ]
+      .filter(Boolean)
+      .map(String)
+    if (!hasProductLock(shot, refs)) throw new Error('请先上传产品参考图或填写产品锁定信息')
+    const productType = normalizeProductType(shot.productType)
+    const compiled = promptConsistencyService.getShotConsistencyReport(item.id, shot.id) ||
+      promptConsistencyService.previewShotConsistencyPrompt(item.id, shot)
+
+    return {
+      shotId: shot.id,
+      promptCompilerVersion: compiled.compilerVersion,
+      consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
+      productType,
+      compiledPrompt: compiled.finalPrompt,
+      compiledNegativePrompt: compiled.finalNegativePrompt,
+      startPrompt: buildGptFramePrompt({
+        shot,
+        productType,
+        modelPack: pack,
+        productPoints: shot.aiPrompt || shot.materialNeed,
+        which: 'start',
+        compiledPrompt: compiled.finalPrompt,
+      }),
+      endPrompt: buildGptFramePrompt({
+        shot,
+        productType,
+        modelPack: pack,
+        productPoints: shot.aiPrompt || shot.materialNeed,
+        which: 'end',
+        compiledPrompt: compiled.finalPrompt,
+      }),
+      negativePrompt: compiled.finalNegativePrompt,
+      referenceImageCount: refs.length,
+      modelIdentityPackId: pack.id,
+    }
+  },
+
+  async recompileShotConsistency(input: { cloneProjectId: string; shotId: string }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item || !item.blueprint) throw new Error('复刻项目不存在')
+    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    if (!shot) throw new Error('分镜不存在')
+    const compiled = promptConsistencyService.compileAndPersist({
+      projectId: item.id,
+      shot,
+      projectShotCount: item.blueprint.shots.length,
+      productReferenceImagePaths: shot.productReferenceImagePaths,
+    })
+    replaceProjectShot(item, shot.id, {
+      compiledPrompt: compiled.finalPrompt,
+      compiledNegativePrompt: compiled.finalNegativePrompt,
+      promptCompilerVersion: compiled.compilerVersion,
+      consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
+    })
+    await cloneRepo.upsertProject(item)
+    return compiled
+  },
+
+  async listShotConsistencyAnchors(input: { cloneProjectId: string; shotId: string }) {
+    return promptConsistencyService.listShotConsistencyAnchors(input.cloneProjectId, input.shotId)
+  },
+
+  async listShotConsistencyPatches(input: { cloneProjectId: string; shotId: string }) {
+    return promptConsistencyService.listShotConsistencyPatches(input.cloneProjectId, input.shotId)
+  },
+
   async generateAllShotFrames(input: {
     cloneProjectId: string
     onlyMissing?: boolean
+    which?: 'start' | 'end' | 'both'
     shotIds?: string[]
     productReferenceImagePaths?: string[]
+    concurrency?: number
   }) {
     const base = await cloneRepo.getProject(input.cloneProjectId)
     if (!base || !base.blueprint) throw new Error('复刻项目或蓝图不存在')
     const onlyMissing = input.onlyMissing !== false
+    const which = input.which ?? 'both'
     const wanted = new Set((input.shotIds ?? []).map((x) => String(x)).filter(Boolean))
     const shots = base.blueprint.shots.filter((shot) => {
       if (wanted.size && !wanted.has(String(shot.id))) return false
       if (shot.locked) return false
       if (!onlyMissing) return true
+      if (which === 'start') return !shot.generatedFirstFramePath
+      if (which === 'end') return !shot.generatedLastFramePath
       return !(shot.generatedFirstFramePath && shot.generatedLastFramePath)
     })
     let done = 0
     let failed = 0
     let skipped = 0
     const errors: Array<{ shotId: string; index: number; reason: string }> = []
-    for (const shot of shots) {
-      try {
-        await cloneService.generateGptShotFrames({
-          cloneProjectId: input.cloneProjectId,
-          shotId: shot.id,
-          which: 'both',
-          productReferenceImagePaths: input.productReferenceImagePaths,
-        })
-        done += 1
-      } catch (e: any) {
-        failed += 1
-        errors.push({ shotId: shot.id, index: shot.index, reason: String(e?.message ?? e) })
-      }
-    }
+    const envConcurrency = Number(process.env.CLONE_STORYBOARD_FRAME_CONCURRENCY || '')
+    const requestedConcurrency = Number(input.concurrency ?? envConcurrency ?? 2)
+    const frameConcurrency = Math.max(1, Math.min(3, Number.isFinite(requestedConcurrency) ? Math.floor(requestedConcurrency) : 2))
+    const frameQueue = new PQueue({ concurrency: frameConcurrency })
+    await Promise.all(
+      shots.map((shot) =>
+        frameQueue.add(async () => {
+          try {
+            await cloneService.generateGptShotFrames({
+              cloneProjectId: input.cloneProjectId,
+              shotId: shot.id,
+              which,
+              productReferenceImagePaths: input.productReferenceImagePaths,
+            })
+            done += 1
+          } catch (e: any) {
+            failed += 1
+            errors.push({ shotId: shot.id, index: shot.index, reason: String(e?.message ?? e) })
+          }
+        }),
+      ),
+    )
     const latest = await cloneRepo.getProject(input.cloneProjectId)
     const total = shots.length
     if (onlyMissing && latest?.blueprint?.shots?.length) {
@@ -5579,7 +6524,11 @@ export const cloneService = {
         if (shot.locked) return false
         return true
       })
-      const ready = candidate.filter((shot) => shot.generatedFirstFramePath && shot.generatedLastFramePath).length
+      const ready = candidate.filter((shot) => {
+        if (which === 'start') return Boolean(shot.generatedFirstFramePath)
+        if (which === 'end') return Boolean(shot.generatedLastFramePath)
+        return Boolean(shot.generatedFirstFramePath && shot.generatedLastFramePath)
+      }).length
       skipped = Math.max(0, candidate.length - ready - failed)
     }
     return {
@@ -5658,10 +6607,11 @@ export const cloneService = {
   async renderPreview(input: { cloneProjectId: string; outputDir?: string; shotIds?: string[] }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
+    const creds = await cloneRepo.getCredentials()
     const outDir = String(input.outputDir ?? '').trim() || join(getAppPaths().dataDir, 'viral-clone', item.id, 'outputs')
     const targetIds = new Set((input.shotIds ?? []).map((x) => String(x)).filter(Boolean))
     const scopedShots = targetIds.size ? item.blueprint.shots.filter((shot) => targetIds.has(String(shot.id))) : item.blueprint.shots
-    const issues = buildPreflightIssues(scopedShots, item)
+    const issues = buildPreflightIssues(scopedShots, item, { allowMockCompose: isLocalMockTestMode(creds) })
     if (issues.length) throw new Error('出片前检查失败：' + issues.slice(0, 8).join('；'))
     let shots = renderableShots(scopedShots, item)
     if (!shots.length) {
@@ -5687,8 +6637,9 @@ export const cloneService = {
   async renderBatch(input: { cloneProjectId: string; count: number; outputDir?: string; retryFailed?: boolean }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('复刻项目或蓝图不存在')
+    const creds = await cloneRepo.getCredentials()
     const outDir = String(input.outputDir ?? '').trim() || join(getAppPaths().dataDir, 'viral-clone', item.id, 'outputs')
-    const issues = buildPreflightIssues(item.blueprint.shots, item)
+    const issues = buildPreflightIssues(item.blueprint.shots, item, { allowMockCompose: isLocalMockTestMode(creds) })
     if (issues.length) throw new Error('出片前检查失败：' + issues.slice(0, 10).join('；'))
     let shots = renderableShots(item.blueprint.shots, item)
     if (!shots.length) {
@@ -6119,7 +7070,7 @@ export const cloneService = {
             taskId: existing.taskId,
             provider: existing.provider || 'apifox_hub',
             model: existing.model || videoProviderModel(creds),
-            endpointStyle: existing.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+            endpointStyle: existing.endpointStyle || resolveApifoxHubCredentials(creds, 'video')?.videoEndpointStyle,
             requestCapability: existing.requestCapability || 'video_start_end_to_video',
             videoUrl: recovered.task.outputUrls[0],
             localPath: recovered.outputPath,
@@ -6156,18 +7107,27 @@ export const cloneService = {
       const endPath = shot.keyframes?.endFrame?.filePath
       if (!startPath || !endPath) throw new Error('分镜 ' + (shot.index + 1) + ' 缺少首尾帧，无法生成视频')
       try {
-        const current = resolveShotVideoOutput(item, shot)
+        let activeShot = shot
+        const normalizedAiPrompt = normalizeLegacyShotPromptForPersistence(activeShot)
+        if (normalizedAiPrompt && normalizedAiPrompt !== String(activeShot.aiPrompt || '').trim()) {
+          replaceProjectShot(item, activeShot.id, { aiPrompt: normalizedAiPrompt })
+          item = await cloneRepo.upsertProject(item)
+          blueprint = item.blueprint as CloneBlueprint
+          const refreshedShot = blueprint.shots.find((s) => s.id === activeShot.id)
+          if (refreshedShot) activeShot = refreshedShot
+        }
+        const current = resolveShotVideoOutput(item, activeShot)
         let generated = null as Awaited<ReturnType<typeof generateShotVideoByProviderChain>> | null
         if (current.taskId) {
           const recovered = await recoverAi666TaskById({ credentials: creds, taskId: current.taskId, outDir })
           if (recovered.synced && recovered.outputPath) {
             const saved = await saveSegmentDone({
               project: item,
-              shot,
+              shot: activeShot,
               taskId: current.taskId,
               provider: current.provider || 'apifox_hub',
               model: current.model || videoProviderModel(creds),
-              endpointStyle: current.endpointStyle || creds.apifoxHub?.videoEndpointStyle,
+              endpointStyle: current.endpointStyle || resolveApifoxHubCredentials(creds, 'video')?.videoEndpointStyle,
               requestCapability: current.requestCapability || 'video_start_end_to_video',
               videoUrl: recovered.task.outputUrls[0],
               localPath: recovered.outputPath,
@@ -6180,22 +7140,22 @@ export const cloneService = {
           }
         }
         generated = await generateShotVideoByProviderChain({
-          shot,
+          shot: activeShot,
           outDir,
           startFramePath: startPath,
           endFramePath: endPath,
-          consistencyMode: input.consistencyMode ?? shot.keyframes?.consistencyMode ?? 'soft',
+          consistencyMode: input.consistencyMode ?? activeShot.keyframes?.consistencyMode ?? 'soft',
           credentials: creds,
           chain,
         })
-        const segment = segmentKeyByPurpose(shot.purpose)
+        const segment = segmentKeyByPurpose(activeShot.purpose)
         const appended = await upsertAssetToProduct({ product, segment, filePath: generated.outputFilePath })
         product = appended.product
-        const taskId = String(generated.remoteTaskId || current.taskId || shot.generatedTaskId || '').trim()
+        const taskId = String(generated.remoteTaskId || current.taskId || activeShot.generatedTaskId || '').trim()
         blueprint = {
           ...blueprint,
           shots: blueprint.shots.map((s) =>
-            s.id === shot.id ? { ...s, sourceMode: 'ai', aiEnabled: true, aiGeneratedAssetId: appended.asset.id } : s,
+            s.id === activeShot.id ? { ...s, sourceMode: 'ai', aiEnabled: true, aiGeneratedAssetId: appended.asset.id } : s,
           ),
         }
         item.aiTasks = item.aiTasks.map((t) =>

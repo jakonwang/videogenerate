@@ -5,6 +5,133 @@ function cleanText(value: unknown, fallback: string) {
   return text || fallback
 }
 
+function containsCjk(value: string) {
+  return /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(value)
+}
+
+export function keepEnglishLikeText(value: unknown, fallback = '') {
+  const text = String(value ?? '')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u3000-\u303f\uff00-\uffef]/g, ' ')
+    .replace(/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]+/g, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/[^\x20-\x7E\n]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text || fallback
+}
+
+function extractEnglishSegments(value: unknown) {
+  const normalized = keepEnglishLikeText(value)
+  return normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => /[a-z]{3,}/i.test(item))
+}
+
+function normalizePromptLine(value: unknown) {
+  return String(value ?? '')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .flatMap((item) => extractEnglishSegments(item))
+    .filter(Boolean)
+}
+
+function shouldDropPromptLine(line: string) {
+  const lowered = line.toLowerCase()
+  return (
+    lowered.startsWith('script confidence:') ||
+    lowered.startsWith('analysis notes:') ||
+    lowered.startsWith('script negative:') ||
+    lowered.startsWith('reference lock mode:') ||
+    lowered.startsWith('must preserve:') ||
+    lowered.includes('script analysis failed') ||
+    lowered.includes('aggregate chat model not enabled') ||
+    lowered.includes('model not register:') ||
+    lowered.includes('traceid:') ||
+    lowered.includes('http 400:') ||
+    lowered.includes('http 500:') ||
+    lowered.includes('error invoking remote method') ||
+    lowered.includes('fetch failed')
+  )
+}
+
+function stripBrokenTail(line: string) {
+  return line
+    .replace(/^remium\b/i, 'Premium')
+    .replace(/slow push-i$/i, 'slow push-in')
+    .replace(/\bzoom_in\s+\d+\s*\./gi, 'zoom_in.')
+    .replace(/\.\./g, '.')
+    .replace(/\btraceid\s*:\s*\S+/gi, '')
+    .replace(/\bhttp\s*(400|401|403|404|429|500|502|503)\s*:\s*.*$/gi, '')
+    .replace(/[;,:-]?\s*(script confidence|analysis notes|script negative|reference lock mode)\s*:?.*$/i, '')
+    .trim()
+}
+
+function dedupePromptLines(lines: string[]) {
+  const kept: string[] = []
+  const seen = new Set<string>()
+  for (const raw of lines) {
+    const line = stripBrokenTail(raw)
+    if (!line || shouldDropPromptLine(line)) continue
+    const key = line.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    kept.push(line)
+  }
+  return kept
+}
+
+function sentenceCase(value: string) {
+  const text = value.trim()
+  if (!text) return text
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+function composePromptParagraphs(sections: Array<string | null | undefined>, maxChars = 1800) {
+  const parts = sections
+    .map((item) => sanitizeGeneratedVideoPrompt(item || '', 600))
+    .map((item) => item.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((item) => sentenceCase(item.endsWith('.') ? item : `${item}.`))
+  const compact = Array.from(new Set(parts)).join('\n\n')
+  return sanitizeGeneratedVideoPrompt(compact, maxChars)
+}
+
+export function sanitizeGeneratedVideoPrompt(value: unknown, maxChars = 1800) {
+  const lines = dedupePromptLines(normalizePromptLine(value))
+    .filter((line) => !containsCjk(line))
+    .filter((line) => /[a-z]{3,}/i.test(line))
+  const compact = lines.join('\n')
+  if (compact.length <= maxChars) return compact
+  const shortened: string[] = []
+  let total = 0
+  for (const line of lines) {
+    if (total + line.length + 1 > maxChars) break
+    shortened.push(line)
+    total += line.length + 1
+  }
+  return shortened.join('\n')
+}
+
+export function sanitizeNegativePrompt(value: unknown, maxChars = 400) {
+  const items = keepEnglishLikeText(value)
+    .split(/[,\n]/)
+    .map((item) => item.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  const deduped = Array.from(new Set(items.map((item) => item.toLowerCase()))).map((key) =>
+    items.find((item) => item.toLowerCase() === key) || key,
+  )
+  return deduped.join(', ').slice(0, maxChars)
+}
+
+export function buildNoSpeakingInstruction() {
+  return 'The person must stay silent: no speaking, no lip-sync, no mouth narration, no dialogue, no talking-head delivery, and no visible speech articulation.'
+}
+
 function movementLabel(shot: ShotSpec) {
   const motion = String(shot.cameraMovement || shot.motion || shot.prompt?.cameraMotion || 'static')
   const map: Record<string, string> = {
@@ -22,11 +149,14 @@ function movementLabel(shot: ShotSpec) {
 export function buildReferenceLock(shot: ShotSpec, sceneFallback?: string): ReferenceLock {
   const role = String(shot.role || shot.shotRole || shot.purpose || 'detail')
   const shotType = String(shot.shotType || shot.cloneClass || 'real_product')
-  const visual = cleanText(shot.visualPrompt || shot.visual || shot.promptHint || shot.prompt?.positive, 'short social-commerce product demonstration')
+  const visual = keepEnglishLikeText(
+    shot.visualPrompt || shot.visual || shot.promptHint || shot.prompt?.positive,
+    'short social-commerce product demonstration',
+  )
   const isModel = role === 'model_scene' || shotType === 'model_demo'
   const isCloseup = role === 'product_closeup' || shot.framing === 'extreme_closeup' || shotType === 'closeup'
   const sceneEnvironment = cleanText(
-    shot.referenceLock?.sceneEnvironment,
+    keepEnglishLikeText(shot.referenceLock?.sceneEnvironment),
     isModel
       ? sceneFallback || 'same lifestyle background category as the reference shot'
       : isCloseup
@@ -34,22 +164,22 @@ export function buildReferenceLock(shot: ShotSpec, sceneFallback?: string): Refe
         : sceneFallback || 'same social-commerce scene category as the reference shot',
   )
   const subjectPose = cleanText(
-    shot.referenceLock?.subjectPose,
+    keepEnglishLikeText(shot.referenceLock?.subjectPose),
     isModel
       ? 'keep the same body angle, face direction, hand position and distance from camera as the reference shot'
       : isCloseup
-        ? 'keep the same hand/product position and product-to-camera distance as the reference shot'
+        ? 'keep the same hand and product position and product-to-camera distance as the reference shot'
         : 'keep the same subject placement and product handling posture as the reference shot',
   )
   const productAction = cleanText(
-    shot.referenceLock?.productAction,
-    shot.action || (isModel ? 'demonstrate the product on or near the body in the same way as the reference' : visual),
+    keepEnglishLikeText(shot.referenceLock?.productAction),
+    keepEnglishLikeText(shot.action, isModel ? 'demonstrate the product on or near the body in the same way as the reference' : visual),
   )
   const cameraComposition = cleanText(
-    shot.referenceLock?.cameraComposition,
+    keepEnglishLikeText(shot.referenceLock?.cameraComposition),
     `${shot.framing || 'closeup'} framing; preserve product screen position, subject crop, camera distance and product size ratio from the reference shot`,
   )
-  const motionPath = cleanText(shot.referenceLock?.motionPath, movementLabel(shot))
+  const motionPath = cleanText(keepEnglishLikeText(shot.referenceLock?.motionPath), movementLabel(shot))
   const mustPreserve = [
     ...(shot.referenceLock?.mustPreserve ?? []),
     `background category and atmosphere: ${sceneEnvironment}`,
@@ -57,19 +187,25 @@ export function buildReferenceLock(shot: ShotSpec, sceneFallback?: string): Refe
     `product demonstration action: ${productAction}`,
     `camera composition: ${cameraComposition}`,
     `motion path and rhythm: ${motionPath}`,
-  ].map((x) => cleanText(x, '')).filter(Boolean)
+  ]
+    .map((x) => keepEnglishLikeText(x))
+    .filter(Boolean)
   const mayReplace = [
     ...(shot.referenceLock?.mayReplace ?? []),
     'replace the original person with the selected new model identity',
     'change gender, age, skin tone, hair style and outfit only as required by the selected model',
     'replace the original product with the uploaded user product while keeping the same demonstration action',
-  ].map((x) => cleanText(x, '')).filter(Boolean)
+  ]
+    .map((x) => keepEnglishLikeText(x))
+    .filter(Boolean)
   const mustAvoid = [
     ...(shot.referenceLock?.mustAvoid ?? []),
     'do not copy the original person face, identity, account, watermark, subtitles, stickers or platform UI',
     'do not invent a different background, new pose, unrelated action, new camera angle or different product-display method',
     'do not turn model demo shots into tabletop product shots, and do not turn product closeups into selfies',
-  ].map((x) => cleanText(x, '')).filter(Boolean)
+  ]
+    .map((x) => keepEnglishLikeText(x))
+    .filter(Boolean)
   return {
     sceneEnvironment,
     subjectPose,
@@ -85,38 +221,50 @@ export function buildReferenceLock(shot: ShotSpec, sceneFallback?: string): Refe
 
 export function buildReferenceLockText(shot: ShotSpec, sceneFallback?: string) {
   const lock = buildReferenceLock(shot, sceneFallback)
-  return [
-    'Reference lock mode: hard_reference_motion.',
-    `Scene/background: ${lock.sceneEnvironment}.`,
-    `Subject pose: ${lock.subjectPose}.`,
-    `Product action: ${lock.productAction}.`,
-    `Camera composition: ${lock.cameraComposition}.`,
-    `Motion path: ${lock.motionPath}.`,
-    `Must preserve: ${lock.mustPreserve.join('; ')}.`,
-    `May replace: ${lock.mayReplace.join('; ')}.`,
-    `Must avoid: ${lock.mustAvoid.join('; ')}.`,
-  ].join('\n')
+  return composePromptParagraphs(
+    [
+      `Keep the same background category and atmosphere as the reference shot: ${lock.sceneEnvironment}. Keep the same subject pose and hand placement: ${lock.subjectPose}. Keep the same product action: ${lock.productAction}.`,
+      `Preserve the same camera composition and motion path as the reference shot: ${lock.cameraComposition}. ${lock.motionPath}.`,
+      `Only replace the person identity and product identity. ${lock.mayReplace.join('; ')}.`,
+      `Do not drift away from the reference shot. ${lock.mustAvoid.join('; ')}.`,
+    ],
+    900,
+  )
 }
 
 export function buildShotScriptConstraintText(shot: ShotSpec) {
-  const lines = [
-    'Shot script lock: preserve this specific shot logic.',
-    `Script role: ${cleanText(shot.scriptRole, 'unknown')}.`,
-    `Script text: ${cleanText(shot.scriptText, 'no reliable narration detected; infer from visual action')}.`,
-    shot.narrationText ? `Narration meaning: ${cleanText(shot.narrationText, '')}.` : '',
-    shot.onScreenText ? `On-screen text meaning: ${cleanText(shot.onScreenText, '')}.` : '',
-    `Visual description: ${cleanText(shot.visualDescription, shot.visualPrompt || shot.visual || 'reference visual')}.`,
-    `Action description: ${cleanText(shot.actionDescription, shot.action || shot.visualPrompt || 'reference action')}.`,
-    `Camera description: ${cleanText(shot.cameraDescription, `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`)}.`,
-    `Product focus: ${cleanText(shot.productFocus, 'clear product demonstration purpose')}.`,
-    `Generation prompt: ${cleanText(shot.generationPrompt, shot.aiPrompt || shot.prompt?.positive || 'follow the reference shot script and motion')}.`,
-    `Start-frame constraint: first frame must already match the shot script role, scene, product placement and action setup.`,
-    `End-frame constraint: last frame must naturally complete the same script beat without changing scene, action type, product or person identity.`,
-    `Script confidence: ${Number(shot.scriptConfidence ?? 0).toFixed(2)}.`,
-    shot.analysisNotes?.length ? `Analysis notes: ${shot.analysisNotes.join('; ')}.` : '',
-    `Script negative: ${cleanText(shot.negativePrompt, 'no watermark, account name, platform UI, copied face identity, subtitles, stickers or brand logo')}.`,
-  ]
-  return lines.filter(Boolean).join('\n')
+  const scriptText = keepEnglishLikeText(shot.scriptText, 'Maintain the original shot selling logic and timing.')
+  const narrationText = keepEnglishLikeText(shot.narrationText, '')
+  const onScreenText = keepEnglishLikeText(shot.onScreenText, '')
+  const visualDescription = keepEnglishLikeText(
+    shot.visualDescription,
+    keepEnglishLikeText(shot.visualPrompt || shot.visual, 'Real social-commerce product demonstration in a believable environment.'),
+  )
+  const actionDescription = keepEnglishLikeText(
+    shot.actionDescription,
+    keepEnglishLikeText(shot.action || shot.visualPrompt, 'Natural product demonstration with believable hand movement.'),
+  )
+  const cameraDescription = keepEnglishLikeText(
+    shot.cameraDescription,
+    `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`,
+  )
+  const productFocus = keepEnglishLikeText(shot.productFocus, 'Keep the product clearly visible and commercially relevant.')
+  const generationPrompt = keepEnglishLikeText(
+    shot.generationPrompt,
+    shot.aiPrompt || shot.prompt?.positive || 'Follow the original shot motion and selling logic.',
+  )
+  return composePromptParagraphs(
+    [
+      `Preserve this exact shot logic. ${scriptText}`,
+      narrationText ? `The spoken meaning should remain aligned with this shot: ${narrationText}.` : '',
+      onScreenText ? `Any implied on-screen message should mean: ${onScreenText}.` : '',
+      `Visual direction: ${visualDescription}. Action direction: ${actionDescription}. Camera direction: ${cameraDescription}.`,
+      `Keep the product clearly visible and commercially relevant. ${productFocus}.`,
+      generationPrompt ? `Core generation guidance: ${generationPrompt.slice(0, 320)}.` : '',
+      'The first frame must already match the shot setup, and the final frame must complete the same shot beat without changing scene, product, action type, or person identity.',
+    ],
+    1000,
+  )
 }
 
 export function buildProductLockText(
@@ -133,7 +281,7 @@ export function buildProductLockText(
     'Do not generate a similar product. Reproduce the exact same product only.',
     'If the reference shot contains another accessory or another worn item, replace that item with the uploaded user product only.',
     'Do not keep the original accessory if it conflicts with the uploaded user product.',
-    productDescription ? `Product description: ${productDescription.trim()}` : '',
+    productDescription ? `Product description: ${keepEnglishLikeText(productDescription)}` : '',
     productRefs.length ? `Reference count: ${productRefs.length}` : '',
   ]
   const specific: Record<CloneProductType, string[]> = {
@@ -157,7 +305,7 @@ export function buildProductLockText(
       'Do not alter the cut, fit, or fabric category.',
     ],
     toy: [
-      'Identify the product as a toy or figurine first, then keep that exact character/object identity.',
+      'Identify the product as a toy or figurine first, then keep that exact character or object identity.',
       'Keep toy shape, facial details, color blocks, proportions, and material feel unchanged.',
       'Do not turn it into a different character or change the face.',
     ],
@@ -167,7 +315,7 @@ export function buildProductLockText(
       'If another object occupies the same display position in the reference shot, replace that object with the uploaded product only.',
     ],
   }
-  return [...lines, ...specific[productType]].filter(Boolean).join('\n')
+  return sanitizeGeneratedVideoPrompt([...lines, ...specific[productType]].filter(Boolean).join('\n'), 900)
 }
 
 export function buildCloneNegativePrompt(productType: CloneProductType, shotType?: string) {
@@ -231,34 +379,30 @@ export function buildCloneShotPrompt(input: {
   const { blueprint, shot, productRefs, options } = input
   const rhythm = blueprint.rhythm
   const visualStyle = blueprint.visualStyle
-  const shotRole = shot.shotRole || shot.role || shot.purpose || 'detail'
-  const cameraFraming = shot.framing || 'closeup'
-  const cameraMovement = shot.cameraMovement || shot.motion || 'static'
-  const action = shot.action || shot.visualPrompt || 'natural product demonstration'
+  const shotRole = keepEnglishLikeText(shot.shotRole || shot.role || shot.purpose || 'detail', 'detail')
+  const cameraFraming = keepEnglishLikeText(shot.framing || 'closeup', 'closeup')
+  const cameraMovement = keepEnglishLikeText(shot.cameraMovement || shot.motion || 'static', 'static')
+  const action = keepEnglishLikeText(shot.action || shot.visualPrompt || 'natural product demonstration', 'natural product demonstration')
   const negative = buildCloneNegativePrompt(options.productType, shot.shotType)
   const referenceLock = buildReferenceLockText(shot, visualStyle?.scene)
   const scriptLock = buildShotScriptConstraintText(shot)
+  const sellingPoints = keepEnglishLikeText(
+    options.productPoints || shot.materialNeed || '',
+    'clear product visibility and purchase reason',
+  )
 
   const sections = [
-    `shot role: ${shotRole}`,
+    `Create a premium realistic social-commerce short video shot. Use ${buildRealismInstruction(shot.shotType, options.qualityMode)}. Keep the scene in ${keepEnglishLikeText(visualStyle?.scene || 'social commerce scene', 'social commerce scene')} with ${keepEnglishLikeText(visualStyle?.lighting || 'soft natural daylight', 'soft natural daylight')}.`,
+    `Use ${cameraFraming} framing and ${cameraMovement} camera movement. The action should stay focused on ${action}. The target duration is ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
     scriptLock,
     referenceLock,
-    `product lock: ${buildProductLockText(options.productType, productRefs, options.productDescription)}`,
-    `reference rhythm: avg shot ${Number(rhythm?.avgShotDurationSec ?? shot.durationSec ?? 1.5).toFixed(1)}s, cut density ${rhythm?.cutDensity ?? 'medium'}, movement ${cameraMovement}`,
-    `scene: ${visualStyle?.scene || 'social commerce scene'}`,
-    `camera framing: ${cameraFraming}`,
-    `camera movement: ${cameraMovement}`,
-    `action: ${action}`,
-    `lighting: ${visualStyle?.lighting || 'soft daylight'}`,
-    `realism style: ${buildRealismInstruction(shot.shotType, options.qualityMode)}`,
-    `duration target: ${Number(shot.durationSec || 3).toFixed(1)} seconds`,
-    `selling points: ${String(options.productPoints || shot.materialNeed || '').trim() || 'clear product visibility and purchase reason'}`,
-    `text safety: ${buildTextSafetyInstruction()}`,
-    `negative prompt: ${negative}`,
+    buildProductLockText(options.productType, productRefs, options.productDescription),
+    `The selling focus must stay on: ${sellingPoints}. The average shot rhythm is ${Number(rhythm?.avgShotDurationSec ?? shot.durationSec ?? 1.5).toFixed(1)} seconds with ${rhythm?.cutDensity ?? 'medium'} cut density.`,
+    buildTextSafetyInstruction(),
   ]
   return {
-    positive: sections.join('\n'),
-    negative,
+    positive: composePromptParagraphs(sections, 1800),
+    negative: sanitizeNegativePrompt(negative),
   }
 }
 
@@ -273,18 +417,18 @@ export function expandCommercialVideoPrompt(input: {
   durationSec?: number
   qualityMode?: CloneQualityMode
 }) {
-  const title = cleanText(input.title, 'short-form commercial video')
-  const hook = cleanText(input.hook, 'strong first-3-seconds hook with clear product value')
-  const sceneHint = cleanText(input.sceneHint, 'premium commercial social-video scene')
-  const styleHint = cleanText(input.styleHint, 'high-end realistic TikTok style')
-  const productPoints = cleanText(input.productPoints, 'clear product value, texture, usage and buying reason')
+  const title = keepEnglishLikeText(input.title, 'short-form commercial video')
+  const hook = keepEnglishLikeText(input.hook, 'strong first-3-seconds hook with clear product value')
+  const sceneHint = keepEnglishLikeText(input.sceneHint, 'premium commercial social-video scene')
+  const styleHint = keepEnglishLikeText(input.styleHint, 'high-end realistic TikTok style')
+  const productPoints = keepEnglishLikeText(input.productPoints, 'clear product value, texture, usage and buying reason')
   const beats = Array.isArray(input.storyBeats) ? input.storyBeats.slice(0, 6) : []
   const beatText = beats.length
     ? beats
         .map((beat, index) => {
-          const purpose = cleanText(beat.purpose, 'demo')
-          const shotType = cleanText(beat.shotType, 'social commerce close-up')
-          const productRole = cleanText(beat.productRole, 'product focus')
+          const purpose = keepEnglishLikeText(beat.purpose, 'demo')
+          const shotType = keepEnglishLikeText(beat.shotType, 'social commerce close-up')
+          const productRole = keepEnglishLikeText(beat.productRole, 'product focus')
           return `${index + 1}. ${purpose} - ${shotType} - ${productRole}`
         })
         .join('\n')
@@ -297,20 +441,20 @@ export function expandCommercialVideoPrompt(input: {
         ? 'balanced realism and clarity'
         : 'maximum realism, premium commercial finish'
   const positive = [
-    `title: ${title}`,
-    `hook: ${hook}`,
-    `scene: ${sceneHint}`,
-    `style: ${styleHint}`,
-    `product focus: ${productPoints}`,
-    `duration target: ${duration.toFixed(1)} seconds`,
-    `execution quality: ${qualityLine}`,
-    'camera: mix of close-up, medium shot and detail shot, with clean composition and stable framing',
-    'lighting: natural premium light, soft highlights, visible texture and depth',
-    'motion: subtle handheld motion, smooth transition, no jarring cuts',
-    'subject: clear model or product presence, believable body language, no awkward pose',
-    'editing: concise rhythm, strong hook, clear middle section, clean ending',
-    'constraints: remove watermark, subtitles, UI noise, logo contamination and low-quality artifacts',
-    `story beats:\n${beatText}`,
+    `Title: ${title}`,
+    `Hook: ${hook}`,
+    `Scene: ${sceneHint}`,
+    `Style: ${styleHint}`,
+    `Product focus: ${productPoints}`,
+    `Duration target: ${duration.toFixed(1)} seconds`,
+    `Execution quality: ${qualityLine}`,
+    'Camera: mix of close-up, medium shot and detail shot, with clean composition and stable framing',
+    'Lighting: natural premium light, soft highlights, visible texture and depth',
+    'Motion: subtle handheld motion, smooth transition, no jarring cuts',
+    'Subject: clear model or product presence, believable body language, no awkward pose',
+    'Editing: concise rhythm, strong hook, clear middle section, clean ending',
+    'Constraints: remove watermark, subtitles, UI noise, logo contamination and low-quality artifacts',
+    `Story beats:\n${beatText}`,
   ]
     .filter(Boolean)
     .join('\n')
@@ -327,5 +471,8 @@ export function expandCommercialVideoPrompt(input: {
     'overexposed highlights',
     'muddy background',
   ].join(', ')
-  return { positive, negative }
+  return {
+    positive: sanitizeGeneratedVideoPrompt(positive),
+    negative: sanitizeNegativePrompt(negative),
+  }
 }
