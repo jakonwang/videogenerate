@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronDown, Clock3, Grid2X2, LoaderCircle, MoreVertical, Play, Plus, Search, Trash2, Video, Wand2 } from 'lucide-vue-next'
+import { ChevronDown, Clock3, LoaderCircle, MoreVertical, Play, Plus, Search, Trash2, Video, Wand2 } from 'lucide-vue-next'
 import UiCard from '../components/UiCard.vue'
 import UiButton from '../components/UiButton.vue'
 
@@ -11,6 +11,7 @@ type CloneProjectSummary = {
   description?: string
   archived?: boolean
   status: string
+  runMode: 'auto' | 'manual'
   createdAt: number
   updatedAt: number
   currentStep: string
@@ -36,11 +37,16 @@ const creating = ref(false)
 const removingId = ref('')
 const rows = ref<CloneProjectSummary[]>([])
 const query = ref('')
+const errorDialogOpen = ref(false)
+const errorDialogTitle = ref('')
+const errorDialogMessage = ref('')
+const createRunMode = ref<'auto' | 'manual' | ''>('')
 const statusFilter = ref<'all' | 'draft' | 'running' | 'ready_for_review' | 'completed' | 'failed'>('all')
+const sortOrder = ref<'updated_desc' | 'updated_asc'>('updated_desc')
 
 const filteredRows = computed(() => {
   const keyword = query.value.trim().toLowerCase()
-  return rows.value.filter((item) => {
+  const list = rows.value.filter((item) => {
     const statusText = String(item.status || '').toLowerCase()
     if (statusFilter.value === 'draft' && statusText !== 'draft') return false
     if (statusFilter.value === 'running' && !(statusText.includes('running') || statusText.includes('generating') || statusText === 'analyzed' || statusText === 'materials_ready')) return false
@@ -50,6 +56,10 @@ const filteredRows = computed(() => {
     if (!keyword) return true
     const haystack = [item.title, item.description, item.referenceVideoName, item.selectedModelIdentityName, item.lastError].filter(Boolean).join(' ').toLowerCase()
     return haystack.includes(keyword)
+  })
+  return list.sort((a, b) => {
+    const delta = Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+    return sortOrder.value === 'updated_desc' ? delta : -delta
   })
 })
 
@@ -83,8 +93,8 @@ const recentRows = computed(() => rows.value.slice().sort((a, b) => Number(b.upd
 function humanStep(step?: string) {
   if (step === 'upload_analyze_script') return '分析参考视频'
   if (step === 'generate_script_variants' || step === 'select_script_variant') return '脚本生成'
-  if (step === 'generate_storyboard_grids') return '分镜视频生成'
-  if (step === 'generate_shot_videos' || step === 'review_replace_shots') return '脚本生成'
+  if (step === 'generate_storyboard_grids') return '分镜图片生成'
+  if (step === 'generate_shot_videos' || step === 'review_replace_shots') return '分镜视频生成'
   if (step === 'compose_final_video' || step === 'export_final') return '成片合成'
   return '待开始'
 }
@@ -97,6 +107,10 @@ function humanStatus(status?: string) {
   if (text.includes('running') || text.includes('generating') || text === 'analyzed' || text === 'materials_ready') return '进行中'
   if (text === 'ready_for_review') return '待检查'
   return '进行中'
+}
+
+function humanRunMode(runMode?: 'auto' | 'manual') {
+  return runMode === 'auto' ? '自动运行' : '手动运行'
 }
 
 function statusTone(status?: string) {
@@ -123,11 +137,23 @@ function shortPath(input?: string) {
   return parts.slice(-1)[0] || '--'
 }
 
+function compactError(input?: string, max = 44) {
+  const text = String(input || '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > max ? `${text.slice(0, max)}...` : text
+}
+
+function compactDescription(input?: string, max = 40) {
+  const text = String(input || '').replace(/\s+/g, ' ').trim()
+  if (!text) return '从参考视频到成片输出，当前任务正在等待推进。'
+  return text.length > max ? `${text.slice(0, max)}...` : text
+}
+
 function toFileSrc(input?: string) {
   const text = String(input || '').trim()
   if (!text) return ''
-  if (/^(https?:|data:|file:)/i.test(text)) return text
-  return `file:///${text.replace(/\\/g, '/')}`
+  if (/^(https?:|data:|vg:|file:)/i.test(text)) return text
+  return `vg://file?path=${encodeURIComponent(text)}`
 }
 
 function formatTime(value?: number) {
@@ -145,6 +171,10 @@ function stepIndex(step?: string) {
   return 0
 }
 
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'updated_desc' ? 'updated_asc' : 'updated_desc'
+}
+
 async function refresh() {
   loading.value = true
   try {
@@ -156,11 +186,17 @@ async function refresh() {
 
 async function createTask() {
   if (creating.value) return
+  if (!createRunMode.value) return
   creating.value = true
   try {
-    const res = (await window.api.clone.createDraftProject({ locale: 'zh-CN', strength: 'structure' })) as { project?: { id?: string } }
+    const res = (await window.api.clone.createDraftProject({
+      locale: 'zh-CN',
+      strength: 'structure',
+      runMode: createRunMode.value,
+    })) as { project?: { id?: string } }
     const id = String(res?.project?.id || '').trim()
     if (id) {
+      createRunMode.value = ''
       void router.push(`/clone/${id}`)
       return
     }
@@ -183,9 +219,31 @@ async function removeTask(id: string) {
   }
 }
 
+async function confirmRemoveTask(item: CloneProjectSummary) {
+  if (!item?.id) return
+  const title = item.title || item.id
+  const ok = window.confirm(`确认删除「${title}」吗？删除后无法恢复。`)
+  if (!ok) return
+  await removeTask(item.id)
+}
+
 function openTask(id: string) {
   if (!id) return
   void router.push(`/clone/${id}`)
+}
+
+function openErrorDialog(item: CloneProjectSummary) {
+  const text = String(item.lastError || '').trim()
+  if (!text) return
+  errorDialogTitle.value = item.title || item.id
+  errorDialogMessage.value = text
+  errorDialogOpen.value = true
+}
+
+function closeErrorDialog() {
+  errorDialogOpen.value = false
+  errorDialogTitle.value = ''
+  errorDialogMessage.value = ''
 }
 
 onMounted(refresh)
@@ -207,12 +265,21 @@ onMounted(refresh)
             <UiButton variant="secondary" disabled>
               批量导出
             </UiButton>
-            <UiButton :disabled="creating" @click="createTask">
+            <div class="clone-list-run-mode">
+              <button class="clone-list-run-mode__option" :class="{ 'is-active': createRunMode === 'auto' }" type="button" @click="createRunMode = 'auto'">
+                自动运行
+              </button>
+              <button class="clone-list-run-mode__option" :class="{ 'is-active': createRunMode === 'manual' }" type="button" @click="createRunMode = 'manual'">
+                手动运行
+              </button>
+            </div>
+            <UiButton :disabled="creating || !createRunMode" @click="createTask">
               <Plus class="h-4 w-4" />
               {{ creating ? '创建中...' : '新建任务' }}
             </UiButton>
           </div>
         </header>
+        <p class="clone-list-run-mode__hint">新建任务前必须选择运行模式。自动运行会自动推进并在最终成片前执行硬门禁；手动运行按阶段执行，但最终合成同样不能绕过门禁。</p>
 
         <section class="clone-list-filters">
           <div class="clone-list-tabs">
@@ -228,12 +295,13 @@ onMounted(refresh)
             </button>
           </div>
           <div class="clone-list-toolbar">
-            <button class="clone-list-sort" type="button">
-              更新时间
+            <label class="clone-list-search" aria-label="搜索任务">
+              <Search class="h-4 w-4" />
+              <input v-model.trim="query" type="text" placeholder="搜索任务名称、模特或错误信息" />
+            </label>
+            <button class="clone-list-sort" type="button" @click="toggleSortOrder">
+              {{ sortOrder === 'updated_desc' ? '最近更新' : '最早更新' }}
               <ChevronDown class="h-4 w-4" />
-            </button>
-            <button class="clone-list-view" type="button" aria-label="卡片视图">
-              <Grid2X2 class="h-4 w-4" />
             </button>
           </div>
         </section>
@@ -253,7 +321,7 @@ onMounted(refresh)
                     <span class="clone-task-card__step-tag" :class="stepTone(item.currentStep)">
                       {{ humanStep(item.currentStep) }}
                     </span>
-                    <button class="clone-task-card__more" type="button" aria-label="更多操作">
+                    <button class="clone-task-card__more" type="button" aria-label="更多操作" disabled>
                       <MoreVertical class="h-4 w-4" />
                     </button>
                   </div>
@@ -265,7 +333,10 @@ onMounted(refresh)
                     <span class="clone-task-card__status" :class="statusTone(item.status)">{{ humanStatus(item.status) }}</span>
                   </div>
 
+                  <p class="clone-task-card__description">{{ compactDescription(item.description) }}</p>
+
                   <div class="clone-task-card__meta">
+                    <span>模式：{{ humanRunMode(item.runMode) }}</span>
                     <span>模特：{{ item.selectedModelIdentityName || '未绑定' }}</span>
                     <span>素材：{{ item.productReferenceImageCount }} 张图片 / {{ item.generatedVideoCount || 0 }} 个视频</span>
                   </div>
@@ -297,13 +368,16 @@ onMounted(refresh)
                       <button class="clone-task-card__action clone-task-card__action--play" type="button" @click="openTask(item.id)">
                         <Play class="h-4 w-4" />
                       </button>
-                      <button class="clone-task-card__action clone-task-card__action--danger" type="button" :disabled="removingId === item.id" @click="removeTask(item.id)">
+                      <button class="clone-task-card__action clone-task-card__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
                         <Trash2 class="h-4 w-4" />
                       </button>
                     </div>
                   </div>
 
-                  <p v-if="item.lastError" class="clone-task-card__error">错误：{{ item.lastError }}</p>
+                  <div v-if="item.lastError" class="clone-task-card__error">
+                    <span class="clone-task-card__error-text">错误：{{ compactError(item.lastError) }}</span>
+                    <button class="clone-task-card__error-link" type="button" @click.stop="openErrorDialog(item)">查看错误</button>
+                  </div>
                 </div>
               </article>
             </div>
@@ -359,8 +433,8 @@ onMounted(refresh)
 
             <UiCard class="clone-side-card clone-side-card--recent">
               <div class="clone-side-card__row">
-                <strong>最近切换</strong>
-                <button type="button" class="clone-side-clear">清空</button>
+                <strong>最近更新</strong>
+                <span class="clone-side-clear">按更新时间展示</span>
               </div>
               <div class="clone-recent-list">
                 <button v-for="item in recentRows" :key="item.id" type="button" class="clone-recent-item" @click="openTask(item.id)">
@@ -374,12 +448,27 @@ onMounted(refresh)
                   </span>
                 </button>
               </div>
-              <button type="button" class="clone-side-all">查看全部任务 →</button>
+              <button type="button" class="clone-side-all" @click="statusFilter = 'all'">查看全部任务 →</button>
             </UiCard>
           </aside>
         </section>
       </div>
     </section>
+
+    <div v-if="errorDialogOpen" class="clone-error-dialog-mask" @click.self="closeErrorDialog">
+      <div class="clone-error-dialog" @click.stop>
+        <div class="clone-error-dialog__head">
+          <div class="clone-error-dialog__copy">
+            <strong>任务错误详情</strong>
+            <span>{{ errorDialogTitle }}</span>
+          </div>
+          <UiButton variant="ghost" @click="closeErrorDialog">关闭</UiButton>
+        </div>
+        <div class="clone-error-dialog__body">
+          {{ errorDialogMessage }}
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -466,6 +555,62 @@ onMounted(refresh)
   gap: 12px;
 }
 
+.clone-list-run-mode {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px;
+  min-height: 50px;
+  padding: 6px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: linear-gradient(180deg, rgba(11, 18, 34, 0.96), rgba(15, 24, 43, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.clone-list-run-mode__option {
+  min-width: 112px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: #9fb0d8;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.clone-list-run-mode__option:hover {
+  color: #eef3ff;
+  border-color: rgba(129, 140, 248, 0.24);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.clone-list-run-mode__option.is-active {
+  color: #ffffff;
+  border-color: rgba(129, 140, 248, 0.38);
+  background: linear-gradient(135deg, rgba(109, 93, 255, 0.96), rgba(86, 163, 255, 0.86));
+  box-shadow: 0 10px 22px rgba(96, 96, 255, 0.26);
+}
+
+.clone-list-run-mode__option:active {
+  transform: translateY(1px);
+}
+
+.clone-list-run-mode__hint {
+  margin: -4px 0 0;
+  color: #9fb0d8;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
 .clone-list-filters {
   align-items: center;
   justify-content: space-between;
@@ -502,6 +647,7 @@ onMounted(refresh)
   gap: 10px;
 }
 
+.clone-list-search,
 .clone-list-sort,
 .clone-list-view {
   display: inline-flex;
@@ -517,10 +663,24 @@ onMounted(refresh)
   font-size: 14px;
 }
 
-.clone-list-view {
-  width: 44px;
-  padding: 0;
-  color: #9f90ff;
+.clone-list-search {
+  justify-content: flex-start;
+  min-width: 280px;
+  padding-right: 12px;
+  color: #8fa1c8;
+}
+
+.clone-list-search input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #eef3ff;
+  font-size: 13px;
+}
+
+.clone-list-search input::placeholder {
+  color: #7e90bb;
 }
 
 .clone-content-grid {
@@ -657,10 +817,22 @@ onMounted(refresh)
   color: #cbd5e1;
 }
 
+.clone-task-card__more:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .clone-task-card__body {
   display: grid;
   gap: 10px;
   align-content: start;
+}
+
+.clone-task-card__description {
+  margin: -2px 0 0;
+  color: #9fb0d8;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .clone-task-card__head {
@@ -772,10 +944,94 @@ onMounted(refresh)
 }
 
 .clone-task-card__error {
-  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.clone-task-card__error-text {
+  min-width: 0;
   color: #ffb1b8;
   font-size: 12px;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clone-task-card__error-link {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clone-error-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 18, 0.72);
+}
+
+.clone-error-dialog {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  background: linear-gradient(180deg, rgba(17, 25, 42, 0.98), rgba(11, 17, 30, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+}
+
+.clone-error-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.clone-error-dialog__copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.clone-error-dialog__copy strong {
+  color: #f8fafc;
+  font-size: 15px;
+}
+
+.clone-error-dialog__copy span {
+  color: #98a6c3;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.clone-error-dialog__body {
+  max-height: 52vh;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: #fecdd3;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .clone-list-empty {

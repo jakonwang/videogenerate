@@ -5,16 +5,21 @@ import { useRoute, useRouter } from 'vue-router'
 import CloneConsoleSidebar from '../components/clone/CloneConsoleSidebar.vue'
 import CloneDataCard from '../components/clone/CloneDataCard.vue'
 import CloneMediaCard from '../components/clone/CloneMediaCard.vue'
+import CloneRuntimeConsole from '../components/clone/CloneRuntimeConsole.vue'
 import CloneStageHeader from '../components/clone/CloneStageHeader.vue'
 import CloneStateCard from '../components/clone/CloneStateCard.vue'
 import { useCloneProjectWorkspace } from '@/composables/useCloneProjectWorkspace'
 import { useCloneRouteProject } from '@/composables/useCloneRouteProject'
 import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
+import { useCloneTopbarStore } from '@/stores/cloneTopbar'
+import { storeToRefs } from 'pinia'
 
 const { t: tr } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { routeProjectId, resolveActiveProjectId } = useCloneRouteProject()
+const cloneTopbar = useCloneTopbarStore()
+const { requestedStageKey } = storeToRefs(cloneTopbar)
 
 type StoryBeat = {
   id: string
@@ -95,6 +100,7 @@ type BlueprintShot = {
   generatedFirstFramePath?: string
   generatedLastFramePath?: string
   generatedClipPath?: string
+  generatedTaskId?: string
   qualityStatus?: 'unchecked' | 'pending' | 'passed' | 'warning' | 'failed'
   qualityReasons?: string[]
   canEnterRender?: boolean
@@ -257,8 +263,7 @@ const selectedModelId = ref('')
 const errorText = ref('')
 const stageLog = ref('等待上传参考视频并开始分析')
 const runtimeLogs = ref<RuntimeLogItem[]>([])
-const logListRef = ref<HTMLElement | null>(null)
-const consoleCollapsed = ref(false)
+const consoleCollapsed = ref(true)
 const storyboardBatchSummary = ref<{ total: number; done: number; failed: number; skipped: number } | null>(null)
 const modelModalOpen = ref(false)
 const framePreviewOpen = ref(false)
@@ -314,6 +319,9 @@ const storyboardFrames = computed<StoryboardFrame[]>(() => {
   })
 })
 const shotVideoOutputs = computed(() => current.value?.shotVideoOutputs ?? [])
+const shotVideoOutputIndexMap = computed<Record<string, number>>(() =>
+  Object.fromEntries(shotVideoOutputs.value.map((item, index) => [item.shotId, index])),
+)
 const filteredShotOutputs = computed(() => {
   switch (selectedShotFilter.value) {
     case 'ready':
@@ -338,6 +346,45 @@ const storyBeatMap = computed<Record<string, StoryBeat>>(() =>
 )
 const shotFrameMap = computed<Record<string, StoryboardFrame>>(() =>
   Object.fromEntries(storyboardFrames.value.map((item) => [item.shotId, item])),
+)
+const blueprintShotMap = computed<Record<string, BlueprintShot>>(() =>
+  Object.fromEntries(blueprintShots.value.map((item) => [item.id, item])),
+)
+const selectedVariantShotScripts = computed(
+  () => scriptVariants.value.find((item) => item.id === selectedVariantId.value)?.shotScripts || [],
+)
+const storyboardDesignRows = computed(() =>
+  selectedVariantShotScripts.value.map((shot, index) => {
+    const beat = storyBeatMap.value[shot.shotId]
+    const blueprintShot = blueprintShotMap.value[shot.shotId]
+    const frame = shotFrameMap.value[shot.shotId]
+    const durationSec = Number(
+      blueprintShot?.durationSec ??
+        ((Number.isFinite(Number(beat?.endSec)) && Number.isFinite(Number(beat?.startSec)))
+          ? Number(beat?.endSec) - Number(beat?.startSec)
+          : 0),
+    )
+    return {
+      shotId: shot.shotId,
+      shotIndex: typeof shot.shotIndex === 'number' ? shot.shotIndex + 1 : index + 1,
+      scriptCode: `脚本-${typeof shot.shotIndex === 'number' ? shot.shotIndex + 1 : index + 1}`,
+      imagePath: frame?.imagePath || '',
+      statusText: blueprintShot?.locked ? '已锁定' : frame?.imagePath ? '已生成' : humanStatus(frame?.status || blueprintShot?.status || 'idle'),
+      retryCount: typeof frame?.retryCount === 'number' ? frame.retryCount : 0,
+      promptText: safeText(shot.scriptText, safeText(blueprintShot?.scriptText, '等待脚本内容')),
+      tags: [
+        localizeShotField(beat?.shotType || blueprintShot?.shotType),
+        localizePurpose(beat?.purpose),
+        localizeShotField(beat?.productRole),
+      ].filter((item, rowIndex, arr) => item && item !== '--' && arr.indexOf(item) === rowIndex).slice(0, 3),
+      durationText: durationSec > 0 ? formatDuration(durationSec) : safeText(shot.timeRange, '--'),
+      sceneText: localizeShotField(beat?.shotType || blueprintShot?.shotType),
+      cameraText: safeText(blueprintShot?.cameraDescription, localizeShotField(beat?.productRole)),
+      voiceText: safeText(beat?.voiceover || beat?.onScreenText, '--'),
+      locked: Boolean(blueprintShot?.locked),
+      error: safeText(frame?.error || blueprintShot?.error, ''),
+    }
+  }),
 )
 const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath || '')
 const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), '默认项目输出目录'))
@@ -397,13 +444,11 @@ const gateFailureSummary = computed(() => {
   const reason = first.error || first.qualityReasons?.join('；') || '镜头未通过生产质检'
   return `当前有 ${gateBlockedShots.value.length} 个镜头阻塞最终成片，首个失败镜头 #${Number(first.index ?? 0) + 1}：${reason}`
 })
+const videoStageDescription = computed(() =>
+  `${tr('cloneView.videoStage.description')} ${gatePassAllowed.value ? '门禁已通过。' : '门禁未通过。'}`,
+)
 const autoFlowSummary = computed(() =>
-  safeText(
-    current.value?.autoFlowStatus?.lastSummary,
-    current.value?.runMode === 'auto'
-      ? '自动运行会在素材齐备后持续推进，并在最终成片前执行硬门禁。'
-      : '手动运行按阶段推进，但最终成片同样受硬门禁约束。',
-  ),
+  safeText(current.value?.autoFlowStatus?.lastSummary, current.value?.runMode === 'auto' ? '自动推进' : '手动推进'),
 )
 const autoFlowRunning = computed(() => current.value?.autoFlowStatus?.status === 'running')
 const retryableShotOutputs = computed(() =>
@@ -437,6 +482,29 @@ const processingShotCount = computed(
       return !item.videoPath && !item.error && (status.includes('running') || status.includes('processing') || status.includes('pending'))
     }).length,
 )
+const hasRemotePendingShotSync = computed(() =>
+  shotVideoOutputs.value.some((item) => {
+    if (item.videoPath) return false
+    if (!effectiveShotTaskId(item.shotId)) return false
+    const status = String(item.status || '').toLowerCase()
+    return (
+      status === 'pending' ||
+      status === 'idle' ||
+      status === 'remote_running' ||
+      status === 'polling_timeout' ||
+      status === 'downloading' ||
+      status === 'creating' ||
+      status === 'generating'
+    )
+  }),
+)
+const missingTaskIdShotCount = computed(() =>
+  shotVideoOutputs.value.filter((item) => {
+    if (Boolean(String(item.videoPath || '').trim())) return false
+    return !effectiveShotTaskId(item.shotId)
+  }).length,
+)
+const continueQueryableShotCount = computed(() => filteredShotOutputs.value.filter((item) => canContinueSyncShot(item)).length)
 const composeTotalDuration = computed(() =>
   shotVideoOutputs.value.reduce((total, item) => total + Number(item.durationSec || 0), 0),
 )
@@ -597,6 +665,14 @@ const statusTone = computed(() => {
   return 'idle'
 })
 
+const workflowStageKey = computed<StageItem['key']>(() => {
+  if (workflowStep.value === 'generate_script_variants' || workflowStep.value === 'select_script_variant') return 'variant'
+  if (workflowStep.value === 'generate_storyboard_grids') return 'grid'
+  if (workflowStep.value === 'generate_shot_videos' || workflowStep.value === 'review_replace_shots') return 'video'
+  if (workflowStep.value === 'compose_final_video') return 'compose'
+  return 'analyze'
+})
+const visibleStageKey = computed<StageItem['key']>(() => (selectedStageKey.value || workflowStageKey.value) as StageItem['key'])
 const stageItems = computed<StageItem[]>(() => {
   const hasBlueprint = Boolean(current.value?.blueprint)
   const hasVariants = scriptVariants.value.length > 0
@@ -608,55 +684,47 @@ const stageItems = computed<StageItem[]>(() => {
     {
       key: 'analyze',
       title: '参考分析',
-      desc: hasBlueprint ? '脚本结构与基础分镜已识别' : '上传参考视频并提炼可复刻结构',
+      desc: hasBlueprint ? '结构已识别' : '上传参考视频',
       done: hasBlueprint,
-      active: workflowStep.value === 'upload_analyze_script',
+      active: visibleStageKey.value === 'analyze',
     },
     {
       key: 'variant',
       title: '脚本生成',
       desc: hasVariants
         ? hasSelectedVariant
-          ? '已选定脚本，可进入分镜设计'
-          : `已生成 ${scriptVariants.value.length} 条候选脚本`
-        : '绑定模特和商品图后生成多条脚本候选',
+          ? '已选定，可进分镜'
+          : `已生成 ${scriptVariants.value.length} 条候选`
+        : '绑定素材后生成候选',
       done: hasVariants && hasSelectedVariant,
-      active: workflowStep.value === 'generate_script_variants' || workflowStep.value === 'select_script_variant',
+      active: visibleStageKey.value === 'variant',
     },
     {
       key: 'grid',
       title: '分镜设计',
-      desc: hasFrames ? '分镜图片已生成，可继续进入视频阶段' : '根据已选脚本和素材生成逐镜头画面',
+      desc: hasFrames ? '已生成，可进视频' : '生成逐镜头画面',
       done: hasFrames,
-      active: workflowStep.value === 'generate_storyboard_grids',
+      active: visibleStageKey.value === 'grid',
     },
     {
       key: 'video',
-      title: '分镜视频生成',
-      desc: hasVideos ? '分镜视频已生成，可替换个别镜头' : '根据分镜图与对应脚本生成视频片段',
+      title: '分镜视频',
+      desc: hasVideos ? '已生成，可替换镜头' : '生成视频片段',
       done: hasVideos,
-      active: workflowStep.value === 'generate_shot_videos' || workflowStep.value === 'review_replace_shots',
+      active: visibleStageKey.value === 'video',
     },
     {
       key: 'compose',
       title: '成片合成',
-      desc: hasFinal ? '完整视频已输出并保存到历史记录' : '检查片段后合成并导出最终成片',
+      desc: hasFinal ? '已输出并保存' : '合成并导出成片',
       done: hasFinal,
-      active: workflowStep.value === 'compose_final_video',
+      active: visibleStageKey.value === 'compose',
     },
   ]
 })
 
 const currentStageTitle = computed(() => stageItems.value.find((item) => item.active)?.title || stageItems.value.find((item) => !item.done)?.title || '等待继续')
 const nextStageTitle = computed(() => stageItems.value.find((item) => !item.done)?.title || '可继续复用历史项目')
-const workflowStageKey = computed<StageItem['key']>(() => {
-  if (workflowStep.value === 'generate_script_variants' || workflowStep.value === 'select_script_variant') return 'variant'
-  if (workflowStep.value === 'generate_storyboard_grids') return 'grid'
-  if (workflowStep.value === 'generate_shot_videos' || workflowStep.value === 'review_replace_shots') return 'video'
-  if (workflowStep.value === 'compose_final_video') return 'compose'
-  return 'analyze'
-})
-const visibleStageKey = computed<StageItem['key']>(() => (selectedStageKey.value || workflowStageKey.value) as StageItem['key'])
 const finalButtonLabel = computed(() => {
   if (loading.value && workflowStep.value === 'compose_final_video') return '正在合成'
   return shotVideoOutputs.value.length ? '重新合成' : '开始合成'
@@ -664,6 +732,18 @@ const finalButtonLabel = computed(() => {
 const analyzePrimaryButtonLabel = computed(() => (referenceSourcePath.value ? '分析脚本' : '上传参考视频'))
 const variantTopCandidate = computed(() => scriptVariants.value[0] || null)
 const failedShotActionText = computed(() => (failedShotOutputs.value.length ? `重新生成失败项 ${failedShotOutputs.value.length}` : '重新生成失败项'))
+const selectedShotFrame = computed<StoryboardFrame | null>(() =>
+  selectedShotOutput.value ? shotFrameMap.value[selectedShotOutput.value.shotId] || null : null,
+)
+const selectedStoryboardRow = computed(
+  () => storyboardDesignRows.value.find((item) => item.shotId === selectedShotId.value) || storyboardDesignRows.value[0] || null,
+)
+const selectedStoryboardBeat = computed<StoryBeat | null>(
+  () => storyBeats.value.find((item) => item.id === selectedStoryboardRow.value?.shotId) || null,
+)
+const selectedStoryboardFrame = computed<StoryboardFrame | null>(
+  () => (selectedStoryboardRow.value ? shotFrameMap.value[selectedStoryboardRow.value.shotId] || null : null),
+)
 
 watch(
   shotVideoOutputs,
@@ -675,6 +755,17 @@ watch(
     const exists = items.some((item) => item.shotId === selectedShotId.value)
     if (!exists) {
       selectedShotId.value = items.find((item) => item.videoPath)?.shotId || items[0]?.shotId || ''
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  storyboardDesignRows,
+  (items) => {
+    if (!items.length) return
+    if (!items.some((item) => item.shotId === selectedShotId.value)) {
+      selectedShotId.value = items[0]?.shotId || ''
     }
   },
   { immediate: true },
@@ -801,9 +892,71 @@ function pushRuntimeLog(message: string, level: RuntimeLogItem['level'] = 'info'
   const last = runtimeLogs.value[0]
   if (last?.message === text && last.level === level) return
   runtimeLogs.value = [{ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, level, message: text, time: Date.now() }, ...runtimeLogs.value].slice(0, 80)
-  void nextTick(() => {
-    if (logListRef.value) logListRef.value.scrollTop = 0
-  })
+}
+
+function effectiveShotTaskId(shotId?: string) {
+  const id = String(shotId || '').trim()
+  if (!id) return ''
+  const outputTaskId = String(shotVideoOutputs.value.find((item) => item.shotId === id)?.taskId || '').trim()
+  if (outputTaskId) return outputTaskId
+  return String(blueprintShotMap.value[id]?.generatedTaskId || '').trim()
+}
+
+function describeShotSyncState(item?: ShotVideoOutput | null) {
+  if (!item) return { title: '--', detail: '--', tone: 'idle' as 'idle' | 'success' | 'warning' | 'danger' }
+  const shotTaskId = effectiveShotTaskId(item.shotId)
+  const status = String(item.status || '').toLowerCase()
+  const remoteStatus = String(item.remoteStatus || '').toLowerCase()
+  const errorText = safeText(item.error, '')
+  const hasVideo = Boolean(String(item.videoPath || '').trim())
+
+  if (hasVideo || status === 'done') {
+    return {
+      title: '已完成',
+      detail: remoteStatus || 'succeeded',
+      tone: 'success' as const,
+    }
+  }
+  if (errorText || status === 'failed') {
+    return {
+      title: shotTaskId ? '云端失败' : '本地失败',
+      detail: errorText || remoteStatus || (shotTaskId ? 'task failed' : '未生成任务'),
+      tone: 'danger' as const,
+    }
+  }
+  if (status === 'remote_running' || remoteStatus === 'processing' || remoteStatus === 'running') {
+    return {
+      title: '云端生成中',
+      detail: shotTaskId ? `taskId=${shotTaskId}` : '任务已提交，等待回写',
+      tone: 'warning' as const,
+    }
+  }
+  if (status === 'downloading') {
+    return {
+      title: '结果下载中',
+      detail: shotTaskId ? `taskId=${shotTaskId}` : '云端已返回，正在下载',
+      tone: 'warning' as const,
+    }
+  }
+  if (status === 'polling_timeout') {
+    return {
+      title: shotTaskId ? '查询超时' : '待补任务号',
+      detail: shotTaskId ? `taskId=${shotTaskId}` : '当前镜头没有 taskId，无法继续查询',
+      tone: shotTaskId ? ('warning' as const) : ('danger' as const),
+    }
+  }
+  if (status === 'creating' || status === 'generating' || status === 'pending' || status === 'idle') {
+    return {
+      title: shotTaskId ? '待继续查询' : '待补任务号',
+      detail: shotTaskId ? `taskId=${shotTaskId}` : '当前镜头没有 taskId，无法继续查询',
+      tone: shotTaskId ? ('warning' as const) : ('danger' as const),
+    }
+  }
+  return {
+    title: humanStatus(item.status),
+    detail: remoteStatus || shotTaskId || '待完成',
+    tone: 'idle' as const,
+  }
 }
 
 function setStageLog(message: string, level: RuntimeLogItem['level'] = 'info') {
@@ -827,6 +980,7 @@ const applyRuntimePipelineStatus = (project: CloneProject, runtimeRes: { pipelin
 const {
   applyProject,
   refreshCurrentProject,
+  refreshRuntimeProject,
   ensureCurrentProjectReady,
   refreshProjectAfterFailure,
   loadProject,
@@ -847,6 +1001,7 @@ const {
   replaceShotVideo: replaceShotVideoInWorkspace,
   regenerateShotClip: regenerateShotClipInWorkspace,
   refreshRemoteStatus: refreshRemoteStatusInWorkspace,
+  syncPendingShotVideos: syncPendingShotVideosInWorkspace,
   composeFinalVideo: composeFinalVideoInWorkspace,
 } = useCloneProjectWorkspace<CloneProject>({
   current,
@@ -945,16 +1100,26 @@ async function toggleFrameLock(shotId: string) {
 function canContinueSyncShot(item?: ShotVideoOutput | null) {
   if (!item) return false
   if (Boolean(String(item.videoPath || '').trim())) return false
-  if (!String(item.taskId || '').trim()) return false
+  if (!effectiveShotTaskId(item.shotId)) return false
   const status = String(item.status || '').toLowerCase()
   const remoteStatus = String(item.remoteStatus || '').toLowerCase()
   return (
     status === 'failed' ||
+    status === 'pending' ||
+    status === 'idle' ||
     status === 'polling_timeout' ||
     status === 'remote_running' ||
+    status === 'creating' ||
+    status === 'generating' ||
     status === 'downloading' ||
     remoteStatus === 'succeeded'
   )
+}
+
+function canRepairShotTaskId(item?: ShotVideoOutput | null) {
+  if (!item) return false
+  if (Boolean(String(item.videoPath || '').trim())) return false
+  return !effectiveShotTaskId(item.shotId)
 }
 
 function storyBeatDisplayIndex(beat: StoryBeat, fallbackIndex = 0) {
@@ -1180,6 +1345,10 @@ async function refreshRemoteStatus() {
   await refreshRemoteStatusInWorkspace()
 }
 
+async function syncPendingShotVideos() {
+  await syncPendingShotVideosInWorkspace()
+}
+
 async function composeFinalVideo() {
   console.log('[clone-debug] compose-final-click', {
     visibleStageKey: visibleStageKey.value,
@@ -1213,8 +1382,10 @@ async function revealFinalOutput() {
 
 let timer: number | null = null
 let offRuntimeLog: (() => void) | null = null
+let refreshTick = 0
 
 onMounted(async () => {
+  cloneTopbar.show(stageItems.value.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
   pushRuntimeLog(stageLog.value)
   offRuntimeLog = window.api.clone.onRuntimeLog?.((payload) => {
     const text = safeText(payload?.message, '')
@@ -1236,10 +1407,36 @@ onMounted(async () => {
   }
   timer = window.setInterval(() => {
     if (current.value?.id && !isDraftingNewProject.value) {
-      void loadProject(current.value.id, { updateStageLog: false })
+      refreshTick += 1
+      if (hasRemotePendingShotSync.value || refreshTick % 4 === 0) {
+        void loadProject(current.value.id, { updateStageLog: false })
+      } else {
+        void refreshRuntimeProject()
+      }
     }
-  }, 4000)
+  }, 6000)
 })
+
+watch(
+  stageItems,
+  (items) => {
+    if (!route.path.includes('/clone/')) return
+    cloneTopbar.show(items.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
+  },
+  { immediate: true, deep: true },
+)
+
+watch(
+  requestedStageKey,
+  (key) => {
+    const nextKey = String(key || '').trim() as StageItem['key']
+    if (!nextKey) return
+    if (['analyze', 'variant', 'grid', 'video', 'compose'].includes(nextKey)) {
+      selectStage(nextKey)
+    }
+    cloneTopbar.consumeRequestedStage()
+  },
+)
 
 watch(
   pipelineErrorContext,
@@ -1252,6 +1449,7 @@ watch(
 )
 
 onUnmounted(() => {
+  cloneTopbar.hide()
   if (timer) window.clearInterval(timer)
   offRuntimeLog?.()
   offRuntimeLog = null
@@ -1260,47 +1458,20 @@ onUnmounted(() => {
 
 <template>
   <div class="clone-page">
-    <section class="workflow-rail">
-      <div class="workflow-rail__track">
-        <button
-          v-for="item in stageItems"
-          :key="item.key"
-          class="workflow-rail__step"
-          :class="{ 'is-done': item.done, 'is-active': visibleStageKey === item.key }"
-          type="button"
-          @click="selectStage(item.key)"
-        >
-          <div class="workflow-rail__index">{{ stageItems.findIndex((stage) => stage.key === item.key) + 1 }}</div>
-          <div class="workflow-rail__body">
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.desc }}</span>
-          </div>
-        </button>
-      </div>
-    </section>
-
     <section class="workspace-grid">
       <div class="main-column">
         <article v-if="visibleStageKey === 'analyze'" class="panel panel-reference">
           <div class="analyze-workbench">
-            <div class="analyze-topbar">
-              <div class="analyze-breadcrumb">爆款复刻 / 项目详情</div>
-              <div class="analyze-topbar__actions">
-                <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')">
-                  返回任务列表
-                </button>
-                <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="selectStage('variant')">下一步：脚本生成</button>
-              </div>
-            </div>
-
             <section class="analyze-hero-card">
               <div class="analyze-hero-card__head">
                 <div class="analyze-hero-card__copy">
-                  <span class="panel-tag">参考分析</span>
                   <h2>参考视频分析</h2>
                   <p>提取脚本结构、内容节奏与可复刻信息</p>
                 </div>
                 <div class="analyze-hero-card__controls">
+                  <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')">
+                    返回任务列表
+                  </button>
                   <button
                     class="primary-button small"
                     type="button"
@@ -1316,7 +1487,7 @@ onUnmounted(() => {
                 <div class="analyze-video-card">
                   <div class="analyze-video-card__head">
                     <strong>参考视频</strong>
-                    <span>{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, '等待上传参考视频') }}</span>
+                    <span>{{ referenceSourcePath ? '上传后用于后续脚本、分镜与视频阶段分析' : '请先上传参考视频' }}</span>
                   </div>
                   <div class="video-shell analyze-video-shell">
                     <video v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" controls preload="metadata"></video>
@@ -1332,109 +1503,126 @@ onUnmounted(() => {
                       {{ referenceSourcePath ? '重新选择视频' : '上传参考视频' }}
                     </button>
                   </div>
-                </div>
-
-                <div class="analyze-structure-card">
-                  <div class="analyze-structure-card__head">
-                    <strong>内容结构<span>（已识别）</span></strong>
-                  </div>
-                  <div v-if="storyBeats.length" class="analyze-structure-track">
-                    <div
-                      v-for="(item, index) in storyBeats.slice(0, 5)"
-                      :key="item.id"
-                      class="analyze-structure-node"
-                      :class="{ 'is-highlight': index === 0 }"
-                    >
-                      <span class="analyze-structure-node__index">{{ storyBeatDisplayIndex(item, index) }}</span>
-                      <strong>{{ storyBeatRangeText(item, index) }}</strong>
-                      <span>{{ localizePurpose(item.purpose) }}</span>
-                      <small>{{ localizeShotField(item.shotType || item.productRole) }}</small>
-                    </div>
-                  </div>
-                  <CloneStateCard
-                    v-else
-                    class="empty-state small-empty"
-                    title="等待内容结构"
-                    description="完成分析后，这里会展示参考视频的内容分段。"
-                  />
-                </div>
-              </div>
-
-              <div class="analyze-bottom-grid">
-                <div class="analyze-panel-card analyze-insights-panel">
-                  <div class="analyze-panel-card__head">
-                    <strong>AI 分析结果</strong>
-                  </div>
-                  <div class="analyze-summary-grid">
-                    <div v-for="item in analyzeSummaryCards" :key="item.key" class="analyze-summary-item">
-                      <strong>{{ item.title }}</strong>
-                      <span>{{ item.desc }}</span>
-                    </div>
-                  </div>
-                  <div class="analyze-insights-layout">
-                    <div class="analyze-script-card">
-                      <div class="analyze-script-card__head">
-                        <strong>识别脚本内容</strong>
-                        <span>{{ analyzeScriptLines.length ? `${analyzeScriptLines.length} 段` : '等待分析' }}</span>
-                      </div>
-                      <div v-if="analyzeGlobalSections.length" class="analyze-global-sections">
-                        <div v-for="item in analyzeGlobalSections" :key="item.key" class="analyze-global-section">
-                          <strong>{{ item.title }}</strong>
-                          <p>{{ item.desc }}</p>
-                        </div>
-                      </div>
-                      <div v-if="analyzeScriptLines.length" class="analyze-script-lines">
-                        <p v-for="(line, index) in analyzeScriptLines" :key="`${index}-${line}`">{{ line }}</p>
-                      </div>
-                      <p v-else>{{ analyzeScriptPreview }}</p>
-                      <div v-if="analyzeReversePrompt" class="analyze-reverse-prompt">
-                        <strong>反推提示词</strong>
-                        <p>{{ analyzeReversePrompt }}</p>
-                      </div>
-                    </div>
-
-                    <div class="analyze-structure-mini">
-                      <div class="analyze-structure-mini__head">
-                        <strong>结构片段</strong>
-                        <span>{{ storyBeats.length ? `${storyBeats.length} 个镜头` : '等待识别' }}</span>
-                      </div>
-                      <div v-if="storyBeats.length" class="analyze-structure-mini__list">
-                        <div v-for="(item, index) in storyBeats.slice(0, 5)" :key="item.id" class="analyze-structure-mini__item">
-                          <span>{{ String(index + 1).padStart(2, '0') }}</span>
-                          <div>
-                            <strong>{{ localizePurpose(item.purpose) }}</strong>
-                            <small>{{ storyBeatRangeText(item, index) }} · {{ localizeShotField(item.shotType || item.productRole) }}</small>
-                          </div>
-                        </div>
-                      </div>
-                      <p v-else class="analyze-structure-mini__empty">完成分析后，这里会显示结构片段摘要。</p>
+                  <div class="analyze-video-meta-card">
+                    <strong>视频信息</strong>
+                    <div class="analyze-video-meta-card__grid">
+                      <span>文件名</span>
+                      <strong>{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, '未上传') }}</strong>
+                      <span>片段数</span>
+                      <strong>{{ storyBeats.length || 0 }}</strong>
+                      <span>状态</span>
+                      <strong>{{ analyzeStageProgress >= 100 ? '分析完成' : loading ? '分析中' : '待分析' }}</strong>
                     </div>
                   </div>
                 </div>
 
-                <div class="analyze-panel-card analyze-engine-card">
-                  <div class="analyze-panel-card__head">
-                    <strong>AI 引擎状态</strong>
+                <div class="analyze-results-card">
+                  <div class="analyze-results-card__head">
+                    <strong>分析结果</strong>
+                    <span>{{ storyBeats.length ? `${storyBeats.length} 个片段` : '等待分析' }}</span>
                   </div>
-                  <div class="analyze-engine-ring">
-                    <span>{{ analyzeStageProgress }}</span>
+                  <div class="analyze-results-tabs">
+                    <button class="analyze-results-tabs__item is-active" type="button">分析结果</button>
+                    <button class="analyze-results-tabs__item" type="button">爆款要素</button>
+                    <button class="analyze-results-tabs__item" type="button">情绪曲线</button>
+                    <button class="analyze-results-tabs__item" type="button">节奏分析</button>
                   </div>
-                  <strong class="analyze-engine-title">{{ analyzeStageProgress >= 100 ? '分析完成' : loading ? '分析中' : '待分析' }}</strong>
-                  <span class="analyze-engine-meta">当前状态：{{ safeText(humanWorkflowStep(workflowStep), '--') }}</span>
-                </div>
-              </div>
+                  <div class="analyze-results-card__section">
+                    <div class="analyze-results-card__section-head">
+                      <strong>内容结构</strong>
+                      <span>视频由 {{ storyBeats.length || 0 }} 个主要片段组成</span>
+                    </div>
+                    <div v-if="storyBeats.length" class="analyze-structure-track">
+                      <div
+                        v-for="(item, index) in storyBeats.slice(0, 5)"
+                        :key="item.id"
+                        class="analyze-structure-node"
+                        :class="{ 'is-highlight': index === 0 }"
+                      >
+                        <span class="analyze-structure-node__index">{{ storyBeatDisplayIndex(item, index) }}</span>
+                        <strong>{{ storyBeatRangeText(item, index) }}</strong>
+                        <span>{{ localizePurpose(item.purpose) }}</span>
+                        <small>{{ localizeShotField(item.shotType || item.productRole) }}</small>
+                      </div>
+                    </div>
+                    <CloneStateCard
+                      v-else
+                      class="empty-state small-empty"
+                      title="等待内容结构"
+                      description="完成分析后，这里会展示参考视频的内容分段。"
+                    />
+                  </div>
 
-              <div class="analyze-footer">
-                <div class="analyze-project-card">
-                  <div class="analyze-project-card__thumb">
-                    <img v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" alt="project-preview" />
-                    <span v-else>项目</span>
+                  <div class="analyze-results-card__section">
+                    <div class="analyze-results-card__section-head">
+                      <strong>脚本内容</strong>
+                      <span>{{ analyzeScriptLines.length ? `${analyzeScriptLines.length} 段` : '等待识别' }}</span>
+                    </div>
+                    <div v-if="analyzeScriptLines.length" class="analyze-script-lines analyze-script-lines--compact">
+                      <p v-for="(line, index) in analyzeScriptLines.slice(0, 6)" :key="`${index}-${line}`">{{ line }}</p>
+                    </div>
+                    <p v-else class="analyze-results-card__empty-copy">{{ analyzeScriptPreview }}</p>
                   </div>
-                  <div class="analyze-project-card__copy">
-                    <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, '当前项目') }}</strong>
-                    <span>项目进度 {{ analyzeStageProgress }}%</span>
+                </div>
+
+                <div class="analyze-project-info-card">
+                  <div class="analyze-project-info-card__section">
+                    <div class="analyze-project-info-card__head">
+                      <strong>项目信息</strong>
+                    </div>
+                    <div class="analyze-project-field">
+                      <span>项目名称</span>
+                      <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, '当前项目') }}</strong>
+                    </div>
+                    <div class="analyze-project-pills">
+                      <em>{{ current?.runMode === 'auto' ? '智能复刻' : '手动流程' }}</em>
+                      <em>{{ hasBoundModel ? '已选模特' : '未选模特' }}</em>
+                      <em>{{ effectiveProductRefs.length ? `商品图 ${effectiveProductRefs.length}` : '未传商品图' }}</em>
+                    </div>
                   </div>
-                  <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')">返回任务列表</button>
+
+                  <div class="analyze-project-info-card__section">
+                    <div class="analyze-project-info-card__head">
+                      <strong>模特信息</strong>
+                    </div>
+                    <div class="variant-asset-card">
+                      <div class="variant-asset-card__media variant-asset-card__media--model">
+                        <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
+                        <span v-else>模特</span>
+                      </div>
+                      <div class="variant-summary-card__copy">
+                        <span>当前模特</span>
+                        <strong>{{ safeText(modelSnapshot?.name, '未选择') }}</strong>
+                        <p>{{ modelSnapshot?.id ? '已绑定到当前项目。' : '请先选择模特。' }}</p>
+                      </div>
+                    </div>
+                    <button class="ghost-button small secondary-action full-width" type="button" :disabled="modelLoading" @click="modelModalOpen = true">选择模特</button>
+                  </div>
+
+                  <div class="analyze-project-info-card__section">
+                    <div class="analyze-project-info-card__head">
+                      <strong>商品图片</strong>
+                    </div>
+                    <div class="variant-summary-card__copy">
+                      <span>当前商品图</span>
+                      <strong>{{ effectiveProductRefs.length ? `已选 ${effectiveProductRefs.length} 张` : '未上传' }}</strong>
+                      <p>{{ effectiveProductRefs.length ? '这些商品图会继续用于后续阶段。' : '建议先上传 3-9 张商品图。' }}</p>
+                    </div>
+                    <div v-if="visibleProductThumbs.length" class="variant-product-strip">
+                      <span v-for="item in visibleProductThumbs.slice(0, 4)" :key="item" class="variant-product-strip__item">
+                        <img :src="previewImage(item)" alt="product-reference" />
+                        <button class="variant-product-strip__remove" type="button" :disabled="loading" @click.stop.prevent="removeProductImage(item)">删除</button>
+                      </span>
+                    </div>
+                    <div v-if="visibleProductThumbs.length" class="variant-product-meta">
+                      <span>已绑定素材预览</span>
+                      <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), '商品图') }}</strong>
+                    </div>
+                    <div class="variant-product-actions">
+                      <button class="ghost-button small secondary-action" type="button" @click="pickProductImages">上传商品图</button>
+                      <button v-if="effectiveProductRefs.length" class="ghost-button small danger-action" type="button" :disabled="loading" @click.stop.prevent="clearProductImages">清空重选</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -1443,7 +1631,7 @@ onUnmounted(() => {
 
         <article v-if="visibleStageKey === 'variant'" class="panel">
           <div class="variant-workbench">
-            <CloneStageHeader tag="脚本生成" title="绑定素材并生成脚本候选" description="先选择模特和商品图，再生成多条按时间段拆分的脚本候选。">
+            <CloneStageHeader tag="脚本生成" title="生成脚本候选" description="选好模特和商品图后，生成多条候选脚本。">
               <template #actions>
                 <button class="ghost-button small secondary-action" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
                   {{ autoFlowRunning ? '自动运行中' : current?.runMode === 'auto' ? '继续自动运行' : '从当前阶段开始自动运行' }}
@@ -1456,64 +1644,15 @@ onUnmounted(() => {
               </template>
               <template #aux>
                 <span>运行模式：{{ runModeLabel }}</span>
-                <span>自动目标：{{ autoFlowTargetLabel }}</span>
                 <span>当前阶段：{{ autoFlowCurrentStageLabel }}</span>
-                <span>当前候选：{{ scriptVariants.length }}</span>
-                <span>当前选择：{{ selectedVariantId ? '已选脚本' : '未选脚本' }}</span>
+                <span>候选数：{{ scriptVariants.length }}</span>
+                <span>选择状态：{{ selectedVariantId ? '已选择' : '未选择' }}</span>
                 <span>商品图：{{ effectiveProductRefs.length }} 张</span>
-                <span>自动流程：{{ autoFlowSummary }}</span>
               </template>
             </CloneStageHeader>
 
-            <div class="clone-run-mode-banner" :class="current?.runMode === 'auto' ? 'is-auto' : 'is-manual'">
-              <div class="clone-run-mode-banner__main">
-                <span class="clone-run-mode-banner__badge">{{ runModeLabel }}</span>
-                <strong>{{ current?.runMode === 'auto' ? '系统会自动推进到最终门禁，并在全部镜头通过后才进入最终成片。' : '当前任务按手动方式推进，但最终成片仍必须通过统一硬门禁。' }}</strong>
-                <span>{{ autoFlowSummary }}</span>
-              </div>
-              <div class="clone-run-mode-banner__stats">
-                <span>阻塞镜头：{{ gateBlockedShots.length }}</span>
-                <span>允许成片：{{ gatePassAllowed ? '允许' : '禁止' }}</span>
-              </div>
-            </div>
-
             <div class="variant-layout">
               <aside class="variant-summary-panel">
-                <CloneDataCard class="variant-summary-card variant-summary-card--asset">
-                  <div class="variant-asset-card">
-                    <div class="variant-asset-card__media variant-asset-card__media--model">
-                      <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
-                      <span v-else>模特</span>
-                    </div>
-                    <div class="variant-summary-card__copy">
-                      <span>当前模特</span>
-                      <strong>{{ safeText(modelSnapshot?.name, '未选择') }}</strong>
-                      <p>{{ modelSnapshot?.id ? '已绑定到当前项目' : '先选择模特后再生成候选' }}</p>
-                    </div>
-                  </div>
-                  <button class="ghost-button small secondary-action" type="button" :disabled="modelLoading" @click="modelModalOpen = true">选择模特</button>
-                </CloneDataCard>
-                <CloneDataCard class="variant-summary-card variant-summary-card--asset">
-                  <div class="variant-summary-card__copy">
-                    <span>商品图片</span>
-                    <strong>{{ effectiveProductRefs.length ? `已选 ${effectiveProductRefs.length} 张` : '未上传' }}</strong>
-                    <p>{{ effectiveProductRefs.length ? '这些商品图已经绑定到当前项目' : '请先上传 3-9 张商品参考图' }}</p>
-                  </div>
-                  <div v-if="visibleProductThumbs.length" class="variant-product-strip">
-                    <span v-for="item in visibleProductThumbs.slice(0, 4)" :key="item" class="variant-product-strip__item">
-                      <img :src="previewImage(item)" alt="product-reference" />
-                      <button class="variant-product-strip__remove" type="button" :disabled="loading" @click.stop.prevent="removeProductImage(item)">删除</button>
-                    </span>
-                  </div>
-                  <div v-if="visibleProductThumbs.length" class="variant-product-meta">
-                    <span>已绑定素材预览</span>
-                    <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), '商品图') }}</strong>
-                  </div>
-                  <div class="variant-product-actions">
-                    <button class="ghost-button small secondary-action" type="button" @click="pickProductImages">上传商品图</button>
-                    <button v-if="effectiveProductRefs.length" class="ghost-button small danger-action" type="button" :disabled="loading" @click.stop.prevent="clearProductImages">清空重选</button>
-                  </div>
-                </CloneDataCard>
                 <CloneDataCard class="variant-summary-card">
                   <div class="variant-summary-card__copy">
                     <span>当前候选</span>
@@ -1594,97 +1733,161 @@ onUnmounted(() => {
           </div>
         </article>
 
-        <article v-if="visibleStageKey === 'grid'" class="panel">
-          <CloneStageHeader tag="分镜设计" title="逐分镜图片生成" description="根据已选脚本、项目模特和商品图，为每个镜头生成独立分镜图片。">
-            <template #actions>
-              <button class="primary-button small" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="generateStoryboardGrids">开始生成分镜</button>
-            </template>
-            <template #aux>
-              <span>图片结果：{{ storyboardFrames.length }}</span>
-              <span>失败图片：{{ failedStoryboardFrames.length }}</span>
-              <span>当前候选：{{ selectedVariantId ? '已选脚本' : '未选脚本' }}</span>
-              <span>锁定分镜：{{ blueprintShots.filter((shot) => shot.locked).length }}</span>
-              <span>图片供应商：{{ activeImageProvider }}</span>
-              <span>图片模型：{{ activeImageModel }}</span>
-              <span v-if="storyboardBatchSummary">
-                批量结果：共 {{ storyboardBatchSummary.total }}，成功 {{ storyboardBatchSummary.done }}，失败 {{ storyboardBatchSummary.failed }}，跳过 {{ storyboardBatchSummary.skipped }}
-              </span>
-              <span>{{ storyboardFrameBlockReason || '所有前置条件已就绪' }}</span>
-            </template>
-          </CloneStageHeader>
+        <article v-if="visibleStageKey === 'grid'" class="panel panel-storyboard-design">
+          <div class="storyboard-stage-hero">
+            <div class="storyboard-stage-hero__copy">
+              <strong>分镜设计</strong>
+              <p>基于脚本内容和风格，AI 为你生成分镜画面，支持调整镜头、画面和提示词</p>
+            </div>
+            <div class="storyboard-stage-hero__actions">
+              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject">
+                保存项目
+              </button>
+              <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="storyboardFrames.length ? selectStage('video') : generateStoryboardGrids()">
+                {{ storyboardFrames.length ? '下一步' : '开始生成分镜' }}
+              </button>
+            </div>
+          </div>
 
-          <div class="storyboard-layout">
-            <section class="storyboard-column storyboard-column--batches">
-              <div class="storyboard-column__head">
-                <div class="storyboard-column__copy">
-                  <strong>分镜脚本</strong>
-                  <span>按脚本顺序检查每个分镜要生成的画面内容。</span>
-                </div>
-                <em>{{ (scriptVariants.find((item) => item.id === selectedVariantId)?.shotScripts || []).length }} 段</em>
-              </div>
-
-              <div class="storyboard-batch-list">
-                <CloneMediaCard
-                  v-for="shot in scriptVariants.find((item) => item.id === selectedVariantId)?.shotScripts || []"
-                  :key="shot.shotId"
-                  class="storyboard-batch-card"
-                >
-                  <div class="batch-meta data-card-copy">
-                    <strong>{{ safeText(shot.timeRange, `分镜 ${shot.shotIndex + 1}`) }}</strong>
-                    <span>{{ shot.scriptText }}</span>
-                  </div>
-                </CloneMediaCard>
-                <CloneStateCard
-                  v-if="!(scriptVariants.find((item) => item.id === selectedVariantId)?.shotScripts || []).length"
-                  class="empty-state section-empty"
-                  title="等待脚本候选"
-                  description="先在上一步选择脚本候选，再进入逐分镜图片生成。"
-                />
-              </div>
-            </section>
-
+          <div class="storyboard-design-layout">
             <section class="storyboard-column storyboard-column--frames">
               <div class="storyboard-column__head">
-                <div class="storyboard-column__copy">
-                  <strong>分镜图片结果</strong>
-                  <span>每个分镜生成一张独立图片，下一步将直接用于视频生成。</span>
-                </div>
-                <em>{{ storyboardFrames.length }} 张</em>
+                <div class="storyboard-column__copy"></div>
+                <em>{{ storyboardDesignRows.length }} 条</em>
               </div>
 
-              <div class="frame-grid">
-                <CloneMediaCard v-for="frame in storyboardFrames" :key="frame.id" class="frame-card">
-                  <div class="frame-card__media">
-                    <img v-if="frame.imagePath" :src="previewImage(frame.imagePath)" alt="frame" />
-                    <CloneStateCard
-                      v-else
-                      class="empty-state small-empty"
-                      :tone="frame.error ? 'danger' : 'pending'"
-                      :title="frame.error ? '生成失败' : '待生成'"
-                      :description="frame.error || '该分镜还没有图片结果。'"
-                    />
-                  </div>
-                  <div class="frame-card__copy">
-                    <strong>{{ safeText(shotLabel(frame.shotId), '分镜') }}</strong>
-                    <span>
-                      {{ blueprintShots.find((shot) => shot.id === frame.shotId)?.locked ? '已锁定' : frame.imagePath ? '已生成' : humanStatus(frame.status) }}
+              <div class="storyboard-design-table">
+                <div class="storyboard-design-table__head">
+                  <span>镜头</span>
+                  <span>画面 / 提示词</span>
+                  <span>时长</span>
+                  <span>景别</span>
+                  <span>运镜</span>
+                  <span>台词 / 旁白</span>
+                  <span>操作</span>
+                </div>
+
+                <div class="storyboard-design-table__body">
+                  <div
+                    v-for="row in storyboardDesignRows"
+                    :key="row.shotId"
+                    class="storyboard-design-row"
+                    :class="{ 'is-active': selectedShotId === row.shotId }"
+                    role="button"
+                    tabindex="0"
+                    @click="selectedShotId = row.shotId"
+                    @keydown.enter.prevent="selectedShotId = row.shotId"
+                    @keydown.space.prevent="selectedShotId = row.shotId"
+                  >
+                    <span class="storyboard-design-cell storyboard-design-cell--index">
+                      <strong>{{ String(row.shotIndex).padStart(2, '0') }}</strong>
+                      <small>{{ row.scriptCode }}</small>
                     </span>
-                    <span v-if="typeof frame.retryCount === 'number' && frame.retryCount > 0">已重试 {{ frame.retryCount }} 次</span>
+
+                    <span class="storyboard-design-cell storyboard-design-cell--prompt">
+                      <span class="storyboard-design-thumb">
+                        <img v-if="row.imagePath" :src="previewImage(row.imagePath)" :alt="safeText(shotLabel(row.shotId), '分镜')">
+                        <span v-else class="storyboard-design-thumb__empty">{{ row.error ? '失败' : '待生成' }}</span>
+                      </span>
+                      <span class="storyboard-design-copy">
+                        <strong>{{ row.promptText }}</strong>
+                        <span class="storyboard-design-tags">
+                          <em v-for="tag in row.tags" :key="`${row.shotId}-${tag}`">{{ tag }}</em>
+                        </span>
+                        <small v-if="row.retryCount > 0">已重试 {{ row.retryCount }} 次</small>
+                      </span>
+                    </span>
+
+                    <span class="storyboard-design-cell">{{ row.durationText }}</span>
+                    <span class="storyboard-design-cell">{{ row.sceneText }}</span>
+                    <span class="storyboard-design-cell">{{ row.cameraText }}</span>
+                    <span class="storyboard-design-cell storyboard-design-cell--voice">{{ row.voiceText }}</span>
+                    <span class="storyboard-design-cell storyboard-design-cell--actions">
+                      <button
+                        class="ghost-button small icon-button"
+                        type="button"
+                        :disabled="!shotFrameMap[row.shotId]?.imagePath"
+                        title="预览"
+                        @click.stop="shotFrameMap[row.shotId] && openFramePreview(shotFrameMap[row.shotId])"
+                      >
+                        ◱
+                      </button>
+                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="toggleFrameLock(row.shotId)" :title="row.locked ? '解除锁定' : '锁定分镜'">
+                        {{ row.locked ? '解' : '锁' }}
+                      </button>
+                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="regenerateStoryboardFrame(row.shotId)" title="重新生成">↻</button>
+                    </span>
                   </div>
-                  <div class="frame-card__actions">
-                    <button class="ghost-button small" type="button" :disabled="!frame.imagePath" @click="openFramePreview(frame)">
-                      预览大图
-                    </button>
-                    <button class="ghost-button small" type="button" :disabled="loading" @click="toggleFrameLock(frame.shotId)">
-                      {{ blueprintShots.find((shot) => shot.id === frame.shotId)?.locked ? '解除锁定' : '锁定分镜' }}
-                    </button>
-                    <button class="ghost-button small" type="button" :disabled="loading" @click="regenerateStoryboardFrame(frame.shotId)">
-                      重新生成
-                    </button>
-                  </div>
-                </CloneMediaCard>
+                </div>
               </div>
             </section>
+
+            <aside class="storyboard-preview-panel">
+              <div class="storyboard-preview-card">
+                <div class="storyboard-preview-card__head">
+                  <div>
+                    <strong>分镜预览</strong>
+                    <span>{{ selectedStoryboardRow ? `镜头 ${String(selectedStoryboardRow.shotIndex).padStart(2, '0')}` : '等待选择镜头' }}</span>
+                  </div>
+                  <button
+                    class="ghost-button small"
+                    type="button"
+                    :disabled="!selectedStoryboardFrame?.imagePath"
+                    @click="selectedStoryboardFrame && openFramePreview(selectedStoryboardFrame)"
+                  >
+                    放大查看
+                  </button>
+                </div>
+
+                <div class="storyboard-preview-media">
+                  <img
+                    v-if="selectedStoryboardFrame?.imagePath"
+                    :src="previewImage(selectedStoryboardFrame.imagePath)"
+                    :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), '分镜预览')"
+                  >
+                  <div v-else class="storyboard-preview-media__empty">
+                    <strong>{{ selectedStoryboardRow?.error ? '生成失败' : '等待生成' }}</strong>
+                    <span>{{ selectedStoryboardRow?.error || '当前镜头生成完成后会在这里显示大图预览。' }}</span>
+                  </div>
+                </div>
+
+                <div v-if="selectedStoryboardRow" class="storyboard-preview-copy">
+                  <strong>{{ selectedStoryboardRow.promptText }}</strong>
+                  <span>{{ selectedStoryboardRow.voiceText }}</span>
+                </div>
+
+                <div class="storyboard-preview-meta">
+                  <div class="storyboard-preview-meta__item">
+                    <span>时长</span>
+                    <strong>{{ selectedStoryboardRow?.durationText || '--' }}</strong>
+                  </div>
+                  <div class="storyboard-preview-meta__item">
+                    <span>景别</span>
+                    <strong>{{ selectedStoryboardRow?.sceneText || '--' }}</strong>
+                  </div>
+                  <div class="storyboard-preview-meta__item">
+                    <span>运镜</span>
+                    <strong>{{ selectedStoryboardRow?.cameraText || '--' }}</strong>
+                  </div>
+                </div>
+
+                <div class="storyboard-preview-tags">
+                  <em v-for="tag in selectedStoryboardRow?.tags || []" :key="`preview-${tag}`">{{ tag }}</em>
+                </div>
+              </div>
+
+              <div class="storyboard-preview-card storyboard-preview-card--script">
+                <div class="storyboard-preview-card__head">
+                  <div>
+                    <strong>脚本视图</strong>
+                    <span>{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : '等待脚本' }}</span>
+                  </div>
+                </div>
+                <div class="storyboard-preview-script">
+                  <p>{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || '当前镜头还没有可用脚本内容。' }}</p>
+                </div>
+              </div>
+            </aside>
           </div>
         </article>
 
@@ -1693,26 +1896,17 @@ onUnmounted(() => {
             class="video-stage-header"
             tag=""
             :title="tr('cloneView.videoStage.title')"
-            :description="tr('cloneView.videoStage.description')"
+            :description="videoStageDescription"
           >
             <template #actions>
               <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">{{ tr('cloneView.videoStage.primaryAction') }}</button>
               <button class="ghost-button small" type="button" :disabled="loading" @click="selectStage('compose')">进入最终成片</button>
             </template>
-            <template #aux>
-              <span>运行模式：{{ runModeLabel }}</span>
-              <span>当前分镜：{{ shotVideoOutputs.length }}</span>
-              <span>失败分镜：{{ failedShotOutputs.length }}</span>
-              <span>自动状态：{{ safeText(current?.autoFlowStatus?.status, '--') }}</span>
-              <span>最终门禁：{{ gatePassAllowed ? '已放行' : '已阻塞' }}</span>
-              <span>当前项目：{{ safeText(current?.title || current?.blueprint?.title || current?.referenceVideoName || current?.id, '未选择项目') }}</span>
-            </template>
-          </CloneStageHeader>
-
-          <div class="clone-gate-summary" :class="gatePassAllowed ? 'is-pass' : 'is-blocked'">
-            <strong>{{ gatePassAllowed ? '最终门禁已通过' : '最终门禁未通过' }}</strong>
-            <span>{{ gateFailureSummary }}</span>
-          </div>
+              <template #aux>
+                <span>运行模式：{{ runModeLabel }}</span>
+                <span>分镜：{{ shotVideoOutputs.length }} · 失败：{{ failedShotOutputs.length }}</span>
+              </template>
+            </CloneStageHeader>
 
           <div v-if="shotVideoOutputs.length" class="shot-workbench shot-workbench--reference">
             <div class="video-stage-layout video-stage-layout--workarea">
@@ -1728,6 +1922,9 @@ onUnmounted(() => {
                         <button class="ghost-button small" type="button" :disabled="loading || !failedShotOutputs.length" @click="regenerateFailedShotVideos">
                           {{ failedShotActionText }}
                         </button>
+                        <button class="ghost-button small" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos">
+                          手动查询待回写
+                        </button>
                         <button class="ghost-button small" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">同步云端状态</button>
                       </div>
                     </div>
@@ -1742,6 +1939,8 @@ onUnmounted(() => {
                       <div class="shot-table-stats">
                         <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
                         <span>{{ tr('cloneView.videoStage.stats.failedPending') }}：{{ failedShotOutputs.length }}</span>
+                        <span>可继续查询：{{ continueQueryableShotCount }}</span>
+                        <span>缺少任务号：{{ missingTaskIdShotCount }}</span>
                       </div>
                     </div>
 
@@ -1759,6 +1958,7 @@ onUnmounted(() => {
                       <div
                         v-for="item in filteredShotOutputs"
                         :key="item.shotId"
+                        v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId]"
                         class="shot-reference-row"
                         :class="{
                           active: selectedShotOutput?.shotId === item.shotId,
@@ -1772,13 +1972,13 @@ onUnmounted(() => {
                         tabindex="0"
                       >
                         <span class="shot-reference-cell shot-reference-cell--index">
-                          <strong>{{ safeText(item.index ? String(item.index).padStart(2, '0') : '', String(shotVideoOutputs.findIndex((entry) => entry.shotId === item.shotId) + 1).padStart(2, '0')) }}</strong>
-                          <small>{{ `脚本-${shotVideoOutputs.findIndex((entry) => entry.shotId === item.shotId) + 1}` }}</small>
+                          <strong>{{ safeText(item.index ? String(item.index).padStart(2, '0') : '', String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0')) }}</strong>
+                          <small>{{ `脚本-${(shotVideoOutputIndexMap[item.shotId] ?? 0) + 1}` }}</small>
                         </span>
                         <span class="shot-reference-cell shot-reference-cell--thumb">
-                          <span v-if="storyboardFrames.find((frame) => frame.shotId === item.shotId)?.imagePath" class="shot-thumb shot-thumb--large">
+                          <span v-if="shotFrameMap[item.shotId]?.imagePath" class="shot-thumb shot-thumb--large">
                             <img
-                              :src="previewImage(storyboardFrames.find((frame) => frame.shotId === item.shotId)?.imagePath)"
+                              :src="previewImage(shotFrameMap[item.shotId]?.imagePath)"
                               :alt="safeText(shotLabel(item.shotId), '分镜')"
                             />
                           </span>
@@ -1795,10 +1995,13 @@ onUnmounted(() => {
                           <strong>{{ localizeShotField(storyBeats.find((beat) => beat.id === item.shotId)?.shotType) }}</strong>
                         </span>
                         <span class="shot-reference-cell shot-reference-cell--status">
-                          <span class="queue-dot" :class="`queue-dot--${item.videoPath ? 'success' : item.error ? 'danger' : loading ? 'working' : 'idle'}`"></span>
+                          <span
+                            class="queue-dot"
+                            :class="`queue-dot--${describeShotSyncState(item).tone === 'success' ? 'success' : describeShotSyncState(item).tone === 'danger' ? 'danger' : describeShotSyncState(item).tone === 'warning' ? 'working' : 'idle'}`"
+                          ></span>
                           <span class="shot-reference-status-copy">
-                            <strong>{{ humanStatus(item.status) }}</strong>
-                            <small>{{ safeText(item.remoteStatus, item.videoPath ? tr('cloneView.videoStage.filters.ready') : tr('cloneView.videoStage.filters.pending')) }}</small>
+                            <strong>{{ describeShotSyncState(item).title }}</strong>
+                            <small>{{ describeShotSyncState(item).detail }}</small>
                             <small v-if="typeof item.retryCount === 'number'">重试 {{ item.retryCount }} / 2</small>
                           </span>
                         </span>
@@ -1820,6 +2023,15 @@ onUnmounted(() => {
                             @click.stop="syncFailedShotVideo(item.shotId)"
                           >
                             继续查询
+                          </button>
+                          <button
+                            v-else-if="canRepairShotTaskId(item)"
+                            class="ghost-button small action-button"
+                            type="button"
+                            :disabled="loading || !current?.id"
+                            @click.stop="refreshRemoteStatus"
+                          >
+                            同步补查
                           </button>
                         </span>
                       </div>
@@ -1862,26 +2074,25 @@ onUnmounted(() => {
                       </CloneDataCard>
                       <CloneDataCard class="meta-card sidebar-frame-card">
                         <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
-                        <div
-                          v-if="selectedShotOutput && storyboardFrames.find((frame) => frame.shotId === selectedShotOutput.shotId)?.imagePath"
-                          class="sidebar-frame-thumb"
-                        >
+                        <div v-if="selectedShotFrame?.imagePath" class="sidebar-frame-thumb">
                           <img
-                            :src="previewImage(storyboardFrames.find((frame) => frame.shotId === selectedShotOutput.shotId)?.imagePath)"
-                            :alt="safeText(shotLabel(selectedShotOutput.shotId), '参考分镜')"
+                            :src="previewImage(selectedShotFrame.imagePath)"
+                            :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), '参考分镜')"
                           />
                         </div>
                         <div v-else class="sidebar-frame-thumb sidebar-frame-thumb--empty">{{ tr('cloneView.videoStage.noReferenceFrame') }}</div>
                       </CloneDataCard>
                       <CloneDataCard class="meta-card compact-meta-grid">
                         <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
-                        <strong>{{ safeText(selectedShotOutput ? humanStatus(selectedShotOutput.status) : '--', '--') }}</strong>
+                        <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</strong>
+                        <span>状态说明</span>
+                        <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</strong>
                         <span>当前配置视频模型</span>
                         <strong>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</strong>
                         <span>{{ tr('cloneView.videoStage.modelLabel') }}</span>
                         <strong>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</strong>
                         <span>{{ tr('cloneView.videoStage.taskIdLabel') }}</span>
-                        <strong>{{ safeText(selectedShotOutput?.taskId, '--') }}</strong>
+                        <strong>{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</strong>
                       </CloneDataCard>
                     </section>
                   </div>
@@ -1914,115 +2125,55 @@ onUnmounted(() => {
         </article>
 
         <article v-if="visibleStageKey === 'compose'" class="panel panel-compose-stage">
-          <CloneStageHeader tag="" title="成片合成" description="本地合成最终成片，预览结果并导出到目标文件夹">
+          <CloneStageHeader tag="" title="最终成片" description="预览并导出成片">
             <template #actions>
               <button class="primary-button small" :class="{ 'is-warning': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo">{{ finalButtonLabel }}</button>
             </template>
             <template #aux>
-              <span>运行模式：{{ runModeLabel }}</span>
-              <span>可检查片段：{{ shotVideoOutputs.length }} 条</span>
-              <span>最终门禁：{{ gatePassAllowed ? '允许成片' : '禁止成片' }}</span>
-              <span>输出状态：{{ finalOutputPath ? '已有成片' : '待合成' }}</span>
+              <span>门禁：{{ gatePassAllowed ? '通过' : '阻塞' }}</span>
+              <span>{{ finalOutputPath ? '已有成片' : '待合成' }}</span>
             </template>
           </CloneStageHeader>
 
-          <div class="clone-gate-summary" :class="gatePassAllowed ? 'is-pass' : 'is-blocked'">
-            <strong>{{ gatePassAllowed ? '全部镜头已放行，可进入最终成片。' : '当前任务仍被最终门禁拦截。' }}</strong>
-            <span>{{ gateFailureSummary }}</span>
-          </div>
-
           <div class="compose-workbench">
-            <section class="compose-main-stage">
-              <div class="compose-canvas-panel">
-                <div class="compose-canvas-shell">
-                  <div
-                    v-if="composePreviewPath"
-                    class="compose-canvas-frame"
-                    :class="composeAspectClass"
-                    @contextmenu.prevent="finalOutputPath && revealFinalOutput()"
-                  >
-                    <video :src="mediaUrl(composePreviewPath)" controls preload="metadata"></video>
-                  </div>
-                  <CloneStateCard
-                    v-else
-                    class="empty-state"
-                    title="等待成片"
-                    description="合成完成后，这里会显示最终成片；未合成前会显示当前选中镜头预览。"
-                  />
-                </div>
-                <div v-if="finalOutputPath" class="compose-preview-actions">
-                  <button class="ghost-button small" type="button" @click="openFinalOutput">播放成片</button>
-                  <button class="ghost-button small" type="button" @click="revealFinalOutput">在文件夹中显示</button>
+            <section class="compose-canvas-panel">
+              <div class="compose-panel-head">
+                <div class="compose-list-copy">
+                  <span class="panel-tag">成片预览</span>
+                  <strong>预览并导出最终成片</strong>
                 </div>
               </div>
-
-              <div class="compose-timeline-panel">
-                <div class="compose-list-head">
-                  <div class="compose-list-copy">
-                    <span class="panel-tag">镜头顺序</span>
-                    <strong>选择并替换需要重做的片段</strong>
-                  </div>
-                  <span class="mini-pill mini-pill--ghost">{{ shotVideoOutputs.length }} 条</span>
+              <div class="compose-canvas-shell">
+                <div
+                  v-if="composePreviewPath"
+                  class="compose-canvas-frame"
+                  :class="composeAspectClass"
+                  @contextmenu.prevent="finalOutputPath && revealFinalOutput()"
+                >
+                  <video :src="mediaUrl(composePreviewPath)" controls preload="metadata"></video>
                 </div>
-
-                <div v-if="shotVideoOutputs.length" class="compose-timeline-list">
-                  <div
-                    v-for="item in shotVideoOutputs"
-                    :key="`${item.shotId}-review`"
-                    class="compose-timeline-card"
-                    :class="{ active: selectedShotOutput?.shotId === item.shotId }"
-                    @click="selectedShotId = item.shotId"
-                    @keydown.enter.prevent="selectedShotId = item.shotId"
-                    @keydown.space.prevent="selectedShotId = item.shotId"
-                    role="button"
-                    tabindex="0"
-                  >
-                    <div class="compose-timeline-thumb">
-                      <video v-if="item.videoPath" :src="mediaUrl(item.videoPath)" preload="metadata" muted></video>
-                      <img v-else-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath)" alt="shot-frame" />
-                      <span v-else>无预览</span>
-                    </div>
-
-                    <div class="compose-timeline-overlay">
-                      <span>{{ shotVideoOutputs.findIndex((entry) => entry.shotId === item.shotId) + 1 }}</span>
-                      <strong>{{ formatDuration(item.durationSec) }}</strong>
-                    </div>
-
-                    <div class="compose-timeline-copy">
-                      <div class="compose-timeline-copy__head">
-                        <strong>{{ safeText(shotLabel(item.shotId), '分镜') }}</strong>
-                        <span class="mini-pill" :class="{ replaced: item.source === 'uploaded_replacement' }">
-                          {{ item.source === 'uploaded_replacement' ? '替换片段' : '生成片段' }}
-                        </span>
-                      </div>
-                      <p>{{ safeText(storyBeatMap[item.shotId]?.visualDescription || storyBeatMap[item.shotId]?.scriptSegment, '当前分镜暂无描述') }}</p>
-                    </div>
-
-                    <div class="compose-timeline-actions">
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="selectedShotId = item.shotId" title="预览">▶</button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="replaceShotVideo(item.shotId)" title="替换">↺</button>
-                      <button
-                        v-if="canContinueSyncShot(item)"
-                        class="ghost-button small icon-button"
-                        type="button"
-                        :disabled="loading"
-                        @click.stop="syncFailedShotVideo(item.shotId)"
-                        title="继续查询"
-                      >
-                        ⟳
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
                 <CloneStateCard
                   v-else
-                  class="empty-state section-empty"
-                  title="等待检查片段"
-                  description="分镜视频生成完成后，这里可以逐个替换镜头再重新合成。"
+                  class="empty-state"
+                  title="等待成片"
+                  description="合成完成后，这里会显示最终成片；未合成前会显示当前选中镜头预览。"
                 />
+              </div>
+              <div class="compose-preview-actions">
+                <button class="ghost-button small" type="button" :disabled="!finalOutputPath" @click="revealFinalOutput">在文件夹中显示</button>
+                <button class="ghost-button small" type="button" :disabled="!finalOutputPath" @click="openFinalOutput">播放成片</button>
+              </div>
+            </section>
 
-                <div class="compose-bottom-actions">
+            <section class="compose-timeline-panel">
+              <div class="compose-list-head">
+                <div class="compose-list-copy">
+                  <span class="panel-tag">镜头顺序</span>
+                  <strong>按镜头顺序检查并替换片段</strong>
+                  <p>先在上方切换镜头，再在下方查看预览与提示。</p>
+                </div>
+                <div class="compose-list-actions">
+                  <span class="mini-pill mini-pill--ghost">{{ shotVideoOutputs.length }} 条</span>
                   <button class="ghost-button small" type="button" :disabled="loading || !selectedShotOutput" @click="replaceShotVideo(selectedShotOutput?.shotId || '')">替换当前镜头</button>
                   <button
                     class="ghost-button small"
@@ -2032,14 +2183,117 @@ onUnmounted(() => {
                   >
                     继续查询当前镜头
                   </button>
+                  <button
+                    v-if="canRepairShotTaskId(selectedShotOutput)"
+                    class="ghost-button small"
+                    type="button"
+                    :disabled="loading || !current?.id"
+                    @click="refreshRemoteStatus"
+                  >
+                    同步补查当前镜头
+                  </button>
                 </div>
               </div>
+
+              <div v-if="shotVideoOutputs.length" class="compose-timeline-stage">
+                <div class="compose-shot-strip">
+                  <div
+                    v-for="item in shotVideoOutputs"
+                    :key="`${item.shotId}-review`"
+                    v-memo="[item.shotId, item.videoPath, item.source, item.status, item.error, item.durationSec, selectedShotOutput?.shotId === item.shotId, shotFrameMap[item.shotId]?.imagePath]"
+                    class="compose-shot-strip__item"
+                    :class="{ active: selectedShotOutput?.shotId === item.shotId }"
+                    @click="selectedShotId = item.shotId"
+                    @keydown.enter.prevent="selectedShotId = item.shotId"
+                    @keydown.space.prevent="selectedShotId = item.shotId"
+                    role="button"
+                    tabindex="0"
+                  >
+                    <span class="compose-shot-strip__index">#{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</span>
+                    <span class="compose-shot-strip__thumb">
+                      <img
+                        v-if="shotFrameMap[item.shotId]?.imagePath"
+                        :src="previewImage(shotFrameMap[item.shotId]?.imagePath)"
+                        alt="shot-frame"
+                        loading="lazy"
+                      />
+                      <span v-else>无预览</span>
+                    </span>
+                    <div class="compose-shot-strip__meta">
+                      <strong>{{ safeText(shotLabel(item.shotId), `镜头 ${(shotVideoOutputIndexMap[item.shotId] ?? 0) + 1}`) }}</strong>
+                      <small>{{ formatDuration(item.durationSec) }}</small>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="compose-shot-preview" v-if="selectedShotOutput">
+                  <div class="compose-shot-preview__media">
+                    <div class="compose-shot-preview__head">
+                      <div class="compose-shot-preview__copy">
+                        <span class="panel-tag">镜头预览</span>
+                        <strong>{{ safeText(shotLabel(selectedShotOutput.shotId), '当前镜头') }}</strong>
+                      </div>
+                      <span class="mini-pill mini-pill--ghost">#{{ String((shotVideoOutputIndexMap[selectedShotOutput.shotId] ?? 0) + 1).padStart(2, '0') }}</span>
+                    </div>
+                    <div class="compose-shot-preview__frame">
+                      <video v-if="selectedShotOutput.videoPath" :src="mediaUrl(selectedShotOutput.videoPath)" preload="none" controls></video>
+                      <img
+                        v-else-if="shotFrameMap[selectedShotOutput.shotId]?.imagePath"
+                        :src="previewImage(shotFrameMap[selectedShotOutput.shotId]?.imagePath)"
+                        :alt="safeText(shotLabel(selectedShotOutput.shotId), '分镜')"
+                      />
+                      <div v-else class="compose-shot-detail__empty">无预览</div>
+                    </div>
+                  </div>
+
+                  <div class="compose-shot-preview__side">
+                    <section class="compose-shot-info-card">
+                      <div class="compose-shot-info-card__head">
+                        <strong>镜头信息</strong>
+                        <small>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</small>
+                      </div>
+                      <div class="compose-shot-info-grid">
+                        <div class="compose-shot-info-item">
+                          <span>时长</span>
+                          <strong>{{ formatDuration(selectedShotOutput.durationSec) }}</strong>
+                        </div>
+                        <div class="compose-shot-info-item">
+                          <span>分辨率</span>
+                          <strong>{{ composeAspectRatio }}</strong>
+                        </div>
+                        <div class="compose-shot-info-item">
+                          <span>类型</span>
+                          <strong>{{ composeExportSettingsSummary }}</strong>
+                        </div>
+                        <div class="compose-shot-info-item">
+                          <span>状态</span>
+                          <strong>{{ describeShotSyncState(selectedShotOutput).detail }}</strong>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="compose-shot-tip-card">
+                      <strong>提示</strong>
+                      <p>{{ shotScriptSummary(selectedShotOutput.shotId) }}</p>
+                      <small>需要重做时可直接使用上方“替换当前镜头”或“继续查询当前镜头”。</small>
+                    </section>
+                  </div>
+                </div>
+              </div>
+
+              <CloneStateCard
+                v-else
+                class="empty-state section-empty"
+                title="等待检查片段"
+                description="分镜视频生成完成后，这里可以逐个替换镜头再重新合成。"
+              />
+
             </section>
 
             <aside class="compose-side-rail">
               <section class="compose-side-card">
                 <div class="compose-side-card__head">
-                  <strong>本地导出</strong>
+                  <strong>导出设置</strong>
                   <small>仅显示本地合成与导出状态</small>
                 </div>
                 <div class="compose-option-group">
@@ -2055,20 +2309,17 @@ onUnmounted(() => {
                 </div>
                 <div class="compose-option-group">
                   <span>当前状态</span>
-                  <strong>{{ composeExportStatusLabel }}</strong>
+                  <strong class="compose-status-ok">{{ composeExportStatusLabel }}</strong>
+                  <small>成片已生成，可直接导出或重新合成</small>
                 </div>
-                <div class="compose-option-group">
+                <div class="compose-option-group compose-option-group--select">
                   <span>导出规格</span>
                   <strong>{{ composeExportSettingsSummary }}</strong>
                 </div>
-                <div class="compose-option-group">
-                  <span>总时长</span>
-                  <strong>{{ formatDuration(composeTotalDuration) }}</strong>
-                </div>
                 <div class="compose-export-grid">
                   <div class="compose-export-stat">
-                    <span>片段数</span>
-                    <strong>{{ shotVideoOutputs.length }}</strong>
+                    <span>总时长</span>
+                    <strong>{{ formatDuration(composeTotalDuration) }}</strong>
                   </div>
                   <div class="compose-export-stat">
                     <span>估算大小</span>
@@ -2080,9 +2331,8 @@ onUnmounted(() => {
                   </div>
                 </div>
                 <div class="compose-side-actions">
-                  <button class="primary-button compose-export-button" type="button" :disabled="loading" @click="composeFinalVideo">{{ finalButtonLabel }}</button>
-                  <button class="ghost-button small" type="button" :disabled="!finalOutputPath" @click="openFinalOutput">播放成片</button>
-                  <button class="ghost-button small" type="button" :disabled="!finalOutputPath" @click="revealFinalOutput">在文件夹中显示</button>
+                  <button class="primary-button compose-export-button" type="button" :disabled="!finalOutputPath" @click="revealFinalOutput">导出成片</button>
+                  <button class="ghost-button compose-side-button" type="button" :disabled="loading" @click="composeFinalVideo">{{ finalButtonLabel }}</button>
                 </div>
               </section>
 
@@ -2092,36 +2342,22 @@ onUnmounted(() => {
               </CloneDataCard>
             </aside>
           </div>
+
+          <section class="compose-tip-card">
+            <span class="compose-tip-card__icon">✧</span>
+            <div>
+              <strong>小贴士</strong>
+              <p>如需调整部分片段，请返回「分镜视频」重新生成对应片段。</p>
+              <p>导出的视频将保存在所选目录中。</p>
+            </div>
+          </section>
         </article>
 
       </div>
 
     </section>
 
-    <section class="runtime-console" :class="{ 'is-collapsed': consoleCollapsed }">
-      <div class="runtime-log-head">
-        <div>
-          <strong>运行控制台</strong>
-          <span>实时查看提交日志、接口返回、阶段切换与错误信息</span>
-        </div>
-        <div class="runtime-log-head__actions">
-          <em>{{ runtimeLogs.length }} 条</em>
-          <button class="ghost-button small" type="button" @click="consoleCollapsed = !consoleCollapsed">
-            {{ consoleCollapsed ? '打开' : '关闭' }}
-          </button>
-        </div>
-      </div>
-      <div v-if="!consoleCollapsed" ref="logListRef" class="runtime-log-list">
-        <article v-for="item in runtimeLogs" :key="item.id" class="runtime-log-item" :class="item.level">
-          <strong>{{ item.level === 'error' ? '错误' : item.level === 'success' ? '成功' : '日志' }}</strong>
-          <span>{{ item.message }}</span>
-        </article>
-      </div>
-    </section>
-
-    <button v-if="consoleCollapsed" class="runtime-console-toggle" type="button" @click="consoleCollapsed = false">
-      打开运行控制台
-    </button>
+    <CloneRuntimeConsole v-model:collapsed="consoleCollapsed" :logs="runtimeLogs" />
 
     <div v-if="framePreviewOpen" class="modal-mask" @click.self="framePreviewOpen = false">
       <div class="modal-panel modal-panel--frame-preview">
@@ -2191,27 +2427,8 @@ onUnmounted(() => {
 .final-layout,
 .feedback-stack,
 .history-list,
-.model-grid,
-.workflow-rail__track {
+.model-grid {
   display: grid;
-}
-
-.workflow-rail {
-  position: sticky;
-  top: 0;
-  z-index: 8;
-  padding: 0 0 6px;
-  background: linear-gradient(180deg, rgba(6, 11, 22, 0.98), rgba(6, 11, 22, 0.9) 66%, transparent);
-}
-
-.workflow-rail__track {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0;
-  padding: 6px 8px;
-  border: 1px solid rgba(119, 137, 198, 0.12);
-  border-radius: 12px;
-  background: rgba(8, 13, 24, 0.96);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
 .panel-head,
@@ -2272,7 +2489,6 @@ onUnmounted(() => {
   background: rgba(142, 166, 255, 0.12);
 }
 
-.workflow-rail__step,
 .panel,
 .meta-card,
 .ghost-button,
@@ -2288,70 +2504,6 @@ onUnmounted(() => {
   border-radius: 18px;
 }
 
-.workflow-rail__step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 10px;
-  padding: 6px 10px;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: none;
-  min-height: 50px;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-
-.workflow-rail__step::after {
-  content: '';
-  position: absolute;
-  top: 20px;
-  left: calc(50% + 22px);
-  width: calc(100% - 44px);
-  height: 1px;
-  background: rgba(148, 163, 184, 0.18);
-  pointer-events: none;
-}
-
-.workflow-rail__step:last-child::after {
-  display: none;
-}
-
-.workflow-rail__step:hover {
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.workflow-rail__step.is-active {
-  background: rgba(109, 93, 255, 0.08);
-}
-
-.workflow-rail__index {
-  position: relative;
-  z-index: 1;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #0c1423;
-  color: #93a2c1;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.workflow-rail__body {
-  display: grid;
-  align-content: center;
-  gap: 1px;
-  min-width: 0;
-}
-
-.workflow-rail__body strong,
 .meta-card strong,
 .variant-copy strong,
 .batch-meta strong,
@@ -2363,7 +2515,6 @@ onUnmounted(() => {
   line-height: 1.3;
 }
 
-.workflow-rail__body span,
 .meta-card span,
 .meta-card em,
 .variant-copy span,
@@ -2378,26 +2529,6 @@ onUnmounted(() => {
   color: #93a2c1;
   font-size: 10px;
   line-height: 1.3;
-}
-
-.workflow-rail__step.is-done .workflow-rail__index,
-.workflow-rail__step.is-active .workflow-rail__index {
-  color: #ffffff;
-  border-color: rgba(109, 93, 255, 0.42);
-  background: linear-gradient(135deg, rgba(111, 88, 255, 0.96), rgba(89, 182, 255, 0.88));
-  box-shadow: 0 0 0 3px rgba(111, 88, 255, 0.1);
-}
-
-.workflow-rail__step.is-active .workflow-rail__body strong {
-  color: #f5f7ff;
-}
-
-.workflow-rail__step.is-active .workflow-rail__body span {
-  color: #bcc8e8;
-}
-
-.workflow-rail__step.is-done::after {
-  background: rgba(109, 93, 255, 0.34);
 }
 
 .stage-summary-bar {
@@ -2447,7 +2578,7 @@ onUnmounted(() => {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-items: start;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .main-column {
@@ -2462,7 +2593,60 @@ onUnmounted(() => {
   z-index: 1;
   padding: 10px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(10px);
+}
+
+.panel-storyboard-design {
+  padding-top: 8px;
+}
+
+.storyboard-stage-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 2px 2px 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.storyboard-stage-hero__copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.storyboard-stage-hero__copy strong {
+  color: #f5f8ff;
+  font-size: 19px;
+  line-height: 1.12;
+  font-weight: 800;
+}
+
+.storyboard-stage-hero__copy p {
+  margin: 0;
+  color: #8fa1c6;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.storyboard-stage-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.storyboard-stage-hero__button {
+  min-width: 116px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.storyboard-stage-hero__button--primary {
+  min-width: 124px;
 }
 
 .panel-reference {
@@ -2473,7 +2657,7 @@ onUnmounted(() => {
 
 .analyze-workbench {
   display: grid;
-  gap: 8px;
+  gap: 0;
 }
 
 .analyze-topbar,
@@ -2517,8 +2701,8 @@ onUnmounted(() => {
 
 .analyze-hero-card {
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px 12px 12px;
   border-radius: 16px;
 }
 
@@ -2532,7 +2716,7 @@ onUnmounted(() => {
 .analyze-hero-card__copy,
 .analyze-project-card__copy {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .analyze-hero-card__copy h2 {
@@ -2561,7 +2745,8 @@ onUnmounted(() => {
 }
 
 .analyze-main-grid {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(280px, 0.78fr) minmax(360px, 1.02fr) minmax(260px, 0.72fr);
+  align-items: start;
 }
 
 .analyze-bottom-grid {
@@ -2569,6 +2754,8 @@ onUnmounted(() => {
 }
 
 .analyze-video-card,
+.analyze-results-card,
+.analyze-project-info-card,
 .analyze-structure-card,
 .analyze-panel-card {
   display: grid;
@@ -2580,6 +2767,89 @@ onUnmounted(() => {
 .analyze-structure-card__head {
   display: grid;
   gap: 4px;
+}
+
+.analyze-results-card,
+.analyze-project-info-card {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(119, 137, 198, 0.14);
+  background:
+    linear-gradient(180deg, rgba(10, 16, 29, 0.92), rgba(8, 13, 24, 0.94)),
+    rgba(255, 255, 255, 0.015);
+}
+
+.analyze-results-card__head,
+.analyze-results-card__section-head,
+.analyze-project-info-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analyze-results-card__head strong,
+.analyze-results-card__section-head strong,
+.analyze-project-info-card__head strong,
+.analyze-project-field strong {
+  color: #eef3ff;
+}
+
+.analyze-results-card__head span,
+.analyze-results-card__section-head span,
+.analyze-project-field span,
+.analyze-results-card__empty-copy {
+  color: #98a6c7;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.analyze-results-card__section,
+.analyze-project-info-card__section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.analyze-project-info-card__section + .analyze-project-info-card__section {
+  margin-top: 2px;
+}
+
+.analyze-results-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px 2px;
+}
+
+.analyze-results-tabs__item {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #7f90b6;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.analyze-results-tabs__item.is-active {
+  border-color: rgba(109, 93, 255, 0.22);
+  background: rgba(109, 93, 255, 0.08);
+  color: #edf3ff;
+}
+
+.analyze-project-field {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .analyze-video-card__head strong,
@@ -2608,11 +2878,51 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
+.analyze-video-meta-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.analyze-video-meta-card > strong {
+  color: #eef3ff;
+  font-size: 13px;
+}
+
+.analyze-video-meta-card__grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.analyze-video-meta-card__grid span {
+  color: #7f90b6;
+  font-size: 11px;
+}
+
+.analyze-video-meta-card__grid strong {
+  color: #dfe8fb;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+  word-break: break-word;
+}
+
+.analyze-script-lines--compact {
+  max-height: none;
+  padding-right: 0;
+}
+
 .analyze-structure-card {
   padding: 10px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.025);
+  align-content: start;
 }
 
 .analyze-structure-card__head strong span {
@@ -2625,6 +2935,7 @@ onUnmounted(() => {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   align-items: stretch;
+  margin-top: 0;
 }
 
 .analyze-structure-node {
@@ -2645,6 +2956,69 @@ onUnmounted(() => {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.analyze-materials-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.analyze-material-card {
+  display: grid;
+  gap: 12px;
+}
+
+.analyze-material-card__head {
+  display: grid;
+  gap: 4px;
+}
+
+.analyze-material-card__head strong {
+  color: #eef3ff;
+  font-size: 14px;
+}
+
+.analyze-material-card__head span {
+  color: #8fa1c6;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.analyze-project-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analyze-project-pills em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(109, 93, 255, 0.2);
+  background: rgba(109, 93, 255, 0.08);
+  color: #cfd8ff;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.analyze-footer,
+.analyze-materials-grid,
+.analyze-bottom-grid {
+  display: none;
+}
+
+.analyze-hero-card__controls {
+  align-self: flex-start;
+  padding-top: 2px;
+}
+
+.analyze-structure-card__head {
+  min-height: 24px;
+  align-items: center;
 }
 
 .analyze-structure-node__index {
@@ -3154,99 +3528,6 @@ onUnmounted(() => {
   opacity: 0.9;
 }
 
-.runtime-console {
-  position: sticky;
-  bottom: 0;
-  z-index: 20;
-  display: grid;
-  gap: 8px;
-  min-height: 0;
-  margin-top: 10px;
-  padding: 8px 10px 10px;
-  border: 1px solid rgba(119, 137, 198, 0.16);
-  background: rgba(11, 17, 30, 0.94);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.14);
-}
-
-.runtime-console.is-collapsed {
-  padding-bottom: 10px;
-}
-
-.runtime-log-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #93a2c1;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.runtime-log-head__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.runtime-log-list {
-  max-height: 260px;
-  overflow: auto;
-  display: grid;
-  gap: 8px;
-  padding-right: 4px;
-  scroll-behavior: smooth;
-}
-
-.runtime-log-item {
-  display: grid;
-  gap: 4px;
-  padding: 10px 11px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.runtime-log-item strong {
-  font-size: 11px;
-  color: #7e90bb;
-}
-
-.runtime-log-item span {
-  color: #edf2ff;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.runtime-log-item.success {
-  border-color: rgba(88, 214, 154, 0.18);
-  background: rgba(88, 214, 154, 0.08);
-}
-
-.runtime-log-item.error {
-  border-color: rgba(255, 120, 120, 0.22);
-  background: rgba(255, 120, 120, 0.08);
-}
-
-.runtime-log-item.info {
-  border-color: rgba(142, 166, 255, 0.16);
-}
-
-.runtime-console-toggle {
-  position: fixed;
-  right: 12px;
-  bottom: 10px;
-  z-index: 41;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid rgba(119, 137, 198, 0.18);
-  background: rgba(11, 17, 30, 0.96);
-  color: #eef3ff;
-  font-size: 12px;
-  cursor: pointer;
-}
 
 .beats-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3684,11 +3965,20 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.storyboard-layout {
-  grid-template-columns: 320px minmax(0, 1fr);
+.storyboard-layout,
+.storyboard-design-layout {
+  display: grid;
   gap: 10px;
   margin-top: 8px;
   align-items: start;
+}
+
+.storyboard-layout {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.storyboard-design-layout {
+  grid-template-columns: minmax(0, 1fr) 304px;
 }
 
 .storyboard-column {
@@ -3708,6 +3998,10 @@ onUnmounted(() => {
 .storyboard-column__copy {
   display: grid;
   gap: 3px;
+}
+
+.storyboard-column__copy:empty {
+  display: none;
 }
 
 .storyboard-column__copy strong {
@@ -3810,6 +4104,365 @@ onUnmounted(() => {
 
 .frame-card__actions .ghost-button {
   min-width: 88px;
+}
+
+.storyboard-design-table {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(133, 149, 196, 0.12);
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(9, 15, 27, 0.98)),
+    rgba(255, 255, 255, 0.015);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 16px 42px rgba(0, 0, 0, 0.18);
+}
+
+.storyboard-design-table__head,
+.storyboard-design-row {
+  display: grid;
+  grid-template-columns: 76px minmax(340px, 2.7fr) 78px 64px 70px minmax(138px, 1.1fr) 72px;
+  gap: 10px;
+  align-items: center;
+}
+
+.storyboard-design-table__head {
+  padding: 0 8px 4px;
+  color: #7f92b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.storyboard-design-table__body {
+  display: grid;
+  gap: 8px;
+}
+
+.storyboard-design-row {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(73, 95, 136, 0.18);
+  background: linear-gradient(180deg, rgba(10, 16, 29, 0.9), rgba(8, 13, 24, 0.96));
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.storyboard-design-row:hover,
+.storyboard-design-row:focus-visible {
+  border-color: rgba(109, 93, 255, 0.36);
+  box-shadow: 0 10px 22px rgba(2, 6, 16, 0.22);
+  outline: none;
+}
+
+.storyboard-design-row.is-active {
+  border-color: rgba(109, 93, 255, 0.52);
+  background:
+    linear-gradient(180deg, rgba(16, 22, 40, 0.98), rgba(10, 16, 29, 0.98)),
+    radial-gradient(circle at top left, rgba(109, 93, 255, 0.14), transparent 40%);
+  box-shadow: inset 0 0 0 1px rgba(109, 93, 255, 0.16);
+}
+
+.storyboard-design-cell {
+  min-width: 0;
+  color: #d9e2f6;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.storyboard-design-cell--index {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  min-height: 96px;
+  padding: 12px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.storyboard-design-cell--index strong {
+  color: #f7faff;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.storyboard-design-cell--index small {
+  color: #8fa0c4;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.storyboard-design-cell--prompt {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.storyboard-design-thumb,
+.storyboard-design-thumb__empty {
+  width: 72px;
+  aspect-ratio: 9 / 16;
+  border-radius: 14px;
+}
+
+.storyboard-design-thumb {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(14, 21, 37, 0.95), rgba(8, 13, 24, 0.95)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.storyboard-design-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #050912;
+}
+
+.storyboard-design-thumb__empty {
+  display: grid;
+  place-items: center;
+  color: #91a3c8;
+  font-size: 12px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.storyboard-design-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.storyboard-design-copy strong {
+  color: #f4f7ff;
+  font-size: 13px;
+  line-height: 1.55;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.storyboard-design-copy small {
+  color: #7f92b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.storyboard-design-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.storyboard-design-tags em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8c6e6;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.storyboard-design-cell--voice {
+  color: #b7c4e3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.storyboard-design-cell--actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.storyboard-design-cell--actions .icon-button {
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.storyboard-preview-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.storyboard-preview-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(133, 149, 196, 0.12);
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(9, 15, 27, 0.98)),
+    rgba(255, 255, 255, 0.015);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 16px 42px rgba(0, 0, 0, 0.16);
+}
+
+.storyboard-preview-card--script {
+  gap: 10px;
+}
+
+.storyboard-preview-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storyboard-preview-card__head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.storyboard-preview-card__head strong {
+  color: #eef3ff;
+  font-size: 14px;
+}
+
+.storyboard-preview-card__head span {
+  color: #8fa1c6;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.storyboard-preview-media {
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(10, 16, 29, 0.96), rgba(7, 12, 23, 0.98)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.storyboard-preview-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #050912;
+}
+
+.storyboard-preview-media__empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  text-align: center;
+  color: #90a3ca;
+}
+
+.storyboard-preview-media__empty strong {
+  color: #eef3ff;
+  font-size: 14px;
+}
+
+.storyboard-preview-media__empty span {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.storyboard-preview-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.storyboard-preview-copy strong {
+  color: #f5f8ff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.storyboard-preview-copy span,
+.storyboard-preview-script p {
+  color: #9caed0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.storyboard-preview-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storyboard-preview-meta__item {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.storyboard-preview-meta__item span {
+  color: #7f92b8;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.storyboard-preview-meta__item strong {
+  color: #edf3ff;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.storyboard-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.storyboard-preview-tags em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8c6e6;
+  font-style: normal;
+  font-size: 11px;
+}
+
+.storyboard-preview-script {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .modal-panel--frame-preview {
@@ -4849,6 +5502,10 @@ onUnmounted(() => {
   padding: 0;
 }
 
+.panel-compose-stage {
+  margin-top: -2px;
+}
+
 .panel-compose-stage :deep(.stage-head),
 .panel-compose-stage :deep(.stage-head__actions),
 .panel-compose-stage :deep(.stage-head__actions .primary-button) {
@@ -4859,16 +5516,10 @@ onUnmounted(() => {
 
 .compose-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 316px);
-  gap: 12px;
-  margin-top: 4px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr) minmax(300px, 356px);
+  gap: 16px;
+  margin-top: 6px;
   align-items: start;
-  min-width: 0;
-}
-
-.compose-main-stage {
-  display: grid;
-  gap: 10px;
   min-width: 0;
 }
 
@@ -4876,16 +5527,26 @@ onUnmounted(() => {
 .compose-timeline-panel,
 .compose-side-card {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: linear-gradient(180deg, rgba(12, 19, 34, 0.94), rgba(8, 13, 24, 0.98));
+  gap: 14px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(133, 149, 196, 0.14);
+  background: linear-gradient(180deg, rgba(12, 19, 34, 0.96), rgba(8, 13, 24, 0.99));
   min-width: 0;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .compose-canvas-panel {
-  align-items: center;
+  align-items: start;
+}
+
+.compose-panel-head {
+  width: 100%;
+}
+
+.compose-timeline-panel {
+  align-content: start;
 }
 
 .compose-list-head,
@@ -4899,6 +5560,14 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+.compose-list-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .compose-list-copy {
   display: grid;
   gap: 4px;
@@ -4907,23 +5576,29 @@ onUnmounted(() => {
 
 .compose-list-copy strong {
   color: #eef3ff;
-  font-size: 14px;
-  line-height: 1.35;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.compose-list-copy p {
+  margin: 0;
+  color: #8fa1c6;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .compose-canvas-shell {
   position: relative;
   width: 100%;
-  height: clamp(360px, 54vh, 560px);
+  height: clamp(460px, 58vh, 760px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 18px;
   overflow: hidden;
+  border-radius: 22px;
   border: 1px solid rgba(133, 149, 196, 0.14);
-  background:
-    radial-gradient(circle at top, rgba(109, 93, 255, 0.18), transparent 38%),
-    linear-gradient(180deg, rgba(10, 16, 29, 0.98), rgba(6, 10, 18, 1));
+  background: linear-gradient(180deg, rgba(10, 16, 29, 0.98), rgba(6, 10, 18, 1));
 }
 
 .compose-canvas-shell video {
@@ -4935,12 +5610,13 @@ onUnmounted(() => {
 }
 
 .compose-canvas-frame {
-  width: auto;
+  width: min(100%, 360px);
   height: 100%;
   max-width: 100%;
   display: grid;
   place-items: center;
   overflow: hidden;
+  border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(7, 12, 21, 0.98);
 }
@@ -4958,93 +5634,205 @@ onUnmounted(() => {
 }
 
 .compose-timeline-list {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  display: contents;
 }
 
-.compose-timeline-card {
-  position: relative;
+.compose-timeline-stage {
   display: grid;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: linear-gradient(180deg, rgba(15, 24, 42, 0.88), rgba(9, 15, 28, 0.96));
-  text-align: left;
+  gap: 16px;
   min-width: 0;
-  transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
 }
 
-.compose-timeline-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(109, 93, 255, 0.28);
+.compose-shot-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(132px, 156px);
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  will-change: scroll-position;
 }
 
-.compose-timeline-card.active {
-  border-color: rgba(109, 93, 255, 0.48);
-  background: linear-gradient(180deg, rgba(37, 32, 70, 0.92), rgba(12, 18, 31, 0.98));
-  box-shadow: 0 0 0 1px rgba(109, 93, 255, 0.18);
+.compose-shot-strip__item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(133, 149, 196, 0.12);
+  background: rgba(12, 19, 34, 0.94);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  min-width: 0;
 }
 
-.compose-timeline-thumb {
-  position: relative;
+.compose-shot-strip__item:hover {
+  border-color: rgba(109, 93, 255, 0.22);
+}
+
+.compose-shot-strip__item.active {
+  border-color: rgba(109, 93, 255, 0.58);
+  background: rgba(29, 31, 58, 0.94);
+}
+
+.compose-shot-strip__index {
+  color: #eef3ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.compose-shot-strip__thumb {
+  display: grid;
+  place-items: center;
   width: 100%;
   aspect-ratio: 9 / 16;
   overflow: hidden;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
 
-.compose-timeline-thumb video {
-  width: auto;
-  max-width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
-  background: #060b16;
-}
-
-.compose-timeline-thumb img {
+.compose-shot-strip__thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.compose-timeline-thumb span {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
+.compose-shot-strip__thumb span {
   color: #8fa1c6;
   font-size: 11px;
 }
 
-.compose-timeline-overlay {
-  position: absolute;
-  top: 18px;
-  left: 18px;
-  right: 18px;
+.compose-shot-strip__meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compose-shot-strip__meta strong {
+  color: #eef3ff;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compose-shot-strip__meta small {
+  color: #8fa1c6;
+  font-size: 11px;
+}
+
+.compose-shot-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 16px;
+  min-width: 0;
+}
+
+.compose-shot-preview__media,
+.compose-shot-preview__side,
+.compose-shot-info-card,
+.compose-shot-tip-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.compose-shot-preview__head,
+.compose-shot-info-card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  pointer-events: none;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.compose-timeline-overlay span,
-.compose-timeline-overlay strong {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 0 8px;
-  background: rgba(5, 9, 17, 0.68);
+.compose-shot-preview__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.compose-shot-preview__copy strong,
+.compose-shot-info-card__head strong {
   color: #eef3ff;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.compose-shot-info-card__head small {
+  color: #8fa1c6;
   font-size: 11px;
-  font-weight: 700;
+}
+
+.compose-shot-preview__frame {
+  width: 100%;
+  min-height: 440px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(133, 149, 196, 0.14);
+  background: linear-gradient(180deg, rgba(8, 14, 27, 0.96), rgba(5, 10, 19, 0.98));
+}
+
+.compose-shot-preview__frame video,
+.compose-shot-preview__frame img {
+  width: min(100%, 380px);
+  height: auto;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  display: block;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.compose-shot-detail__empty {
+  color: #8fa1c6;
+  font-size: 14px;
+}
+
+.compose-shot-info-card,
+.compose-shot-tip-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(133, 149, 196, 0.1);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.compose-shot-info-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.compose-shot-info-item {
+  display: grid;
+  gap: 4px;
+}
+
+.compose-shot-info-item span,
+.compose-shot-tip-card small {
+  color: #8fa1c6;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.compose-shot-info-item strong,
+.compose-shot-tip-card strong {
+  color: #eef3ff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.compose-shot-tip-card p {
+  margin: 0;
+  color: #c9d5ee;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .compose-timeline-copy {
@@ -5105,10 +5893,27 @@ onUnmounted(() => {
 }
 
 .compose-side-rail {
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   width: 100%;
-  max-width: 316px;
+  max-width: none;
+  align-content: start;
+}
+
+.compose-status-ok {
+  color: #63da8b;
+}
+
+.compose-option-group small {
+  color: #8fa1c6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.compose-option-group--select strong::after {
+  content: '⌄';
+  margin-left: 10px;
+  color: #9fb0d8;
 }
 
 .compose-score-card {
@@ -5214,9 +6019,10 @@ onUnmounted(() => {
 .compose-export-stat {
   display: grid;
   gap: 4px;
-  padding: 10px;
-  border: 1px solid rgba(133, 149, 196, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(133, 149, 196, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
   min-width: 0;
   overflow: hidden;
 }
@@ -5231,9 +6037,37 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.compose-tip-card {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(133, 149, 196, 0.1);
+  background: linear-gradient(180deg, rgba(12, 19, 34, 0.92), rgba(8, 13, 24, 0.98));
+}
+
+.compose-tip-card__icon {
+  color: #9b7cff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.compose-tip-card strong {
+  color: #eef3ff;
+  font-size: 14px;
+}
+
+.compose-tip-card p {
+  margin: 6px 0 0;
+  color: #9fb0d8;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .sticky-panel {
-  position: sticky;
-  top: 10px;
+  position: relative;
 }
 
 .console-sidebar {
@@ -5588,6 +6422,7 @@ onUnmounted(() => {
 @media (max-width: 1220px) {
   .reference-layout,
   .storyboard-layout,
+  .storyboard-design-layout,
   .final-layout,
   .asset-grid,
   .frame-grid,
@@ -5632,14 +6467,21 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .compose-timeline-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .compose-timeline-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .compose-shot-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .storyboard-preview-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1280px) {
-  .analyze-main-grid,
-  .analyze-bottom-grid {
+  .analyze-main-grid {
     grid-template-columns: 1fr;
   }
 
@@ -5672,6 +6514,20 @@ onUnmounted(() => {
 }
 
 @media (max-width: 980px) {
+  .analyze-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .storyboard-stage-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .storyboard-stage-hero__actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .analyze-topbar,
   .analyze-hero-card__head,
   .analyze-footer,
@@ -5691,6 +6547,34 @@ onUnmounted(() => {
   .product-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .storyboard-design-table__head,
+  .storyboard-design-row {
+    grid-template-columns: 72px minmax(260px, 2.2fr) 70px 58px 62px minmax(120px, 1fr) 68px;
+    gap: 8px;
+  }
+
+  .storyboard-design-cell--prompt {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .storyboard-design-thumb,
+  .storyboard-design-thumb__empty {
+    width: 64px;
+  }
+
+  .storyboard-preview-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .compose-shot-strip {
+    grid-auto-columns: minmax(124px, 142px);
+  }
+
+  .compose-shot-preview__frame {
+    min-height: 420px;
+  }
 }
 
 @media (max-width: 860px) {
@@ -5707,6 +6591,7 @@ onUnmounted(() => {
   .workspace-grid,
   .reference-layout,
   .storyboard-layout,
+  .storyboard-design-layout,
   .final-layout,
   .asset-grid,
   .meta-grid,
@@ -5752,8 +6637,19 @@ onUnmounted(() => {
     padding: 12px;
   }
 
-  .compose-timeline-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .compose-timeline-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .compose-shot-rail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .compose-shot-detail__preview {
+    min-height: 420px;
   }
 
   .compose-export-grid,

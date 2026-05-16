@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia'
 import TitleBar from './components/TitleBar.vue'
 import UiLocaleSelect from './components/UiLocaleSelect.vue'
 import DsMainLayout from '../design-system/layout/MainLayout.vue'
+import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { useDesignInspectorStore } from '@/stores/designInspector'
 import { useWebSessionStore } from '@/stores/webSession'
 
@@ -16,10 +17,13 @@ const { t } = useI18n()
 const helpOpen = ref(false)
 const moreOpen = ref(false)
 const shellSearch = ref('')
+const cloneTopbar = useCloneTopbarStore()
 const designInspector = useDesignInspectorStore()
 const webSession = useWebSessionStore()
+const { visible: cloneTopbarVisible, items: cloneTopbarItems } = storeToRefs(cloneTopbar)
 const { enabled: designInspectorEnabled } = storeToRefs(designInspector)
 const showDesignInspectorToggle = computed(() => import.meta.env.DEV)
+const showCloneWorkflowTopbar = computed(() => route.path.includes('/clone/') && cloneTopbarVisible.value && cloneTopbarItems.value.length > 0)
 const topUserName = computed(() => webSession.user?.displayName || 'Creator')
 const topUserPlan = computed(() => webSession.subscription?.planName || '桌面版')
 const topWalletBalance = computed(() => webSession.wallet?.balanceCredits ?? 0)
@@ -28,6 +32,9 @@ const sidebarPlanDesc = computed(() =>
   webSession.wallet ? `算力余额 ${topWalletBalance.value}` : '本地工作台模式',
 )
 const topStatusText = computed(() => (webSession.wallet ? '已连接本地工作台' : '桌面端离线模式'))
+const topGpuStatusText = computed(() => (webSession.wallet ? `可用 ${topWalletBalance.value}` : '本地待机'))
+const topApiStatusText = computed(() => (webSession.wallet ? '接口已连接' : '接口未连接'))
+const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPlan.value}`)
 
 const navItems = computed(() => [
   { to: '/home', icon: House, label: '主页', active: route.path.includes('/home') },
@@ -82,6 +89,10 @@ function onTopMenuClick(key: string) {
   }
   if (key === 'export') quickExport()
 }
+
+function requestCloneStage(key: string) {
+  cloneTopbar.requestStage(key)
+}
 </script>
 
 <template>
@@ -121,80 +132,117 @@ function onTopMenuClick(key: string) {
         </template>
 
         <template #topbar>
-          <div class="app-topbar-panel">
-            <div class="app-topbar-search-wrap" data-design-id="main-topbar">
-              <div class="app-top-search">
-                <Search class="h-4 w-4" />
-                <input v-model="shellSearch" type="text" placeholder="搜索模板、任务、素材、功能..." />
-                <span class="app-top-search-shortcut">⌘K</span>
-              </div>
-            </div>
-            <div class="app-topbar-meta">
-              <div class="app-topbar-chip">
-                <span class="app-topbar-chip-dot is-green"></span>
-                <div>
-                  <strong>工作台状态</strong>
-                  <small>{{ topStatusText }}</small>
+          <div class="app-topbar-shell" :class="{ 'has-clone-workflow': showCloneWorkflowTopbar }">
+            <template v-if="showCloneWorkflowTopbar">
+              <div class="app-topbar-clone">
+                <div class="app-topbar-clone__nav">
+                  <template v-for="(item, index) in cloneTopbarItems" :key="item.key">
+                    <button
+                      class="app-topbar-clone__step"
+                      :class="{ 'is-done': item.done, 'is-active': item.active }"
+                      type="button"
+                      @click="requestCloneStage(item.key)"
+                    >
+                      <span class="app-topbar-clone__index">{{ item.done ? '✓' : index + 1 }}</span>
+                      <span class="app-topbar-clone__label">{{ item.title }}</span>
+                    </button>
+                    <span v-if="index < cloneTopbarItems.length - 1" class="app-topbar-clone__arrow"></span>
+                  </template>
+                </div>
+                <div class="app-topbar-clone__spacer"></div>
+                <div class="app-topbar-clone__status">
+                  <span class="app-topbar-clone__metric">
+                    <strong>GPU</strong>
+                    <small>{{ topGpuStatusText }}</small>
+                  </span>
+                  <span class="app-topbar-clone__metric">
+                    <strong>API</strong>
+                    <small>{{ topApiStatusText }}</small>
+                  </span>
+                  <span class="app-topbar-clone__metric app-topbar-clone__metric--account">
+                    <strong>账号状态</strong>
+                    <small>{{ topAccountStatusText }}</small>
+                  </span>
                 </div>
               </div>
-              <div class="app-topbar-chip">
-                <span class="app-topbar-chip-dot is-violet"></span>
-                <div>
-                  <strong>算力余额</strong>
-                  <small>{{ topWalletBalance }}</small>
+            </template>
+            <template v-else>
+              <div class="app-topbar-panel">
+                <div class="app-topbar-search-wrap" data-design-id="main-topbar">
+                  <div class="app-top-search">
+                    <Search class="h-4 w-4" />
+                    <input v-model="shellSearch" type="text" placeholder="搜索模板、任务、素材、功能..." />
+                    <span class="app-top-search-shortcut">⌘K</span>
+                  </div>
+                </div>
+                <div class="app-topbar-meta">
+                  <div class="app-topbar-chip">
+                    <span class="app-topbar-chip-dot is-green"></span>
+                    <div>
+                      <strong>工作台状态</strong>
+                      <small>{{ topStatusText }}</small>
+                    </div>
+                  </div>
+                  <div class="app-topbar-chip">
+                    <span class="app-topbar-chip-dot is-violet"></span>
+                    <div>
+                      <strong>算力余额</strong>
+                      <small>{{ topWalletBalance }}</small>
+                    </div>
+                  </div>
+                </div>
+                <div class="app-topbar-actions">
+                  <button
+                    v-if="showDesignInspectorToggle"
+                    class="app-top-toggle"
+                    :class="{ 'is-active': designInspectorEnabled }"
+                    type="button"
+                    @click="designInspector.toggleDesignInspector(!designInspectorEnabled)"
+                  >
+                    设计联调
+                  </button>
+                  <button class="app-top-icon" :title="t('shell.help')" @click="openHelpModal">
+                    <HelpCircle class="h-4 w-4" />
+                    <span>帮助</span>
+                  </button>
+                  <button class="app-top-icon app-top-icon--badge" title="通知">
+                    <Bell class="h-4 w-4" />
+                    <em>12</em>
+                  </button>
+                  <button class="app-top-user">
+                    <div class="app-top-user__avatar">C</div>
+                    <div class="app-top-user__copy">
+                      <span>{{ topUserName }}</span>
+                      <small>{{ topUserPlan }}</small>
+                    </div>
+                  </button>
+                  <button class="app-top-icon" title="会员与钱包" @click="openBillingCenter">
+                    <UserCircle class="h-4 w-4" />
+                    <span>钱包</span>
+                  </button>
+                  <div class="relative">
+                    <button
+                      class="app-top-more"
+                      @click="moreOpen = !moreOpen"
+                    >
+                      <MoreHorizontal class="h-4 w-4" />
+                      更多
+                    </button>
+                    <div
+                      v-if="moreOpen"
+                      class="absolute right-0 top-12 z-50 w-44 rounded-xl border border-white/10 bg-[#111827] p-2 shadow-2xl shadow-black/40"
+                    >
+                      <button class="shell-more-item" @click="onTopMenuClick('project')">{{ t('shell.project') }}</button>
+                      <button class="shell-more-item" @click="onTopMenuClick('edit')">{{ t('shell.edit') }}</button>
+                      <button class="shell-more-item" @click="onTopMenuClick('view')">{{ t('shell.view') }}</button>
+                      <button class="shell-more-item" @click="onTopMenuClick('export')">{{ t('shell.export') }}</button>
+                      <button class="shell-more-item" @click="moreOpen = false; openCloudWorkspace()">{{ t('shell.openCloud') }}</button>
+                      <button class="shell-more-item" @click="moreOpen = false; quickExport()">{{ t('shell.quickExport') }}</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="app-topbar-actions">
-              <button
-                v-if="showDesignInspectorToggle"
-                class="app-top-toggle"
-                :class="{ 'is-active': designInspectorEnabled }"
-                type="button"
-                @click="designInspector.toggleDesignInspector(!designInspectorEnabled)"
-              >
-                设计联调
-              </button>
-              <button class="app-top-icon" :title="t('shell.help')" @click="openHelpModal">
-                <HelpCircle class="h-4 w-4" />
-                <span>帮助</span>
-              </button>
-              <button class="app-top-icon app-top-icon--badge" title="通知">
-                <Bell class="h-4 w-4" />
-                <em>12</em>
-              </button>
-              <button class="app-top-user">
-                <div class="app-top-user__avatar">C</div>
-                <div class="app-top-user__copy">
-                  <span>{{ topUserName }}</span>
-                  <small>{{ topUserPlan }}</small>
-                </div>
-              </button>
-              <button class="app-top-icon" title="会员与钱包" @click="openBillingCenter">
-                <UserCircle class="h-4 w-4" />
-                <span>钱包</span>
-              </button>
-              <div class="relative">
-              <button
-                class="app-top-more"
-                @click="moreOpen = !moreOpen"
-              >
-                <MoreHorizontal class="h-4 w-4" />
-                更多
-              </button>
-              <div
-                v-if="moreOpen"
-                class="absolute right-0 top-12 z-50 w-44 rounded-xl border border-white/10 bg-[#111827] p-2 shadow-2xl shadow-black/40"
-              >
-                <button class="shell-more-item" @click="onTopMenuClick('project')">{{ t('shell.project') }}</button>
-                <button class="shell-more-item" @click="onTopMenuClick('edit')">{{ t('shell.edit') }}</button>
-                <button class="shell-more-item" @click="onTopMenuClick('view')">{{ t('shell.view') }}</button>
-                <button class="shell-more-item" @click="onTopMenuClick('export')">{{ t('shell.export') }}</button>
-                <button class="shell-more-item" @click="moreOpen = false; openCloudWorkspace()">{{ t('shell.openCloud') }}</button>
-                <button class="shell-more-item" @click="moreOpen = false; quickExport()">{{ t('shell.quickExport') }}</button>
-              </div>
-              </div>
-            </div>
+            </template>
           </div>
         </template>
 
@@ -432,11 +480,21 @@ function onTopMenuClick(key: string) {
 
 .app-shell :deep(.ds-topbar) {
   min-height: 64px;
-  height: 64px;
+  height: auto;
   padding: 0 12px 0 16px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.06);
   background: linear-gradient(180deg, rgba(10, 17, 30, 0.995), rgba(8, 14, 26, 0.985));
-  backdrop-filter: blur(12px);
+}
+
+.app-topbar-shell {
+  display: grid;
+  width: 100%;
+  gap: 0;
+  padding: 6px 0 2px;
+}
+
+.app-topbar-shell.has-clone-workflow {
+  padding: 4px 0 0;
 }
 
 .app-shell :deep(.ds-topbar__actions) {
@@ -453,6 +511,166 @@ function onTopMenuClick(key: string) {
   gap: 8px;
   width: 100%;
   padding: 0;
+}
+
+.app-topbar-clone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid rgba(90, 107, 146, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(11, 18, 31, 0.98), rgba(7, 13, 24, 0.98)),
+    radial-gradient(circle at top left, rgba(109, 93, 255, 0.1), transparent 34%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+.app-topbar-clone__nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.app-topbar-clone__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 6px 0 0;
+  text-align: left;
+  color: rgba(208, 219, 241, 0.72);
+  border: 0;
+  background: transparent;
+  transition: color 160ms ease;
+}
+
+.app-topbar-clone__step:hover {
+  color: #f8fbff;
+}
+
+.app-topbar-clone__step.is-active {
+  color: #ffffff;
+}
+
+.app-topbar-clone__arrow {
+  position: relative;
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(89, 182, 255, 0.14), rgba(111, 88, 255, 0.58));
+  flex: 0 0 auto;
+}
+
+.app-topbar-clone__arrow::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-top: 1px solid rgba(111, 88, 255, 0.72);
+  border-right: 1px solid rgba(111, 88, 255, 0.72);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.app-topbar-clone__index {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 17, 31, 0.72);
+  color: rgba(147, 162, 193, 0.92);
+  border: 1px solid rgba(77, 98, 135, 0.38);
+  font-size: 11px;
+  font-weight: 700;
+  flex: 0 0 auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.app-topbar-clone__label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.app-topbar-clone__step.is-done .app-topbar-clone__index,
+.app-topbar-clone__step.is-active .app-topbar-clone__index {
+  color: #ffffff;
+  border-color: rgba(109, 93, 255, 0.42);
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.2), rgba(89, 182, 255, 0.14));
+}
+
+.app-topbar-clone__step.is-active .app-topbar-clone__index {
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.96), rgba(89, 182, 255, 0.88));
+  box-shadow: 0 0 0 3px rgba(111, 88, 255, 0.08), 0 0 18px rgba(111, 88, 255, 0.26);
+}
+
+.app-topbar-clone__step.is-done .app-topbar-clone__label {
+  color: #eef3ff;
+}
+
+.app-topbar-clone__spacer {
+  flex: 1 1 auto;
+  min-width: 40px;
+}
+
+.app-topbar-clone__status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  flex: 0 0 auto;
+  border-left: 1px solid rgba(82, 106, 136, 0.18);
+}
+
+.app-topbar-clone__metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 16px;
+  align-content: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.app-topbar-clone__metric:first-child {
+  border-left: 0;
+}
+
+.app-topbar-clone__metric strong {
+  color: #dbe5f2;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app-topbar-clone__metric small {
+  color: #a9b7d3;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-topbar-clone__metric--account {
+  min-width: 168px;
 }
 
 .app-topbar-search-wrap {
@@ -709,6 +927,27 @@ function onTopMenuClick(key: string) {
 
   .app-topbar-meta {
     display: none;
+  }
+
+  .app-topbar-clone {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .app-topbar-clone__nav,
+  .app-topbar-clone__status {
+    flex-wrap: wrap;
+  }
+
+  .app-topbar-clone__spacer {
+    display: none;
+  }
+
+  .app-topbar-clone__status {
+    justify-content: flex-start;
+    border-left: 0;
   }
 }
 </style>
