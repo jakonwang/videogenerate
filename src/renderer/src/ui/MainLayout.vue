@@ -2,7 +2,17 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { House, Boxes, MoreHorizontal, Settings, HelpCircle, Sparkles, Radio, Bell, UserCircle, Users, Search } from 'lucide-vue-next'
+import {
+  House,
+  CopyPlus,
+  FolderOpen,
+  ScissorsLineDashed,
+  Settings,
+  Bell,
+  Search,
+  Plus,
+  ChevronDown,
+} from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import TitleBar from './components/TitleBar.vue'
 import UiLocaleSelect from './components/UiLocaleSelect.vue'
@@ -37,16 +47,16 @@ const topApiStatusText = computed(() => (webSession.wallet ? '接口已连接' :
 const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPlan.value}`)
 
 const navItems = computed(() => [
-  { to: '/home', icon: House, label: '主页', active: route.path.includes('/home') },
+  { to: '/home', icon: House, label: '首页', active: route.path.includes('/home') },
+  { to: '/clone', icon: CopyPlus, label: '复刻', active: route.path.includes('/clone') },
   {
     to: '/products',
-    icon: Boxes,
+    icon: FolderOpen,
     label: '生产',
-    active: ['/products', '/templates', '/tasks', '/production'].some((path) => route.path.includes(path)),
+    active: route.path.includes('/products') || route.path.includes('/tasks') || route.path.includes('/templates'),
   },
-  { to: '/models', icon: Users, label: '模特', active: route.path.includes('/models') },
-  { to: '/clone', icon: Sparkles, label: '复刻', active: route.path.includes('/clone') },
-  { to: '/live-slicer', icon: Radio, label: '切片', active: route.path.includes('/live-slicer') },
+  { to: '/live-slicer', icon: ScissorsLineDashed, label: '切片', active: route.path.includes('/live-slicer') },
+  { to: '/settings', icon: Settings, label: '设置', active: route.path.includes('/settings') },
 ])
 
 function go(path: string, query?: Record<string, string>) {
@@ -109,24 +119,12 @@ function requestCloneStage(key: string) {
           <div class="app-shell__sidebar-footer">
             <div class="app-shell__sidebar-plan">
               <div class="app-shell__sidebar-plan-copy">
-                <strong>{{ sidebarPlanLabel }}</strong>
-                <span>{{ sidebarPlanDesc }}</span>
+                <strong>升级专业版</strong>
+                <span>解锁全部高级功能</span>
               </div>
               <button class="app-shell__sidebar-plan-action" @click="openLicenseCenter">
-                升级套餐
+                立即升级
               </button>
-            </div>
-            <button class="app-sidebar-footer-action" @click="go('/settings')">
-              <Settings class="h-4 w-4" />
-              <span>设置</span>
-            </button>
-            <UiLocaleSelect />
-            <div class="app-sidebar-user">
-              <div class="app-avatar">C</div>
-              <div class="min-w-0">
-                <div class="truncate text-xs font-bold text-white/90">Creator</div>
-                <div class="truncate text-[10px] text-white/35">专业版 v2.2.0</div>
-              </div>
             </div>
           </div>
         </template>
@@ -171,75 +169,28 @@ function requestCloneStage(key: string) {
                 <div class="app-topbar-search-wrap" data-design-id="main-topbar">
                   <div class="app-top-search">
                     <Search class="h-4 w-4" />
-                    <input v-model="shellSearch" type="text" placeholder="搜索模板、任务、素材、功能..." />
+                    <input v-model="shellSearch" type="text" placeholder="搜索模板、素材、功能..." />
                     <span class="app-top-search-shortcut">⌘K</span>
                   </div>
                 </div>
-                <div class="app-topbar-meta">
-                  <div class="app-topbar-chip">
-                    <span class="app-topbar-chip-dot is-green"></span>
-                    <div>
-                      <strong>工作台状态</strong>
-                      <small>{{ topStatusText }}</small>
-                    </div>
-                  </div>
-                  <div class="app-topbar-chip">
-                    <span class="app-topbar-chip-dot is-violet"></span>
-                    <div>
-                      <strong>算力余额</strong>
-                      <small>{{ topWalletBalance }}</small>
-                    </div>
-                  </div>
-                </div>
                 <div class="app-topbar-actions">
-                  <button
-                    v-if="showDesignInspectorToggle"
-                    class="app-top-toggle"
-                    :class="{ 'is-active': designInspectorEnabled }"
-                    type="button"
-                    @click="designInspector.toggleDesignInspector(!designInspectorEnabled)"
-                  >
-                    设计联调
-                  </button>
-                  <button class="app-top-icon" :title="t('shell.help')" @click="openHelpModal">
-                    <HelpCircle class="h-4 w-4" />
-                    <span>帮助</span>
-                  </button>
-                  <button class="app-top-icon app-top-icon--badge" title="通知">
+                  <button class="app-top-icon" title="通知">
                     <Bell class="h-4 w-4" />
-                    <em>12</em>
+                  </button>
+                  <button class="app-top-icon" title="设置" @click="go('/settings')">
+                    <Settings class="h-4 w-4" />
+                  </button>
+                  <button class="app-top-create" @click="go('/clone')">
+                    <Plus class="h-4 w-4" />
+                    <span>新建项目</span>
                   </button>
                   <button class="app-top-user">
                     <div class="app-top-user__avatar">C</div>
                     <div class="app-top-user__copy">
                       <span>{{ topUserName }}</span>
-                      <small>{{ topUserPlan }}</small>
                     </div>
+                    <ChevronDown class="h-4 w-4 text-white/45" />
                   </button>
-                  <button class="app-top-icon" title="会员与钱包" @click="openBillingCenter">
-                    <UserCircle class="h-4 w-4" />
-                    <span>钱包</span>
-                  </button>
-                  <div class="relative">
-                    <button
-                      class="app-top-more"
-                      @click="moreOpen = !moreOpen"
-                    >
-                      <MoreHorizontal class="h-4 w-4" />
-                      更多
-                    </button>
-                    <div
-                      v-if="moreOpen"
-                      class="absolute right-0 top-12 z-50 w-44 rounded-xl border border-white/10 bg-[#111827] p-2 shadow-2xl shadow-black/40"
-                    >
-                      <button class="shell-more-item" @click="onTopMenuClick('project')">{{ t('shell.project') }}</button>
-                      <button class="shell-more-item" @click="onTopMenuClick('edit')">{{ t('shell.edit') }}</button>
-                      <button class="shell-more-item" @click="onTopMenuClick('view')">{{ t('shell.view') }}</button>
-                      <button class="shell-more-item" @click="onTopMenuClick('export')">{{ t('shell.export') }}</button>
-                      <button class="shell-more-item" @click="moreOpen = false; openCloudWorkspace()">{{ t('shell.openCloud') }}</button>
-                      <button class="shell-more-item" @click="moreOpen = false; quickExport()">{{ t('shell.quickExport') }}</button>
-                    </div>
-                  </div>
                 </div>
               </div>
             </template>
@@ -282,8 +233,8 @@ function requestCloneStage(key: string) {
 <style scoped>
 .app-shell {
   background:
-    radial-gradient(circle at 18% 0, rgba(109, 93, 255, 0.12), transparent 24%),
-    linear-gradient(180deg, #08111f 0%, #091321 100%);
+    radial-gradient(circle at 20% 0, rgba(111, 88, 255, 0.12), transparent 24%),
+    linear-gradient(180deg, #070d18 0%, #09111c 100%);
   color: #f8fafc;
 }
 
@@ -295,7 +246,7 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-shell) {
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 290px minmax(0, 1fr);
   background: transparent;
 }
 
@@ -306,99 +257,99 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-sidebar) {
-  width: 248px;
-  min-width: 248px;
-  padding: 12px 14px 16px;
-  gap: 14px;
+  width: 290px;
+  min-width: 290px;
+  padding: 16px 18px;
+  gap: 18px;
   align-items: stretch;
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-right: 1px solid rgba(148, 163, 184, 0.08);
   background:
-    linear-gradient(180deg, rgba(7, 14, 26, 0.98), rgba(6, 12, 22, 0.98));
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
+    linear-gradient(180deg, rgba(8, 12, 22, 0.98), rgba(6, 11, 20, 0.98));
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
 }
 
 .app-shell :deep(.ds-sidebar__brand) {
   justify-content: flex-start;
-  gap: 12px;
-  padding: 8px 12px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-  min-height: 72px;
+  gap: 14px;
+  padding: 10px 14px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+  min-height: 86px;
 }
 
 .app-shell :deep(.ds-sidebar__mark) {
-  width: 44px;
-  height: 44px;
-  border-radius: 16px;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
   background:
     radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.28), transparent 24%),
     linear-gradient(135deg, #6d5dff, #8b5cf6);
-  box-shadow: 0 16px 30px rgba(109, 93, 255, 0.24);
+  box-shadow: 0 18px 34px rgba(109, 93, 255, 0.26);
 }
 
 .app-shell :deep(.ds-sidebar__title) {
   color: #f8fafc;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.1;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.05;
 }
 
 .app-shell :deep(.ds-sidebar__subtitle) {
-  margin-top: 4px;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  margin-top: 6px;
+  color: #9aa9c8;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .app-shell :deep(.ds-sidebar__nav) {
-  gap: 10px;
+  gap: 12px;
 }
 
 .app-shell :deep(.ds-sidebar__item) {
-  min-height: 54px;
+  min-height: 58px;
   justify-content: flex-start;
-  gap: 12px;
-  padding: 0 14px;
-  border-radius: 16px;
+  gap: 14px;
+  padding: 0 18px;
+  border-radius: 18px;
   border: 1px solid transparent;
   background: transparent;
-  color: #d2d8e6;
-  font-size: 14px;
-  font-weight: 600;
+  color: #e1e7f4;
+  font-size: 18px;
+  font-weight: 700;
   transition: all 180ms ease;
 }
 
 .app-shell :deep(.ds-sidebar__item:hover) {
-  background: rgba(17, 28, 49, 0.62);
-  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(17, 28, 49, 0.42);
+  border-color: rgba(148, 163, 184, 0.1);
   color: #f8fafc;
 }
 
 .app-shell :deep(.ds-sidebar__item.is-active) {
   background:
-    linear-gradient(135deg, rgba(109, 93, 255, 0.96), rgba(127, 111, 255, 0.92));
-  border-color: rgba(255, 255, 255, 0.1);
+    linear-gradient(135deg, rgba(108, 85, 255, 0.96), rgba(92, 70, 238, 0.92));
+  border-color: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  box-shadow: 0 12px 24px rgba(109, 93, 255, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 26px rgba(109, 93, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .app-shell :deep(.ds-sidebar__item svg) {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .app-shell__sidebar-footer {
   margin-top: auto;
   display: grid;
-  gap: 10px;
+  gap: 16px;
 }
 
 .app-shell__sidebar-plan {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 18px;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
   border: 1px solid rgba(109, 93, 255, 0.16);
   background:
     radial-gradient(circle at 100% 0, rgba(109, 93, 255, 0.16), transparent 40%),
@@ -412,22 +363,22 @@ function requestCloneStage(key: string) {
 
 .app-shell__sidebar-plan-copy strong {
   color: #f8fafc;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .app-shell__sidebar-plan-copy span {
   color: rgba(203, 213, 225, 0.72);
-  font-size: 11px;
+  font-size: 14px;
 }
 
 .app-shell__sidebar-plan-action {
-  min-height: 36px;
-  border-radius: 12px;
+  min-height: 48px;
+  border-radius: 16px;
   border: 1px solid rgba(109, 93, 255, 0.28);
   background: rgba(109, 93, 255, 0.1);
   color: #ddd6fe;
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -457,8 +408,8 @@ function requestCloneStage(key: string) {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  padding: 14px 16px;
+  border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.12);
   background:
     radial-gradient(circle at 100% 0, rgba(109, 93, 255, 0.12), transparent 34%),
@@ -469,28 +420,28 @@ function requestCloneStage(key: string) {
 .app-avatar {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #8b5cf6, #f0abfc);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6d5dff, #8b5cf6);
   color: #fff;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .app-shell :deep(.ds-topbar) {
-  min-height: 64px;
+  min-height: 80px;
   height: auto;
-  padding: 0 12px 0 16px;
+  padding: 0 18px 0 20px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.06);
-  background: linear-gradient(180deg, rgba(10, 17, 30, 0.995), rgba(8, 14, 26, 0.985));
+  background: linear-gradient(180deg, rgba(8, 13, 24, 0.995), rgba(8, 13, 24, 0.985));
 }
 
 .app-topbar-shell {
   display: grid;
   width: 100%;
   gap: 0;
-  padding: 6px 0 2px;
+  padding: 4px 0 1px;
 }
 
 .app-topbar-shell.has-clone-workflow {
@@ -501,14 +452,14 @@ function requestCloneStage(key: string) {
   width: auto;
   flex: 0 0 auto;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .app-topbar-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 18px;
   width: 100%;
   padding: 0;
 }
@@ -678,67 +629,22 @@ function requestCloneStage(key: string) {
   min-width: 0;
 }
 
-.app-topbar-meta,
 .app-topbar-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.app-topbar-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 8px;
-  border-left: 1px solid rgba(148, 163, 184, 0.12);
-}
-
-.app-topbar-chip > div {
-  display: grid;
-  gap: 2px;
-}
-
-.app-topbar-chip strong {
-  color: #dbe5f2;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.app-topbar-chip small {
-  color: #9fb0cf;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.app-topbar-chip-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #22d3ee;
-  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.12);
-}
-
-.app-topbar-chip-dot.is-green {
-  background: #4ade80;
-  box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.12);
-}
-
-.app-topbar-chip-dot.is-violet {
-  background: #8b5cf6;
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
+  gap: 14px;
 }
 
 .app-top-search {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  width: min(440px, 100%);
-  height: 42px;
-  padding: 0 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(10, 19, 36, 0.82);
+  width: min(700px, 100%);
+  height: 52px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 17, 30, 0.82);
   color: #cbd5e1;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
@@ -747,13 +653,13 @@ function requestCloneStage(key: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  height: 20px;
+  min-width: 36px;
+  height: 28px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(148, 163, 184, 0.08);
   color: rgba(203, 213, 225, 0.48);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -771,116 +677,86 @@ function requestCloneStage(key: string) {
 }
 
 .app-top-icon,
-.app-top-user,
-.app-top-more {
+.app-top-user {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 38px;
-  padding: 0 11px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(13, 23, 41, 0.58);
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(13, 21, 35, 0.72);
   color: #e2e8f0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
-.app-top-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(109, 93, 255, 0.22);
-  background: rgba(109, 93, 255, 0.08);
-  color: #d8d4fe;
-  font-size: 12px;
-  font-weight: 700;
-  transition: all 180ms ease;
-}
-
-.app-top-toggle.is-active {
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.24), rgba(139, 92, 246, 0.2));
-  border-color: rgba(109, 93, 255, 0.48);
-  color: #ffffff;
-  box-shadow: 0 0 0 1px rgba(109, 93, 255, 0.18), 0 10px 24px rgba(109, 93, 255, 0.18);
-}
-
 .app-top-icon {
-  min-width: 38px;
+  width: 52px;
+  min-width: 52px;
+  padding: 0;
 }
 
 .app-top-user {
-  min-width: 132px;
+  min-width: 190px;
   justify-content: flex-start;
 }
 
-.app-top-more {
-  min-width: 72px;
-}
-
-.app-top-icon--badge {
-  position: relative;
-}
-
-.app-top-icon--badge em {
-  position: absolute;
-  right: 8px;
-  top: 7px;
-  display: grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: rgba(239, 68, 68, 0.92);
-  color: #fff;
-  font-size: 10px;
-  font-style: normal;
+.app-top-create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 22px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #6f58ff, #7f5dff);
+  color: #ffffff;
+  font-size: 16px;
   font-weight: 700;
+  box-shadow: 0 18px 36px rgba(96, 69, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.app-topbar-text {
+  white-space: nowrap;
 }
 
 .app-top-user__avatar {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #8b5cf6, #f59e0b);
+  background: linear-gradient(135deg, #6d5dff, #8b5cf6);
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .app-top-user__copy {
   display: grid;
-  gap: 1px;
+  gap: 0;
   text-align: left;
 }
 
 .app-top-user__copy span {
   color: #f8fafc;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.app-top-user__copy small {
-  color: #b8a7ff;
-  font-size: 9px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .app-top-icon:hover,
 .app-top-user:hover,
-.app-top-more:hover,
 .app-sidebar-footer-action:hover {
   background: rgba(23, 38, 66, 0.82);
   border-color: rgba(148, 163, 184, 0.24);
   color: #fff;
+}
+
+.app-top-create:hover {
+  filter: brightness(1.04);
 }
 
 .app-shell :deep(.ds-topbar__spacer) {
@@ -888,7 +764,7 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-workspace) {
-  padding: 4px 10px 10px;
+  padding: 14px 18px 18px;
   overflow: auto;
   background: transparent;
 }
@@ -925,10 +801,6 @@ function requestCloneStage(key: string) {
     width: 100%;
   }
 
-  .app-topbar-meta {
-    display: none;
-  }
-
   .app-topbar-clone {
     flex-direction: column;
     align-items: stretch;
@@ -948,6 +820,17 @@ function requestCloneStage(key: string) {
   .app-topbar-clone__status {
     justify-content: flex-start;
     border-left: 0;
+  }
+
+  .app-top-create span,
+  .app-top-user__copy {
+    display: none;
+  }
+
+  .app-top-user {
+    min-width: 52px;
+    justify-content: center;
+    padding: 0;
   }
 }
 </style>

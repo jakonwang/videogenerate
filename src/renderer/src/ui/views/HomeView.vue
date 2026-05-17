@@ -2,18 +2,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  ArrowRight,
   CheckCircle2,
-  ChevronRight,
   Clapperboard,
   CopyPlus,
   FolderKanban,
-  Library,
+  LayoutTemplate,
   MessageCircleMore,
-  ScanSearch,
-  Search,
+  Play,
   Sparkles,
   Upload,
-  Video,
   Wand2,
 } from 'lucide-vue-next'
 import UiButton from '../components/UiButton.vue'
@@ -32,21 +30,6 @@ type VideoTaskLite = {
   createdAt: number
 }
 
-type CloneProjectLite = {
-  id: string
-  title?: string
-  status?: string
-  updatedAt?: number
-  coverAssetPath?: string
-  referenceVideoName?: string
-  referenceVideoPath?: string
-  previewOutputPath?: string
-  finalOutputPath?: string
-  outputDir?: string
-  modelName?: string
-  lastError?: string
-}
-
 type TaskStatLite = {
   total?: number
   running?: number
@@ -55,13 +38,19 @@ type TaskStatLite = {
   failed?: number
 }
 
-type RecentTaskCard = {
-  id: string
+type MetricCard = {
+  label: string
+  value: string
+  suffix: string
+  icon: unknown
+  tone: 'violet' | 'green' | 'blue' | 'orange'
+}
+
+type QuickStartCard = {
   title: string
-  thumb: string
-  progress: number
-  statusLabel: string
-  statusTone: 'running' | 'done' | 'error'
+  desc: string
+  icon: unknown
+  route: string
 }
 
 type TemplateCard = {
@@ -71,60 +60,84 @@ type TemplateCard = {
   thumb: string
 }
 
+type OperationCard = {
+  title: string
+  desc: string
+  icon: unknown
+  tone: 'violet' | 'blue'
+  route: string
+}
+
 const router = useRouter()
 const loading = ref(false)
 const templates = ref<TemplateLite[]>([])
 const tasks = ref<VideoTaskLite[]>([])
-const cloneProjects = ref<CloneProjectLite[]>([])
 const taskStats = ref<TaskStatLite | null>(null)
 
 const staticTemplateThumbs = [
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=640&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=640&q=80',
-  'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=640&q=80',
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=640&q=80',
+  'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80',
 ]
 
-const quickCreateItems = [
+const fallbackTemplateCards = [
+  { title: '产品种草', subtitle: '15.6 万人在用' },
+  { title: '口播讲解', subtitle: '32.1 万人在用' },
+  { title: '旅行记录', subtitle: '8.7 万人在用' },
+  { title: '美食探店', subtitle: '12.4 万人在用' },
+]
+
+const quickStartCards: QuickStartCard[] = [
+  {
+    title: 'AI 脚本',
+    desc: '快速生成创意脚本',
+    icon: Wand2,
+    route: '/tasks',
+  },
   {
     title: '爆款复刻',
-    desc: '上传参考视频，AI 分析生成',
+    desc: '一键复刻热门视频',
     icon: CopyPlus,
     route: '/clone',
   },
   {
-    title: '批量生成',
-    desc: '批量生成多个视频任务',
+    title: '批量创作',
+    desc: '高效生成多条视频',
     icon: FolderKanban,
     route: '/tasks',
   },
   {
-    title: '直播切片',
-    desc: '智能切片直播长视频',
+    title: '智能剪辑',
+    desc: '自动整理精彩片段',
     icon: Clapperboard,
     route: '/live-slicer',
   },
+]
+
+const operationCards: OperationCard[] = [
   {
-    title: '模板应用',
-    desc: '使用模板快速生成视频',
-    icon: Library,
+    title: '开始复刻',
+    desc: '上传参考视频，进入完整复刻流程',
+    icon: CopyPlus,
+    tone: 'violet',
+    route: '/clone',
+  },
+  {
+    title: '进入任务中心',
+    desc: '查看进度、失败原因和输出状态',
+    icon: FolderKanban,
+    tone: 'violet',
+    route: '/tasks',
+  },
+  {
+    title: '模板中心',
+    desc: '挑选可复用模板，快速起稿',
+    icon: LayoutTemplate,
+    tone: 'blue',
     route: '/templates',
   },
 ]
-
-const assistantPrompts = [
-  '分析参考视频，生成爆款脚本',
-  '推荐适合当前内容的模板',
-  '优化视频节奏和转化点',
-]
-
-const sortedTasks = computed(() =>
-  [...tasks.value].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)),
-)
-
-const sortedCloneProjects = computed(() =>
-  [...cloneProjects.value].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)),
-)
 
 const runningCount = computed(
   () =>
@@ -133,84 +146,62 @@ const runningCount = computed(
 )
 
 const doneCount = computed(
-  () =>
-    taskStats.value?.done ??
-    tasks.value.filter((item) => item.status === 'done').length,
+  () => taskStats.value?.done ?? tasks.value.filter((item) => item.status === 'done').length,
 )
+
+const totalTaskCount = computed(() => {
+  const statsTotal = taskStats.value?.total
+  if (typeof statsTotal === 'number') return statsTotal
+  return tasks.value.length
+})
 
 const failedCount = computed(
-  () =>
-    taskStats.value?.failed ??
-    tasks.value.filter((item) => item.status === 'error' || item.status === 'cancelled').length,
+  () => taskStats.value?.failed ?? tasks.value.filter((item) => item.status === 'error').length,
 )
 
-const recentTasks = computed<RecentTaskCard[]>(() => {
-  const cloneRows = sortedCloneProjects.value.slice(0, 4)
-  return cloneRows.map((item, index) => {
-    const status = normalizeProjectStatus(item.status)
-    return {
-      id: item.id,
-      title: item.title || basename(item.referenceVideoName || item.referenceVideoPath || item.outputDir || `项目 ${index + 1}`),
-      thumb: previewImageFor(item, index),
-      progress: projectProgress(status, index),
-      statusLabel: status.label,
-      statusTone: status.tone,
-    }
-  })
-})
-
-const templateCards = computed<TemplateCard[]>(() =>
-  templates.value.slice(0, 4).map((item, index) => ({
-    id: item.id,
-    title: item.name || `模板 ${index + 1}`,
-    subtitle: `使用 ${(12.5 - index * 1.4).toFixed(1)}w`,
-    thumb: staticTemplateThumbs[index % staticTemplateThumbs.length],
-  })),
-)
-
-const currentWorkflowStep = computed(() => {
-  if (doneCount.value) return 5
-  if (runningCount.value >= 3) return 4
-  if (runningCount.value >= 2) return 3
-  if (runningCount.value >= 1) return 2
-  return 1
-})
-
-const workflowNodes = computed(() => [
-  { key: 1, title: '参考分析' },
-  { key: 2, title: '脚本生成' },
-  { key: 3, title: '分镜设计' },
-  { key: 4, title: '分镜视频' },
-  { key: 5, title: '成片合成' },
-  { key: 6, title: '发布导出' },
+const metricCards = computed<MetricCard[]>(() => [
+  {
+    label: '进行中',
+    value: String(runningCount.value),
+    suffix: '项目',
+    icon: FolderKanban,
+    tone: 'violet',
+  },
+  {
+    label: '已完成',
+    value: String(doneCount.value),
+    suffix: '项目',
+    icon: CheckCircle2,
+    tone: 'green',
+  },
+  {
+    label: '模板数量',
+    value: String(templates.value.length || 1),
+    suffix: '套',
+    icon: LayoutTemplate,
+    tone: 'blue',
+  },
+  {
+    label: '异常任务',
+    value: String(failedCount.value),
+    suffix: '条',
+    icon: Sparkles,
+    tone: 'orange',
+  },
 ])
 
-function basename(input: string) {
-  return (input ?? '').split(/[/\\]/).pop() ?? input
-}
-
-function previewImageFor(item: CloneProjectLite, index: number) {
-  const path = item.coverAssetPath || item.finalOutputPath || item.previewOutputPath || item.referenceVideoPath || ''
-  if (path) return `file:///${path.replace(/\\/g, '/')}`
-  return staticTemplateThumbs[index % staticTemplateThumbs.length]
-}
-
-function normalizeProjectStatus(status?: string) {
-  const text = String(status || '').toLowerCase()
-  if (text.includes('done') || text.includes('complete') || text.includes('success')) {
-    return { label: '已完成', tone: 'done' as const }
-  }
-  if (text.includes('fail') || text.includes('error') || text.includes('cancel')) {
-    return { label: '异常', tone: 'error' as const }
-  }
-  return { label: '生成中', tone: 'running' as const }
-}
-
-function projectProgress(status: { tone: 'running' | 'done' | 'error' }, index: number) {
-  if (status.tone === 'done') return 100
-  if (status.tone === 'error') return 38
-  return Math.max(22, Math.min(92, 72 - index * 18))
-}
+const templateCards = computed<TemplateCard[]>(() =>
+  Array.from({ length: 4 }, (_, index) => {
+    const item = templates.value[index]
+    const fallback = fallbackTemplateCards[index]
+    return {
+      id: item?.id || `fallback-${index + 1}`,
+      title: item?.name || fallback.title,
+      subtitle: fallback.subtitle,
+      thumb: staticTemplateThumbs[index],
+    }
+  }),
+)
 
 function go(path: string) {
   void router.push(path)
@@ -219,16 +210,14 @@ function go(path: string) {
 async function refresh() {
   loading.value = true
   try {
-    const [templateRows, taskRows, statsRows, cloneRows] = await Promise.all([
+    const [templateRows, taskRows, statsRows] = await Promise.all([
       window.api.templates.list(),
       window.api.tasks.list(),
       window.api.tasks.stats(),
-      window.api.clone.listProjects(),
     ])
     templates.value = Array.isArray(templateRows) ? (templateRows as TemplateLite[]) : []
     tasks.value = Array.isArray(taskRows) ? (taskRows as VideoTaskLite[]) : []
     taskStats.value = (statsRows || null) as TaskStatLite | null
-    cloneProjects.value = Array.isArray(cloneRows) ? (cloneRows as CloneProjectLite[]) : []
   } finally {
     loading.value = false
   }
@@ -238,631 +227,663 @@ onMounted(refresh)
 </script>
 
 <template>
-  <div class="home-page">
-    <section class="home-grid">
-      <div class="home-main">
-        <UiCard class="hero-card">
-          <div class="hero-card__copy">
-            <h1>
-              让 AI 帮你批量生产
-              <span>高质量短视频</span>
-            </h1>
-            <p>从灵感到爆款，只需 7 步自动完成</p>
-            <div class="hero-card__actions">
-              <UiButton @click="go('/clone')">
-                <Sparkles class="h-4 w-4" />
-                开始新任务
-              </UiButton>
-              <UiButton variant="ghost" @click="go('/clone')">
-                <Upload class="h-4 w-4" />
-                导入参考视频
-              </UiButton>
-            </div>
+  <div class="home-dashboard-refined">
+    <section class="home-dashboard-refined__main">
+      <UiCard class="hero-card">
+        <div class="hero-card__copy">
+          <span class="hero-card__eyebrow">VideoGen Studio</span>
+          <h1>用 AI 创作精彩视频</h1>
+          <p>从灵感、脚本到复刻和导出，首页只保留最核心的创作入口。</p>
+
+          <div class="hero-card__actions">
+            <UiButton @click="go('/clone')">
+              <Sparkles class="h-4 w-4" />
+              开始创作
+            </UiButton>
+            <UiButton variant="ghost" @click="go('/tasks')">
+              <Upload class="h-4 w-4" />
+              查看任务
+            </UiButton>
           </div>
 
-          <div class="hero-card__visual">
-            <div class="hero-orbit hero-orbit--left top-4">智能分析</div>
-            <div class="hero-orbit hero-orbit--left mid-1">脚本生成</div>
-            <div class="hero-orbit hero-orbit--left mid-2">分镜设计</div>
-            <div class="hero-cube">
-              <span>AI</span>
-            </div>
-            <div class="hero-orbit hero-orbit--right top-4">分镜视频</div>
-            <div class="hero-orbit hero-orbit--right mid-1">成片合成</div>
-            <div class="hero-orbit hero-orbit--right mid-2">发布导出</div>
+          <div class="hero-card__summary">
+            <span>总任务 {{ totalTaskCount }}</span>
+            <span>运行中 {{ runningCount }}</span>
+            <span>已完成 {{ doneCount }}</span>
           </div>
-        </UiCard>
-
-        <div class="content-grid">
-          <UiCard class="section-card recent-card">
-            <div class="section-head">
-              <strong>最近任务</strong>
-              <button class="section-link" type="button" @click="go('/tasks')">
-                查看全部
-                <ChevronRight class="h-4 w-4" />
-              </button>
-            </div>
-
-            <div class="recent-list">
-              <article v-for="item in recentTasks" :key="item.id" class="recent-row">
-                <img :src="item.thumb" alt="task-preview" />
-                <div class="recent-row__main">
-                  <strong>{{ item.title }}</strong>
-                  <div class="recent-progress">
-                    <span class="recent-progress__track">
-                      <span class="recent-progress__fill" :style="{ width: `${item.progress}%` }"></span>
-                    </span>
-                    <em v-if="item.statusTone === 'running'">{{ item.progress }}%</em>
-                    <em v-else-if="item.statusTone === 'done'" class="is-success">已完成</em>
-                    <em v-else class="is-error">异常</em>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </UiCard>
-
-          <UiCard class="section-card template-card-panel">
-            <div class="section-head">
-              <strong>推荐模板</strong>
-              <button class="section-link" type="button" @click="go('/templates')">
-                更多模板
-                <ChevronRight class="h-4 w-4" />
-              </button>
-            </div>
-
-            <div class="template-strip">
-              <article v-for="item in templateCards" :key="item.id" class="template-tile">
-                <img :src="item.thumb" alt="template-preview" />
-                <div class="template-tile__copy">
-                  <strong>{{ item.title }}</strong>
-                  <span>{{ item.subtitle }}</span>
-                </div>
-              </article>
-            </div>
-          </UiCard>
         </div>
 
-        <UiCard class="section-card workflow-card">
-          <div class="section-head">
-            <strong>生产流程</strong>
-          </div>
-
-          <div class="workflow-track">
-            <div
-              v-for="node in workflowNodes"
-              :key="node.key"
-              class="workflow-step"
-              :class="{
-                'is-done': node.key < currentWorkflowStep,
-                'is-active': node.key === currentWorkflowStep,
-                'is-next': node.key > currentWorkflowStep,
-              }"
-            >
-              <div class="workflow-step__dot">
-                <CheckCircle2 v-if="node.key < currentWorkflowStep" class="h-4 w-4" />
-                <span v-else>{{ node.key }}</span>
-              </div>
-              <strong>{{ node.title }}</strong>
+        <div class="hero-card__visual">
+          <div class="hero-card__orbit hero-card__orbit--large"></div>
+          <div class="hero-card__orbit hero-card__orbit--small"></div>
+          <div class="hero-card__spark hero-card__spark--a"></div>
+          <div class="hero-card__spark hero-card__spark--b"></div>
+          <div class="hero-card__visual-card">
+            <div class="hero-card__visual-badge">AI Video</div>
+            <div class="hero-card__play-shell">
+              <Play class="h-12 w-12 fill-current" />
             </div>
           </div>
-        </UiCard>
-      </div>
+        </div>
+      </UiCard>
 
-      <aside class="home-side">
-        <UiCard class="side-card">
-          <div class="section-head">
-            <strong>快速创建</strong>
+      <section class="metric-grid">
+        <UiCard v-for="item in metricCards" :key="item.label" class="metric-card">
+          <div class="metric-card__icon" :class="`is-${item.tone}`">
+            <component :is="item.icon" class="h-5 w-5" />
           </div>
-
-          <div class="quick-create-list">
-            <button v-for="item in quickCreateItems" :key="item.title" class="quick-create-item" type="button" @click="go(item.route)">
-              <div class="quick-create-item__icon">
-                <component :is="item.icon" class="h-4 w-4" />
-              </div>
-              <div class="quick-create-item__copy">
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.desc }}</span>
-              </div>
-            </button>
+          <div class="metric-card__copy">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.suffix }}</small>
           </div>
         </UiCard>
+      </section>
 
-        <UiCard class="side-card assistant-card">
-          <div class="section-head">
-            <strong>AI 助手</strong>
-          </div>
-
-          <div class="assistant-visual">
-            <div class="assistant-avatar">
-              <MessageCircleMore class="h-9 w-9" />
+      <UiCard class="quick-start-panel">
+        <div class="panel-head">
+          <h2>快速开始</h2>
+        </div>
+        <div class="quick-start-grid">
+          <button
+            v-for="item in quickStartCards"
+            :key="item.title"
+            class="quick-start-card"
+            type="button"
+            @click="go(item.route)"
+          >
+            <div class="quick-start-card__icon">
+              <component :is="item.icon" class="h-4 w-4" />
             </div>
-          </div>
+            <div class="quick-start-card__copy">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.desc }}</span>
+            </div>
+            <ArrowRight class="quick-start-card__arrow h-4 w-4" />
+          </button>
+        </div>
+      </UiCard>
 
-          <div class="assistant-panel">
-            <span>你好！我可以帮你：</span>
-            <button v-for="item in assistantPrompts" :key="item" class="assistant-suggestion" type="button">
-              <ScanSearch class="h-4 w-4" />
-              <strong>{{ item }}</strong>
-            </button>
-          </div>
-
-          <div class="assistant-input">
-            <input type="text" placeholder="输入你的问题..." />
-            <button type="button">
-              <Sparkles class="h-4 w-4" />
-            </button>
-          </div>
-        </UiCard>
-      </aside>
+      <UiCard class="template-panel">
+        <div class="panel-head">
+          <h2>推荐模板</h2>
+          <button class="panel-link" type="button" @click="go('/templates')">查看全部</button>
+        </div>
+        <div class="template-grid">
+          <button
+            v-for="item in templateCards"
+            :key="item.id"
+            class="template-card"
+            type="button"
+            @click="go('/templates')"
+          >
+            <img :src="item.thumb" :alt="item.title" />
+            <div class="template-card__overlay"></div>
+            <div class="template-card__copy">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.subtitle }}</span>
+            </div>
+            <ArrowRight class="template-card__arrow h-4 w-4" />
+          </button>
+        </div>
+      </UiCard>
     </section>
+
+    <aside class="home-dashboard-refined__side">
+      <UiCard class="side-panel">
+        <div class="panel-head">
+          <h2>快捷操作</h2>
+        </div>
+        <div class="operation-list">
+          <button
+            v-for="item in operationCards"
+            :key="item.title"
+            class="operation-card"
+            type="button"
+            @click="go(item.route)"
+          >
+            <div class="operation-card__icon" :class="`is-${item.tone}`">
+              <component :is="item.icon" class="h-4 w-4" />
+            </div>
+            <div class="operation-card__copy">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.desc }}</span>
+            </div>
+            <ArrowRight class="operation-card__arrow h-4 w-4" />
+          </button>
+        </div>
+      </UiCard>
+
+      <UiCard class="side-panel assistant-shell">
+        <div class="panel-head panel-head--stack">
+          <h2>AI 助手</h2>
+          <p>你的智能创作助手</p>
+        </div>
+
+        <div class="assistant-shell__visual">
+          <div class="assistant-shell__avatar">
+            <MessageCircleMore class="h-8 w-8" />
+          </div>
+        </div>
+
+        <div class="assistant-shell__copy">
+          <strong>需要脚本、模板还是复刻建议？</strong>
+          <span>从这里进入下一步创作动作。</span>
+        </div>
+
+        <button class="assistant-shell__cta" type="button">
+          开始对话
+        </button>
+      </UiCard>
+    </aside>
   </div>
 </template>
 
 <style scoped>
-.home-page {
+.home-dashboard-refined {
   display: grid;
-  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  gap: 18px;
   min-height: 100%;
-  padding: 0 2px 8px;
+  padding: 6px 2px 20px;
   color: #f8fafc;
 }
 
-.section-head,
-.hero-card__actions,
-.assistant-input,
-.section-link,
-.quick-create-item,
-.workflow-track,
-.workflow-step {
-  display: flex;
-  align-items: center;
-}
-
-.section-head strong,
-.quick-create-item__copy strong,
-.template-tile__copy strong,
-.recent-row__main strong,
-.workflow-step strong {
-  color: #eef3ff;
-}
-
-.home-grid {
+.home-dashboard-refined__main,
+.home-dashboard-refined__side,
+.metric-grid,
+.quick-start-grid,
+.template-grid,
+.operation-list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 310px;
-  gap: 14px;
-  margin-top: 2px;
-}
-
-.home-main,
-.home-side,
-.content-grid,
-.recent-list,
-.quick-create-list,
-.assistant-panel {
-  display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .hero-card,
-.section-card,
-.side-card {
-  padding: 18px !important;
-  border-radius: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+.metric-card,
+.quick-start-panel,
+.template-panel,
+.side-panel {
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
   background:
-    radial-gradient(circle at top left, rgba(109, 93, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, rgba(11, 18, 33, 0.98), rgba(8, 13, 25, 0.98));
+    linear-gradient(180deg, rgba(11, 17, 30, 0.98), rgba(8, 14, 26, 0.98)),
+    radial-gradient(circle at 20% 0, rgba(109, 93, 255, 0.1), transparent 28%);
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 30px 70px rgba(0, 0, 0, 0.24);
+}
+
+.hero-card,
+.quick-start-panel,
+.template-panel,
+.side-panel {
+  padding: 20px !important;
 }
 
 .hero-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(420px, 0.8fr);
-  gap: 20px;
-  min-height: 352px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.72fr);
+  min-height: 212px;
+  overflow: hidden;
 }
 
 .hero-card__copy {
   display: grid;
   align-content: center;
-  gap: 18px;
-  padding: 8px 10px;
+  gap: 14px;
+}
+
+.hero-card__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(123, 97, 255, 0.12);
+  color: #c8bcff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .hero-card__copy h1 {
   margin: 0;
-  font-size: clamp(40px, 4vw, 58px);
+  font-size: clamp(34px, 3vw, 44px);
   line-height: 1.08;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
+  font-weight: 800;
 }
 
-.hero-card__copy h1 span {
-  display: block;
-  color: #7d6bff;
-}
-
-.hero-card__copy p,
-.quick-create-item__copy span,
-.template-tile__copy span,
-.assistant-panel span {
+.hero-card__copy p {
+  max-width: 560px;
   margin: 0;
-  color: #95a5c8;
-  font-size: 14px;
-  line-height: 1.6;
+  color: #92a2c7;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.hero-card__actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.hero-card__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hero-card__summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #c6d1eb;
+  font-size: 13px;
 }
 
 .hero-card__visual {
   position: relative;
-  min-height: 300px;
+  min-height: 200px;
 }
 
-.hero-cube {
+.hero-card__visual-card {
   position: absolute;
   inset: 50% auto auto 50%;
-  width: 168px;
-  height: 168px;
-  transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  border-radius: 32px;
+  width: 188px;
+  height: 188px;
+  border-radius: 40px;
+  transform: translate(-50%, -50%) rotate(-12deg);
   background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.36), transparent 24%),
-    linear-gradient(135deg, rgba(81, 112, 255, 0.9), rgba(148, 90, 255, 0.72));
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.3), transparent 24%),
+    linear-gradient(180deg, #8e6fff 0%, #6f55ff 58%, #5e45ec 100%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.16),
-    0 20px 80px rgba(109, 93, 255, 0.42),
-    inset 0 1px 18px rgba(255, 255, 255, 0.26);
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 42px 90px rgba(93, 62, 255, 0.34);
 }
 
-.hero-cube::before,
-.hero-cube::after {
-  content: '';
+.hero-card__visual-badge {
   position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(109, 93, 255, 0.24);
+  top: 18px;
+  left: 18px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 30px;
 }
 
-.hero-cube::before {
-  width: 280px;
-  height: 280px;
+.hero-card__play-shell {
+  display: grid;
+  place-items: center;
+  width: 90px;
+  height: 90px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
 }
 
-.hero-cube::after {
-  width: 360px;
-  height: 360px;
-}
-
-.hero-cube span {
-  color: #f8faff;
-  font-size: 64px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-}
-
-.hero-orbit {
+.hero-card__orbit {
   position: absolute;
-  min-height: 42px;
-  padding: 0 14px;
-  display: inline-flex;
+  inset: 50% auto auto 50%;
+  border-radius: 999px;
+  border: 1px solid rgba(123, 97, 255, 0.22);
+  transform: translate(-50%, -50%);
+}
+
+.hero-card__orbit--large {
+  width: 300px;
+  height: 118px;
+}
+
+.hero-card__orbit--small {
+  width: 228px;
+  height: 82px;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hero-card__spark {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(164, 145, 255, 0.95);
+  box-shadow: 0 0 20px rgba(123, 97, 255, 0.42);
+}
+
+.hero-card__spark--a {
+  top: 36px;
+  right: 28px;
+  width: 8px;
+  height: 8px;
+}
+
+.hero-card__spark--b {
+  left: 40px;
+  bottom: 30px;
+  width: 10px;
+  height: 10px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-card {
+  display: flex;
   align-items: center;
+  gap: 14px;
+  min-height: 92px;
+  padding: 16px 18px !important;
+}
+
+.metric-card__icon,
+.quick-start-card__icon,
+.operation-card__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(12, 20, 36, 0.84);
-  color: #dce5ff;
+}
+
+.metric-card__icon {
+  width: 40px;
+  height: 40px;
+}
+
+.metric-card__icon.is-violet,
+.quick-start-card__icon,
+.operation-card__icon.is-violet {
+  background: linear-gradient(135deg, rgba(120, 95, 255, 0.34), rgba(93, 69, 224, 0.22));
+  color: #a998ff;
+}
+
+.metric-card__icon.is-green {
+  background: linear-gradient(135deg, rgba(64, 189, 126, 0.28), rgba(38, 104, 73, 0.22));
+  color: #7ae1a8;
+}
+
+.metric-card__icon.is-blue,
+.operation-card__icon.is-blue {
+  background: linear-gradient(135deg, rgba(73, 126, 255, 0.28), rgba(38, 65, 129, 0.22));
+  color: #7eb1ff;
+}
+
+.metric-card__icon.is-orange {
+  background: linear-gradient(135deg, rgba(255, 149, 76, 0.26), rgba(114, 64, 36, 0.22));
+  color: #ffb178;
+}
+
+.metric-card__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.metric-card__copy span,
+.metric-card__copy small {
+  color: #8ea0c7;
   font-size: 13px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
 }
 
-.hero-orbit--left.top-4 {
-  top: 10px;
-  left: 24px;
+.metric-card__copy strong {
+  color: #f8fafc;
+  font-size: 22px;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 
-.hero-orbit--left.mid-1 {
-  top: 96px;
-  left: -4px;
-}
-
-.hero-orbit--left.mid-2 {
-  bottom: 42px;
-  left: 26px;
-}
-
-.hero-orbit--right.top-4 {
-  top: 8px;
-  right: 24px;
-}
-
-.hero-orbit--right.mid-1 {
-  top: 96px;
-  right: -2px;
-}
-
-.hero-orbit--right.mid-2 {
-  bottom: 22px;
-  right: 20px;
-}
-
-.content-grid {
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
-}
-
-.section-head {
+.panel-head {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 4px;
 }
 
-.section-head strong {
-  font-size: 18px;
-}
-
-.section-link {
-  gap: 4px;
-  color: #8ea0c7;
-  font-size: 13px;
-}
-
-.recent-list {
-  gap: 12px;
-}
-
-.recent-row {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.recent-row:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.recent-row img,
-.template-tile img {
-  width: 100%;
-  display: block;
-  object-fit: cover;
-  border-radius: 14px;
-}
-
-.recent-row img {
-  height: 60px;
-}
-
-.recent-row__main {
-  display: grid;
-  gap: 10px;
-}
-
-.recent-progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.recent-progress__track {
-  flex: 1;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.recent-progress__fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #7d6bff, #59a7ff);
-}
-
-.recent-progress em {
-  color: #cfd8ef;
-  font-size: 12px;
-  font-style: normal;
-}
-
-.recent-progress em.is-success {
-  color: #53d08f;
-}
-
-.recent-progress em.is-error {
-  color: #ff7d7d;
-}
-
-.template-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.template-tile {
-  overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.template-tile img {
-  height: 210px;
-}
-
-.template-tile__copy {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-}
-
-.workflow-card {
-  gap: 18px;
-}
-
-.workflow-track {
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.workflow-step {
-  flex: 1;
-  gap: 10px;
-  justify-content: center;
-  color: #8698bf;
-}
-
-.workflow-step__dot {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.workflow-step.is-done .workflow-step__dot {
-  color: #53d08f;
-  border-color: rgba(83, 208, 143, 0.26);
-}
-
-.workflow-step.is-active .workflow-step__dot {
-  color: #fff;
-  border-color: rgba(125, 107, 255, 0.4);
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.94), rgba(133, 92, 246, 0.82));
-  box-shadow: 0 0 0 8px rgba(109, 93, 255, 0.12);
-}
-
-.workflow-step strong {
-  font-size: 16px;
-}
-
-.quick-create-item {
+.panel-head--stack {
+  align-items: flex-start;
+  flex-direction: column;
   justify-content: flex-start;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  text-align: left;
 }
 
-.quick-create-item__icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.94), rgba(133, 92, 246, 0.78));
-  color: #fff;
+.panel-head h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 700;
 }
 
-.quick-create-item__copy {
-  display: grid;
-  gap: 4px;
-}
-
-.assistant-card {
-  gap: 16px;
-}
-
-.assistant-visual {
-  display: grid;
-  place-items: center;
-  padding: 10px 0 2px;
-}
-
-.assistant-avatar {
-  width: 108px;
-  height: 108px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #9ab7ff;
-  background:
-    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.22), transparent 26%),
-    linear-gradient(135deg, rgba(109, 93, 255, 0.84), rgba(78, 160, 255, 0.54));
-  box-shadow:
-    0 0 0 10px rgba(109, 93, 255, 0.08),
-    0 20px 56px rgba(109, 93, 255, 0.28);
-}
-
-.assistant-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #d8e1f7;
-  text-align: left;
-}
-
-.assistant-input {
-  gap: 10px;
-  min-height: 50px;
-  padding: 0 10px 0 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.assistant-input input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #eef3ff;
+.panel-head p {
+  margin: 0;
+  color: #8ea0c7;
   font-size: 14px;
 }
 
-.assistant-input button {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.94), rgba(133, 92, 246, 0.78));
-  color: #fff;
+.panel-link {
+  color: #96a8d1;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-@media (max-width: 1400px) {
+.quick-start-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.quick-start-card,
+.operation-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  text-align: left;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.quick-start-card:hover,
+.operation-card:hover,
+.template-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(123, 97, 255, 0.26);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.quick-start-card__icon,
+.operation-card__icon {
+  width: 36px;
+  height: 36px;
+}
+
+.quick-start-card__copy,
+.operation-card__copy {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.quick-start-card__copy strong,
+.operation-card__copy strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.quick-start-card__copy span,
+.operation-card__copy span {
+  color: #8ea0c7;
+  font-size: 12px;
+}
+
+.quick-start-card__arrow,
+.operation-card__arrow {
+  color: #7f91be;
+}
+
+.template-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.template-card {
+  position: relative;
+  min-height: 112px;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+}
+
+.template-card img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.template-card__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7, 12, 22, 0.08), rgba(7, 12, 22, 0.78));
+}
+
+.template-card__copy,
+.template-card__arrow {
+  position: absolute;
+  z-index: 1;
+}
+
+.template-card__copy {
+  left: 14px;
+  right: 34px;
+  bottom: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.template-card__copy strong {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.template-card__copy span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+}
+
+.template-card__arrow {
+  right: 14px;
+  bottom: 14px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.operation-list {
+  gap: 10px;
+}
+
+.assistant-shell {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.assistant-shell__visual {
+  display: grid;
+  place-items: center;
+  padding-top: 4px;
+}
+
+.assistant-shell__avatar {
+  display: grid;
+  place-items: center;
+  width: 114px;
+  height: 114px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.22), transparent 28%),
+    linear-gradient(135deg, rgba(122, 97, 255, 0.92), rgba(78, 59, 198, 0.78));
+  color: #f4f3ff;
+  box-shadow:
+    0 0 0 14px rgba(123, 97, 255, 0.08),
+    0 26px 54px rgba(87, 58, 244, 0.28);
+}
+
+.assistant-shell__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.assistant-shell__copy strong {
+  color: #d8def0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assistant-shell__copy span {
+  color: #8ea0c7;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.assistant-shell__cta {
+  min-height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(123, 97, 255, 0.28);
+  background: linear-gradient(180deg, rgba(49, 37, 118, 0.42), rgba(37, 27, 93, 0.4));
+  color: #f4f0ff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@media (max-width: 1280px) {
+  .home-dashboard-refined {
+    grid-template-columns: 1fr;
+  }
+
+  .home-dashboard-refined__side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
   .hero-card {
     grid-template-columns: 1fr;
   }
 
-  .content-grid,
-  .home-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 980px) {
-  .workflow-track {
-    flex-wrap: wrap;
-  }
-
-  .template-strip {
+  .metric-grid,
+  .quick-start-grid,
+  .template-grid,
+  .home-dashboard-refined__side {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .home-page {
-    padding: 0 0 8px;
+  .home-dashboard-refined {
+    padding: 4px 0 16px;
   }
 
-  .template-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .recent-row {
+  .metric-grid,
+  .quick-start-grid,
+  .template-grid,
+  .home-dashboard-refined__side {
     grid-template-columns: 1fr;
   }
 }
