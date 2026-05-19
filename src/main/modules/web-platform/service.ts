@@ -1838,6 +1838,29 @@ export const webPlatformService = {
     return { project: saved }
   },
 
+  async updateCloneProjectMeta(
+    token: string,
+    input: { cloneProjectId: string; title?: string; description?: string },
+  ) {
+    const auth = await this.authByToken(token)
+    const project = await assertProjectOwnership(input.cloneProjectId, auth.user.id)
+    const result = await cloneService.updateProjectMeta({
+      cloneProjectId: project.id,
+      title: input.title,
+      description: input.description,
+    })
+    if (result?.project) {
+      await patchProjectOwnership(result.project, {
+        userId: auth.user.id,
+        planId: auth.subscription.planId,
+        actualCost: result.project.actualCost || project.actualCost || 0,
+        billingStatus: result.project.billingStatus || project.billingStatus || 'not_required',
+        deductionStatus: result.project.deductionStatus || project.deductionStatus || 'none',
+      })
+    }
+    return result
+  },
+
   async reorderCloneShots(token: string, input: { cloneProjectId: string; shotIds: string[] }) {
     const auth = await this.authByToken(token)
     const project = await assertProjectOwnership(input.cloneProjectId, auth.user.id)

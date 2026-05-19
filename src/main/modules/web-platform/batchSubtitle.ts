@@ -727,11 +727,40 @@ export async function updateBatchSubtitleDraft(input: {
   const current = normalizeBatchSubtitleJob(currentRaw)
   const nextCaptionStyle = normalizeCaptionStyle({ ...current.captionStyle, ...(input.patch.captionStyle || {}) })
   const fontPath = resolveSubtitleRenderFont(nextCaptionStyle.fontName).path
-  const nextSourceItems = input.patch.sourceItems ?? current.sourceItems
+  const nextSourceItems = input.patch.sourceItems
+    ? await Promise.all(
+        input.patch.sourceItems.map(async (item) => {
+          return await enrichBatchSubtitleSourceItem({
+            id: String(item.id || randomUUID()),
+            sourceType: item.sourceType,
+            sourceVideoPath: String(item.sourceVideoPath || '').trim(),
+            sourceProjectId: typeof item.sourceProjectId === 'string' ? item.sourceProjectId : undefined,
+            sourceProjectTitle: typeof item.sourceProjectTitle === 'string' ? item.sourceProjectTitle : undefined,
+            fileName: typeof item.fileName === 'string' ? item.fileName : undefined,
+            coverImagePath: typeof item.coverImagePath === 'string' ? item.coverImagePath : undefined,
+            durationSec: typeof item.durationSec === 'number' ? item.durationSec : undefined,
+            width: typeof item.width === 'number' ? item.width : undefined,
+            height: typeof item.height === 'number' ? item.height : undefined,
+          })
+        }),
+      )
+    : current.sourceItems
+  const currentSourceSignature = JSON.stringify(
+    current.sourceItems.map((item) => [item.id, item.sourceVideoPath, item.sourceType, item.sourceProjectId || '']),
+  )
+  const nextSourceSignature = JSON.stringify(
+    nextSourceItems.map((item) => [item.id, item.sourceVideoPath, item.sourceType, item.sourceProjectId || '']),
+  )
+  const sourceItemsChanged = currentSourceSignature !== nextSourceSignature
   const nextTitleConfig = {
     ...current.titleConfig,
     ...(input.patch.titleConfig || {}),
   }
+  const nextSubtitleTracks = Array.isArray(input.patch.subtitleTracks)
+    ? input.patch.subtitleTracks.map((track) => normalizeTrack(track, track.sourceItemId, nextCaptionStyle, fontPath))
+    : sourceItemsChanged
+      ? current.subtitleTracks.filter((track) => nextSourceItems.some((item) => item.id === track.sourceItemId))
+      : current.subtitleTracks
   const next: BatchSubtitleJob = {
     ...current,
     ...('name' in input.patch ? { name: String(input.patch.name || current.name).trim() || current.name } : {}),
@@ -753,10 +782,14 @@ export async function updateBatchSubtitleDraft(input: {
     styleConfig: normalizeStyleConfig({ ...current.styleConfig, ...(input.patch.styleConfig || {}) }),
     captionStyle: nextCaptionStyle,
     layoutPolicy: normalizeLayoutPolicy({ ...current.layoutPolicy, ...(input.patch.layoutPolicy || {}) }),
-    subtitleTracks: Array.isArray(input.patch.subtitleTracks)
-      ? input.patch.subtitleTracks.map((track) => normalizeTrack(track, track.sourceItemId, nextCaptionStyle, fontPath))
-      : current.subtitleTracks,
+    subtitleTracks: nextSubtitleTracks,
     capcutDraft: input.patch.capcutDraft ? { ...(current.capcutDraft || {}), ...input.patch.capcutDraft } : current.capcutDraft,
+    status: sourceItemsChanged ? 'draft' : current.status,
+    progress: sourceItemsChanged ? 0 : current.progress,
+    outputCount: sourceItemsChanged ? 0 : current.outputCount,
+    outputs: sourceItemsChanged ? [] : current.outputs,
+    batchRuntime: sourceItemsChanged ? undefined : current.batchRuntime,
+    error: sourceItemsChanged ? undefined : current.error,
     updatedAt: now(),
   }
   return await webPlatformRepo.upsertBatchSubtitleJob(next)

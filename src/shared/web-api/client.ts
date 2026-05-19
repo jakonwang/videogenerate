@@ -648,6 +648,13 @@ export function createWebApiClient(options: WebApiClientOptions) {
       })
     },
 
+    async updateCloneProjectMeta(projectId: string, input: { title?: string; description?: string }) {
+      return await request<{ project?: any; summary?: CloneProjectSummary }>(`/clone/projects/${encodeURIComponent(projectId)}`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
     async updateCloneProjectStage(projectId: string, input: { currentStep: CloneWorkflowStep }) {
       return await request<{ project?: any }>(`/clone/projects/${encodeURIComponent(projectId)}/stage`, {
         method: 'POST',

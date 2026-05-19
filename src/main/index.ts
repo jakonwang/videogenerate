@@ -629,6 +629,21 @@ function wireIpc() {
       return await cloneService.updateProjectMeta(payload)
     },
   )
+  ipcMain.handle('clone:listCloneGroups', async () => {
+    return await cloneService.listCloneGroups()
+  })
+  ipcMain.handle('clone:createCloneGroup', async (_e, payload: { name: string }) => {
+    return await cloneService.createCloneGroup(payload)
+  })
+  ipcMain.handle('clone:renameCloneGroup', async (_e, payload: { groupId: string; name: string }) => {
+    return await cloneService.renameCloneGroup(payload)
+  })
+  ipcMain.handle('clone:removeCloneGroup', async (_e, payload: { groupId: string }) => {
+    return await cloneService.removeCloneGroup(payload)
+  })
+  ipcMain.handle('clone:assignCloneProjectsToGroup', async (_e, payload: { cloneProjectIds: string[]; groupId?: string }) => {
+    return await cloneService.assignCloneProjectsToGroup(payload)
+  })
   ipcMain.handle(
     'clone:bindProjectReferenceVideo',
     async (_e, payload: { cloneProjectId: string; videoPath: string }) => {

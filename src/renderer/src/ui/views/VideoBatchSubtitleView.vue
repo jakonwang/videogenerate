@@ -49,6 +49,7 @@ const cloneProjects = ref<CloneProjectSummary[]>([])
 const selectedSourceIds = ref<string[]>([])
 const selectedPreviewId = ref('')
 const selectedJobId = ref('')
+const draftDirty = ref(false)
 const previewFrame = ref<BatchSubtitlePreviewResult | null>(null)
 const previewFrameLoading = ref(false)
 const previewThumbStart = ref(0)
@@ -344,6 +345,30 @@ watch(
 )
 
 watch(
+  () => ({
+    sourceItems: draft.sourceItems.map((item) => item.id).join('|'),
+    titleText: draft.titleText,
+    fontName: draft.captionStyle.fontName,
+    fontSize: draft.captionStyle.fontSize,
+    fontColor: draft.captionStyle.fontColor,
+    strokeColor: draft.captionStyle.strokeColor,
+    strokeWidth: draft.captionStyle.strokeWidth,
+    shadowColor: draft.captionStyle.shadowColor,
+    shadowBlur: draft.captionStyle.shadowBlur,
+    position: draft.captionStyle.position,
+    safeMargin: draft.captionStyle.safeMargin,
+    textAlign: draft.captionStyle.textAlign,
+    maxLines: draft.captionStyle.maxLines,
+    maxWidthRatio: draft.captionStyle.maxWidthRatio,
+    bottomMargin: draft.captionStyle.bottomMargin,
+  }),
+  () => {
+    draftDirty.value = true
+  },
+  { deep: true },
+)
+
+watch(
   () => selectedPreviewIndex.value,
   (index) => {
     if (index < 0) return
@@ -625,7 +650,7 @@ async function loadAll() {
     jobs.value = jobItems
     outputs.value = outputItems
     cloneProjects.value = projects.filter((item) => item.finalOutputPath)
-    if (!selectedJobId.value && jobItems[0]) loadJobIntoDraft(jobItems[0])
+    if (!selectedJobId.value && !draftDirty.value && !draft.sourceItems.length && jobItems[0]) loadJobIntoDraft(jobItems[0])
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -666,6 +691,7 @@ async function pickUploadVideos() {
     ...items.filter((item) => !draft.sourceItems.some((entry) => entry.id === item.id)),
   ]
   if (items[0]) selectedPreviewId.value = items[0].id
+  selectedJobId.value = ''
   sourcePage.value = sourcePageCount.value
   notice.value = `已添加 ${items.length} 条本地素材。`
 }
@@ -704,6 +730,7 @@ function applyCloneSources() {
   const uploadItems = draft.sourceItems.filter((item) => item.sourceType === 'upload')
   draft.sourceItems = [...uploadItems, ...sourceItems]
   if (sourceItems[0]) selectedPreviewId.value = sourceItems[0].id
+  selectedJobId.value = ''
   sourcePage.value = sourcePageCount.value
   notice.value = `已加入 ${sourceItems.length} 条成片库素材。`
   errorText.value = ''
@@ -766,6 +793,7 @@ async function saveCurrentDraft() {
       ? await webApiClient.updateBatchSubtitleDraft(selectedJobId.value, payload)
       : await webApiClient.createBatchSubtitleJob(payload)
     loadJobIntoDraft(result)
+    draftDirty.value = false
     notice.value = '当前草稿已保存。'
     await loadAll()
   } catch (error: any) {
@@ -782,12 +810,17 @@ async function renderBatch() {
     errorText.value = '请先输入标题内容。'
     return
   }
-  if (!selectedJobId.value) await saveCurrentDraft()
-  if (!selectedJobId.value) return
   runningJob.value = true
   errorText.value = ''
+  notice.value = '正在准备批量渲染任务…'
   try {
+    if (!selectedJobId.value) await saveCurrentDraft()
+    if (!selectedJobId.value) {
+      errorText.value = '保存任务失败，未生成可执行任务，请先点击保存配置后重试。'
+      return
+    }
     await webApiClient.updateBatchSubtitleDraft(selectedJobId.value, {
+      sourceItems: draft.sourceItems,
       subtitleSource: 'manual',
       exportEngine: 'ass_fallback',
       titleRenderMode: draft.titleRenderMode,
@@ -804,6 +837,7 @@ async function renderBatch() {
     })
     const result = await webApiClient.runBatchSubtitleJob(selectedJobId.value)
     loadJobIntoDraft(result)
+    draftDirty.value = false
     notice.value = `批量渲染完成，共输出 ${result.outputCount} 条结果。`
     await loadAll()
   } catch (error: any) {
@@ -900,6 +934,7 @@ function loadJobIntoDraft(job: BatchSubtitleJob) {
   draft.captionStyle = { ...defaultCaptionStyle(), ...(job.captionStyle || {}) }
   draft.layoutPolicy = { ...defaultLayoutPolicy(), ...(job.layoutPolicy || {}) }
   selectedJobId.value = job.id
+  draftDirty.value = false
   if (job.sourceItems[0]) selectedPreviewId.value = job.sourceItems[0].id
 }
 
@@ -1517,13 +1552,20 @@ onBeforeUnmount(() => {
             :class="{ 'is-failed': item.renderStatus === 'failed' }"
           >
             <div class="result-thumb__media">
+              <video
+                v-if="item.renderStatus === 'success' && mediaUrl(item.outputVideoPath)"
+                :src="mediaUrl(item.outputVideoPath)"
+                muted
+                playsinline
+                preload="metadata"
+              ></video>
               <img
-                v-if="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
+                v-else-if="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
                 :src="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
                 :alt="item.selectedTitle || '输出结果'"
               />
               <span class="result-thumb__badge" :class="{ 'is-failed': item.renderStatus === 'failed' }">
-                {{ item.renderStatus === 'success' ? '成功' : '失败' }}
+                {{ item.renderStatus === 'success' ? '视频成片' : '失败' }}
               </span>
             </div>
             <div class="result-thumb__copy">
@@ -2107,7 +2149,8 @@ onBeforeUnmount(() => {
 .clone-picker__item img,
 .source-list-item img,
 .preview-thumbs__item img,
-.result-thumb__media img {
+.result-thumb__media img,
+.result-thumb__media video {
   width: 54px;
   height: 72px;
   border-radius: 10px;
@@ -2467,8 +2510,10 @@ onBeforeUnmount(() => {
 }
 
 .preview-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
 }
 
 .preview-footer__actions {
@@ -2486,7 +2531,6 @@ onBeforeUnmount(() => {
 }
 
 .preview-footer .primary-button {
-  flex: 0 0 auto;
   min-width: 220px;
 }
 
@@ -2794,10 +2838,12 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-.result-thumb__media img {
+.result-thumb__media img,
+.result-thumb__media video {
   width: 100%;
   height: 144px;
   border-radius: 14px;
+  object-fit: cover;
 }
 
 .result-thumb__badge {

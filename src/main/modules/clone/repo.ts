@@ -27,6 +27,7 @@ import type {
   CloneLocale,
   ClonePipelineStatus,
   CloneProject,
+  CloneProjectGroup,
   CloneProductType,
   CloneRunMode,
   CloneRealismStyle,
@@ -48,6 +49,7 @@ import { buildReferenceLock } from './prompt'
 
 type CloneDbShape = {
   projects: CloneProject[]
+  projectGroups?: CloneProjectGroup[]
   modelIdentityLibrary?: ModelIdentityLibraryItem[]
 }
 
@@ -72,6 +74,16 @@ function defaultCloneProjectTitle(createdAt: number) {
   return `未命名复刻任务 ${date} ${time}`
 }
 
+function normalizeProjectGroup(item: any): CloneProjectGroup {
+  return {
+    id: String(item?.id ?? randomUUID()),
+    name: String(item?.name ?? '').trim() || '未命名分组',
+    createdAt: Number(item?.createdAt ?? now()),
+    updatedAt: Number(item?.updatedAt ?? now()),
+    sortOrder: Number(item?.sortOrder ?? 0),
+  }
+}
+
 function sanitizeCloneDbText(raw: string) {
   return raw.replace(/(^\s*"[^"\r\n]*)\?(\r?\n\s*[\],])/gm, '$1。"$2')
 }
@@ -88,7 +100,7 @@ async function readCloneDbFile(): Promise<CloneDbShape> {
       return parsed
     }
   } catch {
-    return { projects: [], modelIdentityLibrary: [] }
+    return { projects: [], projectGroups: [], modelIdentityLibrary: [] }
   }
 }
 
@@ -521,11 +533,76 @@ function canUseCloneSqlite() {
   return supported
 }
 
+function normalizeDbCollection<T>(value: T[] | null | undefined) {
+  return Array.isArray(value) ? value : []
+}
+
+function maxUpdatedAt(items: Array<{ updatedAt?: number; createdAt?: number }> | null | undefined) {
+  return normalizeDbCollection(items).reduce((latest, item) => {
+    const ts = Math.max(Number(item?.updatedAt || 0), Number(item?.createdAt || 0))
+    return ts > latest ? ts : latest
+  }, 0)
+}
+
+function shouldHydrateSqliteFromLegacy(legacyDb: CloneDbShape, sqliteDb: CloneDbShape) {
+  const legacyProjects = normalizeDbCollection(legacyDb.projects)
+  const sqliteProjects = normalizeDbCollection(sqliteDb.projects)
+  const legacyGroups = normalizeDbCollection(legacyDb.projectGroups)
+  const sqliteGroups = normalizeDbCollection(sqliteDb.projectGroups)
+  const legacyIdentities = normalizeDbCollection(legacyDb.modelIdentityLibrary)
+  const sqliteIdentities = normalizeDbCollection(sqliteDb.modelIdentityLibrary)
+
+  if (!legacyProjects.length && !legacyGroups.length && !legacyIdentities.length) return false
+  if (!sqliteProjects.length && !sqliteGroups.length && !sqliteIdentities.length) return true
+  if (legacyProjects.length > sqliteProjects.length) return true
+  if (legacyGroups.length > sqliteGroups.length) return true
+  if (legacyIdentities.length > sqliteIdentities.length) return true
+
+  return (
+    maxUpdatedAt(legacyProjects) > maxUpdatedAt(sqliteProjects) ||
+    maxUpdatedAt(legacyGroups) > maxUpdatedAt(sqliteGroups) ||
+    maxUpdatedAt(legacyIdentities) > maxUpdatedAt(sqliteIdentities)
+  )
+}
+
 async function readCloneDbSource(): Promise<CloneDbShape> {
   if (canUseCloneSqlite()) {
-    const db = readCloneDbFromSqlite()
+    const legacyDb = existsSync(cloneDbPath()) ? await readCloneDbFile() : { projects: [], projectGroups: [], modelIdentityLibrary: [] }
+    const hasLegacyData =
+      Array.isArray(legacyDb.projects) && legacyDb.projects.length > 0 ||
+      Array.isArray(legacyDb.projectGroups) && legacyDb.projectGroups.length > 0 ||
+      Array.isArray(legacyDb.modelIdentityLibrary) && legacyDb.modelIdentityLibrary.length > 0
+    let db: CloneDbShape
+    try {
+      initializeCloneSqlite()
+      if (isCloneSqliteEmpty() && hasLegacyData) {
+        writeCloneDbToSqlite({
+          projects: Array.isArray(legacyDb.projects) ? legacyDb.projects : [],
+          projectGroups: Array.isArray(legacyDb.projectGroups) ? legacyDb.projectGroups : [],
+          modelIdentityLibrary: Array.isArray(legacyDb.modelIdentityLibrary) ? legacyDb.modelIdentityLibrary : [],
+        })
+      }
+      db = readCloneDbFromSqlite()
+      if (shouldHydrateSqliteFromLegacy(legacyDb, db)) {
+        writeCloneDbToSqlite({
+          projects: normalizeDbCollection(legacyDb.projects),
+          projectGroups: normalizeDbCollection(legacyDb.projectGroups),
+          modelIdentityLibrary: normalizeDbCollection(legacyDb.modelIdentityLibrary),
+        })
+        db = readCloneDbFromSqlite()
+      }
+    } catch (error) {
+      if (!cloneSqliteFallbackLogged) {
+        cloneSqliteFallbackLogged = true
+        console.warn(
+          `[clone-repo] SQLite read failed, fallback to JSON storage: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+      return legacyDb
+    }
     return {
       projects: Array.isArray(db.projects) ? db.projects : [],
+      projectGroups: Array.isArray(db.projectGroups) ? db.projectGroups : [],
       modelIdentityLibrary: Array.isArray(db.modelIdentityLibrary) ? db.modelIdentityLibrary : [],
     }
   }
@@ -535,14 +612,15 @@ async function readCloneDbSource(): Promise<CloneDbShape> {
 async function writeCloneDbSource(input: CloneDbShape) {
   const normalized: CloneDbShape = {
     projects: Array.isArray(input.projects) ? input.projects : [],
+    projectGroups: Array.isArray(input.projectGroups) ? input.projectGroups : [],
     modelIdentityLibrary: Array.isArray(input.modelIdentityLibrary) ? input.modelIdentityLibrary : [],
   }
   if (canUseCloneSqlite()) {
     writeCloneDbToSqlite({
       projects: normalized.projects,
+      projectGroups: normalized.projectGroups ?? [],
       modelIdentityLibrary: normalized.modelIdentityLibrary ?? [],
     })
-    return
   }
   await writeJsonFile(cloneDbPath(), normalized)
 }
@@ -1136,6 +1214,8 @@ function normalizeProject(p: CloneProject): CloneProject {
         : undefined,
     title: String((p as any)?.title ?? '').trim() || defaultCloneProjectTitle(Number((p as any)?.createdAt ?? now())),
     description: String((p as any)?.description ?? '').trim() || undefined,
+    groupId: String((p as any)?.groupId ?? '').trim() || undefined,
+    groupName: String((p as any)?.groupName ?? '').trim() || undefined,
     archived: Boolean((p as any)?.archived ?? false),
     locale: p.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN',
     runMode: normalizeRunMode((p as any)?.runMode),
@@ -1261,8 +1341,11 @@ export const cloneRepo = {
     return await queueCloneDbMutation(async () => {
       const db = await readCloneDbSource()
       const normalizedLibrary = Array.isArray(db.modelIdentityLibrary) ? db.modelIdentityLibrary.map(normalizeIdentityLibraryItem) : []
+      const normalizedGroups = Array.isArray(db.projectGroups) ? db.projectGroups.map(normalizeProjectGroup) : []
       const normalizedProjects = db.projects.map(normalizeProject)
       let changed = JSON.stringify(normalizedLibrary) !== JSON.stringify(db.modelIdentityLibrary ?? [])
+      changed = changed || JSON.stringify(normalizedGroups) !== JSON.stringify(db.projectGroups ?? [])
+      const groupById = new Map(normalizedGroups.map((x) => [x.id, x]))
 
       const libraryById = new Map(normalizedLibrary.map((x) => [x.id, x]))
       const existingImagePathSet = new Set(
@@ -1352,6 +1435,17 @@ export const cloneRepo = {
 
       const migratedProjects = normalizedProjects.map((project) => {
         const next = { ...project }
+        const linkedGroup = next.groupId ? groupById.get(next.groupId) : undefined
+        if (next.groupId && linkedGroup) {
+          next.groupName = linkedGroup.name
+        } else if (next.groupId && !linkedGroup) {
+          next.groupId = undefined
+          next.groupName = undefined
+          changed = true
+        } else if (!next.groupId && next.groupName) {
+          next.groupName = undefined
+          changed = true
+        }
         const hasSelectedIdentity = Boolean(next.selectedModelIdentityId)
         const legacyPacks = next.modelIdentityPacks ?? []
         if (!hasSelectedIdentity && legacyPacks.length) {
@@ -1403,9 +1497,9 @@ export const cloneRepo = {
       })
 
       if (changed || JSON.stringify(migratedProjects) !== JSON.stringify(db.projects)) {
-        await writeCloneDbSource({ projects: migratedProjects, modelIdentityLibrary: normalizedLibrary })
+        await writeCloneDbSource({ projects: migratedProjects, projectGroups: normalizedGroups, modelIdentityLibrary: normalizedLibrary })
       }
-      return { projects: migratedProjects, modelIdentityLibrary: normalizedLibrary }
+      return { projects: migratedProjects, projectGroups: normalizedGroups, modelIdentityLibrary: normalizedLibrary }
     })
   },
 
@@ -1479,6 +1573,66 @@ export const cloneRepo = {
     return await queueCloneDbMutation(async () => {
       const db = await readCloneDbSource()
       db.projects = (Array.isArray(db.projects) ? db.projects : []).filter((x) => x.id !== id)
+      await writeCloneDbSource(db)
+      return { ok: true }
+    })
+  },
+
+  async listProjectGroups(): Promise<CloneProjectGroup[]> {
+    const db = await this.readDb()
+    return [...(db.projectGroups ?? [])].sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || Number(a.createdAt || 0) - Number(b.createdAt || 0))
+  },
+
+  async getProjectGroup(id: string): Promise<CloneProjectGroup | null> {
+    const all = await this.listProjectGroups()
+    return all.find((x) => x.id === id) ?? null
+  },
+
+  async createProjectGroup(input: { name: string }): Promise<CloneProjectGroup> {
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      const groups = Array.isArray(db.projectGroups) ? db.projectGroups.map(normalizeProjectGroup) : []
+      const next = normalizeProjectGroup({
+        id: randomUUID(),
+        name: input.name,
+        createdAt: now(),
+        updatedAt: now(),
+        sortOrder: groups.length,
+      })
+      db.projectGroups = [...groups, next]
+      await writeCloneDbSource(db)
+      return next
+    })
+  },
+
+  async upsertProjectGroup(input: CloneProjectGroup): Promise<CloneProjectGroup> {
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      const groups = Array.isArray(db.projectGroups) ? db.projectGroups.map(normalizeProjectGroup) : []
+      const idx = groups.findIndex((x) => x.id === input.id)
+      const next = normalizeProjectGroup({ ...input, updatedAt: now() })
+      if (idx >= 0) groups[idx] = next
+      else groups.push(next)
+      db.projectGroups = groups
+      db.projects = (Array.isArray(db.projects) ? db.projects : []).map((project) => {
+        const normalized = normalizeProject(project)
+        if (normalized.groupId !== next.id) return normalized
+        return normalizeProject({ ...normalized, groupName: next.name })
+      })
+      await writeCloneDbSource(db)
+      return next
+    })
+  },
+
+  async removeProjectGroup(id: string): Promise<{ ok: true }> {
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      db.projectGroups = (Array.isArray(db.projectGroups) ? db.projectGroups : []).map(normalizeProjectGroup).filter((x) => x.id !== id)
+      db.projects = (Array.isArray(db.projects) ? db.projects : []).map((project) => {
+        const normalized = normalizeProject(project)
+        if (normalized.groupId !== id) return normalized
+        return normalizeProject({ ...normalized, groupId: undefined, groupName: undefined })
+      })
       await writeCloneDbSource(db)
       return { ok: true }
     })
@@ -1565,6 +1719,7 @@ export const cloneRepo = {
         const legacyDb = await readCloneDbFile()
         writeCloneDbToSqlite({
           projects: Array.isArray(legacyDb.projects) ? legacyDb.projects : [],
+          projectGroups: Array.isArray(legacyDb.projectGroups) ? legacyDb.projectGroups : [],
           modelIdentityLibrary: Array.isArray(legacyDb.modelIdentityLibrary) ? legacyDb.modelIdentityLibrary : [],
         })
       }

@@ -788,6 +788,16 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
       json(res, 200, { ok: true, project: result })
       return
     }
+    if (req.method === 'POST' && projectMatch) {
+      const body = await readBodyClean(req)
+      const result = await webPlatformService.updateCloneProjectMeta(token, {
+        cloneProjectId: decodeURIComponent(projectMatch[1]),
+        title: typeof body.title === 'string' ? body.title : undefined,
+        description: typeof body.description === 'string' ? body.description : undefined,
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
     if (req.method === 'DELETE' && projectMatch) {
       const result = await webPlatformService.removeCloneProject(token, decodeURIComponent(projectMatch[1]))
       json(res, 200, result as JsonObject)

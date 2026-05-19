@@ -1,4 +1,3 @@
-import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
 import type {
   CloneProjectLike,
   ShotVideoGenerateResponse,
@@ -48,35 +47,23 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     options.errorText.value = ''
     options.setStageLog?.('正在根据分镜图和脚本生成视频片段。')
     try {
-      options.pushRuntimeLog?.(
-        `提交分镜视频生成：project=${ensuredProject.id} frames=${options.getStoryboardFrameCount?.() ?? 0}`,
-        'info',
-      )
-      const res = hasStoredWebToken()
-        ? ((await webApiClient.generateCloneShotVideos(ensuredProject.id)) as ShotVideoGenerateResponse<TProject>)
-        : ((await window.api.clone.generateShotVideosFromStoryboard({
-            cloneProjectId: ensuredProject.id,
-          })) as ShotVideoGenerateResponse<TProject>)
+      const resolved = await options.getWorkspaceClient?.(ensuredProject.id)
+      const res = (await resolved?.client.generateShotVideos(ensuredProject.id)) as ShotVideoGenerateResponse<TProject>
       projectActions.applyProject((res.project || options.current.value) as TProject)
       const summary = res.queueSummary
       if (summary?.failed || summary?.pending || summary?.timeout) {
-        options.pushRuntimeLog?.(
-          `分镜视频生成返回：done=${summary.done || 0} failed=${summary.failed || 0} pending=${summary.pending || 0} timeout=${summary.timeout || 0}`,
-          'error',
-        )
         options.setStageLog?.(
-          `分镜视频已继续执行：成功 ${summary.done || 0} 条，失败 ${summary.failed || 0} 条，云端待同步 ${summary.pending || 0} 条。失败项可选择继续查询或直接重新生成。`,
+          `分镜视频已继续执行：成功 ${summary.done || 0} 条，失败 ${summary.failed || 0} 条，待同步 ${summary.pending || 0} 条。`,
           'error',
         )
       } else {
-        options.pushRuntimeLog?.(`分镜视频生成返回：done=${summary?.done || 0} failed=0 pending=0`, 'success')
-        options.setStageLog?.('分镜视频已按脚本顺序全部生成完成，可在合成前检查区替换个别分镜。', 'success')
+        options.setStageLog?.(`分镜视频生成完成，当前通道：${resolved?.channel || 'unknown'}`, 'success')
       }
     } catch (error: any) {
       options.pushRuntimeLog?.(`分镜视频生成异常：${String(error?.message ?? error ?? '未知错误')}`, 'error')
       options.markError?.(error?.message ?? error, '分镜视频生成失败。')
       await projectActions.refreshProjectAfterFailure()
-      options.setStageLog?.('分镜视频生成失败。你可以同步云端状态，或对失败项直接重新生成。', 'error')
+      options.setStageLog?.('分镜视频生成失败。你可以同步状态，或对失败项重新生成。', 'error')
     } finally {
       if (options.loading) options.loading.value = false
     }
@@ -100,10 +87,6 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     if (options.loading) options.loading.value = true
     options.errorText.value = ''
     options.setStageLog?.('正在自动推进复制流程到分镜视频阶段。')
-    options.pushRuntimeLog?.(
-      `提交自动复制流程：project=${ensuredProject.id} variantCount=${Number(input?.variantCount ?? options.variantCount?.value ?? 3)} productRefs=${input?.productReferenceImagePaths?.length ?? options.productRefs.value.length}`,
-      'info',
-    )
     try {
       const selectedModelIdentityId = String(
         input?.selectedModelIdentityId ||
@@ -131,21 +114,16 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
       const videoFailed = Number(res.queueSummary?.failed ?? 0) + Number(res.queueSummary?.timeout ?? 0)
       const totalFailed = frameFailed + videoFailed
       if (totalFailed > 0) {
-        options.setStageLog?.(
-          `自动流程已完成，但有 ${totalFailed} 个镜头失败，可在分镜图/分镜视频阶段逐镜头查看原因。`,
-          'error',
-        )
-        options.pushRuntimeLog?.(`自动流程部分失败：frameFailed=${frameFailed} videoFailed=${videoFailed}`, 'error')
+        options.setStageLog?.(`自动流程已完成，但有 ${totalFailed} 个镜头失败，可在对应阶段逐镜头查看。`, 'error')
       } else {
         options.setStageLog?.('自动流程已完成，已停在分镜视频阶段，可直接检查各镜头结果。', 'success')
-        options.pushRuntimeLog?.(`自动流程完成：videoDone=${res.queueSummary?.done ?? 0} failed=0`, 'success')
       }
     } catch (error: any) {
-      const reason = String(error?.message ?? error ?? '????')
-      options.pushRuntimeLog?.(`?????????${reason}`, 'error')
-      options.markError?.(reason, '???????????')
+      const reason = String(error?.message ?? error ?? '未知错误')
+      options.pushRuntimeLog?.(`自动流程异常：${reason}`, 'error')
+      options.markError?.(reason, '自动流程失败。')
       await projectActions.refreshProjectAfterFailure()
-      options.setStageLog?.(`?????????${reason}`, 'error')
+      options.setStageLog?.(`自动流程失败：${reason}`, 'error')
     } finally {
       if (options.loading) options.loading.value = false
     }
@@ -159,22 +137,18 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     options.errorText.value = ''
     options.setStageLog?.(`正在继续查询 ${shotLabel(shotId)} 的云端任务结果。`)
     try {
-      const res = hasStoredWebToken()
-        ? ((await webApiClient.syncCloneShotVideoTask(projectId, shotId)) as ShotVideoSyncResponse<TProject>)
-        : ((await window.api.clone.syncShotVideoTask({
-            cloneProjectId: projectId,
-            shotId,
-          })) as ShotVideoSyncResponse<TProject>)
+      const resolved = await options.getWorkspaceClient?.(projectId)
+      const res = (await resolved?.client.syncShotVideoTask(projectId, shotId)) as ShotVideoSyncResponse<TProject>
       projectActions.applyProject((res.project || options.current.value) as TProject)
       const taskId = String(
         res.task?.taskId || options.current.value?.shotVideoOutputs?.find((item) => item.shotId === shotId)?.taskId || '',
       ).trim()
       if (res.synced) {
-        options.setStageLog?.(`${shotLabel(shotId)} 已从云端同步成功。${taskId ? ` taskId=${taskId}` : ''}`, 'success')
+        options.setStageLog?.(`${shotLabel(shotId)} 已从云端同步成功${taskId ? ` taskId=${taskId}` : ''}`, 'success')
       } else if (res.task?.status === 'failed') {
-        options.setStageLog?.(`${shotLabel(shotId)} 云端仍然失败。${taskId ? ` taskId=${taskId}` : ''}`, 'error')
+        options.setStageLog?.(`${shotLabel(shotId)} 云端仍然失败${taskId ? ` taskId=${taskId}` : ''}`, 'error')
       } else {
-        options.setStageLog?.(`${shotLabel(shotId)} 暂未拿到最终结果，保留 taskId 继续查询。${taskId ? ` taskId=${taskId}` : ''}`, 'info')
+        options.setStageLog?.(`${shotLabel(shotId)} 暂未拿到最终结果，保留 taskId 继续查询${taskId ? ` taskId=${taskId}` : ''}`, 'info')
       }
     } catch (error: any) {
       options.markError?.(error?.message ?? error, `${shotLabel(shotId)} 云端状态同步失败。`)
@@ -213,25 +187,14 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     const projectId =
       options.resolveActiveProjectId?.(options.current.value?.id) || String(options.current.value?.id || '').trim()
     if (!projectId) return
-    const useWebApi = hasStoredWebToken()
     if (options.loading) options.loading.value = true
     options.errorText.value = ''
     options.setStageLog?.(`正在放弃旧任务并强制重新生成 ${shotLabel(shotId)}。`)
-    options.pushRuntimeLog?.(
-      `提交分镜视频强制重新生成：project=${projectId} shot=${shotId} channel=${useWebApi ? 'web-api' : 'electron-ipc'}`,
-      'info',
-    )
     try {
-      const res = useWebApi
-        ? ((await webApiClient.regenerateCloneShotVideo(projectId, shotId)) as { project?: TProject })
-        : ((await window.api.clone.generateShotClip({
-            cloneProjectId: projectId,
-            shotId,
-            forceRegenerate: true,
-          })) as { project?: TProject })
-      projectActions.applyProject((res.project || options.current.value) as TProject)
-      options.pushRuntimeLog?.(`分镜视频强制重新生成已提交：project=${projectId} shot=${shotId}`, 'success')
-      options.setStageLog?.(`${shotLabel(shotId)} 强制重新生成已提交。`, 'success')
+      const resolved = await options.getWorkspaceClient?.(projectId)
+      const res = await resolved?.client.regenerateShotVideo(projectId, shotId)
+      projectActions.applyProject((res?.project || options.current.value) as TProject)
+      options.setStageLog?.(`${shotLabel(shotId)} 强制重新生成已提交，当前通道：${resolved?.channel || 'unknown'}`, 'success')
     } catch (error: any) {
       options.pushRuntimeLog?.(
         `分镜视频强制重新生成异常：project=${projectId} shot=${shotId} message=${String(error?.message ?? error ?? '未知错误')}`,
@@ -253,31 +216,18 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     options.errorText.value = ''
     options.setStageLog?.('正在同步所有云端分镜任务状态。')
     try {
-      if (hasStoredWebToken()) {
-        const pendingItems = (options.current.value?.shotVideoOutputs ?? []).filter((item) => isPendingSyncItem(item))
-        if (pendingItems.length) {
-          for (const item of pendingItems) {
-            const res = (await webApiClient.syncCloneShotVideoTask(projectId, item.shotId)) as ShotVideoSyncResponse<TProject>
-            projectActions.applyProject((res.project || options.current.value) as TProject)
-          }
-        } else {
-          const [projectRes, runtimeRes] = await Promise.all([
-            webApiClient.getCloneProject(projectId),
-            webApiClient.getCloneRuntime(projectId).catch(() => null),
-          ])
-          let next = (projectRes?.project || options.current.value) as TProject
-          if (runtimeRes?.pipeline && options.applyPipelineStatus) {
-            next = options.applyPipelineStatus(next, runtimeRes)
-          }
-          projectActions.applyProject(next)
+      const resolved = await options.getWorkspaceClient?.(projectId)
+      const pendingItems = (options.current.value?.shotVideoOutputs ?? []).filter((item) => isPendingSyncItem(item))
+      if (pendingItems.length) {
+        for (const item of pendingItems) {
+          const res = (await resolved?.client.syncShotVideoTask(projectId, item.shotId)) as ShotVideoSyncResponse<TProject>
+          projectActions.applyProject((res.project || options.current.value) as TProject)
         }
       } else {
-        const res = (await window.api.clone.reconcileRemoteStoryboardVideos({
-          cloneProjectId: projectId,
-        })) as { project?: TProject }
-        projectActions.applyProject((res.project || options.current.value) as TProject)
+        const refreshed = await projectActions.ensureCurrentProjectReady()
+        if (refreshed?.id) projectActions.applyProject(refreshed)
       }
-      options.setStageLog?.('云端状态同步完成。', 'success')
+      options.setStageLog?.(`云端状态同步完成，当前通道：${resolved?.channel || 'unknown'}`, 'success')
     } catch (error: any) {
       options.markError?.(error?.message ?? error, '云端状态同步失败。')
       options.setStageLog?.('云端状态同步失败，请稍后再试。', 'error')
@@ -298,21 +248,15 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     if (options.loading) options.loading.value = true
     options.errorText.value = ''
     options.setStageLog?.(`正在手动查询 ${pendingItems.length} 个待回写分镜任务。`)
-    options.pushRuntimeLog?.(`手动查询待回写分镜任务：project=${projectId} count=${pendingItems.length}`, 'info')
     try {
+      const resolved = await options.getWorkspaceClient?.(projectId)
       for (const item of pendingItems) {
         const shotId = String(item.shotId || '').trim()
         if (!shotId) continue
-        const res = hasStoredWebToken()
-          ? ((await webApiClient.syncCloneShotVideoTask(projectId, shotId)) as ShotVideoSyncResponse<TProject>)
-          : ((await window.api.clone.syncShotVideoTask({
-              cloneProjectId: projectId,
-              shotId,
-            })) as ShotVideoSyncResponse<TProject>)
+        const res = (await resolved?.client.syncShotVideoTask(projectId, shotId)) as ShotVideoSyncResponse<TProject>
         projectActions.applyProject((res.project || options.current.value) as TProject)
       }
       options.setStageLog?.(`手动查询完成，已轮询 ${pendingItems.length} 个分镜任务。`, 'success')
-      options.pushRuntimeLog?.(`手动查询完成：project=${projectId} count=${pendingItems.length}`, 'success')
     } catch (error: any) {
       options.markError?.(error?.message ?? error, '手动查询待回写分镜任务失败。')
       await projectActions.refreshProjectAfterFailure()

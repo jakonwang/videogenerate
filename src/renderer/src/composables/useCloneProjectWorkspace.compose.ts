@@ -28,26 +28,24 @@ export function useCloneProjectWorkspaceCompose<TProject extends CloneProjectLik
       }
       const readyVideoCount = options.getReadyVideoCount?.() ?? 0
       const outputCount = options.getShotVideoOutputCount?.() ?? 0
+      if (!readyVideoCount) {
+        throw new Error('当前没有可用于合成的分镜视频文件。请先在“分镜视频生成”阶段继续查询或重新生成。')
+      }
       options.pushRuntimeLog?.(
         `提交最终成片合成：project=${ensuredProject.id} readyVideos=${readyVideoCount} outputs=${outputCount}`,
         'info',
       )
-      if (!readyVideoCount) {
-        throw new Error('当前没有可用于合成的分镜视频文件。请先在“分镜视频生成”阶段继续查询或重新生成，直到至少有一条分镜出现真实视频。')
-      }
-      const res = (await window.api.clone.composeCloneVideo({
-        cloneProjectId: ensuredProject.id,
+      const resolved = await options.getWorkspaceClient?.(ensuredProject.id)
+      const res = await resolved?.client.composeFinalVideo(ensuredProject.id, {
         outputDir: options.composeOutputDir.value || undefined,
-      })) as { project?: TProject }
-      projectActions.applyProject((res.project || options.current.value) as TProject)
+      })
+      projectActions.applyProject((res?.project || options.current.value) as TProject)
       if (options.composeLocalError) options.composeLocalError.value = ''
-      const finalOutputPath = options.getFinalOutputPath?.() || String(res.project?.finalCompose?.outputPath || '').trim()
-      options.pushRuntimeLog?.(
-        `最终成片合成返回：output=${String(res.project?.finalCompose?.outputPath || '--')} status=${String(res.project?.finalCompose?.status || '--')}`,
-        finalOutputPath ? 'success' : 'info',
-      )
+      const finalOutputPath = options.getFinalOutputPath?.() || String(res?.project?.finalCompose?.outputPath || '').trim()
       options.setStageLog?.(
-        finalOutputPath ? '最终视频已合成并写入历史记录。' : '合成已结束，等待结果回写。',
+        finalOutputPath
+          ? `最终视频已合成，当前通道：${resolved?.channel || 'unknown'}`
+          : '合成已结束，等待结果回写。',
         finalOutputPath ? 'success' : 'info',
       )
     } catch (error: any) {

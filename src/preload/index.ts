@@ -51,6 +51,16 @@ const api = {
       ipcRenderer.invoke('clone:createDraftProject', payload ?? {}),
     updateProjectMeta: (payload: { cloneProjectId: string; title?: string; description?: string }) =>
       ipcRenderer.invoke('clone:updateProjectMeta', payload),
+    listCloneGroups: () =>
+      ipcRenderer.invoke('clone:listCloneGroups'),
+    createCloneGroup: (payload: { name: string }) =>
+      ipcRenderer.invoke('clone:createCloneGroup', payload),
+    renameCloneGroup: (payload: { groupId: string; name: string }) =>
+      ipcRenderer.invoke('clone:renameCloneGroup', payload),
+    removeCloneGroup: (payload: { groupId: string }) =>
+      ipcRenderer.invoke('clone:removeCloneGroup', payload),
+    assignCloneProjectsToGroup: (payload: { cloneProjectIds: string[]; groupId?: string }) =>
+      ipcRenderer.invoke('clone:assignCloneProjectsToGroup', payload),
     bindProjectReferenceVideo: (payload: { cloneProjectId: string; videoPath: string }) =>
       ipcRenderer.invoke('clone:bindProjectReferenceVideo', payload),
     listProjectSummaries: (payload?: { query?: string; status?: string; archived?: boolean }) =>

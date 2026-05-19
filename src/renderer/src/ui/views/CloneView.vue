@@ -10,6 +10,7 @@ import CloneStageHeader from '../components/clone/CloneStageHeader.vue'
 import CloneStateCard from '../components/clone/CloneStateCard.vue'
 import { useCloneProjectWorkspace } from '@/composables/useCloneProjectWorkspace'
 import { useCloneRouteProject } from '@/composables/useCloneRouteProject'
+import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
 import { hasStoredWebToken, webApiClient, type GeelarkPublishAccount } from '@/lib/webApiClient'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { storeToRefs } from 'pinia'
@@ -293,14 +294,18 @@ const geelarkPublishForm = reactive({
   needShareLink: false,
 })
 
+function safeArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : []
+}
+
 const currentModel = computed(() => models.value.find((item) => item.id === selectedModelId.value) || null)
 const modelSnapshot = computed(() => currentModel.value || current.value?.selectedModelIdentitySnapshot || null)
-const storyBeats = computed(() => current.value?.blueprint?.storyBeats ?? [])
-const scriptVariants = computed(() => current.value?.scriptVariantCandidates ?? [])
-const storyboardBatches = computed(() => current.value?.storyboardGridBatches ?? [])
-const blueprintShots = computed<BlueprintShot[]>(() => current.value?.blueprint?.shots ?? [])
+const storyBeats = computed(() => safeArray(current.value?.blueprint?.storyBeats))
+const scriptVariants = computed(() => safeArray(current.value?.scriptVariantCandidates))
+const storyboardBatches = computed(() => safeArray(current.value?.storyboardGridBatches))
+const blueprintShots = computed<BlueprintShot[]>(() => safeArray(current.value?.blueprint?.shots))
 const storyboardFrames = computed<StoryboardFrame[]>(() => {
-  const rawFrames = current.value?.storyboardFrames ?? []
+  const rawFrames = safeArray(current.value?.storyboardFrames)
   const rawMap = new Map(rawFrames.map((item) => [item.shotId, item]))
   const shots = [...blueprintShots.value].sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
   if (!shots.length) return rawFrames
@@ -332,7 +337,7 @@ const storyboardFrames = computed<StoryboardFrame[]>(() => {
     }
   })
 })
-const shotVideoOutputs = computed(() => current.value?.shotVideoOutputs ?? [])
+const shotVideoOutputs = computed(() => safeArray(current.value?.shotVideoOutputs))
 const shotVideoOutputIndexMap = computed<Record<string, number>>(() =>
   Object.fromEntries(shotVideoOutputs.value.map((item, index) => [item.shotId, index])),
 )
@@ -365,7 +370,7 @@ const blueprintShotMap = computed<Record<string, BlueprintShot>>(() =>
   Object.fromEntries(blueprintShots.value.map((item) => [item.id, item])),
 )
 const selectedVariantShotScripts = computed(
-  () => scriptVariants.value.find((item) => item.id === selectedVariantId.value)?.shotScripts || [],
+  () => safeArray(scriptVariants.value.find((item) => item.id === selectedVariantId.value)?.shotScripts),
 )
 const storyboardDesignRows = computed(() =>
   selectedVariantShotScripts.value.map((shot, index) => {
@@ -414,7 +419,7 @@ const activeImageModel = computed(() => safeText(current.value?.pipelineStatus?.
 const workflowStep = computed(() => current.value?.workflowV2?.currentStep || 'upload_analyze_script')
 const selectedVariantId = computed(() => current.value?.selectedScriptVariantId || scriptVariants.value.find((item) => item.selected)?.id || '')
 const referenceSourcePath = computed(() => current.value?.referenceVideoPath || referenceVideoPath.value)
-const effectiveProductRefs = computed(() => (productRefsDraft.value ? productRefsDraft.value : productRefs.value))
+const effectiveProductRefs = computed(() => (Array.isArray(productRefsDraft.value) ? productRefsDraft.value : safeArray(productRefs.value)))
 const visibleProductThumbs = computed(() => effectiveProductRefs.value.slice(0, 9))
 const activeProjectId = computed(() => resolveActiveProjectId(current.value?.id))
 const isDraftingNewProject = computed(() => Boolean(referenceVideoPath.value.trim()) && !current.value?.id)
@@ -1118,17 +1123,12 @@ async function toggleFrameLock(shotId: string) {
   errorText.value = ''
   setStageLog(`正在${shot.locked ? '解除锁定' : '锁定'} ${shotLabel(shotId)}。`)
   try {
-    const project = hasStoredWebToken()
-      ? (((await webApiClient.updateCloneShot(current.value.id, shotId, {
-          locked: !shot.locked,
-        }))?.project || current.value) as CloneProject)
-      : ((await window.api.clone.updateShotEnhanced({
-          cloneProjectId: current.value.id,
-          shotId,
-          locked: !shot.locked,
-        })) as CloneProject)
+    const resolved = await resolveCloneWorkspaceClient<CloneProject>(current.value.id)
+    const project = ((await resolved.client.updateShot(current.value.id, shotId, {
+      locked: !shot.locked,
+    }))?.project || current.value) as CloneProject
     applyProject(project || current.value)
-    setStageLog(`${shotLabel(shotId)} 已${shot.locked ? '解除锁定' : '锁定'}。`, 'success')
+    setStageLog(`${shotLabel(shotId)} 已${shot.locked ? '解除锁定' : '锁定'}，当前通道：${resolved.channel}。`, 'success')
   } catch (error: any) {
     markError(error?.message ?? error, '分镜锁定失败。')
     await refreshProjectAfterFailure()
@@ -1505,7 +1505,8 @@ onMounted(async () => {
     await loadProject(projectId)
   } catch (error: any) {
     pushRuntimeLog(`任务载入失败：${safeText(error?.message ?? error, '未知错误')}`, 'error')
-    void router.replace('/clone')
+    markError(error?.message ?? error, '任务载入失败。')
+    setStageLog('任务载入失败，请检查当前任务数据后重试。', 'error')
     return
   }
   timer = window.setInterval(() => {

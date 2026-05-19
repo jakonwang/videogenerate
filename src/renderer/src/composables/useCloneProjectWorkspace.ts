@@ -1,23 +1,25 @@
-import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
+import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
 import { useCloneProjectWorkspaceCompose } from './useCloneProjectWorkspace.compose'
 import { useCloneProjectWorkspaceMaterials } from './useCloneProjectWorkspace.materials'
 import { useCloneProjectWorkspaceProject } from './useCloneProjectWorkspace.project'
 import { useCloneProjectWorkspaceScript } from './useCloneProjectWorkspace.script'
 import { useCloneProjectWorkspaceStoryboard } from './useCloneProjectWorkspace.storyboard'
 import { useCloneProjectWorkspaceVideo } from './useCloneProjectWorkspace.video'
-import type {
-  CloneProjectLike,
-  UseCloneProjectWorkspaceOptions,
-} from './useCloneProjectWorkspace.shared'
+import type { CloneProjectLike, UseCloneProjectWorkspaceOptions } from './useCloneProjectWorkspace.shared'
 
 export type { CloneProjectLike, UseCloneProjectWorkspaceOptions } from './useCloneProjectWorkspace.shared'
 
 export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
   options: UseCloneProjectWorkspaceOptions<TProject>,
 ) {
-  const shotLabel = (shotId: string) => options.shotLabel?.(shotId) || `分镜 ${shotId}`
+  const resolvedOptions: UseCloneProjectWorkspaceOptions<TProject> = {
+    ...options,
+    getWorkspaceClient:
+      options.getWorkspaceClient ||
+      (async (projectId?: string) => await resolveCloneWorkspaceClient<TProject>(projectId)),
+  }
 
-  const projectLayer = useCloneProjectWorkspaceProject(options)
+  const projectLayer = useCloneProjectWorkspaceProject(resolvedOptions)
   const {
     applyProject,
     refreshCurrentProject,
@@ -28,20 +30,20 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     waitForStoryboardFrames,
   } = projectLayer
 
-  const materialsLayer = useCloneProjectWorkspaceMaterials(options, {
+  const materialsLayer = useCloneProjectWorkspaceMaterials(resolvedOptions, {
     applyProject,
     loadProject,
     refreshProjectAfterFailure,
   })
   const { pickReferenceVideo, bindProductImages, bindModelIdentity } = materialsLayer
 
-  const scriptLayer = useCloneProjectWorkspaceScript(options, {
+  const scriptLayer = useCloneProjectWorkspaceScript(resolvedOptions, {
     applyProject,
     refreshProjectAfterFailure,
   })
   const { createBlueprint, generateScriptVariants, selectScriptVariant } = scriptLayer
 
-  const storyboardLayer = useCloneProjectWorkspaceStoryboard(options, {
+  const storyboardLayer = useCloneProjectWorkspaceStoryboard(resolvedOptions, {
     applyProject,
     refreshProjectAfterFailure,
     waitForStoryboardFrames,
@@ -54,7 +56,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     regenerateStoryboardFrame,
   } = storyboardLayer
 
-  const videoLayer = useCloneProjectWorkspaceVideo(options, {
+  const videoLayer = useCloneProjectWorkspaceVideo(resolvedOptions, {
     applyProject,
     ensureCurrentProjectReady,
     refreshProjectAfterFailure,
@@ -69,7 +71,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     syncPendingShotVideos,
   } = videoLayer
 
-  const composeLayer = useCloneProjectWorkspaceCompose(options, {
+  const composeLayer = useCloneProjectWorkspaceCompose(resolvedOptions, {
     applyProject,
     ensureCurrentProjectReady,
     refreshProjectAfterFailure,

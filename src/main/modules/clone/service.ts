@@ -765,6 +765,8 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     id: project.id,
     title: ensureProjectTitle(project),
     description: String(project.description || '').trim() || undefined,
+    groupId: String(project.groupId || '').trim() || undefined,
+    groupName: String(project.groupName || '').trim() || undefined,
     archived: Boolean(project.archived ?? false),
     runMode: normalizeRunMode(project.runMode),
     createdAt: Number(project.createdAt || 0),
@@ -2236,6 +2238,7 @@ function toRenderableShot(shot: ShotSpec, project?: CloneProject | null) {
   const effective = getEffectiveShotState(shot, output)
   return {
     ...shot,
+    uploadedAssetPath: shot.uploadedAssetPath || effective.outputVideoPath || shot.generatedClipPath,
     generatedClipPath: effective.generatedClipPath || shot.generatedClipPath,
     generatedSource: (effective.generatedSource || shot.generatedSource) as ShotSpec['generatedSource'],
     generatedProvider: effective.generatedProvider || shot.generatedProvider,
@@ -4529,6 +4532,89 @@ export const cloneService = {
     return {
       project: saved,
       summary: buildProjectSummary(saved),
+    }
+  },
+
+  async listCloneGroups() {
+    const groups = await cloneRepo.listProjectGroups()
+    const summaries = await cloneRepo.listProjects()
+    const countByGroupId = new Map<string, number>()
+    let ungroupedCount = 0
+    for (const project of summaries) {
+      const groupId = String(project.groupId || '').trim()
+      if (!groupId) {
+        ungroupedCount += 1
+        continue
+      }
+      countByGroupId.set(groupId, Number(countByGroupId.get(groupId) || 0) + 1)
+    }
+    return groups.map((group) => ({
+      ...group,
+      taskCount: Number(countByGroupId.get(group.id) || 0),
+    })).concat([
+      {
+        id: '__ungrouped__',
+        name: '未分组',
+        createdAt: 0,
+        updatedAt: 0,
+        sortOrder: -1,
+        taskCount: ungroupedCount,
+      },
+    ])
+  },
+
+  async createCloneGroup(input: { name: string }) {
+    const name = String(input.name || '').trim()
+    if (!name) throw new Error('请输入分组名称')
+    const existing = await cloneRepo.listProjectGroups()
+    if (existing.some((item) => String(item.name || '').trim() === name)) {
+      throw new Error('分组名称已存在')
+    }
+    return await cloneRepo.createProjectGroup({ name })
+  },
+
+  async renameCloneGroup(input: { groupId: string; name: string }) {
+    const groupId = String(input.groupId || '').trim()
+    const name = String(input.name || '').trim()
+    if (!groupId) throw new Error('分组不存在')
+    if (!name) throw new Error('请输入分组名称')
+    const current = await cloneRepo.getProjectGroup(groupId)
+    if (!current) throw new Error('分组不存在')
+    const existing = await cloneRepo.listProjectGroups()
+    if (existing.some((item) => item.id !== groupId && String(item.name || '').trim() === name)) {
+      throw new Error('分组名称已存在')
+    }
+    return await cloneRepo.upsertProjectGroup({ ...current, name })
+  },
+
+  async removeCloneGroup(input: { groupId: string }) {
+    const groupId = String(input.groupId || '').trim()
+    if (!groupId) throw new Error('分组不存在')
+    const current = await cloneRepo.getProjectGroup(groupId)
+    if (!current) throw new Error('分组不存在')
+    return await cloneRepo.removeProjectGroup(groupId)
+  },
+
+  async assignCloneProjectsToGroup(input: { cloneProjectIds: string[]; groupId?: string }) {
+    const cloneProjectIds = Array.isArray(input.cloneProjectIds)
+      ? Array.from(new Set(input.cloneProjectIds.map((item) => String(item || '').trim()).filter(Boolean)))
+      : []
+    if (!cloneProjectIds.length) throw new Error('请选择要移动的任务')
+    const groupId = String(input.groupId || '').trim() || undefined
+    const group = groupId ? await cloneRepo.getProjectGroup(groupId) : null
+    if (groupId && !group) throw new Error('目标分组不存在')
+    const updated: Array<{ project: any; summary: any }> = []
+    for (const cloneProjectId of cloneProjectIds) {
+      const project = await cloneRepo.getProject(cloneProjectId)
+      if (!project) continue
+      project.groupId = group?.id
+      project.groupName = group?.name
+      const saved = await cloneRepo.upsertProject(project)
+      updated.push({ project: saved, summary: buildProjectSummary(saved) })
+    }
+    return {
+      group: group ?? undefined,
+      updated,
     }
   },
 

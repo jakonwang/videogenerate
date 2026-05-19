@@ -67,6 +67,8 @@ export type CloneProjectSummary = {
   id: string
   title: string
   description?: string
+  groupId?: string
+  groupName?: string
   archived?: boolean
   status: string
   runMode: 'auto' | 'manual'

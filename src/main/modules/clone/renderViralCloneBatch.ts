@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { getFfmpegExecutable } from '../../lib/binariesPath'
+import { getFfmpegExecutable, getFfprobeExecutable } from '../../lib/binariesPath'
 import type { ShotSpec } from './types'
 
 type FinalComposeClipMode = 'reference_trim' | 'smart_middle_tail' | 'full_generated_clip'
@@ -25,8 +25,7 @@ async function run(args: string[]) {
 }
 
 async function probeDurationSec(src: string) {
-  const ffmpeg = getFfmpegExecutable()
-  const ffprobe = ffmpeg.toLowerCase().includes('ffmpeg') ? ffmpeg.replace(/ffmpeg(\.exe)?$/i, 'ffprobe$1') : 'ffprobe'
+  const ffprobe = getFfprobeExecutable()
   return await new Promise<number>((resolve, reject) => {
     const args = ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', src]
     let stdout = ''

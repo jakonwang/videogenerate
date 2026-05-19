@@ -869,6 +869,8 @@ export type CloneProject = {
   assetStorageProvider?: 'local_fs' | 'qiniu' | 'web_object_storage'
   title?: string
   description?: string
+  groupId?: string
+  groupName?: string
   archived?: boolean
   status: CloneProjectStatus
   runMode: CloneRunMode
@@ -929,10 +931,20 @@ export type CloneProject = {
   }
 }
 
+export type CloneProjectGroup = {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  sortOrder: number
+}
+
 export type CloneProjectSummary = {
   id: string
   title: string
   description?: string
+  groupId?: string
+  groupName?: string
   archived?: boolean
   status: CloneProjectStatus | ClonePreviewPipelineStatus['status'] | string
   runMode: CloneRunMode

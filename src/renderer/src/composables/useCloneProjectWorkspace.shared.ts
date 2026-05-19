@@ -1,8 +1,10 @@
 import type { Ref } from 'vue'
+import type { CloneWorkspaceClient } from '../../../shared/clone-workspace/client'
 
 export type CloneProjectLike = {
   id: string
   referenceVideoPath: string
+  productReferenceImagePaths?: string[]
   storyboardFrames?: Array<{ shotId: string }>
   workflowV2?: { currentStep?: string }
   shotVideoOutputs?: Array<{ shotId: string; taskId?: string; videoPath?: string; status?: string; error?: string; retryCount?: number }>
@@ -70,6 +72,11 @@ export type UseCloneProjectWorkspaceOptions<TProject extends CloneProjectLike> =
   getFinalOutputPath?: () => string
   setStageLog?: (message: string, level?: 'info' | 'success' | 'error') => void
   pushRuntimeLog?: (message: string, level?: 'info' | 'success' | 'error') => void
+  getWorkspaceClient?: (projectId?: string) => Promise<{
+    client: CloneWorkspaceClient<TProject>
+    ownership: 'web' | 'local' | 'unknown'
+    channel: 'web-api' | 'electron-ipc'
+  }>
 }
 
 export type StoryboardGenerateResponse<TProject extends CloneProjectLike> = {
@@ -92,6 +99,11 @@ export type ShotVideoSyncResponse<TProject extends CloneProjectLike> = {
 
 export function extractProjectProductRefs<TProject extends CloneProjectLike>(project: TProject | null) {
   if (!project) return []
+  const asArray = <TItem>(value: TItem[] | null | undefined): TItem[] => (Array.isArray(value) ? value : [])
+  const rootRefs = Array.isArray(project.productReferenceImagePaths)
+    ? project.productReferenceImagePaths.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+  if (rootRefs.length) return Array.from(new Set(rootRefs)).slice(0, 9)
   const savedRefs = Array.isArray(project.baseBlueprint?.consistencyAssets?.productReferenceImages)
     ? project.baseBlueprint?.consistencyAssets?.productReferenceImages
         .map((item) => String(item || '').trim())
@@ -100,16 +112,16 @@ export function extractProjectProductRefs<TProject extends CloneProjectLike>(pro
   if (savedRefs.length) return Array.from(new Set(savedRefs)).slice(0, 9)
   const refs = new Set<string>()
   const shotGroups = [
-    ...(project.blueprint?.shots ?? []),
-    ...(project.baseBlueprint?.shots ?? []),
+    ...asArray(project.blueprint?.shots),
+    ...asArray(project.baseBlueprint?.shots),
   ]
   for (const shot of shotGroups) {
-    for (const item of shot.productReferenceImagePaths ?? []) {
+    for (const item of asArray(shot.productReferenceImagePaths)) {
       const text = String(item || '').trim()
       if (text) refs.add(text)
     }
   }
-  for (const item of project.baseBlueprint?.consistencyAssets?.productReferenceImages ?? []) {
+  for (const item of asArray(project.baseBlueprint?.consistencyAssets?.productReferenceImages)) {
     const text = String(item || '').trim()
     if (text) refs.add(text)
   }
