@@ -1,7 +1,37 @@
 import type {
+  BatchSubtitleCaptionStyle,
+  BatchSubtitleExportEngine,
+  BatchSubtitleFontOption,
+  BatchSubtitleJob,
+  BatchSubtitleLayoutPolicy,
+  BatchSubtitleMode,
+  BatchSubtitleOutputItem,
+  BatchSubtitleOverlayImageConfig,
+  BatchSubtitlePreviewResult,
+  BatchSubtitleSourceEngine,
+  BatchSubtitleTrack,
+  BatchSubtitleSourceItem,
+  BatchSubtitleStyleConfig,
+  BatchSubtitleTitleItem,
+  BatchSubtitleTitleConfig,
+  BatchSubtitleTitleRenderMode,
   BillingOrder,
+  GeelarkCloudPhoneSummary,
+  GeelarkClonePublishCandidate,
+  GeelarkMusicPreset,
+  GeelarkPluginConfigPayload,
+  GeelarkPluginConfigSummary,
+  GeelarkPublishAccount,
+  GeelarkPublishTaskDetail,
+  GeelarkPublishTaskSummary,
+  PluginConfigPayload,
+  PluginDetail,
+  PluginSummary,
+  CloneModelIdentityCreateInput,
+  CloneModelCredentialsPayload,
   CloneModelIdentitySummary,
   CloneProjectSummary,
+  CloneRunMode,
   CloneRuntimeResponse,
   CloneWorkflowStep,
   DesktopReleaseInfo,
@@ -91,6 +121,19 @@ export function createWebApiClient(options: WebApiClientOptions) {
   }
 
   return {
+    async sendLoginCode(input: { phone: string; channel?: 'sms' }) {
+      return await request<{
+        ok: true
+        message: string
+        provider: 'mock' | 'console'
+        devCode?: string
+        expiresInSec: number
+      }>('/auth/send-code', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
     async login(input: { phone: string; code: string; displayName?: string }) {
       return await request<{
         token: string
@@ -129,7 +172,7 @@ export function createWebApiClient(options: WebApiClientOptions) {
     async createOrder(input: {
       type: 'subscription' | 'compute_pack'
       planId?: string
-      paymentChannel?: 'mock_wechat' | 'mock_alipay'
+      paymentChannel?: 'wechat_native' | 'alipay_native'
       credits?: number
     }) {
       return await request<{
@@ -139,9 +182,11 @@ export function createWebApiClient(options: WebApiClientOptions) {
           status: string
           type: 'subscription' | 'compute_pack'
         }
-        paymentMock: {
+        payment: {
+          provider: 'wechat_native' | 'alipay_native'
           payUrl: string
           qrText: string
+          reference: string
         }
       }>('/billing/orders', {
         method: 'POST',
@@ -149,9 +194,10 @@ export function createWebApiClient(options: WebApiClientOptions) {
       })
     },
 
-    async payMockOrder(orderId: string) {
+    async confirmOrderPayment(orderId: string, input: { paymentReference?: string }) {
       return await request(`/payments/notify/${encodeURIComponent(orderId)}`, {
         method: 'POST',
+        body: JSON.stringify(input),
       })
     },
 
@@ -176,6 +222,380 @@ export function createWebApiClient(options: WebApiClientOptions) {
       return result.projects || []
     },
 
+    async listPlugins() {
+      const result = await request<{ plugins: PluginSummary[] }>('/plugins', {
+        method: 'GET',
+      })
+      return result.plugins || []
+    },
+
+    async listInstalledPlugins() {
+      const result = await request<{ plugins: PluginSummary[] }>('/plugins/installed', {
+        method: 'GET',
+      })
+      return result.plugins || []
+    },
+
+    async getPlugin(pluginId: string) {
+      const result = await request<{ plugin: PluginDetail }>(`/plugins/${encodeURIComponent(pluginId)}`, {
+        method: 'GET',
+      })
+      return result.plugin
+    },
+
+    async installPlugin(pluginId: string) {
+      return await request<{ plugin: PluginDetail }>(`/plugins/${encodeURIComponent(pluginId)}/install`, {
+        method: 'POST',
+      })
+    },
+
+    async uninstallPlugin(pluginId: string) {
+      return await request<{ plugin: PluginDetail }>(`/plugins/${encodeURIComponent(pluginId)}/uninstall`, {
+        method: 'POST',
+      })
+    },
+
+    async enablePlugin(pluginId: string) {
+      return await request<{ plugin: PluginDetail }>(`/plugins/${encodeURIComponent(pluginId)}/enable`, {
+        method: 'POST',
+      })
+    },
+
+    async disablePlugin(pluginId: string) {
+      return await request<{ plugin: PluginDetail }>(`/plugins/${encodeURIComponent(pluginId)}/disable`, {
+        method: 'POST',
+      })
+    },
+
+    async setPluginConfig(pluginId: string, input: PluginConfigPayload) {
+      return await request<{ plugin: PluginDetail }>(`/plugins/${encodeURIComponent(pluginId)}/config`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
+    async getGeelarkPluginConfig() {
+      const result = await request<{ config: GeelarkPluginConfigSummary }>('/plugins/geelark-publisher/config', {
+        method: 'GET',
+      })
+      return result.config
+    },
+
+    async saveGeelarkPluginConfig(input: GeelarkPluginConfigPayload) {
+      const result = await request<{ config: GeelarkPluginConfigSummary }>('/plugins/geelark-publisher/config', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.config
+    },
+
+    async listGeelarkCloudPhones() {
+      const result = await request<{ items: GeelarkCloudPhoneSummary[] }>('/plugins/geelark-publisher/cloud-phones', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async listGeelarkPublisherAccounts() {
+      const result = await request<{ items: GeelarkPublishAccount[] }>('/plugins/geelark-publisher/accounts', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async listGeelarkPublishCandidates() {
+      const result = await request<{ items: GeelarkClonePublishCandidate[] }>(
+        '/plugins/geelark-publisher/publish-candidates',
+        {
+          method: 'GET',
+        },
+      )
+      return result.items || []
+    },
+
+    async listGeelarkMusicPresets() {
+      const result = await request<{ items: GeelarkMusicPreset[] }>('/plugins/geelark-publisher/music-presets', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async saveGeelarkMusicPreset(input: { id?: string; label: string; refVideoId: string; remark?: string }) {
+      const result = await request<{ item: GeelarkMusicPreset }>('/plugins/geelark-publisher/music-presets', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.item
+    },
+
+    async deleteGeelarkMusicPreset(id: string) {
+      return await request<{ ok: true }>(`/plugins/geelark-publisher/music-presets/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+    },
+
+    async generateGeelarkPublishTitle(input: {
+      cloneProjectId: string
+      contentLanguage?: string
+      productTitle?: string
+      productId?: string
+      productReferenceImagePaths?: string[]
+    }) {
+      return await request<{
+        candidates: string[]
+        content: string
+        provider: string
+        model: string
+      }>('/plugins/geelark-publisher/publish-title', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
+    async createGeelarkPublisherAccount(input: Omit<GeelarkPublishAccount, 'id' | 'createdAt' | 'updatedAt'>) {
+      const result = await request<{ item: GeelarkPublishAccount }>('/plugins/geelark-publisher/accounts', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.item
+    },
+
+    async updateGeelarkPublisherAccount(
+      id: string,
+      input: Partial<Omit<GeelarkPublishAccount, 'id' | 'createdAt' | 'updatedAt'>>,
+    ) {
+      const result = await request<{ item: GeelarkPublishAccount }>(
+        `/plugins/geelark-publisher/accounts/${encodeURIComponent(id)}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
+      )
+      return result.item
+    },
+
+    async deleteGeelarkPublisherAccount(id: string) {
+      return await request<{ ok: true }>(`/plugins/geelark-publisher/accounts/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+    },
+
+    async publishGeelarkVideo(input: {
+      cloneProjectId?: string
+      videoPath: string
+      publishAccountId: string
+      videoDesc?: string
+      productId?: string
+      productTitle?: string
+      refVideoId?: string
+      sameVideoVolume?: number
+      sourceVideoVolume?: number
+      markAI?: boolean
+      musicMode?: 'library_ref' | 'manual_ref' | 'volume_only'
+      musicLabel?: string
+      scheduleAt?: number
+      needShareLink?: boolean
+    }) {
+      const result = await request<{ item: GeelarkPublishTaskDetail }>('/plugins/geelark-publisher/publish', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.item
+    },
+
+    async listGeelarkPublishTasks() {
+      const result = await request<{ items: GeelarkPublishTaskSummary[] }>('/plugins/geelark-publisher/tasks', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async getGeelarkPublishTask(id: string) {
+      const result = await request<{ item: GeelarkPublishTaskDetail }>(
+        `/plugins/geelark-publisher/tasks/${encodeURIComponent(id)}`,
+        { method: 'GET' },
+      )
+      return result.item
+    },
+
+    async syncGeelarkPublishTask(id: string) {
+      const result = await request<{ item: GeelarkPublishTaskDetail }>(
+        `/plugins/geelark-publisher/tasks/${encodeURIComponent(id)}/sync`,
+        { method: 'POST' },
+      )
+      return result.item
+    },
+
+    async listBatchSubtitleJobs() {
+      const result = await request<{ items: BatchSubtitleJob[] }>('/plugins/video-batch-subtitle/jobs', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async createBatchSubtitleJob(input: {
+      name: string
+      sourceItems: BatchSubtitleSourceItem[]
+      subtitleMode?: BatchSubtitleMode
+      subtitleSource?: BatchSubtitleSourceEngine
+      exportEngine?: BatchSubtitleExportEngine
+      titleRenderMode?: BatchSubtitleTitleRenderMode
+      titleConfig?: Partial<BatchSubtitleTitleConfig>
+      titleItems?: BatchSubtitleTitleItem[]
+      overlayImageConfig?: Partial<BatchSubtitleOverlayImageConfig>
+      styleConfig?: Partial<BatchSubtitleStyleConfig>
+      captionStyle?: Partial<BatchSubtitleCaptionStyle>
+      layoutPolicy?: Partial<BatchSubtitleLayoutPolicy>
+    }) {
+      const result = await request<{ item: BatchSubtitleJob }>('/plugins/video-batch-subtitle/jobs', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.item
+    },
+
+    async updateBatchSubtitleDraft(
+      jobId: string,
+      input: Partial<{
+        name: string
+        sourceItems: BatchSubtitleSourceItem[]
+        subtitleMode: BatchSubtitleMode
+        subtitleSource: BatchSubtitleSourceEngine
+        exportEngine: BatchSubtitleExportEngine
+        titleRenderMode: BatchSubtitleTitleRenderMode
+        titleConfig: Partial<BatchSubtitleTitleConfig>
+        titleItems: BatchSubtitleTitleItem[]
+        overlayImageConfig: Partial<BatchSubtitleOverlayImageConfig>
+        styleConfig: Partial<BatchSubtitleStyleConfig>
+        captionStyle: Partial<BatchSubtitleCaptionStyle>
+        layoutPolicy: Partial<BatchSubtitleLayoutPolicy>
+        subtitleTracks: BatchSubtitleTrack[]
+        capcutDraft: BatchSubtitleJob['capcutDraft']
+      }>,
+    ) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
+      )
+      return result.item
+    },
+
+    async runBatchSubtitleJob(jobId: string) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/run`,
+        {
+          method: 'POST',
+        },
+      )
+      return result.item
+    },
+
+    async pauseBatchSubtitleJob(jobId: string) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/pause`,
+        {
+          method: 'POST',
+        },
+      )
+      return result.item
+    },
+
+    async resumeBatchSubtitleJob(jobId: string, input?: { retryFailedOnly?: boolean }) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/resume`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input || {}),
+        },
+      )
+      return result.item
+    },
+
+    async transcribeBatchSubtitleJob(jobId: string, input?: { sourceItemId?: string }) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/asr`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input || {}),
+        },
+      )
+      return result.item
+    },
+
+    async exportBatchSubtitleJobWithCapcut(jobId: string) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/export-capcut`,
+        {
+          method: 'POST',
+        },
+      )
+      return result.item
+    },
+
+    async listBatchSubtitleOutputs() {
+      const result = await request<{ items: BatchSubtitleOutputItem[] }>('/plugins/video-batch-subtitle/outputs', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async previewBatchSubtitleFrame(input: {
+      sourceItem: BatchSubtitleSourceItem
+      titleConfig: BatchSubtitleTitleConfig
+      titleItems?: BatchSubtitleTitleItem[]
+      titleRenderMode?: BatchSubtitleTitleRenderMode
+      overlayImageConfig?: BatchSubtitleOverlayImageConfig
+      styleConfig: BatchSubtitleStyleConfig
+      subtitleMode?: BatchSubtitleMode
+      captionStyle?: BatchSubtitleCaptionStyle
+      layoutPolicy?: BatchSubtitleLayoutPolicy
+      subtitleTrack?: BatchSubtitleTrack
+      previewAtSec?: number
+      includeVideo?: boolean
+    }) {
+      const result = await request<{ item: BatchSubtitlePreviewResult }>('/plugins/video-batch-subtitle/preview-frame', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.item
+    },
+
+    async reflowBatchSubtitleJob(jobId: string, input?: { sourceItemId?: string }) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/reflow`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input || {}),
+        },
+      )
+      return result.item
+    },
+
+    async pushBatchSubtitleOutputsToGeelarkPool(jobId: string) {
+      const result = await request<{ item: BatchSubtitleJob }>(
+        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/push-to-geelark`,
+        {
+          method: 'POST',
+        },
+      )
+      return result.item
+    },
+
+    async generateBatchSubtitleTitles(input: { prompt: string; count?: number; contentLanguage?: string }) {
+      return await request<{
+        titles: string[]
+        content: string
+        provider: string
+        model: string
+      }>('/plugins/video-batch-subtitle/generate-titles', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
     async listCloneModelIdentities() {
       const result = await request<{ items: CloneModelIdentitySummary[] }>('/clone/model-identities', {
         method: 'GET',
@@ -183,10 +603,35 @@ export function createWebApiClient(options: WebApiClientOptions) {
       return result.items || []
     },
 
+    async createCloneModelIdentity(input: CloneModelIdentityCreateInput) {
+      return await request<{
+        project?: { id: string; selectedModelIdentityId?: string }
+        model?: CloneModelIdentitySummary
+      }>('/clone/model-identities', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
+    async getCloneModelCredentials() {
+      const result = await request<{ credentials: CloneModelCredentialsPayload }>('/clone/model-credentials', {
+        method: 'GET',
+      })
+      return result.credentials
+    },
+
+    async setCloneModelCredentials(input: CloneModelCredentialsPayload) {
+      return await request<{ ok: true; credentials: CloneModelCredentialsPayload }>('/clone/model-credentials', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
     async createCloneProject(input?: {
       title?: string
       description?: string
       locale?: 'zh-CN' | 'vi-VN'
+      runMode?: CloneRunMode
     }) {
       return await request<{
         project: { id: string }
@@ -376,6 +821,47 @@ export function createWebApiClient(options: WebApiClientOptions) {
           method: 'POST',
         },
       )
+    },
+
+    async getCloneShotConsistencyReport(projectId: string, shotId: string) {
+      return await request<any>(
+        `/clone/projects/${encodeURIComponent(projectId)}/shot-videos/${encodeURIComponent(shotId)}/consistency`,
+      )
+    },
+
+    async getCloneShotImagePromptPreview(projectId: string, shotId: string) {
+      return await request<any>(
+        `/clone/projects/${encodeURIComponent(projectId)}/shot-videos/${encodeURIComponent(shotId)}/image-prompt-preview`,
+      )
+    },
+
+    async recompileCloneShotConsistency(projectId: string, shotId: string) {
+      return await request<any>(
+        `/clone/projects/${encodeURIComponent(projectId)}/shot-videos/${encodeURIComponent(shotId)}/consistency/recompile`,
+        {
+          method: 'POST',
+        },
+      )
+    },
+
+    async listCloneShotConsistencyAnchors(projectId: string, shotId: string) {
+      return await request<any>(
+        `/clone/projects/${encodeURIComponent(projectId)}/shot-videos/${encodeURIComponent(shotId)}/consistency/anchors`,
+      )
+    },
+
+    async listCloneShotConsistencyPatches(projectId: string, shotId: string) {
+      return await request<any>(
+        `/clone/projects/${encodeURIComponent(projectId)}/shot-videos/${encodeURIComponent(shotId)}/consistency/patches`,
+      )
+    },
+
+    async getCloneShotConsistencyAnchors(projectId: string, shotId: string) {
+      return await this.listCloneShotConsistencyAnchors(projectId, shotId)
+    },
+
+    async getCloneShotConsistencyPatches(projectId: string, shotId: string) {
+      return await this.listCloneShotConsistencyPatches(projectId, shotId)
     },
 
     async composeCloneFinalVideo(projectId: string, input?: { outputDir?: string }) {

@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { CloneRunMode } from '@shared/web-api/types'
 import {
   ChevronLeft,
   ChevronRight,
@@ -18,12 +19,14 @@ import {
 import { useRouter } from 'next/navigation'
 
 import { AppShell } from '@/components/app/app-shell'
-import { ErrorState, LoadingState } from '@/components/app/page-state'
+import { EmptyState, ErrorState, LoadingState } from '@/components/app/page-state'
 import { ProtectedPageGate } from '@/components/app/protected-page-gate'
 import { Button } from '@/components/ui/button'
+import { RunModeDialog } from '@/components/clone/run-mode-dialog'
 import { useAuthGuard } from '@/hooks/use-auth-guard'
 import { apiClient } from '@/lib/api-client'
-import { cn, formatDateTime } from '@/lib/utils'
+import { readAppSettings } from '@/lib/app-settings'
+import { cn, formatDateTime, toPreviewSrc } from '@/lib/utils'
 
 type CloneModelIdentitySummary = {
   id: string
@@ -33,6 +36,13 @@ type CloneModelIdentitySummary = {
   coverImagePath?: string
   imagePaths: string[]
   description: string
+  updatedAt: number
+}
+
+type CloneProjectSummary = {
+  id: string
+  title: string
+  referenceVideoName: string
   updatedAt: number
 }
 
@@ -93,88 +103,13 @@ const SCENE_POOL = [
   ['知识分享', '教学', '讲解'],
 ]
 
-const EMPTY_MODELS: CloneModelIdentitySummary[] = [
-  {
-    id: 'model_001',
-    name: '清甜小夏',
-    status: 'done',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '清新自然的邻家女孩形象，笑容甜美，气质温柔，适合穿搭、美妆、生活分享与产品展示内容。',
-    updatedAt: Date.now() - 1000 * 60 * 18,
-  },
-  {
-    id: 'model_002',
-    name: '都市丽人-林薇',
-    status: 'done',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适合高级感都市风、职场风和品牌展示内容，镜头表现稳定，适配成熟消费品类。',
-    updatedAt: Date.now() - 1000 * 60 * 43,
-  },
-  {
-    id: 'model_003',
-    name: '气质御姐-思恩',
-    status: 'idle',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适用于成熟质感表达、轻奢商品展示与电商短视频场景，风格利落克制。',
-    updatedAt: Date.now() - 1000 * 60 * 95,
-  },
-  {
-    id: 'model_004',
-    name: '阳光活力-小雨',
-    status: 'done',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适合运动、活力街拍和年轻消费品的内容表达，情绪明快，适合户外光感场景。',
-    updatedAt: Date.now() - 1000 * 60 * 132,
-  },
-  {
-    id: 'model_005',
-    name: '温柔治愈-安安',
-    status: 'idle',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适合生活方式、治愈感口播和轻家居内容，画面氛围柔和自然。',
-    updatedAt: Date.now() - 1000 * 60 * 205,
-  },
-  {
-    id: 'model_006',
-    name: '复古港风-曼妮',
-    status: 'done',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适合复古服饰、美妆和高级感商品展示，人物辨识度较高。',
-    updatedAt: Date.now() - 1000 * 60 * 268,
-  },
-  {
-    id: 'model_007',
-    name: '甜酷女孩-小K',
-    status: 'idle',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适合个性潮流、街头穿搭与年轻品牌表达，镜头冲击力较强。',
-    updatedAt: Date.now() - 1000 * 60 * 320,
-  },
-  {
-    id: 'model_008',
-    name: '知性老师-林老师',
-    status: 'done',
-    productType: 'general',
-    coverImagePath: '',
-    imagePaths: [],
-    description: '适合知识讲解、专业口播、教育内容和成熟产品说明。',
-    updatedAt: Date.now() - 1000 * 60 * 362,
-  },
-]
+const PRODUCT_TYPE_LABELS: Record<CloneModelIdentitySummary['productType'], string> = {
+  earrings: '饰品耳饰',
+  phone_case: '手机壳',
+  clothes: '服饰穿搭',
+  toy: '玩具潮玩',
+  general: '通用商业',
+}
 
 function fallbackCover(index: number) {
   const seed = [
@@ -197,15 +132,16 @@ function enrichModel(model: CloneModelIdentitySummary, index: number): EnrichedM
   const age = 20 + (index % 7) * 2
   const height = 158 + (index % 7) * 2
   const weight = 42 + (index % 5) * 3
-  const cover = String(model.coverImagePath || model.imagePaths?.[0] || '').trim() || fallbackCover(index)
-  const samples = (model.imagePaths?.length ? model.imagePaths : [cover])
-    .concat(Array.from({ length: 4 }).map((_, sampleIndex) => fallbackCover(index + sampleIndex)))
-    .slice(0, 4)
+  const cover = toPreviewSrc(String(model.coverImagePath || model.imagePaths?.[0] || '').trim()) || fallbackCover(index)
+  const rawSamples = (model.imagePaths?.length ? model.imagePaths : [model.coverImagePath || ''])
+    .map((item) => toPreviewSrc(item))
+    .filter(Boolean)
+  const samples = rawSamples.concat(Array.from({ length: 4 }).map((_, sampleIndex) => fallbackCover(index + sampleIndex))).slice(0, 4)
 
   return {
     ...model,
     coverImagePath: cover,
-    imagePaths: model.imagePaths?.length ? model.imagePaths : [cover],
+    imagePaths: rawSamples.length ? rawSamples : [cover],
     market: index % 2 === 0 ? '162cm' : '168cm',
     gender: '女',
     age,
@@ -222,12 +158,22 @@ function enrichModel(model: CloneModelIdentitySummary, index: number): EnrichedM
 }
 
 function modelCover(model: CloneModelIdentitySummary | EnrichedModel) {
-  return String(model.coverImagePath || model.imagePaths?.[0] || '').trim()
+  return toPreviewSrc(String(model.coverImagePath || model.imagePaths?.[0] || '').trim())
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('文件读取失败'))
+    reader.readAsDataURL(file)
+  })
 }
 
 export default function ModelsPage() {
   const router = useRouter()
   const auth = useAuthGuard()
+  const queryClient = useQueryClient()
 
   const [activeTab, setActiveTab] = useState<ModelTabKey>('all')
   const [viewMode, setViewMode] = useState<ModelViewMode>('grid')
@@ -238,28 +184,165 @@ export default function ModelsPage() {
   const [languageFilter, setLanguageFilter] = useState('支持语言')
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createProjectId, setCreateProjectId] = useState('')
+  const [createProductType, setCreateProductType] = useState<CloneModelIdentitySummary['productType']>('general')
+  const [createProductPoints, setCreateProductPoints] = useState('')
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([])
+  const [createError, setCreateError] = useState('')
+  const [runModeOpen, setRunModeOpen] = useState(false)
+  const [selectedRunMode, setSelectedRunMode] = useState<CloneRunMode | null>(null)
+  const [pendingProjectModel, setPendingProjectModel] = useState<EnrichedModel | null>(null)
 
   const modelsQuery = useQuery({
     queryKey: ['clone-models'],
     queryFn: () => apiClient.listCloneModelIdentities(),
   })
 
-  const createMutation = useMutation({
-    mutationFn: (model: EnrichedModel) =>
-      apiClient.createCloneProject({
+  const projectsQuery = useQuery({
+    queryKey: ['clone-projects'],
+    queryFn: () => apiClient.listCloneProjects(),
+  })
+
+  useEffect(() => {
+    if (!createProjectId && projectsQuery.data?.[0]?.id) {
+      setCreateProjectId(projectsQuery.data[0].id)
+    }
+  }, [createProjectId, projectsQuery.data])
+
+  const imageSettings = useMemo(() => {
+    const settings = readAppSettings()
+    const image = settings.modelConfig.image
+    const providerRaw = String(image.provider || '').trim().toLowerCase()
+    const provider =
+      providerRaw === 'openai'
+        ? 'openai'
+        : providerRaw === 'kling' || providerRaw === 'atlascloud'
+          ? 'kling'
+          : providerRaw === 'grs.ai' || providerRaw === 'grsai'
+            ? 'grsai'
+            : providerRaw === 'vectorengine'
+              ? 'apifox_hub'
+            : 'apifox_hub'
+
+    return {
+      provider,
+      host: String(image.host || '').trim(),
+      apiKey: String(image.apiKey || '').trim(),
+      model: String(image.model || '').trim(),
+    } as const
+  }, [createOpen])
+
+  const createProjectMutation = useMutation({
+    mutationFn: (input: { model: EnrichedModel; runMode: CloneRunMode }) => { const model = input.model; return apiClient.createCloneProject({
         title: `${model.name} 复刻任务`,
-        description: model.description || '',
+        description: input.model.description || '',
         locale: 'zh-CN',
-      }),
-    onSuccess: (result, model) => {
-      if (result.project?.id) router.push(`/clone/${result.project.id}?prefillModel=${model.id}`)
+        runMode: input.runMode,
+      }) },
+    onSuccess: (result, input) => {
+      if (result.project?.id) router.push(`/clone/${result.project.id}?prefillModel=${input.model.id}`)
+    },
+  })
+
+  const requestCreateProject = (model: EnrichedModel) => {
+    setPendingProjectModel(model)
+    setRunModeOpen(true)
+  }
+
+  const confirmCreateProject = () => {
+    if (!selectedRunMode || !pendingProjectModel) return
+    createProjectMutation.mutate(
+      {
+        model: pendingProjectModel,
+        runMode: selectedRunMode,
+      },
+      {
+        onSettled: () => {
+          setRunModeOpen(false)
+          setSelectedRunMode(null)
+          setPendingProjectModel(null)
+        },
+      },
+    )
+  }
+
+  const createModelMutation = useMutation({
+    mutationFn: async () => {
+      const files = await Promise.all(
+        referenceFiles.map(async (file) => {
+          const dataUrl = await readFileAsDataUrl(file)
+          return {
+            fileName: file.name,
+            base64Data: dataUrl,
+            mimeType: file.type || 'image/png',
+          }
+        }),
+      )
+
+      let uploadedPaths: string[] = []
+      if (files.length) {
+        const uploadResult = await apiClient.uploadCloneProductImages(createProjectId, { files })
+        uploadedPaths = Array.isArray(uploadResult.assets) ? uploadResult.assets.map((item: any) => String(item.filePath || '').trim()).filter(Boolean) : []
+      }
+
+      return await apiClient.createCloneModelIdentity({
+        cloneProjectId: createProjectId,
+        productType: createProductType,
+        productPoints: createProductPoints.trim() || undefined,
+        productReferenceImagePaths: uploadedPaths,
+        imageProviderPrimary: imageSettings.provider,
+        openaiApiKey: imageSettings.provider === 'openai' ? imageSettings.apiKey || undefined : undefined,
+        openaiImageModel: imageSettings.provider === 'openai' ? imageSettings.model || 'gpt-image-2' : undefined,
+        openaiImageQuality: imageSettings.provider === 'openai' ? 'high' : undefined,
+        klingApiKey: imageSettings.provider === 'kling' ? imageSettings.apiKey || undefined : undefined,
+        klingHost: imageSettings.provider === 'kling' ? imageSettings.host || undefined : undefined,
+        klingImageModel: imageSettings.provider === 'kling' ? imageSettings.model || undefined : undefined,
+        grsaiApiKey: imageSettings.provider === 'grsai' ? imageSettings.apiKey || undefined : undefined,
+        grsaiHost: imageSettings.provider === 'grsai' ? imageSettings.host || undefined : undefined,
+        grsaiImageModel: imageSettings.provider === 'grsai' ? imageSettings.model || undefined : undefined,
+        apifoxHub:
+          imageSettings.provider === 'apifox_hub'
+            ? {
+                enabled: true,
+                baseUrl: imageSettings.host || undefined,
+                apiKey: imageSettings.apiKey || undefined,
+                imageModel: imageSettings.model || undefined,
+              }
+            : undefined,
+      })
+    },
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['clone-models'] }),
+        queryClient.invalidateQueries({ queryKey: ['clone-projects'] }),
+      ])
+      setCreateOpen(false)
+      setCreateProductPoints('')
+      setReferenceFiles([])
+      setCreateError('')
+      if (result.model?.id) {
+        setSelectedId(result.model.id)
+      }
+    },
+    onError: (error: Error) => {
+      setCreateError(error.message)
     },
   })
 
   const models = useMemo(() => {
-    const source = modelsQuery.data?.length ? modelsQuery.data : EMPTY_MODELS
+    const source = modelsQuery.data || []
     return source.map((item, index) => enrichModel(item, index))
   }, [modelsQuery.data])
+
+  const projects = useMemo(() => {
+    return (projectsQuery.data || []).map((item) => ({
+      id: item.id,
+      title: item.title || item.referenceVideoName || item.id,
+      referenceVideoName: item.referenceVideoName || '',
+      updatedAt: item.updatedAt,
+    })) as CloneProjectSummary[]
+  }, [projectsQuery.data])
 
   const tabCounts = useMemo(
     () => ({
@@ -322,23 +405,41 @@ export default function ModelsPage() {
 
   return (
     <AppShell sidebarContent={null}>
+      <RunModeDialog
+        open={runModeOpen}
+        creating={createProjectMutation.isPending}
+        selectedMode={selectedRunMode}
+        title="选择模特任务运行模式"
+        description="从模特库创建复刻任务时必须先选择运行模式。自动运行会自动推进并在最终成片前执行硬门禁。"
+        onSelect={setSelectedRunMode}
+        onCancel={() => {
+          if (createProjectMutation.isPending) return
+          setRunModeOpen(false)
+          setSelectedRunMode(null)
+          setPendingProjectModel(null)
+        }}
+        onConfirm={confirmCreateProject}
+      />
       <div className="page-shell page-shell--fixed models-page-shell">
         <section className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_344px]">
           <div className="panel grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3.5 px-5 py-4 models-catalog-panel">
             <div className="flex items-start justify-between gap-4">
               <div className="grid gap-2">
                 <h1 className="page-title text-[28px] leading-none tracking-[-0.04em]">模特库</h1>
-                <p className="body-copy max-w-3xl text-[14px]">
-                  管理你的 AI 数字模特，支持形象筛选、声音克隆和场景适配。
-                </p>
+                <p className="body-copy max-w-3xl text-[14px]">管理你的 AI 数字模特，支持形象筛选、真实数据查询和直接发起新模特生成。</p>
               </div>
 
               <div className="flex items-center gap-3">
-                <Button variant="secondary">
+                <Button variant="secondary" onClick={() => setCreateOpen(true)}>
                   <Upload className="h-4 w-4" />
-                  导入模特
+                  导入商品图
                 </Button>
-                <Button>
+                <Button
+                  onClick={() => {
+                    setCreateError('')
+                    setCreateOpen(true)
+                  }}
+                >
                   <Plus className="h-4 w-4" />
                   创建模特
                 </Button>
@@ -411,81 +512,91 @@ export default function ModelsPage() {
             </div>
 
             <div className="min-h-0 overflow-auto pr-1 rail-scroll">
-              {modelsQuery.isPending ? (
-                <LoadingState compact title="正在同步模特库" description="先展示本地预览数据，接口返回后会自动刷新模特列表。" />
-              ) : null}
+              {modelsQuery.isPending ? <LoadingState compact title="正在同步模特库" description="正在从真实接口读取模特数据。" /> : null}
 
               {modelsQuery.isError ? (
                 <ErrorState
                   compact
                   title="模特数据暂时不可用"
-                  description={modelsQuery.error instanceof Error ? `${modelsQuery.error.message}，当前已回退到本地预览数据。` : '当前无法读取在线模特数据，已回退到本地预览数据。'}
+                  description={modelsQuery.error instanceof Error ? modelsQuery.error.message : '当前无法读取在线模特数据。'}
                   onRetry={() => void modelsQuery.refetch()}
                 />
               ) : null}
 
-              <div className={cn('models-grid', viewMode === 'grid' ? 'is-grid' : 'is-list')}>
-                {pagedModels.map((model) => {
-                  const selected = selectedModel?.id === model.id
-                  const statusMeta = STATUS_META[model.status]
-                  return (
-                    <button
-                      key={model.id}
-                      type="button"
-                      onClick={() => setSelectedId(model.id)}
-                      className={cn('models-card', selected && 'is-selected', viewMode === 'list' && 'is-list')}
-                    >
-                      <div className="models-card__media">
-                        {modelCover(model) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={modelCover(model)} alt={model.name} className="models-card__image" />
-                        ) : (
-                          <div className="models-card__image models-card__image--empty">
-                            <ImageIcon className="h-7 w-7" />
-                          </div>
-                        )}
+              {!modelsQuery.isPending && !modelsQuery.isError && !filteredModels.length ? (
+                <EmptyState
+                  compact
+                  title="还没有模特"
+                  description="当前账号下暂无可用模特。先选择一个复刻项目并上传商品图，再创建第一位模特。"
+                  actionLabel="创建模特"
+                  onAction={() => setCreateOpen(true)}
+                />
+              ) : null}
 
-                        <div className="models-card__overlay-top">
-                          {model.badge ? <span className="models-card__badge">{model.badge}</span> : <span />}
-                          <span className="models-card__fav">
-                            <Heart className={cn('h-4 w-4', model.favorite && 'fill-current')} />
-                          </span>
-                        </div>
+              {!!pagedModels.length ? (
+                <div className={cn('models-grid', viewMode === 'grid' ? 'is-grid' : 'is-list')}>
+                  {pagedModels.map((model) => {
+                    const selected = selectedModel?.id === model.id
+                    const statusMeta = STATUS_META[model.status]
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => setSelectedId(model.id)}
+                        className={cn('models-card', selected && 'is-selected', viewMode === 'list' && 'is-list')}
+                      >
+                        <div className="models-card__media">
+                          {modelCover(model) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={modelCover(model)} alt={model.name} className="models-card__image" />
+                          ) : (
+                            <div className="models-card__image models-card__image--empty">
+                              <ImageIcon className="h-7 w-7" />
+                            </div>
+                          )}
 
-                        <div className="models-card__overlay-bottom">
-                          <span className={cn('models-card__status', statusMeta.tone)}>{statusMeta.label}</span>
-                          <span className="grid h-10 w-10 place-items-center rounded-full bg-black/36 text-white">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="models-card__body">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <strong className="truncate text-[17px] font-semibold text-[var(--text-main)]">{model.name}</strong>
-                            <span className="models-card__pro">Pro</span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {model.styleTags.map((tag) => (
-                            <span key={tag} className="models-card__chip">
-                              {tag}
+                          <div className="models-card__overlay-top">
+                            {model.badge ? <span className="models-card__badge">{model.badge}</span> : <span />}
+                            <span className="models-card__fav">
+                              <Heart className={cn('h-4 w-4', model.favorite && 'fill-current')} />
                             </span>
-                          ))}
+                          </div>
+
+                          <div className="models-card__overlay-bottom">
+                            <span className={cn('models-card__status', statusMeta.tone)}>{statusMeta.label}</span>
+                            <span className="grid h-10 w-10 place-items-center rounded-full bg-black/36 text-white">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="text-[13px] text-[var(--text-secondary)]">
-                          {model.ageLabel} ｜ {model.height} ｜ {model.weight}
-                        </div>
+                        <div className="models-card__body">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <strong className="truncate text-[17px] font-semibold text-[var(--text-main)]">{model.name}</strong>
+                              <span className="models-card__pro">Pro</span>
+                            </div>
+                          </div>
 
-                        <div className="text-[13px] text-[var(--text-secondary)]">支持语言：{model.languages.join('、')}</div>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+                          <div className="flex flex-wrap gap-2">
+                            {model.styleTags.map((tag) => (
+                              <span key={tag} className="models-card__chip">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="text-[13px] text-[var(--text-secondary)]">
+                            {model.ageLabel} · {model.height} · {model.weight}
+                          </div>
+
+                          <div className="text-[13px] text-[var(--text-secondary)]">支持语言：{model.languages.join('、')}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
             </div>
 
             <div className="models-pager-row">
@@ -535,7 +646,7 @@ export default function ModelsPage() {
                       </div>
 
                       <div className="text-[13px] text-slate-400">
-                        {selectedModel.ageLabel} ｜ {selectedModel.height} ｜ {selectedModel.weight}
+                        {selectedModel.ageLabel} · {selectedModel.height} · {selectedModel.weight}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -553,10 +664,12 @@ export default function ModelsPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
-                    <Button onClick={() => createMutation.mutate(selectedModel)} disabled={createMutation.isPending}>
-                      {createMutation.isPending ? '创建中...' : '使用模特'}
+                    <Button onClick={() => requestCreateProject(selectedModel)} disabled={createProjectMutation.isPending}>
+                      {createProjectMutation.isPending ? '创建中...' : '使用模特'}
                     </Button>
-                    <Button variant="secondary">编辑信息</Button>
+                    <Button variant="secondary" onClick={() => setCreateOpen(true)}>
+                      继续生成
+                    </Button>
                   </div>
 
                   <div className="flex items-center justify-between gap-3">
@@ -577,14 +690,18 @@ export default function ModelsPage() {
                 <div className="min-h-0 overflow-auto pr-1 rail-scroll">
                   <div className="grid gap-6">
                     <section className="grid gap-3">
-                      <h3 className="text-base font-semibold text-[var(--text-main)]">基本信息</h3>
+                      <h3 className="text-base font-semibold text-[var(--text-main)]">基础信息</h3>
                       <DetailRow label="模特 ID" value={selectedModel.id} />
-                      <DetailRow label="创建时间" value={formatDateTime(selectedModel.updatedAt)} />
                       <DetailRow label="更新时间" value={formatDateTime(selectedModel.updatedAt)} />
+                      <DetailRow label="商品类型" value={PRODUCT_TYPE_LABELS[selectedModel.productType]} />
                       <DetailRow label="支持语言" value={selectedModel.languages.join('、')} />
                       <DetailRow label="适用场景" value={selectedModel.sceneTags.join('、')} />
                       <DetailRow label="授权类型" value="企业授权" />
-                      <DetailRow label="使用状态" value={selectedModel.status === 'done' ? '可用' : selectedModel.status === 'generating' ? '生成中' : '离线'} highlight={selectedModel.status === 'done'} />
+                      <DetailRow
+                        label="使用状态"
+                        value={selectedModel.status === 'done' ? '可用' : selectedModel.status === 'generating' ? '生成中' : selectedModel.status === 'failed' ? '失败' : '离线'}
+                        highlight={selectedModel.status === 'done'}
+                      />
                     </section>
 
                     <section className="grid gap-3">
@@ -595,13 +712,13 @@ export default function ModelsPage() {
                             {tag}
                           </span>
                         ))}
-                        <span className="models-detail-tag models-detail-tag--ghost">添加标签</span>
+                        <span className="models-detail-tag models-detail-tag--ghost">真实数据驱动</span>
                       </div>
                     </section>
 
                     <section className="grid gap-3">
                       <h3 className="text-base font-semibold text-[var(--text-main)]">简介</h3>
-                      <p className="text-sm leading-7 text-[var(--text-secondary)]">{selectedModel.description}</p>
+                      <p className="text-sm leading-7 text-[var(--text-secondary)]">{selectedModel.description || '暂无简介'}</p>
                     </section>
 
                     <section className="grid gap-3">
@@ -622,7 +739,189 @@ export default function ModelsPage() {
           </aside>
         </section>
       </div>
+
+      {createOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/60 px-4 py-8 backdrop-blur-sm">
+          <div className="mx-auto grid max-h-full w-full max-w-[920px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[28px] border border-white/10 bg-[#09111c] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-white/8 px-6 py-5">
+              <div className="grid gap-1.5">
+                <h2 className="text-[22px] font-semibold text-white">创建模特</h2>
+                <p className="text-sm text-slate-400">选择真实复刻项目、上传商品图并填写卖点，直接调用后端模特生成能力。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!createModelMutation.isPending) setCreateOpen(false)
+                }}
+                className="grid h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid min-h-0 gap-5 overflow-auto px-6 py-5 lg:grid-cols-[minmax(0,1.1fr)_320px]">
+              <div className="grid content-start gap-5">
+                <FieldBlock label="来源项目" required>
+                  <select
+                    value={createProjectId}
+                    onChange={(event) => setCreateProjectId(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none"
+                  >
+                    <option value="">请选择复刻项目</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </select>
+                </FieldBlock>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <FieldBlock label="商品类型">
+                    <select
+                      value={createProductType}
+                      onChange={(event) => setCreateProductType(event.target.value as CloneModelIdentitySummary['productType'])}
+                      className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none"
+                    >
+                      {Object.entries(PRODUCT_TYPE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldBlock>
+                </div>
+
+                <FieldBlock label="商品卖点">
+                  <textarea
+                    value={createProductPoints}
+                    onChange={(event) => setCreateProductPoints(event.target.value)}
+                    rows={5}
+                    placeholder="例如：珍珠耳饰、轻奢通勤、白领女性、近景口播、柔光电商场景。"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                  />
+                </FieldBlock>
+
+                <FieldBlock label="商品参考图" required>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    multiple
+                    onChange={(event) => setReferenceFiles(Array.from(event.target.files || []))}
+                    className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:text-white"
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {referenceFiles.length ? (
+                      referenceFiles.map((file) => (
+                        <span key={`${file.name}-${file.size}`} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-slate-300">
+                          {file.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">至少上传 1 张商品图，用于生成真实模特形象。</span>
+                    )}
+                  </div>
+                </FieldBlock>
+
+                <FieldBlock label="当前图片模型配置">
+                  <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-400">供应商</span>
+                      <span className="font-medium text-white">{imageSettings.provider}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-400">模型名</span>
+                      <span className="font-medium text-white">{imageSettings.model || '未设置'}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-400">Host</span>
+                      <span className="max-w-[180px] truncate font-medium text-white">{imageSettings.host || '未设置'}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-400">API Key</span>
+                      <span className="font-medium text-white">{imageSettings.apiKey ? '已配置' : '未设置'}</span>
+                    </div>
+                    <div className="text-xs leading-6 text-slate-500">该配置直接读取自“设置中心 / 图片模型”，创建模特时不再单独填写 Key。</div>
+                  </div>
+                </FieldBlock>
+              </div>
+
+              <aside className="grid content-start gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-5">
+                <div className="grid gap-1">
+                  <div className="text-[12px] uppercase tracking-[0.22em] text-slate-500">创建说明</div>
+                  <div className="text-[15px] font-semibold text-white">真实模特生成闭环</div>
+                </div>
+
+                <div className="grid gap-3 text-sm leading-6 text-slate-300">
+                  <p>1. 从真实复刻项目读取上下文。</p>
+                  <p>2. 上传商品图到 Web API 存储。</p>
+                  <p>3. 使用设置中心里已保存的图片模型配置生成模特。</p>
+                  <p>4. 自动刷新模特库，并可直接进入 `/clone/[projectId]` 使用。</p>
+                </div>
+
+                <div className="grid gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-xs leading-6 text-cyan-100">
+                  <span>当前实现保持前后端分离。</span>
+                  <span>Windows 本地测试通过 Web API 调用，Linux 部署无需改页面逻辑。</span>
+                  <span>如需修改供应商或 API Key，请到设置页统一维护。</span>
+                </div>
+
+                {createError ? <div className="rounded-2xl border border-rose-400/20 bg-rose-400/8 p-4 text-xs leading-6 text-rose-100">{createError}</div> : null}
+              </aside>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/8 px-6 py-4">
+              <div className="text-xs text-slate-500">验收要点：能真实创建模特、列表刷新为真实数据、可继续在复刻工作台使用。</div>
+              <div className="flex items-center gap-3">
+                <Button variant="secondary" onClick={() => setCreateOpen(false)} disabled={createModelMutation.isPending}>
+                  取消
+                </Button>
+                <Button
+                  onClick={() => {
+                    setCreateError('')
+                    if (!createProjectId) {
+                      setCreateError('请先选择来源项目。')
+                      return
+                    }
+                    if (!referenceFiles.length) {
+                      setCreateError('请至少上传一张商品参考图。')
+                      return
+                    }
+                    if (!imageSettings.apiKey) {
+                      setCreateError('请先到设置页完善图片模型的 API Key。')
+                      return
+                    }
+                    createModelMutation.mutate()
+                  }}
+                  disabled={createModelMutation.isPending}
+                >
+                  {createModelMutation.isPending ? '生成中...' : '开始创建'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
+  )
+}
+
+function FieldBlock({
+  label,
+  children,
+  required,
+}: {
+  label: string
+  children: React.ReactNode
+  required?: boolean
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-medium text-white">
+        {label}
+        {required ? <span className="ml-1 text-rose-300">*</span> : null}
+      </span>
+      {children}
+    </label>
   )
 }
 

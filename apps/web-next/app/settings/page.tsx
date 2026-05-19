@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAuthGuard } from '@/hooks/use-auth-guard'
+import { apiClient } from '@/lib/api-client'
 import {
   DEFAULT_APP_SETTINGS,
   type AppSettings,
@@ -29,6 +30,7 @@ import {
   readAppSettings,
   saveAppSettings,
 } from '@/lib/app-settings'
+import type { CloneModelCredentialsPayload } from '@shared/web-api/types'
 
 type SectionKey = 'video' | 'image' | 'chat' | 'cloud'
 
@@ -44,7 +46,50 @@ const sectionMeta: Array<{
   { key: 'cloud', title: '通用设置', description: '语言、本地输出与云存储等基础参数。', icon: Settings2 },
 ]
 
-const providerOptions = ['AtlasCloud', 'GRS.AI', 'ai666', 'OpenAI', '自定义']
+const providerOptions = ['AtlasCloud', 'GRS.AI', 'ai666', 'VectorEngine', 'OpenAI', '自定义']
+
+function providerKey(value: string) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'ai666') return 'ai666'
+  if (raw === 'vectorengine') return 'vectorengine'
+  if (raw === 'atlascloud' || raw === 'kling') return 'kling'
+  if (raw === 'grs.ai' || raw === 'grsai') return 'grsai'
+  if (raw === 'openai') return 'openai'
+  return 'custom'
+}
+
+function chooseProfile(settings: AppSettings, fallback: 'ai666' | 'vectorengine' = 'vectorengine'): 'ai666' | 'vectorengine' {
+  const order = [settings.modelConfig.video.provider, settings.modelConfig.image.provider, settings.modelConfig.chat.provider].map(providerKey)
+  if (order.includes('ai666')) return 'ai666'
+  if (order.includes('vectorengine')) return 'vectorengine'
+  return fallback
+}
+
+function buildHubFromSettings(settings: AppSettings, profile: 'ai666' | 'vectorengine'): NonNullable<CloneModelCredentialsPayload['apifoxHub']> {
+  const pick = (section: ModelSection) => providerKey(section.provider) === profile
+  const video = settings.modelConfig.video
+  const image = settings.modelConfig.image
+  const chat = settings.modelConfig.chat
+  return {
+    enabled: true,
+    baseUrl: (pick(video) ? video.host : pick(image) ? image.host : pick(chat) ? chat.host : '').trim(),
+    apiKey: (pick(video) ? video.apiKey : pick(image) ? image.apiKey : pick(chat) ? chat.apiKey : '').trim() || undefined,
+    chatProvider: 'openai',
+    chatModel: (pick(chat) ? chat.model : '').trim() || 'gpt-4.1-mini',
+    chatEndpointStyle: 'openai_chat',
+    imageProvider: 'openai',
+    imageModel: (pick(image) ? image.model : '').trim() || 'gpt-image-1',
+    imageEndpointStyle: 'openai_images',
+    videoProvider: 'veo',
+    textToVideoModel: (pick(video) ? video.model : '').trim() || 'veo_3_1-lite',
+    imageToVideoModel: (pick(video) ? video.model : '').trim() || 'veo_3_1-lite',
+    startEndVideoModel: (pick(video) ? video.model : '').trim() || 'veo_3_1-lite',
+    referenceVideoModel: (pick(video) ? video.model : '').trim() || 'veo_3_1-lite',
+    videoEndpointStyle: 'official_rest',
+    defaultPollIntervalMs: 2000,
+    defaultTimeoutMs: 600000,
+  }
+}
 
 export default function SettingsPage() {
   const auth = useAuthGuard()
@@ -57,8 +102,22 @@ export default function SettingsPage() {
     setSettings(readAppSettings())
   }, [])
 
-  const save = () => {
+  const save = async () => {
     saveAppSettings(settings)
+    try {
+      const current = await apiClient.getCloneModelCredentials()
+      const profile = chooseProfile(settings, current.apifoxHubProfile === 'ai666' ? 'ai666' : 'vectorengine')
+      const ai666Hub = buildHubFromSettings(settings, 'ai666')
+      const vectorEngineHub = buildHubFromSettings(settings, 'vectorengine')
+      const payload: CloneModelCredentialsPayload = {
+        ...current,
+        apifoxHubProfile: profile,
+        ai666Hub,
+        vectorEngineHub,
+        apifoxHub: profile === 'ai666' ? ai666Hub : vectorEngineHub,
+      }
+      await apiClient.setCloneModelCredentials(payload)
+    } catch {}
     setSavedAt(new Date().toLocaleString('zh-CN', { hour12: false }))
   }
 
@@ -147,7 +206,7 @@ export default function SettingsPage() {
                   <RefreshCw className="h-3.5 w-3.5" />
                   恢复默认
                 </Button>
-                <Button className="h-7.5 rounded-[9px] bg-[linear-gradient(90deg,#5c47ff,#7158ff)] px-4 text-[11px]" onClick={save}>
+                <Button className="h-7.5 rounded-[9px] bg-[linear-gradient(90deg,#5c47ff,#7158ff)] px-4 text-[11px]" onClick={() => void save()}>
                   <Save className="h-3.5 w-3.5" />
                   保存设置
                 </Button>

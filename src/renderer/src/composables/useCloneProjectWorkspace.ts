@@ -21,6 +21,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
   const {
     applyProject,
     refreshCurrentProject,
+    refreshRuntimeProject,
     ensureCurrentProjectReady,
     refreshProjectAfterFailure,
     loadProject,
@@ -60,10 +61,12 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
   })
   const {
     generateShotVideos,
+    autoRunToStoryboardVideos,
     syncFailedShotVideo,
     replaceShotVideo,
     regenerateShotClip,
     refreshRemoteStatus,
+    syncPendingShotVideos,
   } = videoLayer
 
   const composeLayer = useCloneProjectWorkspaceCompose(options, {
@@ -76,6 +79,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
   return {
     applyProject,
     refreshCurrentProject,
+    refreshRuntimeProject,
     ensureCurrentProjectReady,
     refreshProjectAfterFailure,
     loadProject,
@@ -91,10 +95,12 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     generateStoryboardGrids,
     regenerateStoryboardFrame,
     generateShotVideos,
+    autoRunToStoryboardVideos,
     syncFailedShotVideo,
     replaceShotVideo,
     regenerateShotClip,
     refreshRemoteStatus,
+    syncPendingShotVideos,
     composeFinalVideo,
   }
 }

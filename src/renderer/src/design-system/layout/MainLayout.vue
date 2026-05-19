@@ -4,6 +4,10 @@ import Topbar from './Topbar.vue'
 
 defineProps<{
   navItems: Array<{ to: string; label: string; active?: boolean; icon?: any }>
+  sections?: Array<{
+    title: string
+    items: Array<{ to: string; label: string; active?: boolean; icon?: any }>
+  }>
   title?: string
   subtitle?: string
 }>()
@@ -11,7 +15,7 @@ defineProps<{
 
 <template>
   <div class="ds-shell">
-    <Sidebar :items="navItems">
+    <Sidebar :items="navItems" :sections="sections">
       <template #footer>
         <slot name="sidebar-footer" />
       </template>
@@ -44,7 +48,7 @@ defineProps<{
 .ds-workspace {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 5px !important;
 }
 </style>

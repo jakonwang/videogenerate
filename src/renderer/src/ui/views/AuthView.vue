@@ -1,138 +1,235 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import TitleBar from '../components/TitleBar.vue'
-import { LICENSE_STORAGE_KEY } from '../../../../shared/licenseApi'
-import { markLicensedAfterActivate, resetLicenseSession } from '@/lib/licenseSession'
+import { useWebSessionStore } from '@/stores/webSession'
+import { webApiClient } from '@/lib/webApiClient'
 
-const { t } = useI18n()
 const router = useRouter()
+const webSession = useWebSessionStore()
 
-const machineId = ref('')
-const machineLoading = ref(true)
-const licenseKey = ref('')
-const activating = ref(false)
-const errorMsg = ref('')
-const copyHint = ref(false)
+const phone = ref('')
+const code = ref('')
+const displayName = ref('')
+const sending = ref(false)
+const sendHint = ref('')
 
-onMounted(async () => {
-  machineLoading.value = true
-  try {
-    const res = await window.api.license.getMachineId()
-    machineId.value = res.ok ? res.machineId : ''
-    if (!res.ok && res.error) errorMsg.value = res.error
-  } catch (e: any) {
-    errorMsg.value = e?.message ?? String(e)
-  } finally {
-    machineLoading.value = false
+const errorMsg = computed(() => webSession.error || '')
+const loginBusy = computed(() => webSession.loading)
+
+async function sendCode() {
+  sendHint.value = ''
+  webSession.error = ''
+  const normalizedPhone = phone.value.trim()
+  if (!normalizedPhone) {
+    webSession.error = '请输入手机号'
+    return
   }
-})
-
-async function copyMachineId() {
-  const text = machineId.value
-  if (!text) return
+  sending.value = true
   try {
-    await navigator.clipboard.writeText(text)
-    copyHint.value = true
-    setTimeout(() => {
-      copyHint.value = false
-    }, 2000)
-  } catch {
-    errorMsg.value = t('auth.copyFailed')
+    const result = await webApiClient.sendLoginCode({ phone: normalizedPhone, channel: 'sms' })
+    sendHint.value = result.devCode ? `验证码已发送，当前开发环境验证码：${result.devCode}` : '验证码已发送，请查收短信'
+  } catch (error: any) {
+    webSession.error = error?.message ?? String(error)
+  } finally {
+    sending.value = false
   }
 }
 
-async function activate() {
-  errorMsg.value = ''
-  const key = licenseKey.value.trim()
-  if (!key) {
-    errorMsg.value = t('auth.keyRequired')
-    return
-  }
-  activating.value = true
-  try {
-    const res = await window.api.license.verify(key)
-    if (res && res.code === 0 && res.data?.valid === true) {
-      localStorage.setItem(LICENSE_STORAGE_KEY, key)
-      resetLicenseSession()
-      markLicensedAfterActivate()
-      await router.replace({ name: 'products' })
-      return
-    }
-    errorMsg.value = res?.msg?.trim() || t('auth.verifyFailed')
-  } catch (e: any) {
-    errorMsg.value = e?.message ?? String(e)
-  } finally {
-    activating.value = false
-  }
+async function login() {
+  const ok = await webSession.login({
+    phone: phone.value.trim(),
+    code: code.value.trim(),
+    displayName: displayName.value.trim() || undefined,
+  })
+  if (!ok) return
+  await router.replace({ name: 'home' })
 }
 </script>
 
 <template>
-  <div class="ui-app relative flex h-screen w-screen flex-col overflow-hidden bg-[#0E0E11]">
-    <div
-      class="pointer-events-none absolute inset-0"
-      style="
-        background:
-          radial-gradient(70% 50% at 50% 0%, rgba(99, 102, 241, 0.12), rgba(14, 14, 17, 0));
-      "
-    ></div>
+  <div class="ui-app auth-page">
     <TitleBar />
-    <div class="relative flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10">
-      <div class="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-8 shadow-xl shadow-black/50">
-        <h1 class="text-center text-lg font-semibold text-white/90">{{ t('auth.title') }}</h1>
-        <p class="mt-1 text-center text-xs text-white/50">{{ t('auth.subtitle') }}</p>
+    <div class="auth-shell">
+      <section class="auth-card">
+        <div class="auth-copy">
+          <div class="auth-copy__eyebrow">桌面端登录</div>
+          <h1>手机号验证码登录</h1>
+          <p>桌面端现在统一使用账号登录进入工作台，不再依赖授权码激活页。</p>
+        </div>
 
-        <div class="mt-6">
-          <label class="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-white/45">{{
-            t('auth.machineId')
-          }}</label>
-          <div class="flex gap-2">
-            <input
-              class="ui-input flex-1 cursor-default font-mono text-xs text-white/80"
-              type="text"
-              readonly
-              :value="machineLoading ? t('auth.loading') : machineId || '—'"
-            />
-            <button
-              type="button"
-              class="shrink-0 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs font-medium text-white/80 outline-none transition hover:bg-white/[0.06] focus:border-white/20 focus:ring-1 focus:ring-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-              :disabled="!machineId || machineLoading"
-              @click="copyMachineId"
-            >
-              {{ copyHint ? t('auth.copied') : t('auth.copy') }}
+        <div class="auth-form">
+          <label class="auth-field">
+            <span>手机号</span>
+            <input v-model="phone" type="text" placeholder="请输入手机号" />
+          </label>
+
+          <label class="auth-field">
+            <span>显示名称（可选）</span>
+            <input v-model="displayName" type="text" placeholder="首次登录可填写昵称" />
+          </label>
+
+          <div class="auth-code-row">
+            <label class="auth-field auth-field--code">
+              <span>验证码</span>
+              <input v-model="code" type="text" placeholder="请输入验证码" @keyup.enter="login" />
+            </label>
+            <button class="ghost-button" type="button" :disabled="sending" @click="sendCode">
+              {{ sending ? '发送中...' : '发送验证码' }}
             </button>
           </div>
+
+          <p v-if="sendHint" class="auth-hint auth-hint--success">{{ sendHint }}</p>
+          <p v-if="errorMsg" class="auth-hint auth-hint--error">{{ errorMsg }}</p>
+
+          <button class="primary-button" type="button" :disabled="loginBusy" @click="login">
+            {{ loginBusy ? '登录中...' : '登录并进入桌面端' }}
+          </button>
         </div>
-
-        <div class="mt-5">
-          <label class="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-white/45">{{
-            t('auth.licenseKey')
-          }}</label>
-          <input
-            v-model="licenseKey"
-            class="ui-input w-full"
-            type="password"
-            autocomplete="off"
-            :placeholder="t('auth.licensePlaceholder')"
-            @keyup.enter="activate"
-          />
-        </div>
-
-        <p v-if="errorMsg" class="mt-4 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          {{ errorMsg }}
-        </p>
-
-        <button
-          type="button"
-          class="mt-6 w-full rounded-lg bg-gradient-to-b from-indigo-500 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-950/40 transition hover:from-indigo-400 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="activating || machineLoading"
-          @click="activate"
-        >
-          {{ activating ? t('auth.activating') : t('auth.activate') }}
-        </button>
-      </div>
+      </section>
     </div>
   </div>
 </template>
+
+<style scoped>
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(14, 165, 233, 0.14), transparent 28%),
+    linear-gradient(180deg, #09111c 0%, #070d18 100%);
+}
+
+.auth-shell {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 20px;
+  padding: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 24px;
+  background: rgba(8, 13, 21, 0.82);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28);
+}
+
+.auth-copy__eyebrow {
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.auth-copy h1 {
+  margin: 10px 0 0;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.auth-copy p {
+  margin: 10px 0 0;
+  color: rgba(205, 218, 236, 0.76);
+  line-height: 1.7;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-field span {
+  color: #dbe7f7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-field input {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fbff;
+  outline: 0;
+}
+
+.auth-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.auth-field--code {
+  min-width: 0;
+}
+
+.primary-button,
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.primary-button {
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  color: #fff;
+}
+
+.ghost-button {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef5ff;
+}
+
+.primary-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.auth-hint {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.auth-hint--success {
+  border: 1px solid rgba(74, 222, 128, 0.18);
+  background: rgba(34, 197, 94, 0.12);
+  color: #ddffe7;
+}
+
+.auth-hint--error {
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ffd8d8;
+}
+
+@media (max-width: 720px) {
+  .auth-code-row {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

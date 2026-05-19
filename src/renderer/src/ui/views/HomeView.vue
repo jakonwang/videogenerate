@@ -382,10 +382,10 @@ onMounted(refresh)
 <style scoped>
 .home-dashboard-refined {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 292px;
-  gap: 18px;
-  min-height: 100%;
-  padding: 6px 2px 20px;
+  grid-template-columns: minmax(0, 1fr) 276px;
+  gap: 14px;
+  min-height: 0;
+  padding: 2px 0 8px;
   color: #f8fafc;
 }
 
@@ -396,7 +396,7 @@ onMounted(refresh)
 .template-grid,
 .operation-list {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .hero-card,
@@ -418,20 +418,20 @@ onMounted(refresh)
 .quick-start-panel,
 .template-panel,
 .side-panel {
-  padding: 20px !important;
+  padding: 16px !important;
 }
 
 .hero-card {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.72fr);
-  min-height: 212px;
+  min-height: 188px;
   overflow: hidden;
 }
 
 .hero-card__copy {
   display: grid;
   align-content: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .hero-card__eyebrow {
@@ -439,58 +439,58 @@ onMounted(refresh)
   align-items: center;
   width: fit-content;
   min-height: 34px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-radius: 999px;
   background: rgba(123, 97, 255, 0.12);
   color: #c8bcff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .hero-card__copy h1 {
   margin: 0;
-  font-size: clamp(34px, 3vw, 44px);
+  font-size: clamp(30px, 2.6vw, 38px);
   line-height: 1.08;
   letter-spacing: -0.04em;
   font-weight: 800;
 }
 
 .hero-card__copy p {
-  max-width: 560px;
+  max-width: 520px;
   margin: 0;
   color: #92a2c7;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .hero-card__actions {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   align-items: center;
 }
 
 .hero-card__summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .hero-card__summary span {
   display: inline-flex;
   align-items: center;
   min-height: 34px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.12);
   background: rgba(255, 255, 255, 0.03);
   color: #c6d1eb;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .hero-card__visual {
   position: relative;
-  min-height: 200px;
+  min-height: 172px;
 }
 
 .hero-card__visual-card {
@@ -498,9 +498,9 @@ onMounted(refresh)
   inset: 50% auto auto 50%;
   display: grid;
   place-items: center;
-  width: 188px;
-  height: 188px;
-  border-radius: 40px;
+  width: 164px;
+  height: 164px;
+  border-radius: 34px;
   transform: translate(-50%, -50%) rotate(-12deg);
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.3), transparent 24%),
@@ -512,24 +512,24 @@ onMounted(refresh)
 
 .hero-card__visual-badge {
   position: absolute;
-  top: 18px;
-  left: 18px;
-  min-height: 30px;
-  padding: 0 12px;
+  top: 16px;
+  left: 16px;
+  min-height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
   color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  line-height: 30px;
+  line-height: 26px;
 }
 
 .hero-card__play-shell {
   display: grid;
   place-items: center;
-  width: 90px;
-  height: 90px;
-  border-radius: 28px;
+  width: 76px;
+  height: 76px;
+  border-radius: 24px;
   background: rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(6px);
@@ -544,13 +544,13 @@ onMounted(refresh)
 }
 
 .hero-card__orbit--large {
-  width: 300px;
-  height: 118px;
+  width: 260px;
+  height: 102px;
 }
 
 .hero-card__orbit--small {
-  width: 228px;
-  height: 82px;
+  width: 196px;
+  height: 74px;
   border-color: rgba(255, 255, 255, 0.1);
 }
 
@@ -562,17 +562,17 @@ onMounted(refresh)
 }
 
 .hero-card__spark--a {
-  top: 36px;
-  right: 28px;
-  width: 8px;
-  height: 8px;
+  top: 30px;
+  right: 24px;
+  width: 7px;
+  height: 7px;
 }
 
 .hero-card__spark--b {
-  left: 40px;
-  bottom: 30px;
-  width: 10px;
-  height: 10px;
+  left: 34px;
+  bottom: 24px;
+  width: 8px;
+  height: 8px;
 }
 
 .metric-grid {
@@ -582,9 +582,9 @@ onMounted(refresh)
 .metric-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 92px;
-  padding: 16px 18px !important;
+  gap: 12px;
+  min-height: 80px;
+  padding: 14px 16px !important;
 }
 
 .metric-card__icon,
@@ -597,8 +597,8 @@ onMounted(refresh)
 }
 
 .metric-card__icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
 }
 
 .metric-card__icon.is-violet,
@@ -637,7 +637,7 @@ onMounted(refresh)
 
 .metric-card__copy strong {
   color: #f8fafc;
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1.08;
   letter-spacing: -0.03em;
 }
@@ -659,7 +659,7 @@ onMounted(refresh)
 .panel-head h2 {
   margin: 0;
   color: #f8fafc;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -677,7 +677,7 @@ onMounted(refresh)
 
 .quick-start-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .quick-start-card,
@@ -685,8 +685,8 @@ onMounted(refresh)
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 66px;
-  padding: 12px 14px;
+  min-height: 60px;
+  padding: 10px 12px;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.08);
   background: rgba(255, 255, 255, 0.025);
@@ -707,8 +707,8 @@ onMounted(refresh)
 
 .quick-start-card__icon,
 .operation-card__icon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
 }
 
 .quick-start-card__copy,
@@ -737,12 +737,12 @@ onMounted(refresh)
 
 .template-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .template-card {
   position: relative;
-  min-height: 112px;
+  min-height: 104px;
   overflow: hidden;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.08);
@@ -795,12 +795,12 @@ onMounted(refresh)
 }
 
 .operation-list {
-  gap: 10px;
+  gap: 8px;
 }
 
 .assistant-shell {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   align-content: start;
 }
 
@@ -813,8 +813,8 @@ onMounted(refresh)
 .assistant-shell__avatar {
   display: grid;
   place-items: center;
-  width: 114px;
-  height: 114px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   background:
     radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.22), transparent 28%),

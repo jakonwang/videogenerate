@@ -16,12 +16,20 @@ export type ResolvedMultilangFont = {
 }
 
 type Candidate = { path: string; assFamily: string }
+type SystemFontCandidate = { path: string; familyHint: string }
 export type FontRenderAssessment = {
   fileName: string
   sourceFile: string
   familyName: string
   renderReady: boolean
   message: string
+}
+
+export type SubtitleRenderFontOption = {
+  family: string
+  fileName: string
+  source: 'bundled' | 'user' | 'system'
+  path: string
 }
 
 function exists(p: string): boolean {
@@ -40,6 +48,29 @@ function stemFromFileName(fileName: string): string {
   return String(fileName ?? '')
     .replace(/\.(woff2|otf|ttf|ttc)$/i, '')
     .trim()
+}
+
+function listCommonSystemSubtitleFonts(): SystemFontCandidate[] {
+  if (process.platform === 'win32') {
+    const win = 'C:\\Windows\\Fonts'
+    return [
+      { path: join(win, 'msyh.ttc'), familyHint: 'Microsoft YaHei' },
+      { path: join(win, 'msyhbd.ttc'), familyHint: 'Microsoft YaHei' },
+      { path: join(win, 'msyhl.ttc'), familyHint: 'Microsoft YaHei' },
+      { path: join(win, 'simhei.ttf'), familyHint: 'SimHei' },
+      { path: join(win, 'simsun.ttc'), familyHint: 'SimSun' },
+      { path: join(win, 'simsunb.ttf'), familyHint: 'SimSun' },
+      { path: join(win, 'simkai.ttf'), familyHint: 'KaiTi' },
+      { path: join(win, 'arial.ttf'), familyHint: 'Arial' },
+      { path: join(win, 'arialbd.ttf'), familyHint: 'Arial' },
+    ]
+  }
+
+  return [
+    { path: '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', familyHint: 'Noto Sans CJK SC' },
+    { path: '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc', familyHint: 'Noto Sans CJK SC' },
+    { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', familyHint: 'DejaVu Sans' },
+  ]
 }
 
 async function listFontFilesInDir(dir: string): Promise<string[]> {
@@ -192,6 +223,166 @@ export function pickAssFontFamilyForRender(
   return raw
 }
 
+function findBundledFontPathByPatterns(patterns: RegExp[]): string | null {
+  const bundled = findBundledFontsDir()
+  if (!bundled) return null
+  try {
+    const names = readdirSync(bundled).filter(isFontFileName)
+    for (const pattern of patterns) {
+      const matched = names.find((name) => pattern.test(name))
+      if (matched) return join(bundled, matched)
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function findFontPathInDirByPatterns(dir: string, patterns: RegExp[]): string | null {
+  if (!exists(dir)) return null
+  try {
+    const names = readdirSync(dir).filter(isFontFileName)
+    for (const pattern of patterns) {
+      const matched = names.find((name) => pattern.test(name))
+      if (matched) return join(dir, matched)
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function findUserImportedFontPathByPatterns(patterns: RegExp[]): string | null {
+  const { dataDir } = getAppPaths()
+  return findFontPathInDirByPatterns(join(dataDir, 'fonts'), patterns)
+}
+
+function firstExistingPath(paths: string[]): string | null {
+  for (const item of paths) {
+    if (exists(item)) return item
+  }
+  return null
+}
+
+function findBundledOrUserFontPathByFamilyName(fontName: string): { path: string | null; family: string } | null {
+  const target = normalizeFamilyName(fontName)
+  const targetAlias = normalizeFamilyAlias(fontName)
+  if (!target && !targetAlias) return null
+
+  const candidates: Array<{ dir: string; source: 'bundled' | 'user' }> = []
+  const bundledDir = findBundledFontsDir()
+  if (bundledDir) candidates.push({ dir: bundledDir, source: 'bundled' })
+  const { dataDir } = getAppPaths()
+  const userDir = join(dataDir, 'fonts')
+  if (exists(userDir)) candidates.push({ dir: userDir, source: 'user' })
+
+  for (const candidate of candidates) {
+    try {
+      const names = readdirSync(candidate.dir).filter(isFontFileName)
+      for (const name of names) {
+        const absPath = join(candidate.dir, name)
+        const family = stemFromFileName(name)
+        const familyKey = normalizeFamilyName(family)
+        const aliasKey = normalizeFamilyAlias(family)
+        if (familyKey === target || (!!targetAlias && aliasKey === targetAlias)) {
+          return {
+            family,
+            path: absPath,
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null
+}
+
+export function resolveSubtitleRenderFont(fontName: string): { path: string | null; family: string } {
+  const normalized = String(fontName || '').trim().toLowerCase()
+  const mapped =
+    normalized === 'noto sans sc'
+      ? {
+          family: 'Noto Sans SC',
+          path:
+            findUserImportedFontPathByPatterns([/NotoSansSC/i, /NotoSansCJK/i, /SourceHanSans/i]) ||
+            findBundledFontPathByPatterns([/NotoSansSC-Regular\.otf$/i, /NotoSansSC.*\.(otf|ttf|ttc)$/i]),
+        }
+      : normalized === 'microsoft yahei' || normalized === '微软雅黑'
+        ? {
+            family: 'Microsoft YaHei',
+            path:
+              findUserImportedFontPathByPatterns([/msyh/i, /yahei/i, /微软雅黑/i]) ||
+              (process.platform === 'win32'
+                ? firstExistingPath([
+                    'C:\\Windows\\Fonts\\msyh.ttc',
+                    'C:\\Windows\\Fonts\\msyhbd.ttc',
+                    'C:\\Windows\\Fonts\\msyhl.ttc',
+                  ])
+                : null) ||
+              findBundledFontPathByPatterns([/MicrosoftYaHei/i, /YaHei/i]),
+          }
+        : normalized === 'pingfang sc'
+          ? {
+              family: 'PingFang SC',
+              path:
+                findUserImportedFontPathByPatterns([/PingFang/i]) ||
+                findBundledFontPathByPatterns([/PingFang/i, /NotoSansSC-Regular\.otf$/i, /NotoSansSC.*\.(otf|ttf|ttc)$/i]),
+            }
+          : normalized === 'source han sans sc'
+            ? {
+                family: 'Source Han Sans SC',
+                path:
+                  findUserImportedFontPathByPatterns([/SourceHanSans/i, /Source Han Sans/i]) ||
+                  findBundledFontPathByPatterns([/SourceHanSans/i, /NotoSansSC-Regular\.otf$/i, /NotoSansSC.*\.(otf|ttf|ttc)$/i]),
+              }
+            : normalized === 'alibaba puhuiti 2.0'
+              ? {
+                  family: 'Alibaba PuHuiTi 2.0',
+                  path:
+                    findUserImportedFontPathByPatterns([/PuHuiTi/i, /Alibaba/i]) ||
+                    findBundledFontPathByPatterns([/PuHuiTi/i, /Alibaba/i, /NotoSansSC-Regular\.otf$/i, /NotoSansSC.*\.(otf|ttf|ttc)$/i]),
+                }
+              : normalized === 'lxgw wenkai'
+                ? {
+                    family: 'LXGW WenKai TC',
+                    path: findUserImportedFontPathByPatterns([/LXGWWenKai/i, /WenKai/i]) || findBundledFontPathByPatterns([/LXGWWenKai.*\.ttf$/i]),
+                  }
+                : normalized === 'nunito sans'
+                  ? {
+                      family: 'Nunito Sans',
+                      path: findUserImportedFontPathByPatterns([/NunitoSans/i, /Nunito/i]) || findBundledFontPathByPatterns([/NunitoSans.*\.ttf$/i]),
+                    }
+                  : normalized === 'open sans'
+                    ? {
+                        family: 'Open Sans',
+                        path: findUserImportedFontPathByPatterns([/OpenSans/i, /Open Sans/i]) || findBundledFontPathByPatterns([/OpenSans.*\.ttf$/i]),
+                      }
+                    : normalized === 'roboto'
+                      ? {
+                          family: 'Roboto',
+                          path: findUserImportedFontPathByPatterns([/Roboto/i]) || findBundledFontPathByPatterns([/Roboto-VariableFont.*\.ttf$/i, /Roboto.*\.ttf$/i]),
+                        }
+                      : normalized === 'pacifico'
+                        ? {
+                            family: 'Pacifico',
+                            path: findUserImportedFontPathByPatterns([/Pacifico/i]) || findBundledFontPathByPatterns([/Pacifico-Regular\.ttf$/i]),
+                          }
+                        : null
+
+  if (mapped?.path) return mapped
+
+  const genericMatched = findBundledOrUserFontPathByFamilyName(fontName)
+  if (genericMatched?.path) return genericMatched
+
+  const fallback = resolveMultilangFont()
+  return {
+    family: String(fontName || '').trim() || fallback.assFamily,
+    path: mapped?.path || fallback.path,
+  }
+}
+
 function normalizeFamilyName(name: string): string {
   return String(name ?? '').trim().toLowerCase()
 }
@@ -212,6 +403,8 @@ function normalizeFamilyAlias(name: string): string {
     prev = s
     s = s.replace(styleTail, '').trim()
   }
+
+  s = s.replace(/\s+ui$/i, '').trim()
 
   return s || normalizeFamilyName(name)
 }
@@ -238,6 +431,41 @@ export async function listRenderableAssFamilies(fontsDir: string): Promise<FontR
     if (prevWoff && !curWoff) merged.set(key, assessed)
   }
   return [...merged.values()].sort((a, b) => a.familyName.localeCompare(b.familyName, 'en'))
+}
+
+export async function listAvailableSubtitleRenderFonts(): Promise<SubtitleRenderFontOption[]> {
+  const results = new Map<string, SubtitleRenderFontOption>()
+
+  const pushFont = async (source: 'bundled' | 'user' | 'system', absPath: string) => {
+    if (!exists(absPath)) return
+    const fileName = basename(absPath)
+    if (!isFontFileName(fileName)) return
+    const family = (await tryGetFontFamilyName(absPath)) || stemFromFileName(fileName)
+    const key = normalizeFamilyAlias(family) || normalizeFamilyName(family) || fileName.toLowerCase()
+    if (!key || results.has(key)) return
+    results.set(key, {
+      family,
+      fileName,
+      source,
+      path: absPath,
+    })
+  }
+
+  const bundledDir = findBundledFontsDir()
+  if (bundledDir) {
+    const names = await listFontFilesInDir(bundledDir)
+    for (const name of names) await pushFont('bundled', join(bundledDir, name))
+  }
+
+  const { dataDir } = getAppPaths()
+  const userDir = join(dataDir, 'fonts')
+  const userNames = await listFontFilesInDir(userDir)
+  for (const name of userNames) await pushFont('user', join(userDir, name))
+
+  const systemFonts = listCommonSystemSubtitleFonts()
+  for (const item of systemFonts) await pushFont('system', item.path)
+
+  return [...results.values()].sort((a, b) => a.family.localeCompare(b.family, 'en'))
 }
 
 export async function assertAssFontFamilyAvailable(
@@ -274,16 +502,29 @@ export async function resolveAssFontFamilyForFontsDir(
 ): Promise<string> {
   const target = normalizeFamilyName(assFamily)
   const targetAlias = normalizeFamilyAlias(assFamily)
-  if (!target && !targetAlias) return assFamily
-
   const families = await listRenderableAssFamilies(fontsDir)
+  if (!families.length) return assFamily
+
+  if (!target && !targetAlias) {
+    return families[0]?.familyName || assFamily
+  }
   const exact = families.find((x) => normalizeFamilyName(x.familyName) === target)
   if (exact) return exact.familyName
 
   const aliasMatched = families.find((x) => normalizeFamilyAlias(x.familyName) === targetAlias)
   if (aliasMatched) return aliasMatched.familyName
 
-  return assFamily
+  const fallback = resolveMultilangFont()
+  const fallbackTarget = normalizeFamilyName(fallback.assFamily)
+  const fallbackAlias = normalizeFamilyAlias(fallback.assFamily)
+  const fallbackMatched = families.find((x) => {
+    const family = normalizeFamilyName(x.familyName)
+    const alias = normalizeFamilyAlias(x.familyName)
+    return family === fallbackTarget || (!!fallbackAlias && alias === fallbackAlias)
+  })
+  if (fallbackMatched) return fallbackMatched.familyName
+
+  return families[0]?.familyName || assFamily
 }
 
 /** 有字幕烧录时必须存在 fontsdir，否则应中止任务 */
@@ -312,7 +553,10 @@ export async function prepareFontsDirForSubtitles(tmpDir: string): Promise<strin
   const { dataDir } = getAppPaths()
   const userDir = join(dataDir, 'fonts')
   const userFonts = await listFontFilesInDir(userDir)
-  if (!userFonts.length) return resolved.fontsDir
+  const systemFonts = listCommonSystemSubtitleFonts()
+    .map((item) => item.path)
+    .filter((item) => exists(item))
+  if (!userFonts.length && !systemFonts.length) return resolved.fontsDir
 
   const bundledFonts = await listFontFilesInDir(resolved.fontsDir)
   // 若内置目录异常为空，也允许仅用用户目录兜底（但仍返回 mergedDir，保证后续路径一致）
@@ -360,6 +604,10 @@ export async function prepareFontsDirForSubtitles(tmpDir: string): Promise<strin
   for (const name of userFonts) {
     const destName = makeUniqueDest(name, 'user')
     await copyIfNeeded(join(userDir, name), join(mergedDir, destName))
+  }
+  for (const absPath of systemFonts) {
+    const destName = makeUniqueDest(basename(absPath), 'user')
+    await copyIfNeeded(absPath, join(mergedDir, destName))
   }
 
   return mergedDir

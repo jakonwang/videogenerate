@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { startTransition } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Bell,
@@ -10,6 +11,7 @@ import {
   CreditCard,
   Home,
   Plus,
+  Puzzle,
   Scissors,
   Search,
   Settings,
@@ -27,6 +29,8 @@ const links: ReadonlyArray<{ href: string; title: string; icon: LucideIcon; badg
   { href: '/models', title: '模特', icon: Users },
   { href: '/live-clips', title: '直播', icon: Scissors, badge: '客户端' },
   { href: '/production', title: '生产', icon: CirclePlay, badge: '客户端' },
+  { href: '/plugins', title: '插件市场', icon: Puzzle },
+  { href: '/my-plugins', title: '我的插件', icon: Puzzle },
   { href: '/billing', title: '会员', icon: CreditCard },
   { href: '/account', title: '账户', icon: Users },
   { href: '/settings', title: '设置', icon: Settings },
@@ -49,6 +53,12 @@ export function AppShell({
   const router = useRouter()
   const user = useSessionStore((state) => state.user)
   const subscription = useSessionStore((state) => state.subscription)
+
+  const pushRoute = (href: string) => {
+    startTransition(() => {
+      router.push(href)
+    })
+  }
 
   const navIsActive = (href: string) => {
     if (href === '/workspace') return pathname === '/workspace'
@@ -97,7 +107,7 @@ export function AppShell({
             {sidebarContent ? <div className="workspace-sidebar__project">{sidebarContent}</div> : <div />}
 
             <div className="workspace-sidebar__footer">
-              <button type="button" className="workspace-account-card" onClick={() => router.push('/account')}>
+              <button type="button" className="workspace-account-card" onClick={() => pushRoute('/account')}>
                 <div className="workspace-account-card__head">
                   <div className="workspace-account-card__avatar">{userInitial}</div>
                   <div className="workspace-account-card__copy">
@@ -140,7 +150,7 @@ export function AppShell({
                   <span className="workspace-header__notice">12</span>
                 </button>
 
-                <button type="button" className="workspace-user-pill" onClick={() => router.push('/account')}>
+                <button type="button" className="workspace-user-pill" onClick={() => pushRoute('/account')}>
                   <div className="workspace-user-pill__avatar">{userInitial}</div>
                   <div className="workspace-user-pill__copy">
                     <strong>{userName}</strong>

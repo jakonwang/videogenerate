@@ -1,14 +1,29 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import { defaultPluginRecord } from './plugins'
+import { buildDefaultPlans, buildDefaultWebUser } from './repoRuntime'
+import {
+  canInitializeWebPlatformSqlite,
+  getWebPlatformSqliteUnavailableReason,
+  initializeWebPlatformSqlite,
+  isWebPlatformSqliteEmpty,
+  readWebPlatformDbFromSqlite,
+  writeWebPlatformDbToSqlite,
+} from './sqlite'
 import type {
+  AuthCodeChannel,
+  BatchSubtitleJob,
   BillingOrder,
   ComputePriceRule,
+  PluginRecord,
   SubscriptionPlan,
   UserSubscription,
   WalletAccount,
   WalletTransaction,
+  WebAuthCodeRecord,
   WebPlatformDb,
   WebSession,
   WebUser,
@@ -19,6 +34,8 @@ const webPlatformDbPath = () => join(getAppPaths().dbDir, 'web-platform.json')
 function now() {
   return Date.now()
 }
+
+let sqliteFallbackLogged = false
 
 function defaultPlans(): SubscriptionPlan[] {
   return [
@@ -59,24 +76,73 @@ function emptyDb(): WebPlatformDb {
     wallets: [],
     walletTransactions: [],
     orders: [],
-    subscriptionPlans: defaultPlans(),
+    subscriptionPlans: buildDefaultPlans(),
     computePriceRules: defaultComputeRules(),
+    loginCodes: [],
+    plugins: [],
+    batchSubtitleJobs: [],
   }
+}
+
+function normalizeDb(input?: Partial<WebPlatformDb> | null): WebPlatformDb {
+  return {
+    users: Array.isArray(input?.users) ? input.users : [],
+    sessions: Array.isArray(input?.sessions) ? input.sessions : [],
+    subscriptions: Array.isArray(input?.subscriptions) ? input.subscriptions : [],
+    wallets: Array.isArray(input?.wallets) ? input.wallets : [],
+    walletTransactions: Array.isArray(input?.walletTransactions) ? input.walletTransactions : [],
+    orders: Array.isArray(input?.orders) ? input.orders : [],
+    subscriptionPlans:
+      Array.isArray(input?.subscriptionPlans) && input.subscriptionPlans.length ? input.subscriptionPlans : buildDefaultPlans(),
+    computePriceRules:
+      Array.isArray(input?.computePriceRules) && input.computePriceRules.length
+        ? input.computePriceRules
+        : defaultComputeRules(),
+    loginCodes: Array.isArray(input?.loginCodes)
+      ? input.loginCodes.filter((item) => Number(item.expiresAt || 0) > now())
+      : [],
+    plugins: Array.isArray(input?.plugins) ? input.plugins : [],
+    batchSubtitleJobs: Array.isArray(input?.batchSubtitleJobs) ? input.batchSubtitleJobs : [],
+  }
+}
+
+function canUseSqlite() {
+  const supported = canInitializeWebPlatformSqlite()
+  if (!supported && !sqliteFallbackLogged) {
+    sqliteFallbackLogged = true
+    console.warn(
+      `[web-platform] SQLite unavailable, fallback to JSON storage: ${getWebPlatformSqliteUnavailableReason() || 'unknown reason'}`,
+    )
+  }
+  return supported
 }
 
 export const webPlatformRepo = {
   async readDb(): Promise<WebPlatformDb> {
+    if (canUseSqlite()) {
+      return normalizeDb(readWebPlatformDbFromSqlite())
+    }
     const db = await readJsonFile<WebPlatformDb>(webPlatformDbPath(), emptyDb())
-    db.subscriptionPlans = Array.isArray(db.subscriptionPlans) && db.subscriptionPlans.length ? db.subscriptionPlans : defaultPlans()
-    db.computePriceRules = Array.isArray(db.computePriceRules) && db.computePriceRules.length ? db.computePriceRules : defaultComputeRules()
-    return db
+    return normalizeDb(db)
   },
 
   async writeDb(input: WebPlatformDb) {
-    await writeJsonFile(webPlatformDbPath(), input)
+    const normalized = normalizeDb(input)
+    if (canUseSqlite()) {
+      writeWebPlatformDbToSqlite(normalized)
+      return
+    }
+    await writeJsonFile(webPlatformDbPath(), normalized)
   },
 
   async ensureSeed() {
+    if (canUseSqlite()) {
+      initializeWebPlatformSqlite()
+      if (isWebPlatformSqliteEmpty() && existsSync(webPlatformDbPath())) {
+        const legacyDb = await readJsonFile<WebPlatformDb>(webPlatformDbPath(), emptyDb())
+        writeWebPlatformDbToSqlite(normalizeDb(legacyDb))
+      }
+    }
     const db = await this.readDb()
     await this.writeDb(db)
   },
@@ -235,4 +301,99 @@ export const webPlatformRepo = {
     const db = await this.readDb()
     return db.computePriceRules.find((item) => item.action === action) ?? null
   },
+
+  async saveLoginCode(input: { phone: string; code: string; channel: AuthCodeChannel; expiresAt: number }) {
+    const db = await this.readDb()
+    const item: WebAuthCodeRecord = {
+      phone: input.phone,
+      code: input.code,
+      channel: input.channel,
+      expiresAt: input.expiresAt,
+      updatedAt: now(),
+    }
+    db.loginCodes = db.loginCodes.filter((entry) => entry.phone !== input.phone)
+    db.loginCodes.unshift(item)
+    await this.writeDb(db)
+    return item
+  },
+
+  async getLoginCode(phone: string) {
+    const db = await this.readDb()
+    return db.loginCodes.find((item) => item.phone === phone) ?? null
+  },
+
+  async removeLoginCode(phone: string) {
+    const db = await this.readDb()
+    db.loginCodes = db.loginCodes.filter((item) => item.phone !== phone)
+    await this.writeDb(db)
+  },
+
+  async listPluginRecords(userId: string) {
+    const db = await this.readDb()
+    return db.plugins.filter((item) => item.userId === userId)
+  },
+
+  async getPluginRecord(userId: string, pluginId: string) {
+    const db = await this.readDb()
+    return db.plugins.find((item) => item.userId === userId && item.pluginId === pluginId) ?? null
+  },
+
+  async upsertPluginRecord(input: PluginRecord) {
+    const db = await this.readDb()
+    const next: PluginRecord = {
+      ...input,
+      updatedAt: now(),
+    }
+    const idx = db.plugins.findIndex((item) => item.userId === next.userId && item.pluginId === next.pluginId)
+    if (idx >= 0) db.plugins[idx] = next
+    else db.plugins.unshift(next)
+    await this.writeDb(db)
+    return next
+  },
+
+  async ensurePluginRecord(userId: string, pluginId: string) {
+    const current = await this.getPluginRecord(userId, pluginId)
+    if (current) return current
+    return await this.upsertPluginRecord(defaultPluginRecord(userId, pluginId))
+  },
+
+  async listBatchSubtitleJobs(userId: string) {
+    const db = await this.readDb()
+    const jobs = Array.isArray((db as WebPlatformDb & { batchSubtitleJobs?: BatchSubtitleJob[] }).batchSubtitleJobs)
+      ? ((db as WebPlatformDb & { batchSubtitleJobs?: BatchSubtitleJob[] }).batchSubtitleJobs as BatchSubtitleJob[])
+      : []
+    return jobs
+      .filter((item) => item.userId === userId)
+      .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+  },
+
+  async getBatchSubtitleJob(userId: string, jobId: string) {
+    const items = await this.listBatchSubtitleJobs(userId)
+    return items.find((item) => item.id === jobId) ?? null
+  },
+
+  async upsertBatchSubtitleJob(input: BatchSubtitleJob) {
+    const db = (await this.readDb()) as WebPlatformDb & { batchSubtitleJobs?: BatchSubtitleJob[] }
+    const list = Array.isArray(db.batchSubtitleJobs) ? db.batchSubtitleJobs : []
+    const idx = list.findIndex((item) => item.userId === input.userId && item.id === input.id)
+    const next: BatchSubtitleJob = {
+      ...input,
+      updatedAt: now(),
+    }
+    if (idx >= 0) list[idx] = next
+    else list.unshift(next)
+    db.batchSubtitleJobs = list
+    await this.writeDb(db)
+    return next
+  },
+}
+
+webPlatformRepo.createUser = async function createUserClean(input: { phone: string; displayName?: string }) {
+  const createdAt = now()
+  const item: WebUser = buildDefaultWebUser({
+    phone: input.phone,
+    displayName: input.displayName,
+    createdAt,
+  })
+  return await this.upsertUser(item)
 }

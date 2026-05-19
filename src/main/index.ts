@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from 'electron'
 import { join } from 'node:path'
 import { createReadStream } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { ensureAppDirs, getAppPaths } from './lib/paths'
+import { configureAppPathRuntime, ensureAppDirs, getAppPaths } from './lib/paths'
 import { productsRepo } from './modules/products/repo'
 import { templatesRepo } from './modules/templates/repo'
 import { taskQueue } from './modules/tasks/queue'
@@ -33,6 +33,94 @@ import { cloneService } from './modules/clone/service'
 import { webPlatformRepo } from './modules/web-platform/repo'
 
 let mainWindow: BrowserWindow | null = null
+let restoreConsoleBridge: (() => void) | null = null
+
+function configureWindowsStorageRoot() {
+  if (process.platform !== 'win32') return
+  const driveRoot = 'E:\\VideoGenerate'
+  const userDataDir = process.env.VIDEOGENERATE_USER_DATA_DIR || join(driveRoot, 'userData')
+  const dataDir = process.env.VIDEOGENERATE_DATA_DIR || join(userDataDir, '.videogenerate')
+  app.setPath('userData', userDataDir)
+  app.setPath('sessionData', join(userDataDir, 'session'))
+  app.setPath('logs', join(userDataDir, 'logs'))
+  configureAppPathRuntime({
+    userDataDir,
+    dataDir,
+  })
+}
+
+async function cleanupLegacyWindowsStorage() {
+  if (process.platform !== 'win32') return
+  const legacyRoot = join(app.getPath('appData'), 'VideoGenerate')
+  const currentUserData = getAppPaths().userData
+  if (legacyRoot === currentUserData) return
+
+  const removableDirs = [
+    'Cache',
+    'Code Cache',
+    'DawnGraphiteCache',
+    'DawnWebGPUCache',
+    'GPUCache',
+    'blob_storage',
+    'shared_proto_db',
+    'VideoDecodeStats',
+  ]
+
+  await Promise.all(
+    removableDirs.map((name) =>
+      rm(join(legacyRoot, name), {
+        recursive: true,
+        force: true,
+      }).catch(() => undefined),
+    ),
+  )
+
+  const legacyPreviewDir = join(legacyRoot, '.videogenerate', 'batch-subtitle-preview')
+  await rm(legacyPreviewDir, { recursive: true, force: true }).catch(() => undefined)
+
+  const logEntries = await readdir(legacyRoot, { withFileTypes: true }).catch(() => [])
+  await Promise.all(
+    logEntries
+      .filter((entry) => entry.isFile() && /\.log(\.\d+)?$/i.test(entry.name))
+      .map((entry) =>
+        rm(join(legacyRoot, entry.name), {
+          force: true,
+        }).catch(() => undefined),
+      ),
+  )
+}
+
+async function migrateLegacyWindowsUserData() {
+  if (process.platform !== 'win32') return
+  const legacyRoot = join(app.getPath('appData'), 'VideoGenerate')
+  const currentUserData = getAppPaths().userData
+  if (legacyRoot === currentUserData) return
+
+  const entries = await readdir(legacyRoot, { withFileTypes: true }).catch(() => [])
+  if (!entries.length) return
+
+  await mkdir(currentUserData, { recursive: true })
+  for (const entry of entries) {
+    const source = join(legacyRoot, entry.name)
+    const target = join(currentUserData, entry.name)
+    const exists = await stat(target).then(() => true).catch(() => false)
+    if (exists) continue
+    try {
+      await mkdir(join(target, '..'), { recursive: true })
+      await import('node:fs/promises').then(({ cp }) =>
+        cp(source, target, {
+          recursive: true,
+          force: false,
+          errorOnExist: false,
+        }),
+      )
+    } catch {
+      // ignore migrate failures for non-critical legacy files
+    }
+  }
+}
+
+configureWindowsStorageRoot()
 
 /** 与渲染进程语言同步，供未传 title 的系统对话框默认文案；`app.whenReady` 后再对齐系统 locale */
 let mainUiLocale: AppLocale = 'zh-CN'
@@ -121,6 +209,40 @@ function revealMainWindow() {
   mainWindow.focus()
 }
 
+function setupCloneDebugConsoleBridge() {
+  if (restoreConsoleBridge) return
+  const originalConsoleLog = console.log.bind(console)
+  console.log = (...args: unknown[]) => {
+    originalConsoleLog(...args)
+    try {
+      const first = String(args[0] ?? '')
+      if (!first.includes('[clone-debug]') && !first.includes('[vectorengine-debug]') && !first.includes('[web-platform-debug]')) {
+        return
+      }
+      mainWindow?.webContents.send('clone:runtimeLog', {
+        level: 'info',
+        message: args
+          .map((item) => {
+            if (typeof item === 'string') return item
+            try {
+              return JSON.stringify(item)
+            } catch {
+              return String(item)
+            }
+          })
+          .join(' '),
+        time: Date.now(),
+      })
+    } catch {
+      // ignore bridge errors
+    }
+  }
+  restoreConsoleBridge = () => {
+    console.log = originalConsoleLog
+    restoreConsoleBridge = null
+  }
+}
+
 function createWindow() {
   const { preload } = getAppPaths()
   mainWindow = new BrowserWindow({
@@ -159,6 +281,7 @@ function createWindow() {
 }
 
 function wireIpc() {
+  setupCloneDebugConsoleBridge()
   registerLicenseIpc()
 
   ipcMain.handle('app:getPaths', async () => getAppPaths())
@@ -318,7 +441,13 @@ function wireIpc() {
     'clone:createDraftProject',
     async (
       _e,
-      payload: { locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure'; title?: string; description?: string },
+      payload: {
+        locale?: 'vi-VN' | 'zh-CN'
+        strength?: 'structure'
+        title?: string
+        description?: string
+        runMode?: 'auto' | 'manual'
+      },
     ) => {
       return await cloneService.createDraftProject(payload)
     },
@@ -425,9 +554,25 @@ function wireIpc() {
       _e,
       payload: {
         cloneProjectId: string
+        maxAutoRetryPerShot?: number
       },
     ) => {
       return await cloneService.generateShotVideosFromStoryboardFrames(payload)
+    },
+  )
+  ipcMain.handle(
+    'clone:autoRunToStoryboardVideos',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        variantCount?: number
+        selectedModelIdentityId?: string
+        productReferenceImagePaths?: string[]
+        autoBindModelPack?: boolean
+      },
+    ) => {
+      return await cloneService.autoRunCloneToStoryboardVideos(payload)
     },
   )
   ipcMain.handle(
@@ -484,6 +629,12 @@ function wireIpc() {
       return await cloneService.updateProjectMeta(payload)
     },
   )
+  ipcMain.handle(
+    'clone:bindProjectReferenceVideo',
+    async (_e, payload: { cloneProjectId: string; videoPath: string }) => {
+      return await cloneService.bindProjectReferenceVideo(payload)
+    },
+  )
   ipcMain.handle('clone:getProjectSummary', async (_e, payload: { cloneProjectId: string }) => {
     return await cloneService.getProjectSummary(payload)
   })
@@ -493,6 +644,9 @@ function wireIpc() {
       project,
       results: [],
     }
+  })
+  ipcMain.handle('clone:reconcileRemoteStoryboardVideos', async (_e, payload: { cloneProjectId: string }) => {
+    return await cloneService.reconcileRemoteStoryboardVideos(payload)
   })
   ipcMain.handle('clone:reanalyzeShotScript', async (_e, payload: { cloneProjectId: string; shotId: string }) => {
     return await cloneService.reanalyzeShotScript(payload)
@@ -606,6 +760,12 @@ function wireIpc() {
     'clone:selectProjectModelIdentity',
     async (_e, payload: { cloneProjectId: string; identityId: string }) => {
       return await cloneService.selectProjectModelIdentity(payload)
+    },
+  )
+  ipcMain.handle(
+    'clone:exportFinalVideos',
+    async (_e, payload: { cloneProjectIds: string[]; outputDir: string }) => {
+      return await cloneService.exportFinalVideos(payload)
     },
   )
   ipcMain.handle('clone:removeProject', async (_e, payload: { cloneProjectId: string }) => {
@@ -737,6 +897,26 @@ function wireIpc() {
     },
   )
   ipcMain.handle(
+    'clone:getShotConsistencyReport',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.getShotConsistencyReport(payload),
+  )
+  ipcMain.handle(
+    'clone:getShotImagePromptPreview',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.getShotImagePromptPreview(payload),
+  )
+  ipcMain.handle(
+    'clone:recompileShotConsistency',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.recompileShotConsistency(payload),
+  )
+  ipcMain.handle(
+    'clone:listShotConsistencyAnchors',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.listShotConsistencyAnchors(payload),
+  )
+  ipcMain.handle(
+    'clone:listShotConsistencyPatches',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.listShotConsistencyPatches(payload),
+  )
+  ipcMain.handle(
     'clone:generateShotFrames',
     async (_e, payload: { cloneProjectId: string; shotId: string; productReferenceImagePaths?: string[] }) =>
       cloneService.generateShotFrames(payload),
@@ -762,7 +942,7 @@ function wireIpc() {
         productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
         productPoints?: string
         productReferenceImagePaths?: string[]
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -790,7 +970,7 @@ function wireIpc() {
         shotId: string
         which?: 'start' | 'end' | 'both'
         productReferenceImagePaths?: string[]
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -950,9 +1130,15 @@ function wireIpc() {
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         klingImageModel?: string
         grsaiImageModel?: string
+        apifoxHubProfile?: 'ai666' | 'vectorengine'
+        videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+        imageApifoxHubProfile?: 'ai666' | 'vectorengine'
+        chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+        ai666Hub?: import('./modules/clone/types').ApifoxHubCredentials
+        vectorEngineHub?: import('./modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('./modules/clone/types').ApifoxHubCredentials
       },
     ) => {
@@ -984,6 +1170,12 @@ function wireIpc() {
         imageProviderPrimary: payload?.imageProviderPrimary,
         klingImageModel: payload?.klingImageModel,
         grsaiImageModel: payload?.grsaiImageModel,
+        apifoxHubProfile: payload?.apifoxHubProfile,
+        videoApifoxHubProfile: payload?.videoApifoxHubProfile,
+        imageApifoxHubProfile: payload?.imageApifoxHubProfile,
+        chatApifoxHubProfile: payload?.chatApifoxHubProfile,
+        ai666Hub: payload?.ai666Hub,
+        vectorEngineHub: payload?.vectorEngineHub,
         apifoxHub: payload?.apifoxHub,
       })
     },
@@ -1085,7 +1277,9 @@ function wireIpc() {
 
 app.whenReady().then(async () => {
   mainUiLocale = normalizeAppLocale(app.getLocale())
+  await migrateLegacyWindowsUserData()
   await ensureAppDirs()
+  await cleanupLegacyWindowsStorage()
   // 避免 Windows 某些环境下 GPU cache 目录权限问题
   const { cacheDir } = getAppPaths()
   app.commandLine.appendSwitch('disk-cache-dir', cacheDir)

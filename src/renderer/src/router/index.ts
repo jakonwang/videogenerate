@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { ensureLicensed } from '@/lib/licenseSession'
 import { validateStoredWebSession } from '@/lib/webApiClient'
 
 const router = createRouter({
@@ -23,6 +22,16 @@ const router = createRouter({
         { path: 'clone', name: 'clone', component: () => import('@/ui/views/CloneTaskListView.vue') },
         { path: 'clone/:projectId', name: 'clone-project', component: () => import('@/ui/views/CloneView.vue') },
         { path: 'billing', name: 'billing', component: () => import('@/ui/views/BillingView.vue') },
+        { path: 'plugins', name: 'plugins', component: () => import('@/ui/views/PluginsView.vue') },
+        { path: 'plugins/geelark-publisher', name: 'plugin-geelark-publisher', component: () => import('@/ui/views/GeelarkPublisherView.vue') },
+        {
+          path: 'plugins/geelark-publisher/publish-center',
+          name: 'plugin-geelark-publish-center',
+          component: () => import('@/ui/views/GeelarkPublishCenterView.vue'),
+        },
+        { path: 'plugins/video-parser-download', name: 'plugin-video-parser-download', component: () => import('@/ui/views/PluginWorkspacePlaceholderView.vue') },
+        { path: 'plugins/video-batch-watermark', name: 'plugin-video-batch-watermark', component: () => import('@/ui/views/PluginWorkspacePlaceholderView.vue') },
+        { path: 'plugins/video-batch-subtitle', name: 'plugin-video-batch-subtitle', component: () => import('@/ui/views/VideoBatchSubtitleView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/ui/views/SettingsView.vue') },
         { path: 'products', name: 'products', component: () => import('@/ui/views/ProductsView.vue') },
         { path: 'templates', name: 'templates', component: () => import('@/ui/views/TemplatesView.vue') },
@@ -36,11 +45,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.meta.public) return true
   if (await validateStoredWebSession()) return true
-  const ok = await ensureLicensed()
-  if (!ok) {
-    return { name: 'auth', replace: true }
-  }
-  return true
+  return { name: 'auth', replace: true }
 })
 
 export { router }

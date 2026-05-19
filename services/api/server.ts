@@ -1,11 +1,14 @@
 import http from 'node:http'
+import { join } from 'node:path'
+import { getAppEnv } from '../../src/main/lib/appEnv'
 import { configureAppPathRuntime, ensureAppDirs } from '../../src/main/lib/paths'
 import { webPlatformRepo } from '../../src/main/modules/web-platform/repo'
+import { cloneRepo } from '../../src/main/modules/clone/repo'
 import { handleWebApiRequest } from '../../src/main/modules/web-platform/webApiRouter'
 
 const port = Number(process.env.VIDEOGENERATE_WEB_API_PORT || 18080)
 const host = process.env.VIDEOGENERATE_WEB_API_HOST || '0.0.0.0'
-const cwdDataDir = process.env.VIDEOGENERATE_DATA_DIR || `${process.cwd()}\\.videogenerate`
+const cwdDataDir = process.env.VIDEOGENERATE_DATA_DIR || join(process.cwd(), '.videogenerate')
 
 async function bootstrap() {
   configureAppPathRuntime({
@@ -13,6 +16,7 @@ async function bootstrap() {
   })
   await ensureAppDirs()
   await webPlatformRepo.ensureSeed()
+  await cloneRepo.ensureSeed()
 
   const server = http.createServer((req, res) => {
     void handleWebApiRequest(req, res)
@@ -23,6 +27,7 @@ async function bootstrap() {
   })
 
   console.log(`[videogen-web-api] listening on http://${host}:${port}`)
+  console.log(`[videogen-web-api] app env: ${getAppEnv()}`)
   console.log(`[videogen-web-api] data dir: ${cwdDataDir}`)
 }
 

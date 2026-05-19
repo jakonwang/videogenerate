@@ -1,7 +1,9 @@
 import { createHmac, randomUUID } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { basename, extname } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { basename, extname, resolve } from 'node:path'
 import type { ModelCredentials } from './types'
+
+const publicUrlCache = new Map<string, string>()
 
 function base64Url(input: Buffer | string) {
   return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
@@ -40,7 +42,7 @@ function requireQiniuConfig(credentials: ModelCredentials) {
   const bucket = String(credentials.qiniuBucket || '').trim()
   const domain = cleanDomain(String(credentials.qiniuDomain || '').trim())
   if (!accessKey || !secretKey || !bucket || !domain) {
-    throw new Error('GRS.AI 需要公网输入 URL；请先在模型设置中配置七牛云 AccessKey、SecretKey、Bucket 和外链域名，或直接使用公网素材 URL。')
+    throw new Error('GRS.AI 需要公网输入 URL，请先在模型设置中配置七牛云 AccessKey、SecretKey、Bucket 和外链域名，或直接使用公网素材 URL。')
   }
   return {
     accessKey,
@@ -76,6 +78,7 @@ export async function uploadToQiniu(input: { credentials: ModelCredentials; file
     form.append('file', new Blob([buf], { type: mimeByPath(input.filePath) }), safeName || `asset${ext}`)
     return form
   }
+
   const upload = async (uploadHost: string) => {
     const res = await fetch(uploadHost, { method: 'POST', body: makeForm() })
     const text = await res.text().catch(() => '')
@@ -89,7 +92,7 @@ export async function uploadToQiniu(input: { credentials: ModelCredentials; file
   }
 
   const { res, text, uploadHost } = result
-  if (!res.ok) throw new Error(`七牛云上传失败: ${res.status} ${text || res.statusText}（上传域名：${uploadHost}）`)
+  if (!res.ok) throw new Error(`七牛云上传失败 ${res.status} ${text || res.statusText}（上传域名：${uploadHost}）`)
 
   let json: any = null
   try {
@@ -103,5 +106,12 @@ export async function uploadToQiniu(input: { credentials: ModelCredentials; file
 
 export async function toPublicUrlViaQiniu(credentials: ModelCredentials, value: string, keyPrefix?: string) {
   if (/^https?:\/\//i.test(String(value || '').trim())) return value
-  return await uploadToQiniu({ credentials, filePath: value, keyPrefix })
+  const filePath = resolve(String(value || '').trim())
+  const fileStat = await stat(filePath)
+  const cacheKey = [filePath, fileStat.size, fileStat.mtimeMs, String(keyPrefix || '')].join('|')
+  const cached = publicUrlCache.get(cacheKey)
+  if (cached) return cached
+  const uploaded = await uploadToQiniu({ credentials, filePath, keyPrefix })
+  publicUrlCache.set(cacheKey, uploaded)
+  return uploaded
 }

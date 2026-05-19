@@ -233,6 +233,10 @@ export type ShotSpec = {
   keyframes?: ShotKeyframeSpec
   aiGeneratedAssetId?: string
   reviewStatus: CloneReviewStatus
+  consistencyMode?: 'standard' | 'strict'
+  compiledPrompt?: string
+  compiledNegativePrompt?: string
+  promptCompilerVersion?: string
 }
 
 export type ShotVariant = {
@@ -558,6 +562,7 @@ export type CloneStoryboardFrame = {
   aspectRatio: '9:16'
   status: 'idle' | 'cropped' | 'failed'
   error?: string
+  retryCount?: number
   updatedAt?: number
 }
 
@@ -590,6 +595,7 @@ export type CloneShotVideoOutput = {
 export type CloneFinalComposeStatus = {
   status: 'idle' | 'ready' | 'composing' | 'done' | 'failed'
   outputPath?: string
+  coverImagePath?: string
   error?: string
   updatedAt: number
 }
@@ -752,6 +758,11 @@ export type ClonePipelineStatus = {
     image: string
     script: string
   }
+  configuredProviderSummary?: {
+    video: ClonePipelineModelSummary
+    image: ClonePipelineModelSummary
+    script: ClonePipelineModelSummary
+  }
   errorContext?: ClonePipelineErrorContext
 }
 
@@ -800,6 +811,8 @@ export type CloneProjectStatus =
   | 'generating'
   | 'ready_for_review'
   | 'completed'
+
+export type CloneRunMode = 'auto' | 'manual'
 
 export type SessionResultStatus = 'pending' | 'passed' | 'rejected' | 'failed'
 
@@ -858,6 +871,7 @@ export type CloneProject = {
   description?: string
   archived?: boolean
   status: CloneProjectStatus
+  runMode: CloneRunMode
   locale: CloneLocale
   strength: CloneStrength
   referenceVideoPath: string
@@ -902,6 +916,17 @@ export type CloneProject = {
   policy: CloneGenerationPolicy
   lastError?: string
   lastErrorContext?: ClonePipelineErrorContext
+  autoFlowStatus?: {
+    enabled: boolean
+    targetStage: 'storyboard_video_generation' | 'final_compose'
+    status: 'idle' | 'running' | 'done' | 'partial_failed' | 'failed'
+    currentStage?: 'analyze' | 'materials' | 'script' | 'storyboard_images' | 'storyboard_videos' | 'quality_gate' | 'final_compose'
+    imageRetryLimit: number
+    videoRetryLimit: number
+    lastStartedAt?: number
+    lastCompletedAt?: number
+    lastSummary?: string
+  }
 }
 
 export type CloneProjectSummary = {
@@ -910,6 +935,7 @@ export type CloneProjectSummary = {
   description?: string
   archived?: boolean
   status: CloneProjectStatus | ClonePreviewPipelineStatus['status'] | string
+  runMode: CloneRunMode
   createdAt: number
   updatedAt: number
   currentStep: CloneWorkflowV2Step
@@ -923,6 +949,7 @@ export type CloneProjectSummary = {
   finalOutputPath: string
   selectedModelIdentityName: string
   productReferenceImageCount: number
+  productReferenceImagePaths?: string[]
   shotCount: number
   generatedImageCount: number
   generatedVideoCount: number
@@ -957,6 +984,12 @@ export type ModelCredentials = {
   imageProviderPrimary?: ImageProviderName
   klingImageModel?: string
   grsaiImageModel?: string
+  apifoxHubProfile?: 'ai666' | 'vectorengine'
+  videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+  imageApifoxHubProfile?: 'ai666' | 'vectorengine'
+  chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+  ai666Hub?: ApifoxHubCredentials
+  vectorEngineHub?: ApifoxHubCredentials
   apifoxHub?: ApifoxHubCredentials
 }
 

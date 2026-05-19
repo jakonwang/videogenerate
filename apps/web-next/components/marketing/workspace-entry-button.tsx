@@ -2,6 +2,7 @@
 
 import { LogIn } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { startTransition } from 'react'
 
 import { getSessionToken } from '@/lib/api-client'
 
@@ -16,7 +17,9 @@ export function WorkspaceEntryButton({
 
   const handleClick = () => {
     const token = getSessionToken()
-    router.push(token ? '/workspace' : '/login?next=%2Fworkspace')
+    startTransition(() => {
+      router.push(token ? '/workspace' : '/login?next=%2Fworkspace')
+    })
   }
 
   return (

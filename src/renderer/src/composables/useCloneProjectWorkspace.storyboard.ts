@@ -42,10 +42,10 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
         ? ((await webApiClient.saveCloneProjectProductImages(projectId, {
             productReferenceImagePaths: options.productRefsDraft.value ?? [],
           }))?.project as TProject)
-        : ((await window.api.clone.saveProjectProductImages({
+        : (((await window.api.clone.saveProjectProductImages({
             cloneProjectId: projectId,
             productReferenceImagePaths: options.productRefsDraft.value,
-          })) as TProject)
+          })) as { project?: TProject })?.project as TProject)
       projectActions.applyProject(project || options.current.value)
       options.setStageLog?.(successMessage, 'success')
     } catch (error: any) {
@@ -125,10 +125,10 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
           ? ((await webApiClient.saveCloneProjectProductImages(projectId, {
               productReferenceImagePaths: [...options.productRefsDraft.value],
             }))?.project as TProject)
-          : ((await window.api.clone.saveProjectProductImages({
+          : (((await window.api.clone.saveProjectProductImages({
               cloneProjectId: projectId,
               productReferenceImagePaths: [...options.productRefsDraft.value],
-            })) as TProject)
+            })) as { project?: TProject })?.project as TProject)
         projectActions.applyProject(syncedProject || options.current.value)
         options.pushRuntimeLog?.('商品图草稿同步完成，开始提交分镜图片生成。', 'success')
       }
@@ -182,6 +182,7 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
   const regenerateStoryboardFrame = async (shotId: string, effectiveProductRefs: string[]) => {
     const projectId =
       options.resolveActiveProjectId?.(options.current.value?.id) || String(options.current.value?.id || '').trim()
+    const useWebApi = hasStoredWebToken()
     if (!projectId) {
       options.markError?.('请先完成参考视频分析。', '请先完成参考视频分析。')
       return
@@ -193,33 +194,34 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
     if (options.loading) options.loading.value = true
     options.errorText.value = ''
     options.setStageLog?.(`正在重新生成 ${shotLabel(shotId)} 的分镜图片。`)
-    options.pushRuntimeLog?.(`提交单镜分镜图片重生成：project=${projectId} shot=${shotId} refs=${effectiveProductRefs.length}`, 'info')
+    options.pushRuntimeLog?.(`提交单镜分镜图片重生成：project=${projectId} shot=${shotId} refs=${effectiveProductRefs.length} channel=${useWebApi ? 'web-api' : 'electron-ipc'}`, 'info')
     try {
       if (options.productRefsDraft.value) {
-        const syncedProject = hasStoredWebToken()
+        const syncedProject = useWebApi
           ? ((await webApiClient.saveCloneProjectProductImages(projectId, {
               productReferenceImagePaths: [...options.productRefsDraft.value],
             }))?.project as TProject)
-          : ((await window.api.clone.saveProjectProductImages({
+          : (((await window.api.clone.saveProjectProductImages({
               cloneProjectId: projectId,
               productReferenceImagePaths: [...options.productRefsDraft.value],
-            })) as TProject)
+            })) as { project?: TProject })?.project as TProject)
         projectActions.applyProject(syncedProject || options.current.value)
         options.pushRuntimeLog?.('单镜重生成前已同步商品图草稿。', 'success')
       }
-      const project = hasStoredWebToken()
+      const project = useWebApi
         ? (((await webApiClient.regenerateStoryboardImage(projectId, shotId, {
             productReferenceImagePaths: [...effectiveProductRefs],
           }))?.project || options.current.value) as TProject)
-        : ((await window.api.clone.generateShotFrames({
+        : ((await window.api.clone.generateGptShotFrames({
             cloneProjectId: projectId,
             shotId,
+            which: 'both',
             productReferenceImagePaths: [...effectiveProductRefs],
           })) as TProject)
       projectActions.applyProject(project || options.current.value)
       const latest =
         (await projectActions.waitForStoryboardFrames(projectId, 12000)) ||
-        (hasStoredWebToken()
+        (useWebApi
           ? (((await webApiClient.getCloneProject(projectId))?.project || null) as TProject | null)
           : ((await window.api.clone.getProject({ cloneProjectId: projectId })) as TProject))
       if (latest?.id) {

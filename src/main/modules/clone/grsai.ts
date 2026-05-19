@@ -127,6 +127,7 @@ export function pickOutputUrl(json: any): string {
 export async function createGrsImageTask(input: {
   credentials: ModelCredentials
   prompt: string
+  negativePrompt?: string
   urls: string[]
 }) {
   const key = requireGrsKey(input.credentials)
@@ -134,6 +135,7 @@ export async function createGrsImageTask(input: {
   const body = {
     model: String(input.credentials.grsaiImageModel || '').trim() || 'gpt-image-2',
     prompt: input.prompt,
+    negativePrompt: String(input.negativePrompt || '').trim() || undefined,
     aspectRatio: '9:16',
     urls: input.urls,
     webHook: '-1',
@@ -149,6 +151,7 @@ export async function createGrsImageTask(input: {
 export async function createGrsVideoTask(input: {
   credentials: ModelCredentials
   prompt: string
+  negativePrompt?: string
   firstFrameUrl: string
   lastFrameUrl?: string
 }) {
@@ -157,6 +160,7 @@ export async function createGrsVideoTask(input: {
   const body = {
     model: String(input.credentials.grsaiVideoModel || '').trim() || 'veo3.1-fast',
     prompt: input.prompt,
+    negativePrompt: String(input.negativePrompt || '').trim() || undefined,
     firstFrameUrl: input.firstFrameUrl,
     lastFrameUrl: input.lastFrameUrl || '',
     urls: [],

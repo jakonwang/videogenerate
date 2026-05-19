@@ -2,12 +2,15 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronRight, CirclePlay, Plus, Sparkles, Upload, Video } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import type { CloneRunMode } from '@shared/web-api/types'
 
 import { AppShell } from '@/components/app/app-shell'
 import { EmptyState, ErrorState } from '@/components/app/page-state'
 import { ProtectedPageGate } from '@/components/app/protected-page-gate'
 import { Button } from '@/components/ui/button'
+import { RunModeDialog } from '@/components/clone/run-mode-dialog'
+import { useAppNavigation } from '@/hooks/use-app-navigation'
 import { useAuthGuard } from '@/hooks/use-auth-guard'
 import { apiClient } from '@/lib/api-client'
 import { compactText, formatPercent, formatStepLabel, toPreviewSrc } from '@/lib/utils'
@@ -64,7 +67,7 @@ const fallbackTasks = [
 ] as const
 
 export default function WorkspacePage() {
-  const router = useRouter()
+  const { navigate, prefetchMany } = useAppNavigation()
   const auth = useAuthGuard()
 
   const projectsQuery = useQuery({
@@ -75,19 +78,27 @@ export default function WorkspacePage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (input?: { title?: string; description?: string }) =>
+    mutationFn: (input: { title?: string; description?: string; runMode: CloneRunMode }) =>
       apiClient.createCloneProject({
         title: input?.title,
         description: input?.description,
         locale: 'zh-CN',
+        runMode: input.runMode,
       }),
     onSuccess: (result) => {
-      if (result.project?.id) router.push(`/clone/${result.project.id}`)
+      if (result.project?.id) navigate(`/clone/${result.project.id}`)
     },
   })
 
   const rows = projectsQuery.data || []
   const recentTasks = rows.slice(0, 3)
+  const [runModeOpen, setRunModeOpen] = useState(false)
+  const [selectedRunMode, setSelectedRunMode] = useState<CloneRunMode | null>(null)
+  const [pendingCreateInput, setPendingCreateInput] = useState<{ title?: string; description?: string } | null>(null)
+
+  useEffect(() => {
+    prefetchMany(['/clone', '/templates', ...rows.slice(0, 3).map((item) => `/clone/${item.id}`)])
+  }, [prefetchMany, rows])
 
   const gate = ProtectedPageGate({
     auth,
@@ -97,12 +108,47 @@ export default function WorkspacePage() {
 
   if (gate) return gate
 
+  const requestCreateTask = (input?: { title?: string; description?: string }) => {
+    setPendingCreateInput(input || {})
+    setRunModeOpen(true)
+  }
+
+  const confirmCreateTask = () => {
+    if (!selectedRunMode) return
+    createMutation.mutate(
+      {
+        ...(pendingCreateInput || {}),
+        runMode: selectedRunMode,
+      },
+      {
+        onSettled: () => {
+          setRunModeOpen(false)
+          setSelectedRunMode(null)
+          setPendingCreateInput(null)
+        },
+      },
+    )
+  }
+
   return (
     <AppShell
       headerSearchPlaceholder="搜索模板、任务、素材..."
-      onCreateTask={() => createMutation.mutate({ title: '新建视频任务' })}
+      onCreateTask={() => requestCreateTask({ title: '新建视频任务' })}
       creatingTask={createMutation.isPending}
     >
+      <RunModeDialog
+        open={runModeOpen}
+        creating={createMutation.isPending}
+        selectedMode={selectedRunMode}
+        onSelect={setSelectedRunMode}
+        onCancel={() => {
+          if (createMutation.isPending) return
+          setRunModeOpen(false)
+          setSelectedRunMode(null)
+          setPendingCreateInput(null)
+        }}
+        onConfirm={confirmCreateTask}
+      />
       <div className="workspace-home">
         <section className="workspace-hero panel">
           <div className="workspace-hero__copy">
@@ -115,11 +161,11 @@ export default function WorkspacePage() {
               <p>从灵感到爆款，只需 3 步</p>
             </div>
             <div className="workspace-hero__actions">
-              <Button size="lg" onClick={() => createMutation.mutate({ title: '新建视频任务' })} disabled={createMutation.isPending}>
+              <Button size="lg" onClick={() => requestCreateTask({ title: '新建视频任务' })} disabled={createMutation.isPending}>
                 <Plus className="h-5 w-5" />
                 {createMutation.isPending ? '创建中...' : '开始创作'}
               </Button>
-              <Button size="lg" variant="secondary" onClick={() => router.push('/clone')}>
+              <Button size="lg" variant="secondary" onClick={() => navigate('/clone')}>
                 <Upload className="h-5 w-5" />
                 导入参考视频
               </Button>
@@ -145,7 +191,7 @@ export default function WorkspacePage() {
         <WorkspaceSection
           title="最近任务"
           actionLabel="查看全部"
-          onAction={() => router.push('/clone')}
+          onAction={() => navigate('/clone')}
         >
           {projectsQuery.isPending
             ? Array.from({ length: 4 }).map((_, index) => (
@@ -186,7 +232,9 @@ export default function WorkspacePage() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => (isRealTask ? router.push(`/clone/${item.id}`) : router.push('/clone'))}
+                  onMouseEnter={() => prefetchMany([isRealTask ? `/clone/${item.id}` : '/clone'])}
+                  onFocus={() => prefetchMany([isRealTask ? `/clone/${item.id}` : '/clone'])}
+                  onClick={() => (isRealTask ? navigate(`/clone/${item.id}`) : navigate('/clone'))}
                   className="workspace-media-card"
                 >
                   <div className="workspace-media-card__media">
@@ -226,7 +274,7 @@ export default function WorkspacePage() {
             })}
 
           {!projectsQuery.isPending && !projectsQuery.isError ? (
-            <button type="button" onClick={() => createMutation.mutate({ title: '新建视频任务' })} className="workspace-media-card workspace-media-card--create">
+            <button type="button" onClick={() => requestCreateTask({ title: '新建视频任务' })} className="workspace-media-card workspace-media-card--create">
               <span className="workspace-media-card__create-icon">
                 <Plus className="h-8 w-8" />
               </span>
@@ -241,7 +289,7 @@ export default function WorkspacePage() {
                 title="还没有最近任务"
                 description="从参考视频开始创建第一条复刻任务后，首页会持续展示最近进展和快捷入口。"
                 actionLabel="新建任务"
-                onAction={() => createMutation.mutate({ title: '新建视频任务' })}
+                onAction={() => requestCreateTask({ title: '新建视频任务' })}
               />
             </div>
           ) : null}
@@ -250,10 +298,17 @@ export default function WorkspacePage() {
         <WorkspaceSection
           title="推荐模板"
           actionLabel="查看全部"
-          onAction={() => router.push('/templates')}
+          onAction={() => navigate('/templates')}
         >
           {templatePresets.map((item) => (
-            <button key={item.id} type="button" onClick={() => router.push('/templates')} className="workspace-template-card">
+            <button
+              key={item.id}
+              type="button"
+              onMouseEnter={() => prefetchMany(['/templates'])}
+              onFocus={() => prefetchMany(['/templates'])}
+              onClick={() => navigate('/templates')}
+              className="workspace-template-card"
+            >
               <div className="workspace-template-card__overlay" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={item.image} alt={item.title} className="workspace-template-card__image" />

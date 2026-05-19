@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { type CloneProjectSummary, webApiClient } from '../services/webApi'
+import { type CloneProjectSummary, type CloneRunMode, webApiClient } from '../services/webApi'
 
 const router = useRouter()
 const loading = ref(false)
 const creating = ref(false)
 const rows = ref<CloneProjectSummary[]>([])
 const query = ref('')
+const createRunMode = ref<CloneRunMode | ''>('')
 
 const filteredRows = computed(() => {
   const keyword = query.value.trim().toLowerCase()
@@ -65,12 +66,15 @@ async function refresh() {
 
 async function createTask() {
   if (creating.value) return
+  if (!createRunMode.value) return
   creating.value = true
   try {
     const result = await webApiClient.createCloneProject({
       locale: 'zh-CN',
+      runMode: createRunMode.value,
     })
     if (result.project?.id) {
+      createRunMode.value = ''
       await router.push(`/clone/${result.project.id}`)
     }
   } finally {
@@ -98,11 +102,18 @@ onMounted(refresh)
         <button class="web-button web-button--ghost" type="button" @click="refresh">
           {{ loading ? '刷新中...' : '刷新列表' }}
         </button>
-        <button class="web-button web-button--lg" type="button" :disabled="creating" @click="createTask">
+        <button class="web-button web-button--ghost" type="button" :class="{ 'is-active': createRunMode === 'auto' }" @click="createRunMode = 'auto'">
+          自动运行
+        </button>
+        <button class="web-button web-button--ghost" type="button" :class="{ 'is-active': createRunMode === 'manual' }" @click="createRunMode = 'manual'">
+          手动运行
+        </button>
+        <button class="web-button web-button--lg" type="button" :disabled="creating || !createRunMode" @click="createTask">
           {{ creating ? '创建中...' : '新建复刻任务' }}
         </button>
       </div>
     </header>
+    <p class="run-mode-hint">创建任务前必须选择运行模式。自动运行会自动推进并在最终成片前执行硬门禁；手动运行按阶段推进，但最终合成同样不能绕过门禁。</p>
 
     <section class="task-stats">
       <article class="web-card stat-card">

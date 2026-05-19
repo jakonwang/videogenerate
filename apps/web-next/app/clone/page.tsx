@@ -18,12 +18,14 @@ import {
   Video,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import type { CloneRunMode } from '@shared/web-api/types'
 
 import { AuthRedirectScreen } from '@/components/app/auth-redirect-screen'
 import { AppShell } from '@/components/app/app-shell'
 import { EmptyState, ErrorState } from '@/components/app/page-state'
 import { Button } from '@/components/ui/button'
+import { RunModeDialog } from '@/components/clone/run-mode-dialog'
+import { useAppNavigation } from '@/hooks/use-app-navigation'
 import { useAuthGuard } from '@/hooks/use-auth-guard'
 import { useCloneTaskList } from '@/hooks/use-clone-task-list'
 import { cn, compactText, formatDateTime, formatPercent, formatStatusTone, formatStepLabel, toPreviewSrc } from '@/lib/utils'
@@ -67,11 +69,13 @@ const RAIL_FEATURES = [
 type StatusFilter = (typeof STATUS_FILTERS)[number]['key']
 
 export default function ClonePage() {
-  const router = useRouter()
+  const { navigate, prefetchMany } = useAppNavigation()
   const { ready, authed, redirecting, sessionRestoring } = useAuthGuard()
   const { projectsQuery, createMutation, removeMutation } = useCloneTaskList()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [page, setPage] = useState(1)
+  const [runModeOpen, setRunModeOpen] = useState(false)
+  const [selectedRunMode, setSelectedRunMode] = useState<CloneRunMode | null>(null)
 
   const rows = projectsQuery.data || []
 
@@ -118,12 +122,22 @@ export default function ClonePage() {
     return filteredRows.slice(start, start + PAGE_SIZE)
   }, [filteredRows, page])
 
-  const createTask = () =>
-    createMutation.mutate(undefined, {
+  useEffect(() => {
+    prefetchMany(['/download', ...rows.slice(0, 6).map((item) => `/clone/${item.id}`)])
+  }, [prefetchMany, rows])
+
+  const createTask = () => setRunModeOpen(true)
+
+  const confirmCreateTask = () => {
+    if (!selectedRunMode) return
+    createMutation.mutate(selectedRunMode, {
       onSuccess: (result) => {
-        if (result.project?.id) router.push(`/clone/${result.project.id}`)
+        setRunModeOpen(false)
+        setSelectedRunMode(null)
+        if (result.project?.id) navigate(`/clone/${result.project.id}`)
       },
     })
+  }
 
   if (sessionRestoring || (!ready && !authed)) {
     return <AuthRedirectScreen title="正在恢复工作台会话" description="系统正在校验登录状态并准备复刻任务列表。" />
@@ -135,7 +149,19 @@ export default function ClonePage() {
 
   return (
     <AppShell headerSearchPlaceholder="搜索任务、模型、模板或设置项">
-      <div className="page-shell page-shell--fixed clone-page">
+      <div className="page-shell page-shell--fixed clone-page" data-testid="clone-list-page">
+        <RunModeDialog
+          open={runModeOpen}
+          creating={createMutation.isPending}
+          selectedMode={selectedRunMode}
+          onSelect={setSelectedRunMode}
+          onCancel={() => {
+            if (createMutation.isPending) return
+            setRunModeOpen(false)
+            setSelectedRunMode(null)
+          }}
+          onConfirm={confirmCreateTask}
+        />
         <section className="clone-workspace clone-workspace--wide">
           <div className="clone-workspace__main panel">
             <div className="clone-hero clone-hero--compact">
@@ -148,10 +174,10 @@ export default function ClonePage() {
               </div>
 
               <div className="clone-hero__actions">
-                <Button variant="secondary" onClick={() => router.push('/download')}>
+                <Button variant="secondary" onClick={() => navigate('/download')}>
                   批量导出
                 </Button>
-                <Button onClick={createTask} disabled={createMutation.isPending}>
+                <Button data-testid="clone-create-task-button" onClick={createTask} disabled={createMutation.isPending}>
                   <Plus className="h-4 w-4" />
                   {createMutation.isPending ? '创建中...' : '新建任务'}
                 </Button>
@@ -216,7 +242,7 @@ export default function ClonePage() {
                       key={item.id}
                       item={item}
                       removing={removeMutation.isPending && removeMutation.variables === item.id}
-                      onOpen={() => router.push(`/clone/${item.id}`)}
+                      onOpen={() => navigate(`/clone/${item.id}`)}
                       onRemove={() => removeMutation.mutate(item.id)}
                     />
                   ))}
@@ -320,7 +346,14 @@ export default function ClonePage() {
                 {rows.slice(0, 4).map((item) => {
                   const thumb = toPreviewSrc(item.coverAssetPath || item.referenceVideoPath || '')
                   return (
-                    <button key={item.id} type="button" className="clone-rail-switch" onClick={() => router.push(`/clone/${item.id}`)}>
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="clone-rail-switch"
+                      onMouseEnter={() => prefetchMany([`/clone/${item.id}`])}
+                      onFocus={() => prefetchMany([`/clone/${item.id}`])}
+                      onClick={() => navigate(`/clone/${item.id}`)}
+                    >
                       <span className="clone-rail-switch__thumb">{thumb ? <img src={thumb} alt={item.title || 'cover'} /> : <Video className="h-4 w-4" />}</span>
                       <span className="clone-rail-switch__copy">
                         <strong>{compactText(item.title, '未命名任务')}</strong>
@@ -330,7 +363,7 @@ export default function ClonePage() {
                   )
                 })}
 
-                <Button variant="secondary" className="w-full" onClick={() => router.push('/clone')}>
+                <Button variant="secondary" className="w-full" onClick={() => navigate('/clone')}>
                   查看全部任务
                 </Button>
               </div>

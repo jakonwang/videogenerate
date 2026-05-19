@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { cleanAiText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
+import { buildSilentCommercialGlobalRule } from './prompt'
 import type { CloneProductType, ModelCredentials, ShotSpec, ShotVariant } from './types'
 
 type GenerateVariantsInput = {
@@ -50,12 +51,14 @@ function buildPrompt(input: GenerateVariantsInput) {
     2,
   )
   return [
+    buildSilentCommercialGlobalRule(),
     'You are an elite TikTok ecommerce creative director specialized in generating non-duplicate but still high-converting short-video shot variants.',
     'Generate multiple variants for the given original shot while preserving the selling logic.',
     `Strategy: ${input.strategy || 'balanced'}`,
     `Target market: ${input.targetMarket || 'vi-VN'}`,
     `Product category: ${input.productCategory || 'general'}`,
     'Goal: keep the original selling intent, but make the visuals, copy, scene, action, camera language, and composition meaningfully different to reduce duplication risk.',
+    'Human presence must remain a product-supporting device rather than the main attraction.',
     'Forced variation rules: person, scene, action, lens language, wording, and composition must change.',
     `Variant count: ${Math.max(1, Math.floor(input.variantsPerShot))}`,
     'Distribution target: at least 30% product_closeup, at least 20% no_person or weak-person presence, and at least 30% realistic daily-life scenes.',

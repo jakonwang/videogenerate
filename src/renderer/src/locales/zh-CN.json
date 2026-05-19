@@ -109,8 +109,8 @@
   },
   "cloneView": {
     "videoStage": {
-      "title": "分镜生成视频",
-      "description": "查看、生成与重试镜头。",
+      "title": "生成分镜视频",
+      "description": "生成与重试镜头。",
       "primaryAction": "继续生成剩余分镜视频",
       "listTab": "分镜列表",
       "settingsTab": "生成设置",

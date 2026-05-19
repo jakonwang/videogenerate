@@ -5,17 +5,29 @@ export type CloneProjectLike = {
   referenceVideoPath: string
   storyboardFrames?: Array<{ shotId: string }>
   workflowV2?: { currentStep?: string }
-  shotVideoOutputs?: Array<{ shotId: string; taskId?: string; videoPath?: string }>
+  shotVideoOutputs?: Array<{ shotId: string; taskId?: string; videoPath?: string; status?: string; error?: string; retryCount?: number }>
   pipelineStatus?: unknown
   finalCompose?: { outputPath?: string; error?: string; status?: string }
   previewPipeline?: { lastError?: string }
+  autoFlowStatus?: {
+    enabled?: boolean
+    status?: string
+    currentStage?: string
+    imageRetryLimit?: number
+    videoRetryLimit?: number
+    lastSummary?: string
+  }
   blueprint?: {
     scriptAnalysisError?: string
     shots?: Array<{
       id: string
+      generatedTaskId?: string
       productReferenceImagePaths?: string[]
       gptFirstFramePath?: string
       generatedFirstFramePath?: string
+      gptFrameError?: string
+      error?: string
+      retryCount?: number
     }>
   } | null
   baseBlueprint?: {

@@ -45,19 +45,27 @@ export function useCloneWorkspace(projectId: string) {
     queryKey: ['clone-project', projectId],
     queryFn: () => apiClient.getCloneProject(projectId),
     enabled: Boolean(projectId),
+    staleTime: 5_000,
     refetchInterval: polling ? 5000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   })
 
   const runtimeQuery = useQuery({
     queryKey: ['clone-runtime', projectId],
     queryFn: () => apiClient.getCloneRuntime(projectId),
     enabled: Boolean(projectId),
+    staleTime: 5_000,
     refetchInterval: polling ? 5000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   })
 
   const modelsQuery = useQuery({
     queryKey: ['clone-models'],
     queryFn: () => apiClient.listCloneModelIdentities(),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const project = projectQuery.data?.project ?? null
@@ -82,6 +90,8 @@ export function useCloneWorkspace(projectId: string) {
     () => String(project?.selectedModelIdentityId || project?.selectedModelIdentitySnapshot?.id || '').trim(),
     [project],
   )
+  const allowMockWhenNoKey = Boolean(runtime?.pipeline?.credentials?.allowMockWhenNoKey ?? project?.allowMockWhenNoKey ?? false)
+  const productionMode = !allowMockWhenNoKey
 
   const refreshAll = async () => {
     await Promise.all([
@@ -307,6 +317,35 @@ export function useCloneWorkspace(projectId: string) {
     onError: (error: Error) => pushLog(`镜头排序失败：${error.message}`),
   })
 
+  const getConsistencyReport = async (shotId: string) => {
+    const res = await apiClient.getCloneShotConsistencyReport(projectId, shotId)
+    return res?.result ?? res ?? null
+  }
+
+  const getShotImagePromptPreview = async (shotId: string) => {
+    const res = await apiClient.getCloneShotImagePromptPreview(projectId, shotId)
+    return res?.result ?? res ?? null
+  }
+
+  const getConsistencyAnchors = async (shotId: string) => {
+    const res = await apiClient.getCloneShotConsistencyAnchors(projectId, shotId)
+    return res?.result ?? res ?? []
+  }
+
+  const getConsistencyPatches = async (shotId: string) => {
+    const res = await apiClient.getCloneShotConsistencyPatches(projectId, shotId)
+    return res?.result ?? res ?? []
+  }
+
+  const recompileConsistencyMutation = useMutation({
+    mutationFn: (shotId: string) => apiClient.recompileCloneShotConsistency(projectId, shotId),
+    onSuccess: async (_, shotId) => {
+      pushLog(`已重新编译一致性提示词：${shotId}`)
+      await refreshAll()
+    },
+    onError: (error: Error) => pushLog(`一致性重编译失败：${error.message}`),
+  })
+
   return {
     consoleLines,
     project,
@@ -335,10 +374,12 @@ export function useCloneWorkspace(projectId: string) {
     refreshing: projectQuery.isRefetching || runtimeQuery.isRefetching,
     selectedCandidate:
       scriptCandidates.find((item: any) => String(item.id || item.variantId) === selectedVariantId) || null,
-    canGenerateVariants: Boolean(projectId && productImages.length && selectedModelId),
+    canGenerateVariants: Boolean(projectId && productImages.length),
     canGenerateImages: Boolean(projectId && selectedVariantId && productImages.length && selectedModelId),
     canGenerateVideos: storyboardFrames.some((item: any) => Boolean(String(item?.imagePath || '').trim())),
     canCompose: shotVideoOutputs.some((item: any) => Boolean(String(item?.videoPath || item?.localPath || '').trim())),
+    productionMode,
+    allowMockWhenNoKey,
     projectQuery,
     runtimeQuery,
     refreshAll,
@@ -360,6 +401,11 @@ export function useCloneWorkspace(projectId: string) {
     createShotMutation,
     removeShotMutation,
     reorderShotsMutation,
+    recompileConsistencyMutation,
+    getConsistencyReport,
+    getShotImagePromptPreview,
+    getConsistencyAnchors,
+    getConsistencyPatches,
     helpers: {
       shotTime(shot: any) {
         const start = Number(shot?.startSec ?? 0)

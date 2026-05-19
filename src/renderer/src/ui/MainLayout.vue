@@ -4,14 +4,16 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   House,
+  Sparkles,
   CopyPlus,
   FolderOpen,
   ScissorsLineDashed,
-  Settings,
+  Puzzle,
   Bell,
   Search,
   Plus,
   ChevronDown,
+  Settings,
 } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import TitleBar from './components/TitleBar.vue'
@@ -48,6 +50,7 @@ const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPla
 
 const navItems = computed(() => [
   { to: '/home', icon: House, label: '首页', active: route.path.includes('/home') },
+  { to: '/models', icon: Sparkles, label: '模特', active: route.path.includes('/models') },
   { to: '/clone', icon: CopyPlus, label: '复刻', active: route.path.includes('/clone') },
   {
     to: '/products',
@@ -56,7 +59,16 @@ const navItems = computed(() => [
     active: route.path.includes('/products') || route.path.includes('/tasks') || route.path.includes('/templates'),
   },
   { to: '/live-slicer', icon: ScissorsLineDashed, label: '切片', active: route.path.includes('/live-slicer') },
-  { to: '/settings', icon: Settings, label: '设置', active: route.path.includes('/settings') },
+])
+
+const sidebarSections = computed(() => [
+  {
+    title: '插件',
+    items: [
+      { to: '/plugins', icon: Puzzle, label: '插件市场', active: route.path.includes('/plugins') && !route.query.tab },
+      { to: '/plugins?tab=installed', icon: Puzzle, label: '我的插件', active: route.path.includes('/plugins') && route.query.tab === 'installed' },
+    ],
+  },
 ])
 
 function go(path: string, query?: Record<string, string>) {
@@ -111,6 +123,7 @@ function requestCloneStage(key: string) {
     <div class="app-shell__body">
       <DsMainLayout
         :nav-items="navItems"
+        :sections="sidebarSections"
         title=""
         subtitle=""
         :class="[{ 'models-route-shell': route.path.includes('/models') }, 'app-shell__layout']"
@@ -174,12 +187,14 @@ function requestCloneStage(key: string) {
                   </div>
                 </div>
                 <div class="app-topbar-actions">
-                  <button class="app-top-icon" title="通知">
-                    <Bell class="h-4 w-4" />
-                  </button>
-                  <button class="app-top-icon" title="设置" @click="go('/settings')">
-                    <Settings class="h-4 w-4" />
-                  </button>
+                  <div class="app-topbar-actions__utility">
+                    <button class="app-top-icon" title="通知">
+                      <Bell class="h-4 w-4" />
+                    </button>
+                    <button class="app-top-icon" title="设置" @click="go('/settings')">
+                      <Settings class="h-4 w-4" />
+                    </button>
+                  </div>
                   <button class="app-top-create" @click="go('/clone')">
                     <Plus class="h-4 w-4" />
                     <span>新建项目</span>
@@ -246,110 +261,160 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-shell) {
-  grid-template-columns: 290px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr) !important;
   background: transparent;
 }
 
 .app-shell :deep(.ds-shell__main) {
-  min-width: 0;
-  min-height: 0;
+  min-width: 0 !important;
+  min-height: 0 !important;
   background: transparent;
 }
 
 .app-shell :deep(.ds-sidebar) {
-  width: 290px;
-  min-width: 290px;
-  padding: 16px 18px;
-  gap: 18px;
-  align-items: stretch;
-  border-right: 1px solid rgba(148, 163, 184, 0.08);
+  position: relative !important;
+  z-index: 30 !important;
+  pointer-events: auto !important;
+  width: 248px !important;
+  min-width: 248px !important;
+  padding: 12px 14px !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  border-right: 1px solid rgba(148, 163, 184, 0.08) !important;
   background:
-    linear-gradient(180deg, rgba(8, 12, 22, 0.98), rgba(6, 11, 20, 0.98));
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
+    linear-gradient(180deg, rgba(8, 12, 22, 0.98), rgba(6, 11, 20, 0.98)) !important;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
 }
 
 .app-shell :deep(.ds-sidebar__brand) {
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 10px 14px 18px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
-  min-height: 86px;
+  display: flex !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  padding: 8px 10px 14px !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06) !important;
+  min-height: 74px !important;
 }
 
 .app-shell :deep(.ds-sidebar__mark) {
-  width: 54px;
-  height: 54px;
-  border-radius: 18px;
+  width: 46px !important;
+  height: 46px !important;
+  border-radius: 16px !important;
   background:
     radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.28), transparent 24%),
-    linear-gradient(135deg, #6d5dff, #8b5cf6);
-  box-shadow: 0 18px 34px rgba(109, 93, 255, 0.26);
+    linear-gradient(135deg, #6d5dff, #8b5cf6) !important;
+  box-shadow: 0 18px 34px rgba(109, 93, 255, 0.26) !important;
 }
 
 .app-shell :deep(.ds-sidebar__title) {
-  color: #f8fafc;
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1.05;
+  display: block !important;
+  max-width: none !important;
+  color: #f8fafc !important;
+  font-size: 19px !important;
+  font-weight: 800 !important;
+  line-height: 1.05 !important;
 }
 
 .app-shell :deep(.ds-sidebar__subtitle) {
-  margin-top: 6px;
-  color: #9aa9c8;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
+  display: block !important;
+  margin-top: 4px !important;
+  color: #9aa9c8 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
 }
 
 .app-shell :deep(.ds-sidebar__nav) {
-  gap: 12px;
+  width: 100% !important;
+  gap: 8px !important;
+  justify-content: stretch !important;
+}
+
+.app-shell :deep(.ds-sidebar__section) {
+  display: grid !important;
+  gap: 8px !important;
+  margin-top: 8px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.08) !important;
+}
+
+.app-shell :deep(.ds-sidebar__section-title) {
+  display: block !important;
+  padding: 0 8px !important;
+  color: rgba(241, 245, 249, 0.94) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell :deep(.ds-sidebar__section-items) {
+  display: grid !important;
+  gap: 8px !important;
 }
 
 .app-shell :deep(.ds-sidebar__item) {
-  min-height: 58px;
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 0 18px;
-  border-radius: 18px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #e1e7f4;
-  font-size: 18px;
-  font-weight: 700;
+  position: relative !important;
+  z-index: 1 !important;
+  pointer-events: auto !important;
+  display: flex !important;
+  width: 100% !important;
+  min-height: 46px !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  padding: 0 14px !important;
+  border-radius: 14px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: #e1e7f4 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
   transition: all 180ms ease;
 }
 
+.app-shell :deep(.ds-sidebar__item--sub) {
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.app-shell :deep(.ds-sidebar__item span) {
+  display: inline !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+}
+
 .app-shell :deep(.ds-sidebar__item:hover) {
-  background: rgba(17, 28, 49, 0.42);
-  border-color: rgba(148, 163, 184, 0.1);
-  color: #f8fafc;
+  background: rgba(17, 28, 49, 0.42) !important;
+  border-color: rgba(148, 163, 184, 0.1) !important;
+  color: #f8fafc !important;
 }
 
 .app-shell :deep(.ds-sidebar__item.is-active) {
   background:
-    linear-gradient(135deg, rgba(108, 85, 255, 0.96), rgba(92, 70, 238, 0.92));
-  border-color: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-  box-shadow: 0 14px 26px rgba(109, 93, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    linear-gradient(135deg, rgba(108, 85, 255, 0.96), rgba(92, 70, 238, 0.92)) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 26px rgba(109, 93, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
 .app-shell :deep(.ds-sidebar__item svg) {
-  width: 22px;
-  height: 22px;
+  width: 18px !important;
+  height: 18px !important;
 }
 
 .app-shell__sidebar-footer {
   margin-top: auto;
   display: grid;
-  gap: 16px;
+  gap: 12px;
+  padding-top: 8px;
 }
 
 .app-shell__sidebar-plan {
   display: grid;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 24px;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
   border: 1px solid rgba(109, 93, 255, 0.16);
   background:
     radial-gradient(circle at 100% 0, rgba(109, 93, 255, 0.16), transparent 40%),
@@ -363,22 +428,22 @@ function requestCloneStage(key: string) {
 
 .app-shell__sidebar-plan-copy strong {
   color: #f8fafc;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .app-shell__sidebar-plan-copy span {
   color: rgba(203, 213, 225, 0.72);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .app-shell__sidebar-plan-action {
-  min-height: 48px;
-  border-radius: 16px;
+  min-height: 42px;
+  border-radius: 14px;
   border: 1px solid rgba(109, 93, 255, 0.28);
   background: rgba(109, 93, 255, 0.1);
   color: #ddd6fe;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -430,18 +495,20 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-topbar) {
-  min-height: 80px;
-  height: auto;
-  padding: 0 18px 0 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
-  background: linear-gradient(180deg, rgba(8, 13, 24, 0.995), rgba(8, 13, 24, 0.985));
+  min-height: 72px !important;
+  height: auto !important;
+  padding: 0 16px 0 18px !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.05) !important;
+  background:
+    radial-gradient(circle at 50% -80%, rgba(109, 93, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(8, 13, 24, 0.995), rgba(8, 13, 24, 0.985)) !important;
 }
 
 .app-topbar-shell {
   display: grid;
   width: 100%;
   gap: 0;
-  padding: 4px 0 1px;
+  padding: 3px 0 0;
 }
 
 .app-topbar-shell.has-clone-workflow {
@@ -459,7 +526,7 @@ function requestCloneStage(key: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
   width: 100%;
   padding: 0;
 }
@@ -632,34 +699,49 @@ function requestCloneStage(key: string) {
 .app-topbar-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.app-topbar-actions__utility {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(10, 17, 30, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .app-top-search {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  width: min(700px, 100%);
-  height: 52px;
-  padding: 0 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(10, 17, 30, 0.82);
+  width: min(450px, 100%);
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background:
+    linear-gradient(180deg, rgba(12, 19, 34, 0.94), rgba(9, 15, 27, 0.94));
   color: #cbd5e1;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
 .app-top-search-shortcut {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 10px;
-  background: rgba(148, 163, 184, 0.08);
-  color: rgba(203, 213, 225, 0.48);
-  font-size: 11px;
+  min-width: 32px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.07);
+  color: rgba(203, 213, 225, 0.42);
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -681,26 +763,32 @@ function requestCloneStage(key: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 0 16px;
-  border-radius: 18px;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.08);
-  background: rgba(13, 21, 35, 0.72);
+  background: rgba(12, 20, 34, 0.74);
   color: #e2e8f0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
 .app-top-icon {
-  width: 52px;
-  min-width: 52px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
   padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .app-top-user {
-  min-width: 190px;
+  min-width: 172px;
   justify-content: flex-start;
 }
 
@@ -708,15 +796,15 @@ function requestCloneStage(key: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 0 22px;
-  border-radius: 18px;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 16px;
   background: linear-gradient(135deg, #6f58ff, #7f5dff);
   color: #ffffff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  box-shadow: 0 18px 36px rgba(96, 69, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 28px rgba(96, 69, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .app-topbar-text {
@@ -726,12 +814,12 @@ function requestCloneStage(key: string) {
 .app-top-user__avatar {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   background: linear-gradient(135deg, #6d5dff, #8b5cf6);
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -743,14 +831,14 @@ function requestCloneStage(key: string) {
 
 .app-top-user__copy span {
   color: #f8fafc;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .app-top-icon:hover,
 .app-top-user:hover,
 .app-sidebar-footer-action:hover {
-  background: rgba(23, 38, 66, 0.82);
+  background: rgba(19, 31, 52, 0.82);
   border-color: rgba(148, 163, 184, 0.24);
   color: #fff;
 }
@@ -764,8 +852,9 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-workspace) {
-  padding: 14px 18px 18px;
-  overflow: auto;
+  padding: 10px 14px 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: transparent;
 }
 

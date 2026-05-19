@@ -9,6 +9,7 @@ type SessionState = {
   subscription: UserSubscription | null
   wallet: WalletAccount | null
   ready: boolean
+  hydrateToken: (token: string) => void
   setSession: (input: {
     token: string
     user: WebUser
@@ -25,6 +26,14 @@ export const useSessionStore = create<SessionState>((set) => ({
   subscription: null,
   wallet: null,
   ready: false,
+  hydrateToken: (token) =>
+    set((state) => ({
+      token,
+      ready: true,
+      user: state.user,
+      subscription: state.subscription,
+      wallet: state.wallet,
+    })),
   setSession: (input) =>
     set({
       token: input.token,

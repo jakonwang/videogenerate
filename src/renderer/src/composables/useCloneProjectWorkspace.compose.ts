@@ -1,4 +1,3 @@
-import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
 import type { CloneProjectLike, UseCloneProjectWorkspaceOptions } from './useCloneProjectWorkspace.shared'
 
 type ComposeProjectActions<TProject extends CloneProjectLike> = {
@@ -36,14 +35,10 @@ export function useCloneProjectWorkspaceCompose<TProject extends CloneProjectLik
       if (!readyVideoCount) {
         throw new Error('当前没有可用于合成的分镜视频文件。请先在“分镜视频生成”阶段继续查询或重新生成，直到至少有一条分镜出现真实视频。')
       }
-      const res = hasStoredWebToken()
-        ? ((await webApiClient.composeCloneFinalVideo(ensuredProject.id, {
-            outputDir: options.composeOutputDir.value || undefined,
-          })) as { project?: TProject })
-        : ((await window.api.clone.composeCloneVideo({
-            cloneProjectId: ensuredProject.id,
-            outputDir: options.composeOutputDir.value || undefined,
-          })) as { project?: TProject })
+      const res = (await window.api.clone.composeCloneVideo({
+        cloneProjectId: ensuredProject.id,
+        outputDir: options.composeOutputDir.value || undefined,
+      })) as { project?: TProject }
       projectActions.applyProject((res.project || options.current.value) as TProject)
       if (options.composeLocalError) options.composeLocalError.value = ''
       const finalOutputPath = options.getFinalOutputPath?.() || String(res.project?.finalCompose?.outputPath || '').trim()

@@ -1,6 +1,0 @@
-
-> videogenerate@0.1.20 dev:api
-> tsx services/api/server.ts
-
-[videogen-web-api] listening on http://0.0.0.0:18080
-[videogen-web-api] data dir: D:\phpstudy_pro\WWW\videogenerate\.videogenerate

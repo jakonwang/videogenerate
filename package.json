@@ -14,25 +14,34 @@
     "hermes:run": "node scripts/hermes-agent-runner.mjs run --config automation/hermes-agent/config.example.json --task automation/hermes-agent/task.example.json",
     "dev": "electron-vite dev",
     "dev:web": "vite --config apps/web/vite.config.ts",
-    "dev:web-next": "next dev apps/web-next --hostname 127.0.0.1 --port 18280",
+    "dev:web-next": "cd apps/web-next && next dev --hostname 127.0.0.1 --port 18280",
     "dev:api": "tsx services/api/server.ts",
     "build": "electron-vite build && node scripts/copy-font-resources.mjs",
     "build:web": "vite build --config apps/web/vite.config.ts",
-    "build:web-next": "next build apps/web-next",
+    "build:web-next": "cd apps/web-next && next build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json",
     "typecheck:web-next": "tsc --noEmit -p apps/web-next/tsconfig.json",
     "typecheck:api": "tsc --noEmit -p services/api/tsconfig.json",
-    "start:web-next": "next start apps/web-next --hostname 0.0.0.0 --port 18280",
+    "start:web-next": "cd apps/web-next && next start --hostname 0.0.0.0 --port 18280",
+    "preflight:staging": "node scripts/deploy-preflight.mjs staging",
+    "preflight:production": "node scripts/deploy-preflight.mjs production",
+    "smoke:api": "node scripts/api-smoke.mjs",
+    "smoke:auth-send-code": "node scripts/auth-send-code-smoke.mjs",
+    "smoke:web-stack": "node scripts/web-stack-smoke.mjs",
+    "guard:encoding": "node scripts/encoding-guard.mjs",
     "dist": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --win --dir",
     "preview": "electron-vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:web-next-clone-flow": "node test/web-next-clone-flow.e2e.cjs"
   },
   "dependencies": {
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
+    "@remotion/bundler": "^4.0.462",
+    "@remotion/renderer": "^4.0.462",
     "@tanstack/react-query": "^5.100.9",
     "@vueuse/core": "^12.5.0",
     "bufferutil": "^4.1.0",
@@ -53,6 +62,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "remotion": "^4.0.462",
     "tailwind-merge": "^3.3.1",
     "utf-8-validate": "^6.0.6",
     "vue": "^3.5.13",
@@ -117,7 +127,7 @@
     },
     "publish": {
       "provider": "generic",
-      "url": "https://YOUR_UPDATE_URL"
+      "url": "https://update.example.com"
     }
   }
 }

@@ -2,10 +2,13 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl } from './atlasRetry'
+import { resolveApifoxHubCredentials } from './apifoxProfile'
 import type { ModelCredentials, UnifiedCapability } from './types'
 
+const VECTOR_ENGINE_LABEL = 'VectorEngine'
+
 function baseUrl(credentials: ModelCredentials) {
-  return String(credentials.apifoxHub?.baseUrl || '').trim().replace(/\/+$/, '')
+  return String(resolveApifoxHubCredentials(credentials, 'video')?.baseUrl || '').trim().replace(/\/+$/, '')
 }
 
 function officialRestBaseUrl(root: string) {
@@ -13,8 +16,9 @@ function officialRestBaseUrl(root: string) {
 }
 
 function apiKey(credentials: ModelCredentials) {
-  const key = String(credentials.apifoxHub?.apiKey || '').trim()
-  if (!credentials.apifoxHub?.enabled || !key) throw new Error('未启用 ai666 视频接口')
+  const cfg = resolveApifoxHubCredentials(credentials, 'video')
+  const key = String(cfg?.apiKey || '').trim()
+  if (!cfg?.enabled || !key) throw new Error(`未启用 ${VECTOR_ENGINE_LABEL} 视频接口`)
   return key
 }
 
@@ -28,6 +32,50 @@ function modelForCapability(cfg: NonNullable<ModelCredentials['apifoxHub']>, cap
           ? cfg.startEndVideoModel
           : cfg.referenceVideoModel
   return String(selected || '').trim()
+}
+
+function pickFallbackModels(input: {
+  cfg: NonNullable<ModelCredentials['apifoxHub']>
+  credentials: ModelCredentials
+  capability: UnifiedCapability
+}): string[] {
+  const primary = modelForCapability(input.cfg, input.capability)
+  const candidates = [
+    primary,
+    'veo_3_1',
+    'veo3.1',
+    'veo3.1-fast',
+    'veo3.1-4k',
+    'veo3-fast',
+    'veo3',
+    'veo2-fast',
+    'veo2-pro',
+    'veo3-pro',
+    input.cfg.startEndVideoModel,
+    input.cfg.imageToVideoModel,
+    input.cfg.textToVideoModel,
+    input.credentials.videoModelPrimary,
+    input.credentials.videoModelFallback,
+    'veo_3_1-fast-4K',
+    'veo_3_1-fast',
+    'veo_3_1-lite',
+  ]
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const raw of candidates) {
+    const model = String(raw || '').trim()
+    if (!model || seen.has(model)) continue
+    seen.add(model)
+    normalized.push(model)
+  }
+  return normalized
+}
+
+function isModelChannelUnavailable(resStatus: number, text: string) {
+  const normalized = String(text || '')
+  if (resStatus === 503 && /no available channel for model/i.test(normalized)) return true
+  if ((resStatus === 429 || resStatus === 400) && /model [`'"]?.+[`'"]? does not exist/i.test(normalized)) return true
+  return false
 }
 
 function viduCreatePath(capability: UnifiedCapability) {
@@ -197,7 +245,7 @@ export class Ai666TaskTimeoutError extends Error {
   lastTransientError?: string
 
   constructor(taskId: string, lastTransientError?: string) {
-    super(`ai666 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
+    super(`${VECTOR_ENGINE_LABEL} 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
     this.name = 'Ai666TaskTimeoutError'
     this.taskId = taskId
     this.lastTransientError = lastTransientError
@@ -208,16 +256,32 @@ export async function queryAsyncTask(input: {
   credentials: ModelCredentials
   taskId: string
 }) {
-  const cfg = input.credentials.apifoxHub!
+  const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
   const url = providerQueryUrl(root, cfg.videoProvider, input.taskId, cfg.videoEndpointStyle)
+  console.log('[vectorengine-debug] query-video-task', {
+    taskId: input.taskId,
+    provider: cfg.videoProvider,
+    endpointStyle: cfg.videoEndpointStyle,
+    baseUrl: root,
+    queryUrl: url,
+  })
 
   let json: any
   try {
-    json = await getAtlasJson(url, key, `ai666 查询视频任务 ${input.taskId}`)
+    json = await getAtlasJson(url, key, `${VECTOR_ENGINE_LABEL} 查询视频任务 ${input.taskId}`)
   } catch (error) {
     const message = String((error as any)?.message ?? error ?? '')
+    if (/task_not_exist/i.test(message)) {
+      return {
+        taskId: input.taskId,
+        status: 'failed',
+        outputUrls: [],
+        errorMessage: 'task_not_exist',
+        raw: { terminalError: 'task_not_exist', message },
+      }
+    }
     if (/502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(message)) {
       return {
         taskId: input.taskId,
@@ -251,6 +315,7 @@ export async function submitTask(input: {
   credentials: ModelCredentials
   capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
   prompt: string
+  negativePrompt?: string
   image?: string
   lastImage?: string
 }) {
@@ -265,8 +330,8 @@ export async function syncRemoteTaskResult(input: {
   const task = await queryAsyncTask({ credentials: input.credentials, taskId: input.taskId })
   if (task.status !== 'succeeded' || !task.outputUrls[0]) return { task, outputPath: undefined as string | undefined, synced: false }
   await mkdir(input.outDir, { recursive: true })
-  const out = join(input.outDir, `apifox_video_${Date.now()}_${randomUUID()}.mp4`)
-  await downloadAtlasToFile(task.outputUrls[0], out, 'ai666 视频下载')
+  const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+  await downloadAtlasToFile(task.outputUrls[0], out, `${VECTOR_ENGINE_LABEL} 视频下载`)
   return { task, outputPath: out, synced: true }
 }
 
@@ -282,142 +347,186 @@ export async function createVideoTask(input: {
   credentials: ModelCredentials
   capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
   prompt: string
+  negativePrompt?: string
   image?: string
   lastImage?: string
 }) {
-  const cfg = input.credentials.apifoxHub!
+  const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
-  const model = modelForCapability(cfg, input.capability)
-  if (!model) throw new Error(`未配置 ${input.capability} 对应的视频模型`)
+  const modelCandidates = pickFallbackModels({
+    cfg,
+    credentials: input.credentials,
+    capability: input.capability,
+  })
+  if (!modelCandidates.length) throw new Error(`未配置 ${input.capability} 对应的视频模型`)
 
   const url = createUrlForProvider(root, cfg.videoProvider, input.capability, cfg.videoEndpointStyle)
-  let body: Record<string, any> = {
-    model,
-    prompt: input.prompt,
-    aspect_ratio: '9:16',
-    duration: 8,
-    resolution: '720p',
-    seed: -1,
-  }
-
-  if (cfg.videoProvider === 'vidu') {
-    body = {
+  let lastFailureText = ''
+  let lastFailureStatus = 0
+  for (const model of modelCandidates) {
+    let body: Record<string, any> = {
       model,
       prompt: input.prompt,
-      aspect_ratio: '9:16',
-      duration: 8,
-      ...(input.image ? { image: input.image } : {}),
-      ...(input.lastImage ? { last_image: input.lastImage } : {}),
-    }
-  } else if (cfg.videoProvider === 'veo') {
-    body = {
-      model,
-      prompt: input.prompt,
-      images: [input.image, input.lastImage].filter(Boolean),
-      enhance_prompt: true,
-      aspect_ratio: '9:16',
-    }
-  } else if (cfg.videoProvider === 'jimeng') {
-    body = {
-      model,
-      prompt: input.prompt,
-      image_url: input.image,
-      last_image_url: input.lastImage,
-      metadata: {
-        aspect_ratio: '9:16',
-        duration: 8,
-      },
-    }
-  } else if (cfg.videoProvider === 'seedance2') {
-    body = {
-      model,
-      content: [
-        { type: 'text', text: input.prompt },
-        ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
-        ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
-      ],
-      generate_audio: false,
-      ratio: '9:16',
-      duration: 5,
-      watermark: false,
-    }
-  } else if (cfg.videoProvider === 'kling') {
-    body = {
-      model,
-      prompt: input.prompt,
-      ...(input.image ? { image: input.image } : {}),
-      ...(input.lastImage ? { last_image: input.lastImage } : {}),
+      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       aspect_ratio: '9:16',
       duration: 8,
       resolution: '720p',
       seed: -1,
     }
-  } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora' || cfg.videoProvider === 'grok') {
-    body =
-      cfg.videoEndpointStyle === 'openai_video'
-        ? {
-            model,
-            prompt: input.prompt,
-            images: [input.image, input.lastImage].filter(Boolean),
-            aspect_ratio: '9:16',
-            enhance_prompt: true,
-          }
-        : {
-            model,
-            prompt: input.prompt,
-            ...(input.image ? { image: input.image } : {}),
-            ...(input.lastImage ? { last_image: input.lastImage } : {}),
-            aspect_ratio: '9:16',
-            duration: 8,
-            resolution: '720p',
-            seed: -1,
-          }
-  } else {
-    if (input.image) body.image = input.image
-    if (input.lastImage) body.last_image = input.lastImage
-  }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-  const text = await res.text()
-  let json: any = null
-  try {
-    json = text ? JSON.parse(text) : null
-  } catch {
-    json = { raw: text }
+    if (cfg.videoProvider === 'vidu') {
+      body = {
+        model,
+        prompt: input.prompt,
+        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+        aspect_ratio: '9:16',
+        duration: 8,
+        ...(input.image ? { image: input.image } : {}),
+        ...(input.lastImage ? { last_image: input.lastImage } : {}),
+      }
+    } else if (cfg.videoProvider === 'veo') {
+      body = {
+        model,
+        prompt: input.prompt,
+        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+        images: [input.image, input.lastImage].filter(Boolean),
+        enhance_prompt: true,
+        aspect_ratio: '9:16',
+      }
+    } else if (cfg.videoProvider === 'jimeng') {
+      body = {
+        model,
+        prompt: input.prompt,
+        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+        image_url: input.image,
+        last_image_url: input.lastImage,
+        metadata: {
+          aspect_ratio: '9:16',
+          duration: 8,
+        },
+      }
+    } else if (cfg.videoProvider === 'seedance2') {
+      body = {
+        model,
+        content: [
+          { type: 'text', text: input.prompt },
+          ...(input.negativePrompt ? [{ type: 'text', text: `Negative constraints: ${input.negativePrompt}` }] : []),
+          ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
+          ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
+        ],
+        generate_audio: false,
+        ratio: '9:16',
+        duration: 5,
+        watermark: false,
+      }
+    } else if (cfg.videoProvider === 'kling') {
+      body = {
+        model,
+        prompt: input.prompt,
+        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+        ...(input.image ? { image: input.image } : {}),
+        ...(input.lastImage ? { last_image: input.lastImage } : {}),
+        aspect_ratio: '9:16',
+        duration: 8,
+        resolution: '720p',
+        seed: -1,
+      }
+    } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora' || cfg.videoProvider === 'grok') {
+      body =
+        cfg.videoEndpointStyle === 'openai_video'
+          ? {
+              model,
+              prompt: input.prompt,
+              negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+              images: [input.image, input.lastImage].filter(Boolean),
+              aspect_ratio: '9:16',
+              enhance_prompt: true,
+            }
+          : {
+              model,
+              prompt: input.prompt,
+              negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+              ...(input.image ? { image: input.image } : {}),
+              ...(input.lastImage ? { last_image: input.lastImage } : {}),
+              aspect_ratio: '9:16',
+              duration: 8,
+              resolution: '720p',
+              seed: -1,
+            }
+    } else {
+      if (input.image) body.image = input.image
+      if (input.lastImage) body.last_image = input.lastImage
+    }
+
+    console.log('[vectorengine-debug] create-video-task', {
+      capability: input.capability,
+      provider: cfg.videoProvider,
+      endpointStyle: cfg.videoEndpointStyle,
+      baseUrl: root,
+      createUrl: url,
+      model,
+      hasImage: Boolean(input.image),
+      hasLastImage: Boolean(input.lastImage),
+      fallbackCandidates: modelCandidates,
+    })
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'x-api-key': key,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    const text = await res.text()
+    let json: any = null
+    try {
+      json = text ? JSON.parse(text) : null
+    } catch {
+      json = { raw: text }
+    }
+    if (!res.ok) {
+      lastFailureText = text
+      lastFailureStatus = res.status
+      if (isModelChannelUnavailable(res.status, text)) {
+        console.warn('[vectorengine-debug] create-video-task:model-unavailable-retry', {
+          model,
+          status: res.status,
+          message: text.slice(0, 300),
+        })
+        continue
+      }
+      throw new Error(`${VECTOR_ENGINE_LABEL} 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+    }
+    const directOutputUrl = pickOutputUrl(json)
+    const taskId = pickTaskId(json)
+    if (!taskId && !directOutputUrl) throw new Error(`${VECTOR_ENGINE_LABEL} 视频任务缺少 id: ${text.slice(0, 500)}`)
+    return {
+      provider: 'apifox_hub',
+      model,
+      endpointStyle: cfg.videoEndpointStyle,
+      baseUrl: cfg.baseUrl,
+      requestCapability: input.capability,
+      taskId: taskId || undefined,
+      directOutputUrl: directOutputUrl || undefined,
+      raw: json,
+    }
   }
-  if (!res.ok) throw new Error(`ai666 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
-  const directOutputUrl = pickOutputUrl(json)
-  const taskId = pickTaskId(json)
-  if (!taskId && !directOutputUrl) throw new Error(`ai666 视频任务缺少 id: ${text.slice(0, 500)}`)
-  return {
-    provider: 'apifox_hub',
-    model,
-    endpointStyle: cfg.videoEndpointStyle,
-    baseUrl: cfg.baseUrl,
-    requestCapability: input.capability,
-    taskId: taskId || undefined,
-    directOutputUrl: directOutputUrl || undefined,
-    raw: json,
-  }
+  throw new Error(`${VECTOR_ENGINE_LABEL} 视频请求失败 HTTP ${lastFailureStatus || 503}: ${String(lastFailureText || '所有候选模型通道不可用').slice(0, 500)}`)
 }
 
 export async function generateVideo(input: {
   credentials: ModelCredentials
   capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
   prompt: string
+  negativePrompt?: string
   outDir: string
   image?: string
   lastImage?: string
 }) {
-  const cfg = input.credentials.apifoxHub!
+  const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
   const model = modelForCapability(cfg, input.capability)
@@ -427,6 +536,7 @@ export async function generateVideo(input: {
   let body: Record<string, any> = {
     model,
     prompt: input.prompt,
+    negative_prompt: String(input.negativePrompt || '').trim() || undefined,
     aspect_ratio: '9:16',
     duration: 8,
     resolution: '720p',
@@ -437,6 +547,7 @@ export async function generateVideo(input: {
     body = {
       model,
       prompt: input.prompt,
+      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       aspect_ratio: '9:16',
       duration: 8,
       ...(input.image ? { image: input.image } : {}),
@@ -446,6 +557,7 @@ export async function generateVideo(input: {
     body = {
       model,
       prompt: input.prompt,
+      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       images: [input.image, input.lastImage].filter(Boolean),
       enhance_prompt: true,
       aspect_ratio: '9:16',
@@ -454,6 +566,7 @@ export async function generateVideo(input: {
     body = {
       model,
       prompt: input.prompt,
+      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       image_url: input.image,
       last_image_url: input.lastImage,
       metadata: {
@@ -466,6 +579,7 @@ export async function generateVideo(input: {
       model,
       content: [
         { type: 'text', text: input.prompt },
+        ...(input.negativePrompt ? [{ type: 'text', text: `Negative constraints: ${input.negativePrompt}` }] : []),
         ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
         ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
       ],
@@ -478,6 +592,7 @@ export async function generateVideo(input: {
     body = {
       model,
       prompt: input.prompt,
+      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       ...(input.image ? { image: input.image } : {}),
       ...(input.lastImage ? { last_image: input.lastImage } : {}),
       aspect_ratio: '9:16',
@@ -491,6 +606,7 @@ export async function generateVideo(input: {
         ? {
             model,
             prompt: input.prompt,
+            negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             images: [input.image, input.lastImage].filter(Boolean),
             aspect_ratio: '9:16',
             enhance_prompt: true,
@@ -498,6 +614,7 @@ export async function generateVideo(input: {
         : {
             model,
             prompt: input.prompt,
+            negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             ...(input.image ? { image: input.image } : {}),
             ...(input.lastImage ? { last_image: input.lastImage } : {}),
             aspect_ratio: '9:16',
@@ -514,6 +631,7 @@ export async function generateVideo(input: {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
+      'x-api-key': key,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -525,14 +643,14 @@ export async function generateVideo(input: {
   } catch {
     json = { raw: text }
   }
-  if (!res.ok) throw new Error(`ai666 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
 
   const directOutputUrl = pickOutputUrl(json)
   const taskId = pickTaskId(json)
   if (!taskId && directOutputUrl) {
     await mkdir(input.outDir, { recursive: true })
-    const out = join(input.outDir, `apifox_video_${Date.now()}_${randomUUID()}.mp4`)
-    await downloadAtlasToFile(directOutputUrl, out, 'ai666 视频下载')
+    const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+    await downloadAtlasToFile(directOutputUrl, out, `${VECTOR_ENGINE_LABEL} 视频下载`)
     return {
       provider: 'apifox_hub',
       model,
@@ -543,7 +661,7 @@ export async function generateVideo(input: {
       raw: json,
     }
   }
-  if (!taskId) throw new Error(`ai666 视频任务缺少 id: ${text.slice(0, 500)}`)
+  if (!taskId) throw new Error(`${VECTOR_ENGINE_LABEL} 视频任务缺少 id: ${text.slice(0, 500)}`)
 
   const started = Date.now()
   const timeoutMs = Math.max(Number(cfg.defaultTimeoutMs || 0), 600000)
@@ -561,11 +679,11 @@ export async function generateVideo(input: {
       }
       throw error
     }
-    if (task.status === 'failed') throw new Error(task.errorMessage || `ai666 视频任务失败: ${taskId}`)
+    if (task.status === 'failed') throw new Error(task.errorMessage || `${VECTOR_ENGINE_LABEL} 视频任务失败: ${taskId}`)
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
-      const out = join(input.outDir, `apifox_video_${Date.now()}_${randomUUID()}.mp4`)
-      await downloadAtlasToFile(task.outputUrls[0], out, 'ai666 视频下载')
+      const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+      await downloadAtlasToFile(task.outputUrls[0], out, `${VECTOR_ENGINE_LABEL} 视频下载`)
       return {
         provider: 'apifox_hub',
         model,
@@ -582,8 +700,8 @@ export async function generateVideo(input: {
     const task = await queryAsyncTask({ credentials: input.credentials, taskId })
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
-      const out = join(input.outDir, `apifox_video_${Date.now()}_${randomUUID()}.mp4`)
-      await downloadAtlasToFile(task.outputUrls[0], out, 'ai666 视频下载')
+      const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+      await downloadAtlasToFile(task.outputUrls[0], out, `${VECTOR_ENGINE_LABEL} 视频下载`)
       return {
         provider: 'apifox_hub',
         model,

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import CloneConsoleSidebar from '../components/clone/CloneConsoleSidebar.vue'
@@ -10,7 +10,7 @@ import CloneStageHeader from '../components/clone/CloneStageHeader.vue'
 import CloneStateCard from '../components/clone/CloneStateCard.vue'
 import { useCloneProjectWorkspace } from '@/composables/useCloneProjectWorkspace'
 import { useCloneRouteProject } from '@/composables/useCloneRouteProject'
-import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
+import { hasStoredWebToken, webApiClient, type GeelarkPublishAccount } from '@/lib/webApiClient'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { storeToRefs } from 'pinia'
 
@@ -264,6 +264,8 @@ const errorText = ref('')
 const stageLog = ref('等待上传参考视频并开始分析')
 const runtimeLogs = ref<RuntimeLogItem[]>([])
 const consoleCollapsed = ref(true)
+const autoBootstrapSignature = ref('')
+const autoRunRequestedAfterAnalyze = ref(false)
 const storyboardBatchSummary = ref<{ total: number; done: number; failed: number; skipped: number } | null>(null)
 const modelModalOpen = ref(false)
 const framePreviewOpen = ref(false)
@@ -271,6 +273,10 @@ const framePreviewPath = ref('')
 const framePreviewTitle = ref('')
 const composeOutputDir = ref('')
 const composeLocalError = ref('')
+const geelarkPublishModalOpen = ref(false)
+const geelarkPublishSubmitting = ref(false)
+const geelarkAccounts = ref<GeelarkPublishAccount[]>([])
+const geelarkPublishMessage = ref('')
 const variantCount = ref(3)
 const selectedStageKey = ref<StageItem['key'] | ''>('')
 const selectedShotId = ref('')
@@ -278,6 +284,14 @@ const selectedShotFilter = ref<'all' | 'ready' | 'failed' | 'pending'>('all')
 const composeAspectRatio = ref<ComposeAspectRatio>('9:16')
 const composeQuality = ref<ComposeQuality>('hd')
 const composeStyle = ref<ComposeStyle>('default')
+const geelarkPublishForm = reactive({
+  publishAccountId: '',
+  videoDesc: '',
+  productId: '',
+  productTitle: '',
+  scheduleAt: '',
+  needShareLink: false,
+})
 
 const currentModel = computed(() => models.value.find((item) => item.id === selectedModelId.value) || null)
 const modelSnapshot = computed(() => currentModel.value || current.value?.selectedModelIdentitySnapshot || null)
@@ -387,6 +401,9 @@ const storyboardDesignRows = computed(() =>
   }),
 )
 const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath || '')
+const selectedGeelarkAccount = computed(
+  () => geelarkAccounts.value.find((item) => item.id === geelarkPublishForm.publishAccountId) || null,
+)
 const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), '默认项目输出目录'))
 const localComposeErrorText = computed(() => safeText(current.value?.finalCompose?.error || composeLocalError.value, ''))
 const pipelineErrorContext = computed(() => current.value?.pipelineStatus?.errorContext || null)
@@ -578,6 +595,30 @@ const composeExportTimeText = computed(() => {
   }
   const minutes = Math.max(1, Math.round((totalSeconds / 30) * qualityBaseMap[composeQuality.value] + styleExtraMap[composeStyle.value]))
   return `约${minutes}分钟`
+})
+const hasGeneratedStoryboardFrames = computed(() => storyboardFrames.value.some((item) => Boolean(String(item.imagePath || '').trim())))
+const canBootstrapAutoRun = computed(() => {
+  if (!current.value?.id) return false
+  if (current.value.runMode !== 'auto') return false
+  if (!autoRunRequestedAfterAnalyze.value) return false
+  if (!referenceSourcePath.value) return false
+  if (!effectiveProductRefs.value.length) return false
+  if (!hasBoundModel.value) return false
+  if (loading.value || autoFlowRunning.value) return false
+  if (!scriptVariants.value.length) return false
+  if (hasGeneratedStoryboardFrames.value) return false
+  if (shotVideoOutputs.value.length) return false
+  if (finalOutputPath.value) return false
+  const autoStage = String(current.value?.autoFlowStatus?.currentStage || '').trim()
+  if (autoStage && autoStage !== 'analyze') return false
+  return true
+})
+const autoBootstrapKey = computed(() => {
+  if (!canBootstrapAutoRun.value) return ''
+  const projectId = String(current.value?.id || '').trim()
+  const modelId = String(selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id || '').trim()
+  const refs = [...effectiveProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean).sort().join('|')
+  return [projectId, referenceSourcePath.value, modelId, refs].join('::')
 })
 const analyzeStageProgress = computed(() => {
   if (loading.value && workflowStep.value === 'upload_analyze_script') return 72
@@ -1255,7 +1296,10 @@ async function clearProductImages() {
 
 async function createBlueprint() {
   const sourcePath = safeText(referenceSourcePath.value, '')
+  autoRunRequestedAfterAnalyze.value = current.value?.runMode === 'auto'
   await createBlueprintInWorkspace(sourcePath)
+  if (!autoRunRequestedAfterAnalyze.value) return
+  await generateScriptVariants()
 }
 
 async function generateScriptVariants() {
@@ -1268,6 +1312,11 @@ async function generateScriptVariants() {
     variantCount: variantCount.value,
   })
   await generateScriptVariantsInWorkspace(effectiveProductRefs.value, hasBoundModel.value)
+  if (!autoRunRequestedAfterAnalyze.value) return
+  await nextTick()
+  const nextKey = autoBootstrapKey.value
+  if (!nextKey || nextKey === autoBootstrapSignature.value) return
+  autoBootstrapSignature.value = nextKey
 }
 
 async function selectScriptVariant(variantId: string) {
@@ -1310,7 +1359,7 @@ async function generateShotVideos() {
 async function autoRunToStoryboardVideos() {
   await autoRunToStoryboardVideosInWorkspace({
     variantCount: variantCount.value,
-    productReferenceImagePaths: effectiveProductRefs.value,
+    productReferenceImagePaths: [...effectiveProductRefs.value],
     selectedModelIdentityId: selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id,
   })
 }
@@ -1362,6 +1411,28 @@ async function composeFinalVideo() {
   await composeFinalVideoInWorkspace()
 }
 
+async function openGeelarkPublishModal() {
+  if (!finalOutputPath.value) {
+    geelarkPublishMessage.value = '请先生成成片。'
+    return
+  }
+  errorText.value = ''
+  geelarkPublishMessage.value = ''
+  try {
+    geelarkAccounts.value = await webApiClient.listGeelarkPublisherAccounts()
+    if (!geelarkPublishForm.publishAccountId && geelarkAccounts.value.length) {
+      geelarkPublishForm.publishAccountId = geelarkAccounts.value[0].id
+    }
+    if (!geelarkPublishForm.scheduleAt) {
+      const next = new Date(Date.now() + 10 * 60 * 1000)
+      geelarkPublishForm.scheduleAt = next.toISOString().slice(0, 16)
+    }
+    geelarkPublishModalOpen.value = true
+  } catch (error: any) {
+    geelarkPublishMessage.value = error?.message ?? String(error)
+  }
+}
+
 async function pickComposeOutputDir() {
   const dir = await window.api.pickDir({ title: '选择最终成片输出目录' })
   if (!dir) return
@@ -1378,6 +1449,38 @@ async function openFinalOutput() {
 async function revealFinalOutput() {
   if (!finalOutputPath.value) return
   await window.api.shell.showItemInFolder(finalOutputPath.value)
+}
+
+async function submitGeelarkPublish() {
+  if (!current.value?.id || !finalOutputPath.value) {
+    geelarkPublishMessage.value = '当前还没有可发布的成片。'
+    return
+  }
+  if (!geelarkPublishForm.publishAccountId) {
+    geelarkPublishMessage.value = '请选择发布账号。'
+    return
+  }
+  geelarkPublishSubmitting.value = true
+  geelarkPublishMessage.value = ''
+  try {
+    await webApiClient.publishGeelarkVideo({
+      cloneProjectId: current.value.id,
+      videoPath: finalOutputPath.value,
+      publishAccountId: geelarkPublishForm.publishAccountId,
+      videoDesc: geelarkPublishForm.videoDesc || undefined,
+      productId: geelarkPublishForm.productId || undefined,
+      productTitle: geelarkPublishForm.productTitle || undefined,
+      scheduleAt: geelarkPublishForm.scheduleAt ? new Date(geelarkPublishForm.scheduleAt).getTime() : Date.now(),
+      needShareLink: Boolean(geelarkPublishForm.needShareLink),
+    })
+    geelarkPublishMessage.value = '已提交到 Geelark。'
+    geelarkPublishModalOpen.value = false
+    void router.push('/plugins/geelark-publisher')
+  } catch (error: any) {
+    geelarkPublishMessage.value = error?.message ?? String(error)
+  } finally {
+    geelarkPublishSubmitting.value = false
+  }
 }
 
 let timer: number | null = null
@@ -1416,6 +1519,38 @@ onMounted(async () => {
     }
   }, 6000)
 })
+
+watch(
+  autoBootstrapKey,
+  async (key) => {
+    if (!key || key === autoBootstrapSignature.value) return
+    autoBootstrapSignature.value = key
+    setStageLog('自动模式素材已齐备，开始自动运行。')
+    try {
+      await nextTick()
+      if (!current.value?.blueprint?.shots?.length && referenceSourcePath.value) {
+        await createBlueprint()
+      }
+      await autoRunToStoryboardVideos()
+      autoRunRequestedAfterAnalyze.value = false
+    } catch (error: any) {
+      autoBootstrapSignature.value = ''
+      autoRunRequestedAfterAnalyze.value = false
+      markError(error?.message ?? error, '自动运行启动失败。')
+      await refreshProjectAfterFailure()
+      setStageLog('自动运行启动失败，请重试。', 'error')
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => current.value?.id || '',
+  () => {
+    autoBootstrapSignature.value = ''
+    autoRunRequestedAfterAnalyze.value = false
+  },
+)
 
 watch(
   stageItems,
@@ -1641,13 +1776,6 @@ onUnmounted(() => {
                   <input v-model.number="variantCount" class="count-input" type="number" min="1" max="6" />
                 </label>
                 <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants">生成候选脚本</button>
-              </template>
-              <template #aux>
-                <span>运行模式：{{ runModeLabel }}</span>
-                <span>当前阶段：{{ autoFlowCurrentStageLabel }}</span>
-                <span>候选数：{{ scriptVariants.length }}</span>
-                <span>选择状态：{{ selectedVariantId ? '已选择' : '未选择' }}</span>
-                <span>商品图：{{ effectiveProductRefs.length }} 张</span>
               </template>
             </CloneStageHeader>
 
@@ -2332,6 +2460,7 @@ onUnmounted(() => {
                 </div>
                 <div class="compose-side-actions">
                   <button class="primary-button compose-export-button" type="button" :disabled="!finalOutputPath" @click="revealFinalOutput">导出成片</button>
+                  <button class="ghost-button compose-side-button" type="button" :disabled="!finalOutputPath" @click="openGeelarkPublishModal">发布到 Geelark</button>
                   <button class="ghost-button compose-side-button" type="button" :disabled="loading" @click="composeFinalVideo">{{ finalButtonLabel }}</button>
                 </div>
               </section>
@@ -2397,6 +2526,79 @@ onUnmounted(() => {
               <span>{{ safeText(item.sceneStyle || item.model, 'AI 模特') }}</span>
             </div>
           </CloneMediaCard>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="geelarkPublishModalOpen" class="modal-mask" @click.self="geelarkPublishModalOpen = false">
+      <div class="modal-panel">
+        <div class="panel-head">
+          <div>
+            <span class="panel-tag">发布到 Geelark</span>
+            <h2>提交 TikTok 发布任务</h2>
+          </div>
+          <button class="ghost-button small" type="button" @click="geelarkPublishModalOpen = false">关闭</button>
+        </div>
+
+        <div class="publish-modal-grid">
+          <label class="publish-field publish-field--full">
+            <span>成片文件</span>
+            <strong>{{ safeText(shortPath(finalOutputPath), '暂无成片') }}</strong>
+          </label>
+
+          <label class="publish-field">
+            <span>发布账号</span>
+            <select v-model="geelarkPublishForm.publishAccountId" class="field-control">
+              <option value="">请选择账号</option>
+              <option v-for="item in geelarkAccounts" :key="item.id" :value="item.id">
+                {{ item.name }}
+              </option>
+            </select>
+          </label>
+
+          <label class="publish-field">
+            <span>绑定云手机</span>
+            <strong>{{ selectedGeelarkAccount?.cloudPhoneName || '未绑定' }}</strong>
+          </label>
+
+          <label class="publish-field publish-field--full">
+            <span>发布文案</span>
+            <textarea v-model="geelarkPublishForm.videoDesc" class="field-control field-control--textarea" placeholder="填写 TikTok 发布文案"></textarea>
+          </label>
+
+          <label class="publish-field">
+            <span>商品 ID</span>
+            <input v-model="geelarkPublishForm.productId" class="field-control" type="text" placeholder="可选" />
+          </label>
+
+          <label class="publish-field">
+            <span>商品标题</span>
+            <input v-model="geelarkPublishForm.productTitle" class="field-control" type="text" placeholder="可选" />
+          </label>
+
+          <label class="publish-field">
+            <span>计划发布时间</span>
+            <input v-model="geelarkPublishForm.scheduleAt" class="field-control" type="datetime-local" />
+          </label>
+
+          <button
+            type="button"
+            class="toggle-button"
+            :class="{ 'is-active': geelarkPublishForm.needShareLink }"
+            @click="geelarkPublishForm.needShareLink = !geelarkPublishForm.needShareLink"
+          >
+            <span>{{ geelarkPublishForm.needShareLink ? '回传分享链接：开启' : '回传分享链接：关闭' }}</span>
+          </button>
+        </div>
+
+        <div v-if="geelarkPublishMessage" class="inline-form-message">
+          {{ geelarkPublishMessage }}
+        </div>
+
+        <div class="panel-actions">
+          <button class="primary-button" type="button" :disabled="geelarkPublishSubmitting" @click="submitGeelarkPublish">
+            {{ geelarkPublishSubmitting ? '提交中...' : '提交发布任务' }}
+          </button>
         </div>
       </div>
     </div>
@@ -4524,6 +4726,47 @@ onUnmounted(() => {
   gap: 8px;
   margin-top: 14px;
   min-width: 0;
+}
+
+.publish-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.publish-field {
+  display: grid;
+  gap: 6px;
+}
+
+.publish-field--full {
+  grid-column: 1 / -1;
+}
+
+.publish-field span {
+  color: #dbe7f7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.publish-field strong {
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fbff;
+  line-height: 1.5;
+}
+
+.inline-form-message {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 14px;
+  background: rgba(14, 165, 233, 0.1);
+  color: #dff6ff;
+  font-size: 13px;
 }
 
 .frame-card strong {

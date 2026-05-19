@@ -30,8 +30,7 @@ withDefaults(
 
 <style scoped>
 .sticky-panel {
-  position: sticky;
-  top: 10px;
+  position: relative;
 }
 
 .console-sidebar {

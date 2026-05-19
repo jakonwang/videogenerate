@@ -44,8 +44,9 @@ export default function LoginPage() {
   const ready = useSessionStore((state) => state.ready)
   const token = useSessionStore((state) => state.token)
   const [phone, setPhone] = useState('13800138000')
-  const [code, setCode] = useState('123456')
+  const [code, setCode] = useState('')
   const [displayName, setDisplayName] = useState('测试用户')
+  const [sendCodeHint, setSendCodeHint] = useState('')
   const [nextTarget, setNextTarget] = useState('/workspace')
 
   useEffect(() => {
@@ -72,6 +73,13 @@ export default function LoginPage() {
         wallet: result.wallet,
       })
       router.push(nextTarget)
+    },
+  })
+
+  const sendCodeMutation = useMutation({
+    mutationFn: () => apiClient.sendLoginCode({ phone, channel: 'sms' }),
+    onSuccess: (result) => {
+      setSendCodeHint(result.devCode ? `开发环境验证码：${result.devCode}` : result.message)
     },
   })
 
@@ -158,6 +166,7 @@ export default function LoginPage() {
                     <div className="flex h-14 items-center gap-3 rounded-[17px] border border-white/10 bg-white/[0.03] px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                       <Smartphone className="h-5 w-5 text-slate-500" />
                       <Input
+                        data-testid="login-phone-input"
                         value={phone}
                         onChange={(event) => setPhone(event.target.value)}
                         placeholder="请输入手机号"
@@ -171,11 +180,22 @@ export default function LoginPage() {
                     <div className="flex h-14 items-center gap-3 rounded-[17px] border border-white/10 bg-white/[0.03] px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                       <LockKeyhole className="h-5 w-5 text-slate-500" />
                       <Input
+                        data-testid="login-code-input"
                         value={code}
                         onChange={(event) => setCode(event.target.value)}
                         placeholder="请输入验证码"
                         className="h-auto border-0 bg-transparent px-0 text-[15px] text-white shadow-none placeholder:text-slate-500 focus-visible:ring-0"
                       />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 rounded-xl px-3"
+                        disabled={!phone.trim() || sendCodeMutation.isPending}
+                        onClick={() => sendCodeMutation.mutate()}
+                      >
+                        {sendCodeMutation.isPending ? '发送中...' : '发送验证码'}
+                      </Button>
                     </div>
                   </label>
 
@@ -184,6 +204,7 @@ export default function LoginPage() {
                     <div className="flex h-14 items-center gap-3 rounded-[17px] border border-white/10 bg-white/[0.03] px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                       <UserRound className="h-5 w-5 text-slate-500" />
                       <Input
+                        data-testid="login-display-name-input"
                         value={displayName}
                         onChange={(event) => setDisplayName(event.target.value)}
                         placeholder="请输入显示名称"
@@ -194,6 +215,7 @@ export default function LoginPage() {
                 </div>
 
                 <Button
+                  data-testid="login-submit-button"
                   size="lg"
                   className="h-16 rounded-[18px] bg-[linear-gradient(90deg,#614bff,#755cff)] text-[16px] font-semibold shadow-[0_18px_38px_rgba(98,75,255,0.34)]"
                   disabled={!phone.trim() || !code.trim() || !displayName.trim() || loginMutation.isPending}
@@ -205,13 +227,13 @@ export default function LoginPage() {
                 </Button>
 
                 <div className="grid gap-1.5 text-[14px] leading-7 text-slate-400">
-                  <span>默认手机号：13800138000</span>
-                  <span>默认验证码：123456</span>
+                  <span>请输入系统分配手机号并发送验证码后登录</span>
+                  {sendCodeHint ? <span>{sendCodeHint}</span> : null}
                 </div>
 
-                {loginMutation.error ? (
+                {loginMutation.error || sendCodeMutation.error ? (
                   <div className="rounded-[16px] border border-rose-400/18 bg-rose-500/10 px-4 py-3.5 text-[14px] text-rose-100">
-                    {loginMutation.error.message}
+                    {loginMutation.error?.message || sendCodeMutation.error?.message}
                   </div>
                 ) : null}
               </div>

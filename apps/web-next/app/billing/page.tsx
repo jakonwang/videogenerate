@@ -59,18 +59,18 @@ export default function BillingPage() {
     mutationFn: (input: { type: 'subscription' | 'compute_pack'; planId?: string; credits?: number }) =>
       apiClient.createOrder({
         ...input,
-        paymentChannel: 'mock_wechat',
+        paymentChannel: 'wechat_native',
       }),
     onSuccess: async (result) => {
-      setPaymentHint(`订单 ${result.order.id} 已创建，可在右侧完成模拟支付。`)
+      setPaymentHint(`订单 ${result.order.id} 已创建，可使用右侧测试回调完成支付验收。`)
       await queryClient.invalidateQueries({ queryKey: ['billing-orders'] })
     },
   })
 
   const payOrderMutation = useMutation({
-    mutationFn: (orderId: string) => apiClient.payMockOrder(orderId),
+    mutationFn: (input: { orderId: string; paymentReference?: string }) => apiClient.confirmOrderPayment(input.orderId, { paymentReference: input.paymentReference }),
     onSuccess: async () => {
-      setPaymentHint('模拟支付已完成，会员信息和算力余额已同步刷新。')
+      setPaymentHint('支付回调已完成，会员信息和算力余额已同步刷新。')
       await queryClient.invalidateQueries({ queryKey: ['billing-orders'] })
       await queryClient.invalidateQueries({ queryKey: ['profile'] })
     },
@@ -401,9 +401,18 @@ export default function BillingPage() {
                         <strong className="text-[16px] text-white">{latestPendingOrder.id}</strong>
                         <span className="text-[13px] text-slate-500">金额 ¥ {latestPendingOrder.amountCny}</span>
                       </div>
-                      <Button size="sm" disabled={payOrderMutation.isPending} onClick={() => payOrderMutation.mutate(latestPendingOrder.id)}>
-                        {payOrderMutation.isPending ? '支付处理中...' : '完成支付'}
-                      </Button>
+                        <Button
+                          size="sm"
+                          disabled={payOrderMutation.isPending}
+                          onClick={() =>
+                            payOrderMutation.mutate({
+                              orderId: latestPendingOrder.id,
+                              paymentReference: latestPendingOrder.paymentReference,
+                            })
+                          }
+                        >
+                          {payOrderMutation.isPending ? '支付处理中...' : '确认支付回调'}
+                        </Button>
                     </div>
                     {paymentHint ? <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3 text-[13px] leading-6 text-slate-300">{paymentHint}</div> : null}
                   </div>

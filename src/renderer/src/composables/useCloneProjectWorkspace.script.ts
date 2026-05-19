@@ -66,17 +66,34 @@ export function useCloneProjectWorkspaceScript<TProject extends CloneProjectLike
     options.errorText.value = ''
     options.setStageLog?.('正在生成脚本变体并进行评分。')
     try {
+      const localSelectedModelId = String(options.selectedModelId.value || '').trim()
+      const persistedModelId = String(options.current.value?.selectedModelIdentitySnapshot?.id || '').trim()
+      if (localSelectedModelId && localSelectedModelId !== persistedModelId) {
+        const syncedProject = hasStoredWebToken()
+          ? ((await webApiClient.selectCloneProjectModelIdentity(projectId, {
+              identityId: localSelectedModelId,
+            }))?.project as TProject)
+          : ((await window.api.clone.selectProjectModelIdentity({
+              cloneProjectId: projectId,
+              identityId: localSelectedModelId,
+            })) as TProject)
+        projectActions.applyProject((syncedProject || options.current.value) as TProject)
+        options.pushRuntimeLog?.(`脚本变体生成前已自动绑定模特：${localSelectedModelId}`, 'info')
+      }
+
       if (options.productRefsDraft.value) {
         const syncedProject = hasStoredWebToken()
           ? ((await webApiClient.saveCloneProjectProductImages(projectId, {
               productReferenceImagePaths: options.productRefsDraft.value,
             }))?.project as TProject)
-          : ((await window.api.clone.saveProjectProductImages({
+          : (((await window.api.clone.saveProjectProductImages({
               cloneProjectId: projectId,
               productReferenceImagePaths: options.productRefsDraft.value,
-            })) as TProject)
+            })) as { project?: TProject })?.project as TProject)
         projectActions.applyProject((syncedProject || options.current.value) as TProject)
+        options.pushRuntimeLog?.(`脚本变体生成前已同步商品图：${options.productRefsDraft.value.length} 张`, 'info')
       }
+
       const variantCount = Math.max(1, Math.min(6, Number(options.variantCount?.value || 3)))
       if (hasStoredWebToken()) {
         const res = await webApiClient.generateCloneScriptVariants(projectId, {
@@ -90,11 +107,15 @@ export function useCloneProjectWorkspaceScript<TProject extends CloneProjectLike
         })) as { project?: TProject }
         projectActions.applyProject((res.project || options.current.value) as TProject)
       }
+
       options.setStageLog?.(
-        options.current.value?.lastError ? '脚本变体已生成，部分候选使用了本地兜底逻辑，请直接选择一条继续。' : '脚本变体生成完成，请选择一条高分脚本继续。',
+        options.current.value?.lastError
+          ? '脚本变体已生成，部分候选使用了本地兜底逻辑，请直接选择一条继续。'
+          : '脚本变体生成完成，请选择一条高分脚本继续。',
         options.current.value?.lastError ? 'info' : 'success',
       )
     } catch (error: any) {
+      options.pushRuntimeLog?.(`脚本变体生成异常：${String(error?.message ?? error ?? '未知错误')}`, 'error')
       options.markError?.(error?.message ?? error, '脚本变体生成失败。')
       await projectActions.refreshProjectAfterFailure()
       options.setStageLog?.('脚本变体生成失败，请检查错误信息后重试。', 'error')
@@ -120,7 +141,7 @@ export function useCloneProjectWorkspaceScript<TProject extends CloneProjectLike
         })) as { project?: TProject }
         projectActions.applyProject((res.project || options.current.value) as TProject)
       }
-      options.setStageLog?.('脚本变体已确认，可以继续生成逐分镜图片。', 'success')
+      options.setStageLog?.('脚本变体已确认，可以继续生成分镜图片。', 'success')
     } catch (error: any) {
       options.markError?.(error?.message ?? error, '脚本变体选择失败。')
       await projectActions.refreshProjectAfterFailure()

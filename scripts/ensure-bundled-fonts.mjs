@@ -1,9 +1,9 @@
 /**
- * 拉取可被 libass/FreeType 稳定加载的字体文件到 resources/fonts。
+ * 同步可被 libass / FreeType 稳定加载的内置字体到 resources/fonts。
  *
- * 背景：
- * - 部分 Windows 环境的 ffmpeg-static / libass 组合无法加载 woff2（会报 Error opening memory font '*.woff2' 并直接失败）。
- * - 因此这里优先同步 OTF/TTF（更通用），避免字幕烧录失败。
+ * 约束：
+ * - 只补齐基础字体，不删除仓库里已经存在的 ttf/otf/ttc 内置字体。
+ * - 清理历史 woff2 和杂项文件，避免 ffmpeg / libass 扫描异常。
  */
 import fs from 'node:fs'
 import https from 'node:https'
@@ -17,25 +17,19 @@ const fontsDir = path.join(root, 'resources', 'fonts')
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-/** 选择“能覆盖中/英/越/泰 + 粗斜体展示”的最小集合 */
 const FONT_FILES = [
-  // 中文（SC）：OTF 体积适中，libass 更稳
   {
     name: 'NotoSansSC-Regular.otf',
-    // Noto CJK：使用 Subset OTF（体积更小且 libass 更稳）
     url: 'https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf',
   },
-  // 英文/拉丁/越南语：TTF
   {
     name: 'NotoSans-Regular.ttf',
     url: 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSans/unhinted/ttf/NotoSans-Regular.ttf',
   },
-  // 泰文：TTF
   {
     name: 'NotoSansThai-Regular.ttf',
     url: 'https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansThai/unhinted/ttf/NotoSansThai-Regular.ttf',
   },
-  // 展示体（圆润标题 + 斜体）：variable ttf
   {
     name: 'Nunito[wght].ttf',
     url: 'https://static.oeh.ac.at/fonts/ofl/nunito/Nunito%5Bwght%5D.ttf',
@@ -44,37 +38,57 @@ const FONT_FILES = [
     name: 'Nunito-Italic[wght].ttf',
     url: 'https://static.oeh.ac.at/fonts/ofl/nunito/Nunito-Italic%5Bwght%5D.ttf',
   },
+  {
+    name: 'ZCOOLKuaiLe-Regular.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf',
+  },
+  {
+    name: 'MaShanZheng-Regular.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/MaShanZheng-Regular.ttf',
+  },
+  {
+    name: 'LongCang-Regular.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/longcang/LongCang-Regular.ttf',
+  },
 ]
 
-function safeUnlink(p) {
+const KEEP_MARKERS = new Set(['.videogenerate-fonts-ready'])
+
+function safeUnlink(filePath) {
   try {
-    fs.unlinkSync(p)
+    fs.unlinkSync(filePath)
   } catch {
     // ignore
   }
 }
 
+function isStableBundledFontFile(name) {
+  const lower = String(name || '').toLowerCase()
+  return lower.endsWith('.otf') || lower.endsWith('.ttf') || lower.endsWith('.ttc')
+}
+
 function cleanFontsDir() {
   fs.mkdirSync(fontsDir, { recursive: true })
-  const allowNames = new Set(FONT_FILES.map((x) => x.name).concat(['.videogenerate-fonts-ready']))
   const entries = fs.readdirSync(fontsDir)
   let removed = 0
+
   for (const name of entries) {
-    if (name.startsWith('.')) continue
-    if (allowNames.has(name)) continue
+    if (KEEP_MARKERS.has(name)) continue
+    if (isStableBundledFontFile(name)) continue
+
     const lower = name.toLowerCase()
-    // 清理旧的 woff2 子集与杂项（README 等），避免 libass 扫描时报错
-    if (lower.endsWith('.woff2') || lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.css')) {
-      safeUnlink(path.join(fontsDir, name))
-      removed++
-      continue
-    }
-    // 非目标字体文件也移除，确保目录干净可控
-    if (!lower.endsWith('.otf') && !lower.endsWith('.ttf') && !lower.endsWith('.ttc')) {
+    if (
+      lower.endsWith('.woff2') ||
+      lower.endsWith('.md') ||
+      lower.endsWith('.txt') ||
+      lower.endsWith('.css') ||
+      !isStableBundledFontFile(name)
+    ) {
       safeUnlink(path.join(fontsDir, name))
       removed++
     }
   }
+
   if (removed) console.log(`[fonts] cleaned: removed ${removed} stale files`)
 }
 
@@ -102,17 +116,17 @@ function downloadFile(url, dest) {
             return reject(new Error(`HTTP ${res.statusCode} ${url}`))
           }
           res.pipe(file)
-          file.on('finish', () => file.close((e) => (e ? reject(e) : resolve())))
+          file.on('finish', () => file.close((error) => (error ? reject(error) : resolve())))
         },
       )
-      .on('error', (err) => {
+      .on('error', (error) => {
         try {
           file.close()
           fs.unlink(dest, () => {})
         } catch {
           // ignore
         }
-        reject(err)
+        reject(error)
       })
   })
 }
@@ -120,27 +134,29 @@ function downloadFile(url, dest) {
 async function main() {
   cleanFontsDir()
   console.log('[fonts] syncing OTF/TTF into:', fontsDir)
-  let n = 0
-  for (const f of FONT_FILES) {
-    const dest = path.join(fontsDir, f.name)
+  let count = 0
+
+  for (const font of FONT_FILES) {
+    const dest = path.join(fontsDir, font.name)
     let skip = false
     try {
-      const st = fs.statSync(dest)
-      skip = st.size > 32 * 1024
+      const stat = fs.statSync(dest)
+      skip = stat.size > 32 * 1024
     } catch {
       skip = false
     }
     if (!skip) {
-      console.log('[fonts] download:', f.name)
-      await downloadFile(f.url, dest)
+      console.log('[fonts] download:', font.name)
+      await downloadFile(font.url, dest)
     }
-    n++
+    count++
   }
-  fs.writeFileSync(path.join(fontsDir, '.videogenerate-fonts-ready'), `ok\n${n}\n`, 'utf8')
-  console.log('[fonts] done:', fontsDir, `(${n} files)`)
+
+  fs.writeFileSync(path.join(fontsDir, '.videogenerate-fonts-ready'), `ok\n${count}\n`, 'utf8')
+  console.log('[fonts] done:', fontsDir, `(${count} base files, custom bundled fonts preserved)`)
 }
 
-main().catch((e) => {
-  console.error(e)
+main().catch((error) => {
+  console.error(error)
   process.exitCode = 1
 })

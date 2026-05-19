@@ -1,16 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Clapperboard, Image as ImageIcon, MessagesSquare, Server, Cloud } from 'lucide-vue-next'
+import { Clapperboard, Cloud, Image as ImageIcon, KeyRound, MessagesSquare, Server } from 'lucide-vue-next'
+
+type ProviderKey = 'kling' | 'grsai' | 'apifox_hub'
+type PlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine'
+type CapabilityPlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine'
+type SecretKey =
+  | 'klingApiKey'
+  | 'grsaiApiKey'
+  | 'ai666ApiKey'
+  | 'vectorEngineApiKey'
+  | 'qiniuAccessKey'
+  | 'qiniuSecretKey'
 
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
 const modelSettingsBusy = ref(false)
-const modelSettingsSection = ref<'video' | 'image' | 'chat' | 'qiniu'>('video')
-const settingsMode = ref<'simple' | 'pro'>('pro')
-const modelVisibleSecrets = ref<Record<string, boolean>>({
+const modelSettingsSection = ref<'platforms' | 'capabilities' | 'qiniu'>('platforms')
+const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
   grsaiApiKey: false,
-  apifoxApiKey: false,
+  ai666ApiKey: false,
+  vectorEngineApiKey: false,
   qiniuAccessKey: false,
   qiniuSecretKey: false,
 })
@@ -28,32 +39,76 @@ const modelCredentials = ref({
   qiniuPrefix: '',
   allowMockWhenNoKey: false,
   keyframeModel: '',
-  videoProviderPrimary: 'kling',
+  videoProviderPrimary: 'kling' as ProviderKey,
   videoModelPrimary: 'veo_3_1-lite',
-  videoProviderFallback: 'kling',
+  videoProviderFallback: 'kling' as ProviderKey,
   videoModelFallback: 'google/veo3.1-lite/image-to-video',
   grsaiVideoModel: 'grok-video-3',
-  imageProviderPrimary: 'apifox_hub',
+  imageProviderPrimary: 'apifox_hub' as ProviderKey,
   chatProviderPrimary: 'apifox_hub' as 'apifox_hub' | 'grsai',
+  apifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
+  videoApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
+  imageApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
+  chatApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
   klingImageModel: '',
   grsaiImageModel: '',
   grsaiAnalysisModel: '',
+  ai666Hub: {
+    enabled: true,
+    baseUrl: '',
+    apiKey: '',
+    chatProvider: 'openai',
+    chatModel: 'gpt-4.1-mini',
+    chatEndpointStyle: 'openai_chat',
+    imageProvider: 'openai',
+    imageModel: 'gpt-image-1',
+    imageEditModel: '',
+    imageEndpointStyle: 'openai_images',
+    videoProvider: 'veo',
+    textToVideoModel: 'veo_3_1-lite',
+    imageToVideoModel: 'veo_3_1-lite',
+    startEndVideoModel: 'veo_3_1-lite',
+    referenceVideoModel: 'veo_3_1-lite',
+    videoEndpointStyle: 'official_rest',
+    defaultPollIntervalMs: 2000,
+    defaultTimeoutMs: 600000,
+  },
+  vectorEngineHub: {
+    enabled: true,
+    baseUrl: '',
+    apiKey: '',
+    chatProvider: 'openai',
+    chatModel: 'gpt-4.1-mini',
+    chatEndpointStyle: 'openai_chat',
+    imageProvider: 'openai',
+    imageModel: 'gpt-image-1',
+    imageEditModel: '',
+    imageEndpointStyle: 'openai_images',
+    videoProvider: 'veo',
+    textToVideoModel: 'veo_3_1-lite',
+    imageToVideoModel: 'veo_3_1-lite',
+    startEndVideoModel: 'veo_3_1-lite',
+    referenceVideoModel: 'veo_3_1-lite',
+    videoEndpointStyle: 'official_rest',
+    defaultPollIntervalMs: 2000,
+    defaultTimeoutMs: 600000,
+  },
   apifoxHub: {
     enabled: false,
     baseUrl: '',
     apiKey: '',
     chatProvider: 'openai',
-    chatModel: '',
+    chatModel: 'gpt-4.1-mini',
     chatEndpointStyle: 'openai_chat',
     imageProvider: 'openai',
-    imageModel: '',
+    imageModel: 'gpt-image-1',
     imageEditModel: '',
     imageEndpointStyle: 'openai_images',
     videoProvider: 'veo',
-    textToVideoModel: '',
-    imageToVideoModel: '',
-    startEndVideoModel: '',
-    referenceVideoModel: 'google/veo3.1-lite/image-to-video',
+    textToVideoModel: 'veo_3_1-lite',
+    imageToVideoModel: 'veo_3_1-lite',
+    startEndVideoModel: 'veo_3_1-lite',
+    referenceVideoModel: 'veo_3_1-lite',
     videoEndpointStyle: 'official_rest',
     defaultPollIntervalMs: 2000,
     defaultTimeoutMs: 600000,
@@ -61,36 +116,124 @@ const modelCredentials = ref({
 })
 
 const sectionMeta = [
-  { key: 'video', label: '视频模型', desc: '主视频 provider、模型与调用方式', icon: Clapperboard },
-  { key: 'image', label: '图片模型', desc: '文生图和图像编辑链路', icon: ImageIcon },
-  { key: 'chat', label: '对话模型', desc: '脚本分析和通用问答模型', icon: MessagesSquare },
-  { key: 'qiniu', label: '云存储', desc: '七牛上传、外链和资源前缀', icon: Cloud },
+  { key: 'platforms', label: '开放平台', desc: '先配置平台 Key 与 Base URL', icon: KeyRound },
+  { key: 'capabilities', label: '能力模型', desc: '再选择视频、图片、对话模型', icon: Server },
+  { key: 'qiniu', label: '云存储', desc: '七牛上传、外链与资源前缀', icon: Cloud },
 ] as const
+
+const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; hostPlaceholder: string; keyName: SecretKey }> = {
+  kling: {
+    label: 'AtlasCloud',
+    hostLabel: 'Base URL / Host',
+    hostPlaceholder: 'https://api.atlascloud.ai',
+    keyName: 'klingApiKey',
+  },
+  grsai: {
+    label: 'GRS.AI',
+    hostLabel: 'Base URL / Host',
+    hostPlaceholder: 'https://grsaiapi.com',
+    keyName: 'grsaiApiKey',
+  },
+  ai666: {
+    label: 'AI666',
+    hostLabel: 'Base URL',
+    hostPlaceholder: 'https://your-ai666-host',
+    keyName: 'ai666ApiKey',
+  },
+  vectorengine: {
+    label: 'VectorEngine',
+    hostLabel: 'Base URL',
+    hostPlaceholder: 'https://your-vector-engine-host',
+    keyName: 'vectorEngineApiKey',
+  },
+}
 
 const settingsMessageTone = computed(() => {
   const text = String(settingsMessage.value || '').trim()
   if (!text) return 'neutral'
-  if (text.includes('已') || text.includes('开始')) return 'success'
-  return 'error'
+  return /已|成功|完成|打开|开始/.test(text) ? 'success' : 'error'
 })
 
-const activeVideoProviderLabel = computed(() => (modelCredentials.value.videoProviderPrimary === 'apifox_hub' ? 'ai666' : modelCredentials.value.videoProviderPrimary === 'grsai' ? 'GRS.AI' : 'AtlasCloud'))
-const activeImageProviderLabel = computed(() => (modelCredentials.value.imageProviderPrimary === 'apifox_hub' ? 'ai666' : modelCredentials.value.imageProviderPrimary === 'grsai' ? 'GRS.AI' : 'AtlasCloud'))
-const activeChatProviderLabel = computed(() => (modelCredentials.value.chatProviderPrimary === 'apifox_hub' ? 'ai666' : 'GRS.AI'))
+const providerLabel = (provider: string) =>
+  provider === 'apifox_hub' ? 'VectorEngine' : provider === 'grsai' ? 'GRS.AI' : 'AtlasCloud'
+
+function capabilityProviderLabel(provider: ProviderKey | 'grsai', profile?: 'ai666' | 'vectorengine') {
+  if (provider === 'apifox_hub') return profile === 'ai666' ? 'AI666' : 'VectorEngine'
+  return provider === 'grsai' ? 'GRS.AI' : 'AtlasCloud'
+}
+
+function capabilityProfileKey(target: 'videoProviderPrimary' | 'videoProviderFallback' | 'imageProviderPrimary' | 'chatProviderPrimary') {
+  if (target === 'imageProviderPrimary') return 'imageApifoxHubProfile'
+  if (target === 'chatProviderPrimary') return 'chatApifoxHubProfile'
+  return 'videoApifoxHubProfile'
+}
+
+function toCapabilityPlatform(provider: ProviderKey | 'grsai', profile?: 'ai666' | 'vectorengine'): CapabilityPlatformKey {
+  if (provider === 'apifox_hub') return profile === 'ai666' ? 'ai666' : 'vectorengine'
+  return provider === 'grsai' ? 'grsai' : 'kling'
+}
+
+function applyCapabilityPlatform(
+  target: 'videoProviderPrimary' | 'videoProviderFallback' | 'imageProviderPrimary' | 'chatProviderPrimary',
+  platform: CapabilityPlatformKey,
+) {
+  const profileKey = capabilityProfileKey(target)
+  if (platform === 'ai666' || platform === 'vectorengine') {
+    ;(modelCredentials.value[target] as ProviderKey | 'grsai') = 'apifox_hub'
+    modelCredentials.value[profileKey] = platform
+    return
+  }
+  ;(modelCredentials.value[target] as ProviderKey | 'grsai') = platform
+}
+
+const videoPrimaryPlatformBinding = computed({
+  get: () => toCapabilityPlatform(modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
+  set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('videoProviderPrimary', value),
+})
+
+const videoFallbackPlatformBinding = computed({
+  get: () => toCapabilityPlatform(modelCredentials.value.videoProviderFallback, modelCredentials.value.videoApifoxHubProfile),
+  set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('videoProviderFallback', value),
+})
+
+const imagePrimaryPlatformBinding = computed({
+  get: () => toCapabilityPlatform(modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
+  set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('imageProviderPrimary', value),
+})
+
+const chatPrimaryPlatformBinding = computed({
+  get: () => toCapabilityPlatform(modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
+  set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('chatProviderPrimary', value),
+})
+
+function activeApifoxHub(capability: 'video' | 'image' | 'chat') {
+  const profile =
+    capability === 'video'
+      ? modelCredentials.value.videoApifoxHubProfile
+      : capability === 'image'
+        ? modelCredentials.value.imageApifoxHubProfile
+        : modelCredentials.value.chatApifoxHubProfile
+  return profile === 'ai666' ? modelCredentials.value.ai666Hub : modelCredentials.value.vectorEngineHub
+}
 
 const videoPrimaryModelBinding = computed({
   get: () => {
     const creds = modelCredentials.value
-    if (creds.videoProviderPrimary === 'apifox_hub') return creds.apifoxHub.referenceVideoModel || creds.apifoxHub.imageToVideoModel || creds.apifoxHub.textToVideoModel || ''
+    if (creds.videoProviderPrimary === 'apifox_hub') {
+      const hub = activeApifoxHub('video')
+      return hub.startEndVideoModel || hub.referenceVideoModel || hub.imageToVideoModel || hub.textToVideoModel || ''
+    }
     if (creds.videoProviderPrimary === 'grsai') return creds.grsaiVideoModel || ''
     return creds.videoModelFallback || creds.videoModelPrimary || ''
   },
   set: (value: string) => {
     const creds = modelCredentials.value
     if (creds.videoProviderPrimary === 'apifox_hub') {
-      creds.apifoxHub.referenceVideoModel = value
-      creds.apifoxHub.imageToVideoModel = value
-      creds.apifoxHub.textToVideoModel = value
+      const hub = activeApifoxHub('video')
+      hub.startEndVideoModel = value
+      hub.referenceVideoModel = value
+      hub.imageToVideoModel = value
+      hub.textToVideoModel = value
       return
     }
     if (creds.videoProviderPrimary === 'grsai') {
@@ -105,14 +248,14 @@ const videoPrimaryModelBinding = computed({
 const imagePrimaryModelBinding = computed({
   get: () => {
     const creds = modelCredentials.value
-    if (creds.imageProviderPrimary === 'apifox_hub') return creds.apifoxHub.imageModel || ''
+    if (creds.imageProviderPrimary === 'apifox_hub') return activeApifoxHub('image').imageModel || ''
     if (creds.imageProviderPrimary === 'grsai') return creds.grsaiImageModel || ''
     return creds.klingImageModel || ''
   },
   set: (value: string) => {
     const creds = modelCredentials.value
     if (creds.imageProviderPrimary === 'apifox_hub') {
-      creds.apifoxHub.imageModel = value
+      activeApifoxHub('image').imageModel = value
       return
     }
     if (creds.imageProviderPrimary === 'grsai') {
@@ -124,10 +267,10 @@ const imagePrimaryModelBinding = computed({
 })
 
 const chatPrimaryModelBinding = computed({
-  get: () => (modelCredentials.value.chatProviderPrimary === 'apifox_hub' ? modelCredentials.value.apifoxHub.chatModel || '' : modelCredentials.value.grsaiAnalysisModel || ''),
+  get: () => (modelCredentials.value.chatProviderPrimary === 'apifox_hub' ? activeApifoxHub('chat').chatModel || '' : modelCredentials.value.grsaiAnalysisModel || ''),
   set: (value: string) => {
     if (modelCredentials.value.chatProviderPrimary === 'apifox_hub') {
-      modelCredentials.value.apifoxHub.chatModel = value
+      activeApifoxHub('chat').chatModel = value
       return
     }
     modelCredentials.value.grsaiAnalysisModel = value
@@ -135,18 +278,83 @@ const chatPrimaryModelBinding = computed({
 })
 
 const summaryCards = computed(() => [
-  { title: '视频 provider', value: activeVideoProviderLabel.value, meta: videoPrimaryModelBinding.value || '未设置', tone: 'violet', icon: Clapperboard },
-  { title: '图片 provider', value: activeImageProviderLabel.value, meta: imagePrimaryModelBinding.value || '未设置', tone: 'cyan', icon: ImageIcon },
-  { title: '脚本 provider', value: activeChatProviderLabel.value, meta: chatPrimaryModelBinding.value || '未设置', tone: 'green', icon: MessagesSquare },
-  { title: '配置状态', value: settingsMessage.value || '待同步', meta: modelSettingsBusy.value ? '处理中' : '可保存', tone: 'slate', icon: Server },
+  {
+    title: '视频模型',
+    value: capabilityProviderLabel(modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
+    meta: videoPrimaryModelBinding.value || '未设置模型',
+    tone: 'violet',
+    icon: Clapperboard,
+  },
+  {
+    title: '图片模型',
+    value: capabilityProviderLabel(modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
+    meta: imagePrimaryModelBinding.value || '未设置模型',
+    tone: 'cyan',
+    icon: ImageIcon,
+  },
+  {
+    title: '对话模型',
+    value: capabilityProviderLabel(modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
+    meta: chatPrimaryModelBinding.value || '未设置模型',
+    tone: 'green',
+    icon: MessagesSquare,
+  },
+  {
+    title: '当前状态',
+    value: settingsMessage.value || '等待保存',
+    meta: modelSettingsBusy.value ? '处理中' : '可保存',
+    tone: 'slate',
+    icon: Server,
+  },
 ])
 
-function toggleModelSecret(key: string) {
+const platformCards = computed(() => [
+  {
+    provider: 'kling' as ProviderKey,
+    title: 'AtlasCloud',
+    desc: '用于 AtlasCloud / Kling 链路的通用凭证。',
+    icon: Clapperboard,
+  },
+  {
+    provider: 'grsai' as ProviderKey,
+    title: 'GRS.AI',
+    desc: '用于 GRS.AI 的视频、图片和对话能力。',
+    icon: MessagesSquare,
+  },
+  {
+    provider: 'ai666' as PlatformKey,
+    title: 'AI666',
+    desc: '用于 AI666 开放平台独立凭证。',
+    icon: Server,
+  },
+  {
+    provider: 'vectorengine' as PlatformKey,
+    title: 'VectorEngine',
+    desc: '用于 VectorEngine 开放平台独立凭证。',
+    icon: Server,
+  },
+])
+
+function toggleModelSecret(key: SecretKey) {
   modelVisibleSecrets.value[key] = !modelVisibleSecrets.value[key]
 }
 
-function modelSecretType(key: string) {
+function modelSecretType(key: SecretKey) {
   return modelVisibleSecrets.value[key] ? 'text' : 'password'
+}
+
+function providerApiKey(provider: PlatformKey) {
+  if (provider === 'kling') return modelCredentials.value.klingApiKey
+  if (provider === 'grsai') return modelCredentials.value.grsaiApiKey
+  if (provider === 'ai666') return modelCredentials.value.ai666Hub.apiKey
+  return modelCredentials.value.vectorEngineHub.apiKey
+}
+
+function providerHost(provider: PlatformKey) {
+  if (provider === 'kling') return modelCredentials.value.klingHost
+  if (provider === 'grsai') return modelCredentials.value.grsaiHost
+  if (provider === 'ai666') return modelCredentials.value.ai666Hub.baseUrl
+  return modelCredentials.value.vectorEngineHub.baseUrl
 }
 
 async function refreshModelSettings() {
@@ -154,7 +362,7 @@ async function refreshModelSettings() {
   try {
     const next = (await window.api.clone.getModelCredentials()) as typeof modelCredentials.value
     modelCredentials.value = { ...modelCredentials.value, ...next }
-    settingsMessage.value = '已读取当前配置'
+    settingsMessage.value = '模型配置已读取'
   } catch (e: any) {
     settingsMessage.value = `读取配置失败：${e?.message ?? String(e)}`
   } finally {
@@ -167,6 +375,8 @@ async function saveModelSettings() {
   settingsMessage.value = ''
   try {
     const payload = JSON.parse(JSON.stringify(modelCredentials.value))
+    payload.apifoxHubProfile = payload.videoApifoxHubProfile === 'ai666' ? 'ai666' : 'vectorengine'
+    payload.apifoxHub = payload.apifoxHubProfile === 'ai666' ? { ...payload.ai666Hub } : { ...payload.vectorEngineHub }
     await window.api.clone.setModelCredentials(payload)
     const confirmed = (await window.api.clone.getModelCredentials()) as typeof modelCredentials.value
     modelCredentials.value = { ...modelCredentials.value, ...confirmed }
@@ -218,18 +428,16 @@ onMounted(() => {
       <div class="settings-shell__hero">
         <div>
           <div class="settings-kicker">Settings / Control Center</div>
-          <h1>统一模型与云配置入口</h1>
-          <p>设置页不再作为普通后台表单，而是统一纳入工作台骨架，所有 provider 与模型都在这里显式透传管理。</p>
+          <h1>模型平台与能力配置</h1>
+          <p>先配置开放平台的 API Key 和 Base URL，再为视频、图片、对话选择对应平台与模型，降低理解成本。</p>
         </div>
         <div class="settings-shell__actions">
-          <div class="mode-switch">
-            <button type="button" :class="{ active: settingsMode === 'simple' }" @click="settingsMode = 'simple'">简洁</button>
-            <button type="button" :class="{ active: settingsMode === 'pro' }" @click="settingsMode = 'pro'">专业</button>
-          </div>
           <button class="ghost-button small" :disabled="settingsBusy" @click="checkUpdatesNow">检查更新</button>
           <button class="ghost-button small" @click="openDataDir">打开数据目录</button>
           <button class="ghost-button small" @click="refreshModelSettings">刷新</button>
-          <button class="primary-button small" :disabled="modelSettingsBusy" @click="saveModelSettings">{{ modelSettingsBusy ? '保存中' : '保存配置' }}</button>
+          <button class="primary-button small" :disabled="modelSettingsBusy" @click="saveModelSettings">
+            {{ modelSettingsBusy ? '保存中' : '保存配置' }}
+          </button>
         </div>
       </div>
 
@@ -267,139 +475,165 @@ onMounted(() => {
       <main class="settings-form-panel">
         <div v-if="settingsMessage" class="settings-message" :class="settingsMessageTone">{{ settingsMessage }}</div>
 
-        <section v-if="modelSettingsSection === 'video'" class="form-section">
+        <section v-if="modelSettingsSection === 'platforms'" class="form-section">
           <div class="section-head">
             <div>
-              <h2>视频模型</h2>
-              <p>控制视频生成主链路，禁止 silent fallback。</p>
+              <h2>开放平台凭证</h2>
+              <p>平台凭证单独维护，避免用户在视频、图片、对话三个区域反复看到同一套 Key / Base URL。</p>
             </div>
           </div>
-          <div class="form-grid">
-            <label>
-              <span>视频 provider</span>
-              <select v-model="modelCredentials.videoProviderPrimary">
-                <option value="kling">AtlasCloud</option>
-                <option value="grsai">GRS.AI</option>
-                <option value="apifox_hub">ai666</option>
-              </select>
-            </label>
-            <label>
-              <span>视频模型</span>
-              <input v-model="videoPrimaryModelBinding" />
-            </label>
-            <label v-if="modelCredentials.videoProviderPrimary === 'kling'">
-              <span>AtlasCloud API Key</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.klingApiKey" :type="modelSecretType('klingApiKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('klingApiKey')">{{ modelVisibleSecrets.klingApiKey ? '隐藏' : '显示' }}</button>
-              </div>
-            </label>
-            <label v-if="modelCredentials.videoProviderPrimary === 'kling'">
-              <span>AtlasCloud Host</span>
-              <input v-model="modelCredentials.klingHost" />
-            </label>
-            <label v-if="modelCredentials.videoProviderPrimary === 'grsai'">
-              <span>GRS.AI API Key</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.grsaiApiKey" :type="modelSecretType('grsaiApiKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('grsaiApiKey')">{{ modelVisibleSecrets.grsaiApiKey ? '隐藏' : '显示' }}</button>
-              </div>
-            </label>
-            <label v-if="modelCredentials.videoProviderPrimary === 'grsai'">
-              <span>GRS.AI Host</span>
-              <input v-model="modelCredentials.grsaiHost" />
-            </label>
-            <template v-if="modelCredentials.videoProviderPrimary === 'apifox_hub'">
-              <label>
-                <span>ai666 Base URL</span>
-                <input v-model="modelCredentials.apifoxHub.baseUrl" />
-              </label>
-              <label>
-                <span>ai666 API Key</span>
-                <div class="field-inline">
-                  <input v-model="modelCredentials.apifoxHub.apiKey" :type="modelSecretType('apifoxApiKey')" />
-                  <button class="ghost-button tiny" type="button" @click="toggleModelSecret('apifoxApiKey')">{{ modelVisibleSecrets.apifoxApiKey ? '隐藏' : '显示' }}</button>
+
+          <div class="platform-grid">
+            <article v-for="card in platformCards" :key="card.provider" class="platform-card">
+              <div class="platform-card__head">
+                <div class="platform-card__icon">
+                  <component :is="card.icon" :size="16" />
                 </div>
-              </label>
-            </template>
+                <div>
+                  <h3>{{ card.title }}</h3>
+                  <p>{{ card.desc }}</p>
+                </div>
+              </div>
+
+              <div class="form-grid single-column">
+                <label>
+                  <span>API Key</span>
+                  <div class="field-inline">
+                    <input
+                      :value="providerApiKey(card.provider)"
+                      :type="modelSecretType(providerMeta[card.provider].keyName)"
+                      @input="
+                        card.provider === 'kling'
+                          ? (modelCredentials.klingApiKey = ($event.target as HTMLInputElement).value)
+                          : card.provider === 'grsai'
+                            ? (modelCredentials.grsaiApiKey = ($event.target as HTMLInputElement).value)
+                            : card.provider === 'ai666'
+                              ? (modelCredentials.ai666Hub.apiKey = ($event.target as HTMLInputElement).value)
+                              : (modelCredentials.vectorEngineHub.apiKey = ($event.target as HTMLInputElement).value)
+                      "
+                    />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret(providerMeta[card.provider].keyName)">
+                      {{ modelVisibleSecrets[providerMeta[card.provider].keyName] ? '隐藏' : '显示' }}
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  <span>{{ providerMeta[card.provider].hostLabel }}</span>
+                  <input
+                    :value="providerHost(card.provider)"
+                    :placeholder="providerMeta[card.provider].hostPlaceholder"
+                    @input="
+                      card.provider === 'kling'
+                        ? (modelCredentials.klingHost = ($event.target as HTMLInputElement).value)
+                        : card.provider === 'grsai'
+                          ? (modelCredentials.grsaiHost = ($event.target as HTMLInputElement).value)
+                          : card.provider === 'ai666'
+                            ? (modelCredentials.ai666Hub.baseUrl = ($event.target as HTMLInputElement).value)
+                            : (modelCredentials.vectorEngineHub.baseUrl = ($event.target as HTMLInputElement).value)
+                    "
+                  />
+                </label>
+              </div>
+            </article>
           </div>
         </section>
 
-        <section v-else-if="modelSettingsSection === 'image'" class="form-section">
+        <section v-else-if="modelSettingsSection === 'capabilities'" class="form-section">
           <div class="section-head">
             <div>
-              <h2>图片模型</h2>
-              <p>控制文生图、图像编辑与分镜图生成链路。</p>
+              <h2>能力模型</h2>
+              <p>这里仅负责“这项能力使用哪个平台、哪个模型”，平台的凭证请在“开放平台”区域统一配置。</p>
             </div>
           </div>
-          <div class="form-grid">
-            <label>
-              <span>图片 provider</span>
-              <select v-model="modelCredentials.imageProviderPrimary">
-                <option value="kling">AtlasCloud</option>
-                <option value="grsai">GRS.AI</option>
-                <option value="apifox_hub">ai666</option>
-              </select>
-            </label>
-            <label>
-              <span>图片模型</span>
-              <input v-model="imagePrimaryModelBinding" />
-            </label>
-            <label v-if="modelCredentials.imageProviderPrimary === 'apifox_hub'">
-              <span>图片 Base URL</span>
-              <input v-model="modelCredentials.apifoxHub.baseUrl" />
-            </label>
-            <label v-if="modelCredentials.imageProviderPrimary === 'apifox_hub'">
-              <span>图片 API Key</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.apifoxHub.apiKey" :type="modelSecretType('apifoxApiKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('apifoxApiKey')">{{ modelVisibleSecrets.apifoxApiKey ? '隐藏' : '显示' }}</button>
-              </div>
-            </label>
-          </div>
-        </section>
 
-        <section v-else-if="modelSettingsSection === 'chat'" class="form-section">
-          <div class="section-head">
-            <div>
-              <h2>对话模型</h2>
-              <p>控制脚本分析、工作流辅助和通用问答。</p>
-            </div>
-          </div>
-          <div class="form-grid">
-            <label>
-              <span>对话 provider</span>
-              <select v-model="modelCredentials.chatProviderPrimary">
-                <option value="apifox_hub">ai666</option>
-                <option value="grsai">GRS.AI</option>
-              </select>
-            </label>
-            <label>
-              <span>对话模型</span>
-              <input v-model="chatPrimaryModelBinding" />
-            </label>
-            <label v-if="modelCredentials.chatProviderPrimary === 'apifox_hub'">
-              <span>对话 Base URL</span>
-              <input v-model="modelCredentials.apifoxHub.baseUrl" />
-            </label>
-            <label v-if="modelCredentials.chatProviderPrimary === 'apifox_hub'">
-              <span>对话 API Key</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.apifoxHub.apiKey" :type="modelSecretType('apifoxApiKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('apifoxApiKey')">{{ modelVisibleSecrets.apifoxApiKey ? '隐藏' : '显示' }}</button>
+          <div class="capability-stack">
+            <article class="capability-card">
+              <div class="capability-card__head">
+                <div class="capability-card__icon is-violet"><Clapperboard :size="16" /></div>
+                <div>
+                  <h3>视频能力</h3>
+                  <p>主视频生成链路。</p>
+                </div>
               </div>
-            </label>
-            <label v-if="modelCredentials.chatProviderPrimary === 'grsai'">
-              <span>GRS.AI API Key</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.grsaiApiKey" :type="modelSecretType('grsaiApiKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('grsaiApiKey')">{{ modelVisibleSecrets.grsaiApiKey ? '隐藏' : '显示' }}</button>
+              <div class="form-grid">
+                <label>
+                  <span>视频平台</span>
+                  <select v-model="videoPrimaryPlatformBinding">
+                    <option value="kling">AtlasCloud</option>
+                    <option value="grsai">GRS.AI</option>
+                    <option value="ai666">AI666</option>
+                    <option value="vectorengine">VectorEngine</option>
+                  </select>
+                </label>
+                <label>
+                  <span>视频模型</span>
+                  <input v-model="videoPrimaryModelBinding" placeholder="例如 veo_3_1-lite" />
+                </label>
+                <label>
+                  <span>回退平台</span>
+                  <select v-model="videoFallbackPlatformBinding">
+                    <option value="kling">AtlasCloud</option>
+                    <option value="grsai">GRS.AI</option>
+                    <option value="ai666">AI666</option>
+                    <option value="vectorengine">VectorEngine</option>
+                  </select>
+                </label>
+                <label>
+                  <span>回退模型</span>
+                  <input v-model="modelCredentials.videoModelFallback" placeholder="当主模型失败时使用" />
+                </label>
               </div>
-            </label>
-            <label v-if="modelCredentials.chatProviderPrimary === 'grsai'">
-              <span>GRS.AI Host</span>
-              <input v-model="modelCredentials.grsaiHost" />
-            </label>
+            </article>
+
+            <article class="capability-card">
+              <div class="capability-card__head">
+                <div class="capability-card__icon is-cyan"><ImageIcon :size="16" /></div>
+                <div>
+                  <h3>图片能力</h3>
+                  <p>文生图、图像编辑、分镜图生成。</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label>
+                  <span>图片平台</span>
+                  <select v-model="imagePrimaryPlatformBinding">
+                    <option value="kling">AtlasCloud</option>
+                    <option value="grsai">GRS.AI</option>
+                    <option value="ai666">AI666</option>
+                    <option value="vectorengine">VectorEngine</option>
+                  </select>
+                </label>
+                <label>
+                  <span>图片模型</span>
+                  <input v-model="imagePrimaryModelBinding" placeholder="例如 gpt-image-1" />
+                </label>
+              </div>
+            </article>
+
+            <article class="capability-card">
+              <div class="capability-card__head">
+                <div class="capability-card__icon is-green"><MessagesSquare :size="16" /></div>
+                <div>
+                  <h3>对话能力</h3>
+                  <p>脚本分析、流程辅助与通用问答。</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label>
+                  <span>对话平台</span>
+                  <select v-model="chatPrimaryPlatformBinding">
+                    <option value="ai666">AI666</option>
+                    <option value="vectorengine">VectorEngine</option>
+                    <option value="grsai">GRS.AI</option>
+                  </select>
+                </label>
+                <label>
+                  <span>对话模型</span>
+                  <input v-model="chatPrimaryModelBinding" placeholder="例如 gpt-5.2" />
+                </label>
+              </div>
+            </article>
           </div>
         </section>
 
@@ -407,7 +641,7 @@ onMounted(() => {
           <div class="section-head">
             <div>
               <h2>七牛云配置</h2>
-              <p>统一资源上传、外链回显与前缀策略。</p>
+              <p>统一管理上传、外链与资源前缀。</p>
             </div>
           </div>
           <div class="form-grid">
@@ -415,14 +649,18 @@ onMounted(() => {
               <span>Access Key</span>
               <div class="field-inline">
                 <input v-model="modelCredentials.qiniuAccessKey" :type="modelSecretType('qiniuAccessKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuAccessKey')">{{ modelVisibleSecrets.qiniuAccessKey ? '隐藏' : '显示' }}</button>
+                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuAccessKey')">
+                  {{ modelVisibleSecrets.qiniuAccessKey ? '隐藏' : '显示' }}
+                </button>
               </div>
             </label>
             <label>
               <span>Secret Key</span>
               <div class="field-inline">
                 <input v-model="modelCredentials.qiniuSecretKey" :type="modelSecretType('qiniuSecretKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuSecretKey')">{{ modelVisibleSecrets.qiniuSecretKey ? '隐藏' : '显示' }}</button>
+                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuSecretKey')">
+                  {{ modelVisibleSecrets.qiniuSecretKey ? '隐藏' : '显示' }}
+                </button>
               </div>
             </label>
             <label><span>Bucket</span><input v-model="modelCredentials.qiniuBucket" /></label>
@@ -439,20 +677,20 @@ onMounted(() => {
             <h3>当前生效摘要</h3>
           </div>
           <div class="side-list">
-            <div class="side-row"><span>视频</span><strong>{{ activeVideoProviderLabel }} / {{ videoPrimaryModelBinding || '未设置' }}</strong></div>
-            <div class="side-row"><span>图片</span><strong>{{ activeImageProviderLabel }} / {{ imagePrimaryModelBinding || '未设置' }}</strong></div>
-            <div class="side-row"><span>脚本</span><strong>{{ activeChatProviderLabel }} / {{ chatPrimaryModelBinding || '未设置' }}</strong></div>
+            <div class="side-row"><span>视频</span><strong>{{ capabilityProviderLabel(modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || '未设置' }}</strong></div>
+            <div class="side-row"><span>图片</span><strong>{{ capabilityProviderLabel(modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || '未设置' }}</strong></div>
+            <div class="side-row"><span>对话</span><strong>{{ capabilityProviderLabel(modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || '未设置' }}</strong></div>
           </div>
         </section>
 
         <section class="side-card">
           <div class="side-card__head">
-            <h3>测试状态</h3>
+            <h3>使用说明</h3>
           </div>
           <div class="bullet-list">
-            <div class="bullet-item">所有模型配置保持用户透传，不做静默 fallback。</div>
-            <div class="bullet-item">保存后立即重新读取配置，避免前端假回显。</div>
-            <div class="bullet-item">开发环境 Windows，部署 Linux，避免写死本地路径规则。</div>
+            <div class="bullet-item">先在“开放平台”填写 API Key 和 Base URL，再到“能力模型”选择平台与模型。</div>
+            <div class="bullet-item">同一平台的凭证只维护一份，视频、图片、对话会复用，用户更容易理解。</div>
+            <div class="bullet-item">保存后会立刻重新读取配置，避免前端展示与实际生效配置不一致。</div>
           </div>
         </section>
       </aside>
@@ -481,7 +719,9 @@ onMounted(() => {
 .summary-card,
 .nav-item,
 .settings-message,
-.bullet-item {
+.bullet-item,
+.platform-card,
+.capability-card {
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: linear-gradient(180deg, rgba(17, 28, 49, 0.92), rgba(8, 17, 31, 0.94));
@@ -518,17 +758,20 @@ onMounted(() => {
 .section-head p,
 .nav-item small,
 .summary-card small,
-.side-row span {
+.side-row span,
+.platform-card__head p,
+.capability-card__head p {
   margin: 0;
   color: #94a3b8;
   font-size: 12px;
 }
 
 .settings-shell__actions,
-.mode-switch,
 .field-inline,
 .side-row,
-.side-card__head {
+.side-card__head,
+.platform-card__head,
+.capability-card__head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -537,25 +780,6 @@ onMounted(() => {
 .settings-shell__actions {
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.mode-switch {
-  padding: 4px;
-  border-radius: 14px;
-  background: rgba(10, 19, 36, 0.82);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.mode-switch button {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 10px;
-  color: #cbd5e1;
-}
-
-.mode-switch .active {
-  background: rgba(109, 93, 255, 0.14);
-  color: #f8fafc;
 }
 
 .settings-summary-grid {
@@ -571,13 +795,38 @@ onMounted(() => {
   gap: 10px;
 }
 
-.summary-card__icon {
+.summary-card__icon,
+.platform-card__icon,
+.capability-card__icon,
+.nav-item__icon {
   width: 42px;
   height: 42px;
   display: grid;
   place-items: center;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.platform-card__icon,
+.capability-card__icon {
+  width: 36px;
+  height: 36px;
+}
+
+.capability-card__icon.is-violet,
+.nav-item__icon {
+  background: rgba(109, 93, 255, 0.16);
+  color: #d8deff;
+}
+
+.capability-card__icon.is-cyan {
+  background: rgba(34, 211, 238, 0.16);
+  color: #c7f9ff;
+}
+
+.capability-card__icon.is-green {
+  background: rgba(34, 197, 94, 0.16);
+  color: #d1fae5;
 }
 
 .summary-card span {
@@ -608,7 +857,8 @@ onMounted(() => {
 .settings-side-panel,
 .settings-form-panel,
 .side-card,
-.form-section {
+.form-section,
+.capability-stack {
   display: grid;
   gap: 12px;
   align-content: start;
@@ -626,16 +876,6 @@ onMounted(() => {
 .nav-item.active {
   border-color: rgba(109, 93, 255, 0.42);
   box-shadow: 0 0 0 1px rgba(109, 93, 255, 0.12);
-}
-
-.nav-item__icon {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: rgba(109, 93, 255, 0.16);
-  color: #d8deff;
 }
 
 .settings-message {
@@ -663,14 +903,32 @@ onMounted(() => {
 }
 
 .section-head h2,
-.side-card__head h3 {
+.side-card__head h3,
+.platform-card__head h3,
+.capability-card__head h3 {
   margin: 0;
+}
+
+.platform-grid,
+.capability-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.platform-card,
+.capability-card,
+.side-card {
+  padding: 14px;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.form-grid.single-column {
+  grid-template-columns: 1fr;
 }
 
 .form-grid label,
@@ -696,10 +954,6 @@ onMounted(() => {
 
 .field-inline input {
   flex: 1;
-}
-
-.side-card {
-  padding: 14px;
 }
 
 .side-row {

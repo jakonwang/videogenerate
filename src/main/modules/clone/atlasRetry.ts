@@ -1,5 +1,5 @@
-import { basename } from 'node:path'
-import { readFile, writeFile } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 
 type AnyJson = Record<string, any>
 
@@ -8,6 +8,8 @@ type RetryOptions = {
   retries?: number
   baseDelayMs?: number
 }
+
+const atlasMediaUrlCache = new Map<string, string>()
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -50,7 +52,7 @@ async function atlasFetchWithRetry<T>(
       await sleep(baseDelayMs * Math.pow(2, attempt))
     }
   }
-  throw new Error(`${options.label} 失败: ${String((lastError as any)?.message ?? lastError ?? 'unknown error')}`)
+  throw new Error(`${options.label} 澶辫触: ${String((lastError as any)?.message ?? lastError ?? 'unknown error')}`)
 }
 
 async function parseAtlasResponse(res: Response, label: string) {
@@ -142,7 +144,7 @@ export async function getAtlasJson(url: string, key: string, label = 'AtlasCloud
   }, { label })
 }
 
-export async function downloadAtlasToBuffer(url: string, label = 'AtlasCloud 下载') {
+export async function downloadAtlasToBuffer(url: string, label = 'AtlasCloud 涓嬭浇') {
   return atlasFetchWithRetry(async () => {
     const res = await fetch(url)
     if (!res.ok) {
@@ -155,7 +157,7 @@ export async function downloadAtlasToBuffer(url: string, label = 'AtlasCloud 下
   }, { label })
 }
 
-export async function downloadAtlasToFile(url: string, outPath: string, label = 'AtlasCloud 下载文件') {
+export async function downloadAtlasToFile(url: string, outPath: string, label = 'AtlasCloud 涓嬭浇鏂囦欢') {
   const buf = await downloadAtlasToBuffer(url, label)
   await writeFile(outPath, buf)
 }
@@ -180,10 +182,16 @@ export async function uploadAtlasMedia(input: {
   label?: string
 }) {
   const label = input.label || 'AtlasCloud 上传媒体'
+  const normalizedPath = resolve(input.filePath)
+  const fileStat = await stat(normalizedPath)
+  const cacheKey = [String(input.host || '').replace(/\/+$/, ''), input.kind, normalizedPath, fileStat.size, fileStat.mtimeMs].join('|')
+  const cached = atlasMediaUrlCache.get(cacheKey)
+  if (cached) return cached
+
   return atlasFetchWithRetry(async () => {
-    const buf = await readFile(input.filePath)
+    const buf = await readFile(normalizedPath)
     const form = new FormData()
-    form.append('file', new Blob([buf], { type: mimeByPath(input.filePath, input.kind) }), basename(input.filePath))
+    form.append('file', new Blob([buf], { type: mimeByPath(normalizedPath, input.kind) }), basename(normalizedPath))
     const res = await fetch(`${input.host}/api/v1/model/uploadMedia`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${input.key}` },
@@ -192,6 +200,7 @@ export async function uploadAtlasMedia(input: {
     const { json } = await parseAtlasResponse(res, label)
     const url = pickAtlasOutputUrl(json)
     if (!url) throw new Error(`AtlasCloud uploadMedia response missing url: ${JSON.stringify(json)}`)
+    atlasMediaUrlCache.set(cacheKey, url)
     return url
   }, { label })
 }

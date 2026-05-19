@@ -1,10 +1,13 @@
 'use client'
 
 import { useMutation, useQuery } from '@tanstack/react-query'
+import type { CloneRunMode } from '@shared/web-api/types'
 import { ArrowRight, CopyPlus, Layers3 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 import { AppShell } from '@/components/app/app-shell'
+import { RunModeDialog } from '@/components/clone/run-mode-dialog'
 import { EmptyState, ErrorState, LoadingState } from '@/components/app/page-state'
 import { ProtectedPageGate } from '@/components/app/protected-page-gate'
 import { Button } from '@/components/ui/button'
@@ -17,7 +20,7 @@ const templates = [
     id: 'tiktok-seeding',
     name: '种草带货模板',
     desc: '适合 15-30 秒电商种草视频，强调开头抓人、卖点密集和结尾转化。',
-    stage: '参考分析 -> 成片合成',
+    stage: '参考分析 -> 最终成片',
   },
   {
     id: 'ugc-review',
@@ -36,6 +39,9 @@ const templates = [
 export default function TemplatesPage() {
   const router = useRouter()
   const auth = useAuthGuard()
+  const [runModeOpen, setRunModeOpen] = useState(false)
+  const [selectedRunMode, setSelectedRunMode] = useState<CloneRunMode | null>(null)
+  const [pendingTemplate, setPendingTemplate] = useState<(typeof templates)[number] | null>(null)
 
   const plansQuery = useQuery({
     queryKey: ['billing-plans'],
@@ -43,14 +49,15 @@ export default function TemplatesPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (template: (typeof templates)[number]) =>
+    mutationFn: (input: { template: (typeof templates)[number]; runMode: CloneRunMode }) =>
       apiClient.createCloneProject({
-        title: template.name,
-        description: template.desc,
+        title: input.template.name,
+        description: input.template.desc,
         locale: 'zh-CN',
+        runMode: input.runMode,
       }),
-    onSuccess: (result, template) => {
-      if (result.project?.id) router.push(`/clone/${result.project.id}?template=${template.id}`)
+    onSuccess: (result, input) => {
+      if (result.project?.id) router.push(`/clone/${result.project.id}?template=${input.template.id}`)
     },
   })
 
@@ -62,8 +69,46 @@ export default function TemplatesPage() {
 
   if (gate) return gate
 
+  const requestCreateTask = (template: (typeof templates)[number]) => {
+    setPendingTemplate(template)
+    setRunModeOpen(true)
+  }
+
+  const confirmCreateTask = () => {
+    if (!selectedRunMode || !pendingTemplate) return
+    createMutation.mutate(
+      {
+        template: pendingTemplate,
+        runMode: selectedRunMode,
+      },
+      {
+        onSettled: () => {
+          setRunModeOpen(false)
+          setSelectedRunMode(null)
+          setPendingTemplate(null)
+        },
+      },
+    )
+  }
+
   return (
     <AppShell>
+      <RunModeDialog
+        open={runModeOpen}
+        creating={createMutation.isPending}
+        selectedMode={selectedRunMode}
+        title="选择模板任务运行模式"
+        description="使用模板创建任务时必须先选择运行模式。自动运行会在素材齐备后继续推进，并在最终成片前执行硬门禁。"
+        onSelect={setSelectedRunMode}
+        onCancel={() => {
+          if (createMutation.isPending) return
+          setRunModeOpen(false)
+          setSelectedRunMode(null)
+          setPendingTemplate(null)
+        }}
+        onConfirm={confirmCreateTask}
+      />
+
       <div className="page-shell">
         <section className="panel grid gap-4 px-6 py-5">
           <div className="page-header">
@@ -81,31 +126,33 @@ export default function TemplatesPage() {
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {templates.length ? templates.map((template) => (
-              <Card key={template.id} className="grid gap-4 p-5">
-                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[rgba(109,93,255,0.12)] text-violet-200">
-                  <Layers3 className="h-5 w-5" />
-                </div>
-                <div className="stack-title">
-                  <strong className="text-base text-white">{template.name}</strong>
-                  <span className="stack-copy">{template.desc}</span>
-                </div>
-                <div className="soft-card soft-card--dense meta-list">
-                  <strong>适用链路</strong>
-                  <span>{template.stage}</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => createMutation.mutate(template)} disabled={createMutation.isPending}>
-                    <CopyPlus className="h-4 w-4" />
-                    使用模板
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => router.push('/clone')}>
-                    <ArrowRight className="h-4 w-4" />
-                    去任务中心
-                  </Button>
-                </div>
-              </Card>
-            )) : (
+            {templates.length ? (
+              templates.map((template) => (
+                <Card key={template.id} className="grid gap-4 p-5">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[rgba(109,93,255,0.12)] text-violet-200">
+                    <Layers3 className="h-5 w-5" />
+                  </div>
+                  <div className="stack-title">
+                    <strong className="text-base text-white">{template.name}</strong>
+                    <span className="stack-copy">{template.desc}</span>
+                  </div>
+                  <div className="soft-card soft-card--dense meta-list">
+                    <strong>适用链路</strong>
+                    <span>{template.stage}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => requestCreateTask(template)} disabled={createMutation.isPending}>
+                      <CopyPlus className="h-4 w-4" />
+                      使用模板
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => router.push('/clone')}>
+                      <ArrowRight className="h-4 w-4" />
+                      去任务中心
+                    </Button>
+                  </div>
+                </Card>
+              ))
+            ) : (
               <EmptyState compact title="暂无可用模板" description="当前还没有整理好的工作台模板，请先从任务中心手动创建任务。" actionLabel="去任务中心" onAction={() => router.push('/clone')} />
             )}
           </div>
@@ -116,11 +163,11 @@ export default function TemplatesPage() {
               <div className="grid gap-2">
                 <div className="soft-card soft-card--dense meta-list">
                   <strong>模板职责</strong>
-                  <span>模板页负责沉淀生产方式，不反向承载任务编辑逻辑。</span>
+                  <span>模板页只负责沉淀生产方式，不反向承载任务编辑逻辑。</span>
                 </div>
                 <div className="soft-card soft-card--dense meta-list">
                   <strong>创建行为</strong>
-                  <span>点击“使用模板”会直接创建一个新的复刻任务，并进入详情工作台。</span>
+                  <span>点击“使用模板”前必须先选自动运行或手动运行，再创建新的复刻任务并进入详情工作台。</span>
                 </div>
               </div>
             </Card>
@@ -137,12 +184,14 @@ export default function TemplatesPage() {
                     onRetry={() => void plansQuery.refetch()}
                   />
                 ) : null}
-                {!plansQuery.isPending && !plansQuery.isError && (plansQuery.data || []).slice(0, 3).map((plan) => (
-                  <div key={plan.id} className="soft-card soft-card--dense meta-list">
-                    <strong>{plan.name}</strong>
-                    <span>{plan.durationDays} 天 · 每月 {plan.monthlyComputeCredits} 算力</span>
-                  </div>
-                ))}
+                {!plansQuery.isPending &&
+                  !plansQuery.isError &&
+                  (plansQuery.data || []).slice(0, 3).map((plan) => (
+                    <div key={plan.id} className="soft-card soft-card--dense meta-list">
+                      <strong>{plan.name}</strong>
+                      <span>{plan.durationDays} 天 · 每月 {plan.monthlyComputeCredits} 算力</span>
+                    </div>
+                  ))}
                 {!plansQuery.isPending && !plansQuery.isError && !plansQuery.data?.length ? <div className="soft-card soft-card--dense text-sm text-slate-500">暂无套餐信息</div> : null}
               </div>
             </Card>

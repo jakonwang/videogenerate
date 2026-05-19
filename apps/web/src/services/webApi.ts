@@ -3,6 +3,7 @@ export type {
   BillingOrder,
   CloneModelIdentitySummary,
   CloneProjectSummary,
+  CloneRunMode,
   CloneRuntimeResponse,
   SubscriptionPlan,
   UserSubscription,

@@ -3,12 +3,22 @@ dist
 dist-electron
 out
 release
+apps/web-next/.next/cache
+apps/web-next/.next/dev/cache
+apps/web-next/.next/trace
+apps/web-next/.next/trace-build
+apps/web-next/.next/turbopack
 .DS_Store
 *.log
+*.out
+*.err
+*.pid
 .env
 .env.*
 tmp
 tmp-*
+.tmp-*
+audit-*.png
 .codex-logs
 .stitch-ref
 video
@@ -17,6 +27,13 @@ automation/hermes-agent/*.local.json
 
 # app data (local)
 .videogenerate
+.videogenerate-auth-smoke-*
+.videogenerate-production
+.videogenerate-smoke
+.videogenerate-smoke-debug
+.videogenerate-smoke-manual
+.videogenerate-staging
+.videogenerate-web-stack-smoke
 
 # 可选：不提交大体积字体时忽略（保留 resources/fonts/README.md）
 resources/fonts/*.otf

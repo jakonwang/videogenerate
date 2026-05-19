@@ -9,7 +9,8 @@ import { downloadAtlasToBuffer, getAtlasJson, pickAtlasOutputUrl, postAtlasJson,
 import { resolveApifoxHubCredentials } from './apifoxProfile'
 import { generateImage as generateApifoxImage } from './unifiedImage'
 import type { CloneProductType, ImageProviderName, ModelCredentials, ModelIdentityPack, ShotSpec } from './types'
-import { buildNoSpeakingInstruction, buildReferenceLockText, buildShotScriptConstraintText } from './prompt'
+import { buildNoSpeakingInstruction, buildReferenceLockText, buildShotScriptConstraintText, prependSilentCommercialGlobalRule } from './prompt'
+import { canUseMockGeneration } from './mockPolicy'
 
 type GenerateImageInput = {
   credentials: ModelCredentials
@@ -481,7 +482,7 @@ export function buildGptFramePrompt(input: {
   const isEnd = input.which === 'end'
   const referenceLock = buildReferenceLockText(shot, input.modelPack.sceneStyle || 'reference shot scene atmosphere')
   const scriptLock = buildShotScriptConstraintText(shot)
-  return [
+  return prependSilentCommercialGlobalRule([
     isEnd
       ? `Generate the ending keyframe for shot ${shot.index + 1}. It must be a small continuation from the provided GPT start frame.`
       : `Generate the opening keyframe for shot ${shot.index + 1}.`,
@@ -493,7 +494,6 @@ export function buildGptFramePrompt(input: {
     `Reference shot translation: ${String(shot.visualPrompt || shot.visual || 'use only composition, framing, action rhythm and camera grammar from the reference shot').trim()}.`,
     `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration target: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
     `Camera motion target: ${String(shot.motion || 'static')}. Keep changes restrained and realistic.`,
-    buildNoSpeakingInstruction(),
     isEnd
       ? 'The ending frame must keep the same new model, same product, same outfit, same location, same lighting, same emotion and same camera setup as the provided start frame. Only allow subtle hand, expression or camera-position continuation.'
       : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model and replace the original worn or held item with the uploaded user product only. Do not preserve the old accessory if it conflicts with the uploaded product.',
@@ -501,7 +501,7 @@ export function buildGptFramePrompt(input: {
     'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters, no platform controls.',
     'Do not change product category, product structure, product color, metal material, gemstone layout, surface pattern or product proportions.',
     'Realistic smartphone TikTok social-commerce style, natural skin texture, natural hands, clean background, product sharp and clearly visible.',
-  ].join('\n')
+  ], 2200)
 }
 
 export async function generateModelIdentityPackImages(input: {
@@ -514,7 +514,7 @@ export async function generateModelIdentityPackImages(input: {
 }) {
   const profile = defaultModelIdentityDescription(input.productType)
   if (
-    input.credentials.allowMockWhenNoKey &&
+    canUseMockGeneration(input.credentials) &&
     !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
     !String(input.credentials.openaiApiKey ?? '').trim() &&
     !String(input.credentials.klingApiKey ?? '').trim() &&
@@ -573,7 +573,7 @@ export async function generateGptShotFrameImage(input: {
   normalizeOutput?: 'vertical_9_16' | 'preserve'
 }) {
   if (
-    input.credentials.allowMockWhenNoKey &&
+    canUseMockGeneration(input.credentials) &&
     !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
     !String(input.credentials.openaiApiKey ?? '').trim() &&
     !String(input.credentials.klingApiKey ?? '').trim() &&

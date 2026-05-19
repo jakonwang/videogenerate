@@ -8,7 +8,7 @@ export default defineConfig({
       rollupOptions: {
         input: resolve(__dirname, 'src/main/index.ts'),
         // 这些包依赖自身 __dirname 计算二进制路径；打包进 main bundle 会导致路径错误（ENOENT）
-        external: ['ffmpeg-static', 'ffprobe-static'],
+        external: ['ffmpeg-static', 'ffprobe-static', '@remotion/bundler', '@remotion/renderer', 'remotion'],
       },
     },
   },

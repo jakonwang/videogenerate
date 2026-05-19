@@ -67,6 +67,9 @@ const scanLoading = ref(false)
 const scanUrl = ref('')
 const scanQrDataUrl = ref('')
 const scanError = ref('')
+const taskErrorModalOpen = ref(false)
+const taskErrorModalTitle = ref('')
+const taskErrorModalMessage = ref('')
 
 const form = reactive<{ productId: string; templateId: string; count: number; outDir: string }>({
   productId: '',
@@ -345,6 +348,26 @@ function closeScanModal() {
   scanLoading.value = false
 }
 
+function compactTaskError(error?: string) {
+  const text = String(error ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > 42 ? `${text.slice(0, 42)}...` : text
+}
+
+function openTaskErrorModal(row: VideoTask) {
+  const message = String(row.error ?? '').trim()
+  if (!message) return
+  taskErrorModalTitle.value = basename(row.outPath) || row.id
+  taskErrorModalMessage.value = message
+  taskErrorModalOpen.value = true
+}
+
+function closeTaskErrorModal() {
+  taskErrorModalOpen.value = false
+  taskErrorModalTitle.value = ''
+  taskErrorModalMessage.value = ''
+}
+
 async function openScanModal(row: VideoTask) {
   if (row.status !== 'done') return
   scanOpen.value = true
@@ -469,7 +492,18 @@ watch(
           <div class="app-progress h-1.5"><span :style="{ width: Math.round((row.progress || 0) * 100) + '%' }"></span></div>
           <div class="mt-2 flex items-center justify-between text-xs text-slate-500">
             <span>{{ Math.round((row.progress || 0) * 100) }}/100</span>
-            <span>{{ row.error || '自动生成' }}</span>
+            <div class="flex min-w-0 items-center gap-2">
+              <span v-if="row.error" class="truncate text-red-300/90">{{ compactTaskError(row.error) }}</span>
+              <button
+                v-if="row.error"
+                class="shrink-0 rounded-md border border-red-400/20 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-200 transition hover:bg-red-500/20"
+                type="button"
+                @click.stop="openTaskErrorModal(row)"
+              >
+                查看错误
+              </button>
+              <span v-else>自动生成</span>
+            </div>
           </div>
         </button>
       </div>
@@ -555,6 +589,28 @@ watch(
         </div>
         <div class="mt-4 flex justify-end">
           <UiButton variant="ghost" @click="closeScanModal">{{ t('common.cancel') }}</UiButton>
+        </div>
+      </div>
+    </div>
+
+  <div
+      v-if="taskErrorModalOpen"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+      @click.self="closeTaskErrorModal"
+    >
+      <div
+        class="w-full max-w-2xl rounded-xl border border-red-400/20 bg-[#18181B] p-4 shadow-2xl"
+        @click.stop
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-white/90">任务错误详情</div>
+            <div class="mt-1 truncate text-[11px] text-white/50">{{ taskErrorModalTitle }}</div>
+          </div>
+          <UiButton variant="ghost" @click="closeTaskErrorModal">{{ t('common.cancel') }}</UiButton>
+        </div>
+        <div class="mt-4 max-h-[50vh] overflow-auto rounded-lg border border-red-400/15 bg-black/30 p-3 font-mono text-xs leading-6 text-red-200/90 whitespace-pre-wrap break-all">
+          {{ taskErrorModalMessage }}
         </div>
       </div>
     </div>

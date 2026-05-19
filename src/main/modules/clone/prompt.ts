@@ -129,7 +129,15 @@ export function sanitizeNegativePrompt(value: unknown, maxChars = 400) {
 }
 
 export function buildNoSpeakingInstruction() {
-  return 'The person must stay silent: no speaking, no lip-sync, no mouth narration, no dialogue, no talking-head delivery, and no visible speech articulation.'
+  return 'Silent performance only: no speaking, no dialogue, no lip-sync, no visible speech articulation, lips closed or naturally relaxed, mouth stays closed unless breathing naturally, and no presenter-style talking pose.'
+}
+
+export function buildSilentCommercialGlobalRule() {
+  return '[Global Rule: Silent visual commercial. Human models must be faceless with head out of frame whenever possible, no speaking or dialogue is allowed, no presenter-to-camera delivery is allowed, and focus 100% on product angles.]'
+}
+
+export function prependSilentCommercialGlobalRule(parts: Array<string | null | undefined>, maxChars = 1800) {
+  return sanitizeGeneratedVideoPrompt([buildSilentCommercialGlobalRule(), ...parts.filter(Boolean)].join('\n\n'), maxChars)
 }
 
 function movementLabel(shot: ShotSpec) {

@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { ShotSpec } from '../types'
 import { computePromptHash } from '../cache'
-import { buildNoSpeakingInstruction, sanitizeGeneratedVideoPrompt, sanitizeNegativePrompt } from '../prompt'
+import {
+  buildNoSpeakingInstruction,
+  buildSilentCommercialGlobalRule,
+  sanitizeGeneratedVideoPrompt,
+  sanitizeNegativePrompt,
+} from '../prompt'
 import { PROMPT_CONSISTENCY_COMPILER_VERSION, PROMPT_CONSISTENCY_POLICY_VERSION } from './constants'
 import { extractIdentityAnchors } from './anchor-extractor'
 import { generateAntiVariationRules } from './anti-variation'
@@ -39,7 +44,11 @@ export function compilePromptConsistency(input: {
     layer('SHOT_LAYER', 40, `Preserve the original shot logic. ${normalized.scriptText}. Visual direction: ${normalized.visualDescription}. Product focus: ${input.shot.productFocus || 'keep the product clearly visible and commercially relevant'}.`),
     layer('MOTION_LAYER', 50, `Camera and motion direction: ${normalized.cameraDescription}. Motion must not alter product geometry, structure, attachment points, or count.`),
     layer('STYLE_LAYER', 60, `Preserve cinematic quality and commercial realism. ${normalized.styleDescription}`),
-    layer('PERFORMANCE_LAYER', 65, buildNoSpeakingInstruction()),
+    layer(
+      'PERFORMANCE_LAYER',
+      65,
+      `${buildSilentCommercialGlobalRule()} ${buildNoSpeakingInstruction()} Keep the human model head out of frame whenever possible. Never stage the subject as a spokesperson, explainer, presenter, host, or talking-head. Avoid frontal face framing, avoid direct eye contact with the camera, avoid open-mouth expression, avoid lip shapes that suggest speech, and keep lips closed or only minimally relaxed. Product angles are the only hero focus.`,
+    ),
     layer('NEGATIVE_LAYER', 70, sanitizeNegativePrompt(`${patches.negativePatch}, ${generateAntiVariationRules(productType, risk.strictConsistencyMode)}, ${normalized.negativeDescription}`)),
   ]
 

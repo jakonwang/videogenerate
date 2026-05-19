@@ -6,6 +6,7 @@ import { apiClient, getSessionToken, setSessionToken } from '@/lib/api-client'
 import { useSessionStore } from '@/store/session-store'
 
 export function SessionBootstrap() {
+  const hydrateToken = useSessionStore((state) => state.hydrateToken)
   const setSession = useSessionStore((state) => state.setSession)
   const clearSession = useSessionStore((state) => state.clearSession)
   const markReady = useSessionStore((state) => state.markReady)
@@ -16,6 +17,8 @@ export function SessionBootstrap() {
       clearSession()
       return
     }
+
+    hydrateToken(token)
 
     apiClient
       .getProfile()
@@ -31,10 +34,7 @@ export function SessionBootstrap() {
         setSessionToken('')
         clearSession()
       })
-      .finally(() => {
-        markReady()
-      })
-  }, [clearSession, markReady, setSession])
+  }, [clearSession, hydrateToken, markReady, setSession])
 
   return null
 }

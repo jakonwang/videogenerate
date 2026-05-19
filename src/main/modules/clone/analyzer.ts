@@ -106,7 +106,18 @@ function toSegments(duration: number, cuts: number[]) {
     const startSec = round3(merged[i]!)
     const endSec = round3(merged[i + 1]!)
     const durationSec = Math.max(0.5, round3(endSec - startSec))
-    segs.push({ startSec, endSec, durationSec })
+    if (durationSec <= 8) {
+      segs.push({ startSec, endSec, durationSec })
+      continue
+    }
+    const splitCount = Math.max(2, Math.ceil(durationSec / 8))
+    const splitDuration = durationSec / splitCount
+    for (let j = 0; j < splitCount; j++) {
+      const subStart = round3(startSec + splitDuration * j)
+      const subEnd = j === splitCount - 1 ? endSec : round3(startSec + splitDuration * (j + 1))
+      const subDuration = Math.max(0.5, round3(subEnd - subStart))
+      segs.push({ startSec: subStart, endSec: subEnd, durationSec: subDuration })
+    }
   }
   return segs.slice(0, 16)
 }

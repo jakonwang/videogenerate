@@ -8,7 +8,8 @@ import { createGrsVideoTask, isPublicHttpUrl, waitGrsResult } from './grsai'
 import { toPublicUrlViaQiniu } from './qiniu'
 import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl, postAtlasJson } from './atlasRetry'
 import { generateVideo as generateApifoxVideo } from './unifiedVideo'
-import { buildNoSpeakingInstruction, buildReferenceLockText, sanitizeGeneratedVideoPrompt } from './prompt'
+import { buildNoSpeakingInstruction, buildReferenceLockText, prependSilentCommercialGlobalRule, sanitizeGeneratedVideoPrompt } from './prompt'
+import { canUseMockGeneration } from './mockPolicy'
 import type {
   AiProviderName,
   ConsistencyMode,
@@ -208,13 +209,13 @@ function shotRolePrompt(shot: ShotSpec) {
 function shotMotionPrompt(shot: ShotSpec) {
   const motion = String(shot.motion || 'static')
   const map: Record<string, string> = {
-    static: 'mostly static handheld phone shot with subtle natural hand micro-shake',
-    zoom_in: 'slow natural push-in, phone camera moves slightly closer',
-    zoom_out: 'slow natural pull-back, phone camera moves slightly away',
-    pan_left: 'small handheld pan left, smooth but not cinematic',
-    pan_right: 'small handheld pan right, smooth but not cinematic',
-    shake: 'light authentic handheld movement, not chaotic',
-    fast_cut: 'quick practical product reveal motion, no surreal effects',
+    static: 'stable smartphone framing with clear natural hand action, product rotation or wearing movement across the whole clip, not frozen posing',
+    zoom_in: 'noticeable natural push-in with coordinated hand movement and product presentation progression',
+    zoom_out: 'controlled pull-back that reveals more context while the product action keeps evolving',
+    pan_left: 'clear handheld pan left following the product action with meaningful lateral movement',
+    pan_right: 'clear handheld pan right following the product action with meaningful lateral movement',
+    shake: 'energetic authentic handheld motion with readable product action, never chaotic or blurry',
+    fast_cut: 'quick product-reveal rhythm with assertive action beats and strong visual change, no surreal effects',
   }
   return map[motion] || map.static
 }
@@ -242,14 +243,17 @@ export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'v
   const productLock =
     'Keep the exact product from the reference images: same color, shape, material, pattern, print, holes, edges, size and design. Do not add logos, gems, charms, text, extra patterns or new decorations.'
   const realism =
-    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Hard-copy the reference shot action form, background category, camera distance, composition, hand gesture and motion path. Replace only the person identity and product identity. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos.'
+    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Preserve the same shot purpose, background category, camera distance, composition logic, product interaction type and motion grammar from the reference, but let the action play out fully and naturally instead of freezing into a near-still pose. Replace only the person identity and product identity. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos.'
+  const motionPerformance =
+    phase === 'video'
+      ? 'Motion performance rule: keep the same action intent and shot grammar as the reference, but allow fuller hand travel, clearer product turns, more obvious wearing or usage demonstration, and stronger camera progression when appropriate. The motion must continue across the entire clip instead of happening only in the opening second.'
+      : ''
   const phaseText =
     phase === 'start'
       ? 'Opening keyframe, product already visible and in focus, clean frame with no watermark or subtitles.'
       : phase === 'end'
         ? 'Ending keyframe, same product and scene continuity, natural final pose, clean frame with no watermark or subtitles.'
-        : 'Generate natural motion between first and last frame. Preserve product identity, subject pose, hand trajectory, background atmosphere and camera continuity. Do not switch to a different action, different location, different product-display method or unrelated camera angle. No morphing, no object melting, no artificial animation, no copied TikTok watermark, no copied subtitles. Do not generate any visible on-screen text, title card, subtitle line, caption overlay, packaging words or lettering of any kind.'
-  const silentPerformanceRule = phase === 'video' ? buildNoSpeakingInstruction() : ''
+        : 'Generate natural motion between first and last frame. Preserve product identity, background atmosphere, action category and camera continuity. Keep the same selling purpose and reference shot grammar, but do not freeze the subject into one locked pose or one tiny repeated movement. Do not switch to a different action, different location, different product-display method or unrelated camera angle. No morphing, no object melting, no artificial animation, no copied TikTok watermark, no copied subtitles. Do not generate any visible on-screen text, title card, subtitle line, caption overlay, packaging words or lettering of any kind.'
   const blocks = [
     realism,
     sceneDirection,
@@ -257,13 +261,14 @@ export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'v
     productLock,
     shotRolePrompt(shot),
     phase === 'video' ? shotMotionPrompt(shot) : '',
+    motionPerformance,
     phaseText,
-    silentPerformanceRule,
+    phase === 'video' ? buildNoSpeakingInstruction() : '',
   ]
     .map((item) => String(item || '').trim())
     .filter(Boolean)
   const deduped = blocks.filter((item, index) => blocks.findIndex((v) => v.toLowerCase() === item.toLowerCase()) === index)
-  return sanitizeGeneratedVideoPrompt(deduped.join('\n\n'), 2400)
+  return prependSilentCommercialGlobalRule(deduped, 2400)
 }
 
 async function toDataUriOrUrl(absPathOrUrl: string, kind: 'image' | 'video') {
@@ -654,7 +659,7 @@ export async function generateShotByProviderChain(input: {
   credentials: ModelCredentials
   chain: AiProviderName[]
 }): Promise<ProviderResult> {
-  if (input.credentials.allowMockWhenNoKey && !input.credentials.seedanceApiKey && !input.credentials.klingApiKey && !input.credentials.grsaiApiKey) {
+  if (canUseMockGeneration(input.credentials) && !input.credentials.seedanceApiKey && !input.credentials.klingApiKey && !input.credentials.grsaiApiKey) {
     return await mockGenerateFromReference(input)
   }
   throw new Error('Seedance/AtlasCloud/GRS.AI 需要首尾帧或图片输入，请使用分镜片段生成链路')
@@ -735,11 +740,17 @@ export async function generateShotVideoByProviderChain(input: {
   const errs: string[] = []
   const startFrameDataUrl = await toDataUriOrUrl(input.startFramePath, 'image')
   const endFrameDataUrl = await toDataUriOrUrl(input.endFramePath, 'image')
-  const finalPrompt = String(input.compiledPrompt || '').trim() || buildRealisticPrompt(input.shot, 'video')
+  const finalPrompt = prependSilentCommercialGlobalRule(
+    [
+      String(input.compiledPrompt || '').trim() || buildRealisticPrompt(input.shot, 'video'),
+      'Video execution override: keep the human model faceless with head out of frame whenever possible. Never use presenter-to-camera delivery, host-style explanation, spokesperson framing, frontal talking-head composition, direct-to-camera speaking pose, lip-sync, or mouth shapes that suggest speech. Keep the performance silent and product-led, but preserve natural body mechanics and complete action flow across the clip.',
+    ],
+    2400,
+  )
   const finalNegativePrompt = String(input.compiledNegativePrompt || '').trim()
 
   if (
-    input.credentials.allowMockWhenNoKey &&
+    canUseMockGeneration(input.credentials) &&
     !input.credentials.seedanceApiKey &&
     !input.credentials.klingApiKey &&
     !input.credentials.grsaiApiKey &&

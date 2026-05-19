@@ -41,10 +41,18 @@ const api = {
   },
 
   clone: {
-    createDraftProject: (payload?: { locale?: 'vi-VN' | 'zh-CN'; strength?: 'structure'; title?: string; description?: string }) =>
+    createDraftProject: (payload?: {
+      locale?: 'vi-VN' | 'zh-CN'
+      strength?: 'structure'
+      title?: string
+      description?: string
+      runMode?: 'auto' | 'manual'
+    }) =>
       ipcRenderer.invoke('clone:createDraftProject', payload ?? {}),
     updateProjectMeta: (payload: { cloneProjectId: string; title?: string; description?: string }) =>
       ipcRenderer.invoke('clone:updateProjectMeta', payload),
+    bindProjectReferenceVideo: (payload: { cloneProjectId: string; videoPath: string }) =>
+      ipcRenderer.invoke('clone:bindProjectReferenceVideo', payload),
     listProjectSummaries: (payload?: { query?: string; status?: string; archived?: boolean }) =>
       ipcRenderer.invoke('clone:listProjectSummaries', payload ?? {}),
     getProjectSummary: (payload: { cloneProjectId: string }) =>
@@ -87,7 +95,15 @@ const api = {
     }) => ipcRenderer.invoke('clone:generateStoryboardGrids', payload),
     generateShotVideosFromStoryboard: (payload: {
       cloneProjectId: string
+      maxAutoRetryPerShot?: number
     }) => ipcRenderer.invoke('clone:generateShotVideosFromStoryboard', payload),
+    autoRunToStoryboardVideos: (payload: {
+      cloneProjectId: string
+      variantCount?: number
+      selectedModelIdentityId?: string
+      productReferenceImagePaths?: string[]
+      autoBindModelPack?: boolean
+    }) => ipcRenderer.invoke('clone:autoRunToStoryboardVideos', payload),
     replaceShotVideo: (payload: {
       cloneProjectId: string
       shotId: string
@@ -234,6 +250,16 @@ const api = {
       consistencyMode?: 'soft' | 'hard'
       providerPolicy?: { chain?: Array<'seedance' | 'kling'> }
     }) => ipcRenderer.invoke('clone:generateShotVideos', payload),
+    getShotConsistencyReport: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:getShotConsistencyReport', payload),
+    getShotImagePromptPreview: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:getShotImagePromptPreview', payload),
+    recompileShotConsistency: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:recompileShotConsistency', payload),
+    listShotConsistencyAnchors: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:listShotConsistencyAnchors', payload),
+    listShotConsistencyPatches: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:listShotConsistencyPatches', payload),
     generateShotFrames: (payload: {
       cloneProjectId: string
       shotId: string
@@ -250,7 +276,7 @@ const api = {
       productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
       productPoints?: string
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -274,6 +300,13 @@ const api = {
       ipcRenderer.invoke('clone:deleteModelIdentity', payload),
     selectProjectModelIdentity: (payload: { cloneProjectId: string; identityId: string }) =>
       ipcRenderer.invoke('clone:selectProjectModelIdentity', payload),
+    exportFinalVideos: (payload: { cloneProjectIds: string[]; outputDir: string }) =>
+      ipcRenderer.invoke('clone:exportFinalVideos', payload) as Promise<{
+        outputDir: string
+        total: number
+        exported: Array<{ cloneProjectId: string; title: string; sourcePath: string; targetPath: string }>
+        skipped: Array<{ cloneProjectId: string; title: string; reason: string }>
+      }>,
     selectModelIdentityPack: (payload: { cloneProjectId: string; packId: string; confirmed?: boolean }) =>
       ipcRenderer.invoke('clone:selectModelIdentityPack', payload),
     generateGptShotFrames: (payload: {
@@ -281,7 +314,7 @@ const api = {
       shotId: string
       which?: 'start' | 'end' | 'both'
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -299,6 +332,8 @@ const api = {
       ipcRenderer.invoke('clone:generateShotClip', payload),
     refreshProjectStatus: (payload: { cloneProjectId: string }) =>
       ipcRenderer.invoke('clone:refreshProjectStatus', payload),
+    reconcileRemoteStoryboardVideos: (payload: { cloneProjectId: string }) =>
+      ipcRenderer.invoke('clone:reconcileRemoteStoryboardVideos', payload),
     syncShotVideoTask: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:syncShotVideoTask', payload),
     qualityCheckCurrentShot: (payload: { cloneProjectId: string; shotId: string }) =>
@@ -373,9 +408,15 @@ const api = {
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         klingImageModel?: string
         grsaiImageModel?: string
+        apifoxHubProfile?: 'ai666' | 'vectorengine'
+        videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+        imageApifoxHubProfile?: 'ai666' | 'vectorengine'
+        chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+        ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
+        vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       }>,
     setModelCredentials: (payload: {
@@ -403,14 +444,25 @@ const api = {
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       klingImageModel?: string
       grsaiImageModel?: string
+      apifoxHubProfile?: 'ai666' | 'vectorengine'
+      videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+      imageApifoxHubProfile?: 'ai666' | 'vectorengine'
+      chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+      ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
+      vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
     }) =>
       ipcRenderer.invoke('clone:setModelCredentials', payload),
     getGrsAiCredits: () =>
       ipcRenderer.invoke('clone:getGrsAiCredits') as Promise<{ available?: number; raw: unknown }>,
+    onRuntimeLog: (cb: (payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => void) => {
+      const handler = (_: unknown, payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => cb(payload)
+      ipcRenderer.on('clone:runtimeLog', handler)
+      return () => ipcRenderer.off('clone:runtimeLog', handler)
+    },
   },
 
   stickers: {

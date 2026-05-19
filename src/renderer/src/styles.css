@@ -15229,3 +15229,38 @@ h2 {
 .ds-workspace:has(.live-slicer-workbench) {
   padding: 5px !important;
 }
+
+/* 2026-05-16 desktop scroll performance relief
+ * Reduce repaint-heavy blur and keep a single active scroll container
+ * on the shared workspace shell to improve Electron scroll smoothness.
+ */
+.ui-topbar,
+.ds-topbar,
+.app-shell .ds-topbar,
+.ds-shell__main:has(.clone-ref-page) .ds-topbar,
+.ds-shell__main:has(.home-dashboard) .ds-topbar,
+.ds-shell__main:has(.home-dashboard-v2) .ds-topbar,
+.ds-shell__main:has(.live-slicer-workbench) .ds-topbar {
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.ds-workspace {
+  overscroll-behavior: contain;
+}
+
+.ds-workspace:has(.clone-ref-page),
+.ds-workspace:has(.home-dashboard),
+.ds-workspace:has(.home-dashboard-v2),
+.ds-workspace:has(.live-slicer-workbench),
+.ds-workspace:has(.home-page) {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.home-hero-tag,
+.home-console-hero,
+.home-console-panel,
+.home-side-panel {
+  backdrop-filter: none !important;
+}

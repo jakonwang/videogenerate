@@ -1,5 +1,6 @@
 ﻿import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { canUseMockGeneration } from './mockPolicy'
 import { copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import PQueue from 'p-queue'
@@ -32,6 +33,7 @@ import {
 import { productsRepo } from '../products/repo'
 import { templatesRepo } from '../templates/repo'
 import { getMediaInfo } from '../media/info'
+import { generateThumbnailJpg } from '../media/thumbnail'
 import { createBatchTasks } from '../tasks/createBatchTasks'
 import { taskQueue } from '../tasks/queue'
 import { probeMedia } from '../ffmpeg/probe'
@@ -48,6 +50,7 @@ import {
   buildProductLockText,
   buildRealismInstruction,
   buildNoSpeakingInstruction,
+  prependSilentCommercialGlobalRule,
   sanitizeGeneratedVideoPrompt,
   sanitizeNegativePrompt,
   buildTextSafetyInstruction,
@@ -80,6 +83,7 @@ import type {
   ClonePipelineStatus,
   ClonePreviewPipelineStatus,
   CloneBlueprint,
+  CloneConsistencyAssetsSnapshot,
   CloneProject,
   CloneReviewStatus,
   CloneScriptVariantCandidate,
@@ -116,6 +120,29 @@ import { promptConsistencyService } from './prompt-consistency/service'
 
 function now() {
   return Date.now()
+}
+
+async function fileExists(filePath: string) {
+  try {
+    await stat(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function ensureUniqueExportPath(outputDir: string, preferredName: string) {
+  const safeName = String(preferredName || 'final.mp4').trim() || 'final.mp4'
+  const extIndex = safeName.lastIndexOf('.')
+  const baseName = extIndex > 0 ? safeName.slice(0, extIndex) : safeName
+  const extName = extIndex > 0 ? safeName.slice(extIndex) : ''
+  let candidate = join(outputDir, safeName)
+  let cursor = 1
+  while (await fileExists(candidate)) {
+    candidate = join(outputDir, `${baseName}_${String(cursor).padStart(2, '0')}${extName}`)
+    cursor += 1
+  }
+  return candidate
 }
 
 function normalizeVideoShotStatus(value: unknown) {
@@ -709,19 +736,26 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
   const shotCount = project.blueprint?.shots?.length ?? project.baseBlueprint?.shots?.length ?? 0
   const generatedImageCount = (project.storyboardFrames ?? []).filter((item) => Boolean(item.imagePath)).length
   const generatedVideoCount = (project.shotVideoOutputs ?? []).filter((item) => Boolean(item.videoPath)).length
-  const productReferenceImageCount =
-    project.baseBlueprint?.consistencyAssets?.productReferenceImages?.length ??
-    project.blueprint?.consistencyAssets?.productReferenceImages?.length ??
-    0
+  const productReferenceImagePaths = Array.from(
+    new Set(
+      [
+        ...(project.blueprint?.consistencyAssets?.productReferenceImages ?? []),
+        ...(project.baseBlueprint?.consistencyAssets?.productReferenceImages ?? []),
+        ...(project.blueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? []) ?? []),
+        ...(project.baseBlueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? []) ?? []),
+      ]
+        .map((item) => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 6)
+  const productReferenceImageCount = productReferenceImagePaths.length
   const firstProductImage =
     String(
-      project.blueprint?.consistencyAssets?.productReferenceImages?.[0] ||
-      project.baseBlueprint?.consistencyAssets?.productReferenceImages?.[0] ||
-      project.blueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? [])[0] ||
-      project.baseBlueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? [])[0] ||
+      productReferenceImagePaths[0] ||
       '',
     ).trim()
   const coverAssetPath =
+    String(project.finalCompose?.coverImagePath || '').trim() ||
     firstProductImage ||
     String(project.finalCompose?.outputPath || '').trim() ||
     String(project.previewPipeline?.previewOutputPath || '').trim() ||
@@ -747,6 +781,7 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     finalOutputPath: project.finalCompose?.outputPath || '',
     selectedModelIdentityName,
     productReferenceImageCount,
+    productReferenceImagePaths,
     shotCount,
     generatedImageCount,
     generatedVideoCount,
@@ -896,10 +931,17 @@ function syncFinalCompose(project: CloneProject, patch: Partial<CloneFinalCompos
   project.finalCompose = {
     status: patch.status,
     outputPath: patch.outputPath ?? project.finalCompose?.outputPath,
+    coverImagePath: patch.coverImagePath ?? project.finalCompose?.coverImagePath,
     error: patch.status === 'done' ? patch.error : patch.error ?? project.finalCompose?.error,
     updatedAt: now(),
   }
   return project.finalCompose
+}
+
+async function ensureVideoCoverImage(videoPath?: string) {
+  const source = String(videoPath || '').trim()
+  if (!source) return undefined
+  return (await generateThumbnailJpg({ filePath: source, atSec: 1 })) || undefined
 }
 
 function gridTypeForCount(count: number): 'grid-6' | 'grid-9' {
@@ -962,7 +1004,7 @@ async function generateWholeScriptVariantsWithAi(input: {
     productAnalysis: String(input.productAnalysisText || '').trim(),
   })
   const prompt = [
-    'You are an elite TikTok ecommerce script strategist.',
+    prependSilentCommercialGlobalRule(['You are an elite TikTok ecommerce script strategist.'], 400),
     'Generate multiple full-video script variants for the same product video blueprint.',
     `Output language: ${input.locale === 'zh-CN' ? 'Chinese' : 'Vietnamese'}.`,
     `Variant count: ${input.variantCount}.`,
@@ -972,6 +1014,7 @@ async function generateWholeScriptVariantsWithAi(input: {
     'If a source beat feels longer than 8 seconds, split it into finer consecutive sub-shots while keeping the same story logic and shot order.',
     'Keep the same overall selling structure and shot count, but vary hook wording, scene framing, action details, transitions, persuasion style, and product emphasis.',
     'You must incorporate the bound model identity and product reference context when generating the variants.',
+    'This is for product selling and visual demonstration. Keep human presence subordinate to product display.',
     'Do not remove shots. Do not change shot order. Do not add watermark, logo, subtitles, platform UI, or unrelated branding.',
     'Each shotScripts item must stay within its own time range, and that time range itself must not exceed 8 seconds.',
     'Return JSON only.',
@@ -1149,7 +1192,7 @@ function generatedImageProvider(credentials: ModelCredentials) {
 
 function assertImageProviderKey(credentials: ModelCredentials, action: string) {
   if (
-    credentials.allowMockWhenNoKey &&
+    canUseMockGeneration(credentials) &&
     !String(credentials.klingApiKey ?? '').trim() &&
     !String(credentials.grsaiApiKey ?? '').trim() &&
     !String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey ?? '').trim() &&
@@ -1173,7 +1216,7 @@ function assertImageProviderKey(credentials: ModelCredentials, action: string) {
 
 function isLocalMockTestMode(credentials: ModelCredentials) {
   return (
-    credentials.allowMockWhenNoKey &&
+    canUseMockGeneration(credentials) &&
     !String(credentials.klingApiKey ?? '').trim() &&
     !String(credentials.grsaiApiKey ?? '').trim() &&
     !String(credentials.seedanceApiKey ?? '').trim() &&
@@ -1514,7 +1557,7 @@ function buildStructuredShotPrompt(input: {
       productPoints: [input.productPoints || shot.materialNeed, input.productAnalysisText || ''].filter(Boolean).join('\n'),
     },
   })
-  return sanitizeGeneratedVideoPrompt([prompt.positive, buildNoSpeakingInstruction()].filter(Boolean).join('\n\n'))
+  return prependSilentCommercialGlobalRule([prompt.positive])
 }
 
 function normalizeLegacyShotPromptForPersistence(shot: ShotSpec) {
@@ -1790,7 +1833,7 @@ async function ensureDerivedTemplate(input: {
   variantStrength: 'low' | 'medium' | 'high'
 }) {
   const bp = input.project.baseBlueprint ?? input.project.blueprint
-  if (!bp) throw new Error('钃濆浘涓嶅瓨鍦紝鏃犳硶鍒涘缓浼氳瘽妯℃澘')
+  if (!bp) throw new Error('蓝图不存在，无法创建会话模板')
   const structure = bp.shots.map((x) => segmentKeyByPurpose(x.purpose))
   const uniqStructure: string[] = []
   for (const seg of structure) if (!uniqStructure.includes(seg)) uniqStructure.push(seg)
@@ -3476,12 +3519,6 @@ export const cloneService = {
         identityId: input.selectedModelIdentityId,
       })
     }
-    if (input.productReferenceImagePaths?.length) {
-      project = await this.saveProjectProductImages({
-        cloneProjectId: project.id,
-        productReferenceImagePaths: input.productReferenceImagePaths,
-      })
-    }
     if (!String(project.referenceVideoPath || '').trim()) throw new Error('请先绑定参考视频')
     if (!project.baseBlueprint?.shots?.length) {
       const analyzed = await this.createCloneBlueprintFromReference({
@@ -3491,6 +3528,12 @@ export const cloneService = {
         strength: 'structure',
       })
       project = analyzed.project
+    }
+    if (input.productReferenceImagePaths?.length) {
+      project = await this.saveProjectProductImages({
+        cloneProjectId: project.id,
+        productReferenceImagePaths: input.productReferenceImagePaths,
+      })
     }
 
     setAutoFlowStage(project, 'materials', 'running', '自动准备一致性素材')
@@ -3509,11 +3552,13 @@ export const cloneService = {
 
     setAutoFlowStage(project, 'script', 'running', '自动生成并选择最高分脚本')
     await cloneRepo.upsertProject(project)
-    const variantResult = await this.generateScriptVariantsForProject({
-      cloneProjectId: project.id,
-      variantCount: Math.max(1, Math.min(6, Number(input.variantCount ?? 3) || 3)),
-    })
-    project = variantResult.project
+    if (!project.scriptVariantCandidates?.length) {
+      const variantResult = await this.generateScriptVariantsForProject({
+        cloneProjectId: project.id,
+        variantCount: Math.max(1, Math.min(6, Number(input.variantCount ?? 3) || 3)),
+      })
+      project = variantResult.project
+    }
     const topCandidate = [...(project.scriptVariantCandidates ?? [])].sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0]
     if (!topCandidate?.id) throw new Error('脚本候选生成失败，未产出可用候选')
     const selectedResult = await this.selectScriptVariantForProject({
@@ -3721,7 +3766,7 @@ export const cloneService = {
     productReferenceImagePaths?: string[]
   }) {
     const project = await cloneRepo.getProject(input.cloneProjectId)
-    if (!project || !project.baseBlueprint) throw new Error('复刻项目或蓝图不存在')
+    if (!project || (!project.baseBlueprint && !project.blueprint)) throw new Error('复刻项目或蓝图不存在')
     const refs = (input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
     if (project.blueprint?.shots?.length) {
       project.blueprint = {
@@ -3741,7 +3786,10 @@ export const cloneService = {
         shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
       }
     }
-    const previousAssets = project.baseBlueprint.consistencyAssets ?? { updatedAt: now() }
+    const previousAssets: Partial<CloneConsistencyAssetsSnapshot> & { updatedAt: number } =
+      project.baseBlueprint?.consistencyAssets ??
+      project.blueprint?.consistencyAssets ??
+      { updatedAt: now() }
     const nextAssets = {
       ...previousAssets,
       productImageSetIds: refs.map((p) => basename(p)),
@@ -3750,13 +3798,15 @@ export const cloneService = {
       productAnalysis: refs.length ? previousAssets.productAnalysis : undefined,
       updatedAt: now(),
     }
-    project.baseBlueprint = {
-      ...project.baseBlueprint,
-      consistencyAssets: nextAssets,
+    if (project.baseBlueprint) {
+      project.baseBlueprint = {
+        ...project.baseBlueprint,
+        consistencyAssets: nextAssets,
+      }
     }
-    project.blueprint = project.blueprint
-      ? { ...project.blueprint, consistencyAssets: nextAssets }
-      : project.baseBlueprint
+    if (project.blueprint) {
+      project.blueprint = { ...project.blueprint, consistencyAssets: nextAssets }
+    }
     syncProjectBlueprintLayers(project)
     console.log('[clone-debug] save-project-product-images', {
       cloneProjectId: project.id,
@@ -4275,24 +4325,27 @@ export const cloneService = {
         outputDir: String(input.outputDir || '').trim() || undefined,
       })
       const latest = (await cloneRepo.getProject(project.id)) || project
+      const finalOutputPath = String(rendered.output || '').trim() || undefined
+      const coverImagePath = finalOutputPath ? await ensureVideoCoverImage(finalOutputPath) : undefined
       patchWorkflowV2(latest, 'compose_final_video', 'compose_final_video', 'done')
       patchWorkflowV2(latest, 'compose_final_video', 'export_final', 'done')
       syncFinalCompose(latest, {
-        status: rendered.output ? 'done' : 'failed',
-        outputPath: String(rendered.output || '').trim() || undefined,
-        error: rendered.output ? undefined : '最终合成未产出视频文件',
+        status: finalOutputPath ? 'done' : 'failed',
+        outputPath: finalOutputPath,
+        coverImagePath,
+        error: finalOutputPath ? undefined : '最终合成未产出视频文件',
       })
       previewPipelinePatch(latest, {
-        status: rendered.output ? 'done' : 'failed',
-        previewOutputPath: String(rendered.output || '').trim() || undefined,
+        status: finalOutputPath ? 'done' : 'failed',
+        previewOutputPath: finalOutputPath,
         previewReportPath: String(rendered.reportPath || '').trim() || undefined,
-        lastError: rendered.output ? undefined : '最终合成未产出视频文件',
+        lastError: finalOutputPath ? undefined : '最终合成未产出视频文件',
       })
-      if (rendered.output) {
+      if (finalOutputPath) {
         latest.lastError = ''
         setProjectErrorContext(latest, null)
       }
-      latest.status = rendered.output ? 'completed' : latest.status
+      latest.status = finalOutputPath ? 'completed' : latest.status
       const saved = await cloneRepo.upsertProject(latest)
       return {
         project: saved,
@@ -4479,6 +4532,20 @@ export const cloneService = {
     }
   },
 
+  async bindProjectReferenceVideo(input: { cloneProjectId: string; videoPath: string }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item) throw new Error('复刻项目不存在')
+    const videoPath = String(input.videoPath || '').trim()
+    if (!videoPath) throw new Error('请先选择参考视频')
+    item.referenceVideoPath = videoPath
+    item.referenceVideoName = basename(videoPath)
+    const saved = await cloneRepo.upsertProject(item)
+    return {
+      project: saved,
+      summary: buildProjectSummary(saved),
+    }
+  },
+
   async getProjectSummary(input: { cloneProjectId: string }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
@@ -4572,6 +4639,54 @@ export const cloneService = {
     if (!project) throw new Error('复刻项目不存在')
     await syncProjectSelectedIdentity(project, input.identityId)
     return await cloneRepo.upsertProject(project)
+  },
+
+  async exportFinalVideos(input: { cloneProjectIds: string[]; outputDir: string }) {
+    const cloneProjectIds = Array.isArray(input.cloneProjectIds)
+      ? input.cloneProjectIds.map((item) => String(item || '').trim()).filter(Boolean)
+      : []
+    const outputDir = String(input.outputDir || '').trim()
+    if (!cloneProjectIds.length) throw new Error('请选择至少一个任务')
+    if (!outputDir) throw new Error('导出目录不能为空')
+
+    await mkdir(outputDir, { recursive: true })
+
+    const exported: Array<{ cloneProjectId: string; title: string; sourcePath: string; targetPath: string }> = []
+    const skipped: Array<{ cloneProjectId: string; title: string; reason: string }> = []
+
+    for (const cloneProjectId of cloneProjectIds) {
+      const project = await cloneRepo.getProject(cloneProjectId)
+      if (!project) {
+        skipped.push({ cloneProjectId, title: cloneProjectId, reason: '任务不存在' })
+        continue
+      }
+
+      const sourcePath = String(project.finalCompose?.outputPath || '').trim()
+      if (!sourcePath) {
+        skipped.push({ cloneProjectId, title: project.title || cloneProjectId, reason: '暂无成片可导出' })
+        continue
+      }
+      if (!(await fileExists(sourcePath))) {
+        skipped.push({ cloneProjectId, title: project.title || cloneProjectId, reason: '成片文件不存在' })
+        continue
+      }
+
+      const targetPath = await ensureUniqueExportPath(outputDir, basename(sourcePath))
+      await copyFile(sourcePath, targetPath)
+      exported.push({
+        cloneProjectId,
+        title: project.title || cloneProjectId,
+        sourcePath,
+        targetPath,
+      })
+    }
+
+    return {
+      outputDir,
+      exported,
+      skipped,
+      total: cloneProjectIds.length,
+    }
   },
 
   async removeProject(input: { cloneProjectId: string }) {

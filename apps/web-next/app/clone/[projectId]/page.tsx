@@ -29,6 +29,7 @@ import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { useAppNavigation } from '@/hooks/use-app-navigation'
 import { useAuthGuard } from '@/hooks/use-auth-guard'
 import { useCloneWorkspace } from '@/hooks/use-clone-workspace'
 import { apiClient } from '@/lib/api-client'
@@ -59,6 +60,20 @@ type StoryboardRow = {
   imageSrc: string
   videoSrc: string
   locked: boolean
+  consistencyMode: string
+  promptCompilerVersion: string
+  consistencyRiskLevel: string
+  consistencyProductType: string
+}
+
+type ConsistencyDialogState = {
+  shotId: string
+  title: string
+  loading: boolean
+  report: any | null
+  imagePromptPreview: any | null
+  anchors: any[]
+  patches: any[]
 }
 
 type ShotDraft = {
@@ -141,6 +156,10 @@ function buildRows(workspace: ReturnType<typeof useCloneWorkspace>): StoryboardR
       imageSrc: workspace.helpers.previewSrc(frame?.imagePath || ''),
       videoSrc: workspace.helpers.previewSrc(video?.videoPath || video?.localPath || ''),
       locked: Boolean(shot?.locked),
+      consistencyMode: String(shot?.consistencyMode || 'standard'),
+      promptCompilerVersion: String(shot?.promptCompilerVersion || ''),
+      consistencyRiskLevel: 'unknown',
+      consistencyProductType: String(shot?.productType || 'general'),
     }
   })
 }
@@ -314,6 +333,178 @@ function PreviewDialog({ preview, onClose }: { preview: PreviewState | null; onC
           ) : (
             <video src={preview.src} controls autoPlay className="max-h-[76vh] w-full object-contain" />
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConsistencyDialog({
+  state,
+  onClose,
+  onRecompile,
+  recompiling,
+}: {
+  state: ConsistencyDialogState | null
+  onClose: () => void
+  onRecompile: () => void
+  recompiling: boolean
+}) {
+  if (!state) return null
+
+  const report = state.report
+  const copyText = async (value: string) => {
+    const text = String(value || '').trim()
+    if (!text || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return
+    await navigator.clipboard.writeText(text)
+  }
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-6 backdrop-blur-sm">
+      <div className="grid max-h-[92vh] w-full max-w-6xl gap-4 overflow-hidden rounded-[24px] border border-white/10 bg-[#0a1220] p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="grid gap-1">
+            <strong className="text-base text-white">{state.title}</strong>
+            <span className="text-xs text-slate-500">{state.shotId}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={onRecompile} disabled={recompiling}>
+              <RefreshCcw className="h-4 w-4" />
+              {recompiling ? '重编译中...' : '重新编译'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+              关闭
+            </Button>
+          </div>
+        </div>
+        <div className="grid gap-4 overflow-y-auto pr-1 lg:grid-cols-2">
+          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">一致性状态</div>
+            {state.loading ? (
+              <div className="mt-3 text-sm text-slate-400">加载中...</div>
+            ) : report ? (
+              <div className="mt-3 grid gap-2 text-sm text-slate-200">
+                <div>风险等级：{String(report.riskLevel || '-')}</div>
+                <div>产品类型：{String(report.productType || '-')}</div>
+                <div>严格模式：{report.strictConsistencyMode ? 'strict' : 'standard'}</div>
+                <div>参考优先级：{String(report.referencePriorityMode || '-')}</div>
+                <div>编译版本：{String(report.compilerVersion || '-')}</div>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-slate-400">暂无一致性报告</div>
+            )}
+          </div>
+          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">风险标签</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(report?.riskFlags || []).length ? (
+                report.riskFlags.map((item: string) => <Chip key={item}>{item}</Chip>)
+              ) : (
+                <span className="text-sm text-slate-400">暂无风险标签</span>
+              )}
+            </div>
+          </div>
+          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Identity Anchors</div>
+            <div className="mt-3 grid gap-2">
+              {state.anchors.length ? (
+                state.anchors.map((item: any, index) => (
+                  <div key={`${item.anchor_key}-${index}`} className="rounded-[14px] border border-white/6 bg-black/20 px-3 py-2 text-sm text-slate-200">
+                    <span className="text-slate-500">{item.anchor_key}：</span>
+                    {item.anchor_value}
+                  </div>
+                ))
+              ) : (
+                <span className="text-sm text-slate-400">暂无锚点</span>
+              )}
+            </div>
+          </div>
+          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Patch Blocks</div>
+            <div className="mt-3 grid gap-2">
+              {state.patches.length ? (
+                state.patches.map((item: any, index) => (
+                  <div key={`${item.patch_type}-${index}`} className="rounded-[14px] border border-white/6 bg-black/20 px-3 py-2 text-sm text-slate-200">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{item.patch_type}</div>
+                    <div className="mt-1 leading-6">{item.patch_text}</div>
+                  </div>
+                ))
+              ) : (
+                <span className="text-sm text-slate-400">暂无 patch</span>
+              )}
+            </div>
+          </div>
+          <div className="rounded-[18px] border border-[rgba(109,93,255,0.18)] bg-[rgba(109,93,255,0.05)] p-4 lg:col-span-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-violet-200/80">视频编译 Prompt</div>
+                <div className="mt-1 text-[12px] text-slate-400">用于分镜视频生成的最终编译正向提示词</div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void copyText(String(report?.finalPrompt || ''))}>
+                <Copy className="h-4 w-4" />
+                复制 Prompt
+              </Button>
+            </div>
+            <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{String(report?.finalPrompt || '') || '暂无'}</pre>
+          </div>
+          <div className="rounded-[18px] border border-[rgba(109,93,255,0.18)] bg-[rgba(109,93,255,0.05)] p-4 lg:col-span-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-violet-200/80">视频编译 Negative Prompt</div>
+                <div className="mt-1 text-[12px] text-slate-400">用于分镜视频生成的最终编译负向提示词</div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void copyText(String(report?.finalNegativePrompt || ''))}>
+                <Copy className="h-4 w-4" />
+                复制 Prompt
+              </Button>
+            </div>
+            <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{String(report?.finalNegativePrompt || '') || '暂无'}</pre>
+          </div>
+          <div className="rounded-[18px] border border-[rgba(34,211,238,0.18)] bg-[rgba(34,211,238,0.05)] p-4 lg:col-span-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-200/80">图片实际 Start Prompt</div>
+                <div className="mt-1 text-[12px] text-slate-400">用于分镜图片首帧生成的实际正向提示词</div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void copyText(String(state.imagePromptPreview?.startPrompt || ''))}>
+                <Copy className="h-4 w-4" />
+                复制 Prompt
+              </Button>
+            </div>
+            <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
+              {String(state.imagePromptPreview?.startPrompt || '') || '暂无'}
+            </pre>
+          </div>
+          <div className="rounded-[18px] border border-[rgba(34,211,238,0.18)] bg-[rgba(34,211,238,0.05)] p-4 lg:col-span-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-200/80">图片实际 End Prompt</div>
+                <div className="mt-1 text-[12px] text-slate-400">用于分镜图片尾帧生成的实际正向提示词</div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void copyText(String(state.imagePromptPreview?.endPrompt || ''))}>
+                <Copy className="h-4 w-4" />
+                复制 Prompt
+              </Button>
+            </div>
+            <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
+              {String(state.imagePromptPreview?.endPrompt || '') || '暂无'}
+            </pre>
+          </div>
+          <div className="rounded-[18px] border border-[rgba(34,211,238,0.18)] bg-[rgba(34,211,238,0.05)] p-4 lg:col-span-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-cyan-200/80">图片实际 Negative Prompt</div>
+                <div className="mt-1 text-[12px] text-slate-400">用于分镜图片生成的实际负向提示词</div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void copyText(String(state.imagePromptPreview?.negativePrompt || ''))}>
+                <Copy className="h-4 w-4" />
+                复制 Prompt
+              </Button>
+            </div>
+            <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
+              {String(state.imagePromptPreview?.negativePrompt || '') || '暂无'}
+            </pre>
+          </div>
         </div>
       </div>
     </div>
@@ -512,6 +703,7 @@ function AnalyzeStage({
   const canAnalyze = Boolean(workspace.referenceFile || workspace.project?.referenceVideoPath)
   const referencePreview = workspace.referenceFile ? URL.createObjectURL(workspace.referenceFile) : workspace.helpers.previewSrc(workspace.project?.referenceVideoPath || '')
   const analysisReady = Boolean(analysis)
+  const currentModel = workspace.models.find((model: any) => model.id === workspace.selectedModelId) || workspace.models[0] || null
   const analysisStatus = analysisReady ? '已完成' : workspace.analyzeMutation.isPending ? '分析中' : '待分析'
   const structureCards = [
     { time: '0-3s', title: '开场抓点', copy: '前几秒直接抛出商品和记忆点。' },
@@ -540,7 +732,7 @@ function AnalyzeStage({
   const scriptPreview = compactText(analysis?.scriptPreview || analysis?.summary || analysis?.structure, '参考视频的核心节奏和卖点已经准备好，可以直接生成脚本。')
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="clone-stage-analyze">
       <SectionHeader
         eyebrow="阶段 01"
         title="参考分析"
@@ -566,10 +758,10 @@ function AnalyzeStage({
                 <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">参考视频</div>
                 <div className="mt-2 text-[16px] font-semibold text-white">{referenceVideoName || '暂未上传参考视频'}</div>
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-slate-200 transition hover:border-violet-300/30 hover:bg-violet-500/10">
+              <label data-testid="reference-video-upload-trigger" className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-slate-200 transition hover:border-violet-300/30 hover:bg-violet-500/10">
                 <Upload className="h-4 w-4" />
                 {referenceVideoName ? '重新上传' : '上传视频'}
-                <input type="file" accept="video/*" className="hidden" onChange={(event) => workspace.setReferenceFile(event.target.files?.[0] || null)} />
+                <input data-testid="reference-video-input" type="file" accept="video/*" className="hidden" onChange={(event) => workspace.setReferenceFile(event.target.files?.[0] || null)} />
               </label>
             </div>
 
@@ -623,6 +815,96 @@ function AnalyzeStage({
         </div>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-[1.12fr_1.1fr_320px]">
+          <div className="rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4" data-testid="product-model-panel">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">商品与模特</div>
+                <div className="mt-2 text-[16px] font-semibold text-white">关联商品图和模特</div>
+              </div>
+              <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-[12px] text-slate-300">{workspace.productImages.length} 张</span>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="flex flex-wrap gap-2">
+                <label data-testid="product-images-upload-trigger" className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-slate-200 transition hover:border-violet-300/30 hover:bg-violet-500/10">
+                  <Upload className="h-4 w-4" />
+                  上传商品图
+                  <input
+                    data-testid="product-images-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files || [])
+                      if (files.length) workspace.uploadProductsMutation.mutate(files)
+                      event.currentTarget.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {workspace.productImages.length ? (
+                  workspace.productImages.map((imagePath: string, index: number) => (
+                    <div key={`${imagePath}-${index}`} className="overflow-hidden rounded-[18px] border border-white/8 bg-black/40">
+                      <img src={workspace.helpers.previewSrc(imagePath)} alt={`product-${index + 1}`} className="aspect-square w-full object-cover" />
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-8 text-center text-[13px] text-slate-500 sm:col-span-3">
+                    请先上传商品图，后续脚本和分镜生成需要使用这些素材。
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-3">
+                <div className="text-[13px] text-slate-300">可用模特</div>
+                <div className="grid gap-3">
+                  {workspace.models.length ? (
+                    workspace.models.map((model: any) => {
+                      const active = workspace.selectedModelId === model.id
+                      const cover = workspace.helpers.previewSrc(model.coverImagePath || model.imagePaths?.[0] || '')
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          data-testid={`model-option-${model.id}`}
+                          onClick={() => workspace.selectModelMutation.mutate(model.id)}
+                          className={cn(
+                            'grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3 rounded-[18px] border px-3 py-3 text-left transition',
+                            active ? 'border-[rgba(109,93,255,0.55)] bg-[rgba(109,93,255,0.12)]' : 'border-white/8 bg-white/[0.03] hover:border-white/15',
+                          )}
+                        >
+                          <div className="overflow-hidden rounded-[14px] bg-black/40">
+                            {cover ? (
+                              <img src={cover} alt={model.name} className="aspect-square w-full object-cover" />
+                            ) : (
+                              <div className="grid aspect-square place-items-center text-slate-500">
+                                <ImageIcon className="h-5 w-5" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-medium text-white">{model.name}</div>
+                            <div className="mt-1 text-[12px] text-slate-400">{String(model.status || 'idle')}</div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  ) : (
+                    <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-8 text-center text-[13px] text-slate-500">
+                      模特列表为空，请先确认模特库数据。
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-[12px] text-slate-400" data-testid="selected-model-summary">
+                  当前模特：{currentModel?.name || workspace.selectedModelId || '未选择模特'}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="mb-4 text-[16px] font-semibold text-white">AI 分析结果</div>
             <div className="grid gap-3 xl:grid-cols-3">
@@ -659,7 +941,7 @@ function AnalyzeStage({
         </div>
 
         <div className="mt-5 flex flex-wrap justify-center gap-4">
-          <Button className="min-w-[320px]" onClick={() => (analysisReady ? onNext() : workspace.analyzeMutation.mutate())} disabled={workspace.analyzeMutation.isPending || (!analysisReady && !canAnalyze)}>
+          <Button data-testid="analyze-start-button" className="min-w-[320px]" onClick={() => (analysisReady ? onNext() : workspace.analyzeMutation.mutate())} disabled={workspace.analyzeMutation.isPending || (!analysisReady && !canAnalyze)}>
             {analysisReady ? '进入脚本生成' : workspace.analyzeMutation.isPending ? '分析中...' : '开始分析'}
           </Button>
           <Button variant="secondary" className="min-w-[260px]" onClick={() => workspace.analyzeMutation.mutate()} disabled={!canAnalyze || workspace.analyzeMutation.isPending}>
@@ -682,7 +964,7 @@ function ScriptStage({ workspace, onPrev, onNext }: { workspace: ReturnType<type
   })
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="clone-stage-script">
       <SectionHeader
         eyebrow="阶段 02"
         title="脚本生成"
@@ -745,6 +1027,7 @@ function ScriptStage({ workspace, onPrev, onNext }: { workspace: ReturnType<type
                   const score = Number(item.score || item.totalScore || 92 - index * 4)
                   return (
                     <button
+                      data-testid={`script-variant-option-${variantId}`}
                       key={variantId}
                       type="button"
                       onClick={() => workspace.chooseVariantMutation.mutate(variantId)}
@@ -784,11 +1067,17 @@ function ScriptStage({ workspace, onPrev, onNext }: { workspace: ReturnType<type
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <Button variant="secondary" onClick={() => workspace.generateVariantsMutation.mutate()} disabled={!workspace.canGenerateVariants || workspace.generateVariantsMutation.isPending}>
+              <Button data-testid="generate-script-variants-button" variant="secondary" onClick={() => workspace.generateVariantsMutation.mutate()} disabled={!workspace.canGenerateVariants || workspace.generateVariantsMutation.isPending}>
                 <RefreshCcw className="h-4 w-4" />
                 {workspace.generateVariantsMutation.isPending ? '生成中...' : '重新生成'}
               </Button>
-              <div className="text-[12px] text-slate-500">{selectedVariant ? '已选择脚本版本，可继续进入分镜图片。' : '请先选择一个脚本版本。'}</div>
+              <div className="text-[12px] text-slate-500">
+                {!workspace.productImages.length
+                  ? '请先上传商品图后再生成脚本候选。'
+                  : selectedVariant
+                    ? '已选择脚本版本，可继续进入分镜图片。'
+                    : '脚本候选不再强依赖模特，选好版本后再进入分镜图阶段绑定模特。'}
+              </div>
             </div>
           </div>
         </GlassCard>
@@ -858,7 +1147,9 @@ function ScriptStage({ workspace, onPrev, onNext }: { workspace: ReturnType<type
             <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4">
               <div className="text-[12px] text-slate-500">当前模特</div>
               <div className="mt-2 text-[14px] text-white">{currentModel?.name || workspace.selectedModelId || '未选择模特'}</div>
-              <div className="mt-3 text-[12px] leading-6 text-slate-400">候选脚本会结合当前模特、时长和风格倾向生成，并保留多版本供你筛选。</div>
+              <div className="mt-3 text-[12px] leading-6 text-slate-400">
+                候选脚本阶段只要求商品图。模特会在分镜图片阶段参与人物与商品一致性生成；若当前为空，请在下一阶段先创建或选择模特。
+              </div>
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -885,6 +1176,7 @@ function StoryboardStage({
   onPageChange,
   onPreview,
   onEdit,
+  onOpenConsistency,
   onPrev,
   onNext,
 }: {
@@ -896,6 +1188,7 @@ function StoryboardStage({
   onPageChange: (page: number) => void
   onPreview: (preview: PreviewState) => void
   onEdit: (row: StoryboardRow) => void
+  onOpenConsistency: (row: StoryboardRow) => void
   onPrev: () => void
   onNext: () => void
 }) {
@@ -921,7 +1214,7 @@ function StoryboardStage({
   }, [activeShotId, pagedRows])
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="clone-stage-storyboard">
       <SectionHeader
         eyebrow="阶段 03"
         title="分镜图片"
@@ -933,13 +1226,24 @@ function StoryboardStage({
               <Plus className="h-4 w-4" />
               添加镜头
             </Button>
-            <Button onClick={() => workspace.generateImagesMutation.mutate()} disabled={!workspace.canGenerateImages || workspace.generateImagesMutation.isPending}>
+            <Button data-testid="generate-storyboard-images-button" onClick={() => workspace.generateImagesMutation.mutate()} disabled={!workspace.canGenerateImages || workspace.generateImagesMutation.isPending}>
               <ImageIcon className="h-4 w-4" />
               {workspace.generateImagesMutation.isPending ? '生成中...' : '智能生成分镜'}
             </Button>
           </>
         }
       />
+
+      {!workspace.selectedModelId ? (
+        <GlassCard className="border-amber-400/20 bg-amber-500/10 p-4">
+          <div className="grid gap-2">
+            <div className="text-[14px] font-medium text-amber-100">当前还没有可用模特</div>
+            <div className="text-[12px] leading-6 text-amber-50/80">
+              分镜图片阶段需要模特资产来锁定人物与商品一致性。请先在右侧模特区选择已有模特；如果列表为空，需要先在模特库创建一个模特身份包。
+            </div>
+          </div>
+        </GlassCard>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_312px]">
         <div className="grid gap-4">
@@ -1049,6 +1353,21 @@ function StoryboardStage({
                           </button>
                           <button
                             type="button"
+                            title="查看图片 Prompt / 一致性"
+                            aria-label="查看图片 Prompt / 一致性"
+                            className="inline-flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.03] px-2.5 py-2 text-[12px] text-slate-200 transition hover:border-white/15 hover:bg-white/[0.06]"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onOpenConsistency(row)
+                            }}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            <span className="hidden xl:inline">Prompt</span>
+                          </button>
+                          <button
+                            type="button"
+                            title="重新生成图片"
+                            aria-label="重新生成图片"
                             className="rounded-lg border border-white/8 bg-white/[0.03] p-2 text-slate-200 transition hover:border-white/15 hover:bg-white/[0.06]"
                             onClick={(event) => {
                               event.stopPropagation()
@@ -1059,6 +1378,8 @@ function StoryboardStage({
                           </button>
                           <button
                             type="button"
+                            title={row.locked ? '解锁分镜' : '锁定分镜'}
+                            aria-label={row.locked ? '解锁分镜' : '锁定分镜'}
                             className="rounded-lg border border-white/8 bg-white/[0.03] p-2 text-slate-200 transition hover:border-white/15 hover:bg-white/[0.06]"
                             onClick={(event) => {
                               event.stopPropagation()
@@ -1173,6 +1494,9 @@ function ShotVideoStage({
   onPreview,
   onPrev,
   onNext,
+  onOpenConsistency,
+  onRunPreflight,
+  preflightLoading,
 }: {
   workspace: ReturnType<typeof useCloneWorkspace>
   rows: StoryboardRow[]
@@ -1183,11 +1507,15 @@ function ShotVideoStage({
   onPreview: (preview: PreviewState) => void
   onPrev: () => void
   onNext: () => void
+  onOpenConsistency: (row: StoryboardRow) => void
+  onRunPreflight: () => void
+  preflightLoading: boolean
 }) {
   const completedCount = rows.filter((item) => item.videoSrc).length
+  const highRiskCount = rows.filter((item) => item.consistencyRiskLevel === 'high' || item.consistencyRiskLevel === 'critical').length
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="clone-stage-shot-videos">
       <SectionHeader
         eyebrow="阶段 04"
         title="分镜视频"
@@ -1195,7 +1523,7 @@ function ShotVideoStage({
         actions={
           <>
             <Chip active>{completedCount}/{rows.length} 已完成</Chip>
-            <Button onClick={() => workspace.generateVideosMutation.mutate()} disabled={!workspace.canGenerateVideos || workspace.generateVideosMutation.isPending}>
+            <Button data-testid="generate-shot-videos-button" onClick={() => workspace.generateVideosMutation.mutate()} disabled={!workspace.canGenerateVideos || workspace.generateVideosMutation.isPending}>
               <Video className="h-4 w-4" />
               {workspace.generateVideosMutation.isPending ? '提交中...' : '批量生成视频'}
             </Button>
@@ -1349,7 +1677,7 @@ function ComposeStage({
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="clone-stage-compose">
       <SectionHeader
         eyebrow="阶段 05"
         title="成片输出"
@@ -1361,7 +1689,7 @@ function ComposeStage({
               <Pencil className="h-4 w-4" />
               编辑当前镜头
             </Button>
-            <Button onClick={() => workspace.composeMutation.mutate()} disabled={!workspace.canCompose || workspace.composeMutation.isPending}>
+            <Button data-testid="compose-final-video-button" onClick={() => workspace.composeMutation.mutate()} disabled={!workspace.canCompose || workspace.composeMutation.isPending}>
               <Video className="h-4 w-4" />
               {workspace.composeMutation.isPending ? '合成中...' : '合成最终成片'}
             </Button>
@@ -1518,22 +1846,38 @@ function PaginationBar({
 export default function CloneProjectDetailPage() {
   const params = useParams<{ projectId: string }>()
   const searchParams = useSearchParams()
+  const { prefetchMany } = useAppNavigation()
   const projectId = String(params?.projectId || '')
   const { ready, authed, redirecting, sessionRestoring } = useAuthGuard()
   const workspace = useCloneWorkspace(projectId)
 
-  const rows = useMemo(() => buildRows(workspace), [workspace])
   const derivedStage = useMemo(() => deriveStage(workspace), [workspace])
   const [currentStage, setCurrentStage] = useState<CloneStage>('upload_analyze_script')
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const [activeShotId, setActiveShotId] = useState('')
   const [editDraft, setEditDraft] = useState<ShotDraft | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [consistencyDialog, setConsistencyDialog] = useState<ConsistencyDialogState | null>(null)
+  const [consistencyReports, setConsistencyReports] = useState<Record<string, any>>({})
+  const [consistencyBatchLoading, setConsistencyBatchLoading] = useState(false)
   const [storyboardPage, setStoryboardPage] = useState(1)
   const [videoPage, setVideoPage] = useState(1)
   const [composePage, setComposePage] = useState(1)
   const prefilledModelRef = useRef<string>('')
   const importedProjectRef = useRef<string>('')
+
+  const rows = useMemo(
+    () =>
+      buildRows(workspace).map((row) => {
+        const report = consistencyReports[row.shotId]
+        return {
+          ...row,
+          consistencyRiskLevel: String(report?.riskLevel || row.consistencyRiskLevel || 'unknown'),
+          consistencyProductType: String(report?.productType || row.consistencyProductType || 'general'),
+        }
+      }),
+    [workspace, consistencyReports],
+  )
 
   const templateHint = searchParams.get('template') || ''
   const prefillModel = searchParams.get('prefillModel') || ''
@@ -1547,6 +1891,10 @@ export default function CloneProjectDetailPage() {
   const storyboardRows = rows.slice((storyboardPage - 1) * pageSize, storyboardPage * pageSize)
   const videoRows = rows.slice((videoPage - 1) * pageSize, videoPage * pageSize)
   const composeRows = rows.slice((composePage - 1) * pageSize, composePage * pageSize)
+
+  useEffect(() => {
+    prefetchMany(['/clone'])
+  }, [prefetchMany, projectId])
 
   useEffect(() => {
     setCurrentStage(derivedStage)
@@ -1627,6 +1975,49 @@ export default function CloneProjectDetailPage() {
     setEditOpen(false)
   }
 
+  const openConsistency = async (row: StoryboardRow) => {
+    setConsistencyDialog({
+      shotId: row.shotId,
+      title: `镜头 ${row.order} 一致性诊断`,
+      loading: true,
+      report: null,
+      imagePromptPreview: null,
+      anchors: [],
+      patches: [],
+    })
+    const [report, imagePromptPreview, anchors, patches] = await Promise.all([
+      workspace.getConsistencyReport(row.shotId),
+      workspace.getShotImagePromptPreview(row.shotId),
+      workspace.getConsistencyAnchors(row.shotId),
+      workspace.getConsistencyPatches(row.shotId),
+    ])
+    setConsistencyReports((current) => ({ ...current, [row.shotId]: report }))
+    setConsistencyDialog({
+      shotId: row.shotId,
+      title: `镜头 ${row.order} 一致性诊断`,
+      loading: false,
+      report,
+      imagePromptPreview,
+      anchors,
+      patches,
+    })
+  }
+
+  const runConsistencyPreflight = async () => {
+    setConsistencyBatchLoading(true)
+    try {
+      const entries = await Promise.all(
+        rows.map(async (row) => {
+          const report = await workspace.getConsistencyReport(row.shotId)
+          return [row.shotId, report] as const
+        }),
+      )
+      setConsistencyReports(Object.fromEntries(entries))
+    } finally {
+      setConsistencyBatchLoading(false)
+    }
+  }
+
   let content: ReactNode = null
 
   if (workspace.loading) {
@@ -1676,6 +2067,7 @@ export default function CloneProjectDetailPage() {
         onPageChange={setStoryboardPage}
         onPreview={setPreview}
         onEdit={openEdit}
+        onOpenConsistency={openConsistency}
         onPrev={() => updateStage(getPrevStage(currentStage))}
         onNext={() => updateStage(getNextStage(currentStage))}
       />
@@ -1692,6 +2084,9 @@ export default function CloneProjectDetailPage() {
         onPreview={setPreview}
         onPrev={() => updateStage(getPrevStage(currentStage))}
         onNext={() => updateStage(getNextStage(currentStage))}
+        onOpenConsistency={openConsistency}
+        onRunPreflight={runConsistencyPreflight}
+        preflightLoading={consistencyBatchLoading}
       />
     )
   } else {
@@ -1714,7 +2109,7 @@ export default function CloneProjectDetailPage() {
 
   return (
     <AppShell sidebarContent={null}>
-      <div className="grid gap-3">
+      <div className="grid gap-3" data-testid="clone-project-detail-page">
         <div className="grid gap-2.5 rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,18,32,0.96),rgba(7,14,25,0.92))] px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="grid gap-1.5">
@@ -1724,11 +2119,12 @@ export default function CloneProjectDetailPage() {
               </div>
               <h1 className="text-[16px] font-semibold leading-6 text-white xl:text-[18px]">{workspace.project?.title || '爆款复刻工作台'}</h1>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-400">
-              <Chip>进度 {formatPercent(workspace.project?.progressPercent)}</Chip>
-              <Chip>{workspace.project?.updatedAt ? `更新 ${formatDateTime(workspace.project?.updatedAt).slice(11)}` : '等待同步'}</Chip>
+              <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-400">
+                <Chip>进度 {formatPercent(workspace.project?.progressPercent)}</Chip>
+                <Chip>{workspace.project?.updatedAt ? `更新 ${formatDateTime(workspace.project?.updatedAt).slice(11)}` : '等待同步'}</Chip>
+                <Chip active={workspace.productionMode}>{workspace.productionMode ? '真实生产模式' : '开发调试模式'}</Chip>
+              </div>
             </div>
-          </div>
           <CloneStageNav currentStep={currentStage} onStepChange={(stage) => updateStage(stage as CloneStage)} />
         </div>
 
@@ -1755,6 +2151,17 @@ export default function CloneProjectDetailPage() {
       </div>
 
       <PreviewDialog preview={preview} onClose={() => setPreview(null)} />
+      <ConsistencyDialog
+        state={consistencyDialog}
+        onClose={() => setConsistencyDialog(null)}
+        onRecompile={async () => {
+          if (!consistencyDialog?.shotId) return
+          await workspace.recompileConsistencyMutation.mutateAsync(consistencyDialog.shotId)
+          const row = rows.find((item) => item.shotId === consistencyDialog.shotId)
+          if (row) await openConsistency(row)
+        }}
+        recompiling={workspace.recompileConsistencyMutation.isPending}
+      />
       <ShotEditDialog
         open={editOpen}
         draft={editDraft}

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
 import { generateChatCompletion } from './unifiedChat'
+import { buildSilentCommercialGlobalRule } from './prompt'
 import type { CloneGlobalScript, CloneLocale, ModelCredentials, ScriptRole, ShotSpec } from './types'
 
 type FrameSet = {
@@ -105,6 +106,21 @@ function clamp01(value: unknown) {
   return Math.max(0, Math.min(1, n))
 }
 
+function round3(value: number) {
+  return Math.round(value * 1000) / 1000
+}
+
+function clampShotWindow(startTime: number, endTime: number, fallbackStart: number, fallbackDuration: number) {
+  const safeStart = Number.isFinite(startTime) ? Number(startTime) : Number(fallbackStart || 0)
+  const candidateEnd = Number.isFinite(endTime) ? Number(endTime) : safeStart + Number(fallbackDuration || 1.5)
+  const minEnd = safeStart + 0.5
+  const maxEnd = safeStart + 8
+  return {
+    startTime: round3(Math.max(0, safeStart)),
+    endTime: round3(Math.max(minEnd, Math.min(candidateEnd, maxEnd))),
+  }
+}
+
 function normalizeRole(value: unknown): ScriptRole {
   const role = String(value ?? '').trim() as ScriptRole
   return SCRIPT_ROLES.includes(role) ? role : 'unknown'
@@ -132,10 +148,16 @@ function fallbackShot(shot: AnalyzeInput['shots'][number], note: string): Script
   const visual = cleanText(shot.visualPrompt, 'reference product demonstration shot')
   const action = cleanText(shot.action, visual)
   const camera = cleanText(shot.cameraMovement || shot.motion, 'same camera movement as reference shot')
+  const timing = clampShotWindow(
+    Number(shot.startSec || 0),
+    Number(shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 1.5)),
+    Number(shot.startSec || 0),
+    Number(shot.durationSec || 1.5),
+  )
   return {
     shotId: shot.id,
-    startTime: Number(shot.startSec || 0),
-    endTime: Number(shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 1.5)),
+    startTime: timing.startTime,
+    endTime: timing.endTime,
     scriptText: '',
     scriptRole: shot.index === 0 ? 'hook' : 'unknown',
     narrationText: '',
@@ -330,10 +352,16 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
   const shots = input.shots.map((shot) => {
     const raw = byId.get(shot.id)
     if (!raw) return fallbackShot(shot, 'GRS.AI output missed this shot; fallback generated locally')
+    const timing = clampShotWindow(
+      Number(raw.startTime ?? raw.start_time ?? shot.startSec ?? 0),
+      Number(raw.endTime ?? raw.end_time ?? shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 1.5)),
+      Number(shot.startSec || 0),
+      Number(shot.durationSec || 1.5),
+    )
     return {
       shotId: shot.id,
-      startTime: Number(raw.startTime ?? raw.start_time ?? shot.startSec ?? 0),
-      endTime: Number(raw.endTime ?? raw.end_time ?? shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 1.5)),
+      startTime: timing.startTime,
+      endTime: timing.endTime,
       scriptText: cleanText(raw.scriptText ?? raw.script_text, ''),
       scriptRole: normalizeRole(raw.scriptRole ?? raw.script_role),
       narrationText: cleanText(raw.narrationText ?? raw.narration_text, ''),
@@ -387,10 +415,14 @@ function buildInstruction(input: AnalyzeInput) {
     .join('\n')
 
   return [
+    buildSilentCommercialGlobalRule(),
     'You are a top-tier TikTok ecommerce short-video director, storyboard designer, and paid-ads strategist.',
     `Output language: ${language}.`,
     `Target market: ${input.targetMarket || input.locale}. Product category: ${input.productCategory || 'general'}.`,
     'Analyze the uploaded viral reference video shot by shot. This is not a generic summary. It is a structured reconstruction script used to regenerate a new ecommerce short video.',
+    'This is for selling and product demonstration, so keep the product as the primary subject and human presence as supporting context only.',
+    'Every analyzed shot must be 8.0 seconds or shorter. If a source beat appears longer than 8 seconds, reverse-engineer it into multiple finer consecutive shots.',
+    'Be meticulous when reverse-engineering long actions, transitions, camera moves and product demonstrations. Split them into smaller realistic sub-shots instead of keeping any shot above 8 seconds.',
     'Sample the video at 1 frame per second and use the sampled frames together with shot boundaries to reconstruct the visual language accurately.',
     'For every shot, you must analyze and preserve these dimensions in the JSON fields and analysis notes:',
     '1. Camera movement type and speed: push, pull, pan, tilt, track, orbit, handheld or static, with specific speed description.',
@@ -402,7 +434,7 @@ function buildInstruction(input: AnalyzeInput) {
     'Map the above analysis into these output fields: cameraDescription, visualDescription, actionDescription, sceneDescription, emotionDescription, textOverlay, productFocus and analysisNotes.',
     'The generation_prompt field must be a complete Jingmeng/Seedance-ready prompt written in this order: timeline + subject + scene + action + camera + atmosphere.',
     'The generation_prompt must be directly usable for image-to-video or reference-video recreation, concise but specific, and should include motion rhythm, framing, lighting, color mood and environment cues.',
-    'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. When speech is unclear, infer the script from the visuals.',
+    'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. When speech is unclear, infer the script from the visuals, but do not produce speaking-focused or face-focused performance guidance.',
     'Return ONLY valid JSON. No markdown. No explanation outside JSON.',
     'Use script_role values only from: hook,pain_point,solution,show,detail,proof,offer,cta,transition,unknown.',
     'Prioritize realistic ecommerce reconstruction, reusable prompt detail, and mobile-native visual language.',
@@ -434,7 +466,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
       prompt: buildInstruction(input),
     })
     if (!apifox.content) {
-      return fallbackAnalysisResult(input, `ai666 脚本分析返回为空。provider=${apifox.provider} model=${apifox.model}`)
+      return fallbackAnalysisResult(input, `VectorEngine 脚本分析返回为空。provider=${apifox.provider} model=${apifox.model}`)
     }
     try {
       const parsed = parseModelJsonPayload(apifox.content).parsed
@@ -442,7 +474,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
     } catch (e: any) {
       return fallbackAnalysisResult(
         input,
-        `ai666 脚本分析解析失败。provider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 280)} reason=${String(e?.message ?? e)}`,
+        `VectorEngine 脚本分析解析失败。provider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 280)} reason=${String(e?.message ?? e)}`,
       )
     }
   }

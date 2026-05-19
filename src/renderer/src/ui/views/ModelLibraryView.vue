@@ -168,7 +168,7 @@ const imageProviderMissingText = computed(() => {
     : imageProviderPrimary.value === 'grsai'
       ? '请先在设置中心配置 GRS.AI API Key'
       : imageProviderPrimary.value === 'apifox_hub'
-        ? '请先在设置中心配置 ai666 图片 API Key'
+        ? '请先在设置中心配置 VectorEngine 图片 API Key'
         : '请先在设置中心配置图片生成 API Key'
 })
 
@@ -590,7 +590,7 @@ async function generateModel() {
         : imageProviderPrimary.value === 'grsai'
           ? '请先配置 GRS.AI API Key'
           : imageProviderPrimary.value === 'apifox_hub'
-            ? '请先配置 ai666 图片 API Key'
+            ? '请先配置 VectorEngine 图片 API Key'
             : '请先配置 OpenAI API Key'
     return
   }

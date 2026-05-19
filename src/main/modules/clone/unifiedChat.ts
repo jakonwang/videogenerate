@@ -1,13 +1,17 @@
 import { cleanAiText, extractModelMessageContent } from './aiResponse'
+import { resolveApifoxHubCredentials } from './apifoxProfile'
 import type { ModelCredentials } from './types'
 
+const VECTOR_ENGINE_LABEL = 'VectorEngine'
+
 function baseUrl(credentials: ModelCredentials) {
-  return String(credentials.apifoxHub?.baseUrl || '').trim().replace(/\/+$/, '')
+  return String(resolveApifoxHubCredentials(credentials, 'chat')?.baseUrl || '').trim().replace(/\/+$/, '')
 }
 
 function apiKey(credentials: ModelCredentials) {
-  const key = String(credentials.apifoxHub?.apiKey || '').trim()
-  if (!credentials.apifoxHub?.enabled || !key) throw new Error('未启用聚合接口对话模型')
+  const cfg = resolveApifoxHubCredentials(credentials, 'chat')
+  const key = String(cfg?.apiKey || '').trim()
+  if (!cfg?.enabled || !key) throw new Error(`未启用 ${VECTOR_ENGINE_LABEL} 对话模型或缺少 API Key`)
   return key
 }
 
@@ -16,13 +20,14 @@ export async function generateChatCompletion(input: {
   system?: string
   prompt: string
 }) {
-  const cfg = input.credentials.apifoxHub!
+  const cfg = resolveApifoxHubCredentials(input.credentials, 'chat')!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
 
   let url = `${root}/v1/chat/completions`
   let headers: Record<string, string> = {
     Authorization: `Bearer ${key}`,
+    'x-api-key': key,
     'Content-Type': 'application/json',
   }
   let body: any = {
@@ -61,7 +66,7 @@ export async function generateChatCompletion(input: {
     body: JSON.stringify(body),
   })
   const text = await res.text()
-  if (!res.ok) throw new Error(`聚合接口对话请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 对话请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
 
   let content = ''
   if (cfg.chatEndpointStyle === 'gemini_native') {

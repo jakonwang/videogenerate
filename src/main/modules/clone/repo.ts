@@ -1,6 +1,8 @@
 ﻿import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { readFile, readdir } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import {
   decryptRuntimeString,
   encryptRuntimeString,
@@ -8,6 +10,14 @@ import {
 } from '../../lib/runtimeCrypto'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { getAppPaths } from '../../lib/paths'
+import {
+  canInitializeCloneSqlite,
+  getCloneSqliteUnavailableReason,
+  initializeCloneSqlite,
+  isCloneSqliteEmpty,
+  readCloneDbFromSqlite,
+  writeCloneDbToSqlite,
+} from './sqlite'
 import type {
   CloneGenerationPolicy,
   CloneGenerationQueueJob,
@@ -18,6 +28,7 @@ import type {
   ClonePipelineStatus,
   CloneProject,
   CloneProductType,
+  CloneRunMode,
   CloneRealismStyle,
   CloneRhythmProfile,
   CloneStrength,
@@ -31,6 +42,7 @@ import type {
   CloneFrameCacheEntry,
   CloneCloudClipCacheEntry,
   CloneShotVideoOutput,
+  ApifoxHubCredentials,
 } from './types'
 import { buildReferenceLock } from './prompt'
 
@@ -46,6 +58,8 @@ type CloneSettingsShape = {
 
 const cloneDbPath = () => join(getAppPaths().dbDir, 'clone-projects.json')
 const cloneSettingsPath = () => join(getAppPaths().dbDir, 'clone-settings.json')
+let cloneDbMutationQueue: Promise<unknown> = Promise.resolve()
+let cloneSqliteFallbackLogged = false
 
 function now() {
   return Date.now()
@@ -229,6 +243,10 @@ function inferMarket(locale: CloneLocale): 'VN' | 'TH' | 'US' | 'GLOBAL' {
 
 function inferLanguage(locale: CloneLocale) {
   return locale === 'zh-CN' ? 'zh-CN' : 'vi-VN'
+}
+
+function normalizeRunMode(value: unknown): CloneRunMode {
+  return value === 'auto' ? 'auto' : 'manual'
 }
 
 function inferBeatPurpose(
@@ -444,11 +462,115 @@ function normalizeAi666VideoModel(value: unknown, fallback: string) {
   return mapped || fallback
 }
 
+function normalizeVectorEngineBaseUrl(value: unknown) {
+  return String(value ?? '').trim().replace(/\/+$/, '')
+}
+
+function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
+  return {
+    enabled: Boolean(parsed?.enabled ?? true),
+    baseUrl: normalizeVectorEngineBaseUrl(parsed?.baseUrl),
+    apiKey: String(parsed?.apiKey ?? '').trim() || undefined,
+    chatProvider:
+      parsed?.chatProvider === 'anthropic' || parsed?.chatProvider === 'gemini'
+        ? parsed.chatProvider
+        : 'openai',
+    chatModel: String(parsed?.chatModel ?? '').trim() || 'gpt-4.1-mini',
+    chatEndpointStyle:
+      parsed?.chatEndpointStyle === 'anthropic_native' || parsed?.chatEndpointStyle === 'gemini_native'
+        ? parsed.chatEndpointStyle
+        : 'openai_chat',
+    imageProvider:
+      parsed?.imageProvider === 'gemini' || parsed?.imageProvider === 'jimeng' || parsed?.imageProvider === 'midjourney'
+        ? parsed.imageProvider
+        : 'openai',
+    imageModel: String(parsed?.imageModel ?? '').trim() || 'gpt-image-1',
+    imageEditModel: String(parsed?.imageEditModel ?? '').trim() || undefined,
+    imageEndpointStyle:
+      parsed?.imageEndpointStyle === 'official_rest' || parsed?.imageEndpointStyle === 'midjourney_task'
+        ? parsed.imageEndpointStyle
+        : 'openai_images',
+    videoProvider:
+      parsed?.videoProvider === 'sora' ||
+      parsed?.videoProvider === 'veo' ||
+      parsed?.videoProvider === 'grok' ||
+      parsed?.videoProvider === 'jimeng' ||
+      parsed?.videoProvider === 'vidu' ||
+      parsed?.videoProvider === 'kling' ||
+      parsed?.videoProvider === 'seedance2'
+        ? parsed.videoProvider
+        : 'openai_video',
+    textToVideoModel: normalizeAi666VideoModel(parsed?.textToVideoModel, 'veo_3_1-lite'),
+    imageToVideoModel: normalizeAi666VideoModel(parsed?.imageToVideoModel, 'veo_3_1-lite'),
+    startEndVideoModel: normalizeAi666VideoModel(parsed?.startEndVideoModel, 'veo_3_1-lite'),
+    referenceVideoModel: normalizeAi666VideoModel(parsed?.referenceVideoModel, 'veo_3_1-lite'),
+    videoEndpointStyle: parsed?.videoEndpointStyle === 'official_rest' ? 'official_rest' : 'openai_video',
+    defaultPollIntervalMs: Math.max(1000, Number(parsed?.defaultPollIntervalMs ?? 2000) || 2000),
+    defaultTimeoutMs: Math.max(30000, Number(parsed?.defaultTimeoutMs ?? 600000) || 600000),
+  }
+}
+
+function canUseCloneSqlite() {
+  const supported = canInitializeCloneSqlite()
+  if (!supported && !cloneSqliteFallbackLogged) {
+    cloneSqliteFallbackLogged = true
+    console.warn(
+      `[clone-repo] SQLite unavailable, fallback to JSON storage: ${getCloneSqliteUnavailableReason() || 'unknown reason'}`,
+    )
+  }
+  return supported
+}
+
+async function readCloneDbSource(): Promise<CloneDbShape> {
+  if (canUseCloneSqlite()) {
+    const db = readCloneDbFromSqlite()
+    return {
+      projects: Array.isArray(db.projects) ? db.projects : [],
+      modelIdentityLibrary: Array.isArray(db.modelIdentityLibrary) ? db.modelIdentityLibrary : [],
+    }
+  }
+  return await readCloneDbFile()
+}
+
+async function writeCloneDbSource(input: CloneDbShape) {
+  const normalized: CloneDbShape = {
+    projects: Array.isArray(input.projects) ? input.projects : [],
+    modelIdentityLibrary: Array.isArray(input.modelIdentityLibrary) ? input.modelIdentityLibrary : [],
+  }
+  if (canUseCloneSqlite()) {
+    writeCloneDbToSqlite({
+      projects: normalized.projects,
+      modelIdentityLibrary: normalized.modelIdentityLibrary ?? [],
+    })
+    return
+  }
+  await writeJsonFile(cloneDbPath(), normalized)
+}
+
+function queueCloneDbMutation<T>(task: () => Promise<T>): Promise<T> {
+  const next = cloneDbMutationQueue.then(task, task)
+  cloneDbMutationQueue = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
+
 function inferAspectRatio(value: unknown, fallback: '9:16' | '16:9' = '9:16'): '9:16' | '16:9' {
   return value === '16:9' ? '16:9' : value === '9:16' ? '9:16' : fallback
 }
 
 function normalizeCredentials(parsed: any): ModelCredentials {
+  const ai666Hub = normalizeApifoxHubCredentials(parsed?.ai666Hub ?? parsed?.apifoxHub)
+  const vectorEngineHub = normalizeApifoxHubCredentials(parsed?.vectorEngineHub ?? parsed?.apifoxHub)
+  const profile: 'ai666' | 'vectorengine' = parsed?.apifoxHubProfile === 'ai666' ? 'ai666' : 'vectorengine'
+  const videoProfile: 'ai666' | 'vectorengine' =
+    parsed?.videoApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.videoApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
+  const imageProfile: 'ai666' | 'vectorengine' =
+    parsed?.imageApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.imageApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
+  const chatProfile: 'ai666' | 'vectorengine' =
+    parsed?.chatApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.chatApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
+  const activeHub = videoProfile === 'ai666' ? ai666Hub : vectorEngineHub
   return {
     seedanceApiKey: String(parsed?.seedanceApiKey ?? '').trim() || undefined,
     seedanceHost: String(parsed?.seedanceHost ?? '').trim() || 'https://ark.ap-southeast.bytepluses.com',
@@ -480,47 +602,13 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     imageProviderPrimary: normalizeImageProvider(parsed?.imageProviderPrimary, 'apifox_hub'),
     klingImageModel: String(parsed?.klingImageModel ?? '').trim() || 'openai/gpt-image-1/edit',
     grsaiImageModel: String(parsed?.grsaiImageModel ?? '').trim() || 'gpt-image-2',
-    apifoxHub: {
-      enabled: Boolean(parsed?.apifoxHub?.enabled ?? true),
-      baseUrl: String(parsed?.apifoxHub?.baseUrl ?? '').trim() || 'https://api.example.com',
-      apiKey: String(parsed?.apifoxHub?.apiKey ?? '').trim() || undefined,
-      chatProvider:
-        parsed?.apifoxHub?.chatProvider === 'anthropic' || parsed?.apifoxHub?.chatProvider === 'gemini'
-          ? parsed.apifoxHub.chatProvider
-          : 'openai',
-      chatModel: String(parsed?.apifoxHub?.chatModel ?? '').trim() || 'gpt-5.2',
-      chatEndpointStyle:
-        parsed?.apifoxHub?.chatEndpointStyle === 'anthropic_native' || parsed?.apifoxHub?.chatEndpointStyle === 'gemini_native'
-          ? parsed.apifoxHub.chatEndpointStyle
-          : 'openai_chat',
-      imageProvider:
-        parsed?.apifoxHub?.imageProvider === 'gemini' || parsed?.apifoxHub?.imageProvider === 'jimeng' || parsed?.apifoxHub?.imageProvider === 'midjourney'
-          ? parsed.apifoxHub.imageProvider
-          : 'openai',
-      imageModel: String(parsed?.apifoxHub?.imageModel ?? '').trim() || 'gpt-image-2',
-      imageEditModel: String(parsed?.apifoxHub?.imageEditModel ?? '').trim() || undefined,
-      imageEndpointStyle:
-        parsed?.apifoxHub?.imageEndpointStyle === 'official_rest' || parsed?.apifoxHub?.imageEndpointStyle === 'midjourney_task'
-          ? parsed.apifoxHub.imageEndpointStyle
-          : 'openai_images',
-      videoProvider:
-        parsed?.apifoxHub?.videoProvider === 'sora' ||
-        parsed?.apifoxHub?.videoProvider === 'veo' ||
-        parsed?.apifoxHub?.videoProvider === 'grok' ||
-        parsed?.apifoxHub?.videoProvider === 'jimeng' ||
-        parsed?.apifoxHub?.videoProvider === 'vidu' ||
-        parsed?.apifoxHub?.videoProvider === 'kling' ||
-        parsed?.apifoxHub?.videoProvider === 'seedance2'
-          ? parsed.apifoxHub.videoProvider
-          : 'openai_video',
-      textToVideoModel: normalizeAi666VideoModel(parsed?.apifoxHub?.textToVideoModel, 'veo_3_1-lite'),
-      imageToVideoModel: normalizeAi666VideoModel(parsed?.apifoxHub?.imageToVideoModel, 'veo_3_1-lite'),
-      startEndVideoModel: normalizeAi666VideoModel(parsed?.apifoxHub?.startEndVideoModel, 'veo_3_1-lite'),
-      referenceVideoModel: normalizeAi666VideoModel(parsed?.apifoxHub?.referenceVideoModel, 'veo_3_1-lite'),
-      videoEndpointStyle: parsed?.apifoxHub?.videoEndpointStyle === 'official_rest' ? 'official_rest' : 'openai_video',
-      defaultPollIntervalMs: Math.max(1000, Number(parsed?.apifoxHub?.defaultPollIntervalMs ?? 2000) || 2000),
-      defaultTimeoutMs: Math.max(30000, Number(parsed?.apifoxHub?.defaultTimeoutMs ?? 600000) || 600000),
-    },
+    apifoxHubProfile: profile,
+    videoApifoxHubProfile: videoProfile,
+    imageApifoxHubProfile: imageProfile,
+    chatApifoxHubProfile: chatProfile,
+    ai666Hub,
+    vectorEngineHub,
+    apifoxHub: activeHub,
   }
 }
 
@@ -924,6 +1012,7 @@ function normalizeProject(p: CloneProject): CloneProject {
         aspectRatio: '9:16' as const,
         status: item?.status === 'cropped' || item?.status === 'failed' ? item.status : 'idle',
         error: String(item?.error ?? '').trim() || undefined,
+        retryCount: typeof item?.retryCount === 'number' ? Number(item.retryCount) : undefined,
         updatedAt: Number(item?.updatedAt ?? now()) || now(),
       }))
     : []
@@ -1014,6 +1103,7 @@ function normalizeProject(p: CloneProject): CloneProject {
             ? (p as any).finalCompose.status
             : 'idle',
         outputPath: String((p as any).finalCompose.outputPath ?? '').trim() || undefined,
+        coverImagePath: String((p as any).finalCompose.coverImagePath ?? '').trim() || undefined,
         error: String((p as any).finalCompose.error ?? '').trim() || undefined,
         updatedAt: Number((p as any).finalCompose.updatedAt ?? now()),
       }
@@ -1048,6 +1138,7 @@ function normalizeProject(p: CloneProject): CloneProject {
     description: String((p as any)?.description ?? '').trim() || undefined,
     archived: Boolean((p as any)?.archived ?? false),
     locale: p.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN',
+    runMode: normalizeRunMode((p as any)?.runMode),
     strength: 'structure',
     policy: {
       ...(p.policy ?? defaultPolicy()),
@@ -1111,6 +1202,37 @@ function normalizeProject(p: CloneProject): CloneProject {
     storyboardGridBatches,
     storyboardFrames,
     shotVideoOutputs: Array.from(mergedShotVideoOutputs.values()),
+    autoFlowStatus: (p as any).autoFlowStatus
+      ? {
+          enabled: Boolean((p as any).autoFlowStatus.enabled),
+          targetStage:
+            String((p as any).autoFlowStatus.targetStage ?? '').trim() === 'final_compose'
+              ? ('final_compose' as const)
+              : ('storyboard_video_generation' as const),
+          status:
+            (p as any).autoFlowStatus.status === 'running' ||
+            (p as any).autoFlowStatus.status === 'done' ||
+            (p as any).autoFlowStatus.status === 'partial_failed' ||
+            (p as any).autoFlowStatus.status === 'failed'
+              ? (p as any).autoFlowStatus.status
+              : 'idle',
+          currentStage:
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'analyze' ||
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'materials' ||
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'script' ||
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'storyboard_images' ||
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'storyboard_videos' ||
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'quality_gate' ||
+            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'final_compose'
+              ? ((p as any).autoFlowStatus.currentStage as 'analyze' | 'materials' | 'script' | 'storyboard_images' | 'storyboard_videos' | 'quality_gate' | 'final_compose')
+              : undefined,
+          imageRetryLimit: Number((p as any).autoFlowStatus.imageRetryLimit ?? 2) || 2,
+          videoRetryLimit: Number((p as any).autoFlowStatus.videoRetryLimit ?? 2) || 2,
+          lastStartedAt: Number((p as any).autoFlowStatus.lastStartedAt ?? 0) || undefined,
+          lastCompletedAt: Number((p as any).autoFlowStatus.lastCompletedAt ?? 0) || undefined,
+          lastSummary: String((p as any).autoFlowStatus.lastSummary ?? '').trim() || undefined,
+        }
+      : undefined,
     finalCompose,
     previewPipeline: (p as any).previewPipeline
       ? {
@@ -1136,153 +1258,155 @@ function normalizeProject(p: CloneProject): CloneProject {
 
 export const cloneRepo = {
   async readDb(): Promise<CloneDbShape> {
-    const db = await readCloneDbFile()
-    const normalizedLibrary = Array.isArray(db.modelIdentityLibrary) ? db.modelIdentityLibrary.map(normalizeIdentityLibraryItem) : []
-    const normalizedProjects = db.projects.map(normalizeProject)
-    let changed = JSON.stringify(normalizedLibrary) !== JSON.stringify(db.modelIdentityLibrary ?? [])
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      const normalizedLibrary = Array.isArray(db.modelIdentityLibrary) ? db.modelIdentityLibrary.map(normalizeIdentityLibraryItem) : []
+      const normalizedProjects = db.projects.map(normalizeProject)
+      let changed = JSON.stringify(normalizedLibrary) !== JSON.stringify(db.modelIdentityLibrary ?? [])
 
-    const libraryById = new Map(normalizedLibrary.map((x) => [x.id, x]))
-    const existingImagePathSet = new Set(
-      normalizedLibrary.flatMap((x) => x.imagePaths.map((p) => String(p || '').trim()).filter(Boolean)),
-    )
+      const libraryById = new Map(normalizedLibrary.map((x) => [x.id, x]))
+      const existingImagePathSet = new Set(
+        normalizedLibrary.flatMap((x) => x.imagePaths.map((p) => String(p || '').trim()).filter(Boolean)),
+      )
 
-    // Recover legacy model packs/snapshots from every project into the global model library.
-    for (const project of normalizedProjects) {
-      const legacyPacks = Array.isArray(project.modelIdentityPacks) ? project.modelIdentityPacks : []
-      const candidates: Array<any> = []
-      if (project.selectedModelIdentitySnapshot) {
-        candidates.push({
-          ...project.selectedModelIdentitySnapshot,
-          id: project.selectedModelIdentitySnapshot.id || project.selectedModelIdentityId,
-        })
-      }
-      for (const pack of legacyPacks) {
-        if (!pack) continue
-        candidates.push(pack)
-      }
-      for (const item of candidates) {
-        const candidateId = String(item?.id ?? '').trim()
-        if (!candidateId || libraryById.has(candidateId)) continue
-        const recovered = normalizeIdentityLibraryItem({
-          ...item,
-          id: candidateId,
-          name: String(item?.name ?? '').trim() || nextIdentityName(normalizedLibrary),
-          coverImagePath: item?.coverImagePath ?? item?.imagePaths?.[0],
-        })
-        normalizedLibrary.unshift(recovered)
-        libraryById.set(recovered.id, recovered)
-        for (const p of recovered.imagePaths) existingImagePathSet.add(String(p || '').trim())
-        changed = true
-      }
-    }
-
-    // Recover orphan model-identity image folders from disk when db records were lost.
-    if (normalizedLibrary.length <= 1) {
-      try {
-        const viralCloneRoot = join(getAppPaths().dataDir, 'viral-clone')
-        const rootDirs = await readdir(viralCloneRoot, { withFileTypes: true })
-        for (const rootDir of rootDirs) {
-          if (!rootDir.isDirectory()) continue
-          const projectId = rootDir.name
-          const modelDir = join(viralCloneRoot, projectId, 'model-identity')
-          let images: string[] = []
-          try {
-            images = (await readdir(modelDir, { withFileTypes: true }))
-              .filter((x) => x.isFile() && /\.png$/i.test(x.name))
-              .map((x) => join(modelDir, x.name))
-          } catch {
-            continue
-          }
-          if (!images.length) continue
-          images.sort((a, b) => b.localeCompare(a))
-          const uniqueNew = images.filter((p) => !existingImagePathSet.has(p))
-          if (!uniqueNew.length) continue
-          const recoveredId = `recovered-${projectId}`
-          if (libraryById.has(recoveredId)) continue
+      // Recover legacy model packs/snapshots from every project into the global model library.
+      for (const project of normalizedProjects) {
+        const legacyPacks = Array.isArray(project.modelIdentityPacks) ? project.modelIdentityPacks : []
+        const candidates: Array<any> = []
+        if (project.selectedModelIdentitySnapshot) {
+          candidates.push({
+            ...project.selectedModelIdentitySnapshot,
+            id: project.selectedModelIdentitySnapshot.id || project.selectedModelIdentityId,
+          })
+        }
+        for (const pack of legacyPacks) {
+          if (!pack) continue
+          candidates.push(pack)
+        }
+        for (const item of candidates) {
+          const candidateId = String(item?.id ?? '').trim()
+          if (!candidateId || libraryById.has(candidateId)) continue
           const recovered = normalizeIdentityLibraryItem({
-            id: recoveredId,
-            status: 'done',
-            name: `恢复模特 ${projectId.slice(0, 8)}`,
-            productType: 'general',
-            market: 'Southeast Asian market',
-            gender: 'female',
-            ageRange: '20-28',
-            hairStyle: 'natural dark hair',
-            skinTone: 'natural warm skin tone',
-            outfitStyle: 'clean casual outfit',
-            mood: 'calm confident friendly',
-            sceneStyle: 'soft daylight social commerce studio',
-            description: `Recovered from local folder ${projectId}/model-identity`,
-            imagePaths: uniqueNew,
-            coverImagePath: uniqueNew[0],
-            model: 'recovered-local',
+            ...item,
+            id: candidateId,
+            name: String(item?.name ?? '').trim() || nextIdentityName(normalizedLibrary),
+            coverImagePath: item?.coverImagePath ?? item?.imagePaths?.[0],
           })
           normalizedLibrary.unshift(recovered)
           libraryById.set(recovered.id, recovered)
           for (const p of recovered.imagePaths) existingImagePathSet.add(String(p || '').trim())
           changed = true
         }
-      } catch {
-        // ignore recovery scan errors
       }
-    }
 
-    const migratedProjects = normalizedProjects.map((project) => {
-      const next = { ...project }
-      const hasSelectedIdentity = Boolean(next.selectedModelIdentityId)
-      const legacyPacks = next.modelIdentityPacks ?? []
-      if (!hasSelectedIdentity && legacyPacks.length) {
-        const selectedLegacy =
-          legacyPacks.find((x) => x.id === next.selectedModelIdentityPackId) ??
-          legacyPacks.find((x) => x.confirmed) ??
-          legacyPacks[0]
-        if (selectedLegacy) {
-          let libraryItem = libraryById.get(selectedLegacy.id)
-          if (!libraryItem) {
-            libraryItem = normalizeIdentityLibraryItem({
-              ...selectedLegacy,
-              name: nextIdentityName(normalizedLibrary),
-              coverImagePath: selectedLegacy.imagePaths?.[0],
-            })
-            normalizedLibrary.unshift(libraryItem)
-            libraryById.set(libraryItem.id, libraryItem)
-            changed = true
-          }
-          next.selectedModelIdentityId = libraryItem.id
-          next.selectedModelIdentitySnapshot = snapshotFromLibraryItem(libraryItem)
-          changed = true
-        }
-      } else if (next.selectedModelIdentityId) {
-        const linked = libraryById.get(next.selectedModelIdentityId)
-        if (linked) {
-          next.selectedModelIdentitySnapshot = snapshotFromLibraryItem(linked)
-        } else {
-          const fallbackSource =
-            next.selectedModelIdentitySnapshot ??
-            legacyPacks.find((x) => x.id === next.selectedModelIdentityId) ??
-            legacyPacks[0]
-          if (fallbackSource) {
+      // Recover orphan model-identity image folders from disk when db records were lost.
+      if (normalizedLibrary.length <= 1) {
+        try {
+          const viralCloneRoot = join(getAppPaths().dataDir, 'viral-clone')
+          const rootDirs = await readdir(viralCloneRoot, { withFileTypes: true })
+          for (const rootDir of rootDirs) {
+            if (!rootDir.isDirectory()) continue
+            const projectId = rootDir.name
+            const modelDir = join(viralCloneRoot, projectId, 'model-identity')
+            let images: string[] = []
+            try {
+              images = (await readdir(modelDir, { withFileTypes: true }))
+                .filter((x) => x.isFile() && /\.png$/i.test(x.name))
+                .map((x) => join(modelDir, x.name))
+            } catch {
+              continue
+            }
+            if (!images.length) continue
+            images.sort((a, b) => b.localeCompare(a))
+            const uniqueNew = images.filter((p) => !existingImagePathSet.has(p))
+            if (!uniqueNew.length) continue
+            const recoveredId = `recovered-${projectId}`
+            if (libraryById.has(recoveredId)) continue
             const recovered = normalizeIdentityLibraryItem({
-              ...fallbackSource,
-              id: next.selectedModelIdentityId,
-              name: String((fallbackSource as any)?.name ?? '').trim() || nextIdentityName(normalizedLibrary),
-              coverImagePath: (fallbackSource as any)?.coverImagePath ?? (fallbackSource as any)?.imagePaths?.[0],
+              id: recoveredId,
+              status: 'done',
+              name: `恢复模特 ${projectId.slice(0, 8)}`,
+              productType: 'general',
+              market: 'Southeast Asian market',
+              gender: 'female',
+              ageRange: '20-28',
+              hairStyle: 'natural dark hair',
+              skinTone: 'natural warm skin tone',
+              outfitStyle: 'clean casual outfit',
+              mood: 'calm confident friendly',
+              sceneStyle: 'soft daylight social commerce studio',
+              description: `Recovered from local folder ${projectId}/model-identity`,
+              imagePaths: uniqueNew,
+              coverImagePath: uniqueNew[0],
+              model: 'recovered-local',
             })
             normalizedLibrary.unshift(recovered)
             libraryById.set(recovered.id, recovered)
-            next.selectedModelIdentitySnapshot = snapshotFromLibraryItem(recovered)
+            for (const p of recovered.imagePaths) existingImagePathSet.add(String(p || '').trim())
             changed = true
           }
+        } catch {
+          // ignore recovery scan errors
         }
       }
-      next.modelIdentityPacks = legacyPacks.length ? legacyPacks : linkedLegacyPacks(next.selectedModelIdentitySnapshot, next.selectedModelIdentityId)
-      return next
-    })
 
-    if (changed || JSON.stringify(migratedProjects) !== JSON.stringify(db.projects)) {
-      await writeJsonFile(cloneDbPath(), { projects: migratedProjects, modelIdentityLibrary: normalizedLibrary })
-    }
-    return { projects: migratedProjects, modelIdentityLibrary: normalizedLibrary }
+      const migratedProjects = normalizedProjects.map((project) => {
+        const next = { ...project }
+        const hasSelectedIdentity = Boolean(next.selectedModelIdentityId)
+        const legacyPacks = next.modelIdentityPacks ?? []
+        if (!hasSelectedIdentity && legacyPacks.length) {
+          const selectedLegacy =
+            legacyPacks.find((x) => x.id === next.selectedModelIdentityPackId) ??
+            legacyPacks.find((x) => x.confirmed) ??
+            legacyPacks[0]
+          if (selectedLegacy) {
+            let libraryItem = libraryById.get(selectedLegacy.id)
+            if (!libraryItem) {
+              libraryItem = normalizeIdentityLibraryItem({
+                ...selectedLegacy,
+                name: nextIdentityName(normalizedLibrary),
+                coverImagePath: selectedLegacy.imagePaths?.[0],
+              })
+              normalizedLibrary.unshift(libraryItem)
+              libraryById.set(libraryItem.id, libraryItem)
+              changed = true
+            }
+            next.selectedModelIdentityId = libraryItem.id
+            next.selectedModelIdentitySnapshot = snapshotFromLibraryItem(libraryItem)
+            changed = true
+          }
+        } else if (next.selectedModelIdentityId) {
+          const linked = libraryById.get(next.selectedModelIdentityId)
+          if (linked) {
+            next.selectedModelIdentitySnapshot = snapshotFromLibraryItem(linked)
+          } else {
+            const fallbackSource =
+              next.selectedModelIdentitySnapshot ??
+              legacyPacks.find((x) => x.id === next.selectedModelIdentityId) ??
+              legacyPacks[0]
+            if (fallbackSource) {
+              const recovered = normalizeIdentityLibraryItem({
+                ...fallbackSource,
+                id: next.selectedModelIdentityId,
+                name: String((fallbackSource as any)?.name ?? '').trim() || nextIdentityName(normalizedLibrary),
+                coverImagePath: (fallbackSource as any)?.coverImagePath ?? (fallbackSource as any)?.imagePaths?.[0],
+              })
+              normalizedLibrary.unshift(recovered)
+              libraryById.set(recovered.id, recovered)
+              next.selectedModelIdentitySnapshot = snapshotFromLibraryItem(recovered)
+              changed = true
+            }
+          }
+        }
+        next.modelIdentityPacks = legacyPacks.length ? legacyPacks : linkedLegacyPacks(next.selectedModelIdentitySnapshot, next.selectedModelIdentityId)
+        return next
+      })
+
+      if (changed || JSON.stringify(migratedProjects) !== JSON.stringify(db.projects)) {
+        await writeCloneDbSource({ projects: migratedProjects, modelIdentityLibrary: normalizedLibrary })
+      }
+      return { projects: migratedProjects, modelIdentityLibrary: normalizedLibrary }
+    })
   },
 
   async listProjects(): Promise<CloneProject[]> {
@@ -1298,56 +1422,66 @@ export const cloneRepo = {
   async createProject(input: {
     locale: CloneLocale
     strength: CloneStrength
+    runMode?: CloneRunMode
     referenceVideoPath: string
     referenceVideoName: string
     title?: string
     description?: string
   }): Promise<CloneProject> {
-    const db = await readJsonFile<CloneDbShape>(cloneDbPath(), { projects: [] })
-    const item: CloneProject = {
-      id: randomUUID(),
-      createdAt: now(),
-      updatedAt: now(),
-      title: String(input.title ?? '').trim() || defaultCloneProjectTitle(now()),
-      description: String(input.description ?? '').trim() || undefined,
-      archived: false,
-      status: 'draft',
-      locale: input.locale,
-      strength: input.strength,
-      referenceVideoPath: input.referenceVideoPath,
-      referenceVideoName: input.referenceVideoName,
-      baseBlueprint: null,
-      blueprint: null,
-      aiTasks: [],
-      reviewDecisions: {},
-      sessions: [],
-      modelIdentityPacks: [],
-      defaultGenerationPolicy: {
-        qualityProfile: 'high',
-        variantStrength: 'medium',
-      },
-      policy: defaultPolicy(),
-    }
-    db.projects.unshift(item)
-    await writeJsonFile(cloneDbPath(), db)
-    return item
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      const item: CloneProject = {
+        id: randomUUID(),
+        createdAt: now(),
+        updatedAt: now(),
+        title: String(input.title ?? '').trim() || defaultCloneProjectTitle(now()),
+        description: String(input.description ?? '').trim() || undefined,
+        archived: false,
+        status: 'draft',
+        runMode: normalizeRunMode(input.runMode),
+        locale: input.locale,
+        strength: input.strength,
+        referenceVideoPath: input.referenceVideoPath,
+        referenceVideoName: input.referenceVideoName,
+        baseBlueprint: null,
+        blueprint: null,
+        aiTasks: [],
+        reviewDecisions: {},
+        sessions: [],
+        modelIdentityPacks: [],
+        defaultGenerationPolicy: {
+          qualityProfile: 'high',
+          variantStrength: 'medium',
+        },
+        policy: defaultPolicy(),
+      }
+      db.projects = Array.isArray(db.projects) ? db.projects : []
+      db.projects.unshift(item)
+      await writeCloneDbSource(db)
+      return item
+    })
   },
 
   async upsertProject(input: CloneProject): Promise<CloneProject> {
-    const db = await this.readDb()
-    const idx = db.projects.findIndex((x) => x.id === input.id)
-    const next = normalizeProject({ ...input, updatedAt: now() })
-    if (idx >= 0) db.projects[idx] = next
-    else db.projects.unshift(next)
-    await writeJsonFile(cloneDbPath(), db)
-    return next
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      db.projects = Array.isArray(db.projects) ? db.projects.map(normalizeProject) : []
+      const idx = db.projects.findIndex((x) => x.id === input.id)
+      const next = normalizeProject({ ...input, updatedAt: now() })
+      if (idx >= 0) db.projects[idx] = next
+      else db.projects.unshift(next)
+      await writeCloneDbSource(db)
+      return next
+    })
   },
 
   async removeProject(id: string): Promise<{ ok: true }> {
-    const db = await this.readDb()
-    db.projects = db.projects.filter((x) => x.id !== id)
-    await writeJsonFile(cloneDbPath(), db)
-    return { ok: true }
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      db.projects = (Array.isArray(db.projects) ? db.projects : []).filter((x) => x.id !== id)
+      await writeCloneDbSource(db)
+      return { ok: true }
+    })
   },
 
   async listModelIdentityLibrary(): Promise<ModelIdentityLibraryItem[]> {
@@ -1361,46 +1495,61 @@ export const cloneRepo = {
   },
 
   async upsertModelIdentity(input: ModelIdentityLibraryItem): Promise<ModelIdentityLibraryItem> {
-    const db = await this.readDb()
-    const idx = (db.modelIdentityLibrary ?? []).findIndex((x) => x.id === input.id)
-    const next = normalizeIdentityLibraryItem({ ...input, updatedAt: now() })
-    if (!db.modelIdentityLibrary) db.modelIdentityLibrary = []
-    if (idx >= 0) db.modelIdentityLibrary[idx] = next
-    else db.modelIdentityLibrary.unshift(next)
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      const idx = (db.modelIdentityLibrary ?? []).findIndex((x) => x.id === input.id)
+      const next = normalizeIdentityLibraryItem({ ...input, updatedAt: now() })
+      if (!db.modelIdentityLibrary) db.modelIdentityLibrary = []
+      if (idx >= 0) db.modelIdentityLibrary[idx] = next
+      else db.modelIdentityLibrary.unshift(next)
 
-    db.projects = db.projects.map((project) => {
-      if (project.selectedModelIdentityId !== next.id) return project
-      return normalizeProject({
-        ...project,
-        selectedModelIdentitySnapshot: snapshotFromLibraryItem(next),
-        selectedModelIdentityPackId: next.id,
-        modelIdentityPacks: linkedLegacyPacks(snapshotFromLibraryItem(next), next.id),
+      db.projects = (Array.isArray(db.projects) ? db.projects : []).map((project) => {
+        const normalizedProject = normalizeProject(project)
+        if (normalizedProject.selectedModelIdentityId !== next.id) return normalizedProject
+        return normalizeProject({
+          ...normalizedProject,
+          selectedModelIdentitySnapshot: snapshotFromLibraryItem(next),
+          selectedModelIdentityPackId: next.id,
+          modelIdentityPacks: linkedLegacyPacks(snapshotFromLibraryItem(next), next.id),
+        })
       })
+      await writeCloneDbSource(db)
+      return next
     })
-    await writeJsonFile(cloneDbPath(), db)
-    return next
   },
 
   async deleteModelIdentity(id: string): Promise<{ ok: true }> {
-    const db = await this.readDb()
-    db.modelIdentityLibrary = (db.modelIdentityLibrary ?? []).filter((x) => x.id !== id)
-    db.projects = db.projects.map((project) => {
-      if (project.selectedModelIdentityId !== id) return project
-      return normalizeProject({
-        ...project,
-        selectedModelIdentityId: id,
-        selectedModelIdentityPackId: undefined,
-        selectedModelIdentitySnapshot: project.selectedModelIdentitySnapshot,
-        modelIdentityPacks: [],
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      db.modelIdentityLibrary = (db.modelIdentityLibrary ?? []).filter((x) => x.id !== id)
+      db.projects = (Array.isArray(db.projects) ? db.projects : []).map((project) => {
+        const normalizedProject = normalizeProject(project)
+        if (normalizedProject.selectedModelIdentityId !== id) return normalizedProject
+        return normalizeProject({
+          ...normalizedProject,
+          selectedModelIdentityId: id,
+          selectedModelIdentityPackId: undefined,
+          selectedModelIdentitySnapshot: normalizedProject.selectedModelIdentitySnapshot,
+          modelIdentityPacks: [],
+        })
       })
+      await writeCloneDbSource(db)
+      return { ok: true }
     })
-    await writeJsonFile(cloneDbPath(), db)
-    return { ok: true }
   },
 
   async getCredentials(): Promise<ModelCredentials> {
     const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
     return decryptCredentials(settings)
+  },
+
+  getCredentialsSync(): ModelCredentials {
+    try {
+      const raw = readFileSync(cloneSettingsPath(), 'utf8')
+      return decryptCredentials(JSON.parse(raw || '{}') as CloneSettingsShape)
+    } catch {
+      return decryptCredentials({})
+    }
   },
 
   async setCredentials(input: ModelCredentials): Promise<{ ok: true }> {
@@ -1410,7 +1559,18 @@ export const cloneRepo = {
 
 
   async ensureSeed() {
-    await readJsonFile<CloneDbShape>(cloneDbPath(), { projects: [] })
+    if (canUseCloneSqlite()) {
+      initializeCloneSqlite()
+      if (isCloneSqliteEmpty() && existsSync(cloneDbPath())) {
+        const legacyDb = await readCloneDbFile()
+        writeCloneDbToSqlite({
+          projects: Array.isArray(legacyDb.projects) ? legacyDb.projects : [],
+          modelIdentityLibrary: Array.isArray(legacyDb.modelIdentityLibrary) ? legacyDb.modelIdentityLibrary : [],
+        })
+      }
+    } else {
+      await readJsonFile<CloneDbShape>(cloneDbPath(), { projects: [] })
+    }
     await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
   },
 }
