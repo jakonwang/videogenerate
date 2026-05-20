@@ -133,6 +133,27 @@ type ShotVideoOutput = {
   completedAt?: number
 }
 
+type ShotImagePromptPreview = {
+  shotId: string
+  promptBuildSentinel?: string
+  promptCompilerVersion?: string
+  consistencyMode?: string
+  productType?: string
+  compiledPrompt?: string
+  compiledNegativePrompt?: string
+  productDescriptionBlock?: string
+  modelIdentityBlock?: string
+  referenceResponsibilityBlock?: string
+  hasCompiledProductLock?: boolean
+  hasProductDescriptionBlock?: boolean
+  hasModelIdentityBlock?: boolean
+  startPrompt?: string
+  endPrompt?: string
+  negativePrompt?: string
+  referenceImageCount?: number
+  modelIdentityPackId?: string
+}
+
 type FinalCompose = {
   status: string
   outputPath?: string
@@ -272,8 +293,10 @@ const modelModalOpen = ref(false)
 const framePreviewOpen = ref(false)
 const framePreviewPath = ref('')
 const framePreviewTitle = ref('')
+const shotPromptPreviewOpen = ref(false)
 const composeOutputDir = ref('')
 const composeLocalError = ref('')
+const shotPromptCopyMessage = ref('')
 const geelarkPublishModalOpen = ref(false)
 const geelarkPublishSubmitting = ref(false)
 const geelarkAccounts = ref<GeelarkPublishAccount[]>([])
@@ -285,6 +308,10 @@ const selectedShotFilter = ref<'all' | 'ready' | 'failed' | 'pending'>('all')
 const composeAspectRatio = ref<ComposeAspectRatio>('9:16')
 const composeQuality = ref<ComposeQuality>('hd')
 const composeStyle = ref<ComposeStyle>('default')
+const shotImagePromptPreviewLoading = ref(false)
+const shotImagePromptPreviewError = ref('')
+const shotImagePromptPreview = ref<ShotImagePromptPreview | null>(null)
+const shotImagePromptPreviewLoadedShotId = ref('')
 const geelarkPublishForm = reactive({
   publishAccountId: '',
   videoDesc: '',
@@ -650,6 +677,14 @@ const analyzeSummaryCards = computed(() => [
   },
 ])
 const analyzeScriptPreview = computed(() => {
+  const blueprintShotPreview = (current.value?.blueprint?.shots || [])
+    .slice()
+    .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+    .map((shot) => String(shot.scriptText || shot.visualDescription || shot.actionDescription || '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('\n')
+  if (blueprintShotPreview) return blueprintShotPreview
   const globalScript = String(current.value?.blueprint?.globalScript?.content || '').trim()
   if (globalScript) return globalScript
   const beatScript = storyBeats.value
@@ -673,13 +708,6 @@ const analyzeGlobalSections = computed(() => {
 })
 const analyzeReversePrompt = computed(() => safeText(current.value?.blueprint?.globalScript?.reversePrompt, ''))
 const analyzeScriptLines = computed(() => {
-  const globalScript = String(current.value?.blueprint?.globalScript?.content || '').trim()
-  if (globalScript) {
-    return globalScript
-      .split(/\r?\n+/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-  }
   const blueprintShotLines = (current.value?.blueprint?.shots || [])
     .slice()
     .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
@@ -690,6 +718,13 @@ const analyzeScriptLines = computed(() => {
     })
     .filter(Boolean)
   if (blueprintShotLines.length) return blueprintShotLines
+  const globalScript = String(current.value?.blueprint?.globalScript?.content || '').trim()
+  if (globalScript) {
+    return globalScript
+      .split(/\r?\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+  }
   return storyBeats.value
     .map((item, index) => {
       const content = String(item.voiceover || item.onScreenText || item.scriptSegment || item.visualDescription || item.purpose || '').trim()
@@ -697,6 +732,38 @@ const analyzeScriptLines = computed(() => {
       return `${String(index + 1).padStart(2, '0')}  ${content}`
     })
     .filter(Boolean)
+})
+const productAnalysisSnapshot = computed(() => {
+  const analysis = current.value?.baseBlueprint?.consistencyAssets?.productAnalysis || current.value?.blueprint?.consistencyAssets?.productAnalysis
+  if (!analysis) return null
+  return {
+    category: safeText(analysis.category, ''),
+    summary: safeText(analysis.summary, ''),
+    coreSubject: safeText(analysis.coreSubject, ''),
+    connectionStructure: safeText(analysis.connectionStructure, ''),
+    materialDetails: safeText(analysis.materialDetails, ''),
+    wearingPosition: safeText(analysis.wearingPosition, ''),
+    surfaceDetails: safeText(analysis.surfaceDetails, ''),
+    colorDetails: safeText(analysis.colorDetails, ''),
+    geometryDetails: safeText(analysis.geometryDetails, ''),
+    sizeScale: safeText(analysis.sizeScale, ''),
+    matchingRules: Array.isArray(analysis.matchingRules) ? analysis.matchingRules.map((item) => safeText(item, '')).filter(Boolean) : [],
+  }
+})
+const productAnalysisSections = computed(() => {
+  const analysis = productAnalysisSnapshot.value
+  if (!analysis) return []
+  return [
+    { key: 'summary', title: '商品摘要', desc: analysis.summary },
+    { key: 'coreSubject', title: '核心主体', desc: analysis.coreSubject },
+    { key: 'connectionStructure', title: '连接结构', desc: analysis.connectionStructure },
+    { key: 'materialDetails', title: '材质细节', desc: analysis.materialDetails },
+    { key: 'wearingPosition', title: '佩戴/展示位置', desc: analysis.wearingPosition },
+    { key: 'surfaceDetails', title: '表面细节', desc: analysis.surfaceDetails },
+    { key: 'colorDetails', title: '颜色细节', desc: analysis.colorDetails },
+    { key: 'geometryDetails', title: '几何结构', desc: analysis.geometryDetails },
+    { key: 'sizeScale', title: '尺寸比例', desc: analysis.sizeScale },
+  ].filter((item) => item.desc)
 })
 const shotProgressPercent = computed(() => {
   const total = shotVideoOutputs.value.length
@@ -776,7 +843,9 @@ const finalButtonLabel = computed(() => {
   return shotVideoOutputs.value.length ? '重新合成' : '开始合成'
 })
 const analyzePrimaryButtonLabel = computed(() => (referenceSourcePath.value ? '分析脚本' : '上传参考视频'))
-const variantTopCandidate = computed(() => scriptVariants.value[0] || null)
+const selectedVariantCandidate = computed(
+  () => scriptVariants.value.find((item) => item.id === selectedVariantId.value) || scriptVariants.value.find((item) => item.selected) || scriptVariants.value[0] || null,
+)
 const failedShotActionText = computed(() => (failedShotOutputs.value.length ? `重新生成失败项 ${failedShotOutputs.value.length}` : '重新生成失败项'))
 const selectedShotFrame = computed<StoryboardFrame | null>(() =>
   selectedShotOutput.value ? shotFrameMap.value[selectedShotOutput.value.shotId] || null : null,
@@ -1009,6 +1078,113 @@ function setStageLog(message: string, level: RuntimeLogItem['level'] = 'info') {
   stageLog.value = message
   pushRuntimeLog(message, level)
 }
+
+async function copyPromptText(text: string, successMessage: string) {
+  const value = String(text || '').trim()
+  if (!value) return
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      shotPromptCopyMessage.value = successMessage
+      return
+    }
+  } catch {}
+  const ok = window.prompt('请复制以下内容', value)
+  if (ok !== null) {
+    shotPromptCopyMessage.value = successMessage
+  }
+}
+
+async function copyAllShotPrompts() {
+  if (!shotImagePromptPreview.value) return
+  const parts = [
+    `Start Prompt:\n${safeText(shotImagePromptPreview.value.startPrompt, '--')}`,
+    `End Prompt:\n${safeText(shotImagePromptPreview.value.endPrompt, '--')}`,
+    `Negative Prompt:\n${safeText(shotImagePromptPreview.value.negativePrompt || shotImagePromptPreview.value.compiledNegativePrompt, '--')}`,
+  ]
+  await copyPromptText(parts.join('\n\n'), '整套提示词已复制')
+}
+
+async function loadShotImagePromptPreview(shotId?: string, force = false, openModal = false) {
+  const projectId = String(current.value?.id || '').trim()
+  const nextShotId = String(shotId || '').trim()
+  if (!projectId || !nextShotId) {
+    shotImagePromptPreview.value = null
+    shotImagePromptPreviewError.value = ''
+    shotImagePromptPreviewLoadedShotId.value = ''
+    return
+  }
+  if (!force && shotImagePromptPreviewLoadedShotId.value === nextShotId && shotImagePromptPreview.value) return
+  shotImagePromptPreviewLoading.value = true
+  shotImagePromptPreviewError.value = ''
+  try {
+    const result = (await window.api.clone.getShotImagePromptPreview({
+      cloneProjectId: projectId,
+      shotId: nextShotId,
+    })) as ShotImagePromptPreview
+    shotImagePromptPreview.value = result || null
+    shotImagePromptPreviewLoadedShotId.value = nextShotId
+    if (openModal) shotPromptPreviewOpen.value = true
+  } catch (error: any) {
+    shotImagePromptPreview.value = null
+    shotImagePromptPreviewLoadedShotId.value = ''
+    shotImagePromptPreviewError.value = safeText(error?.message ?? error, '分镜图片提示词预览加载失败')
+    if (openModal) shotPromptPreviewOpen.value = true
+  } finally {
+    shotImagePromptPreviewLoading.value = false
+  }
+}
+
+const highlightedStartProductDescription = computed(() => safeText(shotImagePromptPreview.value?.productDescriptionBlock, ''))
+const highlightedEndProductDescription = computed(() => safeText(shotImagePromptPreview.value?.productDescriptionBlock, ''))
+const promptDiagnosticSummary = computed(() => {
+  const startPrompt = safeText(shotImagePromptPreview.value?.startPrompt, '')
+  const endPrompt = safeText(shotImagePromptPreview.value?.endPrompt, '')
+  const preview = shotImagePromptPreview.value
+  const detectBlock = (promptText: string, marker: string) => promptText.includes(marker)
+  const startStats = {
+    length: startPrompt.length,
+    hasCompiledLock: Boolean(preview?.hasCompiledProductLock) || detectBlock(startPrompt, 'STRICT PRODUCT IDENTITY LOCK FOR THIS FRAME'),
+    hasProductDescription: Boolean(preview?.hasProductDescriptionBlock) || detectBlock(startPrompt, 'TEXT PRODUCT DESCRIPTION LOCK'),
+    hasModelLock: Boolean(preview?.hasModelIdentityBlock) || detectBlock(startPrompt, 'STRICT MODEL IDENTITY LOCK'),
+    hasReferenceResponsibility: Boolean(preview?.referenceResponsibilityBlock) || detectBlock(startPrompt, 'PRODUCT REFERENCES LOCK PRODUCT ONLY'),
+  }
+  const endStats = {
+    length: endPrompt.length,
+    hasCompiledLock: Boolean(preview?.hasCompiledProductLock) || detectBlock(endPrompt, 'STRICT PRODUCT IDENTITY LOCK FOR THIS FRAME'),
+    hasProductDescription: Boolean(preview?.hasProductDescriptionBlock) || detectBlock(endPrompt, 'TEXT PRODUCT DESCRIPTION LOCK'),
+    hasModelLock: Boolean(preview?.hasModelIdentityBlock) || detectBlock(endPrompt, 'STRICT MODEL IDENTITY LOCK'),
+    hasReferenceResponsibility: Boolean(preview?.referenceResponsibilityBlock) || detectBlock(endPrompt, 'PRODUCT REFERENCES LOCK PRODUCT ONLY'),
+  }
+  return { start: startStats, end: endStats }
+})
+const promptHealthStatus = computed(() => {
+  const start = promptDiagnosticSummary.value.start
+  const end = promptDiagnosticSummary.value.end
+  const startCoreReady = start.hasCompiledLock && start.hasProductDescription && start.hasModelLock
+  const endCoreReady = end.hasCompiledLock && end.hasProductDescription && end.hasModelLock
+  const hasMissingCore = !startCoreReady || !endCoreReady
+  const hasHighLength = start.length > 1750 || end.length > 1750
+  if (hasMissingCore) {
+    return {
+      tone: 'danger',
+      label: '核心块缺失',
+      message: '商品锁、商品描述或模特锁有缺失，当前 Prompt 不安全。',
+    }
+  }
+  if (hasHighLength) {
+    return {
+      tone: 'warning',
+      label: '长度偏高',
+      message: '核心块已保留，但 Prompt 已接近上限，仍有被截断风险。',
+    }
+  }
+  return {
+    tone: 'success',
+    label: '状态安全',
+    message: '核心块齐全且长度安全，可以继续用于分镜图片生成。',
+  }
+})
 
 function markError(message: unknown, fallback: string) {
   errorText.value = safeText(message, fallback)
@@ -1554,6 +1730,16 @@ watch(
 )
 
 watch(
+  () => [current.value?.id || '', selectedStoryboardRow.value?.shotId || '', visibleStageKey.value] as const,
+  ([projectId, shotId, stageKey]) => {
+    if (stageKey !== 'grid') return
+    if (!projectId || !shotId) return
+    void loadShotImagePromptPreview(shotId)
+  },
+  { immediate: true },
+)
+
+watch(
   stageItems,
   (items) => {
     if (!route.path.includes('/clone/')) return
@@ -1759,6 +1945,37 @@ onUnmounted(() => {
                       <button v-if="effectiveProductRefs.length" class="ghost-button small danger-action" type="button" :disabled="loading" @click.stop.prevent="clearProductImages">清空重选</button>
                     </div>
                   </div>
+
+                  <div class="analyze-project-info-card__section">
+                    <div class="analyze-project-info-card__head">
+                      <strong>商品描述</strong>
+                      <span>{{ productAnalysisSections.length ? '分析后自动生成' : '等待参考分析完成' }}</span>
+                    </div>
+                    <div v-if="productAnalysisSnapshot" class="product-analysis-card">
+                      <div class="product-analysis-card__summary">
+                        <span>商品类型</span>
+                        <strong>{{ safeText(productAnalysisSnapshot.category, '未识别') }}</strong>
+                      </div>
+                      <div class="product-analysis-card__list">
+                        <div v-for="item in productAnalysisSections" :key="item.key" class="product-analysis-card__item">
+                          <span>{{ item.title }}</span>
+                          <strong>{{ item.desc }}</strong>
+                        </div>
+                      </div>
+                      <div v-if="productAnalysisSnapshot.matchingRules.length" class="product-analysis-card__rules">
+                        <span>匹配规则</span>
+                        <div class="product-analysis-card__tags">
+                          <em v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</em>
+                        </div>
+                      </div>
+                    </div>
+                    <CloneStateCard
+                      v-else
+                      class="empty-state small-empty"
+                      title="等待商品描述"
+                      description="上传商品图并完成参考分析后，这里会展示后续脚本和分镜复用的商品结构描述。"
+                    />
+                  </div>
                 </div>
               </div>
             </section>
@@ -1798,9 +2015,9 @@ onUnmounted(() => {
                 </CloneDataCard>
                 <CloneDataCard class="variant-summary-card variant-summary-card--highlight">
                   <div class="variant-summary-card__copy">
-                    <span>推荐脚本</span>
-                    <strong>{{ safeText(variantTopCandidate?.title, '等待生成') }}</strong>
-                    <p>{{ safeText(variantTopCandidate?.summary, '生成后会显示推荐理由') }}</p>
+                    <span>默认脚本</span>
+                    <strong>{{ safeText(selectedVariantCandidate?.title, '等待生成') }}</strong>
+                    <p>{{ safeText(selectedVariantCandidate?.summary, '生成后会显示当前默认沿用的脚本内容') }}</p>
                   </div>
                 </CloneDataCard>
               </aside>
@@ -1808,20 +2025,20 @@ onUnmounted(() => {
               <section class="variant-main-panel">
                 <div v-if="scriptVariants.length" class="variant-hero-card">
                   <div class="variant-hero-card__score">
-                    <span>{{ variantTopCandidate?.score?.toFixed(1) || '0.0' }}</span>
+                    <span>{{ selectedVariantCandidate?.score?.toFixed(1) || '0.0' }}</span>
                   </div>
                   <div class="variant-hero-card__copy">
-                    <strong>{{ safeText(variantTopCandidate?.title, '等待候选脚本') }}</strong>
-                    <p>{{ safeText(variantTopCandidate?.summary, '生成脚本后在这里显示最高分候选。') }}</p>
-                    <small>{{ safeText(variantTopCandidate?.reason, '脚本推荐理由会显示在这里。') }}</small>
+                    <strong>{{ safeText(selectedVariantCandidate?.title, '等待候选脚本') }}</strong>
+                    <p>{{ safeText(selectedVariantCandidate?.summary, '生成脚本后在这里显示默认沿用的脚本。') }}</p>
+                    <small>{{ safeText(selectedVariantCandidate?.reason, '默认脚本说明会显示在这里。') }}</small>
                   </div>
                   <button
                     class="ghost-button small secondary-action"
                     type="button"
-                    :disabled="!variantTopCandidate"
-                    @click="variantTopCandidate ? selectScriptVariant(variantTopCandidate.id) : undefined"
+                    :disabled="!selectedVariantCandidate"
+                    @click="selectedVariantCandidate ? selectScriptVariant(selectedVariantCandidate.id) : undefined"
                   >
-                    应用推荐
+                    应用默认脚本
                   </button>
                 </div>
 
@@ -1944,6 +2161,15 @@ onUnmounted(() => {
                       <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="toggleFrameLock(row.shotId)" :title="row.locked ? '解除锁定' : '锁定分镜'">
                         {{ row.locked ? '解' : '锁' }}
                       </button>
+                      <button
+                        class="ghost-button small"
+                        type="button"
+                        :disabled="shotImagePromptPreviewLoading"
+                        @click.stop="selectedShotId = row.shotId; loadShotImagePromptPreview(row.shotId, true, true)"
+                        title="提示词预览"
+                      >
+                        提示词
+                      </button>
                       <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="regenerateStoryboardFrame(row.shotId)" title="重新生成">↻</button>
                     </span>
                   </div>
@@ -2011,6 +2237,14 @@ onUnmounted(() => {
                     <strong>脚本视图</strong>
                     <span>{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : '等待脚本' }}</span>
                   </div>
+                  <button
+                    class="ghost-button small"
+                    type="button"
+                    :disabled="shotImagePromptPreviewLoading || !selectedStoryboardRow"
+                    @click="loadShotImagePromptPreview(selectedStoryboardRow?.shotId, true, true)"
+                  >
+                    {{ shotImagePromptPreviewLoading ? '加载中' : '提示词预览' }}
+                  </button>
                 </div>
                 <div class="storyboard-preview-script">
                   <p>{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || '当前镜头还没有可用脚本内容。' }}</p>
@@ -2500,6 +2734,114 @@ onUnmounted(() => {
         </div>
         <div class="frame-preview-shell">
           <img v-if="framePreviewPath" :src="previewImage(framePreviewPath)" alt="frame-preview" />
+        </div>
+      </div>
+    </div>
+
+    <div v-if="shotPromptPreviewOpen" class="modal-mask" @click.self="shotPromptPreviewOpen = false">
+      <div class="modal-panel modal-panel--prompt-preview">
+        <div class="panel-head">
+          <div>
+            <span class="panel-tag">提示词预览</span>
+            <h2>{{ selectedStoryboardRow ? `镜头 ${String(selectedStoryboardRow.shotIndex).padStart(2, '0')}` : '分镜图片提示词' }}</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="ghost-button small" type="button" :disabled="!shotImagePromptPreview" @click="copyAllShotPrompts">复制全部</button>
+            <button class="ghost-button small" type="button" @click="shotPromptPreviewOpen = false">关闭</button>
+          </div>
+        </div>
+        <div v-if="shotImagePromptPreview" class="prompt-preview-card">
+          <div class="prompt-preview-meta">
+            <span>模式：{{ safeText(shotImagePromptPreview.consistencyMode, '--') }}</span>
+            <span>商品类型：{{ safeText(shotImagePromptPreview.productType, '--') }}</span>
+            <span>参考图：{{ Number(shotImagePromptPreview.referenceImageCount || 0) }}</span>
+            <span>编译器：{{ safeText(shotImagePromptPreview.promptCompilerVersion, '--') }}</span>
+            <span>哨兵：{{ safeText(shotImagePromptPreview.promptBuildSentinel, '--') }}</span>
+            <span v-if="shotPromptCopyMessage">{{ shotPromptCopyMessage }}</span>
+          </div>
+          <div class="prompt-health-banner" :class="`is-${promptHealthStatus.tone}`">
+            <strong>{{ promptHealthStatus.label }}</strong>
+            <span>{{ promptHealthStatus.message }}</span>
+          </div>
+          <div class="prompt-diagnostic-card">
+            <div class="prompt-diagnostic-card__head">
+              <strong>Prompt 统计</strong>
+              <span>用于快速确认长度和核心块保留情况</span>
+            </div>
+            <div class="prompt-diagnostic-grid">
+              <div class="prompt-diagnostic-item">
+                <span>Start 长度</span>
+                <strong>{{ promptDiagnosticSummary.start.length }}</strong>
+                <small>
+                  商品锁 {{ promptDiagnosticSummary.start.hasCompiledLock ? '在' : '缺' }} · 商品描述 {{ promptDiagnosticSummary.start.hasProductDescription ? '在' : '缺' }} · 模特锁 {{ promptDiagnosticSummary.start.hasModelLock ? '在' : '缺' }}
+                </small>
+              </div>
+              <div class="prompt-diagnostic-item">
+                <span>End 长度</span>
+                <strong>{{ promptDiagnosticSummary.end.length }}</strong>
+                <small>
+                  商品锁 {{ promptDiagnosticSummary.end.hasCompiledLock ? '在' : '缺' }} · 商品描述 {{ promptDiagnosticSummary.end.hasProductDescription ? '在' : '缺' }} · 模特锁 {{ promptDiagnosticSummary.end.hasModelLock ? '在' : '缺' }}
+                </small>
+              </div>
+            </div>
+          </div>
+          <div v-if="highlightedStartProductDescription || highlightedEndProductDescription" class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>商品描述高亮</strong>
+              <span>后端显式返回的商品描述锁</span>
+            </div>
+            <div v-if="highlightedStartProductDescription" class="prompt-highlight-card__block">
+              <span>Start Prompt 商品描述</span>
+              <pre>{{ highlightedStartProductDescription }}</pre>
+            </div>
+            <div v-if="highlightedEndProductDescription && highlightedEndProductDescription !== highlightedStartProductDescription" class="prompt-highlight-card__block">
+              <span>End Prompt 商品描述</span>
+              <pre>{{ highlightedEndProductDescription }}</pre>
+            </div>
+          </div>
+          <div v-if="shotImagePromptPreview.modelIdentityBlock" class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>模特身份锁高亮</strong>
+              <span>后端显式返回的模特锁</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Model Identity Lock</span>
+              <pre>{{ shotImagePromptPreview.modelIdentityBlock }}</pre>
+            </div>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Start Prompt</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotImagePromptPreview.startPrompt, ''), 'Start Prompt 已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotImagePromptPreview.startPrompt, '--') }}</pre>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>End Prompt</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotImagePromptPreview.endPrompt, ''), 'End Prompt 已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotImagePromptPreview.endPrompt, '--') }}</pre>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Negative Prompt</strong>
+              <button
+                class="ghost-button small"
+                type="button"
+                @click="copyPromptText(safeText(shotImagePromptPreview.negativePrompt || shotImagePromptPreview.compiledNegativePrompt, ''), 'Negative Prompt 已复制')"
+              >
+                复制
+              </button>
+            </div>
+            <pre>{{ safeText(shotImagePromptPreview.negativePrompt || shotImagePromptPreview.compiledNegativePrompt, '--') }}</pre>
+          </div>
+        </div>
+        <div v-else-if="shotImagePromptPreviewError" class="prompt-preview-empty prompt-preview-empty--error">
+          {{ shotImagePromptPreviewError }}
+        </div>
+        <div v-else class="prompt-preview-empty">
+          当前没有可展示的分镜图片提示词。
         </div>
       </div>
     </div>
@@ -4672,6 +5014,12 @@ onUnmounted(() => {
   width: min(1080px, calc(100vw - 40px));
 }
 
+.modal-panel--prompt-preview {
+  width: min(1080px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+
 .frame-preview-shell {
   display: grid;
   place-items: center;
@@ -5746,6 +6094,192 @@ onUnmounted(() => {
   padding: 0;
 }
 
+.product-analysis-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(133, 149, 196, 0.14);
+  background: rgba(9, 14, 26, 0.86);
+}
+
+.product-analysis-card__summary,
+.product-analysis-card__item,
+.product-analysis-card__rules {
+  display: grid;
+  gap: 4px;
+}
+
+.product-analysis-card__summary span,
+.product-analysis-card__item span,
+.product-analysis-card__rules span {
+  font-size: 11px;
+  color: #8ea3ca;
+}
+
+.product-analysis-card__summary strong,
+.product-analysis-card__item strong {
+  color: #eef3ff;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.product-analysis-card__list {
+  display: grid;
+  gap: 10px;
+}
+
+.product-analysis-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product-analysis-card__tags em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(119, 140, 196, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d7e2ff;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.prompt-highlight-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 196, 82, 0.26);
+  background: linear-gradient(180deg, rgba(64, 42, 8, 0.42), rgba(24, 17, 7, 0.54));
+  box-shadow: inset 0 1px 0 rgba(255, 220, 140, 0.08);
+}
+
+.prompt-highlight-card__head,
+.prompt-highlight-card__block {
+  display: grid;
+  gap: 6px;
+}
+
+.prompt-highlight-card__head strong,
+.prompt-highlight-card__block span {
+  color: #ffe2a2;
+}
+
+.prompt-highlight-card__head span {
+  font-size: 11px;
+  color: rgba(255, 226, 162, 0.78);
+}
+
+.prompt-highlight-card__block pre {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 214, 118, 0.14);
+  background: rgba(6, 8, 14, 0.42);
+  color: #fff4d7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+.prompt-diagnostic-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(133, 149, 196, 0.16);
+  background: rgba(10, 16, 29, 0.88);
+}
+
+.prompt-diagnostic-card__head,
+.prompt-diagnostic-item {
+  display: grid;
+  gap: 4px;
+}
+
+.prompt-diagnostic-card__head span,
+.prompt-diagnostic-item span,
+.prompt-diagnostic-item small {
+  font-size: 11px;
+  color: #8ea3ca;
+}
+
+.prompt-diagnostic-item strong {
+  color: #eef3ff;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.prompt-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.prompt-health-banner {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(133, 149, 196, 0.16);
+}
+
+.prompt-health-banner strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.prompt-health-banner span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.prompt-health-banner.is-success {
+  border-color: rgba(72, 187, 120, 0.24);
+  background: rgba(11, 34, 21, 0.88);
+}
+
+.prompt-health-banner.is-success strong {
+  color: #9ff0bf;
+}
+
+.prompt-health-banner.is-success span {
+  color: rgba(159, 240, 191, 0.82);
+}
+
+.prompt-health-banner.is-warning {
+  border-color: rgba(255, 196, 82, 0.26);
+  background: rgba(49, 34, 8, 0.88);
+}
+
+.prompt-health-banner.is-warning strong {
+  color: #ffd778;
+}
+
+.prompt-health-banner.is-warning span {
+  color: rgba(255, 215, 120, 0.84);
+}
+
+.prompt-health-banner.is-danger {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(49, 16, 16, 0.88);
+}
+
+.prompt-health-banner.is-danger strong {
+  color: #ff9b9b;
+}
+
+.prompt-health-banner.is-danger span {
+  color: rgba(255, 155, 155, 0.84);
+}
+
 .panel-compose-stage {
   margin-top: -2px;
 }
@@ -6453,6 +6987,73 @@ onUnmounted(() => {
   margin: 0;
   text-align: right;
   word-break: break-word;
+}
+
+.prompt-preview-card {
+  display: grid;
+  gap: 10px;
+}
+
+.prompt-preview-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.prompt-preview-card__head > span {
+  color: #eef3ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.prompt-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #9fb0d8;
+  font-size: 11px;
+}
+
+.prompt-preview-block {
+  display: grid;
+  gap: 6px;
+}
+
+.prompt-preview-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.prompt-preview-block strong {
+  color: #eef3ff;
+  font-size: 11px;
+}
+
+.prompt-preview-block pre {
+  margin: 0;
+  padding: 10px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid rgba(133, 149, 196, 0.12);
+  background: rgba(8, 14, 27, 0.88);
+  color: #d7e2ff;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.prompt-preview-empty {
+  color: #8fa2cf;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.prompt-preview-empty--error {
+  color: #ff9b9b;
 }
 
 .sidebar-script-card,

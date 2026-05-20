@@ -9,7 +9,7 @@ import { downloadAtlasToBuffer, getAtlasJson, pickAtlasOutputUrl, postAtlasJson,
 import { resolveApifoxHubCredentials } from './apifoxProfile'
 import { generateImage as generateApifoxImage } from './unifiedImage'
 import type { CloneProductType, ImageProviderName, ModelCredentials, ModelIdentityPack, ShotSpec } from './types'
-import { buildNoSpeakingInstruction, buildReferenceLockText, buildShotScriptConstraintText, prependSilentCommercialGlobalRule } from './prompt'
+import { buildNoSpeakingInstruction, buildReferenceLockText, buildShotScriptConstraintText, prependSilentCommercialGlobalRule, sanitizeGeneratedVideoPrompt } from './prompt'
 import { canUseMockGeneration } from './mockPolicy'
 
 type GenerateImageInput = {
@@ -455,7 +455,7 @@ export function buildIdentityPackPrompt(input: {
 function productLock(productType: CloneProductType) {
   const common =
     'The product must match the user reference product images exactly: same color, shape, material, pattern, holes, pins, layout and decorative details. First identify the uploaded product category correctly, then preserve that exact product as the single source of truth. Product fidelity has higher priority than styling, beauty retouching or scene decoration. Do not add logo, do not redesign the product, do not output a similar generic product.'
-  if (productType === 'earrings') return `${common} Earrings must keep the same dangling structure, metal texture, pearls or zircon details if any. If the reference person is wearing different earrings, remove them and replace them with the uploaded earrings only.`
+  if (productType === 'earrings') return `${common} Earrings must keep the same dangling structure, metal texture, pearls or zircon details if any. If the reference person is wearing different earrings, remove them and replace them with the uploaded earrings only. Gemstone and metal highlights must stay realistic and physically believable; do not add exaggerated sparkle, glow, starburst shine, magical shimmer, or fake luxury effects. Earrings cannot stand upright by themselves; they must appear worn on the ear, held by hand, laid flat, or supported by a believable contact point or gravity-consistent hanging direction.`
   if (productType === 'phone_case') return `${common} Phone case camera hole, border and printed pattern must remain identical. If another case or phone accessory exists in the reference shot, replace only that case layer with the uploaded case.`
   if (productType === 'clothes') return `${common} Clothing cut, fabric, collar, sleeves and pattern must remain identical. If the reference outfit conflicts with the uploaded product, replace only the relevant clothing item with the uploaded product.`
   return common
@@ -470,38 +470,113 @@ function identityText(pack: ModelIdentityPack) {
   ].join(' ')
 }
 
+export function buildModelIdentityLockText(pack: ModelIdentityPack) {
+  const profile = [
+    pack.market ? `market ${pack.market}` : '',
+    pack.gender ? `gender ${pack.gender}` : '',
+    pack.ageRange ? `age ${pack.ageRange}` : '',
+    pack.hairStyle ? `hair ${pack.hairStyle}` : '',
+    pack.skinTone ? `skin ${pack.skinTone}` : '',
+    pack.outfitStyle ? `outfit ${pack.outfitStyle}` : '',
+    pack.mood ? `mood ${pack.mood}` : '',
+    pack.sceneStyle ? `scene ${pack.sceneStyle}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  return [
+    'STRICT MODEL IDENTITY LOCK: use the same selected model across all storyboard frames.',
+    profile ? `Selected model profile: ${profile}.` : '',
+    pack.description ? `Selected model identity: ${pack.description}.` : '',
+    'Only the selected model package defines the person. Product references lock product only, not person identity.',
+    'Do not change face, hair identity, skin-tone identity, age identity, or outfit identity unless the selected model package defines it.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+export function buildReferenceResponsibilityText() {
+  return 'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY.'
+}
+
+export function buildProductDescriptionLockText(productDescription?: string) {
+  const text = String(productDescription || '').trim()
+  if (!text) return ''
+  return [
+    'TEXT PRODUCT DESCRIPTION LOCK (HIGHEST PRIORITY FOR PRODUCT IDENTITY AFTER REFERENCES):',
+    text,
+  ].join('\n')
+}
+
+function isModelPresentationShot(shot: ShotSpec) {
+  const role = String(shot.role || shot.shotRole || shot.purpose || '').trim().toLowerCase()
+  const shotType = String(shot.shotType || '').trim().toLowerCase()
+  return role === 'model_scene' || shotType === 'model_demo'
+}
+
+function buildCrossShotInstanceLock(shot: ShotSpec, modelPresentationShot: boolean) {
+  return [
+    'SILENT VISUAL COMMERCIAL.',
+    modelPresentationShot
+      ? 'No dialogue. No presenter delivery. Keep human-use context, not a talking-head shot.'
+      : 'No face. No dialogue.',
+    'STRICT PRODUCT LOCK: same single product instance across all shots; exact silhouette, geometry, structure, material, color, and proportion; no variation.',
+    'Same model identity across all shots; human only.',
+    'Different camera views only.',
+    modelPresentationShot
+      ? 'Keep real wearing or human-use context.'
+      : 'Keep the same product; only change angle or crop.',
+    `Shot ${shot.index + 1} is another view of the same locked subject, not a new setup.`,
+  ].join('\n')
+}
+
 export function buildGptFramePrompt(input: {
   shot: ShotSpec
   productType: CloneProductType
   modelPack: ModelIdentityPack
   productPoints?: string
+  productDescription?: string
   which: 'start' | 'end'
   compiledPrompt?: string
 }) {
   const shot = input.shot
   const isEnd = input.which === 'end'
+  const modelPresentationShot = isModelPresentationShot(shot)
+  const crossShotInstanceLock = buildCrossShotInstanceLock(shot, modelPresentationShot)
   const referenceLock = buildReferenceLockText(shot, input.modelPack.sceneStyle || 'reference shot scene atmosphere')
   const scriptLock = buildShotScriptConstraintText(shot)
+  const compiledPrompt = sanitizeGeneratedVideoPrompt(String(input.compiledPrompt || '').trim(), 1200)
+  const shotContinuityRule = isEnd
+    ? 'Continue from the provided start frame: same model, product, outfit, location, lighting, and camera; only subtle pose or camera continuation.'
+    : 'Keep the same background category, composition, hand placement, and product demonstration action from the reference shot.'
+  const minimalShotSupplement = [
+    `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
+    `Camera motion: ${String(shot.motion || 'static')}.`,
+    `Product selling points: ${input.productPoints || shot.materialNeed || 'clear product texture and usage value'}.`,
+    modelPresentationShot
+      ? 'Keep visible wearing context; do not convert it into a tabletop or isolated product still.'
+      : 'Keep product readability primary.',
+  ].join(' ')
   return prependSilentCommercialGlobalRule([
     isEnd
       ? `Generate the ending keyframe for shot ${shot.index + 1}. It must be a small continuation from the provided GPT start frame.`
       : `Generate the opening keyframe for shot ${shot.index + 1}.`,
-    input.compiledPrompt ? `Product identity lock for this frame:\n${String(input.compiledPrompt).trim()}` : '',
-    identityText(input.modelPack),
-    scriptLock,
+    crossShotInstanceLock,
+    buildProductDescriptionLockText(input.productDescription),
+    compiledPrompt ? `STRICT PRODUCT IDENTITY LOCK FOR THIS FRAME:\n${compiledPrompt}` : '',
+    buildModelIdentityLockText(input.modelPack),
+    buildReferenceResponsibilityText(),
+    shotContinuityRule,
     referenceLock,
+    scriptLock,
+    minimalShotSupplement,
+    modelPresentationShot
+      ? 'Frame must still read as a model demo shot.'
+      : 'Keep the composition product-led and clean.',
     productLock(input.productType),
-    `Reference shot translation: ${String(shot.visualPrompt || shot.visual || 'use only composition, framing, action rhythm and camera grammar from the reference shot').trim()}.`,
-    `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration target: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
-    `Camera motion target: ${String(shot.motion || 'static')}. Keep changes restrained and realistic.`,
-    isEnd
-      ? 'The ending frame must keep the same new model, same product, same outfit, same location, same lighting, same emotion and same camera setup as the provided start frame. Only allow subtle hand, expression or camera-position continuation.'
-      : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model and replace the original worn or held item with the uploaded user product only. Do not preserve the old accessory if it conflicts with the uploaded product.',
-    `Product selling points: ${input.productPoints || shot.materialNeed || 'clear product texture and usage value'}.`,
-    'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters, no platform controls.',
-    'Do not change product category, product structure, product color, metal material, gemstone layout, surface pattern or product proportions.',
-    'Realistic smartphone TikTok social-commerce style, natural skin texture, natural hands, clean background, product sharp and clearly visible.',
-  ], 2200)
+    'No text, watermark, logo, UI, or random letters.',
+    'Do not redesign, switch style, add/remove parts, or change proportions.',
+    'Realistic smartphone social-commerce style.',
+  ], 1800)
 }
 
 export async function generateModelIdentityPackImages(input: {

@@ -14,6 +14,285 @@
 
 ## 2026-05-19 项目日志与临时垃圾清理规范
 
+## 2026-05-19 编码污染治理第 10 轮
+
+- 目标：
+  - 阻断仓库继续出现编码乱码和构建产物污染。
+  - 优先治理 Windows 开发环境下的持续伪变更问题。
+- 本轮最小改动：
+  - 仅更新编码门禁脚本、忽略规则与关键文档。
+  - 不改任何业务模块，不重构构建链路。
+- 修复内容：
+  - `scripts/encoding-guard.mjs` 扩展到扫描 `docs / scripts / 根级关键配置`。
+  - 新增高风险 mojibake 字符检查：`锛 / 銆 / 鈥 / 鈩 / 锟 / �`。
+  - 新增 Git 跟踪构建产物检查：`apps/web-next/.next/**`、`apps/web-next/tsconfig.tsbuildinfo`。
+  - `.gitignore` 显式忽略 `apps/web-next/.next` 与 `apps/web-next/tsconfig.tsbuildinfo`。
+  - 修复 `package.json`、`README.md`、编码治理文档中的已知乱码文本。
+- 使用说明：
+  - Windows 开发机建议在当前仓库执行：
+    - `git config core.autocrlf false`
+    - `git config core.safecrlf true`
+  - 提交前执行：
+    - `npm run guard:encoding`
+  - 若门禁提示 `.next` 仍被 Git 跟踪，需要单独执行索引清理：
+    - `git rm -r --cached apps/web-next/.next`
+    - `git rm --cached apps/web-next/tsconfig.tsbuildinfo`
+- Windows / Linux 兼容说明：
+  - 本轮仅涉及 Git / 文档 / Node 门禁脚本治理，不依赖平台专属能力。
+  - Windows 开发与 Linux 部署可共用当前治理方案。
+
+## 2026-05-19 分镜图一致性收口与顺序锚定
+
+## 2026-05-19 模特展示耳环镜头被压成静态产品图修复
+
+## 2026-05-19 分镜图跨镜头单实例锁定约束增强
+
+## 2026-05-19 脚本变体默认沿用参考视频原脚本
+
+## 2026-05-19 脚本变体母本对齐修复与高分默认恢复
+
+- 目标：
+  - 修复脚本变体未贴合参考视频反推脚本的问题。
+  - 恢复评分最高的变体作为默认选项，但前提是所有高分变体都已被母本约束收紧。
+  - 修复脚本变体生成后多条候选近乎完全相同、缺少有效差异的问题。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 的脚本变体提示词、候选后处理对齐、重复保护和默认选中逻辑。
+  - 不改前端接口，不改主数据结构，不移除参考视频原脚本候选。
+- 修复内容：
+  - `generateWholeScriptVariantsWithAi(...)` 的 prompt 从“强母本锁定”调整为“同片轻变体生成”，保持镜头顺序与大体职责一致即可。
+  - 允许 AI 在不改变整片概念的前提下，对措辞、镜头强调点、卖点排序、转场表达、收口语气和细节描述做更明显变化。
+  - 服务端后处理不再要求变体字段与母本近似到高重叠率；只要仍属于同一条视频思路，就允许保留。
+  - 继续保留整片候选重复保护：若 AI 主路径返回的多条候选在 summary 或逐镜脚本上近乎一致，则自动回退到逐镜候选组合路径，避免桌面端出现“多条候选看起来完全一样”。
+  - fallback 路径组装候选时，同样保留“差不多即可”的宽松策略，不再把大部分差异抹平成母本。
+  - 若候选仍然过近，服务端会按不同主题角度进行强制差异化整理，例如：
+    - 潮流前卫
+    - 日常百搭
+    - 礼物心动
+    - 质感细节
+  - 强制差异化会直接作用到每条候选的逐镜 `scriptText / visualDescription / actionDescription / cameraDescription / generationPrompt`，不再只改标题和摘要。
+  - 强制差异化不改变镜头顺序与整片基础思路，只改变每镜表达角度和强调点。
+  - 参考视频原脚本继续保留为显式候选。
+  - 默认 `selectedScriptVariantId` 恢复为评分最高候选，自动流程也恢复选择最高分项。
+  - 修复默认脚本应用错误：生成完成后，实际写回项目分镜时明确使用“生成候选中评分最高的那条”，不再因为 `参考视频原脚本` 的固定高分展示而误写回原脚本。
+  - 修复桌面端脚本变体页顶部“默认脚本”展示错误：顶部摘要卡和大卡改为跟随 `selectedScriptVariantId / selected`，不再固定显示列表第一条。
+- 使用说明：
+  - 生成脚本变体后，默认会选评分最高的一条，但不再要求所有候选几乎逐字贴母本。
+  - 新生成的脚本变体只要与原片“大体一致、同片可用”即可，允许有更明显的轻改写差异。
+  - 如需完全回退，可手动切换到 `参考视频原脚本` 候选。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 服务逻辑，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+## 2026-05-19 参考视频分析强贴视频逐镜还原修复
+
+- 目标：
+  - 修复参考视频分析内容与原视频不一致、容易被提示词和 fallback 拉成另一套电商脚本的问题。
+  - 让参考视频分析优先做“逐镜事实还原”，而不是“导演化优化”或“卖货逻辑脑补”。
+  - 让反推分镜脚本输出更贴近“可直接用于 AI 视频生成的完整提示词”，而不是泛化广告文案。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 的参考视频分析提示词与脚本分析 fallback 文案。
+  - 不改前端接口，不改项目数据结构，不新增页面参数。
+- 修复内容：
+  - `aiScriptAnalyzer.ts` 中 `buildInstruction(...)` 改为“strict reference-video forensic analyst”取向。
+  - 明确要求：只还原视频中实际可见或可可靠推断的信息，不允许补营销话术、CTA、额外卖点、情绪曲线或模板化销售结构。
+  - 明确保留真人佩戴/真人演示语义；若源视频是模特展示商品，不得在分析阶段收缩成静态产品图理解。
+  - `fallbackAnalysisResult(...)` 不再自动补 `hook / solution / proof / CTA` 模板结构，也不再默认补 hook 与 CTA 文案。
+  - `fallbackShot(...)` 与 `applyScriptAnalysisToShots(...)` 的 `productFocus` fallback 改为更事实化的参考视频观察表述。
+  - 每镜 `scriptText` 改为基于镜头真实内容的简明分镜描述，不再优先保留泛营销句式。
+  - 每镜 `generationPrompt` 统一重建为 7 个维度：
+    - 主体
+    - 动作
+    - 场景
+    - 光影
+    - 运镜
+    - 风格
+    - 画质参数
+  - 无论走主模型返回还是 fallback，落库后的每镜视频提示词都按同一套 7 维结构收口。
+  - 参考视频分析页“脚本内容”区域改为优先展示 `blueprint.shots[*].scriptText`，不再优先显示 `globalScript.content` 的整片摘要文案。
+  - 保存分析结果时，`globalScript.content` 也会回填为逐镜 `scriptText` 汇总，避免首屏再次被泛化营销摘要污染。
+- 使用说明：
+  - 重新执行参考视频分析后，新规则才会生效。
+  - 如果原视频本身信息弱或语音不清，分析结果会更保守，宁可少写，也不会再默认脑补成标准电商短视频结构。
+  - 参考视频分析产出的分镜脚本会更偏“可直接喂给 AI 视频模型”的结构化提示词，而不是广告文案摘要。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 服务逻辑与提示词文案，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+- 目标：
+  - 修复脚本变体未贴合参考视频反推脚本的问题。
+  - 恢复评分最高的变体作为默认选项，但前提是所有高分变体都已被母本约束收紧。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 的脚本变体提示词、候选后处理对齐和默认选中逻辑。
+  - 不改前端接口，不改数据结构，不移除参考视频原脚本候选。
+- 修复内容：
+  - `generateWholeScriptVariantsWithAi(...)` 的 prompt 明确 `sourceScript` 是唯一母本，所有变体必须逐镜贴合参考视频反推脚本。
+  - 增加服务端逐镜“母本对齐修复”，对越界字段回退到 `baseShots` 母本。
+  - fallback 路径组装候选时，同样执行母本对齐，避免降级时自由发散。
+  - 参考视频原脚本继续保留为显式候选。
+  - 默认 `selectedScriptVariantId` 恢复为评分最高候选，自动流程也恢复选择最高分项。
+- 使用说明：
+  - 生成脚本变体后，默认会选评分最高的一条，但这条高分脚本应仍然贴合参考视频反推脚本。
+  - 如需完全回退，可手动切换到 `参考视频原脚本` 候选。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 服务逻辑，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+- 目标：
+  - 调整脚本变体默认选中策略，生成变体后默认继续使用参考视频拆解出的原始脚本内容，不自动切到高分变体。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 的脚本变体默认候选与自动流程选择逻辑。
+  - 不改前端页面结构，不移除高分变体，不影响手动切换能力。
+- 修复内容：
+  - 生成脚本变体时，候选列表首项新增 `参考视频原脚本`。
+  - `selectedScriptVariantId` 默认指向参考视频原脚本，而不是最高分变体。
+  - 自动流程中不再默认“自动选择最高分脚本”，改为“自动生成脚本变体并默认沿用参考视频原脚本”。
+  - 高分变体仍然保留在候选列表中，用户可手动切换。
+- 使用说明：
+  - 生成脚本变体后，系统默认继续使用参考视频拆解出的那条脚本。
+  - 如果想用评分更高的脚本，仍可在脚本变体列表中手动选择。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 服务逻辑，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+- 目标：
+  - 进一步收紧分镜图跨镜头一致性，明确所有分镜只是“同一个商品实例、同一个模特身份”的不同机位视角，而不是每镜重新生成一个相似新物体。
+- 本轮最小改动：
+  - 仅增强主进程 `clone` 图片 prompt 顶层约束文案，不改接口、不改页面、不改数据结构。
+- 修复内容：
+  - 顶层增加 `STRICT PRODUCT LOCK / MODEL LOCK / CONSISTENCY RULE`。
+  - 明确：
+    - `There is ONLY ONE product instance across all shots`
+    - `NOT re-generated per shot`
+    - `Different camera views ONLY`
+  - 对模特展示镜头保留真人佩戴/真人演示语义，不把“单实例锁”执行成无人静物图。
+- 使用说明：
+  - 重新生成分镜图后，新的一镜一实例锁定规则才会生效。
+  - 旧任务旧图不会自动更新。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript prompt 文案，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+- 目标：
+  - 修复 `/clone` 中脚本明明是“模特展示耳环”或“佩戴展示”镜头，但生成结果退化成静态产品图、桌面摆拍图或 catalog packshot 的问题。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 的图片 prompt 角色约束，不改页面、不改接口。
+- 修复内容：
+  - 对 `model_scene / model_demo` 类镜头补强“必须保留真人佩戴/真人演示语义”的 prompt 规则。
+  - 明确这类镜头不能退化为 isolated product still、tabletop packshot、flat catalog image。
+  - 在一致性编译层和图片生成层同时保留“商品 identity 优先”，但不再把“product-led”误解释成“无人静物图”。
+  - 继续保留静默商业片规则，但对模特展示镜头不再默认把人物展示语义压没。
+- 使用说明：
+  - 对已有任务重新生成对应分镜图后，新规则才会生效。
+  - 若脚本/参考镜头本身是佩戴展示镜头，新的结果应保留耳部、颈肩、手部或其他自然人体演示上下文。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript prompt 逻辑，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+- 目标：
+  - 修复 `/clone` 分镜图“各生各的”、提示词混乱、跨镜头商品和模特不稳定的问题。
+  - 保持现有分镜图入口不变，仅通过 prompt 收口和顺序锚定提高一致性。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 的图片 prompt 拼装、prompt consistency 清洗/风控、参考图优先级。
+  - 不改前端页面，不新增接口参数，不重构整体分镜图工作流。
+- 修复内容：
+  - `compiledPrompt` 提升为图片生成的主 identity 骨架，镜头信息改为从属补充。
+  - prompt 清洗增强，过滤调试残留、重复句、冲突文案、容易诱导 redesign / over-style 的描述。
+  - 高风险商品、反光材质、强运动/遮挡镜头更容易进入 strict 模式，降低 cinematic 覆盖 identity 的概率。
+  - 分镜图新增顺序锚定：第 2 镜及之后优先追加上一镜已生成图作为 continuity anchor；缺失时自动回退。
+  - prompt / refs 变化后通过现有 hash 自然失效，不引入额外迁移。
+- 使用说明：
+  - 用户无需新增手动开关，重新生成分镜图后新规则自动生效。
+  - 旧任务不会自动更新，需重新生成对应分镜图。
+  - 单镜头重新生成时，如可找到上一镜已生成图，会自动参与一致性锚定。
+- 补充说明：
+  - 深层分镜图片（尤其是 GPT keyframe start / end prompt）不再只依赖商品参考图。
+  - 生成 prompt 时会显式注入商品结构文本描述，内容来自项目内 `consistencyAssets.productAnalysis`，包括：
+    - category
+    - core subject
+    - connection structure
+    - material details
+    - wearing position
+    - surface details
+    - color details
+    - geometry details
+    - size / scale
+    - matching rules
+  - 目的：避免模型只靠参考图自由猜测商品形态，导致深层分镜生成出与上传商品图不一致的“另一件商品”。
+  - 桌面端 `/clone` 的“分镜设计”阶段新增“提示词”预览入口：
+    - 每条分镜右侧操作区提供 `提示词` 按钮
+    - 点击后以弹窗形式展示当前分镜图片的 `Start Prompt / End Prompt / Negative Prompt`
+    - 弹窗支持 `复制全部`，也支持分别复制 `Start / End / Negative`
+    - 不再把提示词长文本常驻占用右侧分镜预览区域
+    - 若当前项目尚未落库 `productAnalysis`，点击提示词预览时会先自动补跑商品结构分析，再返回带 `TEXT PRODUCT DESCRIPTION LOCK` 的提示词
+    - 若结构分析接口临时失败，后端会回退到基于参考图约束的通用商品结构描述，保证提示词中仍然存在非空的商品描述锁定段，而不是完全缺失
+  - 若当前项目还没有 `productAnalysis`，则在生成 GPT 分镜图前同步补跑一次商品结构分析并立刻落库，确保本次 prompt 就能带上商品描述，而不是继续等待后台异步补写。
+- Windows / Linux 兼容说明：
+  - 本轮仅为 TypeScript 主进程逻辑调整，不依赖 Windows 专属能力。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+## 2026-05-19 复刻分镜图片统一模特身份锁定修复
+
+- 目标：
+  - 修复 `/clone` 复刻链路中，已选择模特后，分镜图片仍被商品参考图中的人物带偏，导致各分镜模特不一致的问题。
+  - 明确分镜图片生成阶段必须“模特锁人、商品图锁商品”，禁止商品图中的人物身份覆盖已选模特。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 分镜图片生成 prompt、引用图顺序和 prompt consistency 编译逻辑。
+  - 不改前端页面结构，不改 `/storyboard-images` 入口协议，不扩散到无关页面。
+- 修复内容：
+  - 分镜图片 prompt 新增 `STRICT MODEL IDENTITY LOCK` 规则，明确所有分镜图必须使用同一个已选模特身份。
+  - 明确 `PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY`，商品图只用于锁定商品结构、材质、颜色、比例和细节。
+  - 当商品图中带有人物时，系统会在 prompt 中明确忽略其中人物的脸、发型、肤色、体态和穿搭身份，只提取商品信息。
+  - 分镜图片引用图顺序调整为“模特身份包优先、商品图其后”，降低 provider 被商品图人物带偏的概率。
+  - prompt consistency 编译结果新增模特身份锁补丁，统一约束“选中模特身份 > 商品图中的人物信息”。
+- 使用说明：
+  - 选择模特后，所有分镜图默认强制使用该模特，不需要新增手动开关。
+  - 商品图只作为商品身份参考，不再作为人物身份来源。
+  - 旧任务需要重新生成分镜图片后，新的统一模特规则才会生效。
+  - 可通过 `npm run test:storyboard-model-lock` 做最小 prompt 回归检查。
+- Windows / Linux 兼容说明：
+  - 本轮仅修改 TypeScript 主进程 prompt 和服务逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+## 2026-05-19 饰品分镜高光过假与耳环站立姿态修复
+
+- 目标：
+  - 修复饰品类分镜图/分镜视频中，钻石或金属高光被生成得过亮、过闪、过假 的问题。
+  - 修复耳环类商品被错误生成成“自己站起来”的不真实姿态问题。
+- 本轮最小改动：
+  - 仅调整 `clone` 主进程中饰品相关的 prompt 正向约束和负面约束。
+  - 不改前端页面，不改任务入口，不新增用户开关。
+- 修复内容：
+  - 对耳环/饰品类补充“真实反光”规则：
+    - 钻石、锆石、金属反光必须是相机真实可见的自然高光。
+    - 禁止夸张 sparkle、glow、starburst、magical shimmer、fake luxury VFX。
+  - 对耳环类补充“真实支撑/重力”规则：
+    - 耳环只能以佩戴在耳朵上、手持、平放或有真实支撑接触点的方式展示。
+    - 禁止生成耳环像摆件、雕塑、立牌一样独立直立。
+  - 图像 prompt、视频 prompt、anti-variation 和负面提示词同步收口，减少图像和视频阶段语义不一致。
+- 使用说明：
+  - 用户无需额外操作，重新生成分镜图或分镜视频后新规则自动生效。
+  - 旧任务的旧分镜结果不会自动回刷，需要重新生成对应分镜阶段。
+- Windows / Linux 兼容说明：
+  - 本轮仅为 TypeScript prompt 约束更新，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
+## 2026-05-19 商品素材保存后项目根级引用同步修复
+
+- 目标：
+  - 修复复刻项目在保存商品参考图后，仅更新蓝图层 `consistencyAssets / shot.productReferenceImagePaths`，但未同步项目根级 `productReferenceImagePaths`，导致部分旧链路或兼容逻辑读取到旧值的问题。
+- 本轮最小改动：
+  - 仅调整主进程 `clone` 服务中的商品素材保存逻辑。
+  - 不改前端页面结构，不改 IPC 协议，不扩展新的状态字段。
+- 修复内容：
+  - `generateConsistencyAssets(...)` 在保存商品参考图后，同步回写项目根级 `productReferenceImagePaths`。
+  - 异步商品结构分析成功后再次持久化时，同样保持项目根级 `productReferenceImagePaths` 与蓝图层一致。
+- 使用说明：
+  - 保存商品参考图后，项目级、蓝图级、分镜级商品图引用会保持一致。
+  - 依赖旧字段 `productReferenceImagePaths` 的摘要、兼容逻辑或后续流程可以直接读取到最新商品图。
+- Windows / Linux 兼容说明：
+  - 本轮仅为 TypeScript 主进程字段同步修复，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署运行逻辑保持一致。
+
 - 目标：
   - 清理仓库根目录中无业务价值的本地日志、临时截图、临时调试目录和冒烟运行残留。
   - 避免 Windows 开发环境产生的大量本地垃圾继续污染仓库，且不影响 Linux 部署内容。
@@ -3979,6 +4258,324 @@ Web 前端只重构视觉层级、布局系统、组件结构与文案体系，�
   - 渲染完成后，可在右下输出结果区点击卡片或“查看视频”直接打开成片。
   - 点击“打开目录”可直接定位到本次字幕成片文件所在目录。
   - 如果某条输出失败，结果卡会展示失败状态和错误信息，不会误点空结果。
+- 验证方式：
+  - `npm run typecheck`
+
+## 2026-05-20 桌面端分镜提示词预览重启阻塞修复与版本哨兵确认
+
+- 目标：
+  - 修复桌面端开发态因重复注册 `clone:getShotImagePromptPreview` IPC 导致主进程启动异常的问题。
+  - 确保 `/clone` 分镜提示词预览实际加载到最新主进程代码，并可通过版本哨兵确认。
+- 本轮最小改动：
+  - 仅调整 `src/main/index.ts` 的重复 IPC 注册。
+  - 不改提示词拼装逻辑，不改前端交互结构，不扩散到无关模块。
+- 修复内容：
+  - 删除重复的 `ipcMain.handle('clone:getShotImagePromptPreview', ...)` 注册，只保留一处有效绑定。
+  - 保留后端 `promptBuildSentinel` 返回字段与前端哨兵展示，用于确认桌面端是否已切到最新进程。
+- 使用说明：
+  - Windows 桌面端重启后，进入 `/clone` 分镜设计，打开任意分镜的 `提示词` 预览弹窗。
+  - 弹窗中应能看到：
+    - `哨兵：shot-image-prompt-2026-05-20-v3`
+  - 若看不到该哨兵，说明当前桌面端仍未加载到最新主进程代码，需要继续排查旧进程或旧构建残留。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 Electron 主进程 IPC 注册，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 打包部署逻辑保持一致。
+- 验证方式：
+  - `npm run typecheck`
+  - `npm run dev`
+
+## 2026-05-20 桌面端分镜提示词核心块显式返回修复
+
+- 目标：
+  - 修复桌面端“提示词预览里明明有商品描述生成链路，但前端仍显示商品描述缺失”的误判问题。
+- 根因：
+  - 前端此前通过字符串截取 `Start Prompt / End Prompt` 来猜测商品描述块和模特锁是否存在。
+  - 当后端 prompt 精简、换行变化或块顺序调整时，前端容易提取失败，造成“核心块缺失”的假告警。
+- 本轮最小改动：
+  - 仅收口 `/clone` 分镜提示词预览接口返回值与桌面端预览弹窗诊断逻辑。
+  - 不改图片生成主链路，不改分镜页面结构。
+- 修复内容：
+  - `src/main/modules/clone/service.ts`
+    - `getShotImagePromptPreview(...)` 直接返回：
+      - `productDescriptionBlock`
+      - `modelIdentityBlock`
+      - `referenceResponsibilityBlock`
+      - `hasCompiledProductLock`
+      - `hasProductDescriptionBlock`
+      - `hasModelIdentityBlock`
+  - `src/renderer/src/ui/views/CloneView.vue`
+    - 提示词预览诊断改为优先消费后端显式返回的核心块布尔值。
+    - 商品描述高亮改为直接展示后端返回的 `productDescriptionBlock`。
+    - 新增模特身份锁高亮区，直接展示后端返回的 `modelIdentityBlock`。
+    - 不再依赖脆弱的字符串切片作为唯一判断依据。
+- 使用说明：
+  - 桌面端打开 `/clone` 分镜设计的 `提示词` 弹窗后：
+    - 若后端已有商品描述，会在“商品描述高亮”中直接显示。
+    - 若后端已有模特锁，会在“模特身份锁高亮”中直接显示。
+    - 即使整段 prompt 文案继续精简，诊断也不应再误报缺失。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程返回结构与 Electron 渲染层展示逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 打包部署逻辑保持一致。
+- 验证方式：
+  - `npm run typecheck`
+  - `npm run dev`
+
+## 2026-05-20 分镜图提示词核心块前置与长度收紧
+
+- 目标：
+  - 在商品描述已经存在的前提下，进一步降低分镜图 prompt 因长度偏高而截断核心块的风险。
+- 本轮最小改动：
+  - 仅调整 `src/main/modules/clone/gptImage.ts` 的 GPT 分镜图 prompt 组装顺序与少量重复文案。
+  - 不改接口协议，不改页面结构，不改商品分析链路。
+- 修复内容：
+  - 将 `TEXT PRODUCT DESCRIPTION LOCK` 前移到 `STRICT PRODUCT IDENTITY LOCK FOR THIS FRAME` 之前，确保商品结构文本更早进入 prompt。
+  - 保留 `STRICT MODEL IDENTITY LOCK` 紧跟在核心商品锁之后。
+  - 压缩部分重复约束文案，例如：
+    - talking-head 约束
+    - camera view / crop 重复句
+    - 末尾风格包装句
+  - 将部分低优先级规则后移，例如 `productLock(productType)`，把前部预算优先留给核心锁定块。
+- 结果：
+  - 核心顺序进一步收口为：
+    - 全局静默商业片规则
+    - 分镜 opening / ending 指令
+    - 跨镜头单实例锁
+    - 商品描述锁
+    - 本帧商品 identity 锁
+    - 模特身份锁
+  - 在相同长度预算下，核心块更靠前，被截断的概率更低。
+- 使用说明：
+  - 桌面端重新打开分镜 `提示词` 预览，查看 `Start Prompt / End Prompt` 顶部顺序与总长度变化。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 文本拼装逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 打包部署逻辑保持一致。
+- 验证方式：
+  - `npm run typecheck`
+  - `npm run dev`
+
+## 2026-05-20 分镜图商品描述锁切换为紧凑版
+
+- 目标：
+  - 在不丢失商品结构锁定能力的前提下，进一步压缩分镜图 prompt 长度，降低截断风险。
+- 根因：
+  - 当前长度主要被 `TEXT PRODUCT DESCRIPTION LOCK` 中的完整商品分析文本占用。
+  - 其中 `surface details`、`matching rules` 等字段对“锁结构”帮助次于主体、连接结构、材质、颜色、几何和尺寸。
+- 本轮最小改动：
+  - 仅调整 `src/main/modules/clone/service.ts` 中分镜图 prompt 使用的商品描述文本版本。
+  - 不修改商品分析原始落库结果，不影响其他消费完整商品分析文本的流程。
+- 修复内容：
+  - `buildProductStructureDescription(...)` 新增 `compact` 模式。
+  - 新增 `buildCompactProjectProductAnalysisText(...)`，仅保留：
+    - `Category`
+    - `Core subject / Summary`
+    - `Connection structure`
+    - `Material details`
+    - `Wearing/display position`
+    - `Color details`
+    - `Geometry details`
+    - `Size/scale`
+  - `getShotImagePromptPreview(...)` 改为对分镜图 prompt 使用紧凑版商品描述锁。
+- 结果：
+  - 商品描述仍在 prompt 最前部。
+  - 但其自身长度显著下降，给后续 `STRICT PRODUCT IDENTITY LOCK` 与 `STRICT MODEL IDENTITY LOCK` 留出更多预算。
+- 使用说明：
+  - 桌面端重新打开 `/clone` 分镜 `提示词` 弹窗后，可继续对比：
+    - `Start 长度`
+    - `End 长度`
+    - 商品描述高亮内容是否仍覆盖结构锁定核心信息
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 文本组装逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 打包部署逻辑保持一致。
+- 验证方式：
+  - `npm run typecheck`
+  - `npm run dev`
+
+## 2026-05-20 分镜图片提示词缓存失效修复
+
+- 目标：
+  - 修复 `/clone` 分镜图片阶段在商品锁描述、模特锁或最终编译提示词已经变化时，仍直接复用旧缓存图片，表现为“提示词看起来没带商品描述、也没有重新调用图片生成接口”的问题。
+- 本轮最小改动：
+  - 仅调整主进程分镜图片生成缓存键计算与提示词复用逻辑。
+  - 不改页面结构，不改前后端接口协议，不新增 UI 开关。
+- 实现说明：
+  - `src/main/modules/clone/service.ts`
+    - 在实际发起分镜首帧/尾帧生成前，先显式生成 `startPrompt` 与 `endPrompt`。
+    - 统一复用同一份 `productAnalysisText`，避免缓存计算与真实请求使用不同文本来源。
+    - 图片缓存键 `imagePromptHash` 现在额外纳入：
+      - 实际正向 prompt
+      - 实际负向 prompt
+  - `src/main/modules/clone/cache.ts`
+    - 扩展 `computeImagePromptHash(...)`，将 `positivePrompt` 与 `negativePrompt` 纳入哈希。
+- 结果：
+  - 当商品描述、产品结构分析、模特身份锁或 prompt consistency 编译结果变化时，旧分镜图缓存会自然失效。
+  - 分镜图片会重新走真实图片生成链路，而不是误命中旧缓存，因此不再表现成“没有调接口”。
+- 使用说明：
+  - 进入 `/clone/[projectId]` 的分镜图片阶段后，重新生成对应分镜即可。
+  - 无需额外配置；只要 prompt 或锁定信息发生变化，系统会自动重新请求图片生成。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程纯逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署可共用同一实现。
+- 验证方式：
+  - `npm run typecheck`
+
+## 2026-05-20 分镜图片商品描述被提示词清洗误删修复
+
+- 目标：
+  - 修复桌面端 `/clone` 分镜图片提示词中“始终没有商品描述”的问题。
+- 根因：
+  - 分镜图片 prompt 最终会经过 `sanitizeGeneratedVideoPrompt(...)` 清洗。
+  - 该清洗逻辑会过滤 CJK 文本，只保留英文式 prompt 行。
+  - 但商品结构分析 `analyzeProductStructureWithGrs(...)` 之前按项目语言输出：
+    - `zh-CN` 输出中文
+    - `vi-VN` 输出越南语
+  - 结果商品分析文本虽然进入了 `buildGptFramePrompt(...)`，但在清洗阶段被整段删除，最终表现为“提示词没有商品描述”。
+- 本轮最小改动：
+  - `src/main/modules/clone/aiScriptAnalyzer.ts`
+    - 商品结构分析固定输出英文，确保可直接注入图片提示词。
+  - `src/main/modules/clone/service.ts`
+    - 新增旧分析结果刷新判定。
+    - 若历史项目里的 `productAnalysis` 仍包含中文/日文/韩文等 CJK 内容，则在分镜预览与分镜图生成前自动重新分析，替换为英文商品描述。
+- 结果：
+  - 新项目生成的商品结构分析可稳定进入分镜图片 prompt。
+  - 老项目无需手工清库；再次打开分镜提示词预览或重新生成分镜图时，会自动修复旧的非英文商品分析。
+- 使用说明：
+  - 桌面端进入 `/clone/:projectId`。
+  - 点击分镜提示词预览或重新生成分镜图即可触发自动修复。
+  - 无需额外页面操作或配置开关。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程提示词与分析逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署可共用。
+- 验证方式：
+  - `npm run typecheck`
+
+## 2026-05-20 商品描述前移到参考分析阶段
+
+- 目标：
+  - 在桌面端 `/clone` 主链路中，用户上传参考视频、模特、商品图片并执行“参考视频分析”后，就提前生成商品结构描述，供后续脚本、分镜图片、分镜视频统一复用。
+- 本轮最小改动：
+  - 仅调整主进程参考分析完成后的衔接逻辑。
+  - 不改页面结构，不新增额外按钮，不改前后端接口协议。
+- 实现说明：
+  - `src/main/modules/clone/service.ts`
+    - 在 `createCloneBlueprintFromReference(...)` 完成参考视频分析并写入 blueprint 后：
+      - 立即收集当前项目已保存的商品参考图
+      - 自动推断当前商品类型
+      - 立即调用 `ensureProjectProductAnalysis(...)`
+    - 这样商品结构分析会在“参考分析阶段”就写入：
+      - `project.baseBlueprint.consistencyAssets.productAnalysis`
+      - `project.blueprint.consistencyAssets.productAnalysis`
+- 结果：
+  - 后续进入脚本变体、分镜图片提示词预览、分镜图片生成、分镜视频生成时，都可直接复用已经存在的商品描述。
+  - 避免把商品分析延迟到分镜阶段才首次补算，减少链路后半段才暴露问题的情况。
+- 使用说明：
+  - 桌面端在上传商品图后，执行“分析脚本 / 参考视频分析”即可。
+  - 若当前项目已绑定商品图，分析完成后系统会自动生成商品描述，无需再到后续阶段补触发。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程业务编排，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署可共用。
+- 验证方式：
+  - `npm run typecheck`
+
+## 2026-05-20 分镜图片提示词商品描述前置防截断
+
+- 目标：
+  - 修复分镜图片实际生成 prompt 中“商品描述已存在但最终看不到”的问题。
+- 根因：
+  - `buildGptFramePrompt(...)` 最终通过 `prependSilentCommercialGlobalRule(..., 2200)` 做统一清洗和长度裁剪。
+  - 之前商品描述 `buildProductDescriptionLockText(...)` 与编译后的产品锁 `compiledPrompt` 排位不够靠前。
+  - 当镜头约束、模特锁、参考锁、脚本锁内容较长时，后半段会被 2200 字符上限直接截断，导致商品描述在最终 prompt 中消失。
+- 本轮最小改动：
+  - `src/main/modules/clone/gptImage.ts`
+    - 调整 `buildGptFramePrompt(...)` 的组装顺序：
+      - 先放 `compiledPrompt`
+      - 再放 `buildProductDescriptionLockText(...)`
+      - 再放模特锁、参考职责、产品类别锁等次级信息
+- 结果：
+  - 即使 prompt 很长，商品描述与严格产品锁也会优先保留在最终分镜图片生成 prompt 中。
+  - 后置的补充说明若被裁剪，也不会再把最关键的商品身份描述裁掉。
+- 使用说明：
+  - 重新打开分镜图片提示词预览或重新生成分镜图即可生效。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程 prompt 组装顺序，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署可共用。
+- 验证方式：
+  - `npm run typecheck`
+
+## 2026-05-20 分镜图片提示词精简收口
+
+- 目标：
+  - 缩短分镜图片实际生成 prompt，减少被长度上限截断的风险。
+  - 去除重复表达，优先保留最核心的商品锁、模特锁、参考锁和镜头连续性信息。
+- 本轮最小改动：
+  - 仅调整 `buildGptFramePrompt(...)` 的文案结构和长度上限。
+  - 不改接口协议，不改页面结构，不改图片生成调用方式。
+- 精简原则：
+  - 必留：
+    - `compiledPrompt`
+    - `TEXT PRODUCT DESCRIPTION LOCK`
+    - 模特身份锁
+    - 产品/人物职责边界
+    - 分镜连续性
+    - 参考动作与构图
+  - 压缩：
+    - 重复的 silent / no speaking / product lock / model lock 句子
+    - 重复的“不要 redesign / 不要 talking head / 不要 product-only still”近义表达
+    - 冗长的补充修辞
+  - 后置：
+    - 风格性、包装性、口语化的次级说明
+- 实现说明：
+  - `src/main/modules/clone/gptImage.ts`
+    - 压缩 `buildCrossShotInstanceLock(...)`
+    - 压缩 `buildReferenceResponsibilityText(...)`
+    - 压缩 `buildProductDescriptionLockText(...)`
+    - 压缩 continuity / supplement 文案
+    - 将 `prependSilentCommercialGlobalRule(..., 2200)` 收紧为 `1800`
+- 结果：
+  - prompt 更短、更硬、更少重复。
+  - 被保留的优先级顺序更清晰：
+    - 商品严格锁
+    - 商品描述
+    - 模特锁
+    - 参考职责
+    - 连续性与参考镜头
+    - 镜头补充说明
+- 使用说明：
+  - 桌面端重新打开提示词预览或重新生成分镜图即可看到新的精简版 prompt。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程字符串组装逻辑，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署可共用。
+- 验证方式：
+  - `npm run typecheck`
+
+## 2026-05-20 脚本生成前补齐商品描述
+
+- 目标：
+  - 修复桌面端主链路中“参考视频已分析、随后补上传商品图/模特，再点脚本生成时，商品描述仍未生成”的时序问题。
+- 根因：
+  - 商品描述此前只在两个时机生成：
+    - 参考视频分析完成后，若当时已经有商品图
+    - 后续分镜提示词预览 / 分镜图生成前
+  - 若用户是在参考分析之后才补传商品图，再直接点“脚本生成”，就会出现脚本已生成但商品描述还没补算。
+- 本轮最小改动：
+  - `src/main/modules/clone/service.ts`
+    - 在 `generateScriptVariantsForProject(...)` 开始阶段：
+      - 先收集当前项目商品图
+      - 推断商品类型
+      - 先执行 `ensureProjectProductAnalysis(...)`
+      - 再继续脚本变体生成
+- 结果：
+  - 现在桌面端链路支持以下顺序：
+    - 上传视频
+    - 参考分析
+    - 补传模特 / 商品图
+    - 点击脚本生成
+  - 在脚本生成真正开始前，商品描述会先被补齐并写入项目。
+- 使用说明：
+  - 无需额外按钮。
+  - 只要脚本生成前商品图已绑定，系统会自动先补做商品描述。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程执行顺序，不依赖 Windows 专属 API。
+  - Windows 开发测试与 Linux 部署可共用。
 - 验证方式：
   - `npm run typecheck`
   - `npm run build`

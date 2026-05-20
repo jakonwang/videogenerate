@@ -40,6 +40,9 @@ import { probeMedia } from '../ffmpeg/probe'
 import { renderViralCloneBatch } from './renderViralCloneBatch'
 import {
   buildGptFramePrompt,
+  buildModelIdentityLockText,
+  buildProductDescriptionLockText,
+  buildReferenceResponsibilityText,
   defaultModelIdentityDescription,
   generateGptShotFrameImage,
   generateModelIdentityPackImages,
@@ -117,6 +120,8 @@ import { queryGrsCredits } from './grsai'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent } from './aiResponse'
 import { downloadAtlasToFile } from './atlasRetry'
 import { promptConsistencyService } from './prompt-consistency/service'
+
+const SHOT_IMAGE_PROMPT_PREVIEW_SENTINEL = 'shot-image-prompt-2026-05-20-v3'
 
 function now() {
   return Date.now()
@@ -954,6 +959,231 @@ function buildVariantCandidateTitle(index: number, scoreHint: number) {
   return `脚本变体 ${index + 1} · ${scoreHint.toFixed(1)}`
 }
 
+function buildReferenceScriptCandidate(baseShots: ShotSpec[]): CloneScriptVariantCandidate {
+  const orderedShots = [...baseShots].sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+  const shotScripts = orderedShots.map((shot, shotIndex) => ({
+    shotId: shot.id,
+    shotIndex,
+    timeRange: buildShotTimeRange(shot),
+    scriptText: String(shot.scriptText || '').trim(),
+    scriptRole: (String(shot.scriptRole || 'unknown').trim() || 'unknown') as ShotSpec['scriptRole'],
+    visualDescription: String(shot.visualDescription || '').trim(),
+    actionDescription: String(shot.actionDescription || '').trim(),
+    cameraDescription: String(shot.cameraDescription || '').trim(),
+    generationPrompt: String(shot.generationPrompt || '').trim(),
+  }))
+  return {
+    id: randomUUID(),
+    title: '参考视频原脚本',
+    summary:
+      shotScripts
+        .map((row) => row.scriptText)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(' / ')
+        .slice(0, 220) || '沿用参考视频拆解出的原始脚本内容',
+    fullScript: composeWholeScriptFromShots(
+      orderedShots.map((shot) => ({
+        ...shot,
+        scriptText: String(shot.scriptText || '').trim(),
+        scriptRole: shot.scriptRole,
+        visualDescription: String(shot.visualDescription || '').trim(),
+        actionDescription: String(shot.actionDescription || '').trim(),
+        cameraDescription: String(shot.cameraDescription || '').trim(),
+        generationPrompt: String(shot.generationPrompt || '').trim(),
+      })),
+    ),
+    shotScripts,
+    score: 10,
+    reason: '默认沿用参考视频原始脚本，不自动切换到高分变体',
+    selected: true,
+    createdAt: now(),
+  }
+}
+
+function normalizeCandidateText(value: unknown) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function isLightRewriteCandidate(base: string, candidate: string) {
+  const baseText = normalizeCandidateText(base).toLowerCase()
+  const candidateText = normalizeCandidateText(candidate).toLowerCase()
+  if (!candidateText) return false
+  if (!baseText) return true
+  if (candidateText === baseText) return true
+  if (candidateText.includes(baseText) || baseText.includes(candidateText)) return true
+  const baseTokens = new Set(baseText.split(/[^a-z0-9\u4e00-\u9fa5]+/i).filter(Boolean))
+  const candidateTokens = candidateText.split(/[^a-z0-9\u4e00-\u9fa5]+/i).filter(Boolean)
+  if (!baseTokens.size || !candidateTokens.length) return false
+  const overlap = candidateTokens.filter((token) => baseTokens.has(token)).length
+  return overlap / Math.max(1, candidateTokens.length) >= 0.45
+}
+
+function shouldKeepVariantField(base: string, candidate: string, options?: { allowBroaderRewrite?: boolean }) {
+  const baseText = normalizeCandidateText(base)
+  const candidateText = normalizeCandidateText(candidate)
+  if (!candidateText) return false
+  if (!baseText) return true
+  if (candidateText === baseText) return true
+  if (options?.allowBroaderRewrite) {
+    if (candidateText.length >= Math.min(12, Math.max(6, Math.floor(baseText.length * 0.2)))) return true
+  }
+  return isLightRewriteCandidate(baseText, candidateText)
+}
+
+function alignVariantShotToBase(input: {
+  baseShot: ShotSpec
+  shotIndex: number
+  raw: any
+}) {
+  const baseTimeRange = buildShotTimeRange(input.baseShot)
+  const rawRole = String(input.raw?.scriptRole || '').trim()
+  const rawTimeRange = String(input.raw?.timeRange || input.raw?.time_range || '').trim()
+  const baseScriptText = String(input.baseShot.scriptText || '').trim()
+  const baseVisualDescription = String(input.baseShot.visualDescription || '').trim()
+  const baseActionDescription = String(input.baseShot.actionDescription || '').trim()
+  const baseCameraDescription = String(input.baseShot.cameraDescription || '').trim()
+  const baseGenerationPrompt = String(input.baseShot.generationPrompt || '').trim()
+  const candidateScriptText = String(input.raw?.scriptText || '').trim()
+  const candidateVisualDescription = String(input.raw?.visualDescription || '').trim()
+  const candidateActionDescription = String(input.raw?.actionDescription || '').trim()
+  const candidateCameraDescription = String(input.raw?.cameraDescription || '').trim()
+  const candidateGenerationPrompt = String(input.raw?.generationPrompt || '').trim()
+
+  return {
+    shotId: input.baseShot.id,
+    shotIndex: input.shotIndex,
+    timeRange: rawTimeRange && rawTimeRange === baseTimeRange ? rawTimeRange : baseTimeRange,
+    scriptText: shouldKeepVariantField(baseScriptText, candidateScriptText, { allowBroaderRewrite: true }) ? candidateScriptText : baseScriptText,
+    scriptRole:
+      rawRole && rawRole === String(input.baseShot.scriptRole || 'unknown').trim()
+        ? (rawRole as ShotSpec['scriptRole'])
+        : ((String(input.baseShot.scriptRole || 'unknown').trim() || 'unknown') as ShotSpec['scriptRole']),
+    visualDescription: shouldKeepVariantField(baseVisualDescription, candidateVisualDescription, { allowBroaderRewrite: true })
+      ? candidateVisualDescription
+      : baseVisualDescription,
+    actionDescription: shouldKeepVariantField(baseActionDescription, candidateActionDescription, { allowBroaderRewrite: true })
+      ? candidateActionDescription
+      : baseActionDescription,
+    cameraDescription: shouldKeepVariantField(baseCameraDescription, candidateCameraDescription, { allowBroaderRewrite: true })
+      ? candidateCameraDescription
+      : baseCameraDescription,
+    generationPrompt: shouldKeepVariantField(baseGenerationPrompt, candidateGenerationPrompt, { allowBroaderRewrite: true })
+      ? candidateGenerationPrompt
+      : baseGenerationPrompt || [baseScriptText, baseVisualDescription, baseActionDescription, baseCameraDescription].filter(Boolean).join('\n'),
+  }
+}
+
+function pickHighestScoreCandidate(candidates: CloneScriptVariantCandidate[]) {
+  return candidates
+    .slice()
+    .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0] || null
+}
+
+function normalizeVariantComparisonText(value: unknown) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
+function areVariantCandidatesNearDuplicate(a: CloneScriptVariantCandidate, b: CloneScriptVariantCandidate) {
+  const aSummary = normalizeVariantComparisonText(a.summary)
+  const bSummary = normalizeVariantComparisonText(b.summary)
+  const aShots = (a.shotScripts ?? []).map((row) => normalizeVariantComparisonText(row.scriptText)).join(' | ')
+  const bShots = (b.shotScripts ?? []).map((row) => normalizeVariantComparisonText(row.scriptText)).join(' | ')
+  return Boolean(aSummary && bSummary && aSummary === bSummary) || Boolean(aShots && bShots && aShots === bShots)
+}
+
+function hasEnoughVariantDiversity(candidates: CloneScriptVariantCandidate[]) {
+  const generated = candidates.filter((item) => item.title !== '参考视频原脚本')
+  if (generated.length <= 1) return generated.length === 1
+  for (let i = 0; i < generated.length; i += 1) {
+    for (let j = i + 1; j < generated.length; j += 1) {
+      if (!areVariantCandidatesNearDuplicate(generated[i], generated[j])) return true
+    }
+  }
+  return false
+}
+
+function scriptVariantThemePreset(index: number, locale: CloneLocale) {
+  if (locale === 'zh-CN') {
+    const presets = [
+      {
+        title: '潮流前卫',
+        summaryPrefix: '强调个性表达与视觉冲击，突出潮流佩戴氛围。',
+        reason: '偏潮流前卫角度，强化第一眼吸引力',
+        shotPrefix: '潮流感表达：',
+      },
+      {
+        title: '日常百搭',
+        summaryPrefix: '强调日常佩戴与轻松搭配，降低决策门槛。',
+        reason: '偏日常百搭角度，突出通勤与日常适配',
+        shotPrefix: '日常感表达：',
+      },
+      {
+        title: '礼物心动',
+        summaryPrefix: '强调精致细节与礼物感受，突出心动氛围。',
+        reason: '偏礼赠心动角度，强化精致与惊喜感',
+        shotPrefix: '礼物感表达：',
+      },
+      {
+        title: '质感细节',
+        summaryPrefix: '强调材质、做工与局部细节，突出高级感。',
+        reason: '偏质感细节角度，强化材质与工艺卖点',
+        shotPrefix: '质感向表达：',
+      },
+    ]
+    return presets[index % presets.length]
+  }
+  const presets = [
+    { title: 'Trend Focus', summaryPrefix: 'Lean into trend expression and visual punch.', reason: 'Trend-led angle with stronger first-glance impact', shotPrefix: 'Trend angle: ' },
+    { title: 'Daily Match', summaryPrefix: 'Lean into daily wear and easy matching.', reason: 'Daily-wear angle with lower decision pressure', shotPrefix: 'Daily angle: ' },
+    { title: 'Gift Mood', summaryPrefix: 'Lean into refined details and giftable mood.', reason: 'Gift-led angle with stronger emotional appeal', shotPrefix: 'Gift angle: ' },
+    { title: 'Detail Craft', summaryPrefix: 'Lean into material, finish, and crafted details.', reason: 'Detail-led angle with stronger craftsmanship focus', shotPrefix: 'Detail angle: ' },
+  ]
+  return presets[index % presets.length]
+}
+
+function applyVariantTheme(candidate: CloneScriptVariantCandidate, themeIndex: number, locale: CloneLocale) {
+  if (candidate.title === '参考视频原脚本') return candidate
+  const preset = scriptVariantThemePreset(themeIndex, locale)
+  const shotScripts = (candidate.shotScripts ?? []).map((row, shotIndex) => {
+    const baseScriptText = normalizeCandidateText(row.scriptText)
+    const nextScriptText = `${preset.shotPrefix}${baseScriptText || `分镜 ${shotIndex + 1} 围绕 ${preset.title} 角度表达`}`.trim()
+    return {
+      ...row,
+      scriptText: nextScriptText,
+      visualDescription: row.visualDescription ? `${preset.title}风格下，${row.visualDescription}` : row.visualDescription,
+      actionDescription: row.actionDescription ? `${preset.title}重点下，${row.actionDescription}` : row.actionDescription,
+      cameraDescription: row.cameraDescription ? `${preset.title}表达方式，${row.cameraDescription}` : row.cameraDescription,
+      generationPrompt: row.generationPrompt ? `${preset.summaryPrefix}\n${row.generationPrompt}` : row.generationPrompt,
+    }
+  })
+  return {
+    ...candidate,
+    title: `${preset.title} · ${candidate.title}`,
+    summary: `${preset.summaryPrefix} ${candidate.summary || ''}`.trim().slice(0, 220),
+    reason: preset.reason,
+    shotScripts,
+    fullScript: shotScripts
+      .slice()
+      .sort((a, b) => Number(a.shotIndex || 0) - Number(b.shotIndex || 0))
+      .map((row, rowIndex) => `#${rowIndex + 1} ${row.scriptRole || 'unknown'}\n${String(row.scriptText || row.generationPrompt || row.visualDescription || '').trim()}`)
+      .join('\n\n'),
+  }
+}
+
+function enforceVariantCandidateDiversity(candidates: CloneScriptVariantCandidate[], locale: CloneLocale) {
+  return candidates.map((candidate, index) => {
+    if (index === 0 || !candidates.slice(0, index).some((prev) => areVariantCandidatesNearDuplicate(prev, candidate))) {
+      return candidate
+    }
+    return applyVariantTheme(candidate, index - 1, locale)
+  })
+}
+
 function composeWholeScriptFromShots(shots: ShotSpec[]) {
   return shots
     .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
@@ -1010,14 +1240,19 @@ async function generateWholeScriptVariantsWithAi(input: {
     'Generate multiple full-video script variants for the same product video blueprint.',
     `Output language: ${input.locale === 'zh-CN' ? 'Chinese' : 'Vietnamese'}.`,
     `Variant count: ${input.variantCount}.`,
+    'The reconstructed source shots below are the base script. Every variant should stay generally aligned to them shot by shot.',
     'Every variant must keep shot order unchanged and output per-shot time-range script content.',
+    'Do not change shot count. Do not change shot order. Keep the role and broad purpose of each shot generally consistent.',
     'Each shotScripts item must explicitly describe what happens in that time range, in a form like "0s-3s 做什么".',
     'Every single shot must be 8.0 seconds or shorter. Never output any shot longer than 8 seconds.',
     'If a source beat feels longer than 8 seconds, split it into finer consecutive sub-shots while keeping the same story logic and shot order.',
-    'Keep the same overall selling structure and shot count, but vary hook wording, scene framing, action details, transitions, persuasion style, and product emphasis.',
+    'Allow noticeable but still related variation in wording, hook tone, selling emphasis order, transition phrasing, CTA phrasing, and micro-level presentation details.',
+    'You may adjust per-shot expression, focus point, and descriptive detail as long as the whole variant still feels like the same product video idea.',
+    'Do not rewrite the video into a completely different concept. Do not replace the product category, the model-presented context, or the overall shot sequence.',
+    'visualDescription, actionDescription, cameraDescription, and generationPrompt should stay broadly aligned with the corresponding source shot, but they do not need to be near-identical.',
     'You must incorporate the bound model identity and product reference context when generating the variants.',
     'This is for product selling and visual demonstration. Keep human presence subordinate to product display.',
-    'Do not remove shots. Do not change shot order. Do not add watermark, logo, subtitles, platform UI, or unrelated branding.',
+    'Do not remove shots. Do not add watermark, logo, subtitles, platform UI, or unrelated branding.',
     'Each shotScripts item must stay within its own time range, and that time range itself must not exceed 8 seconds.',
     'Return JSON only.',
     'JSON shape:',
@@ -1172,16 +1407,30 @@ function compactStoryboardImageRefs(input: {
   modelPackRefs: string[]
   thumbnailPath?: string
   startFramePath?: string
+  continuityAnchorPath?: string
   mode: 'start' | 'end'
 }) {
   const productRefs = Array.from(new Set(input.productRefs.map((item) => String(item || '').trim()).filter(Boolean)))
   const modelPackRefs = Array.from(new Set(input.modelPackRefs.map((item) => String(item || '').trim()).filter(Boolean)))
   const thumbnailRefs = input.thumbnailPath ? [String(input.thumbnailPath).trim()].filter(Boolean) : []
   const startFrameRefs = input.startFramePath ? [String(input.startFramePath).trim()].filter(Boolean) : []
+  const continuityAnchorRefs = input.continuityAnchorPath ? [String(input.continuityAnchorPath).trim()].filter(Boolean) : []
   if (input.mode === 'end') {
-    return Array.from(new Set([...startFrameRefs, ...productRefs.slice(0, 2), ...modelPackRefs.slice(0, 1), ...thumbnailRefs])).slice(0, 5)
+    return Array.from(new Set([...startFrameRefs, ...continuityAnchorRefs, ...modelPackRefs.slice(0, 2), ...productRefs.slice(0, 2), ...thumbnailRefs])).slice(0, 6)
   }
-  return Array.from(new Set([...productRefs.slice(0, 3), ...modelPackRefs.slice(0, 2), ...thumbnailRefs])).slice(0, 5)
+  return Array.from(new Set([...continuityAnchorRefs, ...modelPackRefs.slice(0, 3), ...productRefs.slice(0, 2), ...thumbnailRefs])).slice(0, 6)
+}
+
+function previousShotContinuityAnchor(project: CloneProject, shot: ShotSpec) {
+  const sortedShots = (project.blueprint?.shots ?? []).slice().sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+  const currentIndex = sortedShots.findIndex((item) => item.id === shot.id)
+  if (currentIndex <= 0) return ''
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const candidate = sortedShots[index]
+    const anchor = String(candidate.gptFirstFramePath || candidate.generatedFirstFramePath || candidate.gptLastFramePath || candidate.generatedLastFramePath || '').trim()
+    if (anchor) return anchor
+  }
+  return ''
 }
 
 function generatedImageProvider(credentials: ModelCredentials) {
@@ -1422,6 +1671,23 @@ function productTypeLockPrompt(productType: CloneProductType) {
   return [...base, ...(specific[productType] ?? specific.general)].join(' ')
 }
 
+function toPromptModelIdentity(pack: ModelIdentityPack | null | undefined) {
+  if (!pack) return undefined
+  return {
+    id: pack.id,
+    description: pack.description,
+    market: pack.market,
+    gender: pack.gender,
+    ageRange: pack.ageRange,
+    hairStyle: pack.hairStyle,
+    skinTone: pack.skinTone,
+    outfitStyle: pack.outfitStyle,
+    mood: pack.mood,
+    sceneStyle: pack.sceneStyle,
+    imagePaths: pack.imagePaths,
+  }
+}
+
 function buildProductStructureDescription(input: {
   category: CloneProductType
   summary?: string
@@ -1434,21 +1700,171 @@ function buildProductStructureDescription(input: {
   geometryDetails?: string
   sizeScale?: string
   matchingRules?: string[]
+  compact?: boolean
 }) {
-  const lines = [
-    `Category: ${input.category}`,
-    input.summary ? `Summary: ${input.summary}` : '',
-    input.coreSubject ? `Core subject: ${input.coreSubject}` : '',
-    input.connectionStructure ? `Connection structure: ${input.connectionStructure}` : '',
-    input.materialDetails ? `Material details: ${input.materialDetails}` : '',
-    input.wearingPosition ? `Wearing/display position: ${input.wearingPosition}` : '',
-    input.surfaceDetails ? `Surface details: ${input.surfaceDetails}` : '',
-    input.colorDetails ? `Color details: ${input.colorDetails}` : '',
-    input.geometryDetails ? `Geometry details: ${input.geometryDetails}` : '',
-    input.sizeScale ? `Size/scale: ${input.sizeScale}` : '',
-    input.matchingRules?.length ? `Matching rules: ${input.matchingRules.join(' | ')}` : '',
-  ]
+  const lines = input.compact
+    ? [
+        `Category: ${input.category}`,
+        input.coreSubject ? `Core subject: ${input.coreSubject}` : input.summary ? `Summary: ${input.summary}` : '',
+        input.connectionStructure ? `Connection structure: ${input.connectionStructure}` : '',
+        input.materialDetails ? `Material details: ${input.materialDetails}` : '',
+        input.wearingPosition ? `Wearing/display position: ${input.wearingPosition}` : '',
+        input.colorDetails ? `Color details: ${input.colorDetails}` : '',
+        input.geometryDetails ? `Geometry details: ${input.geometryDetails}` : '',
+        input.sizeScale ? `Size/scale: ${input.sizeScale}` : '',
+      ]
+    : [
+        `Category: ${input.category}`,
+        input.summary ? `Summary: ${input.summary}` : '',
+        input.coreSubject ? `Core subject: ${input.coreSubject}` : '',
+        input.connectionStructure ? `Connection structure: ${input.connectionStructure}` : '',
+        input.materialDetails ? `Material details: ${input.materialDetails}` : '',
+        input.wearingPosition ? `Wearing/display position: ${input.wearingPosition}` : '',
+        input.surfaceDetails ? `Surface details: ${input.surfaceDetails}` : '',
+        input.colorDetails ? `Color details: ${input.colorDetails}` : '',
+        input.geometryDetails ? `Geometry details: ${input.geometryDetails}` : '',
+        input.sizeScale ? `Size/scale: ${input.sizeScale}` : '',
+        input.matchingRules?.length ? `Matching rules: ${input.matchingRules.join(' | ')}` : '',
+      ]
   return lines.filter(Boolean).join('\n')
+}
+
+function buildProjectProductAnalysisText(project: CloneProject, fallbackProductType?: CloneProductType) {
+  const productAnalysis =
+    (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis ||
+    (project.blueprint?.consistencyAssets as any)?.productAnalysis
+  return buildProductStructureDescription({
+    category: normalizeProductType(project.baseBlueprint?.productCategory || fallbackProductType || 'general'),
+    summary: String(productAnalysis?.summary || '').trim(),
+    coreSubject: String(productAnalysis?.coreSubject || '').trim(),
+    connectionStructure: String(productAnalysis?.connectionStructure || '').trim(),
+    materialDetails: String(productAnalysis?.materialDetails || '').trim(),
+    wearingPosition: String(productAnalysis?.wearingPosition || '').trim(),
+    surfaceDetails: String(productAnalysis?.surfaceDetails || '').trim(),
+    colorDetails: String(productAnalysis?.colorDetails || '').trim(),
+    geometryDetails: String(productAnalysis?.geometryDetails || '').trim(),
+    sizeScale: String(productAnalysis?.sizeScale || '').trim(),
+    matchingRules: Array.isArray(productAnalysis?.matchingRules) ? productAnalysis.matchingRules.map(String).filter(Boolean) : [],
+  })
+}
+
+function buildCompactProjectProductAnalysisText(project: CloneProject, fallbackProductType?: CloneProductType) {
+  const productAnalysis =
+    (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis ||
+    (project.blueprint?.consistencyAssets as any)?.productAnalysis
+  return buildProductStructureDescription({
+    category: normalizeProductType(project.baseBlueprint?.productCategory || fallbackProductType || 'general'),
+    summary: String(productAnalysis?.summary || '').trim(),
+    coreSubject: String(productAnalysis?.coreSubject || '').trim(),
+    connectionStructure: String(productAnalysis?.connectionStructure || '').trim(),
+    materialDetails: String(productAnalysis?.materialDetails || '').trim(),
+    wearingPosition: String(productAnalysis?.wearingPosition || '').trim(),
+    surfaceDetails: String(productAnalysis?.surfaceDetails || '').trim(),
+    colorDetails: String(productAnalysis?.colorDetails || '').trim(),
+    geometryDetails: String(productAnalysis?.geometryDetails || '').trim(),
+    sizeScale: String(productAnalysis?.sizeScale || '').trim(),
+    matchingRules: Array.isArray(productAnalysis?.matchingRules) ? productAnalysis.matchingRules.map(String).filter(Boolean) : [],
+    compact: true,
+  })
+}
+
+function containsCjkText(value: unknown) {
+  return /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(String(value || ''))
+}
+
+function shouldRefreshProductAnalysis(productAnalysis: any) {
+  if (!productAnalysis) return true
+  const fields = [
+    productAnalysis.summary,
+    productAnalysis.coreSubject,
+    productAnalysis.connectionStructure,
+    productAnalysis.materialDetails,
+    productAnalysis.wearingPosition,
+    productAnalysis.surfaceDetails,
+    productAnalysis.colorDetails,
+    productAnalysis.geometryDetails,
+    productAnalysis.sizeScale,
+    productAnalysis.rawDescription,
+    ...(Array.isArray(productAnalysis.matchingRules) ? productAnalysis.matchingRules : []),
+  ]
+  const joined = fields.map((item) => String(item || '').trim()).filter(Boolean).join('\n')
+  if (!joined) return true
+  return containsCjkText(joined)
+}
+
+function buildFallbackProductAnalysis(productType: CloneProductType) {
+  return {
+    category: productType,
+    summary: 'Use the uploaded reference images as the only valid product identity source.',
+    coreSubject: 'Preserve the exact same single product instance shown in the uploaded reference images.',
+    connectionStructure: 'Keep all connection points, attachment points, hanging structure, closures, and component relationships exactly the same as the reference images.',
+    materialDetails: 'Match the exact visible material family, finish, reflectivity, transparency, and gemstone or decorative material response from the reference images.',
+    wearingPosition: 'Keep the same real wearing or display position implied by the product category and the reference images.',
+    surfaceDetails: 'Keep the same surface texture, polish, engraving, stone setting, edge treatment, and micro details visible in the reference images.',
+    colorDetails: 'Match the exact visible color family, metallic tone, stone color, brightness, and contrast shown in the reference images.',
+    geometryDetails: 'Keep the exact silhouette, geometry, component count, curvature, thickness, proportions, length, and relative placement shown in the reference images.',
+    sizeScale: 'Keep the product scale and proportions consistent with the reference images and realistic wearing scale.',
+    matchingRules: [
+      'same product category only',
+      'no redesign',
+      'no extra parts',
+      'no missing parts',
+      'same structure and proportions as reference images',
+    ],
+    rawDescription: '',
+  }
+}
+
+async function ensureProjectProductAnalysis(project: CloneProject, refs: string[], productType: CloneProductType, locale: CloneLocale) {
+  const existing = (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis
+  if (existing && !shouldRefreshProductAnalysis(existing)) {
+    return project
+  }
+  if (!refs.length) return project
+  let analyzed = buildFallbackProductAnalysis(productType)
+  try {
+    const analyzedResult = await analyzeProductStructureWithGrs({
+      credentials: await cloneRepo.getCredentials(),
+      productReferenceImagePaths: refs,
+      productCategory: productType,
+      locale,
+    })
+    analyzed = {
+      ...analyzedResult,
+      category: normalizeProductType(analyzedResult.category || productType),
+    }
+  } catch (error) {
+    console.warn('[clone] product-analysis-fallback', {
+      projectId: project.id,
+      productType,
+      refs: refs.length,
+      message: String((error as any)?.message ?? error ?? ''),
+    })
+  }
+  const nextAssets = {
+    ...(project.baseBlueprint?.consistencyAssets ?? {}),
+    productReferenceImages: refs,
+    productAnalysis: {
+      ...analyzed,
+      updatedAt: now(),
+    },
+    updatedAt: now(),
+  }
+  if (project.baseBlueprint) {
+    project.baseBlueprint = {
+      ...project.baseBlueprint,
+      consistencyAssets: nextAssets,
+    }
+  }
+  if (project.blueprint) {
+    project.blueprint = {
+      ...project.blueprint,
+      consistencyAssets: nextAssets,
+    }
+  }
+  project.productReferenceImagePaths = refs
+  syncProjectBlueprintLayers(project)
+  return await cloneRepo.upsertProject(project)
 }
 
 function shotRoleText(shot: ShotSpec) {
@@ -3166,6 +3582,16 @@ export const cloneService = {
       ...(project.blueprint ?? {}),
       ...analyzed.blueprint,
     }
+      const initialProductRefs = collectProjectProductReferenceImages(project)
+      if (initialProductRefs.length) {
+        const analyzedProductType = normalizeProductType(
+          project.baseBlueprint?.productCategory ||
+          project.blueprint?.productCategory ||
+          project.baseBlueprint?.shots?.[0]?.productType ||
+          'general',
+        )
+        await ensureProjectProductAnalysis(project, initialProductRefs, analyzedProductType, locale)
+      }
       project.status = 'analyzed'
       project.workflowV2 = defaultWorkflowV2()
       patchWorkflowV2(project, 'generate_script_variants', 'upload_analyze_script', 'done')
@@ -3265,7 +3691,7 @@ export const cloneService = {
     cloneProjectId: string
     variantCount: number
   }) {
-    const project = await cloneRepo.getProject(input.cloneProjectId)
+    let project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project || !project.baseBlueprint) throw new Error('复刻项目或蓝图不存在')
     ensureCloneFlowState(project)
     patchWorkflowV2(project, 'generate_script_variants', 'generate_script_variants', 'running')
@@ -3273,9 +3699,19 @@ export const cloneService = {
     if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特。')
     const boundProductRefs = collectProjectProductReferenceImages(project)
     if (!boundProductRefs.length) throw new Error('请先上传商品图。')
+    const resolvedProductType = normalizeProductType(
+      project.baseBlueprint?.productCategory ||
+      project.blueprint?.productCategory ||
+      project.baseBlueprint?.shots?.[0]?.productType ||
+      'general',
+    )
+    project = await ensureProjectProductAnalysis(project, boundProductRefs, resolvedProductType, project.locale)
+    await cloneRepo.upsertProject(project)
+    const baseBlueprint = project.baseBlueprint
+    if (!baseBlueprint) throw new Error('复刻项目或蓝图不存在')
     const productAnalysis = (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis
     const productAnalysisText = buildProductStructureDescription({
-      category: normalizeProductType(project.baseBlueprint?.productCategory || 'general'),
+      category: normalizeProductType(baseBlueprint.productCategory || 'general'),
       summary: String(productAnalysis?.summary || '').trim(),
       coreSubject: String(productAnalysis?.coreSubject || '').trim(),
       connectionStructure: String(productAnalysis?.connectionStructure || '').trim(),
@@ -3293,7 +3729,7 @@ export const cloneService = {
       const rows = await generateWholeScriptVariantsWithAi({
         credentials: await cloneRepo.getCredentials(),
         locale: project.locale,
-        shots: project.baseBlueprint.shots,
+        shots: baseBlueprint.shots,
         variantCount: count,
         modelIdentity: {
           name: project.selectedModelIdentitySnapshot?.name,
@@ -3303,26 +3739,15 @@ export const cloneService = {
         productReferenceImagePaths: boundProductRefs,
         productAnalysisText,
       })
-      const baseShots = [...project.baseBlueprint.shots].sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
-      const candidates: CloneScriptVariantCandidate[] = rows.slice(0, count).map((item: any, index: number) => {
+      const baseShots = [...baseBlueprint.shots].sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+      const referenceCandidate = buildReferenceScriptCandidate(baseShots)
+      const generatedCandidates: CloneScriptVariantCandidate[] = rows.slice(0, count).map((item: any, index: number) => {
         const shotScripts = baseShots.map((shot, shotIndex) => {
           const hit =
             (item.shotScripts ?? []).find((row: any) => String(row?.shotId || '').trim() === shot.id) ||
             (item.shotScripts ?? []).find((row: any) => Number(row?.shotIndex ?? -1) === shotIndex) ||
             {}
-          return {
-            shotId: shot.id,
-            shotIndex,
-            timeRange:
-              String(hit?.timeRange || hit?.time_range || '').trim() ||
-              buildShotTimeRange(shot),
-            scriptText: String(hit?.scriptText || shot.scriptText || '').trim(),
-            scriptRole: (String(hit?.scriptRole || shot.scriptRole || 'unknown').trim() || 'unknown') as ShotSpec['scriptRole'],
-            visualDescription: String(hit?.visualDescription || shot.visualDescription || '').trim(),
-            actionDescription: String(hit?.actionDescription || shot.actionDescription || '').trim(),
-            cameraDescription: String(hit?.cameraDescription || shot.cameraDescription || '').trim(),
-            generationPrompt: String(hit?.generationPrompt || shot.generationPrompt || '').trim(),
-          }
+          return alignVariantShotToBase({ baseShot: shot, shotIndex, raw: hit })
         })
         return {
           id: item.id,
@@ -3341,16 +3766,42 @@ export const cloneService = {
           ),
           shotScripts,
           score: Number(item.score || 8) || 8,
-          reason: String(item.reason || '').trim() || (index === 0 ? '综合分最高，优先推荐' : '整片风格差异化候选'),
-          selected: index === 0,
+          reason: String(item.reason || '').trim() || '整片风格差异化候选',
+          selected: false,
           createdAt: now() + index,
         }
-      })
+      }).map((candidate: CloneScriptVariantCandidate, index: number) => applyVariantTheme(candidate, index, project.locale))
+      let candidates: CloneScriptVariantCandidate[] = [
+        referenceCandidate,
+        ...generatedCandidates.map((item) => ({ ...item, selected: false })),
+      ]
+      if (!hasEnoughVariantDiversity(candidates)) {
+        candidates = enforceVariantCandidateDiversity(candidates, project.locale)
+      }
+      if (!hasEnoughVariantDiversity(candidates)) {
+        throw new Error('整片脚本变体缺少有效差异，回退到逐镜候选组合。')
+      }
       project.scriptVariantCandidates = candidates
-      project.selectedScriptVariantId = candidates[0]?.id
+      const defaultCandidate = pickHighestScoreCandidate(generatedCandidates) || referenceCandidate
+      project.selectedScriptVariantId = defaultCandidate.id
+      project.scriptVariantCandidates = candidates.map((item) => ({
+        ...item,
+        selected: item.id === defaultCandidate.id,
+      }))
       project.lastError = ''
       patchWorkflowV2(project, 'generate_script_variants', 'generate_script_variants', 'done')
       patchWorkflowV2(project, 'select_script_variant', 'select_script_variant', 'running')
+      for (const shotScript of defaultCandidate.shotScripts) {
+        replaceProjectShot(project, shotScript.shotId, {
+          scriptText: shotScript.scriptText,
+          scriptRole: shotScript.scriptRole,
+          visualDescription: shotScript.visualDescription,
+          actionDescription: shotScript.actionDescription,
+          cameraDescription: shotScript.cameraDescription,
+          generationPrompt: shotScript.generationPrompt,
+          promptHint: shotScript.timeRange,
+        })
+      }
       latest = await cloneRepo.upsertProject(project)
     } catch (error: any) {
       const creds = await cloneRepo.getCredentials()
@@ -3397,7 +3848,8 @@ export const cloneService = {
     const shots = latest.baseBlueprint.shots
     const byShot = latest.baseBlueprint.variants ?? {}
     const scoreByShot = latest.baseBlueprint.variantScores ?? {}
-    const candidates: CloneScriptVariantCandidate[] = []
+    const referenceCandidate = buildReferenceScriptCandidate(shots)
+    let candidates: CloneScriptVariantCandidate[] = [referenceCandidate]
     for (let i = 0; i < count; i += 1) {
       const candidateShotScripts = shots
         .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
@@ -3409,17 +3861,11 @@ export const cloneService = {
               .slice()
               .sort((a, b) => (scores.get(b.id)?.totalScore || 0) - (scores.get(a.id)?.totalScore || 0))[i] ??
             variants[0]
-          return {
-            shotId: shot.id,
+          return alignVariantShotToBase({
+            baseShot: shot,
             shotIndex: Number(shot.index || 0),
-            timeRange: buildShotTimeRange(shot),
-            scriptText: String(chosen?.scriptText || shot.scriptText || '').trim(),
-            scriptRole: chosen?.scriptRole || shot.scriptRole || 'unknown',
-            visualDescription: String(chosen?.visualDescription || shot.visualDescription || '').trim(),
-            actionDescription: String(chosen?.actionDescription || shot.actionDescription || '').trim(),
-            cameraDescription: String(chosen?.cameraDescription || shot.cameraDescription || '').trim(),
-            generationPrompt: String(chosen?.generationPrompt || shot.generationPrompt || '').trim(),
-          }
+            raw: chosen || {},
+          })
         })
       const score = candidateShotScripts.length
         ? Number(
@@ -3434,7 +3880,7 @@ export const cloneService = {
             ).toFixed(2),
           )
         : 0
-      candidates.push({
+      candidates.push(applyVariantTheme({
         id: randomUUID(),
         title: buildVariantCandidateTitle(i, score),
         summary: candidateShotScripts.map((row) => row.scriptText).filter(Boolean).slice(0, 3).join(' / ').slice(0, 220),
@@ -3451,15 +3897,35 @@ export const cloneService = {
         ),
         shotScripts: candidateShotScripts,
         score,
-        reason: i === 0 ? '综合分最高，优先推荐' : i === 1 ? '节奏和转化更平衡' : '风格差异更大，适合试稿',
-        selected: i === 0,
+        reason: i === 0 ? '评分更高的备选脚本' : i === 1 ? '节奏和转化更平衡' : '风格差异更大，适合试稿',
+        selected: false,
         createdAt: now(),
-      })
+      }, i, latest.locale))
+    }
+    if (!hasEnoughVariantDiversity(candidates)) {
+      candidates = enforceVariantCandidateDiversity(candidates, latest.locale)
     }
     latest.scriptVariantCandidates = candidates
-    latest.selectedScriptVariantId = candidates[0]?.id
+    const generatedOnlyCandidates = candidates.filter((item) => item.id !== referenceCandidate.id)
+    const defaultCandidate = pickHighestScoreCandidate(generatedOnlyCandidates) || referenceCandidate
+    latest.selectedScriptVariantId = defaultCandidate.id
+    latest.scriptVariantCandidates = candidates.map((item) => ({
+      ...item,
+      selected: item.id === defaultCandidate.id,
+    }))
     patchWorkflowV2(latest, 'generate_script_variants', 'generate_script_variants', 'done')
     patchWorkflowV2(latest, 'select_script_variant', 'select_script_variant', 'running')
+    for (const shotScript of defaultCandidate.shotScripts) {
+      replaceProjectShot(latest, shotScript.shotId, {
+        scriptText: shotScript.scriptText,
+        scriptRole: shotScript.scriptRole,
+        visualDescription: shotScript.visualDescription,
+        actionDescription: shotScript.actionDescription,
+        cameraDescription: shotScript.cameraDescription,
+        generationPrompt: shotScript.generationPrompt,
+        promptHint: shotScript.timeRange,
+      })
+    }
     const saved = await cloneRepo.upsertProject(latest)
     return {
       project: saved,
@@ -3553,7 +4019,7 @@ export const cloneService = {
     if (!boundProductRefs.length) throw new Error('请先绑定商品图')
     if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特')
 
-    setAutoFlowStage(project, 'script', 'running', '自动生成并选择最高分脚本')
+    setAutoFlowStage(project, 'script', 'running', '自动生成脚本变体并默认选择评分最高项')
     await cloneRepo.upsertProject(project)
     if (!project.scriptVariantCandidates?.length) {
       const variantResult = await this.generateScriptVariantsForProject({
@@ -3562,11 +4028,16 @@ export const cloneService = {
       })
       project = variantResult.project
     }
-    const topCandidate = [...(project.scriptVariantCandidates ?? [])].sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0]
-    if (!topCandidate?.id) throw new Error('脚本候选生成失败，未产出可用候选')
+    if (!project) throw new Error('复刻项目不存在')
+    const currentProject = project
+    const defaultCandidate =
+      (currentProject.scriptVariantCandidates ?? []).find((item) => String(item.id || '').trim() === String(currentProject.selectedScriptVariantId || '').trim()) ||
+      (currentProject.scriptVariantCandidates ?? []).find((item) => item.selected) ||
+      currentProject.scriptVariantCandidates?.[0]
+    if (!defaultCandidate?.id) throw new Error('脚本候选生成失败，未产出可用候选')
     const selectedResult = await this.selectScriptVariantForProject({
-      cloneProjectId: project.id,
-      variantId: topCandidate.id,
+      cloneProjectId: currentProject.id,
+      variantId: defaultCandidate.id,
     })
     project = selectedResult.project
 
@@ -5456,6 +5927,7 @@ export const cloneService = {
       ...(snapshotProject.baseBlueprint || item.baseBlueprint),
       consistencyAssets,
     }
+    snapshotProject.productReferenceImagePaths = refs
     snapshotProject.blueprint = snapshotProject.blueprint
       ? { ...snapshotProject.blueprint, consistencyAssets }
       : snapshotProject.baseBlueprint
@@ -5494,6 +5966,7 @@ export const cloneService = {
             ...latest.baseBlueprint,
             consistencyAssets: latestConsistencyAssets,
           }
+          latest.productReferenceImagePaths = refs
           latest.blueprint = latest.blueprint
             ? { ...latest.blueprint, consistencyAssets: latestConsistencyAssets }
             : latest.baseBlueprint
@@ -5730,7 +6203,7 @@ export const cloneService = {
     })
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
-    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    let shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('锟斤拷锟斤拷失锟斤拷')
     const shotDir = join(getAppPaths().dataDir, 'viral-clone', item.id, 'shots', shot.id)
     await mkdir(shotDir, { recursive: true })
@@ -5889,35 +6362,61 @@ export const cloneService = {
       patch: { gptFrameStatus: 'generating', gptFrameError: '', gptFrameConfirmed: false },
     })
 
-    const latest = await cloneRepo.getProject(input.cloneProjectId)
+    let latest = await cloneRepo.getProject(input.cloneProjectId)
     if (!latest || !latest.blueprint) throw new Error('复刻项目或蓝图不存在')
     const latestShot = latest.blueprint.shots.find((x) => x.id === input.shotId) ?? shot
-    const outDir = join(getAppPaths().dataDir, 'viral-clone', latest.id, 'shots', latestShot.id, 'gpt-frames')
-    await mkdir(outDir, { recursive: true })
     const productType = normalizeProductType(latestShot.productType)
+    latest = await ensureProjectProductAnalysis(latest, refs, productType, latest.locale)
+    if (!latest.blueprint) throw new Error('复刻项目或蓝图不存在')
+    const refreshedShot = latest.blueprint.shots.find((x) => x.id === input.shotId) ?? latestShot
+    const outDir = join(getAppPaths().dataDir, 'viral-clone', latest.id, 'shots', refreshedShot.id, 'gpt-frames')
+    await mkdir(outDir, { recursive: true })
     const which = input.which ?? 'both'
     const compiled = promptConsistencyService.compileAndPersist({
       projectId: latest.id,
-      shot: latestShot,
+      shot: refreshedShot,
       projectShotCount: latest.blueprint.shots.length,
       productReferenceImagePaths: refs,
+      modelIdentity: toPromptModelIdentity(pack),
+    })
+    const productAnalysisText = buildProjectProductAnalysisText(latest, productType)
+    const startPrompt = buildGptFramePrompt({
+      shot: refreshedShot,
+      productType,
+      modelPack: pack,
+      productPoints: refreshedShot.aiPrompt || refreshedShot.materialNeed,
+      productDescription: productAnalysisText,
+      which: 'start',
+      compiledPrompt: compiled.finalPrompt,
+    })
+    const endPrompt = buildGptFramePrompt({
+      shot: refreshedShot,
+      productType,
+      modelPack: pack,
+      productPoints: refreshedShot.aiPrompt || refreshedShot.materialNeed,
+      productDescription: productAnalysisText,
+      which: 'end',
+      compiledPrompt: compiled.finalPrompt,
     })
     const promptHash = computePromptHash({
-      shot: latestShot,
+      shot: refreshedShot,
       productRefs: refs,
-      productDescription: latestShot.materialNeed,
+      productDescription: [latestShot.materialNeed, productAnalysisText].filter(Boolean).join('\n'),
       model: imageProviderModel(creds),
       qualityMode: normalizeQualityMode(latestShot.qualityMode),
     })
+    const continuityAnchorPath = previousShotContinuityAnchor(latest, refreshedShot)
     const imagePromptHash = computeImagePromptHash({
       promptHash,
       which,
-      refs: [...refs, ...pack.imagePaths],
+      refs: [...pack.imagePaths, ...refs, continuityAnchorPath].filter(Boolean),
       model: imageProviderModel(creds),
+      positivePrompt: which === 'end' ? endPrompt : which === 'both' ? `${startPrompt}\n---\n${endPrompt}` : startPrompt,
+      negativePrompt: compiled.finalNegativePrompt,
     })
     const cachedFrame = getCachedFrameResult(latest, imagePromptHash)
-    let firstPath = latestShot.gptFirstFramePath
-    let lastPath = latestShot.gptLastFramePath
+    let firstPath = refreshedShot.gptFirstFramePath
+    let lastPath = refreshedShot.gptLastFramePath
     try {
       if (cachedFrame?.imagePaths?.length) {
         firstPath = cachedFrame.imagePaths[0] || firstPath
@@ -5927,21 +6426,15 @@ export const cloneService = {
         const startRefs = compactStoryboardImageRefs({
           productRefs: refs,
           modelPackRefs: pack.imagePaths,
-          thumbnailPath: latestShot.thumbnailPath,
+          thumbnailPath: refreshedShot.thumbnailPath,
+          continuityAnchorPath,
           mode: 'start',
         })
         firstPath = await generateGptShotFrameImage({
           credentials: creds,
           outDir,
-          filePrefix: `gpt_first_${latestShot.index + 1}`,
-          prompt: buildGptFramePrompt({
-            shot: latestShot,
-            productType,
-            modelPack: pack,
-            productPoints: latestShot.aiPrompt || latestShot.materialNeed,
-            which: 'start',
-            compiledPrompt: compiled.finalPrompt,
-          }),
+          filePrefix: `gpt_first_${refreshedShot.index + 1}`,
+          prompt: startPrompt,
           negativePrompt: compiled.finalNegativePrompt,
           imagePaths: startRefs,
         })
@@ -5950,29 +6443,23 @@ export const cloneService = {
         const endRefs = compactStoryboardImageRefs({
           productRefs: refs,
           modelPackRefs: pack.imagePaths,
-          thumbnailPath: latestShot.thumbnailPath,
+          thumbnailPath: refreshedShot.thumbnailPath,
           startFramePath: firstPath,
+          continuityAnchorPath,
           mode: 'end',
         })
         lastPath = await generateGptShotFrameImage({
           credentials: creds,
           outDir,
-          filePrefix: `gpt_last_${latestShot.index + 1}`,
-          prompt: buildGptFramePrompt({
-            shot: latestShot,
-            productType,
-            modelPack: pack,
-            productPoints: latestShot.aiPrompt || latestShot.materialNeed,
-            which: 'end',
-            compiledPrompt: compiled.finalPrompt,
-          }),
+          filePrefix: `gpt_last_${refreshedShot.index + 1}`,
+          prompt: endPrompt,
           negativePrompt: compiled.finalNegativePrompt,
           imagePaths: endRefs,
         })
       }
         setCachedFrameResult(latest, {
           hash: imagePromptHash,
-          shotId: latestShot.id,
+          shotId: refreshedShot.id,
           imagePaths: [firstPath, lastPath].filter(Boolean) as string[],
           provider: generatedImageProvider(creds),
           model: imageProviderModel(creds),
@@ -5983,16 +6470,9 @@ export const cloneService = {
       }
       setCachedPromptResult(latest, {
         hash: promptHash,
-        shotId: latestShot.id,
-        positivePrompt: buildGptFramePrompt({
-          shot: latestShot,
-          productType,
-          modelPack: pack,
-          productPoints: latestShot.aiPrompt || latestShot.materialNeed,
-          which: 'start',
-          compiledPrompt: compiled.finalPrompt,
-        }),
-        negativePrompt: compiled.finalNegativePrompt || buildCloneNegativePrompt(productType, latestShot.shotType),
+        shotId: refreshedShot.id,
+        positivePrompt: startPrompt,
+        negativePrompt: compiled.finalNegativePrompt || buildCloneNegativePrompt(productType, refreshedShot.shotType),
         model: imageProviderModel(creds),
         qualityMode: normalizeQualityMode(latestShot.qualityMode),
         createdAt: now(),
@@ -6103,7 +6583,7 @@ export const cloneService = {
     })
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('澶嶅埢椤圭洰鎴栬摑鍥句笉瀛樺湪')
-    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    let shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('锟斤拷锟斤拷失锟斤拷')
     console.log('[clone-debug] generate-shot-clip:loaded-shot', {
       projectId: item.id,
@@ -6290,6 +6770,7 @@ export const cloneService = {
       shot,
       projectShotCount: item.blueprint.shots.length,
       productReferenceImagePaths: shot.productReferenceImagePaths,
+      modelIdentity: toPromptModelIdentity(selectedIdentityPack(item)),
     })
     try {
       const creds = await cloneRepo.getCredentials()
@@ -6584,15 +7065,15 @@ export const cloneService = {
   async getShotConsistencyReport(input: { cloneProjectId: string; shotId: string }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('复刻项目不存在')
-    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    let shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('分镜不存在')
-    return promptConsistencyService.getShotConsistencyReport(item.id, shot.id) || promptConsistencyService.previewShotConsistencyPrompt(item.id, shot)
+    return promptConsistencyService.getShotConsistencyReport(item.id, shot.id) || promptConsistencyService.previewShotConsistencyPrompt(item.id, shot, toPromptModelIdentity(selectedIdentityPack(item)))
   },
 
   async getShotImagePromptPreview(input: { cloneProjectId: string; shotId: string }) {
-    const item = await cloneRepo.getProject(input.cloneProjectId)
+    let item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('复刻项目不存在')
-    const shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    let shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('分镜不存在')
     const pack = selectedIdentityPack(item)
     if (!pack || pack.status !== 'done' || !pack.imagePaths.length) {
@@ -6609,32 +7090,51 @@ export const cloneService = {
       .map(String)
     if (!hasProductLock(shot, refs)) throw new Error('请先上传产品参考图或填写产品锁定信息')
     const productType = normalizeProductType(shot.productType)
+    item = await ensureProjectProductAnalysis(item, refs, productType, item.locale || 'zh-CN')
+    await cloneRepo.upsertProject(item)
+    shot = item.blueprint?.shots.find((x) => x.id === input.shotId) || shot
     const compiled = promptConsistencyService.getShotConsistencyReport(item.id, shot.id) ||
-      promptConsistencyService.previewShotConsistencyPrompt(item.id, shot)
+      promptConsistencyService.previewShotConsistencyPrompt(item.id, shot, toPromptModelIdentity(selectedIdentityPack(item)))
+
+    const productDescriptionText = buildCompactProjectProductAnalysisText(item, productType)
+    const productDescriptionBlock = buildProductDescriptionLockText(productDescriptionText)
+    const modelIdentityBlock = buildModelIdentityLockText(pack)
+    const referenceResponsibilityBlock = buildReferenceResponsibilityText()
+    const startPrompt = buildGptFramePrompt({
+      shot,
+      productType,
+      modelPack: pack,
+      productPoints: shot.aiPrompt || shot.materialNeed,
+      productDescription: productDescriptionText,
+      which: 'start',
+      compiledPrompt: compiled.finalPrompt,
+    })
+    const endPrompt = buildGptFramePrompt({
+      shot,
+      productType,
+      modelPack: pack,
+      productPoints: shot.aiPrompt || shot.materialNeed,
+      productDescription: productDescriptionText,
+      which: 'end',
+      compiledPrompt: compiled.finalPrompt,
+    })
 
     return {
       shotId: shot.id,
+      promptBuildSentinel: SHOT_IMAGE_PROMPT_PREVIEW_SENTINEL,
       promptCompilerVersion: compiled.compilerVersion,
       consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
       productType,
       compiledPrompt: compiled.finalPrompt,
       compiledNegativePrompt: compiled.finalNegativePrompt,
-      startPrompt: buildGptFramePrompt({
-        shot,
-        productType,
-        modelPack: pack,
-        productPoints: shot.aiPrompt || shot.materialNeed,
-        which: 'start',
-        compiledPrompt: compiled.finalPrompt,
-      }),
-      endPrompt: buildGptFramePrompt({
-        shot,
-        productType,
-        modelPack: pack,
-        productPoints: shot.aiPrompt || shot.materialNeed,
-        which: 'end',
-        compiledPrompt: compiled.finalPrompt,
-      }),
+      productDescriptionBlock,
+      modelIdentityBlock,
+      referenceResponsibilityBlock,
+      hasCompiledProductLock: Boolean(String(compiled.finalPrompt || '').trim()),
+      hasProductDescriptionBlock: Boolean(productDescriptionBlock),
+      hasModelIdentityBlock: Boolean(modelIdentityBlock),
+      startPrompt,
+      endPrompt,
       negativePrompt: compiled.finalNegativePrompt,
       referenceImageCount: refs.length,
       modelIdentityPackId: pack.id,
@@ -6651,6 +7151,7 @@ export const cloneService = {
       shot,
       projectShotCount: item.blueprint.shots.length,
       productReferenceImagePaths: shot.productReferenceImagePaths,
+      modelIdentity: toPromptModelIdentity(selectedIdentityPack(item)),
     })
     replaceProjectShot(item, shot.id, {
       compiledPrompt: compiled.finalPrompt,
