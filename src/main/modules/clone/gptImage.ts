@@ -1,18 +1,21 @@
 ﻿import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { runFfmpeg } from '../ffmpeg/runner'
 import { createGrsImageTask, isPublicHttpUrl, requireGrsKey, waitGrsResult } from './grsai'
 import { toPublicUrlViaQiniu } from './qiniu'
 import { downloadAtlasToBuffer, getAtlasJson, pickAtlasOutputUrl, postAtlasJson, uploadAtlasMedia } from './atlasRetry'
+import { resolveApifoxHubCredentials } from './apifoxProfile'
 import { generateImage as generateApifoxImage } from './unifiedImage'
 import type { CloneProductType, ImageProviderName, ModelCredentials, ModelIdentityPack, ShotSpec } from './types'
-import { buildReferenceLockText, buildShotScriptConstraintText } from './prompt'
+import { buildNoSpeakingInstruction, buildReferenceLockText, buildShotScriptConstraintText, prependSilentCommercialGlobalRule, sanitizeGeneratedVideoPrompt } from './prompt'
+import { canUseMockGeneration } from './mockPolicy'
 
 type GenerateImageInput = {
   credentials: ModelCredentials
   prompt: string
+  negativePrompt?: string
   imagePaths?: string[]
   outDir: string
   filePrefix: string
@@ -32,6 +35,50 @@ function imageProvider(credentials: ModelCredentials): ImageProviderName {
     return credentials.imageProviderPrimary
   }
   return 'openai'
+}
+
+function hasProviderCredential(credentials: ModelCredentials, provider: ImageProviderName) {
+  if (provider === 'kling') return Boolean(String(credentials.klingApiKey || '').trim())
+  if (provider === 'grsai') return Boolean(String(credentials.grsaiApiKey || '').trim())
+  if (provider === 'apifox_hub') return Boolean(String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey || '').trim())
+  return Boolean(String(credentials.openaiApiKey || '').trim())
+}
+
+function imageProviderCandidates(credentials: ModelCredentials): ImageProviderName[] {
+  const preferred = imageProvider(credentials)
+  const fallbackOrder: ImageProviderName[] = ['apifox_hub', 'openai', 'kling', 'grsai']
+  const out: ImageProviderName[] = []
+  for (const provider of [preferred, ...fallbackOrder]) {
+    if (out.includes(provider)) continue
+    if (!hasProviderCredential(credentials, provider)) continue
+    out.push(provider)
+  }
+  return out
+}
+
+function withImageProvider(credentials: ModelCredentials, provider: ImageProviderName): ModelCredentials {
+  if (provider === 'openai') {
+    return {
+      ...credentials,
+      imageProviderPrimary: 'openai',
+    }
+  }
+  return {
+    ...credentials,
+    imageProviderPrimary: provider,
+  }
+}
+
+function isRetryableImageProviderError(error: unknown) {
+  const message = String((error as any)?.message ?? error ?? '').toLowerCase()
+  return (
+    message.includes('连接超时') ||
+    message.includes('task timeout') ||
+    message.includes('fetch failed') ||
+    message.includes('无法访问') ||
+    message.includes('connection') ||
+    message.includes('timeout')
+  )
 }
 
 function klingImageModel(credentials: ModelCredentials) {
@@ -255,6 +302,7 @@ async function postKlingImage(input: GenerateImageInput) {
     input_fidelity: 'high',
     output_format: 'jpeg',
     prompt: input.prompt,
+    negative_prompt: String(input.negativePrompt || '').trim() || undefined,
     quality: imageQuality(input.credentials),
     size: '1024x1536',
   }
@@ -277,6 +325,7 @@ async function postGrsImage(input: GenerateImageInput) {
   const created = await createGrsImageTask({
     credentials: input.credentials,
     prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
     urls,
   })
   const outputUrl = created.directUrl || (created.taskId ? (await waitGrsResult(input.credentials, created.taskId)).outputUrl : '')
@@ -291,19 +340,60 @@ async function postGrsImage(input: GenerateImageInput) {
 }
 
 async function generateProviderImage(input: GenerateImageInput) {
-  const provider = imageProvider(input.credentials)
-  if (provider === 'apifox_hub') {
-    return (await generateApifoxImage({
-      credentials: input.credentials,
-      prompt: input.prompt,
-      outDir: input.outDir,
-      filePrefix: input.filePrefix,
-      capability: input.imagePaths?.length ? 'image_edit' : 'image_generate',
-    })).outputPath
+  const providers = imageProviderCandidates(input.credentials)
+  if (!providers.length) {
+    return await postEditImage(input)
   }
-  if (provider === 'kling') return await postKlingImage(input)
-  if (provider === 'grsai') return await postGrsImage(input)
-  return await postEditImage(input)
+  const errors: string[] = []
+  for (let index = 0; index < providers.length; index += 1) {
+    const provider = providers[index]
+    const scopedInput = {
+      ...input,
+      credentials: withImageProvider(input.credentials, provider),
+    }
+    try {
+      if (provider === 'apifox_hub') {
+        return (await generateApifoxImage({
+          credentials: scopedInput.credentials,
+          prompt: scopedInput.prompt,
+          negativePrompt: scopedInput.negativePrompt,
+          imagePaths: scopedInput.imagePaths,
+          outDir: scopedInput.outDir,
+          filePrefix: scopedInput.filePrefix,
+          capability: scopedInput.imagePaths?.length ? 'image_edit' : 'image_generate',
+        })).outputPath
+      }
+      if (provider === 'kling') return await postKlingImage(scopedInput)
+      if (provider === 'grsai') return await postGrsImage(scopedInput)
+      return await postEditImage(scopedInput)
+    } catch (error: any) {
+      const text = String(error?.message ?? error ?? '').trim() || 'unknown error'
+      errors.push(`${provider}: ${text}`)
+      const isLast = index >= providers.length - 1
+      if (!isRetryableImageProviderError(error) || isLast) {
+        throw new Error(errors.join(' | '))
+      }
+    }
+  }
+  throw new Error(errors.join(' | ') || '图片生成失败')
+}
+
+async function buildMockImageFromReference(input: GenerateImageInput) {
+  await mkdir(input.outDir, { recursive: true })
+  const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
+  const source = refs.find((item) => existsSync(item))
+  if (!source) {
+    throw new Error('缺少可用参考图，无法生成本地测试图片')
+  }
+  const ext = extname(source).toLowerCase() || '.png'
+  const rawPath = join(input.outDir, `${input.filePrefix}_mock_raw_${Date.now()}_${randomUUID()}${ext}`)
+  await copyFile(source, rawPath)
+  return await finalizeImageOutput({
+    rawPath,
+    outDir: input.outDir,
+    filePrefix: `${input.filePrefix}_mock`,
+    normalizeOutput: input.normalizeOutput,
+  })
 }
 
 export function defaultModelIdentityDescription(productType: CloneProductType) {
@@ -364,10 +454,10 @@ export function buildIdentityPackPrompt(input: {
 
 function productLock(productType: CloneProductType) {
   const common =
-    'The product must match the user reference product images exactly: same color, shape, material, pattern, holes, pins, layout and decorative details. Do not add logo or redesign the product.'
-  if (productType === 'earrings') return `${common} Earrings must keep the same dangling structure, metal texture, pearls or zircon details if any.`
-  if (productType === 'phone_case') return `${common} Phone case camera hole, border and printed pattern must remain identical.`
-  if (productType === 'clothes') return `${common} Clothing cut, fabric, collar, sleeves and pattern must remain identical.`
+    'The product must match the user reference product images exactly: same color, shape, material, pattern, holes, pins, layout and decorative details. First identify the uploaded product category correctly, then preserve that exact product as the single source of truth. Product fidelity has higher priority than styling, beauty retouching or scene decoration. Do not add logo, do not redesign the product, do not output a similar generic product.'
+  if (productType === 'earrings') return `${common} Earrings must keep the same dangling structure, metal texture, pearls or zircon details if any. If the reference person is wearing different earrings, remove them and replace them with the uploaded earrings only. Gemstone and metal highlights must stay realistic and physically believable; do not add exaggerated sparkle, glow, starburst shine, magical shimmer, or fake luxury effects. Earrings cannot stand upright by themselves; they must appear worn on the ear, held by hand, laid flat, or supported by a believable contact point or gravity-consistent hanging direction.`
+  if (productType === 'phone_case') return `${common} Phone case camera hole, border and printed pattern must remain identical. If another case or phone accessory exists in the reference shot, replace only that case layer with the uploaded case.`
+  if (productType === 'clothes') return `${common} Clothing cut, fabric, collar, sleeves and pattern must remain identical. If the reference outfit conflicts with the uploaded product, replace only the relevant clothing item with the uploaded product.`
   return common
 }
 
@@ -380,35 +470,113 @@ function identityText(pack: ModelIdentityPack) {
   ].join(' ')
 }
 
+export function buildModelIdentityLockText(pack: ModelIdentityPack) {
+  const profile = [
+    pack.market ? `market ${pack.market}` : '',
+    pack.gender ? `gender ${pack.gender}` : '',
+    pack.ageRange ? `age ${pack.ageRange}` : '',
+    pack.hairStyle ? `hair ${pack.hairStyle}` : '',
+    pack.skinTone ? `skin ${pack.skinTone}` : '',
+    pack.outfitStyle ? `outfit ${pack.outfitStyle}` : '',
+    pack.mood ? `mood ${pack.mood}` : '',
+    pack.sceneStyle ? `scene ${pack.sceneStyle}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  return [
+    'STRICT MODEL IDENTITY LOCK: use the same selected model across all storyboard frames.',
+    profile ? `Selected model profile: ${profile}.` : '',
+    pack.description ? `Selected model identity: ${pack.description}.` : '',
+    'Only the selected model package defines the person. Product references lock product only, not person identity.',
+    'Do not change face, hair identity, skin-tone identity, age identity, or outfit identity unless the selected model package defines it.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+export function buildReferenceResponsibilityText() {
+  return 'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY.'
+}
+
+export function buildProductDescriptionLockText(productDescription?: string) {
+  const text = String(productDescription || '').trim()
+  if (!text) return ''
+  return [
+    'TEXT PRODUCT DESCRIPTION LOCK (HIGHEST PRIORITY FOR PRODUCT IDENTITY AFTER REFERENCES):',
+    text,
+  ].join('\n')
+}
+
+function isModelPresentationShot(shot: ShotSpec) {
+  const role = String(shot.role || shot.shotRole || shot.purpose || '').trim().toLowerCase()
+  const shotType = String(shot.shotType || '').trim().toLowerCase()
+  return role === 'model_scene' || shotType === 'model_demo'
+}
+
+function buildCrossShotInstanceLock(shot: ShotSpec, modelPresentationShot: boolean) {
+  return [
+    'SILENT VISUAL COMMERCIAL.',
+    modelPresentationShot
+      ? 'No dialogue. No presenter delivery. Keep human-use context, not a talking-head shot.'
+      : 'No face. No dialogue.',
+    'STRICT PRODUCT LOCK: same single product instance across all shots; exact silhouette, geometry, structure, material, color, and proportion; no variation.',
+    'Same model identity across all shots; human only.',
+    'Different camera views only.',
+    modelPresentationShot
+      ? 'Keep real wearing or human-use context.'
+      : 'Keep the same product; only change angle or crop.',
+    `Shot ${shot.index + 1} is another view of the same locked subject, not a new setup.`,
+  ].join('\n')
+}
+
 export function buildGptFramePrompt(input: {
   shot: ShotSpec
   productType: CloneProductType
   modelPack: ModelIdentityPack
   productPoints?: string
+  productDescription?: string
   which: 'start' | 'end'
+  compiledPrompt?: string
 }) {
   const shot = input.shot
   const isEnd = input.which === 'end'
+  const modelPresentationShot = isModelPresentationShot(shot)
+  const crossShotInstanceLock = buildCrossShotInstanceLock(shot, modelPresentationShot)
   const referenceLock = buildReferenceLockText(shot, input.modelPack.sceneStyle || 'reference shot scene atmosphere')
   const scriptLock = buildShotScriptConstraintText(shot)
-  return [
+  const compiledPrompt = sanitizeGeneratedVideoPrompt(String(input.compiledPrompt || '').trim(), 1200)
+  const shotContinuityRule = isEnd
+    ? 'Continue from the provided start frame: same model, product, outfit, location, lighting, and camera; only subtle pose or camera continuation.'
+    : 'Keep the same background category, composition, hand placement, and product demonstration action from the reference shot.'
+  const minimalShotSupplement = [
+    `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
+    `Camera motion: ${String(shot.motion || 'static')}.`,
+    `Product selling points: ${input.productPoints || shot.materialNeed || 'clear product texture and usage value'}.`,
+    modelPresentationShot
+      ? 'Keep visible wearing context; do not convert it into a tabletop or isolated product still.'
+      : 'Keep product readability primary.',
+  ].join(' ')
+  return prependSilentCommercialGlobalRule([
     isEnd
       ? `Generate the ending keyframe for shot ${shot.index + 1}. It must be a small continuation from the provided GPT start frame.`
       : `Generate the opening keyframe for shot ${shot.index + 1}.`,
-    identityText(input.modelPack),
-    scriptLock,
+    crossShotInstanceLock,
+    buildProductDescriptionLockText(input.productDescription),
+    compiledPrompt ? `STRICT PRODUCT IDENTITY LOCK FOR THIS FRAME:\n${compiledPrompt}` : '',
+    buildModelIdentityLockText(input.modelPack),
+    buildReferenceResponsibilityText(),
+    shotContinuityRule,
     referenceLock,
+    scriptLock,
+    minimalShotSupplement,
+    modelPresentationShot
+      ? 'Frame must still read as a model demo shot.'
+      : 'Keep the composition product-led and clean.',
     productLock(input.productType),
-    `Reference shot translation: ${String(shot.visualPrompt || shot.visual || 'use only composition, framing, action rhythm and camera grammar from the reference shot').trim()}.`,
-    `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration target: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
-    `Camera motion target: ${String(shot.motion || 'static')}. Keep changes restrained and realistic.`,
-    isEnd
-      ? 'The ending frame must keep the same new model, same product, same outfit, same location, same lighting, same emotion and same camera setup as the provided start frame. Only allow subtle hand, expression or camera-position continuation.'
-      : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model and replace only the product with the user product.',
-    `Product selling points: ${input.productPoints || shot.materialNeed || 'clear product texture and usage value'}.`,
-    'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters, no platform controls.',
-    'Realistic smartphone TikTok social-commerce style, natural skin texture, natural hands, clean background, product sharp and clearly visible.',
-  ].join('\n')
+    'No text, watermark, logo, UI, or random letters.',
+    'Do not redesign, switch style, add/remove parts, or change proportions.',
+    'Realistic smartphone social-commerce style.',
+  ], 1800)
 }
 
 export async function generateModelIdentityPackImages(input: {
@@ -420,6 +588,27 @@ export async function generateModelIdentityPackImages(input: {
   onImageGenerated?: (filePath: string, index: number) => Promise<void> | void
 }) {
   const profile = defaultModelIdentityDescription(input.productType)
+  if (
+    canUseMockGeneration(input.credentials) &&
+    !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(input.credentials.openaiApiKey ?? '').trim() &&
+    !String(input.credentials.klingApiKey ?? '').trim() &&
+    !String(input.credentials.grsaiApiKey ?? '').trim()
+  ) {
+    const imagePaths: string[] = []
+    for (let i = 0; i < 9; i += 1) {
+      const path = await buildMockImageFromReference({
+        credentials: input.credentials,
+        prompt: `mock model identity ${i + 1}`,
+        imagePaths: input.productReferenceImagePaths,
+        outDir: input.outDir,
+        filePrefix: `model_identity_${i + 1}`,
+      })
+      imagePaths.push(path)
+      await input.onImageGenerated?.(path, i)
+    }
+    return { profile, imagePaths, model: 'mock-image' }
+  }
   const prompts = [
     'clean white background front portrait, neutral expression',
     'clean white background left three-quarter portrait',
@@ -452,10 +641,20 @@ export async function generateModelIdentityPackImages(input: {
 export async function generateGptShotFrameImage(input: {
   credentials: ModelCredentials
   prompt: string
+  negativePrompt?: string
   outDir: string
   filePrefix: string
   imagePaths: string[]
   normalizeOutput?: 'vertical_9_16' | 'preserve'
 }) {
+  if (
+    canUseMockGeneration(input.credentials) &&
+    !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(input.credentials.openaiApiKey ?? '').trim() &&
+    !String(input.credentials.klingApiKey ?? '').trim() &&
+    !String(input.credentials.grsaiApiKey ?? '').trim()
+  ) {
+    return await buildMockImageFromReference(input)
+  }
   return await generateProviderImage(input)
 }
