@@ -1,7 +1,7 @@
 import type { PromptRiskFlag } from './types'
 
-export const PROMPT_CONSISTENCY_COMPILER_VERSION = 'pc-1.0.0'
-export const PROMPT_CONSISTENCY_POLICY_VERSION = 'pc-policy-1.2.0'
+export const PROMPT_CONSISTENCY_COMPILER_VERSION = 'pc-1.4.0'
+export const PROMPT_CONSISTENCY_POLICY_VERSION = 'pc-policy-1.6.0'
 
 export const HIGH_RISK_PRODUCT_TYPES = new Set([
   'earrings',
@@ -31,6 +31,11 @@ export const CINEMATIC_OVERRIDE_TERMS = [
   'luxury reinterpretation',
   'abstract',
   'glowing',
+  'beautify',
+  'redesign',
+  'dramatic lighting makeover',
+  'editorial fashion',
+  'surreal',
 ]
 
 export const REFLECTIVE_HINTS = ['metal', 'reflective', 'chrome', 'glossy', 'mirror', 'gem', 'jewelry', 'gold', 'silver']

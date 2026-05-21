@@ -47,12 +47,14 @@ import {
   generateGptShotFrameImage,
   generateModelIdentityPackImages,
 } from './gptImage'
+import { getProductCanonicalSourcePrompt, sanitizeProductReferenceImages } from './productImageSanitizer'
 import {
   buildCloneShotPrompt,
   buildCloneNegativePrompt,
   buildProductLockText,
   buildRealismInstruction,
   buildNoSpeakingInstruction,
+  keepEnglishLikeText,
   prependSilentCommercialGlobalRule,
   sanitizeGeneratedVideoPrompt,
   sanitizeNegativePrompt,
@@ -122,6 +124,7 @@ import { downloadAtlasToFile } from './atlasRetry'
 import { promptConsistencyService } from './prompt-consistency/service'
 
 const SHOT_IMAGE_PROMPT_PREVIEW_SENTINEL = 'shot-image-prompt-2026-05-20-v3'
+const SHOT_VIDEO_PROMPT_PREVIEW_SENTINEL = 'shot-video-prompt-2026-05-21-v2'
 
 function now() {
   return Date.now()
@@ -761,6 +764,7 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     ).trim()
   const coverAssetPath =
     String(project.finalCompose?.coverImagePath || '').trim() ||
+    String(project.coverAssetPath || '').trim() ||
     firstProductImage ||
     String(project.finalCompose?.outputPath || '').trim() ||
     String(project.previewPipeline?.previewOutputPath || '').trim() ||
@@ -1415,10 +1419,27 @@ function compactStoryboardImageRefs(input: {
   const thumbnailRefs = input.thumbnailPath ? [String(input.thumbnailPath).trim()].filter(Boolean) : []
   const startFrameRefs = input.startFramePath ? [String(input.startFramePath).trim()].filter(Boolean) : []
   const continuityAnchorRefs = input.continuityAnchorPath ? [String(input.continuityAnchorPath).trim()].filter(Boolean) : []
+  const primaryProductRefs = productRefs.slice(0, 1)
+  const primaryModelRefs = modelPackRefs.slice(0, 1)
   if (input.mode === 'end') {
-    return Array.from(new Set([...startFrameRefs, ...continuityAnchorRefs, ...modelPackRefs.slice(0, 2), ...productRefs.slice(0, 2), ...thumbnailRefs])).slice(0, 6)
+    return Array.from(
+      new Set([
+        ...primaryProductRefs,
+        ...startFrameRefs,
+        ...continuityAnchorRefs,
+        ...primaryModelRefs,
+        ...thumbnailRefs,
+      ]),
+    ).slice(0, 6)
   }
-  return Array.from(new Set([...continuityAnchorRefs, ...modelPackRefs.slice(0, 3), ...productRefs.slice(0, 2), ...thumbnailRefs])).slice(0, 6)
+  return Array.from(
+    new Set([
+      ...primaryProductRefs,
+      ...primaryModelRefs,
+      ...continuityAnchorRefs,
+      ...thumbnailRefs,
+    ]),
+  ).slice(0, 6)
 }
 
 function previousShotContinuityAnchor(project: CloneProject, shot: ShotSpec) {
@@ -1702,29 +1723,33 @@ function buildProductStructureDescription(input: {
   matchingRules?: string[]
   compact?: boolean
 }) {
+  const asciiText = (value: unknown, fallback: string) => {
+    const text = keepEnglishLikeText(value, '').trim()
+    return text || fallback
+  }
   const lines = input.compact
     ? [
         `Category: ${input.category}`,
-        input.coreSubject ? `Core subject: ${input.coreSubject}` : input.summary ? `Summary: ${input.summary}` : '',
-        input.connectionStructure ? `Connection structure: ${input.connectionStructure}` : '',
-        input.materialDetails ? `Material details: ${input.materialDetails}` : '',
-        input.wearingPosition ? `Wearing/display position: ${input.wearingPosition}` : '',
-        input.colorDetails ? `Color details: ${input.colorDetails}` : '',
-        input.geometryDetails ? `Geometry details: ${input.geometryDetails}` : '',
-        input.sizeScale ? `Size/scale: ${input.sizeScale}` : '',
+        `Core subject: ${asciiText(input.coreSubject || input.summary, 'same exact product instance from Product Canonical Source')}`,
+        `Connection structure: ${asciiText(input.connectionStructure, 'keep every attachment and connection point unchanged')}`,
+        `Material details: ${asciiText(input.materialDetails, 'preserve the exact visible material family and finish')}`,
+        `Wearing/display position: ${asciiText(input.wearingPosition, 'keep the same wearing or display position')}`,
+        `Color details: ${asciiText(input.colorDetails, 'preserve the exact visible color family')}`,
+        `Geometry details: ${asciiText(input.geometryDetails, 'preserve silhouette, shape, proportions, and component count')}`,
+        `Size/scale: ${asciiText(input.sizeScale, 'keep product scale consistent with the reference images')}`,
       ]
     : [
         `Category: ${input.category}`,
-        input.summary ? `Summary: ${input.summary}` : '',
-        input.coreSubject ? `Core subject: ${input.coreSubject}` : '',
-        input.connectionStructure ? `Connection structure: ${input.connectionStructure}` : '',
-        input.materialDetails ? `Material details: ${input.materialDetails}` : '',
-        input.wearingPosition ? `Wearing/display position: ${input.wearingPosition}` : '',
-        input.surfaceDetails ? `Surface details: ${input.surfaceDetails}` : '',
-        input.colorDetails ? `Color details: ${input.colorDetails}` : '',
-        input.geometryDetails ? `Geometry details: ${input.geometryDetails}` : '',
-        input.sizeScale ? `Size/scale: ${input.sizeScale}` : '',
-        input.matchingRules?.length ? `Matching rules: ${input.matchingRules.join(' | ')}` : '',
+        `Summary: ${asciiText(input.summary, 'use the bound product snapshot as the only product fact source')}`,
+        `Core subject: ${asciiText(input.coreSubject, 'same exact product instance from Product Canonical Source')}`,
+        `Connection structure: ${asciiText(input.connectionStructure, 'keep every attachment and connection point unchanged')}`,
+        `Material details: ${asciiText(input.materialDetails, 'preserve the exact visible material family and finish')}`,
+        `Wearing/display position: ${asciiText(input.wearingPosition, 'keep the same wearing or display position')}`,
+        `Surface details: ${asciiText(input.surfaceDetails, 'preserve the same surface texture and micro details')}`,
+        `Color details: ${asciiText(input.colorDetails, 'preserve the exact visible color family')}`,
+        `Geometry details: ${asciiText(input.geometryDetails, 'preserve silhouette, shape, proportions, and component count')}`,
+        `Size/scale: ${asciiText(input.sizeScale, 'keep product scale consistent with the reference images')}`,
+        `Matching rules: ${input.matchingRules?.length ? input.matchingRules.join(' | ') : 'no redesign | no extra parts | no missing parts'}`,
       ]
   return lines.filter(Boolean).join('\n')
 }
@@ -1748,6 +1773,155 @@ function buildProjectProductAnalysisText(project: CloneProject, fallbackProductT
   })
 }
 
+function buildBoundProductSnapshotText(project: CloneProject) {
+  const snapshot = project.boundProductSnapshot || project.baseBlueprint?.consistencyAssets?.boundProductSnapshot || project.blueprint?.consistencyAssets?.boundProductSnapshot
+  if (!snapshot) return ''
+  return [
+    'BOUND PRODUCT SNAPSHOT (PRIMARY PRODUCT FACT SOURCE):',
+    `Product ID: ${snapshot.id}`,
+    `Product Name: ${snapshot.name}`,
+    `Product Type: ${snapshot.type}`,
+    snapshot.remark ? `Product Remark: ${snapshot.remark}` : '',
+    snapshot.coverImagePath ? `Product Cover: ${snapshot.coverImagePath}` : '',
+    snapshot.canonicalSourcePath ? `Canonical Source: ${snapshot.canonicalSourcePath}` : '',
+    `Canonical Source Status: ${snapshot.canonicalSourceStatus || 'idle'}`,
+    snapshot.originalImagePaths.length ? `Original Image Count: ${snapshot.originalImagePaths.length}` : '',
+    snapshot.frozenReferenceImagePaths.length ? `Frozen Reference Count: ${snapshot.frozenReferenceImagePaths.length}` : '',
+    'This snapshot is frozen at binding time. If any later text conflicts with it, the snapshot and its reference images win.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject) {
+  if (!project.productId) return project
+  const product = await getProductById(project.productId)
+  if (!product) return project
+  const originalRefs = collectCloneProductImageRefs(product)
+  const canonicalSourcePath = String(product.canonicalSourcePath || '').trim() || resolveBoundCanonicalSourcePath(project)
+  const boundAt = project.boundProductSnapshot?.boundAt || project.baseBlueprint?.consistencyAssets?.boundProductSnapshot?.boundAt || project.blueprint?.consistencyAssets?.boundProductSnapshot?.boundAt || now()
+  const nextSnapshot = {
+    id: product.id,
+    name: String(product.name || '').trim(),
+    type: String(product.type || '').trim(),
+    remark: String(product.remark || '').trim() || undefined,
+    coverImagePath: String(product.coverImagePath || originalRefs[0] || '').trim() || undefined,
+    canonicalSourcePath: canonicalSourcePath || undefined,
+    canonicalSourceStatus: product.canonicalSourceStatus ?? 'idle',
+    originalImagePaths: originalRefs,
+    frozenReferenceImagePaths: canonicalSourcePath ? [canonicalSourcePath] : [],
+    boundAt,
+    updatedAt: now(),
+  }
+  const next = { ...project, boundProductSnapshot: nextSnapshot }
+  if (next.baseBlueprint?.consistencyAssets) {
+    next.baseBlueprint = {
+      ...next.baseBlueprint,
+      consistencyAssets: {
+        ...next.baseBlueprint.consistencyAssets,
+        boundProductSnapshot: nextSnapshot,
+        originalProductReferenceImages: originalRefs,
+        sanitizedProductReferenceImages: canonicalSourcePath ? [canonicalSourcePath] : [],
+        productReferenceImages: canonicalSourcePath ? [canonicalSourcePath] : originalRefs,
+        productImageSanitization: {
+          ...(next.baseBlueprint.consistencyAssets.productImageSanitization ?? {
+            status: 'idle',
+            originalPaths: [],
+            sanitizedPaths: [],
+            failedPaths: [],
+            diagnostics: [],
+            updatedAt: now(),
+          }),
+          status: canonicalSourcePath ? 'done' : 'idle',
+          originalPaths: originalRefs,
+          sanitizedPaths: canonicalSourcePath ? [canonicalSourcePath] : [],
+          failedPaths: canonicalSourcePath ? [] : originalRefs,
+          updatedAt: now(),
+        },
+        updatedAt: now(),
+      },
+    }
+  }
+  if (next.blueprint?.consistencyAssets) {
+    next.blueprint = {
+      ...next.blueprint,
+      consistencyAssets: {
+        ...next.blueprint.consistencyAssets,
+        boundProductSnapshot: nextSnapshot,
+        originalProductReferenceImages: originalRefs,
+        sanitizedProductReferenceImages: canonicalSourcePath ? [canonicalSourcePath] : [],
+        productReferenceImages: canonicalSourcePath ? [canonicalSourcePath] : originalRefs,
+        productImageSanitization: {
+          ...(next.blueprint.consistencyAssets.productImageSanitization ?? {
+            status: 'idle',
+            originalPaths: [],
+            sanitizedPaths: [],
+            failedPaths: [],
+            diagnostics: [],
+            updatedAt: now(),
+          }),
+          status: canonicalSourcePath ? 'done' : 'idle',
+          originalPaths: originalRefs,
+          sanitizedPaths: canonicalSourcePath ? [canonicalSourcePath] : [],
+          failedPaths: canonicalSourcePath ? [] : originalRefs,
+          updatedAt: now(),
+        },
+        updatedAt: now(),
+      },
+    }
+  }
+  return next
+}
+
+function resolveBoundCanonicalSourcePath(project: CloneProject) {
+  const snapshot = project.boundProductSnapshot || project.baseBlueprint?.consistencyAssets?.boundProductSnapshot || project.blueprint?.consistencyAssets?.boundProductSnapshot
+  const snapshotCanonical = String(snapshot?.canonicalSourcePath || '').trim()
+  if (snapshotCanonical) return snapshotCanonical
+
+  const candidates = [
+    ...(project.sanitizedProductReferenceImagePaths ?? []),
+    ...(project.baseBlueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+    ...(project.blueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+    ...(project.productReferenceImagePaths ?? []),
+    ...(project.blueprint?.shots?.flatMap((shot) => shot.sanitizedProductReferenceImagePaths ?? []) ?? []),
+    ...(project.blueprint?.shots?.flatMap((shot) => shot.productReferenceImagePaths ?? []) ?? []),
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+
+  const canonicalLike = candidates.find((item) => item.toLowerCase().includes('canonical_source'))
+  if (canonicalLike) return canonicalLike
+  return ''
+}
+
+function resolveProductSnapshotText(project: CloneProject, fallbackProductType?: CloneProductType) {
+  const snapshotText = buildBoundProductSnapshotText(project)
+  if (snapshotText) return snapshotText
+  return buildProjectProductAnalysisText(project, fallbackProductType)
+}
+
+function buildPromptProductDescriptionText(project: CloneProject, fallbackProductType?: CloneProductType) {
+  const snapshot = project.boundProductSnapshot || project.baseBlueprint?.consistencyAssets?.boundProductSnapshot || project.blueprint?.consistencyAssets?.boundProductSnapshot
+  const snapshotText = snapshot
+    ? buildProductStructureDescription({
+        category: normalizeProductType(snapshot.type || fallbackProductType || 'general'),
+        summary: `Product ID ${snapshot.id}. Use Product Canonical Source only.`,
+        coreSubject: `Exact same product instance as ${keepEnglishLikeText(snapshot.name, 'bound product') || 'the bound product'}.`,
+        connectionStructure: 'Keep every attachment, connector, and structural relation identical to Product Canonical Source.',
+        materialDetails: `Product Canonical Source path: ${String(snapshot.canonicalSourcePath || '').trim() || 'missing'}.`,
+        wearingPosition: snapshot.remark ? `Bound note: ${keepEnglishLikeText(snapshot.remark, 'same bound product')}` : 'Use the same bound product setup.',
+        surfaceDetails: 'Preserve the same surface texture, polish, and micro details from Product Canonical Source.',
+        colorDetails: 'Keep the exact visible color family, tone, and reflection from Product Canonical Source.',
+        geometryDetails: 'Preserve the exact silhouette, geometry, proportions, and component count.',
+        sizeScale: 'Keep the exact product scale and real wearing proportion.',
+        matchingRules: ['Product Canonical Source only', 'no redesign', 'same single product instance', 'no extra parts', 'no missing parts'],
+      })
+    : ''
+  return [snapshotText, buildProjectProductAnalysisText(project, fallbackProductType)]
+    .filter(Boolean)
+    .join('\n')
+}
+
 function buildCompactProjectProductAnalysisText(project: CloneProject, fallbackProductType?: CloneProductType) {
   const productAnalysis =
     (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis ||
@@ -1766,6 +1940,500 @@ function buildCompactProjectProductAnalysisText(project: CloneProject, fallbackP
     matchingRules: Array.isArray(productAnalysis?.matchingRules) ? productAnalysis.matchingRules.map(String).filter(Boolean) : [],
     compact: true,
   })
+}
+
+function storyboardPrimaryProductRefs(project: CloneProject): string[] {
+  const preferred = [
+    ...(project.sanitizedProductReferenceImagePaths ?? []),
+    ...(project.baseBlueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+    ...(project.blueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+    ...(project.originalProductReferenceImagePaths ?? []),
+    ...(project.baseBlueprint?.consistencyAssets?.originalProductReferenceImages ?? []),
+    ...(project.blueprint?.consistencyAssets?.originalProductReferenceImages ?? []),
+    ...(project.productReferenceImagePaths ?? []),
+  ]
+  return Array.from(new Set(preferred.map((item) => String(item || '').trim()).filter(Boolean)))
+}
+
+function analysisProductRefs(project: CloneProject): string[] {
+  const preferred = [
+    ...(project.sanitizedProductReferenceImagePaths ?? []),
+    ...(project.baseBlueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+    ...(project.blueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+    ...(project.originalProductReferenceImagePaths ?? []),
+    ...(project.baseBlueprint?.consistencyAssets?.originalProductReferenceImages ?? []),
+    ...(project.blueprint?.consistencyAssets?.originalProductReferenceImages ?? []),
+  ]
+  return Array.from(new Set(preferred.map((item) => String(item || '').trim()).filter(Boolean)))
+}
+
+function isImageFilePath(filePath: string) {
+  return /\.(png|jpe?g|webp|bmp)$/i.test(String(filePath || '').trim())
+}
+
+function collectCloneProductImageRefs(product: Product): string[] {
+  const imageRefs = Array.isArray((product as any).images)
+    ? ((product as any).images as Array<{ filePath?: string }>).map((item) => String(item?.filePath || '').trim())
+    : []
+  const legacyRefs = Object.values(product.assets ?? {})
+    .flatMap((assets) => (assets ?? []).map((asset) => String(asset?.filePath || '').trim()))
+  const refs = [...imageRefs, ...legacyRefs].filter((filePath) => filePath && isImageFilePath(filePath))
+  return Array.from(new Set(refs))
+}
+
+function computeProductReferenceSignature(refs: string[]) {
+  return refs
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .sort()
+    .join('|')
+}
+
+async function getProductById(productId: string) {
+  const products = await productsRepo.list()
+  return products.find((item) => item.id === productId) || null
+}
+
+async function ensureProductCanonicalSourceCache(input: {
+  product: Product
+  productRefs: string[]
+  productType: CloneProductType
+}) {
+  const productRefs = Array.from(new Set(input.productRefs.map((item) => String(item || '').trim()).filter(Boolean)))
+  const signature = computeProductReferenceSignature(productRefs)
+  const prompt = getProductCanonicalSourcePrompt()
+  const cacheValid =
+    input.product.canonicalSourceStatus === 'done' &&
+    String(input.product.canonicalSourcePath || '').trim() &&
+    input.product.canonicalSourceSourceSignature === signature
+
+  if (cacheValid) {
+    return {
+      product: input.product,
+      canonicalRefs: [String(input.product.canonicalSourcePath || '').trim()].filter(Boolean),
+      fallbackToOriginal: false,
+    }
+  }
+
+  const processingProduct = await productsRepo.upsert({
+    ...input.product,
+    canonicalSourceStatus: 'processing',
+    canonicalSourcePrompt: prompt,
+    canonicalSourceDiagnostics: [],
+    canonicalSourceUpdatedAt: now(),
+    canonicalSourceSourceSignature: signature,
+  })
+
+  try {
+    const sanitization = await sanitizeProductReferenceImages({
+      cloneProjectId: processingProduct.id,
+      productType: input.productType,
+      originalPaths: productRefs,
+      outDir: join(getAppPaths().tmpDir, 'product-library-canonical-source', processingProduct.id),
+    })
+    const canonicalRef = String(sanitization.sanitizedPaths[0] || '').trim()
+    const nextProduct = await productsRepo.upsert({
+      ...processingProduct,
+      canonicalSourcePath: canonicalRef || undefined,
+      canonicalSourceStatus: canonicalRef ? 'done' : 'failed',
+      canonicalSourcePrompt: prompt,
+      canonicalSourceDiagnostics: sanitization.diagnostics,
+      canonicalSourceUpdatedAt: now(),
+      canonicalSourceSourceSignature: signature,
+    })
+    return {
+      product: nextProduct,
+      canonicalRefs: canonicalRef ? [canonicalRef] : [],
+      fallbackToOriginal: !canonicalRef,
+    }
+  } catch (error: any) {
+    const failedProduct = await productsRepo.upsert({
+      ...processingProduct,
+      canonicalSourcePath: undefined,
+      canonicalSourceStatus: 'failed',
+      canonicalSourcePrompt: prompt,
+      canonicalSourceDiagnostics: [
+        {
+          originalPath: productRefs[0] || '',
+          status: 'failed',
+          note: String(error?.message ?? error ?? 'Product Canonical Source generation failed'),
+          prompt,
+          fallbackToOriginal: true,
+        },
+      ],
+      canonicalSourceUpdatedAt: now(),
+      canonicalSourceSourceSignature: signature,
+    })
+    return {
+      product: failedProduct,
+      canonicalRefs: [],
+      fallbackToOriginal: true,
+    }
+  }
+}
+
+const productCanonicalSourceRefreshJobs = new Set<string>()
+
+async function refreshProductCanonicalSourceFromLibrary(productId: string) {
+  const product = await getProductById(productId)
+  if (!product) throw new Error('商品库商品不存在')
+  const productRefs = collectCloneProductImageRefs(product)
+  if (!productRefs.length) throw new Error('当前商品没有可用于生成标准源的图片')
+  const productType = normalizeProductType('general')
+  const productKey = String(product.id || productId).trim()
+  const signature = computeProductReferenceSignature(productRefs)
+  const prompt = getProductCanonicalSourcePrompt()
+  const processingProduct = await productsRepo.upsert({
+    ...product,
+    canonicalSourceStatus: 'processing',
+    canonicalSourcePrompt: prompt,
+    canonicalSourceDiagnostics: [],
+    canonicalSourceUpdatedAt: now(),
+    canonicalSourceSourceSignature: signature,
+  })
+
+  if (!productCanonicalSourceRefreshJobs.has(productKey)) {
+    productCanonicalSourceRefreshJobs.add(productKey)
+    void (async () => {
+      try {
+        const sanitization = await sanitizeProductReferenceImages({
+          cloneProjectId: processingProduct.id,
+          productType,
+          originalPaths: productRefs,
+          outDir: join(getAppPaths().tmpDir, 'product-library-canonical-source', processingProduct.id),
+        })
+        const canonicalRef = String(sanitization.sanitizedPaths[0] || '').trim()
+        await productsRepo.upsert({
+          ...processingProduct,
+          canonicalSourcePath: canonicalRef || undefined,
+          canonicalSourceStatus: canonicalRef ? 'done' : 'failed',
+          canonicalSourcePrompt: prompt,
+          canonicalSourceDiagnostics: sanitization.diagnostics,
+          canonicalSourceUpdatedAt: now(),
+          canonicalSourceSourceSignature: signature,
+        })
+      } catch (error: any) {
+        await productsRepo.upsert({
+          ...processingProduct,
+          canonicalSourcePath: undefined,
+          canonicalSourceStatus: 'failed',
+          canonicalSourcePrompt: prompt,
+          canonicalSourceDiagnostics: [
+            {
+              originalPath: productRefs[0] || '',
+              status: 'failed',
+              note: String(error?.message ?? error ?? 'Product Canonical Source generation failed'),
+              prompt,
+              fallbackToOriginal: true,
+            },
+          ],
+          canonicalSourceUpdatedAt: now(),
+          canonicalSourceSourceSignature: signature,
+        })
+      } finally {
+        productCanonicalSourceRefreshJobs.delete(productKey)
+      }
+    })()
+  }
+
+  return processingProduct
+}
+
+function hasUsableSanitizedProductRefs(project: CloneProject): boolean {
+  return analysisProductRefs(project).some((item) =>
+    (project.sanitizedProductReferenceImagePaths ?? []).includes(item) ||
+    (project.baseBlueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []).includes(item) ||
+    (project.blueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []).includes(item),
+  )
+}
+
+function assertStoryboardExtractionReady(project: CloneProject) {
+  const refs = Array.from(
+    new Set(
+      [
+        ...(project.originalProductReferenceImagePaths ?? []),
+        ...(project.sanitizedProductReferenceImagePaths ?? []),
+        ...(project.baseBlueprint?.consistencyAssets?.originalProductReferenceImages ?? []),
+        ...(project.baseBlueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+        ...(project.blueprint?.consistencyAssets?.originalProductReferenceImages ?? []),
+        ...(project.blueprint?.consistencyAssets?.sanitizedProductReferenceImages ?? []),
+      ]
+        .map((item) => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  )
+  if (!refs.length) {
+    throw new Error('请先上传商品参考图')
+  }
+  return
+}
+
+function resolveStoryboardProductRefs(project: CloneProject, shot?: ShotSpec, requestedRefs?: string[]): string[] {
+  const canonicalSourcePath = resolveBoundCanonicalSourcePath(project)
+  if (!canonicalSourcePath) {
+    throw new Error('请先为绑定商品生成标准源')
+  }
+  return [canonicalSourcePath]
+}
+
+async function sanitizeAndPersistProjectProductRefs(project: CloneProject, originalRefs: string[]) {
+  const normalizedOriginals = Array.from(new Set(originalRefs.map((item) => String(item || '').trim()).filter(Boolean)))
+  const sanitizationStartedAt = now()
+  const processingAssets = {
+    ...(project.baseBlueprint?.consistencyAssets ?? project.blueprint?.consistencyAssets ?? { updatedAt: sanitizationStartedAt }),
+    originalProductReferenceImages: normalizedOriginals,
+    sanitizedProductReferenceImages: [],
+    productImageSanitization: {
+      status: 'processing' as const,
+      originalPaths: normalizedOriginals,
+      sanitizedPaths: [],
+      failedPaths: [],
+      diagnostics: [],
+      error: undefined,
+      updatedAt: sanitizationStartedAt,
+    },
+    updatedAt: sanitizationStartedAt,
+  }
+  project.originalProductReferenceImagePaths = normalizedOriginals
+  project.sanitizedProductReferenceImagePaths = []
+  project.productReferenceImagePaths = normalizedOriginals
+  project.productImageSanitizationStatus = 'processing'
+  project.productImageSanitizationError = undefined
+  if (project.baseBlueprint) {
+    project.baseBlueprint = { ...project.baseBlueprint, consistencyAssets: processingAssets }
+  }
+  if (project.blueprint) {
+    project.blueprint = { ...project.blueprint, consistencyAssets: processingAssets }
+  }
+  syncProjectBlueprintLayers(project)
+  await cloneRepo.upsertProject(project)
+
+  const productType = normalizeProductType(project.baseBlueprint?.productCategory || project.blueprint?.productCategory || 'general')
+  const sanitization = await sanitizeProductReferenceImages({
+    cloneProjectId: project.id,
+    productType,
+    originalPaths: normalizedOriginals,
+    outDir: join(getAppPaths().tmpDir, 'clone-product-sanitized', project.id),
+  })
+  const sanitizedRefs = Array.from(new Set(sanitization.sanitizedPaths.map((item) => String(item || '').trim()).filter(Boolean)))
+  const failedPaths = sanitization.failed.map((item) => String(item || '').trim()).filter(Boolean)
+  const hasAuxiliaryRefs = sanitizedRefs.length > 0
+  const sanitizationStatus = (hasAuxiliaryRefs ? 'done' : 'failed') as 'done' | 'failed'
+  const sanitizationError = hasAuxiliaryRefs ? undefined : '产品标准源生成失败，当前已回退原图继续。'
+  project.productReferenceImagePaths = hasAuxiliaryRefs ? sanitizedRefs : normalizedOriginals
+  project.sanitizedProductReferenceImagePaths = sanitizedRefs
+  project.productImageSanitizationStatus = sanitizationStatus
+  project.productImageSanitizationError = sanitizationError
+  if (project.blueprint?.shots?.length) {
+    project.blueprint = {
+      ...project.blueprint,
+      shots: project.blueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, normalizedOriginals, sanitizedRefs)),
+    }
+  }
+  if (project.baseBlueprint?.shots?.length) {
+    project.baseBlueprint = {
+      ...project.baseBlueprint,
+      shots: project.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, normalizedOriginals, sanitizedRefs)),
+    }
+  }
+  if (project.executionBlueprint?.shots?.length) {
+    project.executionBlueprint = {
+      ...project.executionBlueprint,
+      shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, normalizedOriginals, sanitizedRefs)),
+    }
+  }
+
+  const previousAssets: Partial<CloneConsistencyAssetsSnapshot> & { updatedAt: number } =
+    project.baseBlueprint?.consistencyAssets ??
+    project.blueprint?.consistencyAssets ??
+    { updatedAt: now() }
+  const nextAssets = {
+    ...previousAssets,
+    productImageSetIds: normalizedOriginals.map((p) => basename(p)),
+    referenceImages: normalizedOriginals,
+    productReferenceImages: normalizedOriginals,
+    originalProductReferenceImages: normalizedOriginals,
+    sanitizedProductReferenceImages: sanitizedRefs,
+    productImageSanitization: {
+      status: sanitizationStatus,
+      originalPaths: normalizedOriginals,
+      sanitizedPaths: sanitizedRefs,
+      failedPaths,
+      diagnostics: sanitization.diagnostics.map((item) => ({
+        ...item,
+        fallbackToOriginal: Boolean(item.fallbackToOriginal ?? !hasAuxiliaryRefs),
+      })),
+      error: sanitizationError,
+      updatedAt: now(),
+    },
+    productAnalysis: normalizedOriginals.length ? previousAssets.productAnalysis : undefined,
+    updatedAt: now(),
+  }
+  if (project.baseBlueprint) {
+    project.baseBlueprint = { ...project.baseBlueprint, consistencyAssets: nextAssets }
+  }
+  if (project.blueprint) {
+    project.blueprint = { ...project.blueprint, consistencyAssets: nextAssets }
+  }
+  syncProjectBlueprintLayers(project)
+  return project
+}
+
+async function bindProjectProductFromLibrary(project: CloneProject, productId: string) {
+  const targetProductId = String(productId || '').trim()
+  if (!targetProductId) throw new Error('请选择商品库商品')
+  const product = await getProductById(targetProductId)
+  if (!product) throw new Error('商品库商品不存在')
+  const originalRefs = collectCloneProductImageRefs(product)
+  if (!originalRefs.length) throw new Error('当前商品没有可用于 /clone 的商品图片')
+
+  const productType = normalizeProductType(project.baseBlueprint?.productCategory || project.blueprint?.productCategory || 'general')
+  const { product: cachedProduct, canonicalRefs, fallbackToOriginal } = await ensureProductCanonicalSourceCache({
+    product,
+    productRefs: originalRefs,
+    productType,
+  })
+  const effectiveRefs = canonicalRefs.length ? canonicalRefs : originalRefs
+  const sanitizationStatus: 'done' | 'failed' = canonicalRefs.length ? 'done' : 'failed'
+  const sanitizationError = fallbackToOriginal ? '产品标准源生成失败，当前已回退原图继续。' : undefined
+  const sanitizationDiagnostics = cachedProduct.canonicalSourceDiagnostics ?? []
+  const coverAssetPath = String(cachedProduct.coverImagePath || originalRefs[0] || '').trim()
+  const boundAt = now()
+  const boundProductSnapshot = {
+    id: cachedProduct.id,
+    name: String(cachedProduct.name || '').trim(),
+    type: String(cachedProduct.type || '').trim(),
+    remark: String(cachedProduct.remark || '').trim() || undefined,
+    coverImagePath: coverAssetPath || undefined,
+    canonicalSourcePath: String(cachedProduct.canonicalSourcePath || '').trim() || undefined,
+    canonicalSourceStatus: cachedProduct.canonicalSourceStatus ?? 'idle',
+    originalImagePaths: originalRefs,
+    frozenReferenceImagePaths: canonicalRefs.length
+      ? canonicalRefs
+      : [String(cachedProduct.canonicalSourcePath || '').trim()].filter(Boolean),
+    boundAt,
+    updatedAt: boundAt,
+  }
+
+  project.productId = cachedProduct.id
+  project.coverAssetPath = coverAssetPath || project.coverAssetPath
+  project.boundProductSnapshot = boundProductSnapshot
+  project.originalProductReferenceImagePaths = originalRefs
+  project.sanitizedProductReferenceImagePaths = canonicalRefs
+  project.productReferenceImagePaths = effectiveRefs
+  project.productImageSanitizationStatus = sanitizationStatus
+  project.productImageSanitizationError = sanitizationError
+
+  if (project.blueprint?.shots?.length) {
+    project.blueprint = {
+      ...project.blueprint,
+      shots: project.blueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, canonicalRefs)),
+    }
+  }
+  if (project.baseBlueprint?.shots?.length) {
+    project.baseBlueprint = {
+      ...project.baseBlueprint,
+      shots: project.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, canonicalRefs)),
+    }
+  }
+  if (project.executionBlueprint?.shots?.length) {
+    project.executionBlueprint = {
+      ...project.executionBlueprint,
+      shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, canonicalRefs)),
+    }
+  }
+
+  const previousAssets: Partial<CloneConsistencyAssetsSnapshot> & { updatedAt: number } =
+    project.baseBlueprint?.consistencyAssets ??
+    project.blueprint?.consistencyAssets ??
+    { updatedAt: now() }
+  const nextAssets = {
+    ...previousAssets,
+    boundProductSnapshot,
+    productImageSetIds: originalRefs.map((p) => basename(p)),
+    referenceImages: originalRefs,
+    productReferenceImages: effectiveRefs,
+    originalProductReferenceImages: originalRefs,
+    sanitizedProductReferenceImages: canonicalRefs,
+    productImageSanitization: {
+      status: sanitizationStatus,
+      originalPaths: originalRefs,
+      sanitizedPaths: canonicalRefs,
+      failedPaths: canonicalRefs.length ? [] : originalRefs,
+      diagnostics: sanitizationDiagnostics.map((item) => ({
+        ...item,
+        fallbackToOriginal: Boolean(item.fallbackToOriginal ?? fallbackToOriginal),
+      })),
+      error: sanitizationError,
+      updatedAt: now(),
+    },
+    updatedAt: now(),
+  }
+  if (project.baseBlueprint) {
+    project.baseBlueprint = { ...project.baseBlueprint, consistencyAssets: nextAssets }
+  }
+  if (project.blueprint) {
+    project.blueprint = { ...project.blueprint, consistencyAssets: nextAssets }
+  }
+  syncProjectBlueprintLayers(project)
+  return project
+}
+
+function buildShotVideoPromptPreviewText(input: {
+  project: CloneProject
+  shot: ShotSpec
+  productType: CloneProductType
+  productAnalysisText: string
+}) {
+  const productIdentityText = buildPromptProductDescriptionText(input.project, input.productType)
+  const scriptSpliceText = [
+    input.shot.scriptText,
+    input.shot.generationPrompt,
+    input.shot.visualDescription,
+    input.shot.actionDescription,
+    input.shot.cameraDescription,
+    input.shot.materialNeed,
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .join('\n')
+  const compiled =
+    promptConsistencyService.getShotConsistencyReport(input.project.id, input.shot.id) ||
+    promptConsistencyService.previewShotConsistencyPrompt(
+      input.project.id,
+      input.shot,
+      toPromptModelIdentity(selectedIdentityPack(input.project)),
+      productIdentityText,
+    )
+  const effectiveShot: ShotSpec = {
+    ...input.shot,
+    aiPrompt: buildStructuredShotPrompt({
+      shot: input.shot,
+      productType: input.productType,
+      productPoints: scriptSpliceText,
+      productAnalysisText: productIdentityText || input.productAnalysisText,
+    }),
+    compiledPrompt: compiled.finalPrompt,
+    compiledNegativePrompt: compiled.finalNegativePrompt,
+    promptCompilerVersion: compiled.compilerVersion,
+    consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
+  }
+  return {
+    compiled,
+    effectiveShot,
+    prompt: buildRealisticPrompt(effectiveShot, 'video'),
+    scriptSpliceText,
+  }
+}
+
+function normalizePreviewReferencePaths(paths: Array<string | undefined | null>) {
+  return Array.from(
+    new Set(
+      paths
+        .map((item) => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  )
 }
 
 function containsCjkText(value: unknown) {
@@ -1898,7 +2566,7 @@ function movementForShot(shot: ShotSpec) {
   const map: Record<string, string> = {
     static: 'mostly static handheld shot with tiny natural micro movement',
     zoom_in: 'very slow zoom in from 1.00 to 1.06, small change only',
-    zoom_out: 'very slow zoom out from 1.06 to 1.00, small change only',
+    zoom_out: 'very slow zoom out from 1.06 to 1.00, small change only, as a single uninterrupted pull-back within the same close-up family',
     pan_left: 'subtle pan left under 3 percent of frame width',
     pan_right: 'subtle pan right under 3 percent of frame width',
     shake: 'controlled handheld movement, no heavy shaking',
@@ -1970,7 +2638,7 @@ function buildStructuredShotPrompt(input: {
     productRefs: shot.productReferenceImagePaths ?? [],
     options: {
       productType,
-      productDescription: [buildProductLockText(productType, shot.productReferenceImagePaths ?? [], shot.materialNeed), input.productAnalysisText || ''].filter(Boolean).join('\n'),
+      productDescription: [shot.materialNeed, input.productAnalysisText || ''].filter(Boolean).join('\n'),
       qualityMode: normalizeQualityMode(shot.qualityMode),
       productPoints: [input.productPoints || shot.materialNeed, input.productAnalysisText || ''].filter(Boolean).join('\n'),
     },
@@ -2737,7 +3405,25 @@ function replaceProductRefsIntoShot(shot: ShotSpec, refs: string[]): ShotSpec {
   }
 }
 
+function effectiveProjectProductRefs(project: CloneProject): string[] {
+  const preferred = [
+    ...analysisProductRefs(project),
+  ]
+  return Array.from(new Set(preferred.map((item) => String(item || '').trim()).filter(Boolean)))
+}
+
+function replaceProductRefsIntoShotWithTracking(shot: ShotSpec, originalRefs: string[], sanitizedRefs: string[]): ShotSpec {
+  const next = replaceProductRefsIntoShot(shot, originalRefs)
+  return {
+    ...next,
+    originalProductReferenceImagePaths: originalRefs,
+    sanitizedProductReferenceImagePaths: sanitizedRefs,
+  }
+}
+
 function collectProjectProductReferenceImages(project: CloneProject): string[] {
+  const effectiveRefs = storyboardPrimaryProductRefs(project)
+  if (effectiveRefs.length) return effectiveRefs
   const refs = new Set<string>()
   for (const item of project.baseBlueprint?.consistencyAssets?.productReferenceImages ?? []) {
     const text = String(item || '').trim()
@@ -4241,52 +4927,28 @@ export const cloneService = {
   }) {
     const project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project || (!project.baseBlueprint && !project.blueprint)) throw new Error('复刻项目或蓝图不存在')
-    const refs = (input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
-    if (project.blueprint?.shots?.length) {
-      project.blueprint = {
-        ...project.blueprint,
-        shots: project.blueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
-      }
-    }
-    if (project.baseBlueprint?.shots?.length) {
-      project.baseBlueprint = {
-        ...project.baseBlueprint,
-        shots: project.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
-      }
-    }
-    if (project.executionBlueprint?.shots?.length) {
-      project.executionBlueprint = {
-        ...project.executionBlueprint,
-        shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
-      }
-    }
-    const previousAssets: Partial<CloneConsistencyAssetsSnapshot> & { updatedAt: number } =
-      project.baseBlueprint?.consistencyAssets ??
-      project.blueprint?.consistencyAssets ??
-      { updatedAt: now() }
-    const nextAssets = {
-      ...previousAssets,
-      productImageSetIds: refs.map((p) => basename(p)),
-      referenceImages: refs,
-      productReferenceImages: refs,
-      productAnalysis: refs.length ? previousAssets.productAnalysis : undefined,
-      updatedAt: now(),
-    }
-    if (project.baseBlueprint) {
-      project.baseBlueprint = {
-        ...project.baseBlueprint,
-        consistencyAssets: nextAssets,
-      }
-    }
-    if (project.blueprint) {
-      project.blueprint = { ...project.blueprint, consistencyAssets: nextAssets }
-    }
-    syncProjectBlueprintLayers(project)
+    const refs = Array.from(new Set((input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
+    if (!refs.length) throw new Error('请先上传商品图')
+    await sanitizeAndPersistProjectProductRefs(project, refs)
     console.log('[clone-debug] save-project-product-images', {
       cloneProjectId: project.id,
       refs,
     })
     return await cloneRepo.upsertProject(project)
+  },
+
+  async bindProjectProduct(input: {
+    cloneProjectId: string
+    productId: string
+  }) {
+    const project = await cloneRepo.getProject(input.cloneProjectId)
+    if (!project || (!project.baseBlueprint && !project.blueprint)) throw new Error('复刻项目或蓝图不存在')
+    await bindProjectProductFromLibrary(project, input.productId)
+    return await cloneRepo.upsertProject(project)
+  },
+
+  async refreshLibraryProductCanonicalSource(input: { productId: string }) {
+    return await refreshProductCanonicalSourceFromLibrary(input.productId)
   },
 
   async generateStoryboardGridsForProject(input: {
@@ -4308,6 +4970,7 @@ export const cloneService = {
     }
     const refs = (input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
     if (!refs.length) throw new Error('请先上传商品参考图')
+    assertStoryboardExtractionReady(project)
     const pack = selectedIdentityPack(project)
     if (!pack?.imagePaths?.length) throw new Error('请先选择模特')
     const shots = projectBlueprintShots(project).sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
@@ -4375,6 +5038,7 @@ export const cloneService = {
     let project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
+    assertStoryboardExtractionReady(project)
     const projectProductAnalysis = (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis
     const productAnalysisText = buildProductStructureDescription({
       category: normalizeProductType(project.baseBlueprint?.productCategory || 'general'),
@@ -4485,11 +5149,13 @@ export const cloneService = {
       }
       try {
         const creds = await cloneRepo.getCredentials()
+        const productIdentityText = buildPromptProductDescriptionText(project, normalizeProductType(shot.productType))
         const compiled = promptConsistencyService.compileAndPersist({
           projectId: project.id,
           shot,
           projectShotCount: shots.length,
           productReferenceImagePaths: shot.productReferenceImagePaths,
+          productDescription: productIdentityText,
         })
         replaceProjectShot(project, shot.id, {
           compiledPrompt: compiled.finalPrompt,
@@ -4981,8 +5647,9 @@ export const cloneService = {
   },
 
   async getProject(input: { cloneProjectId: string }) {
-    const item = await cloneRepo.getProject(input.cloneProjectId)
+    let item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
+    item = await syncProjectBoundProductSnapshotFromLibrary(item)
     syncProjectBlueprintLayers(item)
     const recoveredProject = await recoverLocalStoryboardFrames(item)
     syncProjectBlueprintLayers(recoveredProject)
@@ -5857,25 +6524,28 @@ export const cloneService = {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.baseBlueprint) throw new Error('复刻项目或蓝图不存在')
     patchWorkflowV2(item, 'model_product_consistency', 'model_product_consistency', 'running')
-    const refs = (input.productReferenceImagePaths ?? [])
+    const requestedRefs = (input.productReferenceImagePaths ?? [])
       .map((x) => String(x || '').trim())
       .filter(Boolean)
+    const refs = requestedRefs.length ? requestedRefs : analysisProductRefs(item)
+    const primaryRefs = storyboardPrimaryProductRefs(item)
+    if (!refs.length) throw new Error('请先上传商品图')
     if (item.blueprint?.shots?.length) {
       item.blueprint = {
         ...item.blueprint,
-        shots: item.blueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
+        shots: item.blueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, primaryRefs.length ? primaryRefs : refs, refs)),
       }
     }
     if (item.baseBlueprint?.shots?.length) {
       item.baseBlueprint = {
         ...item.baseBlueprint,
-        shots: item.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
+        shots: item.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, primaryRefs.length ? primaryRefs : refs, refs)),
       }
     }
     if (item.executionBlueprint?.shots?.length) {
       item.executionBlueprint = {
         ...item.executionBlueprint,
-        shots: item.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShot(shot, refs)),
+        shots: item.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, primaryRefs.length ? primaryRefs : refs, refs)),
       }
     }
     let snapshotProject = item
@@ -5896,11 +6566,14 @@ export const cloneService = {
         cloneProjectId: input.cloneProjectId,
         productType: input.productType,
         productPoints: input.productPoints,
-        productReferenceImagePaths: refs,
+        productReferenceImagePaths: primaryRefs.length ? primaryRefs : refs,
       })
       snapshotProject = next as CloneProject
       if (refs.length) {
-        snapshotProject = updateProjectShots(snapshotProject, (shot) => replaceProductRefsIntoShot(shot, refs))
+        snapshotProject = updateProjectShots(
+          snapshotProject,
+          (shot) => replaceProductRefsIntoShotWithTracking(shot, primaryRefs.length ? primaryRefs : refs, refs),
+        )
       }
     }
     const selectedPackId = snapshotProject.selectedModelIdentityPackId || snapshotProject.selectedModelIdentityId
@@ -5914,10 +6587,21 @@ export const cloneService = {
     const resolvedProductType = normalizeProductType(input.productType ?? snapshotProject.baseBlueprint?.productCategory)
     const consistencyAssets = {
       modelPackId: selectedPackId,
-      productImageSetIds: refs.map((p) => basename(p)),
-      referenceImages: refs,
+      productImageSetIds: (primaryRefs.length ? primaryRefs : refs).map((p) => basename(p)),
+      referenceImages: primaryRefs.length ? primaryRefs : refs,
       modelReferenceImages: generatedPack?.imagePaths ?? snapshotProject.selectedModelIdentitySnapshot?.imagePaths ?? [],
-      productReferenceImages: refs,
+      productReferenceImages: primaryRefs.length ? primaryRefs : refs,
+      originalProductReferenceImages: item.originalProductReferenceImagePaths ?? [],
+      sanitizedProductReferenceImages: refs,
+      productImageSanitization: {
+        status: (item.productImageSanitizationStatus === 'failed' ? 'failed' : 'done') as 'failed' | 'done',
+        originalPaths: item.originalProductReferenceImagePaths ?? [],
+        sanitizedPaths: refs,
+        failedPaths: [],
+        diagnostics: item.baseBlueprint?.consistencyAssets?.productImageSanitization?.diagnostics ?? [],
+        error: item.productImageSanitizationError,
+        updatedAt: now(),
+      },
       productAnalysis: refs.length ? snapshotProject.baseBlueprint?.consistencyAssets?.productAnalysis : undefined,
       status: (shouldGenerateIdentityPack ? 'generated' : 'saved') as 'generated' | 'saved',
       provider: generatedPack?.model,
@@ -5955,7 +6639,7 @@ export const cloneService = {
           if (!latest?.baseBlueprint) return
           const latestConsistencyAssets = {
             ...(latest.baseBlueprint.consistencyAssets ?? {}),
-            productReferenceImages: refs,
+            productReferenceImages: primaryRefs.length ? primaryRefs : refs,
             productAnalysis: {
               ...analyzed,
               updatedAt: now(),
@@ -6212,11 +6896,11 @@ export const cloneService = {
     const refs = input.productReferenceImagePaths?.length
       ? input.productReferenceImagePaths
       : shot.productReferenceImagePaths ?? []
-    const productMainImage = shot.productMainImage || refs[0]
-    const productDetailImages = shot.productDetailImages?.length ? shot.productDetailImages : refs.slice(1, 3)
-    const productUsageImages = shot.productUsageImages ?? []
-    const styleReferenceImages = shot.styleReferenceImages ?? []
-    const mergedRefs = [productMainImage, ...productDetailImages, ...productUsageImages, ...styleReferenceImages].filter(Boolean).map(String)
+    const productMainImage = refs[0]
+    const productDetailImages: string[] = []
+    const productUsageImages: string[] = []
+    const styleReferenceImages: string[] = []
+    const mergedRefs = [productMainImage].filter(Boolean).map(String)
     console.log('[clone-debug] generate-shot-frames:prepared', {
       projectId: item.id,
       shotId: shot.id,
@@ -6345,16 +7029,8 @@ export const cloneService = {
     assertImageProviderKey(creds, '生成 AI 首尾帧')
     const pack = selectedIdentityPack(item)
     if (!pack || pack.status !== 'done' || !pack.imagePaths.length) throw new Error('请先生成并确认新模特身份包')
-    const refs = input.productReferenceImagePaths?.length
-      ? input.productReferenceImagePaths
-      : [
-          shot.productMainImage,
-          ...(shot.productDetailImages ?? []),
-          ...(shot.productUsageImages ?? []),
-          ...(shot.styleReferenceImages ?? []),
-          ...(shot.productReferenceImagePaths ?? []),
-        ].filter(Boolean).map(String)
-    if (!hasProductLock(shot, refs)) throw new Error('请先上传产品参考图或填写产品锁定信息')
+    const refs = resolveStoryboardProductRefs(item, shot)
+    if (!hasProductLock(shot, refs)) throw new Error('请先为绑定商品生成标准源')
 
     await patchShotRuntimeState({
       project: item,
@@ -6379,13 +7055,13 @@ export const cloneService = {
       productReferenceImagePaths: refs,
       modelIdentity: toPromptModelIdentity(pack),
     })
-    const productAnalysisText = buildProjectProductAnalysisText(latest, productType)
+    const productIdentityText = buildPromptProductDescriptionText(latest, productType)
     const startPrompt = buildGptFramePrompt({
       shot: refreshedShot,
       productType,
       modelPack: pack,
       productPoints: refreshedShot.aiPrompt || refreshedShot.materialNeed,
-      productDescription: productAnalysisText,
+      productDescription: productIdentityText,
       which: 'start',
       compiledPrompt: compiled.finalPrompt,
     })
@@ -6394,14 +7070,14 @@ export const cloneService = {
       productType,
       modelPack: pack,
       productPoints: refreshedShot.aiPrompt || refreshedShot.materialNeed,
-      productDescription: productAnalysisText,
+      productDescription: productIdentityText,
       which: 'end',
       compiledPrompt: compiled.finalPrompt,
     })
     const promptHash = computePromptHash({
       shot: refreshedShot,
       productRefs: refs,
-      productDescription: [latestShot.materialNeed, productAnalysisText].filter(Boolean).join('\n'),
+      productDescription: [productIdentityText, latestShot.materialNeed].filter(Boolean).join('\n'),
       model: imageProviderModel(creds),
       qualityMode: normalizeQualityMode(latestShot.qualityMode),
     })
@@ -6409,7 +7085,7 @@ export const cloneService = {
     const imagePromptHash = computeImagePromptHash({
       promptHash,
       which,
-      refs: [...pack.imagePaths, ...refs, continuityAnchorPath].filter(Boolean),
+      refs: [...pack.imagePaths.slice(0, 1), ...refs, continuityAnchorPath].filter(Boolean),
       model: imageProviderModel(creds),
       positivePrompt: which === 'end' ? endPrompt : which === 'both' ? `${startPrompt}\n---\n${endPrompt}` : startPrompt,
       negativePrompt: compiled.finalNegativePrompt,
@@ -6761,16 +7437,21 @@ export const cloneService = {
     let quality: Awaited<ReturnType<typeof qualityCheckShot>> | null = null
     const mode = normalizeQualityMode(shot.qualityMode)
     const maxAttempts = mode === 'high' ? 3 : 1
-    const productAnalysisText = buildProductStructureDescription({
-      category: normalizeProductType(item.baseBlueprint?.productCategory || shot.productType || 'general'),
-      ...(((item.baseBlueprint?.consistencyAssets as any)?.productAnalysis ?? {}) as any),
-    })
+    const productType = normalizeProductType(shot.productType)
+    const productAnalysisText = buildPromptProductDescriptionText(item, productType)
     const compiled = promptConsistencyService.compileAndPersist({
       projectId: item.id,
       shot,
       projectShotCount: item.blueprint.shots.length,
       productReferenceImagePaths: shot.productReferenceImagePaths,
+      productDescription: productAnalysisText,
       modelIdentity: toPromptModelIdentity(selectedIdentityPack(item)),
+    })
+    console.log('[clone-debug] generate-shot-clip:product-snapshot', {
+      projectId: item.id,
+      shotId: shot.id,
+      boundProductSnapshot: item.boundProductSnapshot || item.baseBlueprint?.consistencyAssets?.boundProductSnapshot || item.blueprint?.consistencyAssets?.boundProductSnapshot,
+      productDescription: productAnalysisText,
     })
     try {
       const creds = await cloneRepo.getCredentials()
@@ -6788,7 +7469,7 @@ export const cloneService = {
         const promptHash = computePromptHash({
           shot,
           productRefs: shot.productReferenceImagePaths ?? [],
-          productDescription: shot.materialNeed,
+          productDescription: productAnalysisText,
           model: String(
             videoProviderChain(creds)[0] === 'kling'
               ? creds.videoModelFallback
@@ -6804,7 +7485,15 @@ export const cloneService = {
           aiPrompt: buildStructuredShotPrompt({
             shot,
             productType: shot.productType,
-            productPoints: shot.aiPrompt,
+            productPoints: [
+              shot.generationPrompt,
+              shot.scriptText,
+              shot.visualDescription,
+              shot.actionDescription,
+              shot.cameraDescription,
+              shot.aiPrompt,
+              shot.materialNeed,
+            ].filter(Boolean).join('\n'),
             productAnalysisText,
             retryAttempt: attempt,
           }),
@@ -7067,39 +7756,56 @@ export const cloneService = {
     if (!item || !item.blueprint) throw new Error('复刻项目不存在')
     let shot = item.blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('分镜不存在')
-    return promptConsistencyService.getShotConsistencyReport(item.id, shot.id) || promptConsistencyService.previewShotConsistencyPrompt(item.id, shot, toPromptModelIdentity(selectedIdentityPack(item)))
+    return (
+      promptConsistencyService.getShotConsistencyReport(item.id, shot.id) ||
+      promptConsistencyService.previewShotConsistencyPrompt(
+        item.id,
+        shot,
+        toPromptModelIdentity(selectedIdentityPack(item)),
+        resolveProductSnapshotText(item, normalizeProductType(shot.productType)),
+      )
+    )
   },
 
   async getShotImagePromptPreview(input: { cloneProjectId: string; shotId: string }) {
     let item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.blueprint) throw new Error('复刻项目不存在')
-    let shot = item.blueprint.shots.find((x) => x.id === input.shotId)
+    item = await syncProjectBoundProductSnapshotFromLibrary(item)
+    const blueprint = item.blueprint
+    if (!blueprint) throw new Error('复刻项目不存在')
+    let shot = blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('分镜不存在')
     const pack = selectedIdentityPack(item)
     if (!pack || pack.status !== 'done' || !pack.imagePaths.length) {
       throw new Error('请先生成并确认新模特身份包')
     }
-    const refs = [
-      shot.productMainImage,
-      ...(shot.productDetailImages ?? []),
-      ...(shot.productUsageImages ?? []),
-      ...(shot.styleReferenceImages ?? []),
-      ...(shot.productReferenceImagePaths ?? []),
-    ]
-      .filter(Boolean)
-      .map(String)
-    if (!hasProductLock(shot, refs)) throw new Error('请先上传产品参考图或填写产品锁定信息')
+    const productReferenceImagePaths = normalizePreviewReferencePaths(resolveStoryboardProductRefs(item, shot))
+    if (!hasProductLock(shot, productReferenceImagePaths)) throw new Error('请先为绑定商品生成标准源')
     const productType = normalizeProductType(shot.productType)
-    item = await ensureProjectProductAnalysis(item, refs, productType, item.locale || 'zh-CN')
+    item = await ensureProjectProductAnalysis(item, productReferenceImagePaths, productType, item.locale || 'zh-CN')
     await cloneRepo.upsertProject(item)
     shot = item.blueprint?.shots.find((x) => x.id === input.shotId) || shot
-    const compiled = promptConsistencyService.getShotConsistencyReport(item.id, shot.id) ||
-      promptConsistencyService.previewShotConsistencyPrompt(item.id, shot, toPromptModelIdentity(selectedIdentityPack(item)))
+    const compiled =
+      promptConsistencyService.getShotConsistencyReport(item.id, shot.id) ||
+      promptConsistencyService.previewShotConsistencyPrompt(
+        item.id,
+        shot,
+        toPromptModelIdentity(selectedIdentityPack(item)),
+        resolveProductSnapshotText(item, productType),
+      )
 
-    const productDescriptionText = buildCompactProjectProductAnalysisText(item, productType)
+    const productDescriptionText = buildPromptProductDescriptionText(item, productType)
     const productDescriptionBlock = buildProductDescriptionLockText(productDescriptionText)
     const modelIdentityBlock = buildModelIdentityLockText(pack)
     const referenceResponsibilityBlock = buildReferenceResponsibilityText()
+    const modelReferenceImagePaths = normalizePreviewReferencePaths((pack.imagePaths ?? []).slice(0, 1))
+    console.log('[clone-debug] shot-image-prompt-preview:refs', {
+      projectId: item.id,
+      shotId: shot.id,
+      productCanonicalSourcePath: productReferenceImagePaths[0] || '',
+      primaryModelReferenceImagePath: modelReferenceImagePaths[0] || '',
+      missingCanonicalSource: !productReferenceImagePaths[0],
+    })
     const startPrompt = buildGptFramePrompt({
       shot,
       productType,
@@ -7136,8 +7842,71 @@ export const cloneService = {
       startPrompt,
       endPrompt,
       negativePrompt: compiled.finalNegativePrompt,
-      referenceImageCount: refs.length,
+      referenceImageCount: productReferenceImagePaths.length + modelReferenceImagePaths.length,
       modelIdentityPackId: pack.id,
+      productReferenceImagePaths,
+      productReferenceImageCount: productReferenceImagePaths.length,
+      modelReferenceImagePaths,
+      modelReferenceImageCount: modelReferenceImagePaths.length,
+      boundProductSnapshot: item.boundProductSnapshot || item.baseBlueprint?.consistencyAssets?.boundProductSnapshot || item.blueprint?.consistencyAssets?.boundProductSnapshot,
+    }
+  },
+
+  async getShotVideoPromptPreview(input: { cloneProjectId: string; shotId: string }) {
+    let item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item || !item.blueprint) throw new Error('复刻项目不存在')
+    item = await syncProjectBoundProductSnapshotFromLibrary(item)
+    const blueprint = item.blueprint
+    if (!blueprint) throw new Error('复刻项目不存在')
+    const shot = blueprint.shots.find((x) => x.id === input.shotId)
+    if (!shot) throw new Error('分镜不存在')
+    const productReferenceImagePaths = normalizePreviewReferencePaths(resolveStoryboardProductRefs(item, shot))
+    if (!hasProductLock(shot, productReferenceImagePaths)) {
+      throw new Error('请先为绑定商品生成标准源')
+    }
+    const productType = normalizeProductType(shot.productType)
+    const productAnalysisText = buildPromptProductDescriptionText(item, productType)
+    const pack = selectedIdentityPack(item)
+    const modelReferenceImagePaths = normalizePreviewReferencePaths((pack?.imagePaths ?? []).slice(0, 1))
+    console.log('[clone-debug] shot-video-prompt-preview:refs', {
+      projectId: item.id,
+      shotId: shot.id,
+      productCanonicalSourcePath: productReferenceImagePaths[0] || '',
+      primaryModelReferenceImagePath: modelReferenceImagePaths[0] || '',
+      missingCanonicalSource: !productReferenceImagePaths[0],
+    })
+    const { compiled, effectiveShot, prompt, scriptSpliceText } = buildShotVideoPromptPreviewText({
+      project: item,
+      shot,
+      productType,
+      productAnalysisText,
+    })
+    return {
+      shotId: shot.id,
+      promptBuildSentinel: SHOT_VIDEO_PROMPT_PREVIEW_SENTINEL,
+      promptCompilerVersion: compiled.compilerVersion,
+      consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
+      productType,
+      productDescriptionBlock: buildProductDescriptionLockText(productAnalysisText),
+      storyboardProductDescriptionBlock: buildProductDescriptionLockText(productAnalysisText),
+      hasCompiledProductLock: Boolean(String(compiled.finalPrompt || '').trim()),
+      hasProductDescriptionBlock: Boolean(String(productAnalysisText || '').trim()),
+      hasScriptText: Boolean(String(shot.scriptText || '').trim()),
+      hasGenerationPrompt: Boolean(String(shot.generationPrompt || '').trim()),
+      scriptText: String(shot.scriptText || '').trim(),
+      generationPrompt: String(shot.generationPrompt || '').trim(),
+      visualDescription: String(shot.visualDescription || '').trim(),
+      actionDescription: String(shot.actionDescription || '').trim(),
+      cameraDescription: String(shot.cameraDescription || '').trim(),
+      compiledPrompt: compiled.finalPrompt,
+      compiledNegativePrompt: compiled.finalNegativePrompt,
+      positivePrompt: prompt,
+      negativePrompt: String(effectiveShot.negativePrompt || defaultQualityNegativePrompt()).trim(),
+      productReferenceImagePaths,
+      productReferenceImageCount: productReferenceImagePaths.length,
+      modelReferenceImagePaths,
+      modelReferenceImageCount: modelReferenceImagePaths.length,
+      scriptSpliceText,
     }
   },
 
@@ -7151,6 +7920,7 @@ export const cloneService = {
       shot,
       projectShotCount: item.blueprint.shots.length,
       productReferenceImagePaths: shot.productReferenceImagePaths,
+      productDescription: buildPromptProductDescriptionText(item, normalizeProductType(shot.productType)),
       modelIdentity: toPromptModelIdentity(selectedIdentityPack(item)),
     })
     replaceProjectShot(item, shot.id, {

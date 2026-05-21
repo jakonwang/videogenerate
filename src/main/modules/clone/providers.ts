@@ -8,7 +8,24 @@ import { createGrsVideoTask, isPublicHttpUrl, waitGrsResult } from './grsai'
 import { toPublicUrlViaQiniu } from './qiniu'
 import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl, postAtlasJson } from './atlasRetry'
 import { generateVideo as generateApifoxVideo } from './unifiedVideo'
-import { buildNoSpeakingInstruction, buildReferenceLockText, prependSilentCommercialGlobalRule, sanitizeGeneratedVideoPrompt } from './prompt'
+import {
+  buildCameraMotionLockText,
+  buildFailInsteadRuleText,
+  buildCompositionLockText,
+  buildFrameContinuityLockText,
+  buildHumanPriorityRuleText,
+  buildMotionLimitText,
+  buildPhysicsConsistencyText,
+  buildNoSpeakingInstruction,
+  buildNoSubstituteRuleText,
+  buildReferenceImageLockText,
+  buildReferenceLockText,
+  buildScaleConsistencyLockText,
+  buildSpatialAnchorLockText,
+  buildShotScriptConstraintText,
+  prependSilentCommercialGlobalRule,
+  sanitizeGeneratedVideoPrompt,
+} from './prompt'
 import { canUseMockGeneration } from './mockPolicy'
 import type {
   AiProviderName,
@@ -238,30 +255,141 @@ export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'v
     String(shot.aiPrompt || shot.generationPrompt || shot.prompt?.positive || '').trim(),
     1100,
   )
+  const scriptText = sanitizeGeneratedVideoPrompt(String(shot.scriptText || '').trim(), 320)
+  const generationPrompt = sanitizeGeneratedVideoPrompt(String(shot.generationPrompt || '').trim(), 420)
+  const scriptConstraint = sanitizeGeneratedVideoPrompt(buildShotScriptConstraintText(shot), 720)
+  const scriptExecutionBlock =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            scriptText ? `Script text to execute faithfully in this clip: ${scriptText}` : '',
+            generationPrompt && generationPrompt.toLowerCase() !== scriptText.toLowerCase()
+              ? `Shot execution details: ${generationPrompt}`
+              : '',
+            scriptConstraint,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          900,
+        )
+      : ''
   const sceneDirection = cleanedUserPrompt || fallbackVideoDirectionPrompt(shot)
   const referenceLock = sanitizeGeneratedVideoPrompt(buildReferenceLockText(shot, 'reference shot scene atmosphere'), 900)
+  const spatialAnchorLock = sanitizeGeneratedVideoPrompt(buildSpatialAnchorLockText(String(shot.productType || '')), 520)
+  const physicsConsistency = sanitizeGeneratedVideoPrompt(buildPhysicsConsistencyText(String(shot.productType || '')), 420)
+  const compositionLock = sanitizeGeneratedVideoPrompt(buildCompositionLockText(String(shot.productType || '')), 420)
+  const cameraMotionLock = sanitizeGeneratedVideoPrompt(
+    buildCameraMotionLockText({
+      motion: String(shot.motion || ''),
+      framing: String(shot.framing || ''),
+      productType: String(shot.productType || ''),
+    }),
+    520,
+  )
+  const scaleConsistencyLock = sanitizeGeneratedVideoPrompt(
+    buildScaleConsistencyLockText(String(shot.productType || ''), String(shot.motion || '')),
+    420,
+  )
+  const motionLimit = sanitizeGeneratedVideoPrompt(
+    buildMotionLimitText(String(shot.productType || ''), String(shot.motion || '')),
+    260,
+  )
+  const storyboardControlLayer =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            'SILENT VISUAL COMMERCIAL.',
+            'No dialogue.',
+            'No presenter delivery.',
+            'No speaking.',
+            buildReferenceImageLockText(),
+            'STRICT PRODUCT LOCK: same single product instance across all shots; exact silhouette, geometry, structure, material, color, and proportion; no variation.',
+            'STRICT MODEL IDENTITY LOCK: use the selected model identity only.',
+            'HUMAN PRIORITY RULE: the human must adapt to the product.',
+            'Do not modify, resize, reshape, bend, simplify, or restyle the product to fit the human body.',
+            'If any conflict occurs, adjust human pose, hand placement, ear position, neck angle, or body framing, not the product.',
+            'Different camera views only.',
+            `Shot ${Number(shot.index ?? 0) + 1} is another view of the same locked subject, not a new setup.`,
+            buildFrameContinuityLockText({ isEnd: false, shotIndex: Number(shot.index ?? 0) }),
+            buildNoSubstituteRuleText(),
+            buildHumanPriorityRuleText(),
+            'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY.',
+            'REFERENCE PERSON EXCLUSION RULE: if the product images contain a human wearer or holder, that human is invalid and must be ignored completely.',
+            'If any product image contains a person, ignore that person completely and extract product identity only.',
+            'Exactly one human model is allowed when a human is needed. No second model, no mixed identity, no borrowed model from product images, no extra background person.',
+            spatialAnchorLock,
+            physicsConsistency,
+            motionLimit,
+            compositionLock,
+            cameraMotionLock,
+            scaleConsistencyLock,
+            buildFailInsteadRuleText(),
+          ].join('\n'),
+          1250,
+        )
+      : ''
+  const replicationTaskLock =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            '[CRITICAL FIX] This is NOT a product generation task. This is a product replication + shot adaptation task.',
+            '[PRODUCT SOURCE LOCK] The product MUST be taken from the provided product image. NOT generated from text. NOT inferred from video.',
+            '[INSTANCE RULE] There is ONLY ONE product instance. All shots use the SAME object.',
+            '[VIDEO ROLE LIMIT] Reference video defines ONLY motion and camera behavior. It MUST NOT change product structure.',
+            '[ANTI-RECONSTRUCTION] Do NOT rebuild product from description. Only replicate from reference image.',
+          ].join('\n'),
+          700,
+        )
+      : ''
+  const singleModelLock =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            'Human identity lock: use the selected model identity only.',
+            'Never use any person identity from the product reference images, reference video, source footage, or scene references.',
+            'If any product image contains a person, ignore that person completely and extract product identity only.',
+            'Exactly one human model is allowed in the frame when human presence is needed. No second model, no background model, no duplicate person, no reflection person, no extra hands from another person.',
+            'Do not mix the selected model with the original video person or any person from the product images.',
+          ].join('\n'),
+          650,
+        )
+      : ''
   const productLock =
     'Keep the exact product from the reference images: same color, shape, material, pattern, print, holes, edges, size and design. Do not add logos, gems, charms, text, extra patterns or new decorations.'
+  const jewelryRealism =
+    /earrings?/i.test(String(shot.productType || ''))
+      ? 'Jewelry realism rule: keep diamond, zircon, crystal, and metal reflections subtle, physically plausible, and camera-realistic. Do not add exaggerated sparkle VFX, glow bloom, starburst shine, magical glitter, or overexposed luxury effects. Earrings must follow gravity and believable support: they may be worn, hand-held, laid flat, or lightly supported, but must never stand upright by themselves like a rigid sculpture, signboard, or product figurine.'
+      : ''
   const realism =
-    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Preserve the same shot purpose, background category, camera distance, composition logic, product interaction type and motion grammar from the reference, but let the action play out fully and naturally instead of freezing into a near-still pose. Replace only the person identity and product identity. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos.'
+    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Preserve the same shot purpose, background category, camera distance, composition logic, product interaction type and motion grammar from the reference, but let the action play out fully and naturally instead of freezing into a near-still pose. Do NOT replace or regenerate product or model identity. Only adapt camera and motion. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos. Cinematic polish must never override identity.'
   const motionPerformance =
     phase === 'video'
-      ? 'Motion performance rule: keep the same action intent and shot grammar as the reference, but allow fuller hand travel, clearer product turns, more obvious wearing or usage demonstration, and stronger camera progression when appropriate. The motion must continue across the entire clip instead of happening only in the opening second.'
+      ? String(shot.motion || '').trim().toLowerCase() === 'zoom_out'
+        ? 'Motion performance rule: keep the same action intent and shot grammar as the reference while using a single uninterrupted pull-back within the same close-up family. Adjust human pose, not the product. Do not turn the shot into a medium shot or a new scene. The motion must continue across the entire clip instead of happening only in the opening second.'
+        : 'Motion performance rule: keep the same action intent and shot grammar as the reference, but allow fuller hand travel, clearer product turns, more obvious wearing or usage demonstration, and stronger camera progression when appropriate. Adjust human pose, not the product. The motion must continue across the entire clip instead of happening only in the opening second.'
       : ''
   const phaseText =
     phase === 'start'
       ? 'Opening keyframe, product already visible and in focus, clean frame with no watermark or subtitles.'
       : phase === 'end'
-        ? 'Ending keyframe, same product and scene continuity, natural final pose, clean frame with no watermark or subtitles.'
+        ? 'Ending keyframe, direct continuation of the starting frame, same product instance, same model instance, same scene setup, natural final pose, clean frame with no watermark or subtitles.'
         : 'Generate natural motion between first and last frame. Preserve product identity, background atmosphere, action category and camera continuity. Keep the same selling purpose and reference shot grammar, but do not freeze the subject into one locked pose or one tiny repeated movement. Do not switch to a different action, different location, different product-display method or unrelated camera angle. No morphing, no object melting, no artificial animation, no copied TikTok watermark, no copied subtitles. Do not generate any visible on-screen text, title card, subtitle line, caption overlay, packaging words or lettering of any kind.'
   const blocks = [
-    realism,
-    sceneDirection,
+    storyboardControlLayer,
+    replicationTaskLock,
+    singleModelLock,
     referenceLock,
+    spatialAnchorLock,
+    physicsConsistency,
+    compositionLock,
+    scriptExecutionBlock,
+    sceneDirection,
     productLock,
     shotRolePrompt(shot),
     phase === 'video' ? shotMotionPrompt(shot) : '',
     motionPerformance,
+    jewelryRealism,
+    realism,
     phaseText,
     phase === 'video' ? buildNoSpeakingInstruction() : '',
   ]

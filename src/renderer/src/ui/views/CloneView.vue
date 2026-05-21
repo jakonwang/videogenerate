@@ -152,6 +152,38 @@ type ShotImagePromptPreview = {
   negativePrompt?: string
   referenceImageCount?: number
   modelIdentityPackId?: string
+  productReferenceImagePaths?: string[]
+  productReferenceImageCount?: number
+  modelReferenceImagePaths?: string[]
+  modelReferenceImageCount?: number
+}
+
+type ShotVideoPromptPreview = {
+  shotId: string
+  promptBuildSentinel?: string
+  promptCompilerVersion?: string
+  consistencyMode?: string
+  productType?: string
+  productDescriptionBlock?: string
+  storyboardProductDescriptionBlock?: string
+  hasCompiledProductLock?: boolean
+  hasProductDescriptionBlock?: boolean
+  hasScriptText?: boolean
+  hasGenerationPrompt?: boolean
+  scriptText?: string
+  generationPrompt?: string
+  visualDescription?: string
+  actionDescription?: string
+  cameraDescription?: string
+  compiledPrompt?: string
+  compiledNegativePrompt?: string
+  positivePrompt?: string
+  negativePrompt?: string
+  productReferenceImagePaths?: string[]
+  productReferenceImageCount?: number
+  modelReferenceImagePaths?: string[]
+  modelReferenceImageCount?: number
+  scriptSpliceText?: string
 }
 
 type FinalCompose = {
@@ -166,6 +198,11 @@ type CloneProject = {
   runMode?: 'auto' | 'manual'
   referenceVideoPath: string
   referenceVideoName: string
+  productReferenceImagePaths?: string[]
+  originalProductReferenceImagePaths?: string[]
+  sanitizedProductReferenceImagePaths?: string[]
+  productImageSanitizationStatus?: 'idle' | 'processing' | 'done' | 'failed'
+  productImageSanitizationError?: string
   selectedModelIdentitySnapshot?: {
     id: string
     name?: string
@@ -255,6 +292,18 @@ type ModelItem = {
   sceneStyle?: string
 }
 
+type ProductLibraryItem = {
+  id: string
+  name: string
+  type: string
+  coverImagePath?: string
+  images?: Array<{ filePath?: string; isCover?: boolean }>
+  canonicalSourcePath?: string
+  canonicalSourceStatus?: 'idle' | 'processing' | 'done' | 'failed'
+  canonicalSourceUpdatedAt?: number
+  assets?: Record<string, Array<{ filePath?: string }>>
+}
+
 type StageItem = {
   key: string
   title: string
@@ -276,11 +325,14 @@ type ComposeStyle = 'default' | 'sharp' | 'cinematic'
 
 const current = ref<CloneProject | null>(null)
 const models = ref<ModelItem[]>([])
+const products = ref<ProductLibraryItem[]>([])
 const loading = ref(false)
 const modelLoading = ref(false)
 const referenceVideoPath = ref('')
 const productRefs = ref<string[]>([])
 const productRefsDraft = ref<string[] | null>(null)
+const productRefPreviewMode = ref<'sanitized' | 'original'>('sanitized')
+const selectedProductId = ref('')
 const selectedModelId = ref('')
 const errorText = ref('')
 const stageLog = ref('等待上传参考视频并开始分析')
@@ -294,9 +346,12 @@ const framePreviewOpen = ref(false)
 const framePreviewPath = ref('')
 const framePreviewTitle = ref('')
 const shotPromptPreviewOpen = ref(false)
+const shotVideoPromptPreviewOpen = ref(false)
 const composeOutputDir = ref('')
 const composeLocalError = ref('')
 const shotPromptCopyMessage = ref('')
+const regeneratingShotVideoIds = ref<string[]>([])
+const regeneratingFailedShotVideos = ref(false)
 const geelarkPublishModalOpen = ref(false)
 const geelarkPublishSubmitting = ref(false)
 const geelarkAccounts = ref<GeelarkPublishAccount[]>([])
@@ -312,6 +367,10 @@ const shotImagePromptPreviewLoading = ref(false)
 const shotImagePromptPreviewError = ref('')
 const shotImagePromptPreview = ref<ShotImagePromptPreview | null>(null)
 const shotImagePromptPreviewLoadedShotId = ref('')
+const shotVideoPromptPreviewLoading = ref(false)
+const shotVideoPromptPreviewError = ref('')
+const shotVideoPromptPreview = ref<ShotVideoPromptPreview | null>(null)
+const shotVideoPromptPreviewLoadedShotId = ref('')
 const geelarkPublishForm = reactive({
   publishAccountId: '',
   videoDesc: '',
@@ -446,18 +505,85 @@ const activeImageModel = computed(() => safeText(current.value?.pipelineStatus?.
 const workflowStep = computed(() => current.value?.workflowV2?.currentStep || 'upload_analyze_script')
 const selectedVariantId = computed(() => current.value?.selectedScriptVariantId || scriptVariants.value.find((item) => item.selected)?.id || '')
 const referenceSourcePath = computed(() => current.value?.referenceVideoPath || referenceVideoPath.value)
-const effectiveProductRefs = computed(() => (Array.isArray(productRefsDraft.value) ? productRefsDraft.value : safeArray(productRefs.value)))
-const visibleProductThumbs = computed(() => effectiveProductRefs.value.slice(0, 9))
+const productSanitizationStatus = computed(() => current.value?.productImageSanitizationStatus || 'idle')
+const sanitizedProductRefs = computed(() => safeArray(current.value?.sanitizedProductReferenceImagePaths))
+const originalProductRefs = computed(() => safeArray(current.value?.originalProductReferenceImagePaths))
+const hasDraftProductRefs = computed(() => Array.isArray(productRefsDraft.value) && productRefsDraft.value.length > 0)
+const effectiveProductRefs = computed(() => {
+  if (Array.isArray(productRefsDraft.value)) return productRefsDraft.value
+  if (sanitizedProductRefs.value.length) return sanitizedProductRefs.value
+  return safeArray(productRefs.value)
+})
+const visibleProductThumbs = computed(() =>
+  (productRefPreviewMode.value === 'original' ? originalProductRefs.value : effectiveProductRefs.value).slice(0, 9),
+)
+const productSanitizationStatusLabel = computed(() => {
+  if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) return '待绑定'
+  if (productSanitizationStatus.value === 'processing') return '生成中'
+  if (productSanitizationStatus.value === 'done') return '生成完成'
+  if (productSanitizationStatus.value === 'failed') return '生成失败'
+  return '待生成'
+})
+const productSanitizationStatusClass = computed(() => {
+  if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) return 'working'
+  if (productSanitizationStatus.value === 'processing') return 'working'
+  if (productSanitizationStatus.value === 'done') return 'success'
+  if (productSanitizationStatus.value === 'failed') return 'danger'
+  return ''
+})
+const boundProductLibraryItem = computed<ProductLibraryItem | null>(() => {
+  const targetId = String(current.value?.productId || selectedProductId.value || '').trim()
+  if (!targetId) return null
+  return products.value.find((item) => item.id === targetId) || null
+})
+const boundProductDisplayName = computed(() => {
+  if (boundProductLibraryItem.value?.name) {
+    return `${boundProductLibraryItem.value.name} · ${boundProductLibraryItem.value.id}`
+  }
+  if (current.value?.productId) {
+    return `商品 ${current.value.productId}`
+  }
+  return '未绑定商品'
+})
+const cloneProductBindingHint = computed(() => {
+  if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) {
+    return '商品已选中，但当前还未真正绑定到项目；请先完成参考视频分析后再绑定商品。'
+  }
+  if (productSanitizationStatus.value === 'processing') {
+    return '正在同步商品库标准源缓存；分镜阶段会优先使用当前项目保存的标准源快照。'
+  }
+  if (productSanitizationStatus.value === 'failed') {
+    return safeText(current.value?.productImageSanitizationError, '产品标准源生成失败，当前已回退原图继续。')
+  }
+  if (effectiveProductRefs.value.length) {
+    return '当前项目已保存商品库原图快照与标准源快照；分镜阶段优先使用标准源，原图仅作补充参考与回退源。'
+  }
+  return '请先从商品库选择一个商品。'
+})
+const cloneProductSnapshotLabel = computed(() =>
+  productRefPreviewMode.value === 'original' ? '商品库原图快照' : '产品标准源快照',
+)
+const cloneProductSnapshotHint = computed(() => {
+  if (productRefPreviewMode.value === 'original') {
+    return '原图快照保留商品真实佩戴方向、结构和细节，用于分镜主事实源。'
+  }
+  return '标准源快照用于统一商品结构锁定和后续提示词商品描述。'
+})
 const activeProjectId = computed(() => resolveActiveProjectId(current.value?.id))
 const isDraftingNewProject = computed(() => Boolean(referenceVideoPath.value.trim()) && !current.value?.id)
 const hasBoundModel = computed(() => Boolean(selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id))
+const hasUsableStoryboardProductRefs = computed(() => originalProductRefs.value.length > 0)
+const hasUsableExtractedProductRefs = computed(() => sanitizedProductRefs.value.length > 0 || originalProductRefs.value.length > 0)
 const canGenerateStoryboardFrames = computed(
-  () => Boolean(activeProjectId.value && selectedVariantId.value && effectiveProductRefs.value.length && hasBoundModel.value),
+  () => Boolean(activeProjectId.value && selectedVariantId.value && hasUsableStoryboardProductRefs.value && hasUsableExtractedProductRefs.value && hasBoundModel.value),
 )
 const storyboardFrameBlockReason = computed(() => {
   if (!activeProjectId.value) return '请先完成参考视频分析'
   if (!selectedVariantId.value) return '请先选择一条脚本候选'
-  if (!effectiveProductRefs.value.length) return '请先上传并绑定商品图'
+  if (!hasUsableStoryboardProductRefs.value) return '请先选择并绑定商品库商品'
+  if (!hasUsableExtractedProductRefs.value) {
+    return safeText(current.value?.productImageSanitizationError, '产品标准源生成失败且没有可用原图，请重新绑定更清晰的商品库商品。')
+  }
   if (!hasBoundModel.value) return '请先选择模特'
   return ''
 })
@@ -846,7 +972,10 @@ const analyzePrimaryButtonLabel = computed(() => (referenceSourcePath.value ? '�
 const selectedVariantCandidate = computed(
   () => scriptVariants.value.find((item) => item.id === selectedVariantId.value) || scriptVariants.value.find((item) => item.selected) || scriptVariants.value[0] || null,
 )
-const failedShotActionText = computed(() => (failedShotOutputs.value.length ? `重新生成失败项 ${failedShotOutputs.value.length}` : '重新生成失败项'))
+const failedShotActionText = computed(() => {
+  if (regeneratingFailedShotVideos.value) return `重新生成中… ${failedShotOutputs.value.length}`
+  return failedShotOutputs.value.length ? `重新生成失败项 ${failedShotOutputs.value.length}` : '重新生成失败项'
+})
 const selectedShotFrame = computed<StoryboardFrame | null>(() =>
   selectedShotOutput.value ? shotFrameMap.value[selectedShotOutput.value.shotId] || null : null,
 )
@@ -908,6 +1037,10 @@ function mediaUrl(filePath?: string) {
 
 function previewImage(path?: string) {
   return mediaUrl(path || '')
+}
+
+function promptReferencePaths(paths?: string[]) {
+  return (paths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
 }
 
 function modelPreview(item?: { coverImagePath?: string; imagePaths?: string[] } | null) {
@@ -1105,6 +1238,104 @@ async function copyAllShotPrompts() {
   await copyPromptText(parts.join('\n\n'), '整套提示词已复制')
 }
 
+async function copyAllShotVideoPrompts() {
+  if (!shotVideoPromptPreview.value) return
+  const parts = [
+    `Script Text:\n${safeText(shotVideoPromptPreview.value.scriptText, '--')}`,
+    `Generation Prompt:\n${safeText(shotVideoPromptPreview.value.generationPrompt, '--')}`,
+    `Compiled Prompt:\n${safeText(shotVideoPromptPreview.value.compiledPrompt, '--')}`,
+    `Video Positive Prompt:\n${safeText(shotVideoPromptPreview.value.positivePrompt, '--')}`,
+    `Video Negative Prompt:\n${safeText(shotVideoPromptPreview.value.negativePrompt || shotVideoPromptPreview.value.compiledNegativePrompt, '--')}`,
+  ]
+  await copyPromptText(parts.join('\n\n'), '分镜视频提示词已复制')
+}
+
+function extractPromptSection(source: string, markers: string[]) {
+  const text = safeText(source, '')
+  if (!text) return ''
+  const lines = text.split('\n')
+  const matched = lines.filter((line) => {
+    const normalized = line.trim().toLowerCase()
+    return markers.some((marker) => normalized.includes(marker.toLowerCase()))
+  })
+  return matched.join('\n').trim()
+}
+
+const shotVideoCompiledLockLayer = computed(() =>
+  extractPromptSection(safeText(shotVideoPromptPreview.value?.compiledPrompt, ''), [
+    '[consistency_layer]',
+    '[identity_layer]',
+    'reference image lock (critical)',
+    'strict product lock',
+    'strict model identity lock',
+    'human priority rule',
+    'no substitute rule',
+    'spatial anchor lock',
+    'physics consistency',
+    'composition lock',
+    'camera motion lock',
+    'scale consistency lock',
+    'motion limit',
+    'same person across all storyboard frames',
+    'product references lock product only',
+    'reference person exclusion rule',
+    'product source lock',
+    'instance rule',
+    'anti-reconstruction',
+    'selected model identity lock',
+    'reference image priority',
+  ]),
+)
+
+const shotVideoPositiveLockLayer = computed(() =>
+  extractPromptSection(safeText(shotVideoPromptPreview.value?.positivePrompt, ''), [
+    'reference image lock (critical)',
+    'strict product lock',
+    'strict model identity lock',
+    'human priority rule',
+    'no substitute rule',
+    'spatial anchor lock',
+    'physics consistency',
+    'composition lock',
+    'camera motion lock',
+    'scale consistency lock',
+    'motion limit',
+    'product references lock product only',
+    'reference person exclusion rule',
+    'product source lock',
+    'instance rule',
+    'anti-reconstruction',
+    'exactly one human model is allowed',
+    'human identity lock',
+  ]),
+)
+
+const shotVideoExecutionLayer = computed(() =>
+  extractPromptSection(safeText(shotVideoPromptPreview.value?.positivePrompt, ''), [
+    'script text to execute faithfully in this clip',
+    'shot execution details',
+    'preserve this exact shot logic',
+    'visual direction',
+    'action direction',
+    'camera direction',
+    'motion performance rule',
+    'only adapt camera and motion',
+    'generate natural motion between first and last frame',
+  ]) || safeText(shotVideoPromptPreview.value?.scriptSpliceText, ''),
+)
+
+const shotVideoStyleLayer = computed(() =>
+  extractPromptSection(safeText(shotVideoPromptPreview.value?.positivePrompt, ''), [
+    'premium realistic social commerce video',
+    'modern smartphone camera',
+    'real human hands',
+    'natural daylight',
+    'believable e-commerce demo',
+    'jewelry realism rule',
+    'cinematic polish must never override identity',
+  ]),
+)
+
 async function loadShotImagePromptPreview(shotId?: string, force = false, openModal = false) {
   const projectId = String(current.value?.id || '').trim()
   const nextShotId = String(shotId || '').trim()
@@ -1132,6 +1363,36 @@ async function loadShotImagePromptPreview(shotId?: string, force = false, openMo
     if (openModal) shotPromptPreviewOpen.value = true
   } finally {
     shotImagePromptPreviewLoading.value = false
+  }
+}
+
+async function loadShotVideoPromptPreview(shotId?: string, force = false, openModal = false) {
+  const projectId = String(current.value?.id || '').trim()
+  const nextShotId = String(shotId || '').trim()
+  if (!projectId || !nextShotId) {
+    shotVideoPromptPreview.value = null
+    shotVideoPromptPreviewError.value = ''
+    shotVideoPromptPreviewLoadedShotId.value = ''
+    return
+  }
+  if (!force && shotVideoPromptPreviewLoadedShotId.value === nextShotId && shotVideoPromptPreview.value) return
+  shotVideoPromptPreviewLoading.value = true
+  shotVideoPromptPreviewError.value = ''
+  try {
+    const result = (await window.api.clone.getShotVideoPromptPreview({
+      cloneProjectId: projectId,
+      shotId: nextShotId,
+    })) as ShotVideoPromptPreview
+    shotVideoPromptPreview.value = result || null
+    shotVideoPromptPreviewLoadedShotId.value = nextShotId
+    if (openModal) shotVideoPromptPreviewOpen.value = true
+  } catch (error: any) {
+    shotVideoPromptPreview.value = null
+    shotVideoPromptPreviewLoadedShotId.value = ''
+    shotVideoPromptPreviewError.value = safeText(error?.message ?? error, '分镜视频提示词预览加载失败')
+    if (openModal) shotVideoPromptPreviewOpen.value = true
+  } finally {
+    shotVideoPromptPreviewLoading.value = false
   }
 }
 
@@ -1207,6 +1468,7 @@ const {
   refreshProjectAfterFailure,
   loadProject,
   pickReferenceVideo: bindReferenceVideoToWorkspace,
+  bindLibraryProduct,
   bindProductImages,
   bindModelIdentity,
   createBlueprint: createBlueprintInWorkspace,
@@ -1231,6 +1493,7 @@ const {
   referenceVideoPath,
   productRefs,
   productRefsDraft,
+  selectedProductId,
   selectedModelId,
   storyboardBatchSummary,
   variantCount,
@@ -1440,6 +1703,13 @@ async function refreshModels() {
   }
 }
 
+async function refreshProducts() {
+  products.value = (await window.api.products.list()) as ProductLibraryItem[]
+  if (!selectedProductId.value) {
+    selectedProductId.value = String(current.value?.productId || products.value[0]?.id || '')
+  }
+}
+
 async function pickReferenceVideo() {
   const files = await window.api.pickFiles({
     title: '选择参考视频',
@@ -1462,6 +1732,15 @@ async function pickProductImages() {
   await bindProductImages(next, effectiveProductRefs.value)
 }
 
+async function bindSelectedProduct() {
+  const productId = String(selectedProductId.value || '').trim()
+  if (!productId) {
+    markError('请先选择商品库商品。', '请先选择商品库商品。')
+    return
+  }
+  await bindLibraryProduct(productId)
+}
+
 async function removeProductImage(imagePath: string) {
   await removeProductImageInWorkspace(imagePath, effectiveProductRefs.value)
 }
@@ -1479,6 +1758,11 @@ async function createBlueprint() {
 }
 
 async function generateScriptVariants() {
+  const selectedProduct = String(selectedProductId.value || '').trim()
+  const boundProduct = String(current.value?.productId || '').trim()
+  if (selectedProduct && selectedProduct !== boundProduct && current.value?.id) {
+    await bindLibraryProduct(selectedProduct)
+  }
   console.log('[clone-debug] generate-script-click', {
     currentId: activeProjectId.value || '',
     effectiveProductRefs: [...effectiveProductRefs.value],
@@ -1556,13 +1840,39 @@ async function replaceShotVideo(shotId: string) {
 }
 
 async function regenerateShotClip(shotId: string) {
-  await regenerateShotClipInWorkspace(shotId)
+  const normalizedShotId = String(shotId || '').trim()
+  if (!normalizedShotId) return
+  if (regeneratingShotVideoIds.value.includes(normalizedShotId)) {
+    setStageLog(`${shotLabel(normalizedShotId)} 正在重新生成，请不要重复点击。`)
+    window.alert(`${shotLabel(normalizedShotId)} 正在重新生成，请不要重复点击。`)
+    return
+  }
+  regeneratingShotVideoIds.value = [...regeneratingShotVideoIds.value, normalizedShotId]
+  setStageLog(`${shotLabel(normalizedShotId)} 已提交重新生成，正在处理中，请勿重复点击。`)
+  window.alert(`${shotLabel(normalizedShotId)} 已提交重新生成，正在处理中，请勿重复点击。`)
+  try {
+    await regenerateShotClipInWorkspace(normalizedShotId)
+  } finally {
+    regeneratingShotVideoIds.value = regeneratingShotVideoIds.value.filter((id) => id !== normalizedShotId)
+  }
 }
 
 async function regenerateFailedShotVideos() {
   if (!failedShotOutputs.value.length) return
-  for (const item of failedShotOutputs.value) {
-    await regenerateShotClip(item.shotId)
+  if (regeneratingFailedShotVideos.value) {
+    setStageLog('失败分镜正在批量重新生成，请不要重复点击。')
+    window.alert('失败分镜正在批量重新生成，请不要重复点击。')
+    return
+  }
+  regeneratingFailedShotVideos.value = true
+  setStageLog(`已提交 ${failedShotOutputs.value.length} 个失败分镜重新生成，正在处理中，请勿重复点击。`)
+  window.alert(`已提交 ${failedShotOutputs.value.length} 个失败分镜重新生成，正在处理中，请勿重复点击。`)
+  try {
+    for (const item of failedShotOutputs.value) {
+      await regenerateShotClip(item.shotId)
+    }
+  } finally {
+    regeneratingFailedShotVideos.value = false
   }
 }
 
@@ -1671,6 +1981,7 @@ onMounted(async () => {
     if (!text) return
     pushRuntimeLog(text, payload?.level || 'info')
   })
+  await refreshProducts()
   await refreshModels()
   const projectId = routeProjectId.value
   if (!projectId) {
@@ -1696,6 +2007,14 @@ onMounted(async () => {
     }
   }, 6000)
 })
+
+watch(
+  () => current.value?.productId,
+  (next) => {
+    const normalized = String(next || '').trim()
+    if (normalized) selectedProductId.value = normalized
+  },
+)
 
 watch(
   autoBootstrapKey,
@@ -1899,7 +2218,7 @@ onUnmounted(() => {
                     <div class="analyze-project-pills">
                       <em>{{ current?.runMode === 'auto' ? '智能复刻' : '手动流程' }}</em>
                       <em>{{ hasBoundModel ? '已选模特' : '未选模特' }}</em>
-                      <em>{{ effectiveProductRefs.length ? `商品图 ${effectiveProductRefs.length}` : '未传商品图' }}</em>
+                      <em>{{ effectiveProductRefs.length ? `参考图 ${effectiveProductRefs.length}` : '未绑定商品' }}</em>
                     </div>
                   </div>
 
@@ -1924,25 +2243,69 @@ onUnmounted(() => {
                   <div class="analyze-project-info-card__section">
                     <div class="analyze-project-info-card__head">
                       <strong>商品图片</strong>
+                      <span class="status-pill" :class="productSanitizationStatusClass">{{ productSanitizationStatusLabel }}</span>
                     </div>
                     <div class="variant-summary-card__copy">
-                      <span>当前商品图</span>
-                      <strong>{{ effectiveProductRefs.length ? `已选 ${effectiveProductRefs.length} 张` : '未上传' }}</strong>
-                      <p>{{ effectiveProductRefs.length ? '这些商品图会继续用于后续阶段。' : '建议先上传 3-9 张商品图。' }}</p>
+                      <span>当前绑定商品</span>
+                      <strong>{{ boundProductDisplayName }}</strong>
+                      <p>{{ cloneProductBindingHint }}</p>
+                    </div>
+                    <div class="variant-product-actions">
+                      <select v-model="selectedProductId" class="field-control">
+                        <option value="">选择商品库商品</option>
+                        <option v-for="item in products" :key="item.id" :value="item.id">
+                          {{ item.name }} · {{ item.id }}
+                        </option>
+                      </select>
+                      <button class="ghost-button small secondary-action" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct">绑定商品</button>
+                    </div>
+                    <div class="analyze-project-field">
+                      <span>商品快照状态</span>
+                      <strong>{{ cloneProductSnapshotLabel }}</strong>
+                    </div>
+                    <p v-if="originalProductRefs.length || effectiveProductRefs.length" class="analyze-project-field__hint">
+                      {{ cloneProductSnapshotHint }}
+                    </p>
+                    <div v-if="originalProductRefs.length || effectiveProductRefs.length" class="variant-product-toggle">
+                      <button
+                        class="ghost-button small secondary-action"
+                        type="button"
+                        :class="{ active: productRefPreviewMode === 'sanitized' }"
+                        :disabled="!effectiveProductRefs.length"
+                        @click="productRefPreviewMode = 'sanitized'"
+                      >
+                        查看产品标准源
+                      </button>
+                      <button
+                        class="ghost-button small secondary-action"
+                        type="button"
+                        :class="{ active: productRefPreviewMode === 'original' }"
+                        :disabled="!originalProductRefs.length"
+                        @click="productRefPreviewMode = 'original'"
+                      >
+                        查看原图
+                      </button>
                     </div>
                     <div v-if="visibleProductThumbs.length" class="variant-product-strip">
                       <span v-for="item in visibleProductThumbs.slice(0, 4)" :key="item" class="variant-product-strip__item">
                         <img :src="previewImage(item)" alt="product-reference" />
-                        <button class="variant-product-strip__remove" type="button" :disabled="loading" @click.stop.prevent="removeProductImage(item)">删除</button>
+                        <button
+                          v-if="productRefPreviewMode !== 'original'"
+                          class="variant-product-strip__remove"
+                          type="button"
+                          :disabled="loading"
+                          @click.stop.prevent="removeProductImage(item)"
+                        >
+                          删除
+                        </button>
                       </span>
                     </div>
                     <div v-if="visibleProductThumbs.length" class="variant-product-meta">
-                      <span>已绑定素材预览</span>
+                      <span>{{ cloneProductSnapshotLabel }}预览</span>
                       <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), '商品图') }}</strong>
                     </div>
                     <div class="variant-product-actions">
-                      <button class="ghost-button small secondary-action" type="button" @click="pickProductImages">上传商品图</button>
-                      <button v-if="effectiveProductRefs.length" class="ghost-button small danger-action" type="button" :disabled="loading" @click.stop.prevent="clearProductImages">清空重选</button>
+                      <button class="ghost-button small danger-action" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages">解除当前商品快照</button>
                     </div>
                   </div>
 
@@ -1973,7 +2336,7 @@ onUnmounted(() => {
                       v-else
                       class="empty-state small-empty"
                       title="等待商品描述"
-                      description="上传商品图并完成参考分析后，这里会展示后续脚本和分镜复用的商品结构描述。"
+                      description="绑定商品库商品并完成参考分析后，这里会展示后续脚本和分镜复用的商品结构描述。"
                     />
                   </div>
                 </div>
@@ -1984,7 +2347,7 @@ onUnmounted(() => {
 
         <article v-if="visibleStageKey === 'variant'" class="panel">
           <div class="variant-workbench">
-            <CloneStageHeader tag="脚本生成" title="生成脚本候选" description="选好模特和商品图后，生成多条候选脚本。">
+            <CloneStageHeader tag="脚本生成" title="生成脚本候选" description="选好模特和商品库商品后，生成多条候选脚本。">
               <template #actions>
                 <button class="ghost-button small secondary-action" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
                   {{ autoFlowRunning ? '自动运行中' : current?.runMode === 'auto' ? '继续自动运行' : '从当前阶段开始自动运行' }}
@@ -2071,7 +2434,7 @@ onUnmounted(() => {
                     v-if="!scriptVariants.length"
                     class="empty-state section-empty"
                     title="等待脚本候选"
-                    description="选择模特、上传商品图后点击“生成脚本”，系统会输出多条逐分镜候选脚本。"
+                    description="选择模特、绑定商品库商品后点击“生成脚本”，系统会输出多条逐分镜候选脚本。"
                   />
                 </div>
               </section>
@@ -2282,7 +2645,7 @@ onUnmounted(() => {
                         <button class="shot-table-tab" type="button">{{ tr('cloneView.videoStage.settingsTab') }}</button>
                       </div>
                       <div class="shot-table-actions">
-                        <button class="ghost-button small" type="button" :disabled="loading || !failedShotOutputs.length" @click="regenerateFailedShotVideos">
+                        <button class="ghost-button small" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos">
                           {{ failedShotActionText }}
                         </button>
                         <button class="ghost-button small" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos">
@@ -2307,96 +2670,106 @@ onUnmounted(() => {
                       </div>
                     </div>
 
-                    <div class="shot-reference-header" role="row">
-                      <span>{{ tr('cloneView.videoStage.columns.shot') }}</span>
-                      <span>{{ tr('cloneView.videoStage.columns.frame') }}</span>
-                      <span>{{ tr('cloneView.videoStage.columns.script') }}</span>
-                      <span>{{ tr('cloneView.videoStage.columns.duration') }}</span>
-                      <span>{{ tr('cloneView.videoStage.columns.motion') }}</span>
-                      <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
-                      <span>{{ tr('cloneView.videoStage.columns.actions') }}</span>
-                    </div>
+                    <div class="shot-reference-scroll">
+                      <div class="shot-reference-header" role="row">
+                        <span>{{ tr('cloneView.videoStage.columns.shot') }}</span>
+                        <span>{{ tr('cloneView.videoStage.columns.frame') }}</span>
+                        <span>{{ tr('cloneView.videoStage.columns.script') }}</span>
+                        <span>{{ tr('cloneView.videoStage.columns.duration') }}</span>
+                        <span>{{ tr('cloneView.videoStage.columns.motion') }}</span>
+                        <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
+                        <span>{{ tr('cloneView.videoStage.columns.actions') }}</span>
+                      </div>
 
-                    <div class="shot-table-body shot-table-body--reference">
-                      <div
-                        v-for="item in filteredShotOutputs"
-                        :key="item.shotId"
-                        v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId]"
-                        class="shot-reference-row"
-                        :class="{
-                          active: selectedShotOutput?.shotId === item.shotId,
-                          ready: Boolean(item.videoPath),
-                          failed: item.status === 'failed' || item.status === 'polling_timeout' || Boolean(item.error),
-                        }"
-                        @click="selectedShotId = item.shotId"
-                        @keydown.enter.prevent="selectedShotId = item.shotId"
-                        @keydown.space.prevent="selectedShotId = item.shotId"
-                        role="button"
-                        tabindex="0"
-                      >
-                        <span class="shot-reference-cell shot-reference-cell--index">
-                          <strong>{{ safeText(item.index ? String(item.index).padStart(2, '0') : '', String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0')) }}</strong>
-                          <small>{{ `脚本-${(shotVideoOutputIndexMap[item.shotId] ?? 0) + 1}` }}</small>
-                        </span>
-                        <span class="shot-reference-cell shot-reference-cell--thumb">
-                          <span v-if="shotFrameMap[item.shotId]?.imagePath" class="shot-thumb shot-thumb--large">
-                            <img
-                              :src="previewImage(shotFrameMap[item.shotId]?.imagePath)"
-                              :alt="safeText(shotLabel(item.shotId), '分镜')"
-                            />
+                      <div class="shot-table-body shot-table-body--reference">
+                        <div
+                          v-for="item in filteredShotOutputs"
+                          :key="item.shotId"
+                          v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId]"
+                          class="shot-reference-row"
+                          :class="{
+                            active: selectedShotOutput?.shotId === item.shotId,
+                            ready: Boolean(item.videoPath),
+                            failed: item.status === 'failed' || item.status === 'polling_timeout' || Boolean(item.error),
+                          }"
+                          @click="selectedShotId = item.shotId"
+                          @keydown.enter.prevent="selectedShotId = item.shotId"
+                          @keydown.space.prevent="selectedShotId = item.shotId"
+                          role="button"
+                          tabindex="0"
+                        >
+                          <span class="shot-reference-cell shot-reference-cell--index">
+                            <strong>{{ safeText(item.index ? String(item.index).padStart(2, '0') : '', String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0')) }}</strong>
+                            <small>{{ `脚本-${(shotVideoOutputIndexMap[item.shotId] ?? 0) + 1}` }}</small>
                           </span>
-                          <span v-else class="shot-thumb shot-thumb--large shot-thumb--empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
-                        </span>
-                        <span class="shot-reference-cell shot-reference-cell--copy">
-                          <strong>{{ shotScriptSummary(item.shotId) }}</strong>
-                          <small>{{ safeText(shotLabel(item.shotId), '分镜') }}</small>
-                        </span>
-                        <span class="shot-reference-cell shot-reference-cell--metric">
-                          <strong>{{ formatDuration(item.durationSec) }}</strong>
-                        </span>
-                        <span class="shot-reference-cell shot-reference-cell--metric">
-                          <strong>{{ localizeShotField(storyBeats.find((beat) => beat.id === item.shotId)?.shotType) }}</strong>
-                        </span>
-                        <span class="shot-reference-cell shot-reference-cell--status">
-                          <span
-                            class="queue-dot"
-                            :class="`queue-dot--${describeShotSyncState(item).tone === 'success' ? 'success' : describeShotSyncState(item).tone === 'danger' ? 'danger' : describeShotSyncState(item).tone === 'warning' ? 'working' : 'idle'}`"
-                          ></span>
-                          <span class="shot-reference-status-copy">
-                            <strong>{{ describeShotSyncState(item).title }}</strong>
-                            <small>{{ describeShotSyncState(item).detail }}</small>
-                            <small v-if="typeof item.retryCount === 'number'">重试 {{ item.retryCount }} / 2</small>
+                          <span class="shot-reference-cell shot-reference-cell--thumb">
+                            <span v-if="shotFrameMap[item.shotId]?.imagePath" class="shot-thumb shot-thumb--large">
+                              <img
+                                :src="previewImage(shotFrameMap[item.shotId]?.imagePath)"
+                                :alt="safeText(shotLabel(item.shotId), '分镜')"
+                              />
+                            </span>
+                            <span v-else class="shot-thumb shot-thumb--large shot-thumb--empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
                           </span>
-                        </span>
-                        <span class="shot-reference-cell shot-reference-cell--actions">
-                          <button class="ghost-button small action-button" type="button" @click.stop="selectedShotId = item.shotId">预览</button>
-                          <button
-                            class="ghost-button small action-button"
-                            type="button"
-                            :disabled="loading || !current?.id"
-                            @click.stop="regenerateShotClip(item.shotId)"
-                          >
-                            重新生成
-                          </button>
-                          <button
-                            v-if="canContinueSyncShot(item)"
-                            class="ghost-button small action-button"
-                            type="button"
-                            :disabled="loading"
-                            @click.stop="syncFailedShotVideo(item.shotId)"
-                          >
-                            继续查询
-                          </button>
-                          <button
-                            v-else-if="canRepairShotTaskId(item)"
-                            class="ghost-button small action-button"
-                            type="button"
-                            :disabled="loading || !current?.id"
-                            @click.stop="refreshRemoteStatus"
-                          >
-                            同步补查
-                          </button>
-                        </span>
+                          <span class="shot-reference-cell shot-reference-cell--copy">
+                            <strong>{{ shotScriptSummary(item.shotId) }}</strong>
+                            <small>{{ safeText(shotLabel(item.shotId), '分镜') }}</small>
+                          </span>
+                          <span class="shot-reference-cell shot-reference-cell--metric">
+                            <strong>{{ formatDuration(item.durationSec) }}</strong>
+                          </span>
+                          <span class="shot-reference-cell shot-reference-cell--metric">
+                            <strong>{{ localizeShotField(storyBeats.find((beat) => beat.id === item.shotId)?.shotType) }}</strong>
+                          </span>
+                          <span class="shot-reference-cell shot-reference-cell--status">
+                            <span
+                              class="queue-dot"
+                              :class="`queue-dot--${describeShotSyncState(item).tone === 'success' ? 'success' : describeShotSyncState(item).tone === 'danger' ? 'danger' : describeShotSyncState(item).tone === 'warning' ? 'working' : 'idle'}`"
+                            ></span>
+                            <span class="shot-reference-status-copy">
+                              <strong>{{ describeShotSyncState(item).title }}</strong>
+                              <small>{{ describeShotSyncState(item).detail }}</small>
+                              <small v-if="typeof item.retryCount === 'number'">重试 {{ item.retryCount }} / 2</small>
+                            </span>
+                          </span>
+                          <span class="shot-reference-cell shot-reference-cell--actions">
+                            <button class="ghost-button small action-button" type="button" @click.stop="selectedShotId = item.shotId">预览</button>
+                            <button
+                              class="ghost-button small action-button"
+                              type="button"
+                              :disabled="shotVideoPromptPreviewLoading"
+                              @click.stop="selectedShotId = item.shotId; loadShotVideoPromptPreview(item.shotId, true, true)"
+                            >
+                              提示词
+                            </button>
+                            <button
+                              class="ghost-button small action-button"
+                              type="button"
+                              :disabled="loading || !current?.id || regeneratingShotVideoIds.includes(item.shotId)"
+                              @click.stop="regenerateShotClip(item.shotId)"
+                            >
+                              {{ regeneratingShotVideoIds.includes(item.shotId) ? '重新生成中…' : '重新生成' }}
+                            </button>
+                            <button
+                              v-if="canContinueSyncShot(item)"
+                              class="ghost-button small action-button"
+                              type="button"
+                              :disabled="loading"
+                              @click.stop="syncFailedShotVideo(item.shotId)"
+                            >
+                              继续查询
+                            </button>
+                            <button
+                              v-else-if="canRepairShotTaskId(item)"
+                              class="ghost-button small action-button"
+                              type="button"
+                              :disabled="loading || !current?.id"
+                              @click.stop="refreshRemoteStatus"
+                            >
+                              同步补查
+                            </button>
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -2809,6 +3182,46 @@ onUnmounted(() => {
               <pre>{{ shotImagePromptPreview.modelIdentityBlock }}</pre>
             </div>
           </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>Product Canonical Source</strong>
+              <span>仅显示当前绑定商品生成后的标准源图</span>
+            </div>
+            <div v-if="promptReferencePaths(shotImagePromptPreview.productReferenceImagePaths).length" class="prompt-reference-grid prompt-reference-grid--single">
+              <a
+                v-for="item in promptReferencePaths(shotImagePromptPreview.productReferenceImagePaths).slice(0, 1)"
+                :key="`image-product-${item}`"
+                class="prompt-reference-card"
+                :href="mediaUrl(item)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img :src="previewImage(item)" alt="prompt-product-reference" />
+                <span>{{ shortPath(item) }}</span>
+              </a>
+            </div>
+            <div v-else class="prompt-reference-empty">未生成 Product Canonical Source</div>
+          </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>模特主锚点</strong>
+              <span>仅显示当前模特包的第一张主图</span>
+            </div>
+            <div v-if="promptReferencePaths(shotImagePromptPreview.modelReferenceImagePaths).length" class="prompt-reference-grid prompt-reference-grid--single">
+              <a
+                v-for="item in promptReferencePaths(shotImagePromptPreview.modelReferenceImagePaths).slice(0, 1)"
+                :key="`image-model-${item}`"
+                class="prompt-reference-card"
+                :href="mediaUrl(item)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img :src="previewImage(item)" alt="prompt-model-reference" />
+                <span>{{ shortPath(item) }}</span>
+              </a>
+            </div>
+            <div v-else class="prompt-reference-empty">未上传模特主图</div>
+          </div>
           <div class="prompt-preview-block">
             <div class="prompt-preview-block__head">
               <strong>Start Prompt</strong>
@@ -2842,6 +3255,170 @@ onUnmounted(() => {
         </div>
         <div v-else class="prompt-preview-empty">
           当前没有可展示的分镜图片提示词。
+        </div>
+      </div>
+    </div>
+
+    <div v-if="shotVideoPromptPreviewOpen" class="modal-mask" @click.self="shotVideoPromptPreviewOpen = false">
+      <div class="modal-panel modal-panel--prompt-preview">
+        <div class="panel-head">
+          <div>
+            <span class="panel-tag">视频提示词预览</span>
+            <h2>{{ selectedShotOutput ? `镜头 ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` : '分镜视频提示词' }}</h2>
+          </div>
+          <div class="panel-actions">
+            <button class="ghost-button small" type="button" :disabled="!shotVideoPromptPreview" @click="copyAllShotVideoPrompts">复制全部</button>
+            <button class="ghost-button small" type="button" @click="shotVideoPromptPreviewOpen = false">关闭</button>
+          </div>
+        </div>
+        <div v-if="shotVideoPromptPreview" class="prompt-preview-card">
+          <div class="prompt-preview-meta">
+            <span>模式：{{ safeText(shotVideoPromptPreview.consistencyMode, '--') }}</span>
+            <span>商品类型：{{ safeText(shotVideoPromptPreview.productType, '--') }}</span>
+            <span>编译器：{{ safeText(shotVideoPromptPreview.promptCompilerVersion, '--') }}</span>
+            <span>哨兵：{{ safeText(shotVideoPromptPreview.promptBuildSentinel, '--') }}</span>
+          </div>
+          <div class="prompt-health-banner" :class="shotVideoPromptPreview.hasScriptText && shotVideoPromptPreview.hasGenerationPrompt ? 'is-success' : 'is-warning'">
+            <strong>{{ shotVideoPromptPreview.hasScriptText ? '脚本已接入' : '脚本信息偏弱' }}</strong>
+            <span>
+              {{ shotVideoPromptPreview.hasGenerationPrompt ? '当前视频 prompt 已包含 generationPrompt。' : '当前视频 prompt 主要依赖 scriptText / visual / action / camera 组装。' }}
+            </span>
+          </div>
+          <div v-if="shotVideoPromptPreview.scriptSpliceText" class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>脚本拼接块</strong>
+              <span>沿用之前的 script / generation / visual / action / camera 拼接</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Script Splice</span>
+              <pre>{{ shotVideoPromptPreview.scriptSpliceText }}</pre>
+            </div>
+          </div>
+          <div v-if="shotVideoPromptPreview.productDescriptionBlock" class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>商品描述高亮</strong>
+              <span>视频生成沿用分镜图片阶段的商品结构锁</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Product Description Lock</span>
+              <pre>{{ shotVideoPromptPreview.storyboardProductDescriptionBlock || shotVideoPromptPreview.productDescriptionBlock }}</pre>
+            </div>
+          </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>Product Canonical Source</strong>
+              <span>视频 prompt 参考的商品标准源图</span>
+            </div>
+            <div v-if="promptReferencePaths(shotVideoPromptPreview.productReferenceImagePaths).length" class="prompt-reference-grid prompt-reference-grid--single">
+              <a
+                v-for="item in promptReferencePaths(shotVideoPromptPreview.productReferenceImagePaths).slice(0, 1)"
+                :key="`video-product-${item}`"
+                class="prompt-reference-card"
+                :href="mediaUrl(item)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img :src="previewImage(item)" alt="video-product-reference" />
+                <span>{{ shortPath(item) }}</span>
+              </a>
+            </div>
+            <div v-else class="prompt-reference-empty">未生成 Product Canonical Source</div>
+          </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>模特主锚点</strong>
+              <span>视频 prompt 参考的模特主图</span>
+            </div>
+            <div v-if="promptReferencePaths(shotVideoPromptPreview.modelReferenceImagePaths).length" class="prompt-reference-grid prompt-reference-grid--single">
+              <a
+                v-for="item in promptReferencePaths(shotVideoPromptPreview.modelReferenceImagePaths).slice(0, 1)"
+                :key="`video-model-${item}`"
+                class="prompt-reference-card"
+                :href="mediaUrl(item)"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img :src="previewImage(item)" alt="video-model-reference" />
+                <span>{{ shortPath(item) }}</span>
+              </a>
+            </div>
+            <div v-else class="prompt-reference-empty">未上传模特主图</div>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Script Text</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.scriptText, ''), 'Script Text 已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotVideoPromptPreview.scriptText, '--') }}</pre>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Generation Prompt</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.generationPrompt, ''), 'Generation Prompt 已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotVideoPromptPreview.generationPrompt, '--') }}</pre>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Compiled Prompt</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.compiledPrompt, ''), 'Compiled Prompt 已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotVideoPromptPreview.compiledPrompt, '--') }}</pre>
+          </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>锁定层拆解</strong>
+              <span>先验模特锁 / 商品锁 / 参考职责</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Compiled Lock Layer</span>
+              <pre>{{ safeText(shotVideoCompiledLockLayer, '--') }}</pre>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Video Positive Lock Layer</span>
+              <pre>{{ safeText(shotVideoPositiveLockLayer, '--') }}</pre>
+            </div>
+          </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>执行层拆解</strong>
+              <span>脚本 / 动作 / 运镜</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Execution Layer</span>
+              <pre>{{ safeText(shotVideoExecutionLayer, '--') }}</pre>
+            </div>
+          </div>
+          <div class="prompt-highlight-card">
+            <div class="prompt-highlight-card__head">
+              <strong>风格层拆解</strong>
+              <span>写实质感 / 静默商业片规则</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <span>Style Layer</span>
+              <pre>{{ safeText(shotVideoStyleLayer, '--') }}</pre>
+            </div>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Video Positive Prompt</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.positivePrompt, ''), '视频正向提示词已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotVideoPromptPreview.positivePrompt, '--') }}</pre>
+          </div>
+          <div class="prompt-preview-block">
+            <div class="prompt-preview-block__head">
+              <strong>Video Negative Prompt</strong>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.negativePrompt || shotVideoPromptPreview.compiledNegativePrompt, ''), '视频负向提示词已复制')">复制</button>
+            </div>
+            <pre>{{ safeText(shotVideoPromptPreview.negativePrompt || shotVideoPromptPreview.compiledNegativePrompt, '--') }}</pre>
+          </div>
+        </div>
+        <div v-else-if="shotVideoPromptPreviewError" class="prompt-preview-empty prompt-preview-empty--error">
+          {{ shotVideoPromptPreviewError }}
+        </div>
+        <div v-else class="prompt-preview-empty">
+          当前没有可展示的分镜视频提示词。
         </div>
       </div>
     </div>
@@ -3331,6 +3908,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
 }
 
 .analyze-results-card__head strong,
@@ -3391,10 +3969,17 @@ onUnmounted(() => {
 .analyze-project-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
+}
+
+.analyze-project-field strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .analyze-video-card__head strong,
@@ -4195,6 +4780,7 @@ onUnmounted(() => {
 .variant-summary-card__copy {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .variant-summary-card__copy span {
@@ -4207,6 +4793,10 @@ onUnmounted(() => {
 .variant-summary-card__copy strong {
   font-size: 24px;
   line-height: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .variant-summary-card__copy p {
@@ -4214,6 +4804,9 @@ onUnmounted(() => {
   color: #9aa9c9;
   font-size: 12px;
   line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .variant-summary-card--asset {
@@ -4262,6 +4855,19 @@ onUnmounted(() => {
   padding-top: 2px;
 }
 
+.variant-product-toggle {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.variant-product-toggle .ghost-button.active {
+  border-color: rgba(111, 184, 255, 0.42);
+  background: rgba(52, 108, 194, 0.22);
+  color: #eef5ff;
+}
+
 .variant-product-strip__item {
   position: relative;
   aspect-ratio: 1;
@@ -4308,6 +4914,17 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.variant-product-actions > * {
+  min-width: 0;
+}
+
+.variant-product-actions .field-control {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .danger-action {
@@ -5486,6 +6103,12 @@ onUnmounted(() => {
     rgba(255, 255, 255, 0.018);
 }
 
+.shot-reference-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .shot-table-head {
   display: flex;
   align-items: center;
@@ -5564,8 +6187,9 @@ onUnmounted(() => {
 
 .shot-reference-header,
 .shot-reference-row {
+  min-width: 1100px;
   display: grid;
-  grid-template-columns: 64px 96px minmax(220px, 1.65fr) 72px 96px 116px 224px;
+  grid-template-columns: 64px 96px minmax(220px, 1.65fr) 72px 96px 116px 340px;
   gap: 8px;
   align-items: center;
 }
@@ -5602,6 +6226,7 @@ onUnmounted(() => {
   padding: 0;
   gap: 0;
   overflow: auto;
+  min-width: max-content;
 }
 
 .shot-reference-row {
@@ -5730,9 +6355,9 @@ onUnmounted(() => {
   gap: 4px;
   justify-content: flex-end;
   white-space: nowrap;
-  min-width: 0;
+  min-width: 340px;
   flex-wrap: nowrap;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .shot-thumb--large {
@@ -6187,6 +6812,47 @@ onUnmounted(() => {
   word-break: break-word;
   line-height: 1.6;
   font-size: 12px;
+}
+
+.prompt-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.prompt-reference-grid--single {
+  grid-template-columns: minmax(0, 220px);
+}
+
+.prompt-reference-card {
+  display: grid;
+  gap: 8px;
+  text-decoration: none;
+  color: #f2f6ff;
+}
+
+.prompt-reference-card img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 214, 118, 0.16);
+  background: rgba(5, 8, 14, 0.7);
+}
+
+.prompt-reference-card span,
+.prompt-reference-empty {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 235, 188, 0.82);
+  word-break: break-word;
+}
+
+.prompt-reference-empty {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 214, 118, 0.18);
+  background: rgba(6, 8, 14, 0.28);
 }
 
 .prompt-diagnostic-card {

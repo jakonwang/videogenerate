@@ -101,6 +101,11 @@ function composePromptParagraphs(sections: Array<string | null | undefined>, max
   return sanitizeGeneratedVideoPrompt(compact, maxChars)
 }
 
+function buildAccessorLockedText(input: { productType: string; base: string; earrings: string }) {
+  const normalized = String(input.productType || '').trim().toLowerCase()
+  return /earrings?/.test(normalized) ? input.earrings : input.base
+}
+
 export function sanitizeGeneratedVideoPrompt(value: unknown, maxChars = 1800) {
   const lines = dedupePromptLines(normalizePromptLine(value))
     .filter((line) => !containsCjk(line))
@@ -130,6 +135,142 @@ export function sanitizeNegativePrompt(value: unknown, maxChars = 400) {
 
 export function buildNoSpeakingInstruction() {
   return 'Silent performance only: no speaking, no dialogue, no lip-sync, no visible speech articulation, lips closed or naturally relaxed, mouth stays closed unless breathing naturally, and no presenter-style talking pose.'
+}
+
+export function buildReferenceImageLockText() {
+  return [
+    'REFERENCE IMAGE LOCK (CRITICAL):',
+    'The provided product reference image is the ONLY valid source for product identity.',
+    'The product MUST be directly reused or strictly derived from this reference image.',
+    'Do NOT recreate, approximate, reinterpret, or infer a similar product from text.',
+    'If the exact product cannot be preserved, generation MUST fail instead of replacing it with a lookalike.',
+  ].join(' ')
+}
+
+export function buildFrameContinuityLockText(input: { isEnd: boolean; shotIndex: number }) {
+  if (!input.isEnd) {
+    return [
+      'FRAME CONTINUITY LOCK:',
+      `Shot ${input.shotIndex + 1} start frame establishes the locked base frame for this shot.`,
+      'Keep the same product instance, same model instance, and same scene setup as the continuation source for the ending frame.',
+      'Do not introduce a reset composition, regenerated scene, or substituted product.',
+    ].join(' ')
+  }
+  return [
+    'FRAME CONTINUITY LOCK:',
+    'The ending keyframe MUST be a direct continuation of the provided starting frame.',
+    'Maintain the same product instance, same model instance, and same scene setup.',
+    'Only allow minimal natural motion and slight camera shift.',
+    'Do NOT reset composition or regenerate the scene.',
+  ].join(' ')
+}
+
+export function buildHumanPriorityRuleText() {
+  return [
+    'HUMAN PRIORITY RULE:',
+    'The human MUST adapt to the product.',
+    'Do NOT modify, resize, reshape, bend, simplify, or restyle the product to fit the human body.',
+    'If any conflict occurs, adjust human pose, hand placement, ear position, neck angle, or body framing, not the product.',
+  ].join(' ')
+}
+
+export function buildNoSubstituteRuleText() {
+  return [
+    'NO SUBSTITUTE RULE:',
+    'If exact consistency cannot be maintained, DO NOT generate a similar, alternative, generic, or lookalike product.',
+    'Never replace the locked product with a substitute.',
+    'Discard the generation instead of correcting it.',
+  ].join(' ')
+}
+
+export function buildFailInsteadRuleText() {
+  return 'If any forbidden condition is triggered, discard the generation instead of correcting it.'
+}
+
+export function buildSpatialAnchorLockText(productType: string) {
+  const base = [
+    'SPATIAL ANCHOR LOCK:',
+    'Maintain the same attachment point, same relative placement, same orientation, and same distance to the body support region as the locked reference state.',
+    'Do NOT reposition, rotate, detach, reattach, or structurally shift the product for styling convenience.',
+    'Camera may move, but product placement MUST remain physically consistent.',
+  ].join(' ')
+  const earrings = `${base} For earrings, keep the same ear side, same piercing point, same hanging direction, and same distance from the ear.`
+  return buildAccessorLockedText({ productType, base, earrings })
+}
+
+export function buildPhysicsConsistencyText(productType: string) {
+  const base = [
+    'PHYSICS CONSISTENCY:',
+    'The product must obey believable real-world support and gravity.',
+    'Allow only minimal natural swing or settle motion when motion is required.',
+    'No floating, no rigid sculpture pose, no impossible balance, and no unnatural angles.',
+  ].join(' ')
+  const earrings = `${base} Earrings must hang downward naturally due to gravity and may only show minimal realistic swing.`
+  return buildAccessorLockedText({ productType, base, earrings })
+}
+
+export function buildCompositionLockText(productType: string) {
+  const base = [
+    'COMPOSITION LOCK:',
+    'Maintain the same framing intent, same crop ratio, same subject scale, and same focal composition as the locked reference shot.',
+    'Do NOT zoom drastically, reframe aggressively, reset composition, or rebuild the scene from a new layout.',
+  ].join(' ')
+  const earrings = `${base} For earrings, preserve the same close-up relationship between ear, neck, and product display area.`
+  return buildAccessorLockedText({ productType, base, earrings })
+}
+
+export function buildCameraMotionLockText(input: { motion?: string; framing?: string; productType?: string }) {
+  const motion = String(input.motion || '').trim().toLowerCase()
+  const productType = String(input.productType || '').trim().toLowerCase()
+  if (motion === 'zoom_out') {
+    const isEarring = /earrings?/.test(productType)
+    const startState = isEarring ? 'extreme close-up of earring and ear' : 'tight close-up of the product anchor area'
+    const endState = isEarring
+      ? 'slightly wider close-up including ear and partial neck'
+      : 'slightly wider close-up of the same subject area'
+    return [
+      'CAMERA MOTION LOCK:',
+      'The zoom out must be a CONTINUOUS camera movement from the initial close-up frame.',
+      `Start state: ${startState}.`,
+      `End state: ${endState}.`,
+      'The motion must feel like a single uninterrupted camera pull-back.',
+      'DO NOT cut to a new shot, regenerate a new framing, change subject scale abruptly, or reset composition.',
+    ].join(' ')
+  }
+  return [
+    'CAMERA MOTION LOCK:',
+    'Keep camera motion continuous within the same shot.',
+    'Do NOT cut to a new shot, regenerate a new framing, or reset composition.',
+  ].join(' ')
+}
+
+export function buildScaleConsistencyLockText(productType: string, motion?: string) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  const normalizedMotion = String(motion || '').trim().toLowerCase()
+  const base = [
+    'SCALE CONSISTENCY LOCK:',
+    normalizedMotion === 'zoom_out'
+      ? 'The product must maintain the same real-world scale relative to the body anchor during zoom out.'
+      : 'The product must maintain the same real-world scale relative to the body anchor.',
+    'Do NOT enlarge, shrink, or rescale the product.',
+    normalizedMotion === 'zoom_out' ? 'Only camera distance changes, not the object size.' : 'Camera changes must not alter object scale.',
+  ].join(' ')
+  const earrings = `${base} For earrings, keep the same real-world scale relative to the earlobe, piercing point, and visible ear contour.`
+  return buildAccessorLockedText({ productType: normalizedType, base, earrings })
+}
+
+export function buildMotionLimitText(productType: string, motion?: string) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  if (!/earrings?/.test(normalizedType)) return ''
+  const normalizedMotion = String(motion || '').trim().toLowerCase()
+  return [
+    'MOTION LIMIT:',
+    normalizedMotion === 'zoom_out'
+      ? 'The earring may have extremely subtle micro-movements caused by breathing during the continuous pull-back.'
+      : 'The earring may have extremely subtle micro-movements caused by breathing.',
+    'Amplitude must be minimal and physically plausible.',
+    'No noticeable swinging, no exaggerated motion.',
+  ].join(' ')
 }
 
 export function buildSilentCommercialGlobalRule() {
@@ -233,7 +374,7 @@ export function buildReferenceLockText(shot: ShotSpec, sceneFallback?: string) {
     [
       `Keep the same background category and atmosphere as the reference shot: ${lock.sceneEnvironment}. Keep the same subject pose and hand placement: ${lock.subjectPose}. Keep the same product action: ${lock.productAction}.`,
       `Preserve the same camera composition and motion path as the reference shot: ${lock.cameraComposition}. ${lock.motionPath}.`,
-      `Only replace the person identity and product identity. ${lock.mayReplace.join('; ')}.`,
+      `Do NOT replace or regenerate product or model identity. Only adapt camera and motion while preserving the locked demonstration structure. ${lock.mayReplace.join('; ')}.`,
       `Do not drift away from the reference shot. ${lock.mustAvoid.join('; ')}.`,
     ],
     900,
@@ -287,6 +428,8 @@ export function buildProductLockText(
     'Product fidelity has higher priority than model styling, outfit styling, decorative atmosphere and background beauty.',
     'Do not redesign, stylize, simplify, beautify, or replace the product with a generic equivalent.',
     'Do not generate a similar product. Reproduce the exact same product only.',
+    'Do not generate a substitute product or lookalike product.',
+    'Discard the generation instead of correcting it if exact consistency fails.',
     'If the reference shot contains another accessory or another worn item, replace that item with the uploaded user product only.',
     'Do not keep the original accessory if it conflicts with the uploaded user product.',
     productDescription ? `Product description: ${keepEnglishLikeText(productDescription)}` : '',
@@ -299,6 +442,8 @@ export function buildProductLockText(
       'Keep the exact hook shape, pendant count, pendant spacing, stone size, stone position and metal thickness.',
       'If the model originally wears different earrings, remove them and replace them with the uploaded earrings only.',
       'Do not add chains, stones, logo, extra charms, or alter the hook and pendant structure.',
+      'Keep gemstone and metal reflections realistic and restrained. Do not add exaggerated sparkle effects, starburst highlights, fantasy glow, or fake luxury VFX.',
+      'Earrings cannot stand upright by themselves like a rigid figurine or tabletop sculpture. Show them only as worn on the ear, held by hand, laid flat, or supported by a physically believable display/contact point.',
     ],
     phone_case: [
       'Identify the product as a phone case first, then ensure the visible case is the uploaded case only.',
@@ -342,9 +487,20 @@ export function buildCloneNegativePrompt(productType: CloneProductType, shotType
     'no changed product category',
     'no changed product color',
     'no changed product structure',
+    'discard the generation instead of correcting it',
   ]
   const productSpecific: Record<CloneProductType, string[]> = {
-    earrings: ['no wrong earring structure', 'no extra gemstone', 'no extra chain', 'no ear deformation'],
+    earrings: [
+      'no wrong earring structure',
+      'no extra gemstone',
+      'no extra chain',
+      'no ear deformation',
+      'no exaggerated sparkle effect',
+      'no fantasy glow',
+      'no standing upright earring',
+      'no floating earring',
+      'no unsupported rigid earring pose',
+    ],
     phone_case: ['no wrong camera hole', 'no changed print', 'no changed frame shape'],
     clothes: ['no changed collar', 'no changed sleeve', 'no changed pattern'],
     toy: ['no changed face', 'no changed proportions', 'no changed color blocks'],
