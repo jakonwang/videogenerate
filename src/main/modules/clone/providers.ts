@@ -3,11 +3,30 @@ import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { runFfmpeg } from '../ffmpeg/runner'
+import { resolveApifoxHubCredentials } from './apifoxProfile'
 import { createGrsVideoTask, isPublicHttpUrl, waitGrsResult } from './grsai'
 import { toPublicUrlViaQiniu } from './qiniu'
 import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl, postAtlasJson } from './atlasRetry'
 import { generateVideo as generateApifoxVideo } from './unifiedVideo'
-import { buildReferenceLockText, buildShotScriptConstraintText } from './prompt'
+import {
+  buildCameraMotionLockText,
+  buildFailInsteadRuleText,
+  buildCompositionLockText,
+  buildFrameContinuityLockText,
+  buildHumanPriorityRuleText,
+  buildMotionLimitText,
+  buildPhysicsConsistencyText,
+  buildNoSpeakingInstruction,
+  buildNoSubstituteRuleText,
+  buildReferenceImageLockText,
+  buildReferenceLockText,
+  buildScaleConsistencyLockText,
+  buildSpatialAnchorLockText,
+  buildShotScriptConstraintText,
+  prependSilentCommercialGlobalRule,
+  sanitizeGeneratedVideoPrompt,
+} from './prompt'
+import { canUseMockGeneration } from './mockPolicy'
 import type {
   AiProviderName,
   ConsistencyMode,
@@ -63,7 +82,7 @@ function keyByProvider(p: AiProviderName, credentials: ModelCredentials) {
     if (isAtlasSeedanceReferenceModel(model)) return credentials.seedanceApiKey || credentials.klingApiKey
     return credentials.seedanceApiKey
   }
-  if (p === 'apifox_hub') return credentials.apifoxHub?.apiKey
+  if (p === 'apifox_hub') return resolveApifoxHubCredentials(credentials, 'video')?.apiKey
   if (p === 'grsai') return credentials.grsaiApiKey
   return credentials.klingApiKey
 }
@@ -84,17 +103,18 @@ function hostByProvider(p: AiProviderName, credentials: ModelCredentials) {
     return normalized
   }
   if (p === 'grsai') return cleanHost(credentials.grsaiHost, 'https://grsaiapi.com')
-  if (p === 'apifox_hub') return String(credentials.apifoxHub?.baseUrl || '').trim().replace(/\/+$/, '')
+  if (p === 'apifox_hub') return String(resolveApifoxHubCredentials(credentials, 'video')?.baseUrl || '').trim().replace(/\/+$/, '')
   return atlasCloudHost()
 }
 
 function pickModel(credentials: ModelCredentials, provider: AiProviderName) {
   if (provider === 'apifox_hub') {
+    const hub = resolveApifoxHubCredentials(credentials, 'video')
     return (
-      credentials.apifoxHub?.referenceVideoModel ||
-      credentials.apifoxHub?.startEndVideoModel ||
-      credentials.apifoxHub?.imageToVideoModel ||
-      credentials.apifoxHub?.textToVideoModel ||
+      hub?.referenceVideoModel ||
+      hub?.startEndVideoModel ||
+      hub?.imageToVideoModel ||
+      hub?.textToVideoModel ||
       'apifox-video'
     )
   }
@@ -177,7 +197,7 @@ async function publicUrlForGrs(credentials: ModelCredentials, value: string, lab
   }
 }
 
-async function publicUrlForCloudFrame(credentials: ModelCredentials, value: string, label: string) {
+export async function publicUrlForCloudFrame(credentials: ModelCredentials, value: string, label: string) {
   if (isPublicHttpUrl(value)) return value
   try {
     return await toPublicUrlViaQiniu(credentials, value, `cloud-video-input/${label}`)
@@ -206,36 +226,177 @@ function shotRolePrompt(shot: ShotSpec) {
 function shotMotionPrompt(shot: ShotSpec) {
   const motion = String(shot.motion || 'static')
   const map: Record<string, string> = {
-    static: 'mostly static handheld phone shot with subtle natural hand micro-shake',
-    zoom_in: 'slow natural push-in, phone camera moves slightly closer',
-    zoom_out: 'slow natural pull-back, phone camera moves slightly away',
-    pan_left: 'small handheld pan left, smooth but not cinematic',
-    pan_right: 'small handheld pan right, smooth but not cinematic',
-    shake: 'light authentic handheld movement, not chaotic',
-    fast_cut: 'quick practical product reveal motion, no surreal effects',
+    static: 'stable smartphone framing with clear natural hand action, product rotation or wearing movement across the whole clip, not frozen posing',
+    zoom_in: 'noticeable natural push-in with coordinated hand movement and product presentation progression',
+    zoom_out: 'controlled pull-back that reveals more context while the product action keeps evolving',
+    pan_left: 'clear handheld pan left following the product action with meaningful lateral movement',
+    pan_right: 'clear handheld pan right following the product action with meaningful lateral movement',
+    shake: 'energetic authentic handheld motion with readable product action, never chaotic or blurry',
+    fast_cut: 'quick product-reveal rhythm with assertive action beats and strong visual change, no surreal effects',
   }
   return map[motion] || map.static
 }
 
-function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'video') {
-  const userPrompt = String(shot.aiPrompt || shot.prompt?.positive || '').trim()
-  const referenceLock = buildReferenceLockText(shot, 'reference shot scene atmosphere')
-  const scriptLock = buildShotScriptConstraintText(shot)
+function fallbackVideoDirectionPrompt(shot: ShotSpec) {
+  const fallback = [
+    shot.visualDescription || shot.visualPrompt || shot.visual || 'Real social-commerce product demonstration in a believable environment.',
+    shot.actionDescription || shot.action || 'Natural product demonstration with believable hand movement.',
+    shot.cameraDescription || `${String(shot.framing || 'close-up')} framing with ${shotMotionPrompt(shot)}.`,
+    shot.productFocus || 'Keep the product clearly visible and commercially relevant.',
+    shot.generationPrompt || shot.prompt?.positive || '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return sanitizeGeneratedVideoPrompt(fallback, 900)
+}
+
+export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'video') {
+  const cleanedUserPrompt = sanitizeGeneratedVideoPrompt(
+    String(shot.aiPrompt || shot.generationPrompt || shot.prompt?.positive || '').trim(),
+    1100,
+  )
+  const scriptText = sanitizeGeneratedVideoPrompt(String(shot.scriptText || '').trim(), 320)
+  const generationPrompt = sanitizeGeneratedVideoPrompt(String(shot.generationPrompt || '').trim(), 420)
+  const scriptConstraint = sanitizeGeneratedVideoPrompt(buildShotScriptConstraintText(shot), 720)
+  const scriptExecutionBlock =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            scriptText ? `Script text to execute faithfully in this clip: ${scriptText}` : '',
+            generationPrompt && generationPrompt.toLowerCase() !== scriptText.toLowerCase()
+              ? `Shot execution details: ${generationPrompt}`
+              : '',
+            scriptConstraint,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          900,
+        )
+      : ''
+  const sceneDirection = cleanedUserPrompt || fallbackVideoDirectionPrompt(shot)
+  const referenceLock = sanitizeGeneratedVideoPrompt(buildReferenceLockText(shot, 'reference shot scene atmosphere'), 900)
+  const spatialAnchorLock = sanitizeGeneratedVideoPrompt(buildSpatialAnchorLockText(String(shot.productType || '')), 520)
+  const physicsConsistency = sanitizeGeneratedVideoPrompt(buildPhysicsConsistencyText(String(shot.productType || '')), 420)
+  const compositionLock = sanitizeGeneratedVideoPrompt(buildCompositionLockText(String(shot.productType || '')), 420)
+  const cameraMotionLock = sanitizeGeneratedVideoPrompt(
+    buildCameraMotionLockText({
+      motion: String(shot.motion || ''),
+      framing: String(shot.framing || ''),
+      productType: String(shot.productType || ''),
+    }),
+    520,
+  )
+  const scaleConsistencyLock = sanitizeGeneratedVideoPrompt(
+    buildScaleConsistencyLockText(String(shot.productType || ''), String(shot.motion || '')),
+    420,
+  )
+  const motionLimit = sanitizeGeneratedVideoPrompt(
+    buildMotionLimitText(String(shot.productType || ''), String(shot.motion || '')),
+    260,
+  )
+  const storyboardControlLayer =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            'SILENT VISUAL COMMERCIAL.',
+            'No dialogue.',
+            'No presenter delivery.',
+            'No speaking.',
+            buildReferenceImageLockText(),
+            'STRICT PRODUCT LOCK: same single product instance across all shots; exact silhouette, geometry, structure, material, color, and proportion; no variation.',
+            'STRICT MODEL IDENTITY LOCK: use the selected model identity only.',
+            'HUMAN PRIORITY RULE: the human must adapt to the product.',
+            'Do not modify, resize, reshape, bend, simplify, or restyle the product to fit the human body.',
+            'If any conflict occurs, adjust human pose, hand placement, ear position, neck angle, or body framing, not the product.',
+            'Different camera views only.',
+            `Shot ${Number(shot.index ?? 0) + 1} is another view of the same locked subject, not a new setup.`,
+            buildFrameContinuityLockText({ isEnd: false, shotIndex: Number(shot.index ?? 0) }),
+            buildNoSubstituteRuleText(),
+            buildHumanPriorityRuleText(),
+            'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY.',
+            'REFERENCE PERSON EXCLUSION RULE: if the product images contain a human wearer or holder, that human is invalid and must be ignored completely.',
+            'If any product image contains a person, ignore that person completely and extract product identity only.',
+            'Exactly one human model is allowed when a human is needed. No second model, no mixed identity, no borrowed model from product images, no extra background person.',
+            spatialAnchorLock,
+            physicsConsistency,
+            motionLimit,
+            compositionLock,
+            cameraMotionLock,
+            scaleConsistencyLock,
+            buildFailInsteadRuleText(),
+          ].join('\n'),
+          1250,
+        )
+      : ''
+  const replicationTaskLock =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            '[CRITICAL FIX] This is NOT a product generation task. This is a product replication + shot adaptation task.',
+            '[PRODUCT SOURCE LOCK] The product MUST be taken from the provided product image. NOT generated from text. NOT inferred from video.',
+            '[INSTANCE RULE] There is ONLY ONE product instance. All shots use the SAME object.',
+            '[VIDEO ROLE LIMIT] Reference video defines ONLY motion and camera behavior. It MUST NOT change product structure.',
+            '[ANTI-RECONSTRUCTION] Do NOT rebuild product from description. Only replicate from reference image.',
+          ].join('\n'),
+          700,
+        )
+      : ''
+  const singleModelLock =
+    phase === 'video'
+      ? sanitizeGeneratedVideoPrompt(
+          [
+            'Human identity lock: use the selected model identity only.',
+            'Never use any person identity from the product reference images, reference video, source footage, or scene references.',
+            'If any product image contains a person, ignore that person completely and extract product identity only.',
+            'Exactly one human model is allowed in the frame when human presence is needed. No second model, no background model, no duplicate person, no reflection person, no extra hands from another person.',
+            'Do not mix the selected model with the original video person or any person from the product images.',
+          ].join('\n'),
+          650,
+        )
+      : ''
   const productLock =
     'Keep the exact product from the reference images: same color, shape, material, pattern, print, holes, edges, size and design. Do not add logos, gems, charms, text, extra patterns or new decorations.'
+  const jewelryRealism =
+    /earrings?/i.test(String(shot.productType || ''))
+      ? 'Jewelry realism rule: keep diamond, zircon, crystal, and metal reflections subtle, physically plausible, and camera-realistic. Do not add exaggerated sparkle VFX, glow bloom, starburst shine, magical glitter, or overexposed luxury effects. Earrings must follow gravity and believable support: they may be worn, hand-held, laid flat, or lightly supported, but must never stand upright by themselves like a rigid sculpture, signboard, or product figurine.'
+      : ''
   const realism =
-    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Hard-copy the reference shot action form, background category, camera distance, composition, hand gesture and motion path. Replace only the person identity and product identity. Do not copy the original person, watermark, captions, stickers or platform UI. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos.'
+    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Preserve the same shot purpose, background category, camera distance, composition logic, product interaction type and motion grammar from the reference, but let the action play out fully and naturally instead of freezing into a near-still pose. Do NOT replace or regenerate product or model identity. Only adapt camera and motion. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos. Cinematic polish must never override identity.'
+  const motionPerformance =
+    phase === 'video'
+      ? String(shot.motion || '').trim().toLowerCase() === 'zoom_out'
+        ? 'Motion performance rule: keep the same action intent and shot grammar as the reference while using a single uninterrupted pull-back within the same close-up family. Adjust human pose, not the product. Do not turn the shot into a medium shot or a new scene. The motion must continue across the entire clip instead of happening only in the opening second.'
+        : 'Motion performance rule: keep the same action intent and shot grammar as the reference, but allow fuller hand travel, clearer product turns, more obvious wearing or usage demonstration, and stronger camera progression when appropriate. Adjust human pose, not the product. The motion must continue across the entire clip instead of happening only in the opening second.'
+      : ''
   const phaseText =
     phase === 'start'
       ? 'Opening keyframe, product already visible and in focus, clean frame with no watermark or subtitles.'
       : phase === 'end'
-        ? 'Ending keyframe, same product and scene continuity, natural final pose, clean frame with no watermark or subtitles.'
-        : 'Generate natural motion between first and last frame. Preserve product identity, subject pose, hand trajectory, background atmosphere and camera continuity. Do not switch to a different action, different location, different product-display method or unrelated camera angle. No morphing, no object melting, no artificial animation, no copied TikTok watermark, no copied subtitles.'
-  return [realism, scriptLock, referenceLock, productLock, shotRolePrompt(shot), shotMotionPrompt(shot), phaseText, userPrompt]
+        ? 'Ending keyframe, direct continuation of the starting frame, same product instance, same model instance, same scene setup, natural final pose, clean frame with no watermark or subtitles.'
+        : 'Generate natural motion between first and last frame. Preserve product identity, background atmosphere, action category and camera continuity. Keep the same selling purpose and reference shot grammar, but do not freeze the subject into one locked pose or one tiny repeated movement. Do not switch to a different action, different location, different product-display method or unrelated camera angle. No morphing, no object melting, no artificial animation, no copied TikTok watermark, no copied subtitles. Do not generate any visible on-screen text, title card, subtitle line, caption overlay, packaging words or lettering of any kind.'
+  const blocks = [
+    storyboardControlLayer,
+    replicationTaskLock,
+    singleModelLock,
+    referenceLock,
+    spatialAnchorLock,
+    physicsConsistency,
+    compositionLock,
+    scriptExecutionBlock,
+    sceneDirection,
+    productLock,
+    shotRolePrompt(shot),
+    phase === 'video' ? shotMotionPrompt(shot) : '',
+    motionPerformance,
+    jewelryRealism,
+    realism,
+    phaseText,
+    phase === 'video' ? buildNoSpeakingInstruction() : '',
+  ]
+    .map((item) => String(item || '').trim())
     .filter(Boolean)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .slice(0, 3200)
+  const deduped = blocks.filter((item, index) => blocks.findIndex((v) => v.toLowerCase() === item.toLowerCase()) === index)
+  return prependSilentCommercialGlobalRule(deduped, 2400)
 }
 
 async function toDataUriOrUrl(absPathOrUrl: string, kind: 'image' | 'video') {
@@ -347,6 +508,7 @@ async function createSeedanceTask(input: {
   host: string
   model: string
   shot: ShotSpec
+  prompt: string
   startFrameUrl: string
   endFrameUrl?: string
 }) {
@@ -358,7 +520,7 @@ async function createSeedanceTask(input: {
     model: normalizeSeedanceModel(input.model, 'kinovi'),
     inputs: {
       urls: [input.startFrameUrl, input.endFrameUrl].filter(Boolean),
-      prompt: buildRealisticPrompt(input.shot, 'video'),
+      prompt: input.prompt,
       duration: clampSeedanceDuration(input.shot.durationSec),
       aspectRatio: '9:16',
       mode: 'keyframe',
@@ -376,12 +538,13 @@ async function createAtlasReferenceSeedanceTask(input: {
   host: string
   model: string
   shot: ShotSpec
+  prompt: string
   startFrameUrl: string
   endFrameUrl?: string
 }) {
   const body: AnyJson = {
     model: ATLASCLOUD_SEEDANCE_REFERENCE_MODEL,
-    prompt: buildRealisticPrompt(input.shot, 'video'),
+    prompt: input.prompt,
     image: input.startFrameUrl,
     aspect_ratio: shotAspectRatio(input.shot),
     duration: atlasCloudDuration(ATLASCLOUD_SEEDANCE_REFERENCE_MODEL, input.shot.durationSec),
@@ -411,13 +574,14 @@ async function createArkSeedanceTask(input: {
   host: string
   model: string
   shot: ShotSpec
+  prompt: string
   startFrameUrl: string
   endFrameUrl?: string
 }) {
   const content: AnyJson[] = [
     {
       type: 'text',
-      text: buildRealisticPrompt(input.shot, 'video'),
+      text: input.prompt,
     },
     {
       type: 'image_url',
@@ -485,13 +649,16 @@ async function createKlingTask(input: {
   host: string
   model: string
   shot: ShotSpec
+  prompt: string
+  negativePrompt?: string
   startFrameUrl: string
   endFrameUrl?: string
 }) {
   const model = normalizeKlingType(input.model)
   const body: AnyJson = {
     model,
-    prompt: buildRealisticPrompt(input.shot, 'video'),
+    prompt: input.prompt,
+    negative_prompt: String(input.negativePrompt || '').trim() || undefined,
     image: input.startFrameUrl,
     aspect_ratio: shotAspectRatio(input.shot),
     duration: atlasCloudDuration(model, input.shot.durationSec),
@@ -561,6 +728,58 @@ async function mockGenerateFromReference(input: ProviderInput): Promise<Provider
   return { provider: 'seedance', outputFilePath: out, remoteTaskId: `mock_${randomUUID()}`, model: 'mock-reference' }
 }
 
+async function mockGenerateFromFrames(input: {
+  shot: ShotSpec
+  outDir: string
+  startFramePath: string
+  endFramePath: string
+}): Promise<ProviderResult> {
+  await mkdir(input.outDir, { recursive: true })
+  const out = join(input.outDir, `mock_frames_${input.shot.id}_${Date.now()}.mp4`)
+  const duration = Math.max(2, Math.min(8, Math.round(Number(input.shot.durationSec || 3))))
+  const { width, height } = targetResolutionByShot(input.shot)
+  const frameRate = 24
+  const zoomFrames = Math.max(frameRate, Math.round(duration * frameRate))
+  const fadeOffset = Math.max(0.4, duration - 0.6)
+  const filter = [
+    `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,zoompan=z='min(zoom+0.0008,1.05)':d=${zoomFrames}:s=${width}x${height}:fps=${frameRate}[v0]`,
+    `[1:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,zoompan=z='min(zoom+0.0008,1.05)':d=${zoomFrames}:s=${width}x${height}:fps=${frameRate}[v1]`,
+    `[v0][v1]xfade=transition=fade:duration=0.6:offset=${fadeOffset},format=yuv420p[v]`,
+  ].join(';')
+  await runFfmpeg({
+    args: [
+      '-y',
+      '-loop',
+      '1',
+      '-t',
+      `${duration}`,
+      '-i',
+      input.startFramePath,
+      '-loop',
+      '1',
+      '-t',
+      `${duration}`,
+      '-i',
+      input.endFramePath,
+      '-filter_complex',
+      filter,
+      '-map',
+      '[v]',
+      '-r',
+      `${frameRate}`,
+      '-pix_fmt',
+      'yuv420p',
+      out,
+    ],
+  })
+  return {
+    provider: 'seedance',
+    outputFilePath: out,
+    remoteTaskId: `mock_frames_${randomUUID()}`,
+    model: 'mock-image2video',
+  }
+}
+
 export async function generateShotByProviderChain(input: {
   shot: ShotSpec
   outDir: string
@@ -568,7 +787,7 @@ export async function generateShotByProviderChain(input: {
   credentials: ModelCredentials
   chain: AiProviderName[]
 }): Promise<ProviderResult> {
-  if (input.credentials.allowMockWhenNoKey && !input.credentials.seedanceApiKey && !input.credentials.klingApiKey && !input.credentials.grsaiApiKey) {
+  if (canUseMockGeneration(input.credentials) && !input.credentials.seedanceApiKey && !input.credentials.klingApiKey && !input.credentials.grsaiApiKey) {
     return await mockGenerateFromReference(input)
   }
   throw new Error('Seedance/AtlasCloud/GRS.AI 需要首尾帧或图片输入，请使用分镜片段生成链路')
@@ -641,12 +860,37 @@ export async function generateShotVideoByProviderChain(input: {
   consistencyMode: ConsistencyMode
   credentials: ModelCredentials
   chain: AiProviderName[]
+  compiledPrompt?: string
+  compiledNegativePrompt?: string
 }): Promise<ProviderResult> {
   const chain = normalizeProviderChain(input.chain)
   await mkdir(input.outDir, { recursive: true })
   const errs: string[] = []
   const startFrameDataUrl = await toDataUriOrUrl(input.startFramePath, 'image')
   const endFrameDataUrl = await toDataUriOrUrl(input.endFramePath, 'image')
+  const finalPrompt = prependSilentCommercialGlobalRule(
+    [
+      String(input.compiledPrompt || '').trim() || buildRealisticPrompt(input.shot, 'video'),
+      'Video execution override: keep the human model faceless with head out of frame whenever possible. Never use presenter-to-camera delivery, host-style explanation, spokesperson framing, frontal talking-head composition, direct-to-camera speaking pose, lip-sync, or mouth shapes that suggest speech. Keep the performance silent and product-led, but preserve natural body mechanics and complete action flow across the clip.',
+    ],
+    2400,
+  )
+  const finalNegativePrompt = String(input.compiledNegativePrompt || '').trim()
+
+  if (
+    canUseMockGeneration(input.credentials) &&
+    !input.credentials.seedanceApiKey &&
+    !input.credentials.klingApiKey &&
+    !input.credentials.grsaiApiKey &&
+    !resolveApifoxHubCredentials(input.credentials, 'video')?.apiKey
+  ) {
+    return await mockGenerateFromFrames({
+      shot: input.shot,
+      outDir: input.outDir,
+      startFramePath: input.startFramePath,
+      endFramePath: input.endFramePath,
+    })
+  }
 
   for (const provider of chain) {
     const key = keyByProvider(provider, input.credentials)
@@ -662,6 +906,7 @@ export async function generateShotVideoByProviderChain(input: {
           host,
           model: pickModel(input.credentials, provider),
           shot: input.shot,
+          prompt: finalPrompt,
           startFrameUrl: startFrameDataUrl,
           endFrameUrl: endFrameDataUrl,
         })
@@ -673,7 +918,8 @@ export async function generateShotVideoByProviderChain(input: {
       if (provider === 'grsai') {
         const created = await createGrsVideoTask({
           credentials: input.credentials,
-          prompt: buildRealisticPrompt(input.shot, 'video'),
+          prompt: finalPrompt,
+          negativePrompt: finalNegativePrompt,
           firstFrameUrl: await publicUrlForCloudFrame(input.credentials, input.startFramePath, 'grsai-first-frame'),
           lastFrameUrl: input.endFramePath ? await publicUrlForCloudFrame(input.credentials, input.endFramePath, 'grsai-last-frame') : undefined,
         })
@@ -691,7 +937,8 @@ export async function generateShotVideoByProviderChain(input: {
         const created = await generateApifoxVideo({
           credentials: input.credentials,
           capability: endFrameUrl ? 'video_start_end_to_video' : 'video_image_to_video',
-          prompt: buildRealisticPrompt(input.shot, 'video'),
+          prompt: finalPrompt,
+          negativePrompt: finalNegativePrompt,
           outDir: input.outDir,
           image: startFrameUrl,
           lastImage: endFrameUrl,
@@ -708,6 +955,8 @@ export async function generateShotVideoByProviderChain(input: {
         host,
         model: pickModel(input.credentials, provider),
         shot: input.shot,
+        prompt: finalPrompt,
+        negativePrompt: finalNegativePrompt,
         startFrameUrl,
         endFrameUrl,
       })
