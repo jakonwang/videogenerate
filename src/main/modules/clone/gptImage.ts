@@ -862,9 +862,11 @@ function buildStoryboardLockedActionText(productType: CloneProductType, actionDe
 function buildStoryboardLockedProductFocusText(productType: CloneProductType) {
   const normalizedType = String(productType || '').trim().toLowerCase()
   if (/earrings?/.test(normalizedType)) {
-    return 'Preserve shape, proportions, structure, connector relation, hanging direction, and ear attachment point. Avoid deformation or redesign.'
+    return 'Preserve shape, proportions, structure, connector relation, hanging direction, and ear attachment point. Keep the product close, sharp, and fully readable so small structural details remain clear. Avoid deformation or redesign.'
   }
-  if (/ring|bracelet|necklace/.test(normalizedType)) return 'Preserve shape, proportions, structure, attachment relation, and wearing scale. The product must stay larger and clearer than surrounding body features.'
+  if (/ring|bracelet|necklace/.test(normalizedType)) {
+    return 'Preserve shape, proportions, structure, attachment relation, and wearing scale. Keep the product close, sharp, and fully readable so structural details remain clear. The product must stay larger and clearer than surrounding body features.'
+  }
   return 'Keep the product clearly visible and structurally stable.'
 }
 
@@ -878,7 +880,9 @@ function buildShotControlText(input: {
     ? [
         'product is the visual center',
         'occupies 40% to 60% of the frame',
+        'prefer a tighter crop when needed so the product reads larger and clearer than surrounding face or body context',
         'always sharp and fully visible',
+        'product details must remain crisp and immediately readable',
       ]
     : ['product remains clearly readable', 'product stays sharp and visually primary']
   const hierarchy = isWearableStoryboardShot(input.productType, input.shot) ? 'product > hands > body > face' : 'product > hands > body > background'
@@ -923,6 +927,7 @@ function buildRestrictionsText(productType: CloneProductType, shot: ShotSpec) {
     'Do NOT reconstruct hidden product structure',
     'Do NOT regenerate or redesign the product',
     wearableLike ? 'Do NOT shrink product visibility' : 'Do NOT reduce product readability',
+    wearableLike ? 'Do NOT let the product become small, distant, soft, or detail-blurred' : 'Do NOT let the product become soft, distant, or detail-blurred',
     wearableLike ? 'Do NOT let the model dominate the frame' : 'Do NOT let any non-product element dominate the frame',
     'If the person conflicts with the product, adjust the person or crop, never the product',
   ].join('\n')

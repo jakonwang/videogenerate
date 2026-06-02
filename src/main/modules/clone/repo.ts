@@ -1852,6 +1852,41 @@ function normalizeProject(p: CloneProject): CloneProject {
         ...(((p as any).generationQueue?.options ?? {}) as Record<string, unknown>),
       },
       jobs: normalizeQueueJobs((p as any).generationQueue?.jobs),
+      submissionAuditLogs: Array.isArray((p as any).generationQueue?.submissionAuditLogs)
+        ? (p as any).generationQueue.submissionAuditLogs
+            .map((item: any) => ({
+              id: String(item?.id ?? randomUUID()),
+              shotId: String(item?.shotId ?? '').trim(),
+              shotIndex: Number(item?.shotIndex ?? 0) || undefined,
+              trigger:
+                String(item?.trigger ?? '').trim() === 'single_submit' ||
+                String(item?.trigger ?? '').trim() === 'batch_submit' ||
+                String(item?.trigger ?? '').trim() === 'auto_run_submit' ||
+                String(item?.trigger ?? '').trim() === 'force_regenerate_submit'
+                  ? item.trigger
+                  : 'single_submit',
+              provider: String(item?.provider ?? '').trim() || undefined,
+              model: String(item?.model ?? '').trim() || undefined,
+              requestCapability: String(item?.requestCapability ?? '').trim() || undefined,
+              submissionFingerprint: String(item?.submissionFingerprint ?? '').trim() || undefined,
+              firstFramePath: String(item?.firstFramePath ?? '').trim() || undefined,
+              lastFramePath: String(item?.lastFramePath ?? '').trim() || undefined,
+              taskId: String(item?.taskId ?? '').trim() || undefined,
+              remoteStatus: String(item?.remoteStatus ?? '').trim() || undefined,
+              sourceEvent: String(item?.sourceEvent ?? '').trim() || undefined,
+              status:
+                String(item?.status ?? '').trim() === 'task_accepted' ||
+                String(item?.status ?? '').trim() === 'direct_output' ||
+                String(item?.status ?? '').trim() === 'missing_task' ||
+                String(item?.status ?? '').trim() === 'request_failed'
+                  ? item.status
+                  : 'request_started',
+              error: String(item?.error ?? '').trim() || undefined,
+              createdAt: Number(item?.createdAt ?? now()) || now(),
+            }))
+            .filter((item: any) => Boolean(item.shotId))
+            .slice(0, 200)
+        : [],
       runtime: {
         submitActive: Number((p as any).generationQueue?.runtime?.submitActive ?? 0) || 0,
         pollActive: Number((p as any).generationQueue?.runtime?.pollActive ?? 0) || 0,

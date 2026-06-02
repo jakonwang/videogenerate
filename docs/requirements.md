@@ -20,6 +20,219 @@
 
 ## 当前生效规格
 
+## 2026-06-03 桌面端重新打包并封版为 v4.2.0
+
+- 目标：
+  - 将当前桌面端发布版本从 `v4.1.0` 提升并重新打包为 `v4.2.0`，用于当前代码状态的安装包封版与提交归档。
+- 本轮最小改动：
+  - 调整：
+    - `package.json`
+    - `package-lock.json`
+    - `docs/requirements.md`
+- 生效规则：
+  - 应用主版本号统一更新为 `4.2.0`。
+  - 后续 `electron-builder` 产物文件名将更新为 `VideoGenerate-4.2.0-Setup.exe`。
+  - 本轮不改业务逻辑，只做版本封版、打包与版本记录同步。
+- 使用说明：
+  - Windows 本地执行 `npm run dist` 后，应在 `release/` 目录看到 `v4.2.0` 对应安装包、`latest.yml` 与 `.blockmap`。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 npm 版本元数据与文档记录；Windows 开发打包、Linux 部署发布流程保持兼容。
+- 验证：
+  - `node -p "require('./package.json').version"`
+  - `npm run dist`
+
+## 2026-06-02 `/clone` 强制重新生成分镜视频必须跳过云端成片缓存
+
+- 目标：
+  - 修复 `/clone` 已生成成功的分镜视频点击“重新生成”后，即使新流程走完，最终仍可能拿回上一版旧视频的问题。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/service.ts`
+    - `test/clone-shot-video-force-regenerate-bypasses-cloud-cache.smoke.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - `generateShotClip(...)` 在 `forceRegenerate=true` 时，必须跳过 `getCachedCloudClipResult(...)` 的云端成片缓存复用。
+  - 只有普通生成路径才允许继续命中同 prompt / 同首尾帧的历史云端成片缓存。
+  - 这样点击“重新生成分镜视频”时，系统会真正重新走视频生成，而不是把旧缓存视频再次当成新结果返回。
+- 使用说明：
+  - 现在对已成功的分镜视频执行“重新生成”后，最终回写结果应来自新的生成流程，而不是历史缓存成片。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程缓存命中条件与 smoke test，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npx tsx test/clone-shot-video-force-regenerate-bypasses-cloud-cache.smoke.ts`
+  - `npm run typecheck`
+
+## 2026-06-02 `/clone` 分镜视频提交提示词恢复为之前发布版本
+
+- 目标：
+  - 撤回本轮对 `/clone` 分镜视频真实提交 prompt 的硬锁结构化改写，恢复到之前发布版本正在使用的提示词结构，避免视频阶段商品一致性明显变差。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/prompt.ts`
+    - `test/storyboard-model-identity-lock.smoke.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - 分镜视频真实提交链路恢复为之前发布版的结构：
+    - `buildOptimizedVideoPrompt(...)` 不再在最终视频正向 prompt 中插入 `[PRODUCT LOCK - HARD CONSTRAINT]` 等整段硬锁分块
+    - 恢复为发布版原有的 `CORE RULE / STRICT CONSISTENCY / FRAME CONTINUITY / MOTION / LIGHTING / SHOT EXECUTION` 等组合方式
+    - `buildFinalShotVideoPositivePrompt(...)` 恢复为发布版的简短结构化提示词，不再使用本轮新增的 8 段硬锁块
+  - 本次回退仅作用于分镜视频真实提交 prompt，不影响分镜图提示词、提交审计日志、批量防重复提交和前端预览精简展示。
+- 使用说明：
+  - 现在重新提交分镜视频时，实际送模提示词将恢复到之前发布版本的策略，便于先回到已验证过的一致性表现。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript prompt 组装和 smoke test，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run test:storyboard-model-lock`
+  - `npm run typecheck`
+
+## 2026-06-02 `/clone` 分镜视频提示词预览弹窗简化为仅显示实际发送参数
+
+- 目标：
+  - 简化 `/clone` 分镜视频提示词预览弹窗，避免前端继续展示未实际发送的诊断层、脚本拼接层和历史兼容信息，方便直接核对真正送模的参数。
+- 本轮最小改动：
+  - 调整：
+    - `src/renderer/src/ui/views/CloneView.vue`
+    - `docs/requirements.md`
+- 生效规则：
+  - 分镜视频提示词预览弹窗只保留与真实发送请求直接相关的内容：
+    - 请求参数概览
+    - 商品参考图
+    - 模特主锚点
+    - `Video Request Payload (Preview)`
+    - `Video Positive Prompt (Final Sent)`
+    - `Video Negative Prompt (Final Sent)`
+  - 不再显示以下未实际发送或仅用于诊断的内容：
+    - `Script Text`
+    - `Generation Prompt`
+    - `Frame Prompt (Start / End)`
+    - `Video Diagnostic Prompt`
+    - 硬锁结构拆块预览
+    - 兼容诊断层
+    - `Video Request JSON`
+    - `Video Request Debug Log (Preview)`
+    - 脚本接入提示、商品描述高亮、商品源说明等非发送参数说明
+  - “复制全部”内容同步收缩为仅复制上述实际发送参数。
+- 使用说明：
+  - 现在打开 `/clone` 的“分镜视频提示词预览”时，界面会更接近真实送模入参，便于快速核对每条镜头真正提交给视频模型的参数。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 Vue 前端展示与复制逻辑，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run typecheck`
+
+## 2026-06-02 `/clone` 分镜视频提示词改为硬锁产品一致性结构
+
+- 目标：
+  - 强化 `/clone` 分镜视频生成时的产品一致性，避免视频阶段把商品重建、重设计、补全隐藏结构或生成出不一致的新视角。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/prompt.ts`
+    - `test/storyboard-model-identity-lock.smoke.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - 分镜视频最终正向 prompt 统一切换为更硬的结构化约束，明确包含：
+    - `[PRODUCT LOCK - HARD CONSTRAINT]`
+    - `[SCENE]`
+    - `[MOTION]`
+    - `[CAMERA]`
+    - `[LIGHTING]`
+    - `[MATERIAL]`
+    - `[STABILITY]`
+    - `[STYLE]`
+  - 核心规则包括：
+    - 产品必须被视为固定的 2D 视觉真值源
+    - 不允许重建、重设计、重新诠释产品
+    - 不允许推断隐藏结构、隐藏几何关系或生成新的可见侧面
+    - 只允许全局画面级轻微运动，不允许产品本体动画、形变或材质增强
+    - 光照必须平、稳、漫反射，不允许动态重打光和强反光
+    - 产品在所有帧中必须保持视觉一致
+- 使用说明：
+  - 现在 `/clone` 分镜视频生成会更严格地把商品当作参考图里的固定对象处理，而不是允许模型把它当成三维物体重新演绎。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript prompt 组装与测试，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run test:storyboard-model-lock`
+
+## 2026-06-02 `/clone` 分镜视频创建请求增加提交审计日志
+
+- 目标：
+  - 为 `/clone` 分镜视频真正发起云端创建请求的行为补齐持久化审计记录，便于后续排查重复提交、重复扣费、缺失 taskId 和直接出片等问题。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/types.ts`
+    - `src/main/modules/clone/repo.ts`
+    - `src/main/modules/clone/service.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - 每次真正调用云端视频创建接口前，系统必须写入一条 `request_started` 审计日志。
+  - 当云端返回创建成功、直接出片、缺失 `taskId`、请求失败时，系统必须继续写入对应结果日志。
+  - 审计日志需至少包含：
+    - `shotId`
+    - `shotIndex`
+    - `trigger`
+    - `provider`
+    - `model`
+    - `requestCapability`
+    - `submissionFingerprint`
+    - `firstFramePath`
+    - `lastFramePath`
+    - `taskId`（如有）
+    - `remoteStatus`（如有）
+    - `sourceEvent`
+    - `status`
+    - `createdAt`
+  - 日志保存在项目的 `generationQueue.submissionAuditLogs` 中，并限制最大保留数量，避免无限增长。
+- 使用说明：
+  - 后续如果再出现“同一条分镜被重复提交多次”的情况，可直接读取项目里的 `generationQueue.submissionAuditLogs`，核对每次真实云端创建请求的时间、镜头、触发来源与 taskId。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程数据结构、仓储归一化和提交链路日志写入，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run typecheck`
+
+## 2026-06-02 `/clone` 分镜视频批量生成增加防重复提交保护
+
+- 目标：
+  - 修复 `/clone` 分镜图部分完成后，分镜视频批量生成可能被重复触发，导致同一批镜头反复向云端提交视频任务、产生重复扣费的问题。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/service.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - 同一个项目的 `generateShotVideosFromStoryboardFrames(...)` 在任一时刻只允许存在一轮批量执行中的任务。
+  - 如果同项目在上一轮批量视频生成尚未结束时再次触发，系统必须直接复用当前进行中的批量任务，而不是再开启一轮新的批量提交。
+  - 批量 worker 在真正调用云端视频接口前，必须先写入：
+    - `submissionFingerprint`
+    - `submissionStartedAt`
+    - `submissionLockedUntil`
+  - 后续重复触发时，只要镜头仍处于相同提交指纹和锁定窗口内，就不允许再次提交同一条分镜视频任务。
+- 使用说明：
+  - 现在分镜图陆续生成、自动续跑、手动点击“继续生成剩余分镜视频”等场景叠加时，系统应优先复用正在执行的那一轮批量生成，不再对同一批镜头重复发起云端创建任务。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 主进程批量视频提交流程与内存级互斥逻辑，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run typecheck`
+
+## 2026-06-02 `/clone` 分镜图片提示词强化产品放大与清晰展示
+
+- 目标：
+  - 修复 `/clone` 分镜图片生成时，产品在画面里不够大、不够清晰，导致后续分镜视频生成时商品结构和细节不稳定的问题。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/gptImage.ts`
+    - `test/storyboard-model-identity-lock.smoke.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - 分镜图片首尾帧 prompt 在现有商品锁、参考图优先级、人物身份锁基础上，进一步强化：
+    - 商品需要尽量采用更紧的构图
+    - 当商品细节不够清晰时，优先收紧裁切，让商品在画面中更大
+    - 商品细节必须保持清晰可读，不能出现过小、过远、发软或细节糊掉
+  - 对佩戴类商品镜头，继续保持“商品优先于人物”的层级，不允许为了人物脸部或身体占比而牺牲商品清晰度。
+- 使用说明：
+  - 现在重新生成 `/clone` 分镜图片时，系统会自动要求模型把商品拍得更近一些、更清晰一些，降低后续分镜视频阶段把商品画偏或画成不同款式的概率。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript prompt 组装与测试，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run test:storyboard-model-lock`
+
 ## 2026-06-02 桌面端重新打包并封版为 v4.1.0
 
 - 目标：

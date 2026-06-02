@@ -1739,16 +1739,16 @@ async function copyAllShotPrompts() {
 async function copyAllShotVideoPrompts() {
   if (!shotVideoPromptPreview.value) return
   const parts = [
-    `Script Text:\n${safeText(shotVideoPromptPreview.value.scriptText, '--')}`,
-    `Generation Prompt:\n${safeText(shotVideoPromptPreview.value.generationPrompt, '--')}`,
-    `Start Frame Prompt:\n${safeText(shotVideoPromptPreview.value.startFramePrompt, '--')}`,
-    `End Frame Prompt:\n${safeText(shotVideoPromptPreview.value.endFramePrompt, '--')}`,
-    `Video Diagnostic Prompt:\n${safeText(shotVideoPromptPreview.value.compiledPrompt, '--')}`,
+    `Request Meta:\nprovider: ${safeText(shotVideoPromptPreview.value.requestProvider, '--')}
+model: ${safeText(shotVideoPromptPreview.value.requestModel, '--')}
+capability: ${safeText(shotVideoPromptPreview.value.requestCapability, '--')}
+endpointStyle: ${safeText(shotVideoPromptPreview.value.requestEndpointStyle, '--')}
+createUrl: ${safeText(shotVideoPromptPreview.value.requestCreateUrl, '--')}
+localFirstFramePath: ${safeText(shotVideoPromptPreview.value.localFirstFramePath, '--')}
+localLastFramePath: ${safeText(shotVideoPromptPreview.value.localLastFramePath, '--')}`,
     `Video Positive Prompt:\n${safeText(shotVideoPromptPreview.value.positivePrompt, '--')}`,
     `Video Negative Prompt:\n${safeText(shotVideoPromptPreview.value.negativePrompt || shotVideoPromptPreview.value.compiledNegativePrompt, '--')}`,
-    `Video Request JSON:\n${safeText(shotVideoPromptPreview.value.requestJson, '--')}`,
     `Video Request Payload Preview:\n${safeText(shotVideoPromptPreview.value.requestPayloadPreview, '--')}`,
-    `Video Request Debug Log Preview:\n${safeText(shotVideoPromptPreview.value.requestDebugLogPreview, '--')}`,
   ]
   await copyPromptText(parts.join('\n\n'), '分镜视频提示词已复制')
 }
@@ -1764,92 +1764,6 @@ function resetShotVideoPromptPreviewState(clearLoadedShotId = false) {
   shotVideoPromptPreviewError.value = ''
   if (clearLoadedShotId) shotVideoPromptPreviewLoadedShotId.value = ''
 }
-
-function extractPromptSection(source: string, markers: string[]) {
-  const text = safeText(source, '')
-  if (!text) return ''
-  const lines = text.split('\n')
-  const matched = lines.filter((line) => {
-    const normalized = line.trim().toLowerCase()
-    return markers.some((marker) => normalized.includes(marker.toLowerCase()))
-  })
-  return matched.join('\n').trim()
-}
-
-const shotVideoCompiledLockLayer = computed(() =>
-  extractPromptSection(safeText(shotVideoPromptPreview.value?.compiledPrompt, ''), [
-    '[consistency_layer]',
-    '[identity_layer]',
-    'reference image lock (critical)',
-    'strict product lock',
-    'strict model identity lock',
-    'human priority rule',
-    'no substitute rule',
-    'spatial anchor lock',
-    'physics consistency',
-    'composition lock',
-    'camera motion lock',
-    'scale consistency lock',
-    'motion limit',
-    'same person across all storyboard frames',
-    'product references lock product only',
-    'reference person exclusion rule',
-    'product source lock',
-    'instance rule',
-    'anti-reconstruction',
-    'selected model identity lock',
-    'reference image priority',
-  ]),
-)
-
-const shotVideoPositiveLockLayer = computed(() =>
-  extractPromptSection(safeText(shotVideoPromptPreview.value?.positivePrompt, ''), [
-    'reference image lock (critical)',
-    'strict product lock',
-    'strict model identity lock',
-    'human priority rule',
-    'no substitute rule',
-    'spatial anchor lock',
-    'physics consistency',
-    'composition lock',
-    'camera motion lock',
-    'scale consistency lock',
-    'motion limit',
-    'product references lock product only',
-    'reference person exclusion rule',
-    'product source lock',
-    'instance rule',
-    'anti-reconstruction',
-    'exactly one human model is allowed',
-    'human identity lock',
-  ]),
-)
-
-const shotVideoExecutionLayer = computed(() =>
-  extractPromptSection(safeText(shotVideoPromptPreview.value?.positivePrompt, ''), [
-    'script text to execute faithfully in this clip',
-    'shot execution details',
-    'preserve this exact shot logic',
-    'visual direction',
-    'action direction',
-    'camera direction',
-    'motion performance rule',
-    'only adapt camera and motion',
-    'generate natural motion between first and last frame',
-  ]) || safeText(shotVideoPromptPreview.value?.scriptSpliceText, ''),
-)
-
-const shotVideoStyleLayer = computed(() =>
-  extractPromptSection(safeText(shotVideoPromptPreview.value?.positivePrompt, ''), [
-    'premium realistic social commerce video',
-    'modern smartphone camera',
-    'real human hands',
-    'natural daylight',
-    'believable e-commerce demo',
-    'jewelry realism rule',
-    'cinematic polish must never override identity',
-  ]),
-)
 
 async function loadShotImagePromptPreview(shotId?: string, force = false, openModal = false) {
   const projectId = String(current.value?.id || '').trim()
@@ -4293,50 +4207,7 @@ onUnmounted(() => {
         </div>
         <div v-if="shotVideoPromptPreview" class="prompt-preview-card">
           <div class="prompt-preview-meta">
-            <span>模式：{{ safeText(shotVideoPromptPreview.consistencyMode, '--') }}</span>
             <span>商品类型：{{ safeText(shotVideoPromptPreview.productType, '--') }}</span>
-            <span>编译器：{{ safeText(shotVideoPromptPreview.promptCompilerVersion, '--') }}</span>
-            <span>哨兵：{{ safeText(shotVideoPromptPreview.promptBuildSentinel, '--') }}</span>
-          </div>
-          <div class="prompt-health-banner" :class="shotVideoPromptPreview.hasScriptText && shotVideoPromptPreview.hasGenerationPrompt ? 'is-success' : 'is-warning'">
-            <strong>{{ shotVideoPromptPreview.hasScriptText ? '脚本已接入' : '脚本信息偏弱' }}</strong>
-            <span>
-              {{ shotVideoPromptPreview.hasGenerationPrompt ? '当前视频 prompt 已包含 generationPrompt。' : '当前视频 prompt 主要依赖 scriptText / visual / action / camera 组装。' }}
-            </span>
-          </div>
-          <div v-if="shotVideoPromptPreview.scriptSpliceText" class="prompt-highlight-card">
-            <div class="prompt-highlight-card__head">
-              <strong>脚本拼接块</strong>
-              <span>沿用之前的 script / generation / visual / action / camera 拼接</span>
-            </div>
-            <div class="prompt-highlight-card__block">
-              <span>Script Splice</span>
-              <pre>{{ shotVideoPromptPreview.scriptSpliceText }}</pre>
-            </div>
-          </div>
-          <div v-if="shotVideoPromptPreview.productDescriptionBlock" class="prompt-highlight-card">
-            <div class="prompt-highlight-card__head">
-              <strong>商品描述高亮</strong>
-              <span>视频生成沿用当前绑定商品的 Product DNA</span>
-            </div>
-            <div class="prompt-highlight-card__block">
-              <span>Product Description Lock</span>
-              <pre>{{ shotVideoPromptPreview.storyboardProductDescriptionBlock || shotVideoPromptPreview.productDescriptionBlock }}</pre>
-            </div>
-          </div>
-          <div v-if="shotVideoPromptPreview.productDescriptionText || shotVideoPromptPreview.productReferenceUsageSummary" class="prompt-highlight-card">
-            <div class="prompt-highlight-card__head">
-              <strong>商品源说明</strong>
-              <span>明确说明本次分镜视频用了哪段商品描述、哪几张商品图</span>
-            </div>
-            <div v-if="shotVideoPromptPreview.productDescriptionText" class="prompt-highlight-card__block">
-              <span>实际使用的 Product DNA</span>
-              <pre>{{ shotVideoPromptPreview.productDescriptionText }}</pre>
-            </div>
-            <div v-if="shotVideoPromptPreview.productReferenceUsageSummary" class="prompt-highlight-card__block">
-              <span>商品图使用说明</span>
-              <pre>{{ shotVideoPromptPreview.productReferenceUsageSummary }}</pre>
-            </div>
           </div>
           <div class="prompt-highlight-card">
             <div class="prompt-highlight-card__head">
@@ -4378,75 +4249,6 @@ onUnmounted(() => {
             </div>
             <div v-else class="prompt-reference-empty">未上传模特主图</div>
           </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Script Text</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.scriptText, ''), 'Script Text 已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.scriptText, '--') }}</pre>
-          </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Generation Prompt</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.generationPrompt, ''), 'Generation Prompt 已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.generationPrompt, '--') }}</pre>
-          </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Frame Prompt (Start)</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.startFramePrompt, ''), '起始帧提示词已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.startFramePrompt, '--') }}</pre>
-          </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Frame Prompt (End)</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.endFramePrompt, ''), '结束帧提示词已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.endFramePrompt, '--') }}</pre>
-          </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Video Diagnostic Prompt</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.compiledPrompt, ''), '视频诊断提示词已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.compiledPrompt, '--') }}</pre>
-          </div>
-          <div class="prompt-highlight-card">
-            <div class="prompt-highlight-card__head">
-              <strong>锁定层拆解</strong>
-              <span>先验模特锁 / 商品锁 / 参考职责</span>
-            </div>
-            <div class="prompt-highlight-card__block">
-              <span>Compiled Lock Layer</span>
-              <pre>{{ safeText(shotVideoCompiledLockLayer, '--') }}</pre>
-            </div>
-            <div class="prompt-highlight-card__block">
-              <span>Video Positive Lock Layer</span>
-              <pre>{{ safeText(shotVideoPositiveLockLayer, '--') }}</pre>
-            </div>
-          </div>
-          <div class="prompt-highlight-card">
-            <div class="prompt-highlight-card__head">
-              <strong>执行层拆解</strong>
-              <span>脚本 / 动作 / 运镜</span>
-            </div>
-            <div class="prompt-highlight-card__block">
-              <span>Execution Layer</span>
-              <pre>{{ safeText(shotVideoExecutionLayer, '--') }}</pre>
-            </div>
-          </div>
-          <div class="prompt-highlight-card">
-            <div class="prompt-highlight-card__head">
-              <strong>风格层拆解</strong>
-              <span>写实质感 / 静默商业片规则</span>
-            </div>
-            <div class="prompt-highlight-card__block">
-              <span>Style Layer</span>
-              <pre>{{ safeText(shotVideoStyleLayer, '--') }}</pre>
-            </div>
-          </div>
           <div class="prompt-highlight-card">
             <div class="prompt-highlight-card__head">
               <strong>请求参数概览</strong>
@@ -4460,16 +4262,9 @@ model: ${safeText(shotVideoPromptPreview.requestModel, '--')}
 capability: ${safeText(shotVideoPromptPreview.requestCapability, '--')}
 endpointStyle: ${safeText(shotVideoPromptPreview.requestEndpointStyle, '--')}
 createUrl: ${safeText(shotVideoPromptPreview.requestCreateUrl, '--')}
-localFirstFramePath: ${safeText(shotVideoPromptPreview.localFirstFramePath, '--')}
+              localFirstFramePath: ${safeText(shotVideoPromptPreview.localFirstFramePath, '--')}
 localLastFramePath: ${safeText(shotVideoPromptPreview.localLastFramePath, '--')}` }}</pre>
             </div>
-          </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Video Request JSON</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.requestJson, ''), '视频请求 JSON 已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.requestJson, '--') }}</pre>
           </div>
           <div class="prompt-preview-block">
             <div class="prompt-preview-block__head">
@@ -4477,13 +4272,6 @@ localLastFramePath: ${safeText(shotVideoPromptPreview.localLastFramePath, '--')}
               <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.requestPayloadPreview, ''), '视频请求参数已复制')">复制</button>
             </div>
             <pre>{{ safeText(shotVideoPromptPreview.requestPayloadPreview, '--') }}</pre>
-          </div>
-          <div class="prompt-preview-block">
-            <div class="prompt-preview-block__head">
-              <strong>Video Request Debug Log (Preview)</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.requestDebugLogPreview, ''), '视频请求日志预览已复制')">复制</button>
-            </div>
-            <pre>{{ safeText(shotVideoPromptPreview.requestDebugLogPreview, '--') }}</pre>
           </div>
           <div class="prompt-preview-block">
             <div class="prompt-preview-block__head">

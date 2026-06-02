@@ -648,6 +648,25 @@ export type CloneShotVideoOutput = {
   updatedAt: number
 }
 
+export type CloneShotVideoSubmissionAuditLog = {
+  id: string
+  shotId: string
+  shotIndex?: number
+  trigger: 'single_submit' | 'batch_submit' | 'auto_run_submit' | 'force_regenerate_submit'
+  provider?: string
+  model?: string
+  requestCapability?: UnifiedCapability
+  submissionFingerprint?: string
+  firstFramePath?: string
+  lastFramePath?: string
+  taskId?: string
+  remoteStatus?: string
+  sourceEvent?: string
+  status: 'request_started' | 'task_accepted' | 'direct_output' | 'missing_task' | 'request_failed'
+  error?: string
+  createdAt: number
+}
+
 export type CloneFinalComposeStatus = {
   status: 'idle' | 'ready' | 'composing' | 'done' | 'failed'
   outputPath?: string
@@ -1009,6 +1028,7 @@ export type CloneProject = {
     options: CloneGenerationQueueOptions
     jobs: CloneGenerationQueueJob[]
     runtime?: CloneGenerationQueueRuntime
+    submissionAuditLogs?: CloneShotVideoSubmissionAuditLog[]
     lastShotVideoSummary?: {
       total?: number
       done?: number

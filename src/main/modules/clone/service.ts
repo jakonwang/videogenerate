@@ -135,6 +135,7 @@ import type {
   CloneProjectSummary,
   CloneRunMode,
   CloneShotVideoFailureBreakdown,
+  CloneShotVideoSubmissionAuditLog,
 } from './types'
 import type { MediaAsset, Product, ProductCanonicalSourceDiagnostic } from '../products/types'
 import { queryGrsCredits } from './grsai'
@@ -152,6 +153,7 @@ const storyboardVideoReconcilePending = new Set<string>()
 const shotVideoSyncInFlight = new Map<string, Promise<void>>()
 const shotVideoCreateInFlight = new Map<string, Promise<CloneProject>>()
 const autoRunStoryboardVideosInFlight = new Map<string, Promise<any>>()
+const storyboardBatchVideoGenerationInFlight = new Map<string, Promise<any>>()
 const SHOT_VIDEO_SUBMISSION_LOCK_MS = 2 * 60 * 1000
 const SHOT_VIDEO_RECONCILE_RETRY_DELAY_MS = 5_000
 const shotVideoOrchestrator = createShotVideoOrchestrator()
@@ -225,6 +227,10 @@ function shotVideoCreateKey(projectId: string, shotId: string) {
 
 function autoRunStoryboardVideosKey(projectId: string) {
   return `autorun-storyboard-videos:${String(projectId || '').trim()}`
+}
+
+function storyboardBatchVideoGenerationKey(projectId: string) {
+  return `storyboard-video-batch:${String(projectId || '').trim()}`
 }
 
 function canStartBackgroundAutoRun(project: CloneProject) {
@@ -1492,6 +1498,24 @@ function syncShotVideoOutput(project: CloneProject, output: CloneShotVideoOutput
     return aIndex - bIndex
   })
   return project
+}
+
+function appendShotVideoSubmissionAuditLog(
+  project: CloneProject,
+  entry: Omit<CloneShotVideoSubmissionAuditLog, 'id' | 'createdAt'> & { createdAt?: number },
+) {
+  ensureCloneFlowState(project)
+  const queue = (project.generationQueue ||= createCloneGenerationQueue(project))
+  const current = Array.isArray(queue.submissionAuditLogs) ? queue.submissionAuditLogs : []
+  queue.submissionAuditLogs = [
+    {
+      id: randomUUID(),
+      createdAt: Number(entry.createdAt ?? now()) || now(),
+      ...entry,
+    },
+    ...current,
+  ].slice(0, 200)
+  return queue.submissionAuditLogs
 }
 
 function syncFinalCompose(project: CloneProject, patch: Partial<CloneFinalComposeStatus> & { status: CloneFinalComposeStatus['status'] }) {
@@ -7405,16 +7429,72 @@ async function ensureAi666SegmentVideoTask(input: {
       compiledNegativePrompt: String(latestShot.compiledNegativePrompt || '').trim(),
       finalNegativePrompt: finalApifoxNegativePrompt,
     })
-    const created = await createAi666VideoTask({
-      credentials: creds,
-      capability,
-      prompt: finalApifoxPrompt,
-      negativePrompt: finalApifoxNegativePrompt,
-      image: uploadedOrderedReferenceImages[0],
-      lastImage: uploadedLastFrameImage,
-      referenceImages: [],
+    const auditTrigger: CloneShotVideoSubmissionAuditLog['trigger'] =
+      existing.sourceEvent === 'storyboard_video_batch_submit_started'
+        ? 'batch_submit'
+        : input.forceRegenerate
+          ? 'force_regenerate_submit'
+          : latestProject.autoFlowStatus?.status === 'running'
+            ? 'auto_run_submit'
+            : 'single_submit'
+    appendShotVideoSubmissionAuditLog(latestProject, {
+      shotId: latestShot.id,
+      shotIndex: Number(latestShot.index ?? 0) || undefined,
+      trigger: auditTrigger,
+      provider,
+      model,
+      requestCapability: capability,
+      submissionFingerprint,
+      firstFramePath: String(input.firstFramePath || '').trim() || undefined,
+      lastFramePath: String(input.lastFramePath || input.firstFramePath || '').trim() || undefined,
+      sourceEvent: existing.sourceEvent || 'segment_submit_started',
+      status: 'request_started',
     })
+    await cloneRepo.upsertProject(latestProject)
+    let created
+    try {
+      created = await createAi666VideoTask({
+        credentials: creds,
+        capability,
+        prompt: finalApifoxPrompt,
+        negativePrompt: finalApifoxNegativePrompt,
+        image: uploadedOrderedReferenceImages[0],
+        lastImage: uploadedLastFrameImage,
+        referenceImages: [],
+      })
+    } catch (error: any) {
+      appendShotVideoSubmissionAuditLog(latestProject, {
+        shotId: latestShot.id,
+        shotIndex: Number(latestShot.index ?? 0) || undefined,
+        trigger: auditTrigger,
+        provider,
+        model,
+        requestCapability: capability,
+        submissionFingerprint,
+        firstFramePath: String(input.firstFramePath || '').trim() || undefined,
+        lastFramePath: String(input.lastFramePath || input.firstFramePath || '').trim() || undefined,
+        sourceEvent: 'segment_submit_request_failed',
+        status: 'request_failed',
+        error: String(error?.message ?? error ?? '').trim() || undefined,
+      })
+      await cloneRepo.upsertProject(latestProject)
+      throw error
+    }
     if (created.directOutputUrl) {
+      appendShotVideoSubmissionAuditLog(latestProject, {
+        shotId: latestShot.id,
+        shotIndex: Number(latestShot.index ?? 0) || undefined,
+        trigger: auditTrigger,
+        provider: created.provider,
+        model: created.model,
+        requestCapability: created.requestCapability,
+        submissionFingerprint,
+        firstFramePath: String(input.firstFramePath || '').trim() || undefined,
+        lastFramePath: String(input.lastFramePath || input.firstFramePath || '').trim() || undefined,
+        remoteStatus: 'succeeded',
+        sourceEvent: 'segment_submit_direct_output_received',
+        status: 'direct_output',
+      })
       const outDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', latestShot.id)
       await mkdir(outDir, { recursive: true })
       const outPath = join(outDir, 'generated_clip.mp4')
@@ -7444,6 +7524,20 @@ async function ensureAi666SegmentVideoTask(input: {
       const createdRemoteStatus =
         String(created.raw?.data?.status || created.raw?.status || created.raw?.data?.state || created.raw?.state || 'created').trim() ||
         'created'
+      appendShotVideoSubmissionAuditLog(latestProject, {
+        shotId: latestShot.id,
+        shotIndex: Number(latestShot.index ?? 0) || undefined,
+        trigger: auditTrigger,
+        provider,
+        model,
+        requestCapability: capability,
+        submissionFingerprint,
+        firstFramePath: String(input.firstFramePath || '').trim() || undefined,
+        lastFramePath: String(input.lastFramePath || input.firstFramePath || '').trim() || undefined,
+        remoteStatus: createdRemoteStatus,
+        sourceEvent: 'segment_submit_missing_task',
+        status: 'missing_task',
+      })
       console.error('[clone-debug] ensure-apifox-video-task:missing-task-id', {
         projectId: latestProject.id,
         shotId: latestShot.id,
@@ -7476,6 +7570,21 @@ async function ensureAi666SegmentVideoTask(input: {
       provider: created.provider,
       model: created.model,
       submissionFingerprint,
+    })
+    appendShotVideoSubmissionAuditLog(latestProject, {
+      shotId: latestShot.id,
+      shotIndex: Number(latestShot.index ?? 0) || undefined,
+      trigger: auditTrigger,
+      provider: created.provider,
+      model: created.model,
+      requestCapability: created.requestCapability,
+      submissionFingerprint,
+      firstFramePath: String(input.firstFramePath || '').trim() || undefined,
+      lastFramePath: String(input.lastFramePath || input.firstFramePath || '').trim() || undefined,
+      taskId: created.taskId,
+      remoteStatus: 'created',
+      sourceEvent: 'segment_submit_succeeded',
+      status: 'task_accepted',
     })
     replaceProjectShot(latestProject, latestShot.id, {
       status: 'generating',
@@ -8082,6 +8191,7 @@ export const cloneService = {
       selectedModelIdentityId: project.selectedModelIdentitySnapshot?.id,
     })
     project = frameResult.project
+    if (!project) throw new Error('分镜图片生成后未返回项目快照')
 
     const frameRetryErrors: Array<{ shotId: string; index: number; reason: string }> = []
     const frameRetryCandidates = (await cloneRepo.getProject(project.id))?.blueprint?.shots ?? []
@@ -8157,6 +8267,7 @@ export const cloneService = {
       maxAutoRetryPerShot: AUTO_CLONE_VIDEO_RETRY_LIMIT,
     } as any)
     project = videoResult.project
+    if (!project) throw new Error('分镜视频批量生成后未返回项目快照')
     const pendingVideoCount = Number(videoResult.queueSummary?.pending ?? 0) + Number(videoResult.queueSummary?.timeout ?? 0)
     const failedVideoCount = Number(videoResult.queueSummary?.failed ?? 0)
     const partialFailureCount = frameRetryErrors.length + failedVideoCount + Number(videoResult.queueSummary?.timeout ?? 0)
@@ -8388,6 +8499,15 @@ export const cloneService = {
     cloneProjectId: string
     maxAutoRetryPerShot?: number
   }) {
+    const batchKey = storyboardBatchVideoGenerationKey(input.cloneProjectId)
+    const existingBatch = storyboardBatchVideoGenerationInFlight.get(batchKey)
+    if (existingBatch) {
+      console.log('[clone-debug] storyboard-video-batch:reuse-inflight', {
+        projectId: input.cloneProjectId,
+      })
+      return await existingBatch
+    }
+    const batchTask = (async () => {
     scheduleRemoteStoryboardVideoReconcile(input.cloneProjectId)
     let project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project) throw new Error('复刻项目不存在')
@@ -8715,12 +8835,20 @@ export const cloneService = {
           project: stableProject,
           shotId: shot.id,
           worker: async () => {
+            const submitStartedAt = now()
             syncSegmentVideoOutput(stableProject, shot, {
               source: 'generated',
               status: 'submitting',
               provider: videoProviderLabel(creds),
               model: videoProviderModel(creds),
+              submissionFingerprint: batchSubmissionFingerprint,
+              submissionStartedAt: submitStartedAt,
+              submissionLockedUntil: submitStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
               sourceEvent: 'storyboard_video_batch_submit_started',
+            })
+            replaceProjectShot(stableProject, shot.id, {
+              status: 'generating',
+              error: '',
             })
             await cloneRepo.upsertProject(stableProject)
             await this.updateShotEnhanced({
@@ -8923,6 +9051,11 @@ export const cloneService = {
       failureBreakdown: summarized.failureBreakdown,
       errors,
     }
+    })().finally(() => {
+      storyboardBatchVideoGenerationInFlight.delete(batchKey)
+    })
+    storyboardBatchVideoGenerationInFlight.set(batchKey, batchTask)
+    return await batchTask
   },
 
   async replaceShotVideoForProject(input: {
@@ -11425,7 +11558,7 @@ export const cloneService = {
           aspectRatio: shot.prompt?.aspectRatio || '9:16',
           resolution: '720p',
         })
-        const cachedClip = getCachedCloudClipResult(item, cloudClipHash)
+        const cachedClip = input.forceRegenerate ? null : getCachedCloudClipResult(item, cloudClipHash)
         if (cachedClip?.filePath) {
           out = cachedClip.filePath
           generatedProvider = cachedClip.provider

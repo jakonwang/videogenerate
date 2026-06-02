@@ -17,6 +17,7 @@ export function createCloneGenerationQueue(project: CloneProject) {
   return {
     options,
     jobs: [...(project.generationQueue?.jobs ?? [])],
+    submissionAuditLogs: [...(project.generationQueue?.submissionAuditLogs ?? [])],
     runtime: {
       submitActive: Number(project.generationQueue?.runtime?.submitActive ?? 0) || 0,
       pollActive: Number(project.generationQueue?.runtime?.pollActive ?? 0) || 0,
