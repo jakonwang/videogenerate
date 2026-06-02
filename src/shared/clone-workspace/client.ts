@@ -17,6 +17,7 @@ export type CloneWorkspaceError = Error & {
 
 export type CloneWorkspaceProjectResponse<TProject> = {
   project?: TProject | null
+  executionMode?: 'background_dispatched' | 'blocking_completed'
 }
 
 export type CloneWorkspaceAssetResponse<TProject> = CloneWorkspaceProjectResponse<TProject> & {
@@ -38,6 +39,23 @@ export type CloneWorkspaceShotVideoResponse<TProject> = CloneWorkspaceProjectRes
     skipped: number
     pending?: number
     timeout?: number
+    creating?: number
+    remoteRunning?: number
+    downloading?: number
+    retryableFailed?: number
+    submitActive?: number
+    pollActive?: number
+    downloadActive?: number
+    submitQueued?: number
+    pollQueued?: number
+    downloadQueued?: number
+  }
+  failureBreakdown?: {
+    missingTask?: number
+    remoteTimeout?: number
+    downloadFailed?: number
+    remoteFailed?: number
+    localFailed?: number
   }
 }
 
@@ -79,6 +97,10 @@ export type CloneWorkspaceProductImageUploadInput = {
   files: CloneWorkspaceProductImageUploadFile[]
 }
 
+export type CloneWorkspaceBindProductInput = {
+  productId: string
+}
+
 export interface CloneWorkspaceClient<TProject = any> {
   getOwnership(projectId?: string): Promise<CloneWorkspaceTaskOwnership>
   getProject(projectId: string): Promise<CloneWorkspaceProjectResponse<TProject>>
@@ -90,6 +112,10 @@ export interface CloneWorkspaceClient<TProject = any> {
   saveProductImages(
     projectId: string,
     input: { productReferenceImagePaths?: string[] },
+  ): Promise<CloneWorkspaceProjectResponse<TProject>>
+  bindProduct(
+    projectId: string,
+    input: CloneWorkspaceBindProductInput,
   ): Promise<CloneWorkspaceProjectResponse<TProject>>
   uploadProductImages(
     projectId: string,
@@ -115,13 +141,21 @@ export interface CloneWorkspaceClient<TProject = any> {
     projectId: string,
     input: { productReferenceImagePaths?: string[]; selectedModelIdentityId?: string },
   ): Promise<CloneWorkspaceStoryboardResponse<TProject>>
+  batchQueryStoryboardImages(
+    projectId: string,
+    input: { productReferenceImagePaths?: string[]; shotIds?: string[] },
+  ): Promise<CloneWorkspaceStoryboardResponse<TProject>>
   regenerateStoryboardImage(
     projectId: string,
     shotId: string,
-    input: { productReferenceImagePaths?: string[] },
+    input: { productReferenceImagePaths?: string[]; selectedModelIdentityId?: string },
   ): Promise<CloneWorkspaceProjectResponse<TProject>>
   generateShotVideos(projectId: string): Promise<CloneWorkspaceShotVideoResponse<TProject>>
   syncShotVideoTask(
+    projectId: string,
+    shotId: string,
+  ): Promise<CloneWorkspaceShotVideoSyncResponse<TProject>>
+  forceDownloadShotVideoResult(
     projectId: string,
     shotId: string,
   ): Promise<CloneWorkspaceShotVideoSyncResponse<TProject>>
@@ -200,6 +234,9 @@ export function createWebCloneWorkspaceClient<TProject = any>(
     async saveProductImages(projectId, input) {
       return await wrap(async () => await apiClient.saveCloneProjectProductImages(projectId, input))
     },
+    async bindProduct(projectId, input) {
+      return await wrap(async () => await apiClient.bindCloneProjectProduct(projectId, input))
+    },
     async uploadProductImages(projectId, input) {
       return await wrap(async () => {
         const files = input.files.map((item) => {
@@ -233,6 +270,15 @@ export function createWebCloneWorkspaceClient<TProject = any>(
     async generateStoryboardImages(projectId, input) {
       return await wrap(async () => await apiClient.generateStoryboardImages(projectId, input))
     },
+    async batchQueryStoryboardImages(projectId, input) {
+      return await wrap(async () =>
+        await apiClient.generateStoryboardImages(projectId, {
+          productReferenceImagePaths: input.productReferenceImagePaths,
+          shotIds: input.shotIds,
+          onlyMissing: true,
+        }),
+      )
+    },
     async regenerateStoryboardImage(projectId, shotId, input) {
       return await wrap(async () => await apiClient.regenerateStoryboardImage(projectId, shotId, input))
     },
@@ -240,6 +286,9 @@ export function createWebCloneWorkspaceClient<TProject = any>(
       return await wrap(async () => await apiClient.generateCloneShotVideos(projectId))
     },
     async syncShotVideoTask(projectId, shotId) {
+      return await wrap(async () => await apiClient.syncCloneShotVideoTask(projectId, shotId))
+    },
+    async forceDownloadShotVideoResult(projectId, shotId) {
       return await wrap(async () => await apiClient.syncCloneShotVideoTask(projectId, shotId))
     },
     async regenerateShotVideo(projectId, shotId) {

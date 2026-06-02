@@ -8,6 +8,7 @@ import type {
   BatchSubtitleOutputItem,
   BatchSubtitleOverlayImageConfig,
   BatchSubtitlePreviewResult,
+  BatchSubtitleTitleAnalysisItem,
   BatchSubtitleSourceEngine,
   BatchSubtitleTrack,
   BatchSubtitleSourceItem,
@@ -15,6 +16,8 @@ import type {
   BatchSubtitleTitleItem,
   BatchSubtitleTitleConfig,
   BatchSubtitleTitleRenderMode,
+  BatchSubtitleTitleStyleMode,
+  BatchSubtitleViralTitleConfig,
   BillingOrder,
   GeelarkCloudPhoneSummary,
   GeelarkClonePublishCandidate,
@@ -442,6 +445,9 @@ export function createWebApiClient(options: WebApiClientOptions) {
       titleRenderMode?: BatchSubtitleTitleRenderMode
       titleConfig?: Partial<BatchSubtitleTitleConfig>
       titleItems?: BatchSubtitleTitleItem[]
+      titleStyleMode?: BatchSubtitleTitleStyleMode
+      viralTitleConfig?: BatchSubtitleViralTitleConfig
+      titleAnalysisItems?: BatchSubtitleTitleAnalysisItem[]
       overlayImageConfig?: Partial<BatchSubtitleOverlayImageConfig>
       styleConfig?: Partial<BatchSubtitleStyleConfig>
       captionStyle?: Partial<BatchSubtitleCaptionStyle>
@@ -465,6 +471,9 @@ export function createWebApiClient(options: WebApiClientOptions) {
         titleRenderMode: BatchSubtitleTitleRenderMode
         titleConfig: Partial<BatchSubtitleTitleConfig>
         titleItems: BatchSubtitleTitleItem[]
+        titleStyleMode: BatchSubtitleTitleStyleMode
+        viralTitleConfig: BatchSubtitleViralTitleConfig
+        titleAnalysisItems: BatchSubtitleTitleAnalysisItem[]
         overlayImageConfig: Partial<BatchSubtitleOverlayImageConfig>
         styleConfig: Partial<BatchSubtitleStyleConfig>
         captionStyle: Partial<BatchSubtitleCaptionStyle>
@@ -596,6 +605,27 @@ export function createWebApiClient(options: WebApiClientOptions) {
       })
     },
 
+    async generateBatchSubtitleViralTitles(input: {
+      jobId?: string
+      sourceItems: BatchSubtitleSourceItem[]
+      language?: 'vi' | 'en' | 'zh'
+      tone?: 'hook' | 'conversion' | 'emotional'
+      sellingPoints?: string
+      symbolIntensity?: 'low' | 'medium' | 'high'
+    }) {
+      return await request<{
+        titleItems: BatchSubtitleTitleItem[]
+        analysisItems: BatchSubtitleTitleAnalysisItem[]
+        titleStyleMode: BatchSubtitleTitleStyleMode
+        content: string
+        provider: string
+        model: string
+      }>('/plugins/video-batch-subtitle/generate-viral-titles', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
     async listCloneModelIdentities() {
       const result = await request<{ items: CloneModelIdentitySummary[] }>('/clone/model-identities', {
         method: 'GET',
@@ -712,6 +742,13 @@ export function createWebApiClient(options: WebApiClientOptions) {
       })
     },
 
+    async bindCloneProjectProduct(projectId: string, input: { productId: string }) {
+      return await request<{ project?: any }>(`/clone/projects/${encodeURIComponent(projectId)}/bind-product`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+
     async uploadCloneProductImages(
       projectId: string,
       input: { files: Array<{ fileName: string; base64Data: string; mimeType?: string }> },
@@ -734,7 +771,7 @@ export function createWebApiClient(options: WebApiClientOptions) {
 
     async generateStoryboardImages(
       projectId: string,
-      input: { productReferenceImagePaths?: string[]; selectedModelIdentityId?: string },
+      input: { productReferenceImagePaths?: string[]; selectedModelIdentityId?: string; shotIds?: string[]; onlyMissing?: boolean },
     ) {
       return await request<any>(`/clone/projects/${encodeURIComponent(projectId)}/storyboard-images`, {
         method: 'POST',

@@ -2,6 +2,28 @@ import type { PluginDefinition, PluginDetail, PluginRecord, PluginSummary } from
 
 export const pluginDefinitions: PluginDefinition[] = [
   {
+    id: 'tiktok-listing-helper',
+    name: 'TikTok 商品上架助手',
+    category: 'ecommerce_listing',
+    description: '上传商品实拍图后生成 TikTok 上架图片、标题、描述，并批量导出 Excel 模板。',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/tiktok-listing-helper',
+    usageHint: '适合独立处理 TikTok 商品图生成与店小秘导入模板导出，不影响 /clone 主流程。',
+    configSchema: [
+      {
+        key: 'defaultLanguage',
+        label: '默认标题语言',
+        type: 'select',
+        options: [
+          { label: '简体中文', value: 'zh-CN' },
+          { label: 'English', value: 'en-US' },
+          { label: 'Tiếng Việt', value: 'vi-VN' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'video-parser-download',
     name: '视频解析下载',
     category: 'video_download',

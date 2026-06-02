@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { templatesRepo } from '../templates/repo'
-import type { Product, ProductType, SegmentKey } from './types'
+import type { MediaAsset, Product, ProductImageAsset, ProductType, SegmentKey } from './types'
 
 type DbShape = { products: Product[] }
 
@@ -23,6 +23,75 @@ function cleanSegKeyForBuckets(s: string) {
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[^a-z0-9_\-]/g, '')
+}
+
+function isImagePath(filePath: string) {
+  return /\.(png|jpe?g|webp|bmp|gif)$/i.test(String(filePath || '').trim())
+}
+
+function migrateLegacyAssetsToImages(product: Product): ProductImageAsset[] {
+  const existing = Array.isArray((product as any).images) ? ((product as any).images as ProductImageAsset[]) : []
+  if (existing.length) {
+    return existing.map((item) => ({
+      ...item,
+      productId: product.id,
+      updatedAt: Number(item.updatedAt ?? item.createdAt ?? now()),
+    }))
+  }
+  const flat = Object.values(product.assets ?? {})
+    .flatMap((items) => items ?? [])
+    .filter((item): item is MediaAsset => Boolean(item?.filePath) && isImagePath(String(item.filePath)))
+  const seen = new Set<string>()
+  const images: ProductImageAsset[] = []
+  for (const item of flat) {
+    const filePath = String(item.filePath || '').trim()
+    if (!filePath || seen.has(filePath)) continue
+    seen.add(filePath)
+    images.push({
+      id: item.id || randomUUID(),
+      productId: product.id,
+      filePath,
+      fileName: item.fileName ?? filePath.split(/[/\\]/).pop() ?? filePath,
+      fileSize: Number(item.fileSize ?? 0),
+      width: typeof item.width === 'number' ? item.width : undefined,
+      height: typeof item.height === 'number' ? item.height : undefined,
+      thumbnailPath: item.thumbnailPath ?? filePath,
+      createdAt: Number(item.createdAt ?? now()),
+      updatedAt: Number(item.createdAt ?? now()),
+      isCover: false,
+    })
+  }
+  if (images[0]) images[0].isCover = true
+  return images
+}
+
+function resolveCoverImagePath(product: Product, images: ProductImageAsset[]) {
+  const explicit = String((product as any).coverImagePath || '').trim()
+  if (explicit) return explicit
+  const cover = images.find((item) => item.isCover && String(item.filePath || '').trim())
+  if (cover) return String(cover.filePath || '').trim()
+  const first = String(images[0]?.filePath || '').trim()
+  return first || undefined
+}
+
+function resolveNextCoverImagePath(
+  prev: Product,
+  payload: Partial<Product>,
+  images: ProductImageAsset[],
+) {
+  if (Object.prototype.hasOwnProperty.call(payload, 'images')) {
+    const explicit = String((payload as any).coverImagePath || '').trim()
+    if (explicit) return explicit
+    const cover = images.find((item) => item.isCover && String(item.filePath || '').trim())
+    if (cover) return String(cover.filePath || '').trim()
+    const first = String(images[0]?.filePath || '').trim()
+    return first || undefined
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'coverImagePath')) {
+    const explicit = String((payload as any).coverImagePath || '').trim()
+    return explicit || undefined
+  }
+  return prev.coverImagePath
 }
 
 export const productsRepo = {
@@ -52,6 +121,88 @@ export const productsRepo = {
           createdAt: Number(a.createdAt ?? now()),
         }))
       }
+      ;(p as any).canonicalSourcePath =
+        typeof (p as any).canonicalSourcePath === 'string' ? (p as any).canonicalSourcePath : undefined
+      ;(p as any).analysisBoardPath =
+        typeof (p as any).analysisBoardPath === 'string'
+          ? (p as any).analysisBoardPath
+          : (typeof (p as any).canonicalSourcePath === 'string' ? (p as any).canonicalSourcePath : undefined)
+      ;(p as any).canonicalSourceStatus =
+        (p as any).canonicalSourceStatus === 'processing' ||
+        (p as any).canonicalSourceStatus === 'done' ||
+        (p as any).canonicalSourceStatus === 'failed'
+          ? (p as any).canonicalSourceStatus
+          : 'idle'
+      ;(p as any).analysisBoardStatus =
+        (p as any).analysisBoardStatus === 'processing' ||
+        (p as any).analysisBoardStatus === 'done' ||
+        (p as any).analysisBoardStatus === 'failed'
+          ? (p as any).analysisBoardStatus
+          : (p as any).canonicalSourceStatus
+      ;(p as any).canonicalSourcePrompt =
+        typeof (p as any).canonicalSourcePrompt === 'string' ? (p as any).canonicalSourcePrompt : undefined
+      ;(p as any).analysisBoardPrompt =
+        typeof (p as any).analysisBoardPrompt === 'string'
+          ? (p as any).analysisBoardPrompt
+          : (typeof (p as any).canonicalSourcePrompt === 'string' ? (p as any).canonicalSourcePrompt : undefined)
+      ;(p as any).canonicalSourceDiagnostics = Array.isArray((p as any).canonicalSourceDiagnostics)
+        ? (p as any).canonicalSourceDiagnostics.map((item: any) => ({
+            originalPath: String(item?.originalPath || '').trim(),
+            sanitizedPath: typeof item?.sanitizedPath === 'string' ? item.sanitizedPath : undefined,
+            status: item?.status === 'kept' || item?.status === 'failed' ? item.status : 'sanitized',
+            note: typeof item?.note === 'string' ? item.note : undefined,
+            prompt: typeof item?.prompt === 'string' ? item.prompt : undefined,
+            fallbackToOriginal: Boolean(item?.fallbackToOriginal),
+          }))
+        : undefined
+      ;(p as any).analysisBoardDiagnostics = Array.isArray((p as any).analysisBoardDiagnostics)
+        ? (p as any).analysisBoardDiagnostics.map((item: any) => ({
+            originalPath: String(item?.originalPath || '').trim(),
+            sanitizedPath: typeof item?.sanitizedPath === 'string' ? item.sanitizedPath : undefined,
+            status: item?.status === 'kept' || item?.status === 'failed' ? item.status : 'sanitized',
+            note: typeof item?.note === 'string' ? item.note : undefined,
+            prompt: typeof item?.prompt === 'string' ? item.prompt : undefined,
+            fallbackToOriginal: Boolean(item?.fallbackToOriginal),
+          }))
+        : (Array.isArray((p as any).canonicalSourceDiagnostics) ? (p as any).canonicalSourceDiagnostics : undefined)
+      ;(p as any).canonicalSourceUpdatedAt = Number((p as any).canonicalSourceUpdatedAt ?? 0) || undefined
+      ;(p as any).analysisBoardUpdatedAt =
+        Number((p as any).analysisBoardUpdatedAt ?? 0) ||
+        Number((p as any).canonicalSourceUpdatedAt ?? 0) ||
+        undefined
+      ;(p as any).canonicalSourceSourceSignature =
+        typeof (p as any).canonicalSourceSourceSignature === 'string'
+          ? (p as any).canonicalSourceSourceSignature
+          : undefined
+      ;(p as any).analysisSourceSignature =
+        typeof (p as any).analysisSourceSignature === 'string'
+          ? (p as any).analysisSourceSignature
+          : (typeof (p as any).canonicalSourceSourceSignature === 'string'
+              ? (p as any).canonicalSourceSourceSignature
+              : undefined)
+      ;(p as any).productAnalysis =
+        (p as any).productAnalysis && typeof (p as any).productAnalysis === 'object'
+          ? {
+              category: String((p as any).productAnalysis.category ?? '').trim(),
+              summary: String((p as any).productAnalysis.summary ?? '').trim(),
+              coreSubject: String((p as any).productAnalysis.coreSubject ?? '').trim(),
+              connectionStructure: String((p as any).productAnalysis.connectionStructure ?? '').trim(),
+              materialDetails: String((p as any).productAnalysis.materialDetails ?? '').trim(),
+              wearingPosition: String((p as any).productAnalysis.wearingPosition ?? '').trim(),
+              surfaceDetails: String((p as any).productAnalysis.surfaceDetails ?? '').trim(),
+              colorDetails: String((p as any).productAnalysis.colorDetails ?? '').trim(),
+              geometryDetails: String((p as any).productAnalysis.geometryDetails ?? '').trim(),
+              sizeScale: String((p as any).productAnalysis.sizeScale ?? '').trim(),
+              matchingRules: Array.isArray((p as any).productAnalysis.matchingRules)
+                ? (p as any).productAnalysis.matchingRules.map(String).filter(Boolean)
+                : [],
+              rawDescription: String((p as any).productAnalysis.rawDescription ?? '').trim(),
+              updatedAt: Number((p as any).productAnalysis.updatedAt ?? 0) || now(),
+            }
+          : undefined
+      ;(p as any).images = migrateLegacyAssetsToImages(p as Product)
+      ;(p as any).coverImagePath = resolveCoverImagePath(p as Product, (p as any).images)
+      ;(p as any).remark = typeof (p as any).remark === 'string' ? (p as any).remark : ''
     }
     return db.products
   },
@@ -63,10 +214,55 @@ export const productsRepo = {
       const idx = db.products.findIndex((p) => p.id === payload.id)
       if (idx >= 0) {
         const prev = db.products[idx]
+        const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(payload, key)
+        const nextImages = payload.images ?? prev.images ?? migrateLegacyAssetsToImages(prev)
         const next: Product = {
           ...prev,
           ...payload,
           assets: payload.assets ?? prev.assets,
+          images: nextImages,
+          coverImagePath: resolveNextCoverImagePath(prev, payload, nextImages),
+          remark: hasOwn('remark') ? payload.remark : prev.remark,
+          analysisBoardPath:
+            hasOwn('analysisBoardPath') ? payload.analysisBoardPath : prev.analysisBoardPath,
+          analysisBoardStatus:
+            hasOwn('analysisBoardStatus') ? payload.analysisBoardStatus : prev.analysisBoardStatus,
+          analysisBoardPrompt:
+            hasOwn('analysisBoardPrompt') ? payload.analysisBoardPrompt : prev.analysisBoardPrompt,
+          analysisBoardDiagnostics:
+            !hasOwn('analysisBoardDiagnostics')
+              ? prev.analysisBoardDiagnostics
+              : payload.analysisBoardDiagnostics,
+          analysisBoardUpdatedAt:
+            !hasOwn('analysisBoardUpdatedAt')
+              ? prev.analysisBoardUpdatedAt
+              : payload.analysisBoardUpdatedAt,
+          analysisSourceSignature:
+            !hasOwn('analysisSourceSignature')
+              ? prev.analysisSourceSignature
+              : payload.analysisSourceSignature,
+          canonicalSourcePath:
+            hasOwn('canonicalSourcePath') ? payload.canonicalSourcePath : prev.canonicalSourcePath,
+          canonicalSourceStatus:
+            hasOwn('canonicalSourceStatus') ? payload.canonicalSourceStatus : prev.canonicalSourceStatus,
+          canonicalSourcePrompt:
+            hasOwn('canonicalSourcePrompt') ? payload.canonicalSourcePrompt : prev.canonicalSourcePrompt,
+          canonicalSourceDiagnostics:
+            !hasOwn('canonicalSourceDiagnostics')
+              ? prev.canonicalSourceDiagnostics
+              : payload.canonicalSourceDiagnostics,
+          canonicalSourceUpdatedAt:
+            !hasOwn('canonicalSourceUpdatedAt')
+              ? prev.canonicalSourceUpdatedAt
+              : payload.canonicalSourceUpdatedAt,
+          canonicalSourceSourceSignature:
+            !hasOwn('canonicalSourceSourceSignature')
+              ? prev.canonicalSourceSourceSignature
+              : payload.canonicalSourceSourceSignature,
+          productAnalysis:
+            !hasOwn('productAnalysis')
+              ? prev.productAnalysis
+              : payload.productAnalysis,
           updatedAt: ts,
         }
         db.products[idx] = next
@@ -80,6 +276,22 @@ export const productsRepo = {
       name: payload.name,
       type: payload.type,
       assets: payload.assets ?? (emptyAssets() as any),
+      images: payload.images ?? [],
+      coverImagePath: payload.coverImagePath,
+      remark: payload.remark ?? '',
+      analysisBoardPath: payload.analysisBoardPath,
+      analysisBoardStatus: payload.analysisBoardStatus ?? payload.canonicalSourceStatus ?? 'idle',
+      analysisBoardPrompt: payload.analysisBoardPrompt,
+      analysisBoardDiagnostics: payload.analysisBoardDiagnostics,
+      analysisBoardUpdatedAt: payload.analysisBoardUpdatedAt,
+      analysisSourceSignature: payload.analysisSourceSignature ?? payload.canonicalSourceSourceSignature,
+      canonicalSourcePath: payload.canonicalSourcePath,
+      canonicalSourceStatus: payload.canonicalSourceStatus ?? 'idle',
+      canonicalSourcePrompt: payload.canonicalSourcePrompt,
+      canonicalSourceDiagnostics: payload.canonicalSourceDiagnostics,
+      canonicalSourceUpdatedAt: payload.canonicalSourceUpdatedAt,
+      canonicalSourceSourceSignature: payload.canonicalSourceSourceSignature,
+      productAnalysis: payload.productAnalysis,
       createdAt: ts,
       updatedAt: ts,
     }

@@ -35,7 +35,7 @@ export type CloneModelIdentitySummary = {
   updatedAt: number
 }
 
-export type PluginCategory = 'video_download' | 'video_processing'
+export type PluginCategory = 'video_download' | 'video_processing' | 'ecommerce_listing'
 export type PluginEntryType = 'tool'
 
 export type PluginConfigFieldType = 'text' | 'textarea' | 'number' | 'boolean' | 'select'
@@ -349,6 +349,30 @@ export type BatchSubtitleTitleItem = {
   updatedAt: number
 }
 
+export type BatchSubtitleTitleStyleMode = 'default' | 'vn_tiktok_viral'
+
+export type BatchSubtitleViralTitleTone = 'hook' | 'conversion' | 'emotional'
+
+export type BatchSubtitleViralSymbolIntensity = 'low' | 'medium' | 'high'
+
+export type BatchSubtitleViralTitleConfig = {
+  language?: 'vi' | 'en' | 'zh'
+  tone?: BatchSubtitleViralTitleTone
+  sellingPoints?: string
+  symbolIntensity?: BatchSubtitleViralSymbolIntensity
+  generationMode?: 'video_content'
+}
+
+export type BatchSubtitleTitleAnalysisItem = {
+  sourceItemId: string
+  summary: string
+  subject?: string
+  action?: string
+  scene?: string
+  durationSec?: number
+  updatedAt: number
+}
+
 export type BatchSubtitleOverlayImageConfig = {
   canvasWidth: number
   canvasHeight: number
@@ -464,6 +488,9 @@ export type BatchSubtitleJob = {
   titleRenderMode?: BatchSubtitleTitleRenderMode
   titleConfig: BatchSubtitleTitleConfig
   titleItems?: BatchSubtitleTitleItem[]
+  titleStyleMode?: BatchSubtitleTitleStyleMode
+  viralTitleConfig?: BatchSubtitleViralTitleConfig
+  titleAnalysisItems?: BatchSubtitleTitleAnalysisItem[]
   overlayImageConfig?: BatchSubtitleOverlayImageConfig
   styleConfig: BatchSubtitleStyleConfig
   captionStyle: BatchSubtitleCaptionStyle

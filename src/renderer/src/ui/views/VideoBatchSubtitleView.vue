@@ -18,8 +18,11 @@ import {
   type BatchSubtitleOutputItem,
   type BatchSubtitlePreviewResult,
   type BatchSubtitleSourceItem,
+  type BatchSubtitleTitleAnalysisItem,
   type BatchSubtitleTitleItem,
   type BatchSubtitleTitleRenderMode,
+  type BatchSubtitleTitleStyleMode,
+  type BatchSubtitleViralTitleConfig,
   type CloneProjectSummary,
 } from '@/lib/webApiClient'
 
@@ -27,7 +30,12 @@ type SourceTab = 'upload' | 'clone'
 type RightTab = 'content' | 'style'
 type QueueTab = 'all' | 'processing' | 'completed'
 type StepState = 'idle' | 'active' | 'done'
-type CaptionTemplatePresetId = 'viral-hook' | 'deal-punch' | 'premium-drop'
+type CaptionTemplatePresetId =
+  | 'viral-hook'
+  | 'deal-punch'
+  | 'premium-drop'
+  | 'vn-viral-bold'
+  | 'vn-viral-outline'
 type PreviewMode = 'fast' | 'video'
 
 const sourceTab = ref<SourceTab>('upload')
@@ -58,6 +66,13 @@ const sourcePage = ref(1)
 const sourcePageSize = 12
 const selectedTemplatePreset = ref<CaptionTemplatePresetId>('viral-hook')
 const previewMode = ref<PreviewMode>('fast')
+const viralTitleConfig = reactive<BatchSubtitleViralTitleConfig>({
+  language: 'vi',
+  tone: 'hook',
+  sellingPoints: '',
+  symbolIntensity: 'medium',
+  generationMode: 'video_content',
+})
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let queuePollTimer: ReturnType<typeof setInterval> | null = null
 let previewRequestToken = 0
@@ -161,6 +176,48 @@ const captionTemplatePresets: Array<{
       bottomMargin: 212,
     },
   },
+  {
+    id: 'vn-viral-bold',
+    name: 'VN Viral Bold',
+    summary: '越南 TikTok 爆款标题，粗体大字、强描边、强停留感。',
+    style: {
+      fontName: 'Arial Black',
+      fontSize: 78,
+      fontColor: '#FFF44F',
+      strokeColor: '#050505',
+      strokeWidth: 10,
+      shadowColor: 'rgba(0, 0, 0, 0.45)',
+      shadowBlur: 14,
+      position: 'top',
+      textAlign: 'center',
+      safeMargin: 8,
+      maxLines: 2,
+      maxWidthRatio: 0.84,
+      lineGap: 4,
+      bottomMargin: 180,
+    },
+  },
+  {
+    id: 'vn-viral-outline',
+    name: 'VN Viral Outline',
+    summary: '越南电商短视频封面式标题，高对比红白字，符号感更强。',
+    style: {
+      fontName: 'Arial Black',
+      fontSize: 74,
+      fontColor: '#FFFFFF',
+      strokeColor: '#D61F3A',
+      strokeWidth: 8,
+      shadowColor: 'rgba(8, 8, 8, 0.48)',
+      shadowBlur: 16,
+      position: 'top',
+      textAlign: 'center',
+      safeMargin: 8,
+      maxLines: 2,
+      maxWidthRatio: 0.82,
+      lineGap: 4,
+      bottomMargin: 176,
+    },
+  },
 ]
 
 function defaultOverlayImageConfig(): BatchSubtitleOverlayImageConfig {
@@ -191,6 +248,8 @@ const draft = reactive<{
   sourceItems: BatchSubtitleSourceItem[]
   titleText: string
   titleItems: BatchSubtitleTitleItem[]
+  titleStyleMode: BatchSubtitleTitleStyleMode
+  titleAnalysisItems: BatchSubtitleTitleAnalysisItem[]
   overlayImageConfig: BatchSubtitleOverlayImageConfig
   captionStyle: BatchSubtitleCaptionStyle
   layoutPolicy: BatchSubtitleLayoutPolicy
@@ -200,6 +259,8 @@ const draft = reactive<{
   sourceItems: [],
   titleText: '',
   titleItems: [],
+  titleStyleMode: 'default',
+  titleAnalysisItems: [],
   overlayImageConfig: defaultOverlayImageConfig(),
   captionStyle: defaultCaptionStyle(),
   layoutPolicy: defaultLayoutPolicy(),
@@ -226,7 +287,7 @@ const canPreviewThumbPrev = computed(() => previewThumbStart.value > 0)
 const canPreviewThumbNext = computed(
   () => previewThumbStart.value + previewThumbPageSize < draft.sourceItems.length,
 )
-const hasPreviewReady = computed(() => Boolean(previewSource.value && draft.titleText.trim()))
+const hasPreviewReady = computed(() => Boolean(previewSource.value && resolveTitleTextForSource(previewSource.value.id)))
 const successfulOutputs = computed(() =>
   outputs.value.filter((item) => item.renderStatus === 'success' && String(item.outputVideoPath || '').trim()),
 )
@@ -348,6 +409,7 @@ watch(
   () => ({
     sourceItems: draft.sourceItems.map((item) => item.id).join('|'),
     titleText: draft.titleText,
+    titleItems: draft.titleItems.map((item) => `${item.sourceItemId}:${item.text}`).join('|'),
     fontName: draft.captionStyle.fontName,
     fontSize: draft.captionStyle.fontSize,
     fontColor: draft.captionStyle.fontColor,
@@ -516,19 +578,41 @@ function resolveJobStatusLabel(status: BatchSubtitleJob['status']) {
   return '草稿'
 }
 
+function resolveTitleTextForSource(sourceItemId: string) {
+  const perItem = draft.titleItems.find((item) => item.sourceItemId === sourceItemId)?.text?.trim()
+  if (perItem) return perItem
+  return String(draft.titleText || '').trim()
+}
+
+function syncDraftTitleSummary() {
+  const first = draft.sourceItems[0] ? resolveTitleTextForSource(draft.sourceItems[0].id) : ''
+  draft.titleText = first
+}
+
 function buildTitleItems(): BatchSubtitleTitleItem[] {
-  const text = String(draft.titleText || '').trim()
   return draft.sourceItems.map((item) => ({
     sourceItemId: item.id,
-    text,
+    text: resolveTitleTextForSource(item.id),
     updatedAt: Date.now(),
   }))
+}
+
+function updateTitleItem(sourceItemId: string, text: string) {
+  const normalized = String(text || '').trim()
+  const next = draft.titleItems.filter((item) => item.sourceItemId !== sourceItemId)
+  next.push({
+    sourceItemId,
+    text: normalized,
+    updatedAt: Date.now(),
+  })
+  draft.titleItems = next
+  syncDraftTitleSummary()
 }
 
 function buildPreviewSignature() {
   return JSON.stringify({
     sourceItemId: previewSource.value?.id || '',
-    titleText: String(draft.titleText || '').trim(),
+    titleText: previewSource.value ? resolveTitleTextForSource(previewSource.value.id) : '',
     previewMode: previewMode.value,
     titleRenderMode: draft.titleRenderMode,
     style: {
@@ -551,7 +635,8 @@ function buildPreviewSignature() {
 }
 
 async function refreshAccuratePreview() {
-  if (!previewSource.value || !draft.titleText.trim()) {
+  const previewTitle = previewSource.value ? resolveTitleTextForSource(previewSource.value.id) : ''
+  if (!previewSource.value || !previewTitle) {
     previewFrame.value = null
     previewFrameLoading.value = false
     lastAppliedPreviewSignature = ''
@@ -575,8 +660,8 @@ async function refreshAccuratePreview() {
       subtitleMode: 'static_title',
       titleConfig: {
         strategy: 'single_for_all',
-        singleText: draft.titleText,
-        titlePool: draft.titleText ? [draft.titleText] : [],
+        singleText: previewTitle,
+        titlePool: previewTitle ? [previewTitle] : [],
       },
       titleItems: buildTitleItems(),
       titleRenderMode: draft.titleRenderMode,
@@ -738,6 +823,9 @@ function applyCloneSources() {
 
 function removeSourceItem(id: string) {
   draft.sourceItems = draft.sourceItems.filter((item) => item.id !== id)
+  draft.titleItems = draft.titleItems.filter((item) => item.sourceItemId !== id)
+  draft.titleAnalysisItems = draft.titleAnalysisItems.filter((item) => item.sourceItemId !== id)
+  syncDraftTitleSummary()
 }
 
 async function runGenerateTitles() {
@@ -755,6 +843,35 @@ async function runGenerateTitles() {
     })
     draft.titleText = result.titles[0] || ''
     notice.value = 'AI 标题生成完成。'
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    generatingTitles.value = false
+  }
+}
+
+async function runGenerateViralTitles() {
+  if (!draft.sourceItems.length) {
+    errorText.value = '请先添加至少一条视频素材。'
+    return
+  }
+  generatingTitles.value = true
+  errorText.value = ''
+  try {
+    const result = await webApiClient.generateBatchSubtitleViralTitles({
+      jobId: selectedJobId.value || undefined,
+      sourceItems: draft.sourceItems,
+      language: viralTitleConfig.language || 'vi',
+      tone: viralTitleConfig.tone || 'hook',
+      sellingPoints: String(viralTitleConfig.sellingPoints || '').trim() || undefined,
+      symbolIntensity: viralTitleConfig.symbolIntensity || 'medium',
+    })
+    draft.titleItems = result.titleItems
+    draft.titleAnalysisItems = result.analysisItems
+    draft.titleStyleMode = result.titleStyleMode
+    syncDraftTitleSummary()
+    applyCaptionTemplatePreset('vn-viral-bold')
+    notice.value = `已为 ${result.titleItems.length} 条视频生成越南爆款标题。`
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -780,6 +897,9 @@ async function saveCurrentDraft() {
       titlePool: draft.titleText ? [draft.titleText] : [],
     },
     titleItems: buildTitleItems(),
+    titleStyleMode: draft.titleStyleMode,
+    viralTitleConfig: { ...viralTitleConfig },
+    titleAnalysisItems: draft.titleAnalysisItems,
     overlayImageConfig: draft.overlayImageConfig,
     styleConfig: {
       ...draft.captionStyle,
@@ -825,6 +945,9 @@ async function renderBatch() {
       exportEngine: 'ass_fallback',
       titleRenderMode: draft.titleRenderMode,
       titleItems: buildTitleItems(),
+      titleStyleMode: draft.titleStyleMode,
+      viralTitleConfig: { ...viralTitleConfig },
+      titleAnalysisItems: draft.titleAnalysisItems,
       overlayImageConfig: draft.overlayImageConfig,
       captionStyle: draft.captionStyle,
       layoutPolicy: draft.layoutPolicy,
@@ -930,6 +1053,15 @@ function loadJobIntoDraft(job: BatchSubtitleJob) {
   draft.sourceItems = [...job.sourceItems]
   draft.titleText = job.titleConfig?.singleText || ''
   draft.titleItems = [...(job.titleItems || [])]
+  draft.titleStyleMode = job.titleStyleMode || 'default'
+  draft.titleAnalysisItems = [...(job.titleAnalysisItems || [])]
+  Object.assign(viralTitleConfig, {
+    language: job.viralTitleConfig?.language || 'vi',
+    tone: job.viralTitleConfig?.tone || 'hook',
+    sellingPoints: job.viralTitleConfig?.sellingPoints || '',
+    symbolIntensity: job.viralTitleConfig?.symbolIntensity || 'medium',
+    generationMode: 'video_content',
+  })
   draft.overlayImageConfig = { ...defaultOverlayImageConfig(), ...(job.overlayImageConfig || {}) }
   draft.captionStyle = { ...defaultCaptionStyle(), ...(job.captionStyle || {}) }
   draft.layoutPolicy = { ...defaultLayoutPolicy(), ...(job.layoutPolicy || {}) }
@@ -1282,17 +1414,17 @@ onBeforeUnmount(() => {
             <div class="section-heading">
               <div>
                 <span class="section-kicker">Strategy</span>
-                <strong>标题策略</strong>
+                <strong>生成策略</strong>
               </div>
             </div>
             <div class="strategy-grid">
               <button class="strategy-card is-active" type="button">
-                <strong>单标题应用全部</strong>
-                <small>适合批量电商素材，统一表达、统一风格、统一输出。</small>
+                <strong>AI 越南爆款</strong>
+                <small>按视频内容批量生成适合 TikTok 场景的越南标题。</small>
               </button>
               <button class="strategy-card" type="button" disabled>
-                <strong>随机标题池</strong>
-                <small>本轮保留入口，不作为主链路信息架构重点。</small>
+                <strong>手工兜底</strong>
+                <small>当你已经有明确卖点时，可直接写提示词生成基础标题。</small>
               </button>
             </div>
           </section>
@@ -1300,50 +1432,123 @@ onBeforeUnmount(() => {
           <section class="form-section">
             <div class="section-heading">
               <div>
-                <span class="section-kicker">Title Content</span>
-                <strong>标题文案</strong>
+                <span class="section-kicker">Vietnam Viral Mode</span>
+                <strong>越南爆款模式</strong>
               </div>
-              <span class="section-note">{{ draft.titleText.length }} / 100</span>
+              <span class="section-note">{{ draft.sourceItems.length }} 条素材</span>
+            </div>
+            <div class="form-grid form-grid--dual">
+              <label class="field-block">
+                <span>语言</span>
+                <select v-model="viralTitleConfig.language" class="dark-select">
+                  <option value="vi">越南语</option>
+                  <option value="en">英语</option>
+                  <option value="zh">中文</option>
+                </select>
+              </label>
+              <label class="field-block">
+                <span>语气</span>
+                <select v-model="viralTitleConfig.tone" class="dark-select">
+                  <option value="hook">钩子型</option>
+                  <option value="conversion">转化型</option>
+                  <option value="emotional">情绪型</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-grid form-grid--dual">
+              <label class="field-block">
+                <span>符号强度</span>
+                <select v-model="viralTitleConfig.symbolIntensity" class="dark-select">
+                  <option value="low">低</option>
+                  <option value="medium">中</option>
+                  <option value="high">高</option>
+                </select>
+              </label>
+              <label class="field-block">
+                <span>标题风格</span>
+                <input :value="draft.titleStyleMode" class="dark-input" type="text" readonly />
+              </label>
             </div>
             <textarea
-              v-model="draft.titleText"
-              class="dark-textarea"
-              placeholder="旅行的意义&#10;就是去更美的地方 😌"
+              v-model="viralTitleConfig.sellingPoints"
+              class="dark-textarea dark-textarea--compact"
+              placeholder="补充商品卖点、价格优势、赠品信息或目标人群，帮助 AI 生成更准的标题"
             ></textarea>
             <div class="action-row">
-              <button class="minor-button" type="button" :disabled="generatingTitles" @click="runGenerateTitles">
+              <button class="minor-button" type="button" :disabled="generatingTitles" @click="runGenerateViralTitles">
                 <LoaderCircle v-if="generatingTitles" class="h-4 w-4 animate-spin" />
                 <Sparkles v-else class="h-4 w-4" />
-                <span>{{ generatingTitles ? 'AI 生成中…' : 'AI 生成文案' }}</span>
+                <span>{{ generatingTitles ? 'AI 生成中...' : 'AI 生成越南标题' }}</span>
               </button>
-              <button class="minor-button" type="button" @click="draft.titleText += ' ✨'">插入强调符号</button>
-              <button class="minor-button" type="button" @click="draft.titleText += '\n点击收藏同款'">追加转化尾句</button>
+              <button class="minor-button" type="button" @click="applyCaptionTemplatePreset('vn-viral-bold')">套用粗体模板</button>
+              <button class="minor-button" type="button" @click="applyCaptionTemplatePreset('vn-viral-outline')">套用描边模板</button>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="section-heading">
+              <div>
+                <span class="section-kicker">Manual Fallback</span>
+                <strong>基础标题生成</strong>
+              </div>
             </div>
             <input
               v-model="aiPrompt"
               class="dark-input"
               type="text"
-              placeholder="输入 AI 提示词，例如：TikTok 电商饰品展示、情绪感文案、适合竖屏封面大字"
+              placeholder="例如：生成 1 条适合越南 TikTok 的高点击卖货标题，突出包邮、限时优惠和强对比卖点"
             />
+            <div class="action-row">
+              <button class="minor-button" type="button" :disabled="generatingTitles" @click="runGenerateTitles">
+                <LoaderCircle v-if="generatingTitles" class="h-4 w-4 animate-spin" />
+                <Sparkles v-else class="h-4 w-4" />
+                <span>{{ generatingTitles ? 'AI 生成中...' : '生成单条标题' }}</span>
+              </button>
+            </div>
           </section>
 
           <section class="form-section">
             <div class="section-heading">
               <div>
                 <span class="section-kicker">Render Mode</span>
-                <strong>当前渲染模式</strong>
+                <strong>渲染模式</strong>
               </div>
             </div>
             <div class="mode-pills">
-              <button type="button" class="is-active">透明图层贴片</button>
-              <button type="button" class="is-active">预览与导出一致</button>
+              <button type="button" class="is-active">静态标题贴片</button>
+              <button type="button" class="is-active">真实预览链路</button>
             </div>
             <p class="helper-copy">
-              当前主打静态标题批量贴片，优先保证 Windows 开发预览与 Linux 导出的一致性。
+              当前模式优先保证 Windows 开发与 Linux 部署共用同一条真实渲染链路。
             </p>
           </section>
-        </template>
 
+          <section class="form-section">
+            <div class="section-heading">
+              <div>
+                <span class="section-kicker">Per Video Titles</span>
+                <strong>逐视频标题</strong>
+              </div>
+            </div>
+            <div class="title-item-list">
+              <div v-for="item in draft.sourceItems" :key="item.id" class="title-item-card">
+                <div class="title-item-card__head">
+                  <strong>{{ shortFileName(item.fileName) }}</strong>
+                  <span>{{ formatDuration(item.durationSec) }}</span>
+                </div>
+                <textarea
+                  class="dark-textarea dark-textarea--compact"
+                  :value="resolveTitleTextForSource(item.id)"
+                  placeholder="为当前视频输入单独标题"
+                  @input="updateTitleItem(item.id, ($event.target as HTMLTextAreaElement).value)"
+                ></textarea>
+                <p class="helper-copy helper-copy--tight">
+                  {{ draft.titleAnalysisItems.find((row) => row.sourceItemId === item.id)?.summary || '暂无分析摘要，可先执行 AI 批量生成。' }}
+                </p>
+              </div>
+            </div>
+          </section>
+        </template>
         <template v-else>
           <section class="form-section">
             <div class="section-heading">
@@ -2603,7 +2808,8 @@ onBeforeUnmount(() => {
 }
 
 .dark-input,
-.dark-textarea {
+.dark-textarea,
+.dark-select {
   width: 100%;
   min-height: 40px;
   padding: 10px 12px;
@@ -2616,7 +2822,8 @@ onBeforeUnmount(() => {
 }
 
 .dark-input:focus,
-.dark-textarea:focus {
+.dark-textarea:focus,
+.dark-select:focus {
   border-color: rgba(122, 99, 247, 0.62);
   box-shadow: 0 0 0 1px rgba(122, 99, 247, 0.22);
 }
@@ -2625,6 +2832,54 @@ onBeforeUnmount(() => {
   min-height: 144px;
   resize: vertical;
   line-height: 1.7;
+}
+
+.dark-textarea--compact {
+  min-height: 92px;
+}
+
+.dark-select {
+  appearance: none;
+}
+
+.title-item-list {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.title-item-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.028);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.title-item-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.title-item-card__head strong {
+  font-size: 13px;
+  color: #f5f7fd;
+}
+
+.title-item-card__head span {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.helper-copy--tight {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .dark-input--color {

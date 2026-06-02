@@ -8,6 +8,8 @@ export function generateAntiVariationRules(productType: string, strict: boolean)
   ]
   if (/earrings?/.test(productType)) {
     base.push('Keep exactly one matching pair of earrings. Do not add a second butterfly, a second pendant cluster, or any extra ear accessory.')
+    base.push('Do not exaggerate gem sparkle, glow, bloom, or starburst highlights beyond realistic camera reflections.')
+    base.push('Do not make earrings stand upright by themselves. Preserve believable gravity, hanging direction, and support contact.')
   }
   if (strict) {
     base.push('Across all frames, product identity consistency is more important than cinematic creativity.')

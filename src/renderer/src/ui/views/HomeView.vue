@@ -93,7 +93,7 @@ const quickStartCards: QuickStartCard[] = [
     title: 'AI 脚本',
     desc: '快速生成创意脚本',
     icon: Wand2,
-    route: '/tasks',
+    route: '/production',
   },
   {
     title: '爆款复刻',
@@ -105,7 +105,7 @@ const quickStartCards: QuickStartCard[] = [
     title: '批量创作',
     desc: '高效生成多条视频',
     icon: FolderKanban,
-    route: '/tasks',
+    route: '/production',
   },
   {
     title: '智能剪辑',
@@ -128,14 +128,14 @@ const operationCards: OperationCard[] = [
     desc: '查看进度、失败原因和输出状态',
     icon: FolderKanban,
     tone: 'violet',
-    route: '/tasks',
+    route: '/production',
   },
   {
     title: '模板中心',
     desc: '挑选可复用模板，快速起稿',
     icon: LayoutTemplate,
     tone: 'blue',
-    route: '/templates',
+    route: '/production',
   },
 ]
 
@@ -240,7 +240,7 @@ onMounted(refresh)
               <Sparkles class="h-4 w-4" />
               开始创作
             </UiButton>
-            <UiButton variant="ghost" @click="go('/tasks')">
+            <UiButton variant="ghost" @click="go('/production')">
               <Upload class="h-4 w-4" />
               查看任务
             </UiButton>
@@ -307,7 +307,7 @@ onMounted(refresh)
       <UiCard class="template-panel">
         <div class="panel-head">
           <h2>推荐模板</h2>
-          <button class="panel-link" type="button" @click="go('/templates')">查看全部</button>
+          <button class="panel-link" type="button" @click="go('/production')">查看全部</button>
         </div>
         <div class="template-grid">
           <button
@@ -315,7 +315,7 @@ onMounted(refresh)
             :key="item.id"
             class="template-card"
             type="button"
-            @click="go('/templates')"
+            @click="go('/production')"
           >
             <img :src="item.thumb" :alt="item.title" />
             <div class="template-card__overlay"></div>

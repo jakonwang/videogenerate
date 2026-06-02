@@ -10,6 +10,10 @@ import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl, postAtlasJson } 
 import { generateVideo as generateApifoxVideo } from './unifiedVideo'
 import {
   buildCameraMotionLockText,
+  detectProductMode,
+  buildFinalShotVideoPositivePrompt,
+  buildOptimizedVideoPrompt,
+  buildVideoAntiSparkleNegativePrompt,
   buildFailInsteadRuleText,
   buildCompositionLockText,
   buildFrameContinuityLockText,
@@ -25,10 +29,12 @@ import {
   buildShotScriptConstraintText,
   prependSilentCommercialGlobalRule,
   sanitizeGeneratedVideoPrompt,
+  sanitizeJewelryGenerationPrompt,
 } from './prompt'
 import { canUseMockGeneration } from './mockPolicy'
 import type {
   AiProviderName,
+  CloneProject,
   ConsistencyMode,
   ModelCredentials,
   ShotKeyframeAsset,
@@ -55,6 +61,10 @@ export type ProviderResult = {
   outputFilePath: string
   remoteTaskId?: string
   model?: string
+}
+
+function resolveShotVideoOrderedReferencePaths(project: CloneProject | undefined, shot: ShotSpec, firstFramePath: string) {
+  return [String(firstFramePath || '').trim()].filter(Boolean)
 }
 
 const SEEDANCE_HOST = 'https://ark.ap-southeast.bytepluses.com'
@@ -227,10 +237,10 @@ function shotMotionPrompt(shot: ShotSpec) {
   const motion = String(shot.motion || 'static')
   const map: Record<string, string> = {
     static: 'stable smartphone framing with clear natural hand action, product rotation or wearing movement across the whole clip, not frozen posing',
-    zoom_in: 'noticeable natural push-in with coordinated hand movement and product presentation progression',
-    zoom_out: 'controlled pull-back that reveals more context while the product action keeps evolving',
-    pan_left: 'clear handheld pan left following the product action with meaningful lateral movement',
-    pan_right: 'clear handheld pan right following the product action with meaningful lateral movement',
+    zoom_in: 'very slow, smooth, continuous push-in with gentle hand movement and steady product presentation progression, never sudden or aggressive',
+    zoom_out: 'very slow, smooth, continuous pull-back that reveals only a little more context while keeping the same shot and natural product action, never sudden or aggressive',
+    pan_left: 'slow and smooth handheld pan left following the product action with restrained lateral movement',
+    pan_right: 'slow and smooth handheld pan right following the product action with restrained lateral movement',
     shake: 'energetic authentic handheld motion with readable product action, never chaotic or blurry',
     fast_cut: 'quick product-reveal rhythm with assertive action beats and strong visual change, no surreal effects',
   }
@@ -251,28 +261,28 @@ function fallbackVideoDirectionPrompt(shot: ShotSpec) {
 }
 
 export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'video') {
-  const cleanedUserPrompt = sanitizeGeneratedVideoPrompt(
+  if (phase === 'video') {
+    return buildOptimizedVideoPrompt({
+      shot,
+      productIdentityText: String(shot.materialNeed || '').trim(),
+      productMode: detectProductMode(String(shot.productType || '').trim()),
+    })
+  }
+  const sanitizedGenerationSource = sanitizeJewelryGenerationPrompt(
     String(shot.aiPrompt || shot.generationPrompt || shot.prompt?.positive || '').trim(),
+    shot.productType,
+  )
+  const cleanedUserPrompt = sanitizeGeneratedVideoPrompt(
+    sanitizedGenerationSource || String(shot.aiPrompt || shot.generationPrompt || shot.prompt?.positive || '').trim(),
     1100,
   )
   const scriptText = sanitizeGeneratedVideoPrompt(String(shot.scriptText || '').trim(), 320)
-  const generationPrompt = sanitizeGeneratedVideoPrompt(String(shot.generationPrompt || '').trim(), 420)
+  const generationPrompt = sanitizeGeneratedVideoPrompt(
+    sanitizeJewelryGenerationPrompt(String(shot.generationPrompt || '').trim(), shot.productType) || String(shot.generationPrompt || '').trim(),
+    420,
+  )
   const scriptConstraint = sanitizeGeneratedVideoPrompt(buildShotScriptConstraintText(shot), 720)
-  const scriptExecutionBlock =
-    phase === 'video'
-      ? sanitizeGeneratedVideoPrompt(
-          [
-            scriptText ? `Script text to execute faithfully in this clip: ${scriptText}` : '',
-            generationPrompt && generationPrompt.toLowerCase() !== scriptText.toLowerCase()
-              ? `Shot execution details: ${generationPrompt}`
-              : '',
-            scriptConstraint,
-          ]
-            .filter(Boolean)
-            .join('\n'),
-          900,
-        )
-      : ''
+  const scriptExecutionBlock = ''
   const sceneDirection = cleanedUserPrompt || fallbackVideoDirectionPrompt(shot)
   const referenceLock = sanitizeGeneratedVideoPrompt(buildReferenceLockText(shot, 'reference shot scene atmosphere'), 900)
   const spatialAnchorLock = sanitizeGeneratedVideoPrompt(buildSpatialAnchorLockText(String(shot.productType || '')), 520)
@@ -294,80 +304,19 @@ export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'v
     buildMotionLimitText(String(shot.productType || ''), String(shot.motion || '')),
     260,
   )
-  const storyboardControlLayer =
-    phase === 'video'
-      ? sanitizeGeneratedVideoPrompt(
-          [
-            'SILENT VISUAL COMMERCIAL.',
-            'No dialogue.',
-            'No presenter delivery.',
-            'No speaking.',
-            buildReferenceImageLockText(),
-            'STRICT PRODUCT LOCK: same single product instance across all shots; exact silhouette, geometry, structure, material, color, and proportion; no variation.',
-            'STRICT MODEL IDENTITY LOCK: use the selected model identity only.',
-            'HUMAN PRIORITY RULE: the human must adapt to the product.',
-            'Do not modify, resize, reshape, bend, simplify, or restyle the product to fit the human body.',
-            'If any conflict occurs, adjust human pose, hand placement, ear position, neck angle, or body framing, not the product.',
-            'Different camera views only.',
-            `Shot ${Number(shot.index ?? 0) + 1} is another view of the same locked subject, not a new setup.`,
-            buildFrameContinuityLockText({ isEnd: false, shotIndex: Number(shot.index ?? 0) }),
-            buildNoSubstituteRuleText(),
-            buildHumanPriorityRuleText(),
-            'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY.',
-            'REFERENCE PERSON EXCLUSION RULE: if the product images contain a human wearer or holder, that human is invalid and must be ignored completely.',
-            'If any product image contains a person, ignore that person completely and extract product identity only.',
-            'Exactly one human model is allowed when a human is needed. No second model, no mixed identity, no borrowed model from product images, no extra background person.',
-            spatialAnchorLock,
-            physicsConsistency,
-            motionLimit,
-            compositionLock,
-            cameraMotionLock,
-            scaleConsistencyLock,
-            buildFailInsteadRuleText(),
-          ].join('\n'),
-          1250,
-        )
-      : ''
-  const replicationTaskLock =
-    phase === 'video'
-      ? sanitizeGeneratedVideoPrompt(
-          [
-            '[CRITICAL FIX] This is NOT a product generation task. This is a product replication + shot adaptation task.',
-            '[PRODUCT SOURCE LOCK] The product MUST be taken from the provided product image. NOT generated from text. NOT inferred from video.',
-            '[INSTANCE RULE] There is ONLY ONE product instance. All shots use the SAME object.',
-            '[VIDEO ROLE LIMIT] Reference video defines ONLY motion and camera behavior. It MUST NOT change product structure.',
-            '[ANTI-RECONSTRUCTION] Do NOT rebuild product from description. Only replicate from reference image.',
-          ].join('\n'),
-          700,
-        )
-      : ''
-  const singleModelLock =
-    phase === 'video'
-      ? sanitizeGeneratedVideoPrompt(
-          [
-            'Human identity lock: use the selected model identity only.',
-            'Never use any person identity from the product reference images, reference video, source footage, or scene references.',
-            'If any product image contains a person, ignore that person completely and extract product identity only.',
-            'Exactly one human model is allowed in the frame when human presence is needed. No second model, no background model, no duplicate person, no reflection person, no extra hands from another person.',
-            'Do not mix the selected model with the original video person or any person from the product images.',
-          ].join('\n'),
-          650,
-        )
-      : ''
+  const storyboardControlLayer = ''
+  const replicationTaskLock = ''
+  const singleModelLock = ''
   const productLock =
     'Keep the exact product from the reference images: same color, shape, material, pattern, print, holes, edges, size and design. Do not add logos, gems, charms, text, extra patterns or new decorations.'
+  const highlightRealism = ''
   const jewelryRealism =
     /earrings?/i.test(String(shot.productType || ''))
-      ? 'Jewelry realism rule: keep diamond, zircon, crystal, and metal reflections subtle, physically plausible, and camera-realistic. Do not add exaggerated sparkle VFX, glow bloom, starburst shine, magical glitter, or overexposed luxury effects. Earrings must follow gravity and believable support: they may be worn, hand-held, laid flat, or lightly supported, but must never stand upright by themselves like a rigid sculpture, signboard, or product figurine.'
+      ? 'Jewelry material suppression rule: preserve only the exact earring structure, hanging logic, and component placement. Do not enhance metallic, crystal, gemstone, glossy, or reflective behavior. Treat jewelry as optically quiet, matte, diffuse, non-emissive, and stable. Earrings must follow gravity and believable support: they may be worn, hand-held, laid flat, or lightly supported, but must never stand upright by themselves like a rigid sculpture, signboard, or product figurine.'
       : ''
   const realism =
-    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Preserve the same shot purpose, background category, camera distance, composition logic, product interaction type and motion grammar from the reference, but let the action play out fully and naturally instead of freezing into a near-still pose. Do NOT replace or regenerate product or model identity. Only adapt camera and motion. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos. Cinematic polish must never override identity.'
-  const motionPerformance =
-    phase === 'video'
-      ? String(shot.motion || '').trim().toLowerCase() === 'zoom_out'
-        ? 'Motion performance rule: keep the same action intent and shot grammar as the reference while using a single uninterrupted pull-back within the same close-up family. Adjust human pose, not the product. Do not turn the shot into a medium shot or a new scene. The motion must continue across the entire clip instead of happening only in the opening second.'
-        : 'Motion performance rule: keep the same action intent and shot grammar as the reference, but allow fuller hand travel, clearer product turns, more obvious wearing or usage demonstration, and stronger camera progression when appropriate. Adjust human pose, not the product. The motion must continue across the entire clip instead of happening only in the opening second.'
-      : ''
+    'Premium realistic social commerce video, shot on a modern smartphone camera, natural daylight or soft window light only, clean editorial composition, real human hands, real shadows, real lens perspective, believable e-commerce demo. Preserve the same shot purpose, background category, camera distance, composition logic, product interaction type and motion grammar from the reference, but let the action play out fully and naturally instead of freezing into a near-still pose. Do NOT replace or regenerate product or model identity. Only adapt camera and motion. Do not copy the original person, watermark, captions, stickers or platform UI. Do not show any visible text in the video frame, including titles, subtitles, captions, labels, packaging text, slogans, logos, UI words, random letters or typographic elements. Avoid flashy visual effects, strobe-like lighting, hard flash bursts, CGI, 3D render, plastic toy look, fantasy scene, over-smoothed skin, warped fingers, fake text, watermark, subtitles, captions, UI overlays, account names, stickers and logos. Cinematic polish must never override identity.'
+  const motionPerformance = ''
   const phaseText =
     phase === 'start'
       ? 'Opening keyframe, product already visible and in focus, clean frame with no watermark or subtitles.'
@@ -375,6 +324,8 @@ export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'v
         ? 'Ending keyframe, direct continuation of the starting frame, same product instance, same model instance, same scene setup, natural final pose, clean frame with no watermark or subtitles.'
         : 'Generate natural motion between first and last frame. Preserve product identity, background atmosphere, action category and camera continuity. Keep the same selling purpose and reference shot grammar, but do not freeze the subject into one locked pose or one tiny repeated movement. Do not switch to a different action, different location, different product-display method or unrelated camera angle. No morphing, no object melting, no artificial animation, no copied TikTok watermark, no copied subtitles. Do not generate any visible on-screen text, title card, subtitle line, caption overlay, packaging words or lettering of any kind.'
   const blocks = [
+    highlightRealism,
+    jewelryRealism,
     storyboardControlLayer,
     replicationTaskLock,
     singleModelLock,
@@ -386,17 +337,23 @@ export function buildRealisticPrompt(shot: ShotSpec, phase: 'start' | 'end' | 'v
     sceneDirection,
     productLock,
     shotRolePrompt(shot),
-    phase === 'video' ? shotMotionPrompt(shot) : '',
+    '',
     motionPerformance,
-    jewelryRealism,
     realism,
     phaseText,
-    phase === 'video' ? buildNoSpeakingInstruction() : '',
+    '',
   ]
     .map((item) => String(item || '').trim())
     .filter(Boolean)
   const deduped = blocks.filter((item, index) => blocks.findIndex((v) => v.toLowerCase() === item.toLowerCase()) === index)
   return prependSilentCommercialGlobalRule(deduped, 2400)
+}
+
+export function buildVideoNegativePrompt(shot: ShotSpec, compiledNegativePrompt?: string) {
+  return buildVideoAntiSparkleNegativePrompt(
+    String(compiledNegativePrompt || shot.compiledNegativePrompt || shot.negativePrompt || '').trim(),
+    detectProductMode(String(shot.productType || '').trim()),
+  )
 }
 
 async function toDataUriOrUrl(absPathOrUrl: string, kind: 'image' | 'video') {
@@ -854,6 +811,7 @@ export async function regenerateOneShotKeyframeByProviderChain(input: {
 
 export async function generateShotVideoByProviderChain(input: {
   shot: ShotSpec
+  project?: CloneProject
   outDir: string
   startFramePath: string
   endFramePath: string
@@ -868,14 +826,22 @@ export async function generateShotVideoByProviderChain(input: {
   const errs: string[] = []
   const startFrameDataUrl = await toDataUriOrUrl(input.startFramePath, 'image')
   const endFrameDataUrl = await toDataUriOrUrl(input.endFramePath, 'image')
-  const finalPrompt = prependSilentCommercialGlobalRule(
-    [
-      String(input.compiledPrompt || '').trim() || buildRealisticPrompt(input.shot, 'video'),
-      'Video execution override: keep the human model faceless with head out of frame whenever possible. Never use presenter-to-camera delivery, host-style explanation, spokesperson framing, frontal talking-head composition, direct-to-camera speaking pose, lip-sync, or mouth shapes that suggest speech. Keep the performance silent and product-led, but preserve natural body mechanics and complete action flow across the clip.',
-    ],
-    2400,
-  )
-  const finalNegativePrompt = String(input.compiledNegativePrompt || '').trim()
+  const finalPrompt = buildFinalShotVideoPositivePrompt({
+    shot: input.shot,
+    productIdentityText: '',
+    productMode: detectProductMode(String(input.shot.productType || '').trim()),
+  })
+  const finalNegativePrompt = buildVideoNegativePrompt(input.shot, input.compiledNegativePrompt)
+  console.log('[clone-debug] final-shot-video-prompts', {
+    shotId: input.shot.id,
+    providerChain: chain,
+    productType: String(input.shot.productType || '').trim(),
+    compiledPrompt: String(input.compiledPrompt || input.shot.compiledPrompt || '').trim(),
+    finalPrompt,
+    compiledNegativePrompt: String(input.compiledNegativePrompt || input.shot.compiledNegativePrompt || '').trim(),
+    finalNegativePrompt,
+    productReferenceCount: 0,
+  })
 
   if (
     canUseMockGeneration(input.credentials) &&
@@ -930,18 +896,23 @@ export async function generateShotVideoByProviderChain(input: {
         return { provider, outputFilePath: out, remoteTaskId: created.taskId, model: created.model }
       }
       if (provider === 'apifox_hub') {
-        const startFrameUrl = await publicUrlForCloudFrame(input.credentials, input.startFramePath, 'apifox-first-frame')
-        const endFrameUrl = input.endFramePath
-          ? await publicUrlForCloudFrame(input.credentials, input.endFramePath, 'apifox-last-frame')
-          : undefined
+        const orderedReferenceImages = resolveShotVideoOrderedReferencePaths(input.project, input.shot, input.startFramePath)
+        const uploadedOrderedReferenceImages = (
+          await Promise.all(
+            orderedReferenceImages.map(async (path) => {
+              return await publicUrlForCloudFrame(input.credentials, path, 'apifox-storyboard-ref')
+            }),
+          )
+        ).filter(Boolean)
         const created = await generateApifoxVideo({
           credentials: input.credentials,
-          capability: endFrameUrl ? 'video_start_end_to_video' : 'video_image_to_video',
+          capability: 'video_image_to_video',
           prompt: finalPrompt,
           negativePrompt: finalNegativePrompt,
           outDir: input.outDir,
-          image: startFrameUrl,
-          lastImage: endFrameUrl,
+          image: uploadedOrderedReferenceImages[0],
+          lastImage: undefined,
+          referenceImages: [],
         })
         await normalizeCloudClipForShot({ src: created.outputPath, out, shot: input.shot })
         return { provider, outputFilePath: out, remoteTaskId: created.taskId, model: created.model }

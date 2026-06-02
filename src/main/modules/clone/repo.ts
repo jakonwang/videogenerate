@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { readFile, readdir } from 'node:fs/promises'
@@ -15,7 +15,11 @@ import {
   getCloneSqliteUnavailableReason,
   initializeCloneSqlite,
   isCloneSqliteEmpty,
+  readCloneProjectByIdFromSqlite,
+  readCloneProjectsFromSqlite,
   readCloneDbFromSqlite,
+  removeCloneProjectFromSqlite,
+  upsertCloneProjectInSqlite,
   writeCloneDbToSqlite,
 } from './sqlite'
 import type {
@@ -56,12 +60,28 @@ type CloneDbShape = {
 type CloneSettingsShape = {
   encryptedCredentials?: string
   plaintextCredentials?: ModelCredentials
+  runtimeOptions?: CloneRuntimeOptions
+}
+
+export type CloneRuntimeOptions = {
+  storyboardFrameConcurrency: number
+  globalStoryboardFrameConcurrency: number
+}
+
+const DEFAULT_CLONE_RUNTIME_OPTIONS: CloneRuntimeOptions = {
+  storyboardFrameConcurrency: 3,
+  globalStoryboardFrameConcurrency: 2,
 }
 
 const cloneDbPath = () => join(getAppPaths().dbDir, 'clone-projects.json')
 const cloneSettingsPath = () => join(getAppPaths().dbDir, 'clone-settings.json')
+const legacyUserDataCloneDbPath = () => join(getAppPaths().userData, 'videogenerate', 'db', 'clone-projects.json')
 let cloneDbMutationQueue: Promise<unknown> = Promise.resolve()
-let cloneSqliteFallbackLogged = false
+
+export type CloneSqliteReadyState = {
+  migrated: boolean
+  source: 'sqlite' | 'json_import' | 'empty'
+}
 
 function now() {
   return Date.now()
@@ -88,20 +108,22 @@ function sanitizeCloneDbText(raw: string) {
   return raw.replace(/(^\s*"[^"\r\n]*)\?(\r?\n\s*[\],])/gm, '$1。"$2')
 }
 
-async function readCloneDbFile(): Promise<CloneDbShape> {
+async function readCloneDbFileAt(filePath: string): Promise<CloneDbShape> {
   try {
-    const raw = await readFile(cloneDbPath(), 'utf-8')
+    const raw = await readFile(filePath, 'utf-8')
     try {
       return JSON.parse(raw) as CloneDbShape
     } catch {
       const sanitized = sanitizeCloneDbText(raw)
-      const parsed = JSON.parse(sanitized) as CloneDbShape
-      await writeJsonFile(cloneDbPath(), parsed)
-      return parsed
+      return JSON.parse(sanitized) as CloneDbShape
     }
   } catch {
     return { projects: [], projectGroups: [], modelIdentityLibrary: [] }
   }
+}
+
+async function readCloneDbFile(): Promise<CloneDbShape> {
+  return await readCloneDbFileAt(cloneDbPath())
 }
 
 function normalizeIdentityLibraryItem(item: any): ModelIdentityLibraryItem {
@@ -151,6 +173,371 @@ function snapshotFromLibraryItem(item: ModelIdentityLibraryItem): ModelIdentityL
   return normalizeIdentityLibraryItem(item)
 }
 
+function isStaleImageTaskId(value: unknown) {
+  const taskId = String(value ?? '').trim().toLowerCase()
+  return taskId.startsWith('gpt_frame_') || taskId.startsWith('mj_')
+}
+
+function isCompletedShotVideoStatus(status: unknown) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  return normalized === 'done' || normalized === 'remote_succeeded_pending_download'
+}
+
+function isRunningShotVideoStatus(status: unknown) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  return normalized === 'remote_running' || normalized === 'remote_pending' || normalized === 'submitting' || normalized === 'creating' || normalized === 'generating'
+}
+
+function isActiveShotVideoStatus(status: unknown) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  return (
+    isRunningShotVideoStatus(normalized) ||
+    normalized === 'downloading' ||
+    normalized === 'remote_succeeded_pending_download' ||
+    normalized === 'download_queued'
+  )
+}
+
+function isPendingRemoteShotVideoStatus(status: unknown) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  return normalized === 'created' || normalized === 'queued' || normalized === 'pending' || normalized === 'processing' || normalized === 'running'
+}
+
+function shotVideoStatusPriority(status: unknown) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  switch (normalized) {
+    case 'done':
+      return 90
+    case 'downloading':
+    case 'remote_succeeded_pending_download':
+    case 'download_queued':
+      return 80
+    case 'remote_running':
+      return 70
+    case 'remote_pending':
+    case 'poll_queued':
+      return 60
+    case 'submitting':
+    case 'submit_queued':
+    case 'creating':
+    case 'generating':
+      return 50
+    case 'failed_terminal':
+      return 40
+    case 'failed_retryable':
+    case 'failed':
+    case 'polling_timeout':
+      return 30
+    case 'idle':
+      return 10
+    default:
+      return 0
+  }
+}
+
+function shouldPreferExistingShotVideoState(existing: any, incoming: any, resolvedTaskId?: string) {
+  const existingUpdatedAt = Number(existing?.updatedAt ?? 0)
+  const incomingUpdatedAt = Number(incoming?.updatedAt ?? 0)
+  const existingTaskId = String(existing?.taskId ?? '').trim()
+  const incomingTaskId = String(incoming?.taskId ?? '').trim()
+  const sameTask = Boolean(existingTaskId) && Boolean(incomingTaskId) && existingTaskId === incomingTaskId
+  const taskChanged = Boolean(existingTaskId && incomingTaskId && existingTaskId !== incomingTaskId)
+  const existingPriority = shotVideoStatusPriority(existing?.status)
+  const incomingPriority = shotVideoStatusPriority(incoming?.status)
+  const incomingRemoteStatus = String(incoming?.remoteStatus ?? incoming?.remoteRaw?.status ?? '').trim().toLowerCase()
+  const incomingKeepsRemoteInFlightWithoutTask =
+    Boolean(existingTaskId) &&
+    !incomingTaskId &&
+    (
+      isRunningShotVideoStatus(incoming?.status) ||
+      incomingRemoteStatus === 'created' ||
+      incomingRemoteStatus === 'queued' ||
+      incomingRemoteStatus === 'pending' ||
+      incomingRemoteStatus === 'processing' ||
+      incomingRemoteStatus === 'running'
+    )
+  if (incomingKeepsRemoteInFlightWithoutTask) return true
+  if (taskChanged && resolvedTaskId === existingTaskId && existingUpdatedAt >= incomingUpdatedAt) return true
+  if (incomingUpdatedAt <= 0 || existingUpdatedAt <= 0) return false
+  if (incomingUpdatedAt > existingUpdatedAt) return false
+  if (taskChanged) return true
+  if (incomingPriority < existingPriority) return true
+  if (sameTask && incomingPriority === existingPriority && incomingUpdatedAt < existingUpdatedAt) return true
+  return false
+}
+
+function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incoming: any[] | undefined) {
+  const currentList = Array.isArray(current) ? current : []
+  const incomingList = Array.isArray(incoming) ? incoming : []
+  const currentMap = new Map(currentList.map((item) => [String(item?.shotId ?? ''), item]))
+  const incomingMap = new Map(incomingList.map((item) => [String(item?.shotId ?? ''), item]))
+  const orderedShotIds = [
+    ...incomingList.map((item) => String(item?.shotId ?? '')).filter(Boolean),
+    ...currentList
+      .map((item) => String(item?.shotId ?? ''))
+      .filter((shotId) => Boolean(shotId) && !incomingMap.has(shotId)),
+  ]
+  return orderedShotIds.map((shotId) => {
+    const item = incomingMap.get(shotId)
+    const existing = currentMap.get(shotId)
+    if (!item) return existing
+    if (!existing) return item
+    const incomingTaskId = String(item?.taskId ?? '').trim()
+    const existingTaskId = String(existing?.taskId ?? '').trim()
+    const hasExplicitTaskReset = Object.prototype.hasOwnProperty.call(item, 'taskId') && item?.taskId === undefined
+    const hasExplicitVideoPathReset = Object.prototype.hasOwnProperty.call(item, 'videoPath') && item?.videoPath === undefined
+    const hasExplicitLocalPathReset = Object.prototype.hasOwnProperty.call(item, 'localPath') && item?.localPath === undefined
+    const hasExplicitVideoUrlReset = Object.prototype.hasOwnProperty.call(item, 'videoUrl') && item?.videoUrl === undefined
+    const hasExplicitProviderReset = Object.prototype.hasOwnProperty.call(item, 'provider') && item?.provider === undefined
+    const hasExplicitModelReset = Object.prototype.hasOwnProperty.call(item, 'model') && item?.model === undefined
+    const hasPendingReplacementMarkers =
+      Boolean(item?.previousTaskIds?.length) ||
+      Boolean(item?.submissionStartedAt) ||
+      Boolean(item?.submissionLockedUntil) ||
+      isPendingRemoteShotVideoStatus(item?.remoteStatus) ||
+      isPendingRemoteShotVideoStatus(item?.remoteRaw?.status)
+    const existingHasStickyTaskBinding =
+      Boolean(existingTaskId) &&
+      (
+        isRunningShotVideoStatus(existing?.status) ||
+        existing?.status === 'failed_retryable' ||
+        isCompletedShotVideoStatus(existing?.status) ||
+        isPendingRemoteShotVideoStatus(existing?.remoteStatus) ||
+        isPendingRemoteShotVideoStatus(existing?.remoteRaw?.status) ||
+        Boolean(String(existing?.videoUrl ?? '').trim()) ||
+        Boolean(String(existing?.videoPath ?? '').trim()) ||
+        Boolean(String(existing?.localPath ?? '').trim())
+      )
+    const incomingLosesStickyTaskBinding =
+      !hasExplicitTaskReset &&
+      !incomingTaskId &&
+      existingHasStickyTaskBinding &&
+      !String(item?.videoUrl ?? '').trim() &&
+      !String(item?.videoPath ?? '').trim() &&
+      !String(item?.localPath ?? '').trim()
+    const incomingRemoteStatus = String(item?.remoteStatus ?? item?.remoteRaw?.status ?? '').trim().toLowerCase()
+    const incomingSourceEvent = String(item?.sourceEvent ?? '').trim()
+    const incomingKeepsRemoteInFlightWithoutTask =
+      !hasExplicitTaskReset &&
+      !incomingTaskId &&
+      Boolean(existingTaskId) &&
+      (
+        isRunningShotVideoStatus(item?.status) ||
+        incomingRemoteStatus === 'created' ||
+        incomingRemoteStatus === 'queued' ||
+        incomingRemoteStatus === 'pending' ||
+        incomingRemoteStatus === 'processing' ||
+        incomingRemoteStatus === 'running'
+      )
+    const explicitTaskResetLooksStale =
+      hasExplicitTaskReset &&
+      !incomingTaskId &&
+      Boolean(existingTaskId) &&
+      !Boolean(item?.previousTaskIds?.length) &&
+      !Boolean(item?.submissionStartedAt) &&
+      !Boolean(item?.submissionLockedUntil) &&
+      !String(item?.videoUrl ?? '').trim() &&
+      !String(item?.videoPath ?? '').trim() &&
+      !String(item?.localPath ?? '').trim() &&
+      (
+        isRunningShotVideoStatus(item?.status) ||
+        incomingRemoteStatus === 'created' ||
+        incomingRemoteStatus === 'queued' ||
+        incomingRemoteStatus === 'pending' ||
+        incomingRemoteStatus === 'processing' ||
+        incomingRemoteStatus === 'running' ||
+        incomingSourceEvent === 'segment_submit_started' ||
+        incomingSourceEvent === 'storyboard_video_batch_submit_started' ||
+        incomingSourceEvent === 'segment_submit_succeeded'
+      )
+    const shouldClearCompletedArtifactsForPendingReplacement =
+      hasPendingReplacementMarkers &&
+      (
+        hasExplicitVideoPathReset ||
+        hasExplicitLocalPathReset ||
+        hasExplicitVideoUrlReset ||
+        isRunningShotVideoStatus(item?.status) ||
+        isPendingRemoteShotVideoStatus(item?.remoteStatus) ||
+        isPendingRemoteShotVideoStatus(item?.remoteRaw?.status)
+      )
+    const candidateTaskId = hasExplicitTaskReset
+      ? undefined
+      : incomingTaskId && !isStaleImageTaskId(incomingTaskId)
+        ? incomingTaskId
+        : existingTaskId && !isStaleImageTaskId(existingTaskId)
+          ? existingTaskId
+          : incomingTaskId || existingTaskId || undefined
+    const preferExistingState = shouldPreferExistingShotVideoState(existing, item, candidateTaskId)
+    const shouldForcePreferExistingState =
+      (incomingLosesStickyTaskBinding || incomingKeepsRemoteInFlightWithoutTask || explicitTaskResetLooksStale) &&
+      !String(item?.error ?? '').trim()
+    const resolvedTaskId = hasExplicitTaskReset
+      ? explicitTaskResetLooksStale
+        ? existingTaskId || undefined
+        : undefined
+      : (preferExistingState || incomingLosesStickyTaskBinding || explicitTaskResetLooksStale) && existingTaskId
+        ? existingTaskId
+        : candidateTaskId
+    const existingHasCompletedArtifacts =
+      Boolean(existing?.videoPath || existing?.localPath || existing?.videoUrl)
+    const incomingHasLocalVideoArtifacts =
+      Boolean(String(item?.videoPath ?? '').trim()) || Boolean(String(item?.localPath ?? '').trim())
+    const shouldPreserveCompletedState =
+      existingHasCompletedArtifacts &&
+      isCompletedShotVideoStatus(existing?.status) &&
+      isActiveShotVideoStatus(item?.status) &&
+      !incomingHasLocalVideoArtifacts &&
+      !hasPendingReplacementMarkers &&
+      !hasExplicitTaskReset &&
+      !hasExplicitVideoPathReset &&
+      !hasExplicitLocalPathReset &&
+      (!incomingTaskId || !existingTaskId || incomingTaskId === existingTaskId)
+    return {
+      ...existing,
+      ...item,
+      taskId: resolvedTaskId,
+      provider: hasExplicitProviderReset ? undefined : String(item?.provider ?? '').trim() ? item.provider : existing?.provider,
+      model: hasExplicitModelReset ? undefined : String(item?.model ?? '').trim() ? item.model : existing?.model,
+      videoUrl:
+        shouldClearCompletedArtifactsForPendingReplacement
+          ? undefined
+          : hasExplicitVideoUrlReset
+            ? undefined
+            : String(item?.videoUrl ?? '').trim()
+              ? item.videoUrl
+              : existing?.videoUrl,
+      videoPath:
+        shouldClearCompletedArtifactsForPendingReplacement
+          ? undefined
+          : hasExplicitVideoPathReset
+            ? undefined
+            : String(item?.videoPath ?? '').trim()
+              ? item.videoPath
+              : existing?.videoPath,
+      localPath:
+        shouldClearCompletedArtifactsForPendingReplacement
+          ? undefined
+          : hasExplicitLocalPathReset
+            ? undefined
+            : String(item?.localPath ?? '').trim()
+              ? item.localPath
+              : existing?.localPath,
+      status:
+        shouldPreserveCompletedState || preferExistingState || shouldForcePreferExistingState
+          ? existing?.status
+          : item?.status ?? existing?.status,
+      remoteStatus:
+        shouldPreserveCompletedState || preferExistingState || shouldForcePreferExistingState
+          ? existing?.remoteStatus ?? item?.remoteStatus
+          : item?.remoteStatus ?? existing?.remoteStatus,
+      completedAt:
+        shouldClearCompletedArtifactsForPendingReplacement
+          ? undefined
+          : shouldPreserveCompletedState
+            ? existing?.completedAt ?? item?.completedAt
+            : item?.completedAt ?? existing?.completedAt,
+      updatedAt:
+        preferExistingState && Number(existing?.updatedAt ?? 0) > Number(item?.updatedAt ?? 0)
+          ? existing?.updatedAt
+          : item?.updatedAt ?? existing?.updatedAt,
+      sourceEvent:
+        (preferExistingState || shouldForcePreferExistingState) && String(existing?.sourceEvent ?? '').trim()
+          ? existing?.sourceEvent
+          : item?.sourceEvent ?? existing?.sourceEvent,
+    }
+  }).filter(Boolean)
+}
+
+function mergeBlueprintShotsForPersistence(currentBlueprint: any, incomingBlueprint: any) {
+  const currentShots = Array.isArray(currentBlueprint?.shots) ? currentBlueprint.shots : []
+  const incomingShots = Array.isArray(incomingBlueprint?.shots) ? incomingBlueprint.shots : []
+  if (!incomingBlueprint || !Array.isArray(incomingBlueprint?.shots)) {
+    return currentBlueprint ?? incomingBlueprint
+  }
+  const currentMap = new Map(currentShots.map((item: any) => [String(item?.id ?? ''), item]))
+  return {
+    ...currentBlueprint,
+    ...incomingBlueprint,
+    shots: incomingShots.map((item: any) => {
+      const existing = currentMap.get(String(item?.id ?? '')) as any
+      if (!existing) return item
+      const incomingTaskId = String(item?.generatedTaskId ?? '').trim()
+      const existingTaskId = String(existing?.generatedTaskId ?? '').trim()
+      const hasExplicitTaskReset = Object.prototype.hasOwnProperty.call(item, 'generatedTaskId') && item?.generatedTaskId === undefined
+      const hasExplicitClipPathReset = Object.prototype.hasOwnProperty.call(item, 'generatedClipPath') && item?.generatedClipPath === undefined
+      const hasExplicitProviderReset = Object.prototype.hasOwnProperty.call(item, 'generatedProvider') && item?.generatedProvider === undefined
+      const hasExplicitModelReset = Object.prototype.hasOwnProperty.call(item, 'generatedModel') && item?.generatedModel === undefined
+      const incomingStatus = String(item?.status ?? '').trim().toLowerCase()
+      const existingStatus = String(existing?.status ?? '').trim().toLowerCase()
+      const incomingHasRemoteInFlightState =
+        incomingStatus === 'generating' ||
+        incomingStatus === 'submitting' ||
+        incomingStatus === 'remote_pending' ||
+        incomingStatus === 'remote_running'
+      const existingHasRemoteTaskBinding =
+        Boolean(existingTaskId) &&
+        (
+          existingStatus === 'generating' ||
+          existingStatus === 'submitting' ||
+          existingStatus === 'remote_pending' ||
+          existingStatus === 'remote_running' ||
+          existingStatus === 'failed_retryable' ||
+          Boolean(String(existing?.generatedClipPath ?? '').trim())
+        )
+      const shouldKeepClipPath =
+        !hasExplicitClipPathReset &&
+        (
+          incomingStatus === '' ||
+          incomingStatus === 'done' ||
+          incomingStatus === 'success' ||
+          incomingStatus === 'completed'
+        )
+      const incomingLooksLikeInFlightSnapshotWithoutTask =
+        !incomingTaskId &&
+        (
+          incomingStatus === 'generating' ||
+          incomingStatus === 'submitting' ||
+          incomingStatus === 'remote_pending' ||
+          incomingStatus === 'remote_running'
+        )
+      const explicitTaskResetLooksStale =
+        hasExplicitTaskReset &&
+        incomingLooksLikeInFlightSnapshotWithoutTask &&
+        !hasExplicitClipPathReset &&
+        !hasExplicitProviderReset &&
+        !hasExplicitModelReset
+      const shouldKeepExistingTaskBinding =
+        !incomingTaskId &&
+        existingHasRemoteTaskBinding &&
+        (incomingHasRemoteInFlightState || explicitTaskResetLooksStale)
+      return {
+        ...existing,
+        ...item,
+        generatedTaskId:
+          shouldKeepExistingTaskBinding
+            ? existingTaskId || undefined
+          : hasExplicitTaskReset && !explicitTaskResetLooksStale
+            ? undefined
+            : incomingTaskId && !isStaleImageTaskId(incomingTaskId)
+            ? incomingTaskId
+            : existingTaskId && !isStaleImageTaskId(existingTaskId)
+              ? existingTaskId
+              : incomingTaskId || existingTaskId || undefined,
+        generatedProvider: hasExplicitProviderReset ? undefined : String(item?.generatedProvider ?? '').trim() ? item.generatedProvider : existing?.generatedProvider,
+        generatedModel: hasExplicitModelReset ? undefined : String(item?.generatedModel ?? '').trim() ? item.generatedModel : existing?.generatedModel,
+        generatedClipPath:
+          hasExplicitClipPathReset
+            ? undefined
+            : String(item?.generatedClipPath ?? '').trim()
+              ? item.generatedClipPath
+              : shouldKeepClipPath
+                ? existing?.generatedClipPath
+                : undefined,
+      }
+    }),
+  }
+}
+
 function linkedLegacyPacks(snapshot?: ModelIdentityLibraryItem, selectedId?: string) {
   if (!snapshot || !selectedId) return []
   return [
@@ -192,6 +579,9 @@ function defaultPolicy(): CloneGenerationPolicy {
 function defaultQueueOptions(): CloneGenerationQueueOptions {
   return {
     maxConcurrentCloudJobs: 4,
+    maxConcurrentSubmitJobs: 2,
+    maxConcurrentPollJobs: 4,
+    maxConcurrentDownloadJobs: 1,
     pollIntervalMs: 2000,
     perShotTimeoutMs: 8 * 60 * 1000,
   }
@@ -522,91 +912,106 @@ function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
   }
 }
 
-function canUseCloneSqlite() {
-  const supported = canInitializeCloneSqlite()
-  if (!supported && !cloneSqliteFallbackLogged) {
-    cloneSqliteFallbackLogged = true
-    console.warn(
-      `[clone-repo] SQLite unavailable, fallback to JSON storage: ${getCloneSqliteUnavailableReason() || 'unknown reason'}`,
-    )
-  }
-  return supported
-}
-
 function normalizeDbCollection<T>(value: T[] | null | undefined) {
   return Array.isArray(value) ? value : []
 }
 
-function maxUpdatedAt(items: Array<{ updatedAt?: number; createdAt?: number }> | null | undefined) {
-  return normalizeDbCollection(items).reduce((latest, item) => {
-    const ts = Math.max(Number(item?.updatedAt || 0), Number(item?.createdAt || 0))
-    return ts > latest ? ts : latest
-  }, 0)
+function mergeMissingLegacyEntries(target: CloneDbShape, legacy: CloneDbShape) {
+  const nextProjects = [...normalizeDbCollection(target.projects)]
+  const nextGroups = [...normalizeDbCollection(target.projectGroups)]
+  const nextIdentities = [...normalizeDbCollection(target.modelIdentityLibrary)]
+  const projectIds = new Set(nextProjects.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
+  const groupIds = new Set(nextGroups.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
+  const identityIds = new Set(nextIdentities.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
+  let changed = false
+
+  for (const item of normalizeDbCollection(legacy.projects)) {
+    const id = String((item as any)?.id || '').trim()
+    if (!id || projectIds.has(id)) continue
+    nextProjects.push(item)
+    projectIds.add(id)
+    changed = true
+  }
+  for (const item of normalizeDbCollection(legacy.projectGroups)) {
+    const id = String((item as any)?.id || '').trim()
+    if (!id || groupIds.has(id)) continue
+    nextGroups.push(item)
+    groupIds.add(id)
+    changed = true
+  }
+  for (const item of normalizeDbCollection(legacy.modelIdentityLibrary)) {
+    const id = String((item as any)?.id || '').trim()
+    if (!id || identityIds.has(id)) continue
+    nextIdentities.push(item)
+    identityIds.add(id)
+    changed = true
+  }
+
+  return {
+    changed,
+    db: {
+      projects: nextProjects,
+      projectGroups: nextGroups,
+      modelIdentityLibrary: nextIdentities,
+    } satisfies CloneDbShape,
+  }
 }
 
-function shouldHydrateSqliteFromLegacy(legacyDb: CloneDbShape, sqliteDb: CloneDbShape) {
-  const legacyProjects = normalizeDbCollection(legacyDb.projects)
-  const sqliteProjects = normalizeDbCollection(sqliteDb.projects)
-  const legacyGroups = normalizeDbCollection(legacyDb.projectGroups)
-  const sqliteGroups = normalizeDbCollection(sqliteDb.projectGroups)
-  const legacyIdentities = normalizeDbCollection(legacyDb.modelIdentityLibrary)
-  const sqliteIdentities = normalizeDbCollection(sqliteDb.modelIdentityLibrary)
+export async function ensureCloneSqliteReady(): Promise<CloneSqliteReadyState> {
+  if (!canInitializeCloneSqlite()) {
+    throw new Error(`[clone-repo] SQLite unavailable: ${getCloneSqliteUnavailableReason() || 'unknown reason'}`)
+  }
 
-  if (!legacyProjects.length && !legacyGroups.length && !legacyIdentities.length) return false
-  if (!sqliteProjects.length && !sqliteGroups.length && !sqliteIdentities.length) return true
-  if (legacyProjects.length > sqliteProjects.length) return true
-  if (legacyGroups.length > sqliteGroups.length) return true
-  if (legacyIdentities.length > sqliteIdentities.length) return true
+  initializeCloneSqlite()
+  const legacyCandidates = [cloneDbPath(), legacyUserDataCloneDbPath()]
+    .map((item) => String(item || '').trim())
+    .filter((item, index, list) => Boolean(item) && list.indexOf(item) === index)
 
-  return (
-    maxUpdatedAt(legacyProjects) > maxUpdatedAt(sqliteProjects) ||
-    maxUpdatedAt(legacyGroups) > maxUpdatedAt(sqliteGroups) ||
-    maxUpdatedAt(legacyIdentities) > maxUpdatedAt(sqliteIdentities)
-  )
+  if (!isCloneSqliteEmpty()) {
+    let currentDb = readCloneDbFromSqlite()
+    let changed = false
+    for (const legacyPath of legacyCandidates) {
+      if (!existsSync(legacyPath)) continue
+      const legacyDb = await readCloneDbFileAt(legacyPath)
+      const merged = mergeMissingLegacyEntries(currentDb, legacyDb)
+      if (!merged.changed) continue
+      writeCloneDbToSqlite(merged.db)
+      currentDb = readCloneDbFromSqlite()
+      changed = true
+    }
+    if (changed) return { migrated: true, source: 'json_import' }
+    return { migrated: false, source: 'sqlite' }
+  }
+
+  let imported = false
+  let nextDb: CloneDbShape = { projects: [], projectGroups: [], modelIdentityLibrary: [] }
+  for (const legacyPath of legacyCandidates) {
+    if (!existsSync(legacyPath)) continue
+    const legacyDb = await readCloneDbFileAt(legacyPath)
+    const merged = mergeMissingLegacyEntries(nextDb, legacyDb)
+    nextDb = merged.db
+    imported = imported || merged.changed
+  }
+
+  if (!imported) {
+    return { migrated: false, source: 'empty' }
+  }
+  writeCloneDbToSqlite({
+    projects: normalizeDbCollection(nextDb.projects),
+    projectGroups: normalizeDbCollection(nextDb.projectGroups),
+    modelIdentityLibrary: normalizeDbCollection(nextDb.modelIdentityLibrary),
+  })
+  return { migrated: true, source: 'json_import' }
 }
 
 async function readCloneDbSource(): Promise<CloneDbShape> {
-  if (canUseCloneSqlite()) {
-    const legacyDb = existsSync(cloneDbPath()) ? await readCloneDbFile() : { projects: [], projectGroups: [], modelIdentityLibrary: [] }
-    const hasLegacyData =
-      Array.isArray(legacyDb.projects) && legacyDb.projects.length > 0 ||
-      Array.isArray(legacyDb.projectGroups) && legacyDb.projectGroups.length > 0 ||
-      Array.isArray(legacyDb.modelIdentityLibrary) && legacyDb.modelIdentityLibrary.length > 0
-    let db: CloneDbShape
-    try {
-      initializeCloneSqlite()
-      if (isCloneSqliteEmpty() && hasLegacyData) {
-        writeCloneDbToSqlite({
-          projects: Array.isArray(legacyDb.projects) ? legacyDb.projects : [],
-          projectGroups: Array.isArray(legacyDb.projectGroups) ? legacyDb.projectGroups : [],
-          modelIdentityLibrary: Array.isArray(legacyDb.modelIdentityLibrary) ? legacyDb.modelIdentityLibrary : [],
-        })
-      }
-      db = readCloneDbFromSqlite()
-      if (shouldHydrateSqliteFromLegacy(legacyDb, db)) {
-        writeCloneDbToSqlite({
-          projects: normalizeDbCollection(legacyDb.projects),
-          projectGroups: normalizeDbCollection(legacyDb.projectGroups),
-          modelIdentityLibrary: normalizeDbCollection(legacyDb.modelIdentityLibrary),
-        })
-        db = readCloneDbFromSqlite()
-      }
-    } catch (error) {
-      if (!cloneSqliteFallbackLogged) {
-        cloneSqliteFallbackLogged = true
-        console.warn(
-          `[clone-repo] SQLite read failed, fallback to JSON storage: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-      return legacyDb
-    }
-    return {
-      projects: Array.isArray(db.projects) ? db.projects : [],
-      projectGroups: Array.isArray(db.projectGroups) ? db.projectGroups : [],
-      modelIdentityLibrary: Array.isArray(db.modelIdentityLibrary) ? db.modelIdentityLibrary : [],
-    }
+  await ensureCloneSqliteReady()
+  const db = readCloneDbFromSqlite()
+  return {
+    projects: normalizeDbCollection(db.projects),
+    projectGroups: normalizeDbCollection(db.projectGroups),
+    modelIdentityLibrary: normalizeDbCollection(db.modelIdentityLibrary),
   }
-  return await readCloneDbFile()
 }
 
 async function writeCloneDbSource(input: CloneDbShape) {
@@ -615,14 +1020,18 @@ async function writeCloneDbSource(input: CloneDbShape) {
     projectGroups: Array.isArray(input.projectGroups) ? input.projectGroups : [],
     modelIdentityLibrary: Array.isArray(input.modelIdentityLibrary) ? input.modelIdentityLibrary : [],
   }
-  if (canUseCloneSqlite()) {
-    writeCloneDbToSqlite({
-      projects: normalized.projects,
-      projectGroups: normalized.projectGroups ?? [],
-      modelIdentityLibrary: normalized.modelIdentityLibrary ?? [],
-    })
-  }
-  await writeJsonFile(cloneDbPath(), normalized)
+  await ensureCloneSqliteReady()
+  writeCloneDbToSqlite({
+    projects: normalized.projects,
+    projectGroups: normalized.projectGroups ?? [],
+    modelIdentityLibrary: normalized.modelIdentityLibrary ?? [],
+  })
+}
+
+export async function exportCloneDbSnapshotToJson(targetPath = cloneDbPath()) {
+  const db = await readCloneDbSource()
+  await writeJsonFile(targetPath, db)
+  return targetPath
 }
 
 function queueCloneDbMutation<T>(task: () => Promise<T>): Promise<T> {
@@ -667,7 +1076,7 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     videoModelPrimary: normalizeAi666VideoModel(parsed?.videoModelPrimary, 'veo_3_1-lite'),
     videoModelFallback: normalizeAi666VideoModel(parsed?.videoModelFallback, 'veo_3_1-fast'),
     grsaiVideoModel: normalizeAi666VideoModel(parsed?.grsaiVideoModel, 'grok-video-3'),
-    grsaiAnalysisModel: String(parsed?.grsaiAnalysisModel ?? '').trim() || 'gpt-5.2',
+    grsaiAnalysisModel: String(parsed?.grsaiAnalysisModel ?? '').trim() || 'gemini-3.1-pro',
     chatProviderPrimary: parsed?.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub',
     videoProviderPrimary: normalizeVideoProvider(parsed?.videoProviderPrimary, 'apifox_hub'),
     videoProviderFallback: normalizeVideoProvider(parsed?.videoProviderFallback, 'kling'),
@@ -677,6 +1086,7 @@ function normalizeCredentials(parsed: any): ModelCredentials {
       parsed?.openaiImageQuality === 'low' || parsed?.openaiImageQuality === 'medium'
         ? parsed.openaiImageQuality
         : 'high',
+    replicateApiToken: String(parsed?.replicateApiToken ?? '').trim() || undefined,
     imageProviderPrimary: normalizeImageProvider(parsed?.imageProviderPrimary, 'apifox_hub'),
     klingImageModel: String(parsed?.klingImageModel ?? '').trim() || 'openai/gpt-image-1/edit',
     grsaiImageModel: String(parsed?.grsaiImageModel ?? '').trim() || 'gpt-image-2',
@@ -705,7 +1115,10 @@ function normalizeScriptRole(value: unknown): any {
 }
 
 function fallbackShotScript(s: any, index: number) {
-  const visualDescription = String(s?.visualDescription ?? s?.visualPrompt ?? s?.visual ?? s?.promptHint ?? 'reference product demonstration shot').trim()
+  const visualDescription = sanitizeLegacyPromptText(
+    String(s?.visualDescription ?? s?.visualPrompt ?? s?.visual ?? s?.promptHint ?? 'reference product demonstration shot').trim(),
+    s?.productType,
+  )
   const actionDescription = String(s?.actionDescription ?? s?.action ?? s?.visualPrompt ?? 'reference shot action').trim()
   const cameraDescription = String(s?.cameraDescription ?? `${s?.framing ?? 'closeup'} framing, ${s?.cameraMovement ?? s?.motion ?? 'static'} movement`).trim()
   const productFocus = String(s?.productFocus ?? 'preserve the reference product-display purpose while replacing the product').trim()
@@ -759,7 +1172,7 @@ function fallbackShotScript(s: any, index: number) {
             animation: String(s.textOverlay.animation ?? '').trim() || undefined,
           }
         : undefined,
-    generationPrompt: String(s?.generationPrompt ?? '').trim() || [visualDescription, actionDescription, cameraDescription, productFocus].join('\n'),
+    generationPrompt: sanitizeLegacyPromptText(String(s?.generationPrompt ?? '').trim(), s?.productType) || [visualDescription, actionDescription, cameraDescription, productFocus].join('\n'),
     negativePrompt: String(s?.negativePrompt ?? '').trim() || undefined,
     scriptConfidence: typeof s?.scriptConfidence === 'number' ? Math.max(0, Math.min(1, s.scriptConfidence)) : 0,
     analysisNotes: Array.isArray(s?.analysisNotes) ? s.analysisNotes.map(String).filter(Boolean) : ['历史项目自动补齐脚本字段'],
@@ -812,6 +1225,41 @@ function decryptCredentials(settings: CloneSettingsShape): ModelCredentials {
   return normalizeCredentials(settings.plaintextCredentials ?? { allowMockWhenNoKey: true })
 }
 
+function normalizeCloneRuntimeOptions(input?: Partial<CloneRuntimeOptions> | null): CloneRuntimeOptions {
+  const local = Number(input?.storyboardFrameConcurrency ?? DEFAULT_CLONE_RUNTIME_OPTIONS.storyboardFrameConcurrency)
+  const global = Number(input?.globalStoryboardFrameConcurrency ?? DEFAULT_CLONE_RUNTIME_OPTIONS.globalStoryboardFrameConcurrency)
+  return {
+    storyboardFrameConcurrency: Math.max(1, Math.min(6, Number.isFinite(local) ? Math.floor(local) : DEFAULT_CLONE_RUNTIME_OPTIONS.storyboardFrameConcurrency)),
+    globalStoryboardFrameConcurrency: Math.max(
+      1,
+      Math.min(6, Number.isFinite(global) ? Math.floor(global) : DEFAULT_CLONE_RUNTIME_OPTIONS.globalStoryboardFrameConcurrency),
+    ),
+  }
+}
+
+function sanitizeLegacyPromptText(value: unknown, productType?: unknown) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  const earringLike =
+    /earrings?/.test(normalizedType) ||
+    /silver hoop earring|star-shaped dangles|drop earring|dangle earring|ear wearing|ear jewelry|zircon|stud earring/i.test(text)
+  if (!earringLike) return text
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/TEXT PRODUCT DESCRIPTION LOCK/i.test(line))
+    .filter((line) => !/^Subject:/i.test(line))
+    .filter((line) => !/silver hoop earring|star-shaped dangles|drop earring|dangle earring/i.test(line))
+    .map((line) =>
+      /Preserve original storyboard\/reference scene:/i.test(line)
+        ? 'Preserve original storyboard/reference scene: Extreme close-up of ear wearing the earring.'
+        : line,
+    )
+  return lines.join('\n').trim()
+}
+
 
 function normalizeProject(p: CloneProject): CloneProject {
   const normalizeShot = (s: any, index: number) => {
@@ -821,6 +1269,11 @@ function normalizeProject(p: CloneProject): CloneProject {
     const generatedSource = String(s?.generatedSource ?? '')
     const generatedProvider = String(s?.generatedProvider ?? '')
     const generatedModel = String(s?.generatedModel ?? '')
+    const normalizedShotStatus = String(s?.status ?? '').trim().toLowerCase()
+    const shouldKeepGeneratedClipPath =
+      normalizedShotStatus === 'done' ||
+      normalizedShotStatus === 'success' ||
+      normalizedShotStatus === 'completed'
     const hasLocalMockClip =
       Boolean(s?.generatedClipPath) &&
       (generatedSource === 'mock' ||
@@ -846,6 +1299,8 @@ function normalizeProject(p: CloneProject): CloneProject {
       replaceMode: s?.replaceMode ?? 'upload_video',
       requiredAssetType: s?.requiredAssetType ?? 'any',
       productReferenceImagePaths: Array.isArray(s?.productReferenceImagePaths) ? s.productReferenceImagePaths : [],
+      originalProductReferenceImagePaths: Array.isArray(s?.originalProductReferenceImagePaths) ? s.originalProductReferenceImagePaths : [],
+      sanitizedProductReferenceImagePaths: Array.isArray(s?.sanitizedProductReferenceImagePaths) ? s.sanitizedProductReferenceImagePaths : [],
       isMock: Boolean(s?.isMock ?? hasLocalMockClip),
       qualityMode: s?.qualityMode === 'fast' || s?.qualityMode === 'standard' ? s.qualityMode : 'high',
       qualityStatus:
@@ -872,6 +1327,8 @@ function normalizeProject(p: CloneProject): CloneProject {
       styleReferenceImages: Array.isArray(s?.styleReferenceImages) ? s.styleReferenceImages.map(String) : [],
       gptFirstFramePath: String(s?.gptFirstFramePath ?? '').trim() || undefined,
       gptLastFramePath: String(s?.gptLastFramePath ?? '').trim() || undefined,
+      generatedFirstFramePath: String(s?.generatedFirstFramePath ?? '').trim() || undefined,
+      generatedLastFramePath: String(s?.generatedLastFramePath ?? '').trim() || undefined,
       gptFrameStatus:
         s?.gptFrameStatus === 'generating' || s?.gptFrameStatus === 'done' || s?.gptFrameStatus === 'failed'
           ? s.gptFrameStatus
@@ -981,7 +1438,7 @@ function normalizeProject(p: CloneProject): CloneProject {
       ...fallbackShotScript(s, index),
       referenceLock: buildReferenceLock(s as any, String(s?.referenceLock?.sceneEnvironment ?? 'reference video scene atmosphere')),
       locked: Boolean(s?.locked ?? false),
-      generatedClipPath: hasLocalMockClip ? undefined : s?.generatedClipPath,
+      generatedClipPath: hasLocalMockClip ? undefined : shouldKeepGeneratedClipPath ? s?.generatedClipPath : undefined,
       generatedSource: hasLocalMockClip ? undefined : s?.generatedSource,
       generatedProvider: hasLocalMockClip ? undefined : s?.generatedProvider,
       generatedModel: hasLocalMockClip ? undefined : s?.generatedModel,
@@ -999,6 +1456,44 @@ function normalizeProject(p: CloneProject): CloneProject {
     normalizedBlueprint?.referenceAspectRatio,
     Number(normalizedBlueprint?.referenceWidth ?? 0) > Number(normalizedBlueprint?.referenceHeight ?? 0) ? '16:9' : '9:16',
   )
+  const normalizedConsistencyAssets =
+    (normalizedBlueprint as any)?.consistencyAssets && typeof (normalizedBlueprint as any).consistencyAssets === 'object'
+      ? {
+          ...(normalizedBlueprint as any).consistencyAssets,
+          originalProductReferenceImages: Array.isArray((normalizedBlueprint as any)?.consistencyAssets?.originalProductReferenceImages)
+            ? (normalizedBlueprint as any).consistencyAssets.originalProductReferenceImages.map(String).filter(Boolean)
+            : [],
+          sanitizedProductReferenceImages: Array.isArray((normalizedBlueprint as any)?.consistencyAssets?.sanitizedProductReferenceImages)
+            ? (normalizedBlueprint as any).consistencyAssets.sanitizedProductReferenceImages.map(String).filter(Boolean)
+            : [],
+          productImageSanitization:
+            (normalizedBlueprint as any)?.consistencyAssets?.productImageSanitization &&
+            typeof (normalizedBlueprint as any).consistencyAssets.productImageSanitization === 'object'
+              ? {
+                  status:
+                    (normalizedBlueprint as any).consistencyAssets.productImageSanitization.status === 'processing' ||
+                    (normalizedBlueprint as any).consistencyAssets.productImageSanitization.status === 'done' ||
+                    (normalizedBlueprint as any).consistencyAssets.productImageSanitization.status === 'failed'
+                      ? (normalizedBlueprint as any).consistencyAssets.productImageSanitization.status
+                      : 'idle',
+                  originalPaths: Array.isArray((normalizedBlueprint as any).consistencyAssets.productImageSanitization.originalPaths)
+                    ? (normalizedBlueprint as any).consistencyAssets.productImageSanitization.originalPaths.map(String).filter(Boolean)
+                    : [],
+                  sanitizedPaths: Array.isArray((normalizedBlueprint as any).consistencyAssets.productImageSanitization.sanitizedPaths)
+                    ? (normalizedBlueprint as any).consistencyAssets.productImageSanitization.sanitizedPaths.map(String).filter(Boolean)
+                    : [],
+                  failedPaths: Array.isArray((normalizedBlueprint as any).consistencyAssets.productImageSanitization.failedPaths)
+                    ? (normalizedBlueprint as any).consistencyAssets.productImageSanitization.failedPaths.map(String).filter(Boolean)
+                    : [],
+                  diagnostics: Array.isArray((normalizedBlueprint as any).consistencyAssets.productImageSanitization.diagnostics)
+                    ? (normalizedBlueprint as any).consistencyAssets.productImageSanitization.diagnostics
+                    : [],
+                  error: String((normalizedBlueprint as any).consistencyAssets.productImageSanitization.error ?? '').trim() || undefined,
+                  updatedAt: Number((normalizedBlueprint as any).consistencyAssets.productImageSanitization.updatedAt ?? now()) || now(),
+                }
+              : undefined,
+        }
+      : undefined
   const bp = normalizedBlueprint
     ? {
         ...normalizedBlueprint,
@@ -1023,6 +1518,7 @@ function normalizeProject(p: CloneProject): CloneProject {
         },
         globalScript: normalizeGlobalScript((normalizedBlueprint as any)?.globalScript),
         scriptAnalysisError: String((normalizedBlueprint as any)?.scriptAnalysisError ?? '').trim() || undefined,
+        consistencyAssets: normalizedConsistencyAssets,
         shots: normalizedShots.map((shot: any) => ({
           ...shot,
           prompt: {
@@ -1088,12 +1584,66 @@ function normalizeProject(p: CloneProject): CloneProject {
         frameIndex: Number.isFinite(Number(item?.frameIndex)) ? Number(item?.frameIndex) : index,
         imagePath: String(item?.imagePath ?? '').trim() || undefined,
         aspectRatio: '9:16' as const,
-        status: item?.status === 'cropped' || item?.status === 'failed' ? item.status : 'idle',
+        status:
+          item?.status === 'generating' || item?.status === 'cropped' || item?.status === 'failed'
+            ? item.status
+            : 'idle',
         error: String(item?.error ?? '').trim() || undefined,
         retryCount: typeof item?.retryCount === 'number' ? Number(item.retryCount) : undefined,
         updatedAt: Number(item?.updatedAt ?? now()) || now(),
       }))
     : []
+  const boundProductSnapshot = (p as any).boundProductSnapshot
+    ? {
+        id: String((p as any).boundProductSnapshot.id ?? '').trim(),
+        name: String((p as any).boundProductSnapshot.name ?? '').trim(),
+        type: String((p as any).boundProductSnapshot.type ?? '').trim(),
+        remark: String((p as any).boundProductSnapshot.remark ?? '').trim() || undefined,
+        coverImagePath: String((p as any).boundProductSnapshot.coverImagePath ?? '').trim() || undefined,
+        analysisBoardPath: String((p as any).boundProductSnapshot.analysisBoardPath ?? '').trim() || undefined,
+        analysisBoardStatus:
+          (p as any).boundProductSnapshot.analysisBoardStatus === 'processing' ||
+          (p as any).boundProductSnapshot.analysisBoardStatus === 'done' ||
+          (p as any).boundProductSnapshot.analysisBoardStatus === 'failed'
+            ? (p as any).boundProductSnapshot.analysisBoardStatus
+            : 'idle',
+        canonicalSourcePath: String((p as any).boundProductSnapshot.canonicalSourcePath ?? '').trim() || undefined,
+        canonicalSourceStatus:
+          (p as any).boundProductSnapshot.canonicalSourceStatus === 'processing' ||
+          (p as any).boundProductSnapshot.canonicalSourceStatus === 'done' ||
+          (p as any).boundProductSnapshot.canonicalSourceStatus === 'failed'
+            ? (p as any).boundProductSnapshot.canonicalSourceStatus
+            : 'idle',
+        productAnalysis:
+          (p as any).boundProductSnapshot.productAnalysis && typeof (p as any).boundProductSnapshot.productAnalysis === 'object'
+            ? {
+                category: String((p as any).boundProductSnapshot.productAnalysis.category ?? '').trim(),
+                summary: String((p as any).boundProductSnapshot.productAnalysis.summary ?? '').trim(),
+                coreSubject: String((p as any).boundProductSnapshot.productAnalysis.coreSubject ?? '').trim(),
+                connectionStructure: String((p as any).boundProductSnapshot.productAnalysis.connectionStructure ?? '').trim(),
+                materialDetails: String((p as any).boundProductSnapshot.productAnalysis.materialDetails ?? '').trim(),
+                wearingPosition: String((p as any).boundProductSnapshot.productAnalysis.wearingPosition ?? '').trim(),
+                surfaceDetails: String((p as any).boundProductSnapshot.productAnalysis.surfaceDetails ?? '').trim(),
+                colorDetails: String((p as any).boundProductSnapshot.productAnalysis.colorDetails ?? '').trim(),
+                geometryDetails: String((p as any).boundProductSnapshot.productAnalysis.geometryDetails ?? '').trim(),
+                sizeScale: String((p as any).boundProductSnapshot.productAnalysis.sizeScale ?? '').trim(),
+                matchingRules: Array.isArray((p as any).boundProductSnapshot.productAnalysis.matchingRules)
+                  ? (p as any).boundProductSnapshot.productAnalysis.matchingRules.map(String).filter(Boolean)
+                  : [],
+                rawDescription: String((p as any).boundProductSnapshot.productAnalysis.rawDescription ?? '').trim(),
+                updatedAt: Number((p as any).boundProductSnapshot.productAnalysis.updatedAt ?? now()),
+              }
+            : undefined,
+        originalImagePaths: Array.isArray((p as any).boundProductSnapshot.originalImagePaths)
+          ? (p as any).boundProductSnapshot.originalImagePaths.map(String).filter(Boolean)
+          : [],
+        frozenReferenceImagePaths: Array.isArray((p as any).boundProductSnapshot.frozenReferenceImagePaths)
+          ? (p as any).boundProductSnapshot.frozenReferenceImagePaths.map(String).filter(Boolean)
+          : [],
+        boundAt: Number((p as any).boundProductSnapshot.boundAt ?? now()),
+        updatedAt: Number((p as any).boundProductSnapshot.updatedAt ?? now()),
+      }
+    : undefined
   const shotVideoOutputs = Array.isArray((p as any).shotVideoOutputs)
     ? (p as any).shotVideoOutputs.map((item: any) => ({
         segmentId: String(item?.segmentId ?? item?.shotId ?? '').trim() || undefined,
@@ -1111,14 +1661,22 @@ function normalizeProject(p: CloneProject): CloneProject {
         endpointStyle: String(item?.endpointStyle ?? '').trim() || undefined,
         remoteStatus: String(item?.remoteStatus ?? '').trim() || undefined,
         remoteRaw: item?.remoteRaw,
+        submissionFingerprint: String(item?.submissionFingerprint ?? '').trim() || undefined,
+        submissionStartedAt: Number(item?.submissionStartedAt ?? 0) || undefined,
+        submissionLockedUntil: Number(item?.submissionLockedUntil ?? 0) || undefined,
         durationSec: typeof item?.durationSec === 'number' ? Number(item.durationSec) : undefined,
         status:
+          item?.status === 'submitting' ||
+          item?.status === 'remote_pending' ||
           item?.status === 'creating' ||
           item?.status === 'remote_running' ||
+          item?.status === 'remote_succeeded_pending_download' ||
           item?.status === 'polling_timeout' ||
           item?.status === 'downloading' ||
           item?.status === 'generating' ||
           item?.status === 'done' ||
+          item?.status === 'failed_retryable' ||
+          item?.status === 'failed_terminal' ||
           item?.status === 'failed' ||
           item?.status === 'success' ||
           item?.status === 'completed'
@@ -1128,6 +1686,7 @@ function normalizeProject(p: CloneProject): CloneProject {
             : 'idle',
         error: String(item?.error ?? '').trim() || undefined,
         retryCount: typeof item?.retryCount === 'number' ? Number(item.retryCount) : undefined,
+        sourceEvent: String(item?.sourceEvent ?? '').trim() || undefined,
         createdAt: Number(item?.createdAt ?? now()),
         lastPollAt: Number(item?.lastPollAt ?? 0) || undefined,
         completedAt: Number(item?.completedAt ?? 0) || undefined,
@@ -1135,7 +1694,12 @@ function normalizeProject(p: CloneProject): CloneProject {
       }))
     : []
   const generatedShotOutputs = (bp?.shots ?? [])
-    .filter((shot: any) => String(shot?.id ?? '').trim() && String(shot?.generatedClipPath ?? '').trim())
+    .filter((shot: any) => {
+      const status = String(shot?.status ?? '').trim().toLowerCase()
+      const hasClip = String(shot?.generatedClipPath ?? '').trim()
+      if (!String(shot?.id ?? '').trim() || !hasClip) return false
+      return status === 'done' || status === 'success' || status === 'completed'
+    })
     .map((shot: any) => ({
       segmentId: String(shot.id).trim(),
       index: Number(shot.index ?? 0),
@@ -1217,6 +1781,19 @@ function normalizeProject(p: CloneProject): CloneProject {
     groupId: String((p as any)?.groupId ?? '').trim() || undefined,
     groupName: String((p as any)?.groupName ?? '').trim() || undefined,
     archived: Boolean((p as any)?.archived ?? false),
+    originalProductReferenceImagePaths: Array.isArray((p as any)?.originalProductReferenceImagePaths)
+      ? (p as any).originalProductReferenceImagePaths.map(String).filter(Boolean)
+      : [],
+    sanitizedProductReferenceImagePaths: Array.isArray((p as any)?.sanitizedProductReferenceImagePaths)
+      ? (p as any).sanitizedProductReferenceImagePaths.map(String).filter(Boolean)
+      : [],
+    productImageSanitizationStatus:
+      (p as any)?.productImageSanitizationStatus === 'processing' ||
+      (p as any)?.productImageSanitizationStatus === 'done' ||
+      (p as any)?.productImageSanitizationStatus === 'failed'
+        ? (p as any).productImageSanitizationStatus
+        : 'idle',
+    productImageSanitizationError: String((p as any)?.productImageSanitizationError ?? '').trim() || undefined,
     locale: p.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN',
     runMode: normalizeRunMode((p as any)?.runMode),
     strength: 'structure',
@@ -1275,12 +1852,22 @@ function normalizeProject(p: CloneProject): CloneProject {
         ...(((p as any).generationQueue?.options ?? {}) as Record<string, unknown>),
       },
       jobs: normalizeQueueJobs((p as any).generationQueue?.jobs),
+      runtime: {
+        submitActive: Number((p as any).generationQueue?.runtime?.submitActive ?? 0) || 0,
+        pollActive: Number((p as any).generationQueue?.runtime?.pollActive ?? 0) || 0,
+        downloadActive: Number((p as any).generationQueue?.runtime?.downloadActive ?? 0) || 0,
+        submitQueued: Number((p as any).generationQueue?.runtime?.submitQueued ?? 0) || 0,
+        pollQueued: Number((p as any).generationQueue?.runtime?.pollQueued ?? 0) || 0,
+        downloadQueued: Number((p as any).generationQueue?.runtime?.downloadQueued ?? 0) || 0,
+        updatedAt: Number((p as any).generationQueue?.runtime?.updatedAt ?? now()) || now(),
+      },
       paused: Boolean((p as any).generationQueue?.paused ?? false),
     },
     scriptVariantCandidates,
     selectedScriptVariantId: String((p as any).selectedScriptVariantId ?? '').trim() || undefined,
     storyboardGridBatches,
     storyboardFrames,
+    boundProductSnapshot,
     shotVideoOutputs: Array.from(mergedShotVideoOutputs.values()),
     autoFlowStatus: (p as any).autoFlowStatus
       ? {
@@ -1504,13 +2091,25 @@ export const cloneRepo = {
   },
 
   async listProjects(): Promise<CloneProject[]> {
-    const db = await this.readDb()
-    return db.projects
+    return await queueCloneDbMutation(async () => {
+      const projects = readCloneProjectsFromSqlite()
+      return projects.map(normalizeProject)
+    })
+  },
+
+  async listRawProjects(): Promise<CloneProject[]> {
+    return await queueCloneDbMutation(async () => {
+      return readCloneProjectsFromSqlite()
+    })
   },
 
   async getProject(id: string): Promise<CloneProject | null> {
-    const all = await this.listProjects()
-    return all.find((x) => x.id === id) ?? null
+    const targetId = String(id || '').trim()
+    if (!targetId) return null
+    return await queueCloneDbMutation(async () => {
+      const project = readCloneProjectByIdFromSqlite(targetId)
+      return project ? normalizeProject(project) : null
+    })
   },
 
   async createProject(input: {
@@ -1523,7 +2122,6 @@ export const cloneRepo = {
     description?: string
   }): Promise<CloneProject> {
     return await queueCloneDbMutation(async () => {
-      const db = await readCloneDbSource()
       const item: CloneProject = {
         id: randomUUID(),
         createdAt: now(),
@@ -1549,31 +2147,50 @@ export const cloneRepo = {
         },
         policy: defaultPolicy(),
       }
-      db.projects = Array.isArray(db.projects) ? db.projects : []
-      db.projects.unshift(item)
-      await writeCloneDbSource(db)
-      return item
+      const next = normalizeProject(item)
+      upsertCloneProjectInSqlite(next)
+      return next
     })
   },
 
   async upsertProject(input: CloneProject): Promise<CloneProject> {
     return await queueCloneDbMutation(async () => {
-      const db = await readCloneDbSource()
-      db.projects = Array.isArray(db.projects) ? db.projects.map(normalizeProject) : []
-      const idx = db.projects.findIndex((x) => x.id === input.id)
-      const next = normalizeProject({ ...input, updatedAt: now() })
-      if (idx >= 0) db.projects[idx] = next
-      else db.projects.unshift(next)
-      await writeCloneDbSource(db)
+      const current = readCloneProjectByIdFromSqlite(input.id)
+      const normalizedCurrent = current ? normalizeProject(current) : null
+      const mergedInput =
+        normalizedCurrent
+          ? {
+              ...normalizedCurrent,
+              ...input,
+              blueprint: mergeBlueprintShotsForPersistence(normalizedCurrent.blueprint, input.blueprint),
+              shotVideoOutputs: mergeShotVideoOutputsForPersistence(normalizedCurrent.shotVideoOutputs, input.shotVideoOutputs),
+            }
+          : input
+      const next = normalizeProject({ ...mergedInput, updatedAt: now() })
+      const debugOutputs = Array.isArray(next.shotVideoOutputs)
+        ? next.shotVideoOutputs
+            .filter((item) => ['shot_1', 'shot_2', 'shot_3'].includes(String(item?.shotId ?? '')))
+            .map((item) => ({
+              shotId: item.shotId,
+              taskId: item.taskId,
+              provider: item.provider,
+              model: item.model,
+              status: item.status,
+            }))
+        : []
+      console.log('[clone-debug] repo-upsert-project', {
+        dbDir: getAppPaths().dbDir,
+        projectId: next.id,
+        shotVideoOutputs: debugOutputs,
+      })
+      upsertCloneProjectInSqlite(next)
       return next
     })
   },
 
   async removeProject(id: string): Promise<{ ok: true }> {
     return await queueCloneDbMutation(async () => {
-      const db = await readCloneDbSource()
-      db.projects = (Array.isArray(db.projects) ? db.projects : []).filter((x) => x.id !== id)
-      await writeCloneDbSource(db)
+      removeCloneProjectFromSqlite(id)
       return { ok: true }
     })
   },
@@ -1681,9 +2298,9 @@ export const cloneRepo = {
         if (normalizedProject.selectedModelIdentityId !== id) return normalizedProject
         return normalizeProject({
           ...normalizedProject,
-          selectedModelIdentityId: id,
+          selectedModelIdentityId: undefined,
           selectedModelIdentityPackId: undefined,
-          selectedModelIdentitySnapshot: normalizedProject.selectedModelIdentitySnapshot,
+          selectedModelIdentitySnapshot: undefined,
           modelIdentityPacks: [],
         })
       })
@@ -1707,25 +2324,36 @@ export const cloneRepo = {
   },
 
   async setCredentials(input: ModelCredentials): Promise<{ ok: true }> {
-    await writeJsonFile(cloneSettingsPath(), encryptCredentials(normalizeCredentials(input)))
+    const current = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    await writeJsonFile(cloneSettingsPath(), {
+      ...encryptCredentials(normalizeCredentials(input)),
+      runtimeOptions: normalizeCloneRuntimeOptions(current.runtimeOptions),
+    })
     return { ok: true }
+  },
+
+  async getRuntimeOptions(): Promise<CloneRuntimeOptions> {
+    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    return normalizeCloneRuntimeOptions(settings.runtimeOptions)
+  },
+
+  async setRuntimeOptions(input: Partial<CloneRuntimeOptions>): Promise<CloneRuntimeOptions> {
+    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const next = normalizeCloneRuntimeOptions({
+      ...settings.runtimeOptions,
+      ...input,
+    })
+    await writeJsonFile(cloneSettingsPath(), {
+      ...settings,
+      runtimeOptions: next,
+    })
+    return next
   },
 
 
   async ensureSeed() {
-    if (canUseCloneSqlite()) {
-      initializeCloneSqlite()
-      if (isCloneSqliteEmpty() && existsSync(cloneDbPath())) {
-        const legacyDb = await readCloneDbFile()
-        writeCloneDbToSqlite({
-          projects: Array.isArray(legacyDb.projects) ? legacyDb.projects : [],
-          projectGroups: Array.isArray(legacyDb.projectGroups) ? legacyDb.projectGroups : [],
-          modelIdentityLibrary: Array.isArray(legacyDb.modelIdentityLibrary) ? legacyDb.modelIdentityLibrary : [],
-        })
-      }
-    } else {
-      await readJsonFile<CloneDbShape>(cloneDbPath(), { projects: [] })
-    }
+    const readyState = await ensureCloneSqliteReady()
     await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    return readyState
   },
 }

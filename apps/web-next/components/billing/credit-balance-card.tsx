@@ -1,4 +1,4 @@
-﻿import type { WalletAccount } from '@shared/web-api/types'
+import type { WalletAccount } from '@shared/web-api/types'
 
 import { Card } from '../ui/card'
 

@@ -5,7 +5,8 @@ import { shotConsistencyRepository } from '../prompt-consistency-db/repositories
 import { ensurePromptConsistencyDb } from '../prompt-consistency-db/migrations'
 import type { ShotSpec } from '../types'
 import { compilePromptConsistency } from './compiler'
-import type { PromptCompileResult } from './types'
+import type { PromptCompileResult, PromptModelIdentityInput } from './types'
+import { PROMPT_CONSISTENCY_COMPILER_VERSION, PROMPT_CONSISTENCY_POLICY_VERSION } from './constants'
 
 function now() {
   return Date.now()
@@ -31,11 +32,15 @@ export const promptConsistencyService = {
     shot: ShotSpec
     projectShotCount?: number
     productReferenceImagePaths?: string[]
+    productDescription?: string
+    modelIdentity?: PromptModelIdentityInput
   }) {
     const compiled = compilePromptConsistency({
       projectId: input.projectId,
       shot: input.shot,
       productReferenceImagePaths: input.productReferenceImagePaths,
+      productDescription: input.productDescription,
+      modelIdentity: input.modelIdentity,
     })
     if (!canUsePromptConsistencyDb()) {
       return compiled.result
@@ -81,6 +86,7 @@ export const promptConsistencyService = {
       })),
       patches: [
         { type: 'identity_patch', text: report.patches.identityPatch },
+        { type: 'model_identity_patch', text: report.patches.modelIdentityPatch },
         { type: 'anchor_patch', text: report.patches.anchorPatch },
         { type: 'consistency_patch', text: report.patches.consistencyPatch },
         { type: 'anti_variation_patch', text: report.patches.antiVariationPatch },
@@ -140,7 +146,14 @@ export const promptConsistencyService = {
     if (!canUsePromptConsistencyDb()) return null
     const row = shotConsistencyRepository.getReport(projectId, shotId)
     if (!row) return null
-    return JSON.parse(row.report_json) as PromptCompileResult
+    const parsed = JSON.parse(row.report_json) as PromptCompileResult
+    if (
+      String(parsed.compilerVersion || '').trim() !== PROMPT_CONSISTENCY_COMPILER_VERSION ||
+      String(parsed.policyVersion || '').trim() !== PROMPT_CONSISTENCY_POLICY_VERSION
+    ) {
+      return null
+    }
+    return parsed
   },
 
   listShotConsistencyAnchors(projectId: string, shotId: string) {
@@ -153,7 +166,7 @@ export const promptConsistencyService = {
     return shotConsistencyRepository.listPatches(projectId, shotId)
   },
 
-  previewShotConsistencyPrompt(projectId: string, shot: ShotSpec) {
-    return this.compileAndPersist({ projectId, shot, productReferenceImagePaths: shot.productReferenceImagePaths })
+  previewShotConsistencyPrompt(projectId: string, shot: ShotSpec, modelIdentity?: PromptModelIdentityInput, productDescription?: string) {
+    return this.compileAndPersist({ projectId, shot, productReferenceImagePaths: shot.productReferenceImagePaths, productDescription: productDescription || shot.materialNeed, modelIdentity })
   },
 }

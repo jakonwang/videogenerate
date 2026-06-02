@@ -170,7 +170,7 @@ function pickJitter(template: Template) {
     hueDeg: { min: -2, max: 2 },
   }
 
-  const speed = speedEnabled ? clamp(randFloat(speedR.min, speedR.max), 0.9, 1.12) : 1
+  const speed = speedEnabled ? clamp(randFloat(speedR.min, speedR.max), 0.985, 1.015) : 1
   const color = colorEnabled
     ? {
         brightness: Number(clamp(randFloat(c.brightness.min, c.brightness.max), -0.2, 0.2).toFixed(4)),

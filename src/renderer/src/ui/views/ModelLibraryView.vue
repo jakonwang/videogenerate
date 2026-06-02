@@ -2,6 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  getModelProfileOptionGroups,
+  getModelProfileOptionLabel,
+  getModelProfileOptionPrompt,
+  getRecommendedModelProfileOptions,
+  type ModelProfileOptionValue,
+  type ModelProfileOptions,
+} from '../../../../shared/modelProfileOptions'
+import {
   ArrowLeft,
   ArrowRight,
   ChevronDown,
@@ -52,6 +60,17 @@ type LibraryTab = 'all' | 'mine' | 'team' | 'favorites'
 type DropdownKey = 'status' | 'project' | 'productType' | 'pageSize' | null
 type ModelActionMenuKey = string | null
 type ModelDialogMode = 'rename' | 'delete' | null
+type ModelProfileSectionKey = 'identity' | 'appearance' | 'style' | 'scene'
+type ModelPromptPreview = {
+  profile: Record<string, string>
+  description: string
+  prompt: string
+  productType: string
+  productPoints: string
+  modelProfileOptions: Record<string, string>
+  productReferenceImageCount: number
+  productReferenceImagePaths: string[]
+}
 
 const router = useRouter()
 const busy = ref(false)
@@ -64,6 +83,7 @@ const selectedId = ref('')
 const sourceProjectId = ref('')
 const productType = ref<'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'>('earrings')
 const productPoints = ref('')
+const modelProfileOptions = ref<ModelProfileOptions>(getRecommendedModelProfileOptions('earrings'))
 const productMainImages = ref<string[]>([])
 const productDetailImages = ref<string[]>([])
 const productUsageImages = ref<string[]>([])
@@ -97,9 +117,18 @@ const openDropdown = ref<DropdownKey>(null)
 const openActionMenu = ref<ModelActionMenuKey>(null)
 const dialogMode = ref<ModelDialogMode>(null)
 const createPanelOpen = ref(false)
+const activeProfileSection = ref<ModelProfileSectionKey>('identity')
 const dialogTarget = ref<ModelIdentityLibraryItem | null>(null)
 const renameDraft = ref('')
 const dialogBusy = ref(false)
+const promptPreview = ref<ModelPromptPreview | null>(null)
+const promptPreviewBusy = ref(false)
+const batchGenerateCount = ref(3)
+const batchGenerateOptions = [
+  { value: 1, label: '1 个' },
+  { value: 3, label: '3 个' },
+  { value: 5, label: '5 个' },
+]
 
 const allProductRefs = computed(() =>
   [...productMainImages.value, ...productDetailImages.value, ...productUsageImages.value, ...styleReferenceImages.value].filter(Boolean),
@@ -130,10 +159,12 @@ const tabItems = computed(() => [
 ])
 
 const projectOptions = computed(() =>
-  projects.value.map((project) => ({
+  [...projects.value]
+    .sort((a, b) => Number((b as any).updatedAt || 0) - Number((a as any).updatedAt || 0))
+    .map((project) => ({
     id: project.id,
     label: project.referenceVideoName || project.referenceVideoPath || project.id,
-  })),
+    })),
 )
 
 const statusOptions = [
@@ -160,7 +191,43 @@ const pageSizeOptions = [
 const statusFilterLabel = computed(() => statusOptions.find((item) => item.value === statusFilter.value)?.label ?? '全部性别')
 const productTypeLabel = computed(() => productTypeOptions.find((item) => item.value === productType.value)?.label ?? '全部风格')
 const pageSizeLabel = computed(() => pageSizeOptions.find((item) => item.value === pageSize.value)?.label ?? '8 条/页')
-const sourceProjectLabel = computed(() => projectOptions.value.find((item) => item.id === sourceProjectId.value)?.label ?? '选择来源项目')
+const modelProfileGroups = getModelProfileOptionGroups()
+const modelProfileSummaryItems = computed(() =>
+  modelProfileGroups
+    .map((group) => getModelProfileOptionLabel(group.key, modelProfileOptions.value[group.key]))
+    .filter(Boolean)
+    .slice(0, 7),
+)
+const modelProfileSummaryText = computed(() => {
+  if (!modelProfileSummaryItems.value.length) return '未选择具体设定时，将自动使用当前商品类型的推荐模特方案。'
+  return modelProfileSummaryItems.value.join(' / ')
+})
+const modelProfileSections = computed(() => [
+  {
+    key: 'identity' as const,
+    label: '基础身份',
+    description: '市场、性别、年龄段',
+    groups: modelProfileGroups.filter((group) => ['market', 'gender', 'ageRange'].includes(group.key)),
+  },
+  {
+    key: 'appearance' as const,
+    label: '外观特征',
+    description: '脸型、发型、发色、肤色、体型',
+    groups: modelProfileGroups.filter((group) => ['faceShape', 'hairStyle', 'hairColor', 'skinTone', 'bodyType'].includes(group.key)),
+  },
+  {
+    key: 'style' as const,
+    label: '表达风格',
+    description: '穿搭、气质、语言、镜头感',
+    groups: modelProfileGroups.filter((group) => ['outfitStyle', 'mood', 'languageStyle', 'cameraPresence'].includes(group.key)),
+  },
+  {
+    key: 'scene' as const,
+    label: '场景倾向',
+    description: '场景与风格重心',
+    groups: modelProfileGroups.filter((group) => ['sceneStyle', 'styleBias'].includes(group.key)),
+  },
+])
 const imageProviderMissingText = computed(() => {
   if (imageProviderReady.value) return ''
   return imageProviderPrimary.value === 'kling'
@@ -171,6 +238,184 @@ const imageProviderMissingText = computed(() => {
         ? '请先在设置中心配置 VectorEngine 图片 API Key'
         : '请先在设置中心配置图片生成 API Key'
 })
+
+function defaultModelPromptProfile(type: typeof productType.value, gender?: 'female' | 'male') {
+  const resolvedGender = gender === 'male' ? 'male' : 'female'
+  if (resolvedGender === 'male') {
+    return {
+      market: 'Global social-commerce market',
+      gender: 'male',
+      ageRange: '20-30',
+      faceShape: 'defined face shape',
+      hairStyle: type === 'earrings' ? 'hair tied back or tucked cleanly away from product area' : 'natural straight hair',
+      hairColor: 'natural dark black hair color',
+      skinTone: 'healthy neutral skin tone',
+      bodyType: 'balanced natural build',
+      outfitStyle: type === 'clothes' ? 'refined commute outfit' : type === 'earrings' ? 'minimal clean outfit that does not compete with the product' : 'clean casual outfit',
+      mood: 'calm confident expression',
+      sceneStyle: type === 'earrings' ? 'real indoor environment with depth, soft natural lighting, subtle background blur, neutral lifestyle setting such as bedroom, dressing area, or minimal apartment corner' : type === 'clothes' ? 'light retail lifestyle environment' : 'soft daylight clean product demo setting',
+      languageStyle: 'Chinese-speaking social-commerce expression style',
+      cameraPresence: type === 'earrings' ? 'close-up product-led camera presence' : 'natural social-commerce camera presence',
+      styleBias: type === 'clothes' ? 'styling and look focus' : type === 'earrings' ? 'wearing demonstration focus' : 'conversion-focused product demo style',
+    }
+  }
+  if (type === 'earrings') {
+    return {
+      market: 'Southeast Asian market',
+      gender: 'female',
+      ageRange: '20-28',
+      faceShape: 'oval face shape',
+      hairStyle: 'natural dark hair tucked behind one ear',
+      hairColor: 'natural dark black hair color',
+      skinTone: 'natural warm skin tone',
+      bodyType: 'petite build',
+      outfitStyle: 'minimal light-colored top, clean beauty e-commerce style',
+      mood: 'calm confident friendly, subtle smile',
+      sceneStyle: 'soft daylight, clean background with gentle greenery or neutral wall',
+      languageStyle: 'soft bilingual social-sell expression style',
+      cameraPresence: 'close-up product-led camera presence',
+      styleBias: 'wearing demonstration focus',
+    }
+  }
+  if (type === 'clothes') {
+    return {
+      market: 'Southeast Asian market',
+      gender: 'female',
+      ageRange: '20-30',
+      faceShape: 'oval face shape',
+      hairStyle: 'natural dark hair, tidy styling',
+      hairColor: 'natural dark brown hair color',
+      skinTone: 'natural warm skin tone',
+      bodyType: 'balanced natural build',
+      outfitStyle: 'simple styling that does not compete with the product clothing',
+      mood: 'relaxed confident lifestyle feeling',
+      sceneStyle: 'soft daylight fitting-room or clean home setting',
+      languageStyle: 'Chinese-speaking social-commerce expression style',
+      cameraPresence: 'natural social-commerce camera presence',
+      styleBias: 'styling and look focus',
+    }
+  }
+  return {
+    market: 'Southeast Asian market',
+    gender: 'female',
+    ageRange: '20-30',
+    faceShape: 'oval face shape',
+    hairStyle: 'natural dark hair',
+    hairColor: 'natural dark black hair color',
+    skinTone: 'natural warm skin tone',
+    bodyType: 'slim build',
+    outfitStyle: 'clean casual outfit',
+    mood: 'friendly natural social-commerce model',
+    sceneStyle: 'soft daylight clean product demo setting',
+    languageStyle: 'Chinese-speaking social-commerce expression style',
+    cameraPresence: 'natural social-commerce camera presence',
+    styleBias: 'conversion-focused product demo style',
+  }
+}
+
+function recommendedMaleProfileOptions(type: typeof productType.value): ModelProfileOptions {
+  return {
+    market: 'global_female',
+    gender: 'male',
+    ageRange: type === 'earrings' ? '20_28' : '25_32',
+    faceShape: 'defined',
+    hairStyle: type === 'earrings' ? 'tied_back' : 'dark_straight',
+    hairColor: 'dark_black',
+    skinTone: 'healthy_neutral',
+    bodyType: 'balanced',
+    outfitStyle: type === 'earrings' ? 'clean_minimal' : 'refined_commute',
+    mood: 'calm_confident',
+    sceneStyle: type === 'earrings' ? 'clean_studio' : 'retail_lifestyle',
+    languageStyle: 'chinese_fluent',
+    cameraPresence: type === 'earrings' ? 'closeup_product_led' : 'natural_social_commerce',
+    styleBias: type === 'clothes' ? 'styling_focus' : type === 'earrings' ? 'wearing_focus' : 'conversion_focus',
+  }
+}
+
+function buildLocalModelPromptPreview(input: {
+  productType: typeof productType.value
+  productPoints?: string
+  modelProfileOptions?: ModelProfileOptions
+  productReferenceImagePaths: string[]
+}): ModelPromptPreview {
+  const explicitGender = input.modelProfileOptions?.gender === 'male' ? 'male' : input.modelProfileOptions?.gender === 'female' ? 'female' : undefined
+  const base = defaultModelPromptProfile(input.productType, explicitGender)
+  const femaleRecommended = getRecommendedModelProfileOptions(input.productType)
+  const maleRecommended = recommendedMaleProfileOptions(input.productType)
+  const merged: ModelProfileOptions = { ...(explicitGender === 'male' ? maleRecommended : femaleRecommended), ...(input.modelProfileOptions ?? {}) }
+  if (explicitGender === 'male') {
+    for (const [key, value] of Object.entries(merged) as Array<[keyof ModelProfileOptions, ModelProfileOptionValue | undefined]>) {
+      if (key === 'gender' || !value) continue
+      if (value === femaleRecommended[key]) merged[key] = maleRecommended[key]
+    }
+  }
+  const promptValue = (key: keyof ModelProfileOptions, fallback: string) => {
+    const value = merged[key]
+    return value ? getModelProfileOptionPrompt(key, value) || fallback : fallback
+  }
+  const profile = {
+    market: promptValue('market', base.market),
+    gender: promptValue('gender', base.gender),
+    ageRange: promptValue('ageRange', base.ageRange),
+    faceShape: promptValue('faceShape', base.faceShape),
+    hairStyle: promptValue('hairStyle', base.hairStyle),
+    hairColor: promptValue('hairColor', base.hairColor),
+    skinTone: promptValue('skinTone', base.skinTone),
+    bodyType: promptValue('bodyType', base.bodyType),
+    outfitStyle: promptValue('outfitStyle', base.outfitStyle),
+    mood: promptValue('mood', base.mood),
+    sceneStyle: promptValue('sceneStyle', base.sceneStyle),
+    languageStyle: promptValue('languageStyle', base.languageStyle),
+    cameraPresence: promptValue('cameraPresence', base.cameraPresence),
+    styleBias: promptValue('styleBias', base.styleBias),
+  }
+  const genderHardRule =
+    profile.gender === 'male'
+      ? 'CRITICAL GENDER LOCK: male only. The model must read clearly as a real adult man. Do not generate a woman, feminine face, feminine styling, feminine body shape, or female-presenting identity.'
+      : 'CRITICAL GENDER LOCK: female only. The model must read clearly as a real adult woman. Do not generate a man, masculine face, masculine styling, masculine body shape, or male-presenting identity.'
+  const description = [
+    'New virtual model for this clone project',
+    `${profile.market}, ${profile.gender}, ${profile.ageRange}`,
+    `${profile.faceShape}, ${profile.hairStyle}, ${profile.hairColor}`,
+    `${profile.skinTone}, ${profile.bodyType}`,
+    `${profile.outfitStyle}, ${profile.mood}`,
+    `${profile.sceneStyle}`,
+    `${profile.languageStyle}`,
+    `${profile.cameraPresence}, ${profile.styleBias}`,
+  ].join('. ')
+  const prompt = [
+    'Create one realistic reference image for a new virtual model identity package for short-form social commerce videos.',
+    'The model must be a new person and must not copy any person from the reference video.',
+    genderHardRule,
+    `Market: ${profile.market}. Gender: ${profile.gender}. Age range: ${profile.ageRange}.`,
+    `Face shape: ${profile.faceShape}. Hair: ${profile.hairStyle}. Hair color: ${profile.hairColor}.`,
+    `Skin tone: ${profile.skinTone}. Body type: ${profile.bodyType}. Outfit: ${profile.outfitStyle}.`,
+    `Mood: ${profile.mood}. Scene: ${profile.sceneStyle}. Language style: ${profile.languageStyle}.`,
+    `Camera presence: ${profile.cameraPresence}. Style bias: ${profile.styleBias}.`,
+    `Product category: ${input.productType}. Product selling points: ${input.productPoints || 'realistic product texture and clean usage value'}.`,
+    'Show the model in a practical product-commerce reference pose. Keep face, outfit, lighting and scene style stable and reusable.',
+    'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters.',
+    'Realistic smartphone photo style, natural skin texture, clean commercial composition.',
+  ].join('\n')
+  return {
+    profile,
+    description,
+    prompt,
+    productType: input.productType,
+    productPoints: input.productPoints || '',
+    modelProfileOptions: { ...(input.modelProfileOptions ?? {}) } as Record<string, string>,
+    productReferenceImageCount: input.productReferenceImagePaths.length,
+    productReferenceImagePaths: input.productReferenceImagePaths,
+  }
+}
+
+const uploadPreviewGroups = computed(() => [
+  { key: 'main', label: '主图', hint: '主体参考', images: productMainImages.value },
+  { key: 'detail', label: '细节图', hint: '材质结构', images: productDetailImages.value },
+  { key: 'usage', label: '佩戴图', hint: '上身关系', images: productUsageImages.value },
+  { key: 'style', label: '风格图', hint: '氛围方向', images: styleReferenceImages.value },
+])
+const uploadPreviewHero = computed(() => uploadPreviewGroups.value.find((group) => group.images.length)?.images[0] || '')
 
 const filteredLibrary = computed(() => {
   const keyword = search.value.trim().toLowerCase()
@@ -332,6 +577,13 @@ function closeDialog() {
 
 function closeCreatePanel() {
   createPanelOpen.value = false
+  promptPreview.value = null
+}
+
+function openCreatePanel() {
+  activeProfileSection.value = 'identity'
+  promptPreview.value = null
+  createPanelOpen.value = true
 }
 
 function handleDocumentClick(event: MouseEvent) {
@@ -544,8 +796,29 @@ async function refreshProjects() {
   if (!sourceProjectId.value && projects.value[0]) sourceProjectId.value = projects.value[0].id
 }
 
+async function ensureSourceProjectId() {
+  if (sourceProjectId.value) return sourceProjectId.value
+  await refreshProjects()
+  if (sourceProjectId.value) return sourceProjectId.value
+  const created = await window.api.clone.createDraftProject({
+    locale: 'zh-CN',
+    strength: 'structure',
+    runMode: 'manual',
+    title: '模特创建临时项目',
+    description: '用于桌面端创建模特时自动兜底的轻量草稿项目',
+  })
+  const projectId = String((created as any)?.project?.id || (created as any)?.summary?.id || '').trim()
+  if (!projectId) throw new Error('自动创建模特项目失败')
+  sourceProjectId.value = projectId
+  await refreshProjects()
+  return sourceProjectId.value
+}
+
 async function pickImageGroup(target: 'main' | 'detail' | 'usage' | 'style') {
-  const files = await window.api.pickFiles({
+  const pickFilesOverride = (window as any).__VG_TEST_pickFiles as
+    | ((input: { title: string; multiple: boolean; filters: Array<{ name: string; extensions: string[] }> }) => Promise<string[]>)
+    | undefined
+  const files = await (pickFilesOverride ?? window.api.pickFiles)({
     title:
       target === 'main'
         ? '选择商品主图'
@@ -575,8 +848,68 @@ async function diagnoseProductRefs() {
 }
 
 async function generateModel() {
-  if (!sourceProjectId.value) {
-    message.value = '请先选择一个复刻项目作为来源'
+  if (!hasProductInput.value) {
+    message.value = '请先上传参考图或填写商品卖点'
+    return
+  }
+  if (!imageProviderReady.value) {
+    message.value =
+      imageProviderPrimary.value === 'kling'
+        ? '请先配置 AtlasCloud API Key'
+        : imageProviderPrimary.value === 'grsai'
+          ? '请先配置 GRS.AI API Key'
+          : imageProviderPrimary.value === 'apifox_hub'
+            ? '请先配置 VectorEngine 图片 API Key'
+            : '请先配置 OpenAI API Key'
+    return
+  }
+  message.value = '正在准备生成模特...'
+  busy.value = true
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+  try {
+    const projectId = await ensureSourceProjectId()
+    const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
+    const plainReferenceImagePaths = allProductRefs.value.map((item) => String(item || '')).filter(Boolean)
+    const plainImageProviderCredentials = JSON.parse(JSON.stringify(currentImageProviderCredentials() || {}))
+    await saveCredentials()
+    pollTimer = setInterval(() => {
+      refreshLibrary().catch(() => {})
+    }, 2000)
+    await window.api.clone.generateModelIdentityPack({
+      cloneProjectId: projectId,
+      productType: productType.value,
+      productPoints: productPoints.value.trim() || undefined,
+      modelProfileOptions: plainModelProfileOptions,
+      productReferenceImagePaths: plainReferenceImagePaths,
+      imageProviderPrimary: imageProviderPrimary.value,
+      openaiApiKey: openaiKey.value.trim() || undefined,
+      openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
+      openaiImageQuality: openaiImageQuality.value,
+      klingApiKey: klingKey.value.trim() || undefined,
+      klingHost: normalizeAtlasCloudHost(klingHost.value),
+      klingImageModel: klingImageModel.value.trim() || 'openai/gpt-image-1/edit',
+      grsaiApiKey: grsaiKey.value.trim() || undefined,
+      grsaiHost: grsaiHost.value.trim() || 'https://grsaiapi.com',
+      grsaiImageModel: grsaiImageModel.value.trim() || 'gpt-image-2',
+      imageProviderCredentials: plainImageProviderCredentials,
+    })
+    await refreshLibrary()
+    createPanelOpen.value = false
+    modelProfileOptions.value = getRecommendedModelProfileOptions(productType.value)
+    message.value = '新模特已加入全局模特库'
+  } catch (e: any) {
+    console.error('[model-library] generateModel failed', e)
+    message.value = `生成失败：${String(e?.message ?? e)}`
+  } finally {
+    if (pollTimer) clearInterval(pollTimer)
+    busy.value = false
+  }
+}
+
+async function generateModelsBatch() {
+  const total = Math.max(1, Math.min(5, Math.floor(Number(batchGenerateCount.value) || 1)))
+  if (total <= 1) {
+    await generateModel()
     return
   }
   if (!hasProductInput.value) {
@@ -594,18 +927,24 @@ async function generateModel() {
             : '请先配置 OpenAI API Key'
     return
   }
+  message.value = `正在批量生成 ${total} 个模特...`
   busy.value = true
   let pollTimer: ReturnType<typeof setInterval> | undefined
   try {
+    const projectId = await ensureSourceProjectId()
+    const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
+    const plainReferenceImagePaths = allProductRefs.value.map((item) => String(item || '')).filter(Boolean)
+    const plainImageProviderCredentials = JSON.parse(JSON.stringify(currentImageProviderCredentials() || {}))
     await saveCredentials()
     pollTimer = setInterval(() => {
       refreshLibrary().catch(() => {})
     }, 2000)
-    await window.api.clone.generateModelIdentityPack({
-      cloneProjectId: sourceProjectId.value,
+    const payload = {
+      cloneProjectId: projectId,
       productType: productType.value,
       productPoints: productPoints.value.trim() || undefined,
-      productReferenceImagePaths: allProductRefs.value.map(String),
+      modelProfileOptions: plainModelProfileOptions,
+      productReferenceImagePaths: plainReferenceImagePaths,
       imageProviderPrimary: imageProviderPrimary.value,
       openaiApiKey: openaiKey.value.trim() || undefined,
       openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
@@ -616,16 +955,75 @@ async function generateModel() {
       grsaiApiKey: grsaiKey.value.trim() || undefined,
       grsaiHost: grsaiHost.value.trim() || 'https://grsaiapi.com',
       grsaiImageModel: grsaiImageModel.value.trim() || 'gpt-image-2',
-      imageProviderCredentials: currentImageProviderCredentials(),
-    })
+      imageProviderCredentials: plainImageProviderCredentials,
+    }
+    const concurrency = 2
+    const jobs = Array.from({ length: total }, () => () => window.api.clone.generateModelIdentityPack(payload))
+    const results: PromiseSettledResult<unknown>[] = []
+    for (let start = 0; start < jobs.length; start += concurrency) {
+      const chunk = jobs.slice(start, start + concurrency).map((job) => job())
+      results.push(...(await Promise.allSettled(chunk)))
+    }
     await refreshLibrary()
     createPanelOpen.value = false
-    message.value = '新模特已加入全局模特库'
+    modelProfileOptions.value = getRecommendedModelProfileOptions(productType.value)
+    const successCount = results.filter((item) => item.status === 'fulfilled').length
+    const failedCount = results.length - successCount
+    message.value = `批量生成完成：成功 ${successCount} 个${failedCount ? `，失败 ${failedCount} 个` : ''}`
   } catch (e: any) {
-    message.value = `生成失败：${String(e?.message ?? e)}`
+    console.error('[model-library] generateModelsBatch failed', e)
+    message.value = `批量生成失败：${String(e?.message ?? e)}`
   } finally {
     if (pollTimer) clearInterval(pollTimer)
     busy.value = false
+  }
+}
+
+async function previewModelPrompt() {
+  if (!hasProductInput.value) {
+    message.value = '请先上传参考图或填写商品卖点'
+    return
+  }
+  promptPreviewBusy.value = true
+  try {
+    const projectId = await ensureSourceProjectId()
+    const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
+    const plainReferenceImagePaths = allProductRefs.value.map((item) => String(item || '')).filter(Boolean)
+    const previewApi = window.api.clone.getModelIdentityPromptPreview
+    if (typeof previewApi === 'function') {
+      const result = await previewApi({
+        cloneProjectId: projectId,
+        productType: productType.value,
+        productPoints: productPoints.value.trim() || undefined,
+        modelProfileOptions: plainModelProfileOptions,
+        productReferenceImagePaths: plainReferenceImagePaths,
+      })
+      promptPreview.value = (result as ModelPromptPreview) || null
+      message.value = '已生成当前创建模特的提示词预览'
+      return
+    }
+    promptPreview.value = buildLocalModelPromptPreview({
+      productType: productType.value,
+      productPoints: productPoints.value.trim() || undefined,
+      modelProfileOptions: plainModelProfileOptions,
+      productReferenceImagePaths: plainReferenceImagePaths,
+    })
+    message.value = '已使用本地兜底生成提示词预览，重启桌面端后会切换为主进程真实预览'
+    return
+    message.value = '已使用本地兜底生成提示词预览，重启桌面端后会切换为主进程真实预览'
+    message.value = '已生成当前创建模特的提示词预览'
+  } catch (e: any) {
+    console.error('[model-library] previewModelPrompt failed', e)
+    message.value = `提示词预览失败：${String(e?.message ?? e)}`
+  } finally {
+    promptPreviewBusy.value = false
+  }
+}
+
+function selectModelProfileOption(key: keyof ModelProfileOptions, value: NonNullable<ModelProfileOptions[keyof ModelProfileOptions]>) {
+  modelProfileOptions.value = {
+    ...modelProfileOptions.value,
+    [key]: value,
   }
 }
 
@@ -654,10 +1052,15 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
 })
+
+watch(productType, (value) => {
+  modelProfileOptions.value = getRecommendedModelProfileOptions(value)
+  promptPreview.value = null
+})
 </script>
 
 <template>
-  <div class="models-library-page">
+  <div class="models-library-page" data-testid="models-library-page">
     <section class="models-shell">
       <div class="models-shell__main">
         <section class="models-hero">
@@ -666,11 +1069,11 @@ onBeforeUnmount(() => {
             <p>管理你的 AI 数字模特，支持形象筛选、声音适配和场景绑定，选中后可直接进入复刻工作台。</p>
           </div>
           <div class="models-hero__actions">
-            <button type="button" class="models-ghost-button" @click="createPanelOpen = true">
+            <button type="button" class="models-ghost-button" @click="openCreatePanel">
               <Download class="h-4 w-4" />
               <span>导入模特</span>
             </button>
-            <button type="button" class="models-top-primary" @click="createPanelOpen = true">
+            <button type="button" class="models-top-primary" data-testid="models-open-create" @click="openCreatePanel">
               <span>+</span>
               <span>创建模特</span>
             </button>
@@ -960,82 +1363,133 @@ onBeforeUnmount(() => {
 
     <transition name="fade">
       <div v-if="createPanelOpen" class="models-dialog-backdrop" @click="closeCreatePanel">
-        <div class="models-dialog models-dialog--wide" @click.stop>
-          <div class="models-dialog__head">
-            <h3>创建模特</h3>
+        <div class="models-dialog models-dialog--wide" data-testid="models-create-dialog" @click.stop>
+          <div class="models-dialog__head models-dialog__head--hero">
+            <div class="models-dialog__title-block">
+              <span class="models-dialog__eyebrow">Model Creation</span>
+              <h3>创建模特</h3>
+              <p>左侧完成模特设定，右侧补齐商品素材。当前弹窗优先保证设定清晰、素材可见和一屏可操作。</p>
+            </div>
             <button type="button" class="models-dialog__close" @click="closeCreatePanel">
               <X class="h-4 w-4" />
             </button>
           </div>
 
-          <div class="models-create-grid">
-            <div class="models-create-column">
-              <div class="models-panel__subhead">
-                <h3>来源项目</h3>
-                <p>选择一个复刻项目，作为商品和风格素材来源。</p>
+          <div class="models-create-grid models-create-grid--workspace">
+            <section class="models-create-section">
+              <div class="models-create-section__head">
+                <h4>基础设置</h4>
+                <p>先选择模特的主要方向，再补充细节与商品素材。</p>
+              </div>
+
+              <div class="models-field">
+                <span>模特设定</span>
+                <div class="models-profile-summary">
+                  <div class="models-profile-summary__head">
+                    <strong>当前设定摘要</strong>
+                    <small>会随左侧选项实时更新</small>
+                  </div>
+                  <p>{{ modelProfileSummaryText }}</p>
+                  <div v-if="modelProfileSummaryItems.length" class="models-profile-summary__chips">
+                    <span v-for="item in modelProfileSummaryItems" :key="item">{{ item }}</span>
+                  </div>
+                </div>
+                <div class="models-profile-sections models-profile-sections--compact">
+                  <button
+                    v-for="section in modelProfileSections"
+                    :key="section.key"
+                    type="button"
+                    class="models-profile-section-tab"
+                    :class="{ active: activeProfileSection === section.key }"
+                    @click="activeProfileSection = section.key"
+                  >
+                    <strong>{{ section.label }}</strong>
+                    <small>{{ section.description }}</small>
+                  </button>
+                </div>
+                <div class="models-profile-groups models-profile-groups--flat">
+                  <div
+                    v-for="group in modelProfileSections.find((section) => section.key === activeProfileSection)?.groups || []"
+                    :key="group.key"
+                    class="models-profile-group"
+                  >
+                    <div class="models-profile-group__head">
+                      <strong>{{ group.label }}</strong>
+                      <small>{{ group.description }}</small>
+                    </div>
+                    <div class="models-profile-group__options">
+                      <button
+                        v-for="option in group.options"
+                        :key="option.value"
+                        type="button"
+                        class="models-profile-chip"
+                        :class="{ active: modelProfileOptions[group.key] === option.value }"
+                        @click="selectModelProfileOption(group.key, option.value)"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <label class="models-field">
-                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'project' }">
-                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('project')">
-                    <span class="models-select-trigger__label">{{ sourceProjectLabel }}</span>
-                    <ChevronDown class="h-4 w-4" />
-                  </button>
-                  <div v-if="openDropdown === 'project'" class="models-select-menu models-select-menu--scroll">
-                    <button type="button" class="models-select-option" :class="{ active: sourceProjectId === '' }" @click="sourceProjectId = ''; closeDropdown()">选择来源项目</button>
-                    <button
-                      v-for="project in projectOptions"
-                      :key="project.id"
-                      type="button"
-                      class="models-select-option models-select-option--multiline"
-                      :class="{ active: sourceProjectId === project.id }"
-                      @click="sourceProjectId = project.id; closeDropdown()"
-                    >
-                      {{ project.label }}
-                    </button>
-                  </div>
-                </div>
+                <span>补充描述（可选）</span>
+                <textarea v-model="productPoints" placeholder="例如：更亲和、适合近景佩戴展示、希望更生活化一点"></textarea>
               </label>
+            </section>
 
-              <label class="models-field">
-                <span>商品类型</span>
-                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'productType' }">
-                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('productType')">
-                    <span class="models-select-trigger__label">{{ productTypeLabel }}</span>
-                    <ChevronDown class="h-4 w-4" />
-                  </button>
-                  <div v-if="openDropdown === 'productType'" class="models-select-menu">
-                    <button
-                      v-for="option in productTypeOptions"
-                      :key="option.value"
-                      type="button"
-                      class="models-select-option"
-                      :class="{ active: productType === option.value }"
-                      @click="productType = option.value; closeDropdown()"
-                    >
-                      {{ option.label }}
-                    </button>
-                  </div>
-                </div>
-              </label>
-
-              <label class="models-field">
-                <span>商品卖点</span>
-                <textarea v-model="productPoints" placeholder="例如：轻盈、通勤、礼盒包装、细节质感"></textarea>
-              </label>
-            </div>
-
-            <div class="models-create-column">
-              <div class="models-panel__subhead">
-                <h3>参考素材</h3>
-                <p>上传主图、细节图、使用图与风格图，用于生成模特身份包。</p>
+            <section class="models-create-section models-create-section--soft">
+              <div class="models-create-section__head">
+                <h4>参考素材</h4>
+                <p>上传主图、细节图、佩戴图或风格图，帮助模特生成更贴近商品。</p>
               </div>
 
-              <div class="models-upload-grid">
-                <button type="button" @click="pickImageGroup('main')"><ImagePlus class="h-4 w-4" />主图</button>
-                <button type="button" @click="pickImageGroup('detail')"><ImagePlus class="h-4 w-4" />细节图</button>
-                <button type="button" @click="pickImageGroup('usage')"><ImagePlus class="h-4 w-4" />佩戴图</button>
-                <button type="button" @click="pickImageGroup('style')"><ImagePlus class="h-4 w-4" />风格图</button>
+              <div class="models-upload-panel">
+                <div class="models-upload-panel__lead">
+                  <div class="models-upload-panel__icon">
+                    <ImagePlus class="h-4 w-4" />
+                  </div>
+                  <div class="models-upload-panel__copy">
+                    <strong>素材上传面板</strong>
+                    <p>优先补主图和细节图，右侧会同步显示真实缩略预览。</p>
+                  </div>
+                </div>
+
+                <div class="models-upload-grid">
+                  <button type="button" data-testid="models-upload-main" @click="pickImageGroup('main')"><ImagePlus class="h-4 w-4" />主图</button>
+                  <button type="button" @click="pickImageGroup('detail')"><ImagePlus class="h-4 w-4" />细节图</button>
+                  <button type="button" @click="pickImageGroup('usage')"><ImagePlus class="h-4 w-4" />佩戴图</button>
+                  <button type="button" @click="pickImageGroup('style')"><ImagePlus class="h-4 w-4" />风格图</button>
+                </div>
+              </div>
+
+              <div class="models-upload-preview">
+                <div class="models-upload-preview__hero" :class="{ 'is-empty': !uploadPreviewHero }">
+                  <img v-if="uploadPreviewHero" :src="mediaUrl(uploadPreviewHero)" alt="upload-preview" />
+                  <div v-else class="models-upload-preview__empty">
+                    <ImagePlus class="h-4 w-4" />
+                    <span>上传后将在这里显示素材预览</span>
+                  </div>
+                </div>
+
+                <div class="models-upload-preview__groups">
+                  <div v-for="group in uploadPreviewGroups" :key="group.key" class="models-upload-preview__group">
+                    <div class="models-upload-preview__group-head">
+                      <strong>{{ group.label }}</strong>
+                      <small>{{ group.hint }}</small>
+                    </div>
+                    <div class="models-upload-preview__thumbs" :class="{ 'is-empty': !group.images.length }">
+                      <img
+                        v-for="(image, index) in group.images.slice(0, 4)"
+                        :key="`${group.key}-${index}`"
+                        :src="mediaUrl(image)"
+                        :alt="`${group.label}-${index}`"
+                      />
+                      <span v-if="!group.images.length">未上传</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div class="models-create-stats">
@@ -1045,15 +1499,71 @@ onBeforeUnmount(() => {
                 <div class="models-stat-card"><span>风格图</span><strong>{{ styleReferenceImages.length }}</strong></div>
               </div>
 
+              <div class="models-field">
+                <span>批量生成数量</span>
+                <div class="models-chip-row">
+                  <button
+                    v-for="option in batchGenerateOptions"
+                    :key="option.value"
+                    type="button"
+                    class="models-profile-chip models-profile-chip--lg"
+                    :class="{ active: batchGenerateCount === option.value }"
+                    :disabled="busy"
+                    @click="batchGenerateCount = option.value"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="message" class="models-hint models-hint--floating">
+                {{ message }}
+              </div>
               <div v-if="productDiagnosis" class="models-hint">{{ productDiagnosis }}</div>
               <div v-if="imageProviderMissingText" class="models-hint is-error">{{ imageProviderMissingText }}</div>
 
-              <button class="models-primary-button" type="button" :disabled="busy || !sourceProjectId || !hasProductInput" @click="generateModel">
+              <div class="models-prompt-preview">
+                <div class="models-prompt-preview__head">
+                  <div>
+                    <strong>提示词查看</strong>
+                    <small>这里展示创建模特时实际发送给模型的主提示词</small>
+                  </div>
+                  <div class="models-prompt-preview__actions">
+                    <button type="button" class="models-secondary-button" :disabled="promptPreviewBusy" @click="previewModelPrompt">
+                      <LoaderCircle v-if="promptPreviewBusy" class="h-4 w-4 animate-spin" />
+                      <span>{{ promptPreviewBusy ? '生成中' : '查看提示词' }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="models-secondary-button"
+                      :disabled="!promptPreview?.prompt"
+                      @click="copyText(promptPreview?.prompt || '', '提示词已复制')"
+                    >
+                      复制提示词
+                    </button>
+                  </div>
+                </div>
+                <div v-if="promptPreview" class="models-prompt-preview__body">
+                  <div class="models-tag-row models-tag-row--compact">
+                    <span>{{ promptPreview.profile.gender || '未设置性别' }}</span>
+                    <span>{{ promptPreview.profile.market || '未设置市场' }}</span>
+                    <span>{{ promptPreview.profile.outfitStyle || '未设置穿搭' }}</span>
+                    <span>{{ promptPreview.profile.sceneStyle || '未设置场景' }}</span>
+                    <span>{{ promptPreview.profile.styleBias || '未设置风格偏向' }}</span>
+                    <span>参考图 {{ promptPreview.productReferenceImageCount }} 张</span>
+                  </div>
+                  <p class="models-prompt-preview__summary">{{ promptPreview.description }}</p>
+                  <textarea :value="promptPreview.prompt" readonly class="models-prompt-preview__textarea"></textarea>
+                </div>
+                <p v-else class="models-prompt-preview__empty">点击“查看提示词”后，可直接复制当前创建模特实际使用的 prompt 发给我排查。</p>
+              </div>
+
+              <button class="models-primary-button models-primary-button--wide" data-testid="models-generate-submit" type="button" :disabled="busy || !hasProductInput" @click="generateModelsBatch">
                 <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
                 <Wand2 v-else class="h-4 w-4" />
                 <span>{{ busy ? '正在生成模特' : '生成新模特' }}</span>
               </button>
-            </div>
+            </section>
           </div>
         </div>
       </div>
@@ -1114,6 +1624,58 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.models-prompt-preview {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.models-prompt-preview__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.models-prompt-preview__head small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.models-prompt-preview__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.models-prompt-preview__body {
+  display: grid;
+  gap: 10px;
+}
+
+.models-prompt-preview__summary,
+.models-prompt-preview__empty {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.82);
+  line-height: 1.6;
+}
+
+.models-prompt-preview__textarea {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.72);
+  color: #e2e8f0;
+  padding: 12px 14px;
+  line-height: 1.6;
+}
+
 .models-library-page {
   display: grid;
   gap: 12px;
@@ -1323,7 +1885,7 @@ onBeforeUnmount(() => {
 }
 
 .models-field textarea {
-  min-height: 92px;
+  min-height: 76px;
   padding: 12px 14px;
   resize: none;
 }
@@ -1918,35 +2480,409 @@ onBeforeUnmount(() => {
   margin-top: 16px;
 }
 
+.models-create-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.models-create-grid--workspace {
+  grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr);
+  align-items: start;
+  gap: 14px;
+  margin-top: 10px;
+}
+
 .models-create-column {
   display: grid;
   gap: 14px;
 }
 
-.models-create-stats {
+.models-create-section {
+  display: grid;
+  gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid rgba(81, 99, 146, 0.14);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(12, 21, 37, 0.96), rgba(9, 17, 31, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.models-create-section--soft {
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(10, 18, 32, 0.9), rgba(8, 15, 28, 0.9));
+  position: sticky;
+  top: 0;
+  gap: 9px;
+}
+
+.models-create-section__head {
+  display: grid;
+  gap: 2px;
+}
+
+.models-create-section__head h4 {
+  margin: 0;
+  color: #f8fbff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.models-create-section__head p {
+  margin: 0;
+  color: #8ea2bb;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.models-profile-groups {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 0;
+}
+
+.models-profile-groups--flat {
+  padding-top: 4px;
+}
+
+.models-profile-sections {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.models-profile-sections--compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid rgba(81, 99, 146, 0.12);
+  border-radius: 16px;
+  background: rgba(6, 12, 23, 0.58);
+}
+
+.models-profile-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(81, 99, 146, 0.12);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    rgba(9, 18, 32, 0.52);
+}
+
+.models-profile-summary__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.models-stat-card {
-  border: 1px solid rgba(81, 99, 146, 0.22);
+.models-profile-summary__head strong {
+  color: #f8fbff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.models-profile-summary__head small {
+  color: #7f95af;
+  font-size: 10px;
+}
+
+.models-profile-summary p {
+  margin: 0;
+  color: #d6e0ee;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.models-profile-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.models-profile-summary__chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(22, 39, 61, 0.82);
+  border: 1px solid rgba(93, 119, 160, 0.2);
+  color: #dfe9f8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.models-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.models-profile-section-tab {
+  display: grid;
+  gap: 2px;
+  min-height: 46px;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid transparent;
   border-radius: 12px;
-  background: rgba(20, 31, 48, 0.76);
+  background: transparent;
+  transition: 160ms ease, transform 160ms ease;
+}
+
+.models-profile-section-tab strong {
+  color: #f3f7ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.models-profile-section-tab small {
+  color: #8397b0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.models-profile-section-tab.active {
+  border-color: rgba(34, 211, 238, 0.24);
+  background: rgba(20, 47, 63, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transform: translateY(-1px);
+}
+
+.models-profile-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(81, 99, 146, 0.1);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(8, 15, 28, 0.34), rgba(8, 15, 28, 0.2));
+}
+
+.models-profile-group__head {
+  display: grid;
+  gap: 2px;
+}
+
+.models-profile-group__head strong {
+  color: #f3f7ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.models-profile-group__head small {
+  color: #8397b0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.models-profile-group__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.models-profile-chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(81, 99, 146, 0.14);
+  border-radius: 999px;
+  background: rgba(17, 29, 46, 0.34);
+  color: #dbe4f0;
+  font-size: 11px;
+  transition: 160ms ease, transform 160ms ease;
+}
+
+.models-profile-chip.active {
+  border-color: rgba(34, 211, 238, 0.46);
+  background: linear-gradient(180deg, rgba(22, 82, 107, 0.44), rgba(14, 54, 74, 0.44));
+  color: #e8fbff;
+  transform: translateY(-1px);
+}
+
+.models-profile-chip--lg {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.models-upload-panel {
+  display: grid;
+  gap: 10px;
   padding: 12px;
+  border: 1px solid rgba(81, 99, 146, 0.12);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
+    rgba(9, 18, 32, 0.58);
+}
+
+.models-upload-panel__lead {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.models-upload-panel__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  background: linear-gradient(180deg, rgba(18, 53, 73, 0.5), rgba(13, 34, 47, 0.5));
+  color: #a9f0ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.models-upload-panel__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.models-upload-panel__copy strong {
+  color: #f3f8ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.models-upload-panel__copy p {
+  margin: 0;
+  color: #8ea2bb;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.models-upload-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.models-upload-preview__hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 108px;
+  border-radius: 18px;
+  border: 1px solid rgba(81, 99, 146, 0.14);
+  background: rgba(8, 15, 27, 0.9);
+}
+
+.models-upload-preview__hero img {
+  width: 100%;
+  height: 100%;
+  min-height: 108px;
+  object-fit: cover;
+  display: block;
+}
+
+.models-upload-preview__hero.is-empty {
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 30%),
+    rgba(8, 15, 27, 0.9);
+}
+
+.models-upload-preview__empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 108px;
+  color: #87a0bd;
+  font-size: 11px;
+  text-align: center;
+}
+
+.models-upload-preview__groups {
+  display: grid;
+  gap: 6px;
+}
+
+.models-upload-preview__group {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(81, 99, 146, 0.12);
+  background: rgba(11, 20, 35, 0.72);
+}
+
+.models-upload-preview__group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.models-upload-preview__group-head strong {
+  color: #f4f8ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.models-upload-preview__group-head small {
+  color: #87a0bd;
+  font-size: 10px;
+}
+
+.models-upload-preview__thumbs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.models-upload-preview__thumbs img,
+.models-upload-preview__thumbs span {
+  width: 100%;
+  aspect-ratio: 1.15 / 1;
+  border-radius: 12px;
+}
+
+.models-upload-preview__thumbs img {
+  object-fit: cover;
+  border: 1px solid rgba(81, 99, 146, 0.14);
+  background: rgba(8, 15, 27, 0.9);
+}
+
+.models-upload-preview__thumbs span {
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(81, 99, 146, 0.2);
+  color: #7287a4;
+  font-size: 10px;
+  background: rgba(8, 15, 27, 0.48);
+}
+
+.models-create-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.models-stat-card {
+  border: 1px solid rgba(81, 99, 146, 0.12);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    rgba(20, 31, 48, 0.3);
+  padding: 10px 12px;
 }
 
 .models-stat-card span {
   display: block;
   color: #95a9c0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .models-stat-card strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 4px;
   color: #fff;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -1954,10 +2890,16 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(245, 158, 11, 0.18);
   border-radius: 14px;
   background: rgba(76, 48, 10, 0.22);
-  padding: 10px 12px;
+  padding: 8px 10px;
   color: #f4cf92;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.models-hint--floating {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(20, 54, 96, 0.26);
+  color: #cfe4ff;
 }
 
 .models-hint.is-error {
@@ -1970,7 +2912,7 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 40;
+  z-index: 80;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1989,21 +2931,28 @@ onBeforeUnmount(() => {
   z-index: 60;
   display: grid;
   place-items: center;
-  background: rgba(3, 8, 15, 0.58);
-  backdrop-filter: blur(10px);
+  overflow-y: auto;
+  padding: 24px;
+  background: rgba(3, 8, 15, 0.62);
+  backdrop-filter: blur(14px);
 }
 
 .models-dialog {
   width: min(420px, calc(100vw - 32px));
-  border: 1px solid rgba(81, 99, 146, 0.26);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(17, 28, 44, 0.99), rgba(11, 19, 33, 0.99));
-  box-shadow: 0 24px 60px rgba(2, 6, 14, 0.42);
-  padding: 18px;
+  max-height: calc(100vh - 48px);
+  border: 1px solid rgba(81, 99, 146, 0.22);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(109, 93, 255, 0.14), transparent 24%),
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.06), transparent 18%),
+    linear-gradient(180deg, rgba(17, 28, 44, 0.99), rgba(11, 19, 33, 0.99));
+  box-shadow: 0 26px 72px rgba(2, 6, 14, 0.46);
+  padding: 14px;
+  overflow-y: auto;
 }
 
 .models-dialog--wide {
-  width: min(860px, calc(100vw - 40px));
+  width: min(1040px, calc(100vw - 40px));
 }
 
 .models-dialog__head,
@@ -2014,12 +2963,40 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.models-dialog__head--hero {
+  align-items: flex-start;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(81, 99, 146, 0.14);
+}
+
+.models-dialog__title-block {
+  display: grid;
+  gap: 4px;
+}
+
+.models-dialog__title-block p {
+  margin: 0;
+  color: #91a6bf;
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 560px;
+}
+
+.models-dialog__eyebrow {
+  color: #8edfff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .models-dialog__close {
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(81, 99, 146, 0.22);
-  border-radius: 12px;
-  background: rgba(21, 33, 50, 0.94);
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(81, 99, 146, 0.18);
+  border-radius: 14px;
+  background: rgba(21, 33, 50, 0.62);
   color: #dbe4f0;
 }
 
@@ -2030,6 +3007,14 @@ onBeforeUnmount(() => {
 .models-dialog__footer {
   justify-content: flex-end;
   margin-top: 18px;
+}
+
+.models-primary-button--wide {
+  width: 100%;
+  height: 40px;
+  margin-top: 2px;
+  justify-content: center;
+  letter-spacing: 0.01em;
 }
 
 .models-secondary-button--dialog,
@@ -2102,6 +3087,22 @@ onBeforeUnmount(() => {
 
   .models-input--search {
     min-width: 0;
+  }
+
+  .models-profile-sections--compact,
+  .models-create-stats,
+  .models-upload-preview__thumbs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .models-create-grid--workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .models-create-section--soft {
+    position: static;
   }
 }
 </style>

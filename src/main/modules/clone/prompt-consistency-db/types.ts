@@ -8,6 +8,7 @@ export type DbPromptRiskFlag =
   | 'geometry_drift_risk'
   | 'category_switch_risk'
   | 'motion_occlusion_risk'
+  | 'reference_anchor_gap'
 
 export type DbProductRiskLevel = 'low' | 'medium' | 'high' | 'critical'
 
@@ -15,6 +16,7 @@ export type DbPromptLayerName =
   | 'IDENTITY_LAYER'
   | 'ANCHOR_LAYER'
   | 'CONSISTENCY_LAYER'
+  | 'PRODUCT_DESCRIPTION_LAYER'
   | 'SHOT_LAYER'
   | 'MOTION_LAYER'
   | 'STYLE_LAYER'

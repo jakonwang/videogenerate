@@ -10,6 +10,7 @@ type SecretKey =
   | 'grsaiApiKey'
   | 'ai666ApiKey'
   | 'vectorEngineApiKey'
+  | 'replicateApiToken'
   | 'qiniuAccessKey'
   | 'qiniuSecretKey'
 
@@ -22,6 +23,7 @@ const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   grsaiApiKey: false,
   ai666ApiKey: false,
   vectorEngineApiKey: false,
+  replicateApiToken: false,
   qiniuAccessKey: false,
   qiniuSecretKey: false,
 })
@@ -31,6 +33,7 @@ const modelCredentials = ref({
   klingHost: '',
   grsaiApiKey: '',
   grsaiHost: '',
+  replicateApiToken: '',
   qiniuAccessKey: '',
   qiniuSecretKey: '',
   qiniuBucket: '',
@@ -536,6 +539,30 @@ onMounted(() => {
                 </label>
               </div>
             </article>
+
+            <article class="platform-card">
+              <div class="platform-card__head">
+                <div class="platform-card__icon">
+                  <ImageIcon :size="16" />
+                </div>
+                <div>
+                  <h3>Replicate</h3>
+                  <p>用于 /clone 商品图白底处理，Token 仅保存在桌面端配置。</p>
+                </div>
+              </div>
+
+              <div class="form-grid single-column">
+                <label>
+                  <span>API Token</span>
+                  <div class="field-inline">
+                    <input v-model="modelCredentials.replicateApiToken" :type="modelSecretType('replicateApiToken')" />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('replicateApiToken')">
+                      {{ modelVisibleSecrets.replicateApiToken ? '隐藏' : '显示' }}
+                    </button>
+                  </div>
+                </label>
+              </div>
+            </article>
           </div>
         </section>
 
@@ -630,7 +657,7 @@ onMounted(() => {
                 </label>
                 <label>
                   <span>对话模型</span>
-                  <input v-model="chatPrimaryModelBinding" placeholder="例如 gpt-5.2" />
+                  <input v-model="chatPrimaryModelBinding" placeholder="例如 gemini-3.1-pro" />
                 </label>
               </div>
             </article>

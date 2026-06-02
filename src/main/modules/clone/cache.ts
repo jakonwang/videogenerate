@@ -12,6 +12,8 @@ function stableHash(input: unknown) {
   return createHash('sha1').update(JSON.stringify(input)).digest('hex')
 }
 
+const PROMPT_CACHE_SCHEMA_VERSION = 'prompt-cache-2026-05-28-v2'
+
 export function computePromptHash(input: {
   shot: ShotSpec
   productRefs: string[]
@@ -20,6 +22,7 @@ export function computePromptHash(input: {
   qualityMode: CloneQualityMode
 }) {
   return stableHash({
+    schemaVersion: PROMPT_CACHE_SCHEMA_VERSION,
     shotId: input.shot.id,
     role: input.shot.shotRole || input.shot.role,
     type: input.shot.shotType,
@@ -48,12 +51,16 @@ export function computeImagePromptHash(input: {
   which: 'start' | 'end' | 'both'
   refs: string[]
   model: string
+  positivePrompt?: string
+  negativePrompt?: string
 }) {
   return stableHash({
     promptHash: input.promptHash,
     which: input.which,
     refs: [...input.refs].sort(),
     model: input.model,
+    positivePrompt: input.positivePrompt || '',
+    negativePrompt: input.negativePrompt || '',
   })
 }
 

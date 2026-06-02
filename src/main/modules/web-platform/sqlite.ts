@@ -14,9 +14,7 @@ type SqliteDatabase = {
   prepare(sql: string): SqliteStatement
 }
 
-type SqliteModule = {
-  DatabaseSync: new (path: string) => SqliteDatabase
-}
+type SqliteCtor = new (path: string) => SqliteDatabase
 
 const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -80,41 +78,55 @@ CREATE TABLE IF NOT EXISTS plugins (
 `
 
 let db: SqliteDatabase | null = null
-let databaseSyncCtor: SqliteModule['DatabaseSync'] | null | undefined
-let sqliteUnavailableReason = ''
+let nodeSqliteCtor: SqliteCtor | null | undefined
+let betterSqliteCtor: SqliteCtor | null | undefined
+let unavailableReason = ''
 
 export function webPlatformSqlitePath() {
   return join(getAppPaths().dbDir, 'web-platform.sqlite')
 }
 
-function getDatabaseSyncCtor() {
-  if (databaseSyncCtor !== undefined) return databaseSyncCtor
+function loadNodeSqliteCtor() {
+  if (nodeSqliteCtor !== undefined) return nodeSqliteCtor
   try {
-    const sqliteModule = require('node:sqlite') as SqliteModule
-    databaseSyncCtor = sqliteModule.DatabaseSync
-    sqliteUnavailableReason = ''
+    const sqliteModule = require('node:sqlite') as { DatabaseSync: SqliteCtor }
+    nodeSqliteCtor = sqliteModule.DatabaseSync
+    unavailableReason = ''
   } catch (error) {
-    databaseSyncCtor = null
-    sqliteUnavailableReason = error instanceof Error ? error.message : String(error)
+    nodeSqliteCtor = null
+    unavailableReason = error instanceof Error ? error.message : String(error)
   }
-  return databaseSyncCtor
+  return nodeSqliteCtor
+}
+
+function loadBetterSqliteCtor() {
+  if (betterSqliteCtor !== undefined) return betterSqliteCtor
+  try {
+    const sqliteModule = require('better-sqlite3') as SqliteCtor
+    betterSqliteCtor = sqliteModule
+    unavailableReason = ''
+  } catch (error) {
+    betterSqliteCtor = null
+    if (!unavailableReason) unavailableReason = error instanceof Error ? error.message : String(error)
+  }
+  return betterSqliteCtor
 }
 
 export function canInitializeWebPlatformSqlite() {
-  return Boolean(getDatabaseSyncCtor())
+  return Boolean(loadNodeSqliteCtor() || loadBetterSqliteCtor())
 }
 
 export function getWebPlatformSqliteUnavailableReason() {
-  return sqliteUnavailableReason
+  return unavailableReason
 }
 
 function getDatabase() {
   if (db) return db
   const dir = getAppPaths().dbDir
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  const DatabaseSync = getDatabaseSyncCtor()
+  const DatabaseSync = loadNodeSqliteCtor() || loadBetterSqliteCtor()
   if (!DatabaseSync) {
-    throw new Error(`当前运行环境不支持 SQLite：${sqliteUnavailableReason || 'unknown'}`)
+    throw new Error(`SQLite unavailable: ${unavailableReason || 'unknown'}`)
   }
   db = new DatabaseSync(webPlatformSqlitePath())
   db.exec('PRAGMA journal_mode = WAL;')
@@ -135,7 +147,7 @@ function selectPayloads<T>(table: string, orderBy: string) {
 }
 
 function clearTables(database: SqliteDatabase) {
-  const tables = [
+  for (const table of [
     'users',
     'sessions',
     'subscriptions',
@@ -146,15 +158,14 @@ function clearTables(database: SqliteDatabase) {
     'compute_price_rules',
     'login_codes',
     'plugins',
-  ]
-  for (const table of tables) {
+  ]) {
     database.exec(`DELETE FROM ${table};`)
   }
 }
 
 export function isWebPlatformSqliteEmpty() {
   const database = getDatabase()
-  const tables = [
+  for (const table of [
     'users',
     'sessions',
     'subscriptions',
@@ -165,8 +176,7 @@ export function isWebPlatformSqliteEmpty() {
     'compute_price_rules',
     'login_codes',
     'plugins',
-  ]
-  for (const table of tables) {
+  ]) {
     const row = database.prepare(`SELECT COUNT(1) AS count FROM ${table}`).get() as { count?: number } | undefined
     if (Number(row?.count || 0) > 0) return false
   }
@@ -192,81 +202,37 @@ export function readWebPlatformDbFromSqlite(): WebPlatformDb {
 export function writeWebPlatformDbToSqlite(input: WebPlatformDb) {
   const database = initializeWebPlatformSqlite()
   const insertUser = database.prepare('INSERT INTO users (id, updated_at, payload) VALUES (?, ?, ?)')
-  const insertSession = database.prepare(
-    'INSERT INTO sessions (token, user_id, expires_at, updated_at, payload) VALUES (?, ?, ?, ?, ?)',
-  )
-  const insertSubscription = database.prepare(
-    'INSERT INTO subscriptions (user_id, updated_at, payload) VALUES (?, ?, ?)',
-  )
+  const insertSession = database.prepare('INSERT INTO sessions (token, user_id, expires_at, updated_at, payload) VALUES (?, ?, ?, ?, ?)')
+  const insertSubscription = database.prepare('INSERT INTO subscriptions (user_id, updated_at, payload) VALUES (?, ?, ?)')
   const insertWallet = database.prepare('INSERT INTO wallets (user_id, updated_at, payload) VALUES (?, ?, ?)')
-  const insertWalletTransaction = database.prepare(
-    'INSERT INTO wallet_transactions (id, user_id, created_at, payload) VALUES (?, ?, ?, ?)',
-  )
-  const insertOrder = database.prepare(
-    'INSERT INTO orders (id, user_id, status, created_at, updated_at, payload) VALUES (?, ?, ?, ?, ?, ?)',
-  )
-  const insertPlan = database.prepare(
-    'INSERT INTO subscription_plans (id, enabled, payload) VALUES (?, ?, ?)',
-  )
+  const insertWalletTransaction = database.prepare('INSERT INTO wallet_transactions (id, user_id, created_at, payload) VALUES (?, ?, ?, ?)')
+  const insertOrder = database.prepare('INSERT INTO orders (id, user_id, status, created_at, updated_at, payload) VALUES (?, ?, ?, ?, ?, ?)')
+  const insertPlan = database.prepare('INSERT INTO subscription_plans (id, enabled, payload) VALUES (?, ?, ?)')
   const insertRule = database.prepare('INSERT INTO compute_price_rules (action, payload) VALUES (?, ?)')
-  const insertLoginCode = database.prepare(
-    'INSERT INTO login_codes (phone, expires_at, updated_at, payload) VALUES (?, ?, ?, ?)',
-  )
-  const insertPlugin = database.prepare(
-    'INSERT INTO plugins (user_id, plugin_id, updated_at, payload) VALUES (?, ?, ?, ?)',
-  )
+  const insertLoginCode = database.prepare('INSERT INTO login_codes (phone, expires_at, updated_at, payload) VALUES (?, ?, ?, ?)')
+  const insertPlugin = database.prepare('INSERT INTO plugins (user_id, plugin_id, updated_at, payload) VALUES (?, ?, ?, ?)')
 
   database.exec('BEGIN IMMEDIATE;')
   try {
     clearTables(database)
-    for (const item of input.users) {
-      insertUser.run(item.id, Number(item.updatedAt || 0), JSON.stringify(item))
-    }
+    for (const item of input.users) insertUser.run(item.id, Number(item.updatedAt || 0), JSON.stringify(item))
     for (const item of input.sessions) {
-      insertSession.run(
-        item.token,
-        item.userId,
-        Number(item.expiresAt || 0),
-        Number(item.updatedAt || 0),
-        JSON.stringify(item),
-      )
+      insertSession.run(item.token, item.userId, Number(item.expiresAt || 0), Number(item.updatedAt || 0), JSON.stringify(item))
     }
-    for (const item of input.subscriptions) {
-      insertSubscription.run(item.userId, Number(item.updatedAt || 0), JSON.stringify(item))
-    }
-    for (const item of input.wallets) {
-      insertWallet.run(item.userId, Number(item.updatedAt || 0), JSON.stringify(item))
-    }
+    for (const item of input.subscriptions) insertSubscription.run(item.userId, Number(item.updatedAt || 0), JSON.stringify(item))
+    for (const item of input.wallets) insertWallet.run(item.userId, Number(item.updatedAt || 0), JSON.stringify(item))
     for (const item of input.walletTransactions) {
       insertWalletTransaction.run(item.id, item.userId, Number(item.createdAt || 0), JSON.stringify(item))
     }
     for (const item of input.orders) {
-      insertOrder.run(
-        item.id,
-        item.userId,
-        item.status,
-        Number(item.createdAt || 0),
-        Number(item.updatedAt || 0),
-        JSON.stringify(item),
-      )
+      insertOrder.run(item.id, item.userId, item.status, Number(item.createdAt || 0), Number(item.updatedAt || 0), JSON.stringify(item))
     }
-    for (const item of input.subscriptionPlans) {
-      insertPlan.run(item.id, item.enabled ? 1 : 0, JSON.stringify(item))
-    }
-    for (const item of input.computePriceRules) {
-      insertRule.run(item.action, JSON.stringify(item))
-    }
+    for (const item of input.subscriptionPlans) insertPlan.run(item.id, item.enabled ? 1 : 0, JSON.stringify(item))
+    for (const item of input.computePriceRules) insertRule.run(item.action, JSON.stringify(item))
     for (const item of input.loginCodes) {
-      insertLoginCode.run(
-        item.phone,
-        Number(item.expiresAt || 0),
-        Number(item.updatedAt || 0),
-        JSON.stringify(item),
-      )
+      insertLoginCode.run(item.phone, Number(item.expiresAt || 0), Number(item.updatedAt || 0), JSON.stringify(item))
     }
-    for (const item of input.plugins) {
-      insertPlugin.run(item.userId, item.pluginId, Number(item.updatedAt || 0), JSON.stringify(item))
-    }
+    for (const item of input.plugins) insertPlugin.run(item.userId, item.pluginId, Number(item.updatedAt || 0), JSON.stringify(item))
     database.exec('COMMIT;')
   } catch (error) {
     database.exec('ROLLBACK;')

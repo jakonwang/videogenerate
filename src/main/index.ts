@@ -1,15 +1,9 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
 import { join } from 'node:path'
 import { createReadStream } from 'node:fs'
-import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { configureAppPathRuntime, ensureAppDirs, getAppPaths } from './lib/paths'
-import { productsRepo } from './modules/products/repo'
-import { templatesRepo } from './modules/templates/repo'
-import { taskQueue } from './modules/tasks/queue'
-import { createBatchTasks } from './modules/tasks/createBatchTasks'
-import { getMediaInfo } from './modules/media/info'
-import { splitVideoToSegmentFiles } from './modules/media/segmentSplit'
+import { ensureAppDirs, getAppPaths } from './lib/paths'
 import { analyzeVideoFolderAndSuggestTemplate } from './modules/style/analyzeVideos'
 import { normalizeAppLocale, type AppLocale } from '../shared/locale'
 import { defaultOpenDialogTitle } from './lib/dialogDefaults'
@@ -25,102 +19,35 @@ import {
 } from './lib/fontResolve'
 import { listBundledStickers, toStickerRef } from './lib/stickers'
 import { importUserStickers, listUserStickerFiles, userStickersDir } from './lib/userStickers'
-import { getLanIPv4 } from './lib/lanAddress'
-import { ensurePreviewHttpServer, stopPreviewHttpServer } from './lib/previewHttpServer'
+import { stopPreviewHttpServer } from './lib/previewHttpServer'
 import { ensureWebApiServer, getWebApiServerPort, stopWebApiServer } from './lib/webApiServer'
 import { cloneRepo } from './modules/clone/repo'
 import { cloneService } from './modules/clone/service'
+import { productsRepo } from './modules/products/repo'
+import { templatesRepo } from './modules/templates/repo'
 import { webPlatformRepo } from './modules/web-platform/repo'
+import { configureWindowsStorageRoot, cleanupLegacyWindowsStorage, migrateLegacyWindowsUserData } from './lib/windowsStorage'
+import { registerAppShellMediaIpc } from './ipc/registerAppShellMediaIpc'
+import { registerProductsIpc } from './ipc/registerProductsIpc'
+import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
+import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 
 let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
 
-function configureWindowsStorageRoot() {
-  if (process.platform !== 'win32') return
-  const driveRoot = 'E:\\VideoGenerate'
-  const userDataDir = process.env.VIDEOGENERATE_USER_DATA_DIR || join(driveRoot, 'userData')
-  const dataDir = process.env.VIDEOGENERATE_DATA_DIR || join(userDataDir, '.videogenerate')
-  app.setPath('userData', userDataDir)
-  app.setPath('sessionData', join(userDataDir, 'session'))
-  app.setPath('logs', join(userDataDir, 'logs'))
-  configureAppPathRuntime({
-    userDataDir,
-    dataDir,
-  })
-}
-
-async function cleanupLegacyWindowsStorage() {
-  if (process.platform !== 'win32') return
-  const legacyRoot = join(app.getPath('appData'), 'VideoGenerate')
-  const currentUserData = getAppPaths().userData
-  if (legacyRoot === currentUserData) return
-
-  const removableDirs = [
-    'Cache',
-    'Code Cache',
-    'DawnGraphiteCache',
-    'DawnWebGPUCache',
-    'GPUCache',
-    'blob_storage',
-    'shared_proto_db',
-    'VideoDecodeStats',
-  ]
-
-  await Promise.all(
-    removableDirs.map((name) =>
-      rm(join(legacyRoot, name), {
-        recursive: true,
-        force: true,
-      }).catch(() => undefined),
-    ),
-  )
-
-  const legacyPreviewDir = join(legacyRoot, '.videogenerate', 'batch-subtitle-preview')
-  await rm(legacyPreviewDir, { recursive: true, force: true }).catch(() => undefined)
-
-  const logEntries = await readdir(legacyRoot, { withFileTypes: true }).catch(() => [])
-  await Promise.all(
-    logEntries
-      .filter((entry) => entry.isFile() && /\.log(\.\d+)?$/i.test(entry.name))
-      .map((entry) =>
-        rm(join(legacyRoot, entry.name), {
-          force: true,
-        }).catch(() => undefined),
-      ),
-  )
-}
-
-async function migrateLegacyWindowsUserData() {
-  if (process.platform !== 'win32') return
-  const legacyRoot = join(app.getPath('appData'), 'VideoGenerate')
-  const currentUserData = getAppPaths().userData
-  if (legacyRoot === currentUserData) return
-
-  const entries = await readdir(legacyRoot, { withFileTypes: true }).catch(() => [])
-  if (!entries.length) return
-
-  await mkdir(currentUserData, { recursive: true })
-  for (const entry of entries) {
-    const source = join(legacyRoot, entry.name)
-    const target = join(currentUserData, entry.name)
-    const exists = await stat(target).then(() => true).catch(() => false)
-    if (exists) continue
-    try {
-      await mkdir(join(target, '..'), { recursive: true })
-      await import('node:fs/promises').then(({ cp }) =>
-        cp(source, target, {
-          recursive: true,
-          force: false,
-          errorOnExist: false,
-        }),
-      )
-    } catch {
-      // ignore migrate failures for non-critical legacy files
-    }
+function ignoreBrokenPipeOnStdStreams() {
+  const swallowBrokenPipe = (error: unknown) => {
+    const code = String((error as any)?.code ?? '')
+    const message = String((error as any)?.message ?? error ?? '')
+    if (code === 'EPIPE' || /broken pipe/i.test(message)) return
+    throw error
   }
+  process.stdout?.on?.('error', swallowBrokenPipe)
+  process.stderr?.on?.('error', swallowBrokenPipe)
 }
 
 configureWindowsStorageRoot()
+ignoreBrokenPipeOnStdStreams()
 
 /** 与渲染进程语言同步，供未传 title 的系统对话框默认文案；`app.whenReady` 后再对齐系统 locale */
 let mainUiLocale: AppLocale = 'zh-CN'
@@ -141,6 +68,12 @@ protocol.registerSchemesAsPrivileged([
 
 function guessMimeByPath(p: string) {
   const s = p.toLowerCase()
+  if (s.endsWith('.png')) return 'image/png'
+  if (s.endsWith('.jpg') || s.endsWith('.jpeg')) return 'image/jpeg'
+  if (s.endsWith('.webp')) return 'image/webp'
+  if (s.endsWith('.gif')) return 'image/gif'
+  if (s.endsWith('.bmp')) return 'image/bmp'
+  if (s.endsWith('.svg')) return 'image/svg+xml'
   if (s.endsWith('.mp4')) return 'video/mp4'
   if (s.endsWith('.mov')) return 'video/quicktime'
   if (s.endsWith('.webm')) return 'video/webm'
@@ -270,6 +203,15 @@ function createWindow() {
       errorDescription,
       validatedURL,
     })
+  })
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    console.log('[renderer-console]', { level, message, line, sourceId })
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[window] render-process-gone', details)
+  })
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('[window] renderer unresponsive')
   })
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL
@@ -438,6 +380,24 @@ function wireIpc() {
   })
 
   ipcMain.handle(
+    'clone:debugLog',
+    async (
+      _e,
+      payload: {
+        message: string
+        level?: 'info' | 'error'
+      },
+    ) => {
+      const text = String(payload?.message || '').trim()
+      if (text) {
+        if (payload?.level === 'error') console.error(text)
+        else console.log(text)
+      }
+      return { ok: true }
+    },
+  )
+
+  ipcMain.handle(
     'clone:createDraftProject',
     async (
       _e,
@@ -499,6 +459,18 @@ function wireIpc() {
     },
   )
   ipcMain.handle(
+    'clone:bindProjectProduct',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        productId: string
+      },
+    ) => {
+      return await cloneService.bindProjectProduct(payload)
+    },
+  )
+  ipcMain.handle(
     'clone:generateVariants',
     async (
       _e,
@@ -545,6 +517,7 @@ function wireIpc() {
         selectedModelIdentityId?: string
       },
     ) => {
+      console.log('[clone-debug] ipc:generateStoryboardGrids', payload)
       return await cloneService.generateStoryboardGridsForProject(payload)
     },
   )
@@ -557,6 +530,7 @@ function wireIpc() {
         maxAutoRetryPerShot?: number
       },
     ) => {
+      console.log('[clone-debug] ipc:generateShotVideosFromStoryboard', payload)
       return await cloneService.generateShotVideosFromStoryboardFrames(payload)
     },
   )
@@ -572,6 +546,7 @@ function wireIpc() {
         autoBindModelPack?: boolean
       },
     ) => {
+      console.log('[clone-debug] ipc:autoRunToStoryboardVideos', payload)
       return await cloneService.autoRunCloneToStoryboardVideos(payload)
     },
   )
@@ -598,6 +573,18 @@ function wireIpc() {
       },
     ) => {
       return await cloneService.composeCloneFinalVideo(payload)
+    },
+  )
+  ipcMain.handle(
+    'clone:forceDownloadShotVideoResult',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        shotId: string
+      },
+    ) => {
+      return await cloneService.forceDownloadShotVideoResult(payload)
     },
   )
   ipcMain.handle(
@@ -917,7 +904,12 @@ function wireIpc() {
   )
   ipcMain.handle(
     'clone:getShotImagePromptPreview',
-    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.getShotImagePromptPreview(payload),
+    async (_e, payload: { cloneProjectId: string; shotId: string; selectedModelIdentityId?: string }) =>
+      cloneService.getShotImagePromptPreview(payload),
+  )
+  ipcMain.handle(
+    'clone:getShotVideoPromptPreview',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.getShotVideoPromptPreview(payload),
   )
   ipcMain.handle(
     'clone:recompileShotConsistency',
@@ -943,6 +935,7 @@ function wireIpc() {
       payload: {
         cloneProjectId: string
         onlyMissing?: boolean
+        forceRegenerate?: boolean
         shotIds?: string[]
         productReferenceImagePaths?: string[]
       },
@@ -956,6 +949,7 @@ function wireIpc() {
         cloneProjectId: string
         productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
         productPoints?: string
+        modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
         productReferenceImagePaths?: string[]
         imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
@@ -972,6 +966,19 @@ function wireIpc() {
     ) => cloneService.generateModelIdentityPack(payload),
   )
   ipcMain.handle(
+    'clone:getModelIdentityPromptPreview',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productPoints?: string
+        modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
+        productReferenceImagePaths?: string[]
+      },
+    ) => cloneService.getModelIdentityPromptPreview(payload),
+  )
+  ipcMain.handle(
     'clone:selectModelIdentityPack',
     async (_e, payload: { cloneProjectId: string; packId: string; confirmed?: boolean }) =>
       cloneService.selectModelIdentityPack(payload),
@@ -984,6 +991,7 @@ function wireIpc() {
         cloneProjectId: string
         shotId: string
         which?: 'start' | 'end' | 'both'
+        selectedModelIdentityId?: string
         productReferenceImagePaths?: string[]
         imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
@@ -1116,6 +1124,9 @@ function wireIpc() {
   ipcMain.handle('clone:getModelCredentials', async () => {
     return await cloneService.getModelCredentials()
   })
+  ipcMain.handle('clone:getRuntimeOptions', async () => {
+    return await cloneService.getRuntimeOptions()
+  })
   ipcMain.handle(
     'clone:setModelCredentials',
     async (
@@ -1195,99 +1206,29 @@ function wireIpc() {
       })
     },
   )
+  ipcMain.handle(
+    'clone:setRuntimeOptions',
+    async (
+      _e,
+      payload: {
+        storyboardFrameConcurrency?: number
+        globalStoryboardFrameConcurrency?: number
+      },
+    ) => {
+      return await cloneService.setRuntimeOptions({
+        storyboardFrameConcurrency: payload?.storyboardFrameConcurrency,
+        globalStoryboardFrameConcurrency: payload?.globalStoryboardFrameConcurrency,
+      })
+    },
+  )
   ipcMain.handle('clone:getGrsAiCredits', async () => {
     return await cloneService.getGrsAiCredits()
   })
 
-  ipcMain.handle('media:getInfo', async (_e, filePath: string) => {
-    return await getMediaInfo(filePath)
-  })
-
-  ipcMain.handle(
-    'media:segmentSplit',
-    async (event, payload: { inputPath: string; segmentTimeSec: number; outputDir?: string; outputFormat?: 'source' | 'mp4' }) => {
-      const wc = event.sender
-      const send = (data: Record<string, unknown>) => {
-        if (!wc.isDestroyed()) wc.send('media:segmentSplitProgress', data)
-      }
-      try {
-        const outputPaths = await splitVideoToSegmentFiles({
-          inputPath: String(payload?.inputPath ?? ''),
-          segmentTimeSec: Number(payload?.segmentTimeSec ?? 3),
-          outputDir: String(payload?.outputDir ?? '').trim() || undefined,
-          outputFormat: payload?.outputFormat === 'mp4' ? 'mp4' : 'source',
-          onProgress: (p) => send({ phase: p.phase }),
-        })
-        send({ phase: 'done', count: outputPaths.length })
-        return { ok: true as const, outputPaths }
-      } catch (e: any) {
-        return { ok: false as const, error: e?.message ?? String(e) }
-      }
-    },
-  )
-
-  ipcMain.handle('shell:showItemInFolder', async (_e, fullPath: string) => {
-    shell.showItemInFolder(fullPath)
-    return { ok: true }
-  })
-
-  ipcMain.handle('shell:openPath', async (_e, fullPath: string) => {
-    const p = String(fullPath ?? '')
-    await shell.openPath(p)
-    return { ok: true }
-  })
-
-  ipcMain.handle('products:list', async () => productsRepo.list())
-  ipcMain.handle('products:upsert', async (_e, payload) => productsRepo.upsert(payload))
-  ipcMain.handle('products:remove', async (_e, id: string) => productsRepo.remove(id))
-  ipcMain.handle('products:ensureSegmentBucketsFromTemplates', async () => productsRepo.ensureSegmentBucketsFromTemplates())
-
-  ipcMain.handle('templates:list', async () => templatesRepo.list())
-  ipcMain.handle('templates:upsert', async (_e, payload) => templatesRepo.upsert(payload))
-  ipcMain.handle('templates:remove', async (_e, id: string) => templatesRepo.remove(id))
-
-  ipcMain.handle('tasks:list', async () => taskQueue.list())
-  ipcMain.handle('tasks:stats', async () => taskQueue.stats())
-  ipcMain.handle('tasks:enqueueBatch', async (_e, payload: { productId: string; templateId: string; count: number; outDir: string }) => {
-    const res = await createBatchTasks(payload)
-    for (const t of res.tasks) taskQueue.enqueue(t)
-    return res.meta
-  })
-  ipcMain.handle('tasks:pause', async () => {
-    taskQueue.pause()
-    return { ok: true }
-  })
-  ipcMain.handle('tasks:resume', async () => {
-    taskQueue.resume()
-    return { ok: true }
-  })
-  ipcMain.handle('tasks:cancelAll', async () => {
-    taskQueue.cancelAll()
-    return { ok: true }
-  })
-
-  ipcMain.handle('preview:getMobilePlayUrl', async (_e, taskId: string) => {
-    const id = String(taskId ?? '').trim()
-    const task = taskQueue.getTask(id)
-    if (!task || task.status !== 'done' || !task.outPath?.trim()) {
-      return { ok: false as const, code: 'not_done' as const }
-    }
-    try {
-      const port = await ensurePreviewHttpServer()
-      const ip = getLanIPv4()
-      if (!ip) {
-        return { ok: false as const, code: 'no_lan' as const }
-      }
-      const url = `http://${ip}:${port}/p/${id}`
-      return { ok: true as const, url, port, ip }
-    } catch (e: any) {
-      return { ok: false as const, code: 'server' as const, detail: e?.message ?? String(e) }
-    }
-  })
-
-  taskQueue.onEvent((evt) => {
-    mainWindow?.webContents.send('tasks:event', evt)
-  })
+  registerAppShellMediaIpc(ipcMain, () => mainWindow, () => mainUiLocale)
+  registerProductsIpc(ipcMain)
+  registerTiktokListingIpc(ipcMain)
+  registerTemplatesTasksIpc(ipcMain, () => mainWindow)
 }
 
 app.whenReady().then(async () => {
@@ -1308,6 +1249,11 @@ app.whenReady().then(async () => {
   await ensureWebApiServer()
   createWindow()
   wireIpc()
+  void cloneService.resumePendingRemoteStoryboardVideosOnStartup().catch((error: any) => {
+    console.error('[clone-debug] startup-resume-shot-video-failed', {
+      message: String(error?.message ?? error ?? 'unknown error'),
+    })
+  })
   registerUpdaterIpc(() => mainWindow)
   setupAutoUpdater(() => mainWindow)
 })
@@ -1320,4 +1266,3 @@ app.on('before-quit', () => {
   void stopPreviewHttpServer()
   void stopWebApiServer()
 })
-

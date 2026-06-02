@@ -32,26 +32,26 @@ watch(
   <section class="runtime-console" :class="{ 'is-collapsed': collapsed }">
     <div class="runtime-log-head">
       <div>
-        <strong>运行控制台</strong>
-        <span>实时查看提交日志、接口返回、阶段切换与错误信息</span>
+        <strong>&#36816;&#34892;&#25511;&#21046;&#21488;</strong>
+        <span>&#23454;&#26102;&#26597;&#30475;&#25552;&#20132;&#26085;&#24535;&#12289;&#25509;&#21475;&#36820;&#22238;&#12289;&#38454;&#27573;&#20999;&#25442;&#19982;&#38169;&#35823;&#20449;&#24687;</span>
       </div>
       <div class="runtime-log-head__actions">
-        <em>{{ logs.length }} 条</em>
+        <em>{{ logs.length }} &#26465;</em>
         <button class="ghost-button small" type="button" @click="emit('update:collapsed', !collapsed)">
-          {{ collapsed ? '打开' : '关闭' }}
+          {{ collapsed ? '\u6253\u5f00' : '\u5173\u95ed' }}
         </button>
       </div>
     </div>
     <div v-if="!collapsed" ref="logListRef" class="runtime-log-list">
       <article v-for="item in logs" :key="item.id" class="runtime-log-item" :class="item.level">
-        <strong>{{ item.level === 'error' ? '错误' : item.level === 'success' ? '成功' : '日志' }}</strong>
+        <strong>{{ item.level === 'error' ? '\u9519\u8bef' : item.level === 'success' ? '\u6210\u529f' : '\u65e5\u5fd7' }}</strong>
         <span>{{ item.message }}</span>
       </article>
     </div>
   </section>
 
   <button v-if="collapsed" class="runtime-console-toggle" type="button" @click="emit('update:collapsed', false)">
-    打开运行控制台
+    &#25171;&#24320;&#36816;&#34892;&#25511;&#21046;&#21488;
   </button>
 </template>
 

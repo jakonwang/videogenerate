@@ -9,6 +9,7 @@ const props = defineProps<{
   open: boolean
   src: string | null
   title?: string
+  mediaType?: 'video' | 'image'
 }>()
 
 const emit = defineEmits<{
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const effectiveSrc = computed(() => (props.open ? props.src : null))
+const effectiveMediaType = computed(() => props.mediaType ?? 'video')
 
 function close() {
   emit('close')
@@ -65,7 +67,15 @@ onBeforeUnmount(() => stopPlayback())
           </div>
 
           <div class="flex items-center justify-center p-3">
+            <img
+              v-if="effectiveMediaType === 'image'"
+              class="max-h-[85vh] w-auto max-w-full rounded-xl bg-black object-contain"
+              :src="effectiveSrc ?? undefined"
+              :alt="title || 'preview'"
+              @click.stop
+            />
             <video
+              v-else
               ref="videoEl"
               class="max-h-[85vh] w-auto max-w-full rounded-xl bg-black"
               :src="effectiveSrc ?? undefined"

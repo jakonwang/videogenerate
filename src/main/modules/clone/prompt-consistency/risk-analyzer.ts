@@ -44,22 +44,26 @@ export function analyzePromptRisk(shot: ShotSpec, productType: string) {
   }
   if (/(earring|ring|necklace|bracelet|gem|charm|chain|stone|logo|clasp)/.test(content)) {
     riskFlags.add('small_detail_product')
-    score += 2
+    score += 3
   }
   if (REFLECTIVE_HINTS.some((item) => content.includes(item))) {
     riskFlags.add('reflective_material')
-    score += 2
+    score += 3
   }
   if (CINEMATIC_OVERRIDE_TERMS.some((item) => content.includes(item))) {
     riskFlags.add('cinematic_override_risk')
-    score += 2
+    score += 3
   }
   if (!String(shot.productFocus || '').trim() && !String(shot.materialNeed || '').trim()) {
     riskFlags.add('weak_identity_description')
-    score += 1
+    score += 2
   }
   if (/occlusion|hidden|blur|fast|whip|dramatic movement|turn head/.test(content) || shot.motion === 'shake' || shot.motion === 'fast_cut') {
     riskFlags.add('motion_occlusion_risk')
+    score += 2
+  }
+  if (!String(shot.gptFirstFramePath || shot.generatedFirstFramePath || shot.thumbnailPath || '').trim()) {
+    riskFlags.add('reference_anchor_gap')
     score += 1
   }
   riskFlags.add('extra_decoration_risk')

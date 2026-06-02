@@ -8,6 +8,8 @@ apps/web-next/.next/dev/cache
 apps/web-next/.next/trace
 apps/web-next/.next/trace-build
 apps/web-next/.next/turbopack
+apps/web-next/.next
+apps/web-next/tsconfig.tsbuildinfo
 .DS_Store
 *.log
 *.out
@@ -20,7 +22,11 @@ tmp-*
 .tmp-*
 audit-*.png
 .codex-logs
+.codex-run
 .stitch-ref
+.git-backups
+.tmp
+test/artifacts
 video
 automation/hermes-agent/config.local.json
 automation/hermes-agent/*.local.json
@@ -41,4 +47,3 @@ resources/fonts/*.ttf
 resources/fonts/*.woff2
 resources/fonts/.videogenerate-fonts-ready
 out/main/resources/fonts/
-

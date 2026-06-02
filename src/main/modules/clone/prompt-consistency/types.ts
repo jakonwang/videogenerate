@@ -10,6 +10,7 @@ export type PromptRiskFlag =
   | 'geometry_drift_risk'
   | 'category_switch_risk'
   | 'motion_occlusion_risk'
+  | 'reference_anchor_gap'
 
 export type IdentityAnchor = {
   key:
@@ -32,6 +33,7 @@ export type PromptLayerName =
   | 'IDENTITY_LAYER'
   | 'ANCHOR_LAYER'
   | 'CONSISTENCY_LAYER'
+  | 'PRODUCT_DESCRIPTION_LAYER'
   | 'SHOT_LAYER'
   | 'MOTION_LAYER'
   | 'STYLE_LAYER'
@@ -46,10 +48,26 @@ export type PromptLayerBlock = {
 
 export type ConsistencyPatchSet = {
   identityPatch: string
+  modelIdentityPatch: string
   anchorPatch: string
   consistencyPatch: string
   antiVariationPatch: string
   negativePatch: string
+}
+
+export type PromptModelIdentityInput = {
+  id?: string
+  name?: string
+  description?: string
+  market?: string
+  gender?: string
+  ageRange?: string
+  hairStyle?: string
+  skinTone?: string
+  outfitStyle?: string
+  mood?: string
+  sceneStyle?: string
+  imagePaths?: string[]
 }
 
 export type PromptConsistencyReport = {

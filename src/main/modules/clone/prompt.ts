@@ -1,4 +1,4 @@
-import type { CloneBlueprint, CloneProductType, CloneQualityMode, ReferenceLock, ShotSpec } from './types'
+import type { CloneBlueprint, CloneProductMode, CloneProductType, CloneQualityMode, ReferenceLock, ShotSpec } from './types'
 
 function cleanText(value: unknown, fallback: string) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -64,6 +64,9 @@ function stripBrokenTail(line: string) {
     .replace(/^remium\b/i, 'Premium')
     .replace(/slow push-i$/i, 'slow push-in')
     .replace(/\bzoom_in\s+\d+\s*\./gi, 'zoom_in.')
+    .replace(/\b(reference video|action|scene|lighting|camera|style|quality)\s+\d+\b/gi, '$1')
+    .replace(/\b(static|closeup|close-up|no redesign|high fidelity|stable)\s+\d+\b/gi, '$1')
+    .replace(/\s+\d+\s*$/g, '')
     .replace(/\.\./g, '.')
     .replace(/\btraceid\s*:\s*\S+/gi, '')
     .replace(/\bhttp\s*(400|401|403|404|429|500|502|503)\s*:\s*.*$/gi, '')
@@ -130,11 +133,19 @@ export function sanitizeNegativePrompt(value: unknown, maxChars = 400) {
   const deduped = Array.from(new Set(items.map((item) => item.toLowerCase()))).map((key) =>
     items.find((item) => item.toLowerCase() === key) || key,
   )
-  return deduped.join(', ').slice(0, maxChars)
+  const kept: string[] = []
+  let total = 0
+  for (const item of deduped) {
+    const nextLength = total + item.length + (kept.length ? 2 : 0)
+    if (nextLength > maxChars) break
+    kept.push(item)
+    total = nextLength
+  }
+  return kept.join(', ')
 }
 
 export function buildNoSpeakingInstruction() {
-  return 'Silent performance only: no speaking, no dialogue, no lip-sync, no visible speech articulation, lips closed or naturally relaxed, mouth stays closed unless breathing naturally, and no presenter-style talking pose.'
+  return 'Silent visual performance only: no vocal performance, no conversation scene, no singing scene, no host-style delivery pose, no exaggerated mouth movement, and keep facial expression calm and visually neutral.'
 }
 
 export function buildReferenceImageLockText() {
@@ -187,6 +198,75 @@ export function buildFailInsteadRuleText() {
   return 'If any forbidden condition is triggered, discard the generation instead of correcting it.'
 }
 
+export function buildJewelryLightEffectBanText(productType?: string) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  if (!/earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet/.test(normalizedType)) {
+    return ''
+  }
+  return [
+    'ABSOLUTE JEWELRY LIGHT EFFECT BAN:',
+    'Jewelry must never become a light source.',
+    'Keep stones and metal passive, dim, non-emissive, and physically dull when needed.',
+    'No sparkle, no star glint, no lens flare, no bloom, no glowing white core, no flash hotspot, no detached bright spot, and no self-luminous shine.',
+    'No point-like sparkle, white-hot pixel cluster, rainbow flare, radial rays, magical shine, or luxury-ad jewelry effect.',
+    'If any highlight starts to look flashy, glowing, explosive, premium-VFX, or brighter than realistic skin specular, suppress it immediately.',
+    'Only allow weak, flat, surface-attached reflections. Prefer slightly darker, quieter metal and stone response over any dramatic shine.',
+    'If the jewelry appears self-luminous in any frame, treat that result as invalid and discard it.',
+  ].join(' ')
+}
+
+export function buildAntiGlowLightingEnvironmentText(productType?: string) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  if (!/earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet/.test(normalizedType)) {
+    return ''
+  }
+  return [
+    'ANTI-GLOW LIGHTING ENVIRONMENT:',
+    'Use soft diffused lighting, matte lighting, studio flat lighting, low contrast lighting, and overcast lighting behavior.',
+    'Use diffuse soft source only, with flat studio diffusion and low contrast exposure.',
+    'No specular highlights, no hard key light, no point light reflections, and no glossy jewelry rendering.',
+    'Treat metal and stones as optically quiet materials with dimmer, flatter, non-emissive material response.',
+    'Remove specular edge pops and bright jewelry hotspots.',
+    'Prefer flat studio diffusion or overcast softness over realistic shiny reflections.',
+    'If reference lighting creates jewelry sparkle, override it with flatter, softer, dimmer lighting immediately.',
+    'Lighting control overrides reference lighting when anti-glow conflicts occur.',
+  ].join(' ')
+}
+
+function inferJewelryLikePromptContext(input: {
+  productType?: string
+  generationPrompt?: string
+  visualDescription?: string
+  productIdentityText?: string
+  materialNeed?: string
+}) {
+  const haystack = [
+    input.productType,
+    input.generationPrompt,
+    input.visualDescription,
+    input.productIdentityText,
+    input.materialNeed,
+  ]
+    .map((item) => keepEnglishLikeText(item, ''))
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase()
+  return /earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet|stud|hoop|drop earring|dangle earring/.test(
+    haystack,
+  )
+}
+
+export function buildShotAntiGlowPromptBlock(input: {
+  productType?: string
+  generationPrompt?: string
+  visualDescription?: string
+  productIdentityText?: string
+  materialNeed?: string
+}) {
+  const inferredType = inferJewelryLikePromptContext(input) ? 'jewelry' : String(input.productType || '').trim()
+  return sanitizeGeneratedVideoPrompt(buildJewelryLightEffectBanText(inferredType), 520)
+}
+
 export function buildSpatialAnchorLockText(productType: string) {
   const base = [
     'SPATIAL ANCHOR LOCK:',
@@ -222,6 +302,18 @@ export function buildCompositionLockText(productType: string) {
 export function buildCameraMotionLockText(input: { motion?: string; framing?: string; productType?: string }) {
   const motion = String(input.motion || '').trim().toLowerCase()
   const productType = String(input.productType || '').trim().toLowerCase()
+  if (motion === 'zoom_in') {
+    const startState = 'initial close-up frame'
+    const endState = 'slightly tighter close-up within the same framing family'
+    return [
+      'CAMERA MOTION LOCK:',
+      'The zoom in must be a VERY SLOW, SMOOTH, CONTINUOUS camera movement from the initial close-up frame.',
+      `Start state: ${startState}.`,
+      `End state: ${endState}.`,
+      'The motion must feel like a single uninterrupted gentle push-in with stable camera speed.',
+      'Do NOT accelerate suddenly, snap forward, cut to a new shot, regenerate a new framing, change subject scale abruptly, or reset composition.',
+    ].join(' ')
+  }
   if (motion === 'zoom_out') {
     const isEarring = /earrings?/.test(productType)
     const startState = isEarring ? 'extreme close-up of earring and ear' : 'tight close-up of the product anchor area'
@@ -230,17 +322,17 @@ export function buildCameraMotionLockText(input: { motion?: string; framing?: st
       : 'slightly wider close-up of the same subject area'
     return [
       'CAMERA MOTION LOCK:',
-      'The zoom out must be a CONTINUOUS camera movement from the initial close-up frame.',
+      'The zoom out must be a VERY SLOW, SMOOTH, CONTINUOUS camera movement from the initial close-up frame.',
       `Start state: ${startState}.`,
       `End state: ${endState}.`,
-      'The motion must feel like a single uninterrupted camera pull-back.',
-      'DO NOT cut to a new shot, regenerate a new framing, change subject scale abruptly, or reset composition.',
+      'The motion must feel like a single uninterrupted gentle camera pull-back with stable camera speed.',
+      'DO NOT accelerate suddenly, rush the pull-back, cut to a new shot, regenerate a new framing, change subject scale abruptly, or reset composition.',
     ].join(' ')
   }
   return [
     'CAMERA MOTION LOCK:',
-    'Keep camera motion continuous within the same shot.',
-    'Do NOT cut to a new shot, regenerate a new framing, or reset composition.',
+    'Keep camera motion smooth and continuous within the same shot.',
+    'Do NOT accelerate suddenly, cut to a new shot, regenerate a new framing, or reset composition.',
   ].join(' ')
 }
 
@@ -269,12 +361,12 @@ export function buildMotionLimitText(productType: string, motion?: string) {
       ? 'The earring may have extremely subtle micro-movements caused by breathing during the continuous pull-back.'
       : 'The earring may have extremely subtle micro-movements caused by breathing.',
     'Amplitude must be minimal and physically plausible.',
-    'No noticeable swinging, no exaggerated motion.',
+    'No noticeable swinging, no exaggerated motion, no sudden motion burst.',
   ].join(' ')
 }
 
 export function buildSilentCommercialGlobalRule() {
-  return '[Global Rule: Silent visual commercial. Human models must be faceless with head out of frame whenever possible, no speaking or dialogue is allowed, no presenter-to-camera delivery is allowed, and focus 100% on product angles.]'
+  return '[Global Rule: Silent visual commercial. No vocal-performance scene, no presenter-to-camera delivery, no host-style selling posture, and no talking-head composition. Keep product-led framing. For earrings or worn accessories, the ear area and part of the face/jawline may be visible but the face must not dominate.]'
 }
 
 export function prependSilentCommercialGlobalRule(parts: Array<string | null | undefined>, maxChars = 1800) {
@@ -285,10 +377,10 @@ function movementLabel(shot: ShotSpec) {
   const motion = String(shot.cameraMovement || shot.motion || shot.prompt?.cameraMotion || 'static')
   const map: Record<string, string> = {
     static: 'mostly static handheld shot with tiny natural micro movement',
-    zoom_in: 'slow push-in following the same reference movement path',
-    zoom_out: 'slow pull-back following the same reference movement path',
-    pan_left: 'small handheld pan left matching the reference direction',
-    pan_right: 'small handheld pan right matching the reference direction',
+    zoom_in: 'very slow smooth push-in following the same reference movement path',
+    zoom_out: 'very slow smooth pull-back following the same reference movement path',
+    pan_left: 'small smooth handheld pan left matching the reference direction',
+    pan_right: 'small smooth handheld pan right matching the reference direction',
     shake: 'controlled handheld movement matching the reference energy',
     fast_cut: 'brief practical reveal motion matching the reference cut rhythm',
   }
@@ -405,7 +497,7 @@ export function buildShotScriptConstraintText(shot: ShotSpec) {
   return composePromptParagraphs(
     [
       `Preserve this exact shot logic. ${scriptText}`,
-      narrationText ? `The spoken meaning should remain aligned with this shot: ${narrationText}.` : '',
+      narrationText ? `The intended selling message for this shot should remain aligned with: ${narrationText}.` : '',
       onScreenText ? `Any implied on-screen message should mean: ${onScreenText}.` : '',
       `Visual direction: ${visualDescription}. Action direction: ${actionDescription}. Camera direction: ${cameraDescription}.`,
       `Keep the product clearly visible and commercially relevant. ${productFocus}.`,
@@ -438,11 +530,11 @@ export function buildProductLockText(
   const specific: Record<CloneProductType, string[]> = {
     earrings: [
       'Identify the product as earrings or ear jewelry first, then place only this exact product on the ear or in the hand display.',
-      'Keep earring shape, metal color, dangling structure, pearl or zircon placement, and left-right wearing proportion.',
-      'Keep the exact hook shape, pendant count, pendant spacing, stone size, stone position and metal thickness.',
+      'Keep earring shape, dangling structure, left-right wearing proportion, connector relation, and component placement unchanged.',
+      'Keep the exact hook shape, pendant count, pendant spacing, visible geometry, and thickness proportion.',
       'If the model originally wears different earrings, remove them and replace them with the uploaded earrings only.',
       'Do not add chains, stones, logo, extra charms, or alter the hook and pendant structure.',
-      'Keep gemstone and metal reflections realistic and restrained. Do not add exaggerated sparkle effects, starburst highlights, fantasy glow, or fake luxury VFX.',
+      'Preserve structure only. Do not reinterpret jewelry material behavior or add reflective enhancement, sparkle, starburst highlights, fantasy glow, or fake luxury VFX.',
       'Earrings cannot stand upright by themselves like a rigid figurine or tabletop sculpture. Show them only as worn on the ear, held by hand, laid flat, or supported by a physically believable display/contact point.',
     ],
     phone_case: [
@@ -487,6 +579,17 @@ export function buildCloneNegativePrompt(productType: CloneProductType, shotType
     'no changed product category',
     'no changed product color',
     'no changed product structure',
+    'no exaggerated sparkle',
+    'no sparkle VFX',
+    'no fantasy glow',
+    'no bloom effect',
+    'no bloom-heavy highlights',
+    'no starburst highlights',
+    'no magical glitter',
+    'no luxury VFX',
+    'no glowing product',
+    'no dramatic reflective flare',
+    'no overexposed highlights',
     'discard the generation instead of correcting it',
   ]
   const productSpecific: Record<CloneProductType, string[]> = {
@@ -527,6 +630,409 @@ export function buildRealismInstruction(shotType: string | undefined, qualityMod
 
 export function buildTextSafetyInstruction() {
   return 'Do not generate watermark, account names, platform UI, logos, subtitles, captions, stickers, or random characters.'
+}
+
+export function buildGenerationPromptRestraintText() {
+  return sanitizeGeneratedVideoPrompt(
+    [
+      'Keep the generation prompt realistic and commercially usable.',
+      'Product appearance must stay natural, restrained, and physically believable.',
+      'Do not overdramatize the product with luxury-ad style exaggeration, fantasy polish, or glamorized rendering.',
+      'If the product includes diamond, zircon, crystal, gemstone, glossy metal, mirror, or reflective details, keep highlights subtle and camera-realistic only.',
+      'Allow only tiny low-intensity real specular edges that stay inside the material surface. Do not add exaggerated sparkle, over-flashing shine, glow, bloom, starburst highlights, magical glitter, lens flare, radial light rays, glowing white cores, rainbow flares, or visual-effect style product shine.',
+      'Do not make the product look self-luminous, overly glossy, overexposed, or artificially premium through effects.',
+    ].join('\n'),
+    700,
+  )
+}
+
+export function sanitizeJewelryGenerationPrompt(value: unknown, productType?: string) {
+  const text = keepEnglishLikeText(value, '').trim()
+  if (!text) return ''
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  const looksJewelry =
+    /earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet/.test(
+      `${normalizedType} ${text}`.toLowerCase(),
+    )
+  if (!looksJewelry) return sanitizeGeneratedVideoPrompt(text, 700)
+  const replacements: Array<[RegExp, string]> = [
+    [/\bvisual impact\b/gi, 'refined product presence'],
+    [/\bsparkling stones?\b/gi, 'realistic stone surface detail'],
+    [/\bsparkling\b/gi, 'realistic material detail'],
+    [/\bhigh-polish\b/gi, 'natural'],
+    [/\bglittering\b/gi, 'realistic'],
+    [/\bdazzling\b/gi, 'refined'],
+    [/\bshimmering\b/gi, 'realistic'],
+    [/\bbrilliant shine\b/gi, 'subtle material detail'],
+    [/\bintense shine\b/gi, 'subtle material detail'],
+  ]
+  let next = text
+  for (const [pattern, replacement] of replacements) next = next.replace(pattern, replacement)
+  next = next
+    .replace(/\bhigh-polish silver texture\b/gi, 'natural silver texture')
+    .replace(/\bhigh-polish gold texture\b/gi, 'natural gold texture')
+    .replace(/\bsparkle(?:\s+effect)?\b/gi, 'realistic material detail')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const restraint = [
+    'Keep jewelry highlights tiny, low-intensity, realistic, and restrained.',
+    'Jewelry must not become a light source.',
+    'No star-shaped flare, no radial light rays, no lens flare, no glowing white core, no rainbow flare, no sparkle points, no bloom-heavy shine, no fantasy glow, and no luxury VFX polish.',
+  ].join(' ')
+  return sanitizeGeneratedVideoPrompt([next, restraint].filter(Boolean).join('\n'), 700)
+}
+
+export function buildVideoAntiSparkleNegativePrompt(base?: unknown, productMode: CloneProductMode = 'STRICT') {
+  const hardVfxBan = [
+    'no sparkle',
+    'no starburst',
+    'no lens flare',
+    'no radial light rays',
+    'no light burst',
+    'no glowing white core',
+    'no rainbow flare',
+    'no bloom blob',
+    'no glitter VFX',
+    'no magical shine',
+    'no flash hotspot',
+    'no self-luminous product',
+    'no overexposed shine',
+    'no flashy visual effects',
+    'no strobe-like highlights',
+    'no explosive jewelry glint',
+    'no glowing gemstone',
+    'no bright white hotspot on jewelry',
+    'no detached highlight orb',
+    'no emissive reflection',
+    'no luxury ad shine effect',
+  ].join(', ')
+  const identityBan =
+    productMode === 'STRICT'
+      ? 'no duplicate product, no extra product, no redesigned product, no added details, no second person, no mixed model identity, no product-reference person as model'
+      : productMode === 'BALANCED'
+        ? 'no duplicate product, no redesigned product, no added details, no second person, no mixed model identity'
+        : 'no wrong product category, no second person, no severe product distortion'
+  return sanitizeNegativePrompt([hardVfxBan, identityBan, String(base || '').trim()].filter(Boolean).join(', '), 520)
+}
+
+type ProductModeConfig = {
+  useIdentical: boolean
+  consistencyWord: 'visually identical' | 'visually consistent'
+  allowUnseenParts: boolean | 'partial'
+  cameraHardLimit: boolean
+  sanitizerLevel: 'high' | 'medium' | 'low'
+  styleWordsAllowed: boolean | 'limited'
+  motionFallback: 'hard' | 'soft' | 'minimal'
+  keepCenteredDominant: boolean
+  consistencyPriority: 'highest' | 'balanced' | 'secondary'
+  allowPerspectiveVariation: boolean
+}
+
+const PRODUCT_MODE_CONFIG: Record<CloneProductMode, ProductModeConfig> = {
+  STRICT: {
+    useIdentical: true,
+    consistencyWord: 'visually identical',
+    allowUnseenParts: false,
+    cameraHardLimit: true,
+    sanitizerLevel: 'high',
+    styleWordsAllowed: false,
+    motionFallback: 'hard',
+    keepCenteredDominant: true,
+    consistencyPriority: 'highest',
+    allowPerspectiveVariation: false,
+  },
+  BALANCED: {
+    useIdentical: false,
+    consistencyWord: 'visually consistent',
+    allowUnseenParts: 'partial',
+    cameraHardLimit: false,
+    sanitizerLevel: 'medium',
+    styleWordsAllowed: 'limited',
+    motionFallback: 'soft',
+    keepCenteredDominant: false,
+    consistencyPriority: 'balanced',
+    allowPerspectiveVariation: true,
+  },
+  EXPRESSIVE: {
+    useIdentical: false,
+    consistencyWord: 'visually consistent',
+    allowUnseenParts: true,
+    cameraHardLimit: false,
+    sanitizerLevel: 'low',
+    styleWordsAllowed: true,
+    motionFallback: 'minimal',
+    keepCenteredDominant: false,
+    consistencyPriority: 'secondary',
+    allowPerspectiveVariation: true,
+  },
+}
+
+export function detectProductMode(productType?: string): CloneProductMode {
+  const normalized = String(productType || '').trim().toLowerCase()
+  if (/earrings?|ring|necklace|bracelet|jewelry|jewellery|fashion_accessory/.test(normalized)) return 'STRICT'
+  if (/phone_case|bag|bags|shoes|shoe|general/.test(normalized)) return 'BALANCED'
+  if (/clothes|beauty|perfume|fragrance|home|furniture|decor/.test(normalized)) return 'EXPRESSIVE'
+  return 'BALANCED'
+}
+
+export function getProductModeConfig(mode: CloneProductMode) {
+  return PRODUCT_MODE_CONFIG[mode]
+}
+
+function normalizeVideoCameraInstruction(value: unknown) {
+  const raw = keepEnglishLikeText(value, '').trim()
+  const lowered = raw.toLowerCase()
+  if (!raw) return 'Subtle camera movement only. Keep the product as the visual anchor.'
+  if (lowered.includes('zoom_out') || lowered.includes('zoom out') || lowered.includes('pull-back') || lowered.includes('pull back')) {
+    return 'Subtle camera movement only. Keep the product as the visual anchor with gentle perspective change only.'
+  }
+  if (/(fast_cut|whip|spin|dramatic|aggressive|rapid)/i.test(raw)) {
+    return 'Subtle camera movement only. Keep the product as the visual anchor.'
+  }
+  return sanitizeGeneratedVideoPrompt(`${raw}. Keep the product as the visual anchor. Gentle perspective change only.`, 240)
+}
+
+function buildLockedProductSceneText(productType: string) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  if (/earrings?/.test(normalizedType)) return 'Extreme close-up of ear wearing the earring.'
+  return 'Keep the product clearly visible in the same locked scene.'
+}
+
+function buildLockedProductActionText(productType: string, actionDescription?: unknown) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  if (/earrings?/.test(normalizedType)) {
+    const action = keepEnglishLikeText(actionDescription, '').toLowerCase()
+    if (/\bfinger|touch|hand\b/.test(action)) return 'Minimal finger interaction below the ear.'
+    return 'Very subtle movement only.'
+  }
+  return keepEnglishLikeText(actionDescription, 'Natural product demonstration with believable movement.')
+}
+
+function buildLockedProductFocusText(productType: string, productFocus?: unknown) {
+  const normalizedType = String(productType || '').trim().toLowerCase()
+  if (/earrings?/.test(normalizedType)) {
+    return 'Preserve shape, proportions, and structure. Avoid deformation or redesign.'
+  }
+  return keepEnglishLikeText(productFocus, 'Keep the product clearly visible and commercially relevant.')
+}
+
+function isHighRiskJewelryVideoPrompt(input: {
+  productType?: string
+  generationPrompt?: string
+  visualDescription?: string
+  productIdentityText?: string
+  materialNeed?: string
+}) {
+  return inferJewelryLikePromptContext(input)
+}
+
+export function buildOptimizedVideoPrompt(input: {
+  shot: Pick<
+    ShotSpec,
+    | 'index'
+    | 'productType'
+    | 'scriptText'
+    | 'generationPrompt'
+    | 'visualDescription'
+    | 'actionDescription'
+    | 'cameraDescription'
+    | 'productFocus'
+    | 'materialNeed'
+    | 'motion'
+    | 'framing'
+    | 'shotType'
+    | 'compiledPrompt'
+  >
+  modelIdentityText?: string
+  productIdentityText?: string
+  productMode?: CloneProductMode
+}) {
+  const shot = input.shot
+  const productType = String(shot.productType || '').trim().toLowerCase()
+  const isEarrings = /earrings?/.test(productType)
+  const looksLikeEarringShot =
+    isEarrings ||
+    inferJewelryLikePromptContext({
+      productType: shot.productType,
+      generationPrompt: shot.generationPrompt,
+      visualDescription: shot.visualDescription,
+      productIdentityText: input.productIdentityText,
+      materialNeed: shot.materialNeed,
+    })
+  const modelPresentationShot = String(shot.shotType || '').trim().toLowerCase() === 'model_demo'
+  const shotIndex = Number(shot.index ?? 0) + 1
+  const scriptText = keepEnglishLikeText(shot.scriptText, '')
+  const generationPrompt = sanitizeJewelryGenerationPrompt(shot.generationPrompt, shot.productType)
+  const visual = (looksLikeEarringShot ? 'Extreme close-up of ear wearing the earring.' : buildLockedProductSceneText(productType)) || keepEnglishLikeText(
+    shot.visualDescription,
+    keepEnglishLikeText(generationPrompt, 'Real social-commerce product demonstration in a believable environment.'),
+  )
+  const action = looksLikeEarringShot
+    ? buildLockedProductActionText('earrings', shot.actionDescription)
+    : buildLockedProductActionText(productType, shot.actionDescription)
+  const productFocus = looksLikeEarringShot
+    ? buildLockedProductFocusText('earrings', shot.productFocus)
+    : buildLockedProductFocusText(productType, shot.productFocus)
+  const modelIdentityText = keepEnglishLikeText(input.modelIdentityText, 'Use the same selected model identity only.')
+  const cameraBase = normalizeVideoCameraInstruction(
+    shot.cameraDescription || `${shot.framing || 'closeup'} framing, ${shot.motion || 'subtle camera movement'}`,
+  )
+  const camera =
+    (input.productMode || detectProductMode(productType)) === 'STRICT'
+      ? 'Almost static camera. Keep the product as the visual anchor.'
+      : (input.productMode || detectProductMode(productType)) === 'BALANCED'
+        ? `${cameraBase} Slight perspective variation is allowed if product readability stays stable.`
+        : `${cameraBase} Allow natural motion, atmosphere, and scene expression while keeping the product recognizable.`
+  const coreRule = [
+    'CORE RULE',
+    'Use the provided reference image as primary visual source.',
+    'Preserve product shape, proportions, and structure.',
+    'Avoid deformation or redesign.',
+    'Text is only for motion, framing, action, and shot execution, not for product definition.',
+  ].join('\n')
+  const strictConsistency = [
+    'STRICT CONSISTENCY',
+    'Same product instance.',
+    'Same model identity.',
+    'Same scene environment.',
+    'No redesign or structural drift.',
+  ].join('\n')
+  const continuityLock = [
+    'FRAME CONTINUITY',
+    `Shot ${shotIndex} must remain the same storyboard shot in continuous motion, not a regenerated new setup.`,
+    'Each frame must be a direct continuation of the previous frame.',
+    'Do NOT redraw, reinterpret, reset composition, or regenerate the product as a new object.',
+  ].join('\n')
+  const motionControl = [
+    'MOTION',
+    'Only camera movement is allowed: slow push-in, gentle pull-back, or slight angle shift within the same framing family.',
+    looksLikeEarringShot ? `Interaction: ${action}` : '',
+    `Camera execution: ${camera}`,
+    'The product and model must remain still except for minimal physically believable micro-movement.',
+    'No product movement, no random physics motion, no cloth drift, no exaggerated body motion, and no scene reset.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const lightingControl = [
+    'LIGHTING (ANTI-GLOW)',
+    looksLikeEarringShot ? 'Flat diffuse lighting.' : 'Keep lighting soft and stable.',
+    looksLikeEarringShot ? 'No specular highlights.' : 'No enhancement, no glow, no sparkle, no bloom, no light halo, no starburst, no lens flare, and no overexposure.',
+    looksLikeEarringShot ? 'No reflective response.' : 'Keep reflections controlled and physically plausible.',
+    'Constant brightness across frames.',
+    looksLikeEarringShot ? 'Jewelry must never become a light source.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const shotExecution = [
+    'SHOT EXECUTION',
+    scriptText ? `Script: ${scriptText}` : 'Script: keep the original storyboard shot intent.',
+    action ? `Action: ${action}` : '',
+    `Camera: ${camera}`,
+    productFocus ? `Product focus: ${productFocus}` : '',
+    `Scene execution: ${visual}`,
+    `Duration: ${Number((shot as any).durationSec || 3).toFixed(1)} seconds.`,
+  ].filter(Boolean).join('\n')
+  const shotInstruction = [
+    'SHOT INSTRUCTION',
+    `Shot ${shotIndex}:`,
+    looksLikeEarringShot
+      ? `The model is wearing the earrings. Keep the ear fully readable, with product detail prioritized. ${action} No unnecessary model motion. Only camera motion is allowed.`
+      : 'Keep the product clearly readable. No unnecessary subject motion. Only restrained camera motion is allowed.',
+  ].join('\n')
+  const lines = [
+    `Generate continuous video for shot ${shotIndex}: same storyboard shot in motion, not a new product generation or redesign task.`,
+    'SILENT VISUAL COMMERCIAL',
+    modelPresentationShot ? 'Avoid presenter-style delivery; keep human-use context.' : 'No face-focused composition.',
+    coreRule,
+    strictConsistency,
+    `MODEL LOCK: ${modelIdentityText}. Use the same selected model identity only.`,
+    [
+      'SCENE LOCK',
+      `Preserve original storyboard/reference scene: ${visual}.`,
+      'Keep the same scene category, same environment, same lighting family, and same composition intent.',
+      'Do NOT replace the scene with a studio void, catalog cutout, or generic regenerated background.',
+    ].join('\n'),
+    continuityLock,
+    buildHumanPriorityRuleText(),
+    'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY; ignore any person in product references.',
+    motionControl,
+    lightingControl,
+    'CAMERA LOCK: fixed focal-length feeling, fixed perspective family, no lens distortion change, no sudden reframing or layout reset.',
+    buildSpatialAnchorLockText(productType),
+    buildPhysicsConsistencyText(productType),
+    buildCompositionLockText(productType),
+    buildGenerationPromptRestraintText(),
+    'Stability control:',
+    'No sudden detail changes.',
+    'No texture shifting.',
+    'No shape morphing.',
+    shotExecution,
+    shotInstruction,
+    looksLikeEarringShot
+      ? 'Keep the same ear position, same hanging direction, and the same earring structure with physically believable gravity.'
+      : '',
+    'Natural commercial realism only.',
+    looksLikeEarringShot ? 'Use flat diffuse lighting with stable exposure only.' : 'Use soft natural light or soft window light with realistic smartphone-camera material response.',
+    'No text, watermark, logo, UI, or random letters.',
+    'Realistic smartphone social-commerce style.',
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+  return prependSilentCommercialGlobalRule(lines, 4200)
+}
+
+export function buildFinalShotVideoPositivePrompt(input: {
+  shot: Pick<
+    ShotSpec,
+    | 'id'
+    | 'index'
+    | 'productType'
+    | 'scriptText'
+    | 'generationPrompt'
+    | 'visualDescription'
+    | 'actionDescription'
+    | 'cameraDescription'
+    | 'productFocus'
+    | 'materialNeed'
+    | 'motion'
+    | 'framing'
+    | 'shotType'
+    | 'compiledPrompt'
+  >
+  modelIdentityText?: string
+  productIdentityText?: string
+  productMode?: CloneProductMode
+}) {
+  const visualText = keepEnglishLikeText(input.shot.visualDescription || input.shot.generationPrompt || '', '').trim()
+  const cameraText = keepEnglishLikeText(input.shot.cameraDescription || input.shot.motion || input.shot.framing || '', '').trim()
+  const actionText = keepEnglishLikeText(input.shot.actionDescription || '', '').trim()
+  const compactVisual = visualText || 'Preserve storyboard composition'
+  const compactCamera = cameraText || 'Slow stable camera movement'
+  const compactMotion = actionText || 'Minimal motion'
+  return [
+    'Use reference image as visual guide.',
+    'Preserve product appearance.',
+    'Scene:',
+    'Extreme close-up of ear and earring.',
+    'Motion:',
+    'Very subtle movement only, maintaining original viewing angle.',
+    'No new angles or hidden parts revealed.',
+    'Camera:',
+    'Slow, stable movement only.',
+    'No perspective change.',
+    'Lighting:',
+    'Flat diffuse lighting.',
+    'Constant brightness.',
+    'No specular highlights.',
+    'Stability:',
+    'No deformation.',
+    'No redesign.',
+    'Keep structure identical to reference.',
+    'Style:',
+    'Realistic ecommerce video.',
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function buildCloneShotPrompt(input: {
@@ -613,7 +1119,7 @@ export function expandCommercialVideoPrompt(input: {
     `Duration target: ${duration.toFixed(1)} seconds`,
     `Execution quality: ${qualityLine}`,
     'Camera: mix of close-up, medium shot and detail shot, with clean composition and stable framing',
-    'Lighting: natural premium light, soft highlights, visible texture and depth',
+    'Lighting: soft diffused lighting, even illumination, controlled reflections, no harsh highlights',
     'Motion: subtle handheld motion, smooth transition, no jarring cuts',
     'Subject: clear model or product presence, believable body language, no awkward pose',
     'Editing: concise rhythm, strong hook, clear middle section, clean ending',

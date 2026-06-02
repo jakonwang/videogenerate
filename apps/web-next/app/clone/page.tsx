@@ -7,7 +7,9 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
-  Grid2X2,
+  Edit3,
+  Filter,
+  Folder,
   LoaderCircle,
   MoreVertical,
   PackageOpen,
@@ -23,19 +25,27 @@ import type { CloneRunMode } from '@shared/web-api/types'
 import { AuthRedirectScreen } from '@/components/app/auth-redirect-screen'
 import { AppShell } from '@/components/app/app-shell'
 import { EmptyState, ErrorState } from '@/components/app/page-state'
-import { Button } from '@/components/ui/button'
 import { RunModeDialog } from '@/components/clone/run-mode-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useAppNavigation } from '@/hooks/use-app-navigation'
 import { useAuthGuard } from '@/hooks/use-auth-guard'
 import { useCloneTaskList } from '@/hooks/use-clone-task-list'
 import { cn, compactText, formatDateTime, formatPercent, formatStatusTone, formatStepLabel, toPreviewSrc } from '@/lib/utils'
 
 const STATUS_FILTERS = [
-  { key: 'all', label: '全部' },
-  { key: 'draft', label: '草稿' },
+  { key: 'all', label: '全部任务' },
   { key: 'running', label: '进行中' },
   { key: 'completed', label: '已完成' },
-  { key: 'failed', label: '失败' },
+  { key: 'failed', label: '失败任务' },
+  { key: 'draft', label: '草稿箱' },
+] as const
+
+const TASK_GROUPS = [
+  { key: 'all', label: '全部任务', count: 25 },
+  { key: 'ungrouped', label: '未分组', count: 19 },
+  { key: 'ref26', label: '#26', count: 6 },
+  { key: 'cross10', label: '#10十字架', count: 0 },
 ] as const
 
 const STAGE_KEYS = [
@@ -48,34 +58,17 @@ const STAGE_KEYS = [
 
 const PAGE_SIZE = 12
 
-const RAIL_FEATURES = [
-  {
-    icon: Sparkles,
-    title: '后台持续运行',
-    body: '任务在后台执行，离开当前页面也不会影响主流程推进。',
-  },
-  {
-    icon: Grid2X2,
-    title: '详情页职责',
-    body: '脚本、分镜、镜头与日志都在任务详情中继续处理与追踪。',
-  },
-  {
-    icon: PackageOpen,
-    title: '快捷入口',
-    body: '常用任务会保留在右侧最近切换区域，便于快速回到工作上下文。',
-  },
-] as const
-
 type StatusFilter = (typeof STATUS_FILTERS)[number]['key']
 
 export default function ClonePage() {
   const { navigate, prefetchMany } = useAppNavigation()
   const { ready, authed, redirecting, sessionRestoring } = useAuthGuard()
-  const { projectsQuery, createMutation, removeMutation } = useCloneTaskList()
+  const { projectsQuery, createMutation, removeMutation, renameMutation } = useCloneTaskList()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [page, setPage] = useState(1)
   const [runModeOpen, setRunModeOpen] = useState(false)
   const [selectedRunMode, setSelectedRunMode] = useState<CloneRunMode | null>(null)
+  const [renameState, setRenameState] = useState<{ projectId: string; title: string } | null>(null)
 
   const rows = projectsQuery.data || []
 
@@ -139,6 +132,18 @@ export default function ClonePage() {
     })
   }
 
+  const confirmRenameTask = () => {
+    if (!renameState) return
+    const title = String(renameState.title || '').trim()
+    if (!title) return
+    renameMutation.mutate(
+      { projectId: renameState.projectId, title },
+      {
+        onSuccess: () => setRenameState(null),
+      },
+    )
+  }
+
   if (sessionRestoring || (!ready && !authed)) {
     return <AuthRedirectScreen title="正在恢复工作台会话" description="系统正在校验登录状态并准备复刻任务列表。" />
   }
@@ -148,7 +153,7 @@ export default function ClonePage() {
   }
 
   return (
-    <AppShell headerSearchPlaceholder="搜索任务、模型、模板或设置项">
+    <AppShell headerSearchPlaceholder="搜索商品、模板、任务、功能..." onCreateTask={createTask} creatingTask={createMutation.isPending}>
       <div className="page-shell page-shell--fixed clone-page" data-testid="clone-list-page">
         <RunModeDialog
           open={runModeOpen}
@@ -162,68 +167,125 @@ export default function ClonePage() {
           }}
           onConfirm={confirmCreateTask}
         />
+
+        {renameState ? (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 px-4" onClick={() => !renameMutation.isPending && setRenameState(null)}>
+            <div
+              className="w-full max-w-md rounded-[28px] border border-white/10 bg-[rgba(11,15,25,0.96)] p-6 shadow-[0_24px_120px_rgba(0,0,0,0.45)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 grid gap-1">
+                <h2 className="text-lg font-semibold tracking-[-0.03em] text-white">修改任务名称</h2>
+                <p className="text-sm text-slate-400">仅更新当前复刻任务标题，不改任务内容和流程状态。</p>
+              </div>
+              <div className="grid gap-3">
+                <Input
+                  autoFocus
+                  maxLength={120}
+                  value={renameState.title}
+                  onChange={(event) => setRenameState((current) => (current ? { ...current, title: event.target.value } : current))}
+                  placeholder="输入新的任务名称"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      confirmRenameTask()
+                    }
+                  }}
+                />
+                {renameMutation.isError ? (
+                  <p className="text-xs text-rose-300">{renameMutation.error instanceof Error ? renameMutation.error.message : '任务重命名失败，请稍后重试。'}</p>
+                ) : null}
+              </div>
+              <div className="mt-5 flex justify-end gap-3">
+                <Button variant="ghost" onClick={() => setRenameState(null)} disabled={renameMutation.isPending}>
+                  取消
+                </Button>
+                <Button onClick={confirmRenameTask} disabled={renameMutation.isPending || !String(renameState.title || '').trim()}>
+                  {renameMutation.isPending ? '保存中...' : '保存'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <section className="clone-workspace clone-workspace--wide">
-          <div className="clone-workspace__main panel">
-            <div className="clone-hero clone-hero--compact">
-              <div className="clone-hero__copy">
-                <h1 className="clone-hero__title">
-                  爆款视频复刻
-                  <Sparkles className="clone-hero__title-icon" />
-                </h1>
-                <p className="clone-hero__summary">从参考视频到成片输出，AI 帮你高效复刻爆款内容</p>
+          <div className="clone-workspace__main panel clone-workspace__main--full clone-console">
+            <div className="clone-console__header">
+              <div className="clone-console__intro">
+                <div className="clone-console__title-row">
+                  <h1 className="clone-console__title">爆款视频复刻</h1>
+                  <Sparkles className="clone-console__title-icon" />
+                </div>
+                <p className="clone-console__subtitle">智能复刻热门视频，快速生成优质内容</p>
               </div>
 
-              <div className="clone-hero__actions">
-                <Button variant="secondary" onClick={() => navigate('/download')}>
+              <div className="clone-console__hero-actions">
+                <Button variant="secondary" className="clone-console__action-button" onClick={() => navigate('/download')}>
                   批量导出
                 </Button>
-                <Button data-testid="clone-create-task-button" onClick={createTask} disabled={createMutation.isPending}>
+                <button type="button" className="clone-console__run-pill clone-console__run-pill--active">
+                  自动运行
+                </button>
+                <button type="button" className="clone-console__run-pill">
+                  手动运行
+                </button>
+                <Button className="clone-console__action-button clone-console__action-button--primary" onClick={createTask} disabled={createMutation.isPending}>
                   <Plus className="h-4 w-4" />
-                  {createMutation.isPending ? '创建中...' : '新建任务'}
+                  {createMutation.isPending ? '新建中...' : '新建任务'}
                 </Button>
               </div>
             </div>
 
-            <div className="clone-toolbar clone-toolbar--stack">
-              <div className="clone-filters">
-                {STATUS_FILTERS.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setStatusFilter(item.key)}
-                    className={cn('clone-filter-pill', statusFilter === item.key && 'is-active')}
-                  >
-                    <span>
-                      {item.label} (
-                      {item.key === 'all'
-                        ? stats.total
-                        : item.key === 'draft'
-                          ? stats.draft
-                          : item.key === 'running'
-                            ? stats.running
-                            : item.key === 'completed'
-                              ? stats.completed
-                              : stats.failed}
-                      )
-                    </span>
+            <div className="clone-summary-strip">
+              <SummaryCard icon={PackageOpen} label="全部任务" value={stats.total} helper="总任务数" tone="violet" />
+              <SummaryCard icon={LoaderCircle} label="进行中" value={stats.running} helper="任务处理中" tone="blue" />
+              <SummaryCard icon={CheckCircle2} label="已完成" value={stats.completed} helper="任务已完成" tone="green" />
+              <SummaryCard icon={CircleAlert} label="失败任务" value={stats.failed} helper="任务失败" tone="red" />
+              <SummaryCard icon={Folder} label="草稿箱" value={stats.draft} helper="草稿存储" tone="cyan" />
+            </div>
+
+            <div className="clone-list-head clone-list-head--designed">
+              <div className="clone-list-head__tabs">
+                {TASK_GROUPS.map((group) => (
+                  <button key={group.key} type="button" className={cn('clone-list-tab', group.key === 'all' && 'is-active')}>
+                    <span className="clone-list-tab__label">{group.label}</span>
+                    <span className="clone-list-tab__count">({group.count})</span>
                   </button>
                 ))}
+                <button type="button" className="clone-list-tab clone-list-tab--ghost">
+                  <Plus className="h-4 w-4" />
+                  新建分组
+                </button>
               </div>
 
-              <div className="clone-toolbar__right">
-                <button type="button" className="clone-toolbar-chip">
-                  更新时间
+              <div className="clone-list-head__tools">
+                <button type="button" className="clone-toolbar-chip clone-toolbar-chip--dense">
+                  最近更新
                   <ChevronDown className="h-4 w-4" />
                 </button>
-                <button type="button" className="clone-toolbar-icon is-active" aria-label="网格视图">
-                  <Grid2X2 className="h-4 w-4" />
+                <button type="button" className="clone-toolbar-chip clone-toolbar-chip--dense">
+                  全部素材
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                <button type="button" className="clone-toolbar-icon" aria-label="筛选设置">
+                  <Filter className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
             <div className="clone-content">
               {projectsQuery.isLoading ? (
-                <div className="clone-task-grid clone-task-grid--wide">
+                <div className="clone-task-table">
+                  <div className="clone-task-table__header">
+                    <span />
+                    <span>预览</span>
+                    <span>任务信息</span>
+                    <span>阶段</span>
+                    <span>素材</span>
+                    <span>进度</span>
+                    <span>更新时间</span>
+                    <span>操作</span>
+                  </div>
                   {Array.from({ length: PAGE_SIZE }).map((_, index) => (
                     <TaskSkeleton key={index} />
                   ))}
@@ -236,13 +298,31 @@ export default function ClonePage() {
                   onRetry={() => void projectsQuery.refetch()}
                 />
               ) : pagedRows.length ? (
-                <div className="clone-task-grid clone-task-grid--wide">
+                <div className="clone-task-table">
+                  <div className="clone-task-table__header">
+                    <span>
+                      <input type="checkbox" aria-label="全选任务" />
+                    </span>
+                    <span>预览</span>
+                    <span>任务信息</span>
+                    <span>阶段</span>
+                    <span>素材</span>
+                    <span>进度</span>
+                    <span>更新时间</span>
+                    <span>操作</span>
+                  </div>
                   {pagedRows.map((item) => (
-                    <CloneTaskCard
+                    <CloneTaskRow
                       key={item.id}
                       item={item}
                       removing={removeMutation.isPending && removeMutation.variables === item.id}
                       onOpen={() => navigate(`/clone/${item.id}`)}
+                      onRename={() =>
+                        setRenameState({
+                          projectId: item.id,
+                          title: String(item.title || '').trim(),
+                        })
+                      }
                       onRemove={() => removeMutation.mutate(item.id)}
                     />
                   ))}
@@ -301,105 +381,69 @@ export default function ClonePage() {
                     <ChevronRight className="h-4 w-4" />
                   </button>
                   <button type="button" className="clone-pagination__page-size">
-                    12 条/页
+                    12 条 / 页
                     <ChevronDown className="h-4 w-4" />
                   </button>
                 </div>
               </div>
             ) : null}
           </div>
-
-          <aside className="clone-workspace__rail panel clone-workspace__rail--light">
-            <div className="clone-rail-card clone-rail-card--soft">
-              <div className="clone-rail-card__head">
-                <h2>任务说明</h2>
-                <p>右侧只保留轻量提示和最近切换列表，不再占用过多高度。</p>
-              </div>
-
-              <div className="clone-rail-feature-list">
-                {RAIL_FEATURES.map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <div key={item.title} className="clone-rail-feature">
-                      <span className="clone-rail-feature__icon">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <div>
-                        <strong>{item.title}</strong>
-                        <p>{item.body}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="clone-rail-card clone-rail-card--soft">
-              <div className="clone-rail-card__head clone-rail-card__head--row">
-                <h2>最近切换</h2>
-                <button type="button" className="clone-rail-clear" onClick={() => setStatusFilter('all')}>
-                  清空
-                </button>
-              </div>
-
-              <div className="clone-rail-switches">
-                {rows.slice(0, 4).map((item) => {
-                  const thumb = toPreviewSrc(item.coverAssetPath || item.referenceVideoPath || '')
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="clone-rail-switch"
-                      onMouseEnter={() => prefetchMany([`/clone/${item.id}`])}
-                      onFocus={() => prefetchMany([`/clone/${item.id}`])}
-                      onClick={() => navigate(`/clone/${item.id}`)}
-                    >
-                      <span className="clone-rail-switch__thumb">{thumb ? <img src={thumb} alt={item.title || 'cover'} /> : <Video className="h-4 w-4" />}</span>
-                      <span className="clone-rail-switch__copy">
-                        <strong>{compactText(item.title, '未命名任务')}</strong>
-                        <em>{formatRelativeTime(item.updatedAt)}</em>
-                      </span>
-                    </button>
-                  )
-                })}
-
-                <Button variant="secondary" className="w-full" onClick={() => navigate('/clone')}>
-                  查看全部任务
-                </Button>
-              </div>
-            </div>
-          </aside>
         </section>
       </div>
     </AppShell>
   )
 }
 
-function CloneTaskCard({
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  tone,
+}: {
+  icon: any
+  label: string
+  value: number
+  helper: string
+  tone: 'violet' | 'blue' | 'green' | 'red' | 'cyan'
+}) {
+  return (
+    <article className={cn('clone-summary-card', `clone-summary-card--${tone}`)}>
+      <span className="clone-summary-card__icon">
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="clone-summary-card__copy">
+        <strong>{label}</strong>
+        <small>{helper}</small>
+      </div>
+      <b>{value}</b>
+    </article>
+  )
+}
+
+function CloneTaskRow({
   item,
   removing,
   onOpen,
+  onRename,
   onRemove,
 }: {
   item: any
   removing: boolean
   onOpen: () => void
+  onRename: () => void
   onRemove: () => void
 }) {
   const stageIndex = getStageIndex(item.currentStep)
-  const cover = toPreviewSrc(item.coverAssetPath || item.referenceCoverPath || '')
+  const cover = toPreviewSrc(item.coverAssetPath || item.referenceCoverPath || item.referenceVideoPath || '')
   const progress = formatPercent(item.progressPercent)
   const progressNumber = Math.max(0, Math.min(100, Number.parseFloat(progress) || 0))
   const updatedAt = formatDateTime(item.updatedAt)
-  const modelName = compactText(item.selectedModelIdentityName, '未绑定')
-  const materialCount = item.productReferenceImageCount || 0
-  const videoCount = item.generatedVideoCount || 0
   const title = compactText(item.title, '未命名任务')
+  const subtitle = compactText(item.referenceTemplateTitle || item.referenceTemplateName || '自动运行 · AI模特 003', '自动运行')
   const stageLabel = formatStepLabel(item.currentStep)
-  const sourceLabel = compactText(item.referenceTemplateTitle || item.referenceTemplateName || '参考视频复刻', '参考视频复刻')
   const statusTone = formatStatusTone(item.status)
-  const statusLabel =
-    statusTone === 'success' ? '完成' : statusTone === 'danger' ? '失败' : statusTone === 'running' ? '进行中' : '草稿'
+  const statusLabel = statusTone === 'success' ? '已完成' : statusTone === 'danger' ? '失败' : statusTone === 'running' ? '进行中' : '等待中'
   const statusClass =
     statusTone === 'success'
       ? 'is-success'
@@ -408,85 +452,105 @@ function CloneTaskCard({
         : statusTone === 'running'
           ? 'is-running'
           : 'is-idle'
+  const materialCount = item.productReferenceImageCount || 0
+  const videoCount = Math.max(1, item.generatedVideoCount || 0)
+  const modelName = compactText(item.selectedModelIdentityName, 'Output Pending')
   const errorText = compactText(item.lastError || item.errorMessage, '')
+  const durationText = `${String(Math.max(4, Math.min(59, Math.round(videoCount * 4)))).padStart(2, '0')}:07`
 
   return (
-    <article className="clone-task-card clone-task-card--wide">
-      <div className="clone-task-card__head">
-        <div className="clone-task-card__media">
-          <span className={cn('clone-task-card__status', statusClass)}>{sourceLabel}</span>
+    <article className="clone-task-row">
+      <div className="clone-task-row__select">
+        <input type="checkbox" aria-label={`选择任务 ${title}`} />
+      </div>
+
+      <div className="clone-task-row__preview">
+        <div className="clone-task-row__thumb">
           {cover ? (
             <img src={cover} alt={item.title || 'cover'} />
           ) : (
-            <div className="clone-task-card__media-empty">
-              <Video className="h-7 w-7" />
+            <div className="clone-task-row__thumb-empty">
+              <Video className="h-5 w-5" />
             </div>
           )}
-          <div className="clone-task-card__media-fade" />
-          <button type="button" className="clone-task-card__more" aria-label="更多操作">
-            <MoreVertical className="h-4 w-4" />
+        </div>
+        <span className="clone-task-row__duration">{durationText}</span>
+      </div>
+
+      <div className="clone-task-row__info">
+        <div className="clone-task-row__title">
+          <strong>{title}</strong>
+          <button type="button" onClick={onRename} className="clone-task-row__edit" aria-label="修改任务名称">
+            <Edit3 className="h-3.5 w-3.5" />
           </button>
+        </div>
+        <div className="clone-task-row__meta">
+          <span className="clone-task-row__mode-tag">自动运行</span>
+          <span>{subtitle}</span>
         </div>
       </div>
 
-      <div className="clone-task-card__body">
-        <div className="clone-task-card__title-row">
-          <div className="clone-task-card__title-stack">
-            <h3>{title}</h3>
-            <span className="clone-task-card__stage">{statusLabel}</span>
-          </div>
-        </div>
+      <div className="clone-task-row__stage">
+        <span className={cn('clone-task-row__badge', statusClass)}>{statusLabel}</span>
+        <button type="button" className="clone-task-row__stage-link">
+          移动到分组
+          <ChevronDown className="h-4 w-4" />
+        </button>
+      </div>
 
-        <div className="clone-task-card__meta">
-          <span>模特：{modelName}</span>
-          <span>
-            素材：{materialCount} 张图片 / {Math.max(1, videoCount || (cover ? 1 : 0))} 个视频
-          </span>
-        </div>
+      <div className="clone-task-row__material">
+        <strong>
+          {videoCount} 段 / {materialCount} 素材
+        </strong>
+        <span>{modelName}</span>
+      </div>
 
-        <div className="clone-task-card__progress-head">
-          <strong>{progress}</strong>
-        </div>
-        <div className="clone-task-card__progress">
+      <div className="clone-task-row__progress">
+        <strong>{progress}</strong>
+        <div className="clone-task-row__progress-bar">
           <i style={{ width: progress }} />
         </div>
-
-        <div className="clone-task-card__steps">
+        <div className="clone-task-row__steps">
           {STAGE_KEYS.map((step, index) => {
             const active = index === stageIndex
             const done = index < stageIndex || progressNumber >= 100
             const failed = statusTone === 'danger' && index === stageIndex
+
             return (
-              <span key={step} className={cn('clone-task-card__step', active && 'is-active', done && 'is-done', failed && 'is-failed')}>
-                {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : index + 1}
+              <span key={step} className={cn('clone-task-row__step', active && 'is-active', done && 'is-done', failed && 'is-failed')}>
+                {done ? <CheckCircle2 className="h-3 w-3" /> : index + 1}
               </span>
             )
           })}
         </div>
-
-        <div className="clone-task-card__footer">
-          <span className="clone-task-card__time">{updatedAt}</span>
-          <div className="clone-task-card__actions">
-            <button type="button" onClick={onOpen} className="clone-task-card__icon-btn clone-task-card__icon-btn--primary">
-              <Play className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={onRemove} disabled={removing} className="clone-task-card__icon-btn clone-task-card__icon-btn--danger">
-              {removing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-
         {errorText ? (
-          <div className="clone-task-card__alert">
+          <div className="clone-task-row__alert">
             <CircleAlert className="h-4 w-4" />
             <span>{errorText}</span>
           </div>
         ) : null}
+      </div>
 
-        <div className="clone-task-card__updated">
-          <Clock3 className="h-3.5 w-3.5" />
-          <span>阶段：{stageLabel}</span>
-        </div>
+      <div className="clone-task-row__time">
+        <Clock3 className="h-4 w-4" />
+        <span>{updatedAt}</span>
+      </div>
+
+      <div className="clone-task-row__actions">
+        <button type="button" onClick={onOpen} className="clone-task-row__action" aria-label="打开任务">
+          <Play className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={onRemove} disabled={removing} className="clone-task-row__action clone-task-row__action--danger" aria-label="删除任务">
+          {removing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </button>
+        <button type="button" className="clone-task-row__action" aria-label="更多操作">
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="clone-task-row__mobile-stage">
+        <Clock3 className="h-3.5 w-3.5" />
+        <span>{stageLabel}</span>
       </div>
     </article>
   )
@@ -494,18 +558,29 @@ function CloneTaskCard({
 
 function TaskSkeleton() {
   return (
-    <div className="clone-task-card clone-task-card--wide clone-task-card--skeleton">
-      <div className="skeleton h-[84px] rounded-[18px]" />
-      <div className="mt-4 grid gap-3">
-        <div className="skeleton h-6 w-44 rounded-lg" />
-        <div className="skeleton h-4 w-full rounded-lg" />
-        <div className="skeleton h-4 w-4/5 rounded-lg" />
-        <div className="skeleton h-2 w-full rounded-full" />
-        <div className="flex gap-2">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="skeleton h-8 w-8 rounded-full" />
-          ))}
-        </div>
+    <div className="clone-task-row clone-task-row--skeleton">
+      <div className="skeleton h-5 w-5 rounded-md" />
+      <div className="skeleton h-[74px] w-[96px] rounded-[16px]" />
+      <div className="grid gap-2">
+        <div className="skeleton h-5 w-36 rounded-lg" />
+        <div className="skeleton h-4 w-56 rounded-lg" />
+      </div>
+      <div className="grid gap-2">
+        <div className="skeleton h-6 w-16 rounded-full" />
+        <div className="skeleton h-4 w-24 rounded-lg" />
+      </div>
+      <div className="grid gap-2">
+        <div className="skeleton h-5 w-24 rounded-lg" />
+        <div className="skeleton h-4 w-20 rounded-lg" />
+      </div>
+      <div className="grid gap-2">
+        <div className="skeleton h-5 w-12 rounded-lg" />
+        <div className="skeleton h-2 w-40 rounded-full" />
+      </div>
+      <div className="skeleton h-10 w-28 rounded-lg" />
+      <div className="flex gap-2">
+        <div className="skeleton h-9 w-9 rounded-xl" />
+        <div className="skeleton h-9 w-9 rounded-xl" />
       </div>
     </div>
   )
@@ -521,6 +596,7 @@ function getStageIndex(step?: string) {
         : value === 'export_final'
           ? 'compose_final_video'
           : value
+
   return Math.max(0, STAGE_KEYS.indexOf(normalized as (typeof STAGE_KEYS)[number]))
 }
 
@@ -538,17 +614,4 @@ function buildPageNumbers(page: number, totalPages: number) {
   }
 
   return [1, 'ellipsis-left', page - 1, page, page + 1, 'ellipsis-right', totalPages] as const
-}
-
-function formatRelativeTime(value?: number | string | null) {
-  if (!value) return '刚刚'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '刚刚'
-  const diff = Date.now() - date.getTime()
-  const minutes = Math.max(1, Math.floor(diff / 60000))
-  if (minutes < 60) return `${minutes} 分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
-  const days = Math.floor(hours / 24)
-  return `${days} 天前`
 }

@@ -13,7 +13,28 @@ type ClipWindow = {
   mode: FinalComposeClipMode
 }
 
+type HighlightSuppressionPreset = 'none' | 'conservative'
+
+type HighlightSuppressionDecision = {
+  enabled: boolean
+  preset: HighlightSuppressionPreset
+  reasons: string[]
+}
+
 const FINAL_COMPOSE_CLIP_MODE: FinalComposeClipMode = 'smart_middle_tail'
+const JEWELRY_PRODUCT_TYPES = new Set([
+  'earrings',
+  'jewelry',
+  'jewellery',
+  'necklace',
+  'ring',
+  'bracelet',
+  'pendant',
+])
+const HIGHLIGHT_RISK_PATTERNS = [
+  /耳环|珠宝|首饰|金属|钻石|锆石|水晶|镜面|高光|反光|闪耀/iu,
+  /\b(?:sparkle|glow|glossy|specular|highlight|crystal|diamond|zircon|jewelry|jewellery|metal)\b/iu,
+]
 
 async function run(args: string[]) {
   const ffmpeg = getFfmpegExecutable()
@@ -57,6 +78,42 @@ function round3(value: number) {
   return Math.round(value * 1000) / 1000
 }
 
+function safeText(value: unknown) {
+  return String(value || '').trim()
+}
+
+function shouldSuppressHighlights(shot: ShotSpec): HighlightSuppressionDecision {
+  const reasons: string[] = []
+  const productType = safeText(shot.productType).toLowerCase()
+  if (productType && JEWELRY_PRODUCT_TYPES.has(productType)) {
+    reasons.push(`productType:${productType}`)
+  }
+  const fields = [
+    ['materialNeed', shot.materialNeed],
+    ['productFocus', shot.productFocus],
+    ['visualDescription', shot.visualDescription],
+    ['generationPrompt', shot.generationPrompt],
+  ] as const
+  for (const [label, value] of fields) {
+    const text = safeText(value)
+    if (!text) continue
+    if (HIGHLIGHT_RISK_PATTERNS.some((pattern) => pattern.test(text))) {
+      reasons.push(`field:${label}`)
+    }
+  }
+  return {
+    enabled: reasons.length > 0,
+    preset: reasons.length > 0 ? 'conservative' : 'none',
+    reasons,
+  }
+}
+
+function buildNormalizeVideoFilter(preset: HighlightSuppressionPreset) {
+  const base = 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,fps=30'
+  if (preset !== 'conservative') return base
+  return `${base},curves=master='0/0 0.62/0.58 0.78/0.72 0.88/0.8 1/0.9',eq=contrast=0.97:saturation=0.93:brightness=-0.01`
+}
+
 function pickClipWindow(input: {
   mode: FinalComposeClipMode
   sourceDurationSec: number
@@ -94,14 +151,20 @@ function pickClipWindow(input: {
   } satisfies ClipWindow
 }
 
-async function normalizeClip(input: { src: string; durationSec: number; out: string; clipStartSec?: number }) {
+async function normalizeClip(input: {
+  src: string
+  durationSec: number
+  out: string
+  clipStartSec?: number
+  highlightSuppressionPreset?: HighlightSuppressionPreset
+}) {
   await run([
     '-y',
     '-ss',
     `${Math.max(0, Number(input.clipStartSec || 0))}`,
     '-i', input.src,
     '-t', `${Math.max(0.5, input.durationSec)}`,
-    '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
+    '-vf', buildNormalizeVideoFilter(input.highlightSuppressionPreset || 'none'),
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
     input.out,
   ])
@@ -129,6 +192,9 @@ export async function renderViralCloneBatch(input: {
       clipStartSec?: number
       clipDurationSec?: number
       clipMode?: FinalComposeClipMode
+      highlightSuppressionEnabled?: boolean
+      highlightSuppressionPreset?: HighlightSuppressionPreset
+      highlightSuppressionReasons?: string[]
     }>
   }> = []
   const retries = Math.max(0, Number(input.maxRetry ?? 1))
@@ -148,6 +214,9 @@ export async function renderViralCloneBatch(input: {
           clipStartSec?: number
           clipDurationSec?: number
           clipMode?: FinalComposeClipMode
+          highlightSuppressionEnabled?: boolean
+          highlightSuppressionPreset?: HighlightSuppressionPreset
+          highlightSuppressionReasons?: string[]
         }> = []
         for (const shot of input.shots) {
           if (shot.isMock || shot.generatedSource === 'mock' || shot.generatedSource === 'local') {
@@ -156,6 +225,7 @@ export async function renderViralCloneBatch(input: {
           const src = shot.uploadedAssetPath || shot.generatedClipPath
           if (!src) continue
           const out = join(jobDir, `${shot.id}.mp4`)
+          const highlightSuppression = shouldSuppressHighlights(shot)
           const sourceDurationSec = await probeDurationSec(src)
           const clipWindow = pickClipWindow({
             mode: FINAL_COMPOSE_CLIP_MODE,
@@ -167,6 +237,7 @@ export async function renderViralCloneBatch(input: {
             durationSec: clipWindow.clipDurationSec,
             clipStartSec: clipWindow.clipStartSec,
             out,
+            highlightSuppressionPreset: highlightSuppression.preset,
           })
           normalized.push(out)
           shotSourceReport.push({
@@ -176,6 +247,9 @@ export async function renderViralCloneBatch(input: {
             clipStartSec: clipWindow.clipStartSec,
             clipDurationSec: clipWindow.clipDurationSec,
             clipMode: clipWindow.mode,
+            highlightSuppressionEnabled: highlightSuppression.enabled,
+            highlightSuppressionPreset: highlightSuppression.preset,
+            highlightSuppressionReasons: highlightSuppression.reasons,
           })
         }
         const listFile = join(jobDir, 'concat.txt')
@@ -230,6 +304,9 @@ export async function renderViralCloneBatch(input: {
           shotId: s.id,
           source: s.generatedClipPath ? 'ai' : s.uploadedAssetPath ? 'upload' : 'none',
           clipMode: FINAL_COMPOSE_CLIP_MODE,
+          highlightSuppressionEnabled: shouldSuppressHighlights(s).enabled,
+          highlightSuppressionPreset: shouldSuppressHighlights(s).preset,
+          highlightSuppressionReasons: shouldSuppressHighlights(s).reasons,
         })),
       })
     }
