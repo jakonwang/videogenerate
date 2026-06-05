@@ -133,10 +133,15 @@ export async function createGrsImageTask(input: {
 }) {
   const key = requireGrsKey(input.credentials)
   const host = grsHost(input.credentials)
+  const quality = (() => {
+    const value = String(input.credentials.openaiImageQuality || 'high').trim().toLowerCase()
+    return value === 'low' || value === 'medium' || value === 'high' ? value : 'high'
+  })()
   const body = {
     model: String(input.credentials.grsaiImageModel || '').trim() || 'gpt-image-2',
     prompt: input.prompt,
     negativePrompt: String(input.negativePrompt || '').trim() || undefined,
+    quality,
     aspectRatio: input.aspectRatio || '9:16',
     urls: input.urls,
     webHook: '-1',

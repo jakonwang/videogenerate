@@ -61,6 +61,7 @@ async function buildImageEditFormData(input: {
   model: string
   prompt: string
   negativePrompt?: string
+  quality: 'low' | 'medium' | 'high'
   imagePaths?: string[]
 }) {
   const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
@@ -69,6 +70,7 @@ async function buildImageEditFormData(input: {
   form.set('model', input.model)
   form.set('prompt', input.prompt)
   if (String(input.negativePrompt || '').trim()) form.set('negative_prompt', String(input.negativePrompt || '').trim())
+  form.set('quality', input.quality)
   form.set('size', '1024x1536')
   form.set('n', '1')
   for (const ref of refs) {
@@ -158,6 +160,10 @@ export async function generateImage(input: {
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
   const model = input.capability === 'image_edit' ? cfg.imageEditModel || cfg.imageModel : cfg.imageModel
+  const quality = (() => {
+    const value = String(input.credentials.openaiImageQuality || 'high').trim().toLowerCase()
+    return value === 'low' || value === 'medium' || value === 'high' ? value : 'high'
+  })()
   const refs = (input.imagePaths ?? []).map((p) => String(p || '').trim()).filter(Boolean).slice(0, 8)
   console.log('[clone-debug] apifox-image-provider', {
     capability: input.capability,
@@ -236,6 +242,7 @@ export async function generateImage(input: {
       model,
       prompt: input.prompt,
       negativePrompt: input.negativePrompt,
+      quality,
       imagePaths: refs,
     })
     const res = await fetch(url, {
@@ -280,6 +287,7 @@ export async function generateImage(input: {
     model,
     prompt: input.prompt,
     negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+    quality,
     size: '2K',
     aspect_ratio: '9:16',
     n: 1,
@@ -298,6 +306,7 @@ export async function generateImage(input: {
       model,
       prompt: input.prompt,
       negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+      quality,
       size: '1024x1536',
       n: 1,
     }

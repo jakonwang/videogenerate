@@ -3861,12 +3861,17 @@ function buildShotImageRequestPreview(input: {
         : provider === 'apifox_hub'
         ? String(resolveApifoxHubCredentials(input.credentials, 'image')?.imageModel || '').trim() || 'apifox-image'
           : String(input.credentials.openaiImageModel || '').trim() || 'gpt-image-2'
+  const quality = (() => {
+    const value = String(input.credentials.openaiImageQuality || 'high').trim().toLowerCase()
+    return value === 'low' || value === 'medium' || value === 'high' ? value : 'high'
+  })()
   const toJson = (prompt: string, urls: string[]) =>
     JSON.stringify(
       {
         aspectRatio: '9:16',
         prompt,
         negativePrompt: input.negativePrompt || undefined,
+        quality,
         urls,
         model,
         webHook: '-1',
@@ -11995,8 +12000,9 @@ export const cloneService = {
         : shot.generatedLastFramePath || shot.gptLastFramePath || firstFramePath,
     ).trim()
     const requestCapability = lastFramePath ? 'video_start_end_to_video' : 'video_image_to_video'
+    const requestCredentials = await cloneRepo.getCredentials()
     const requestPreview = buildShotVideoRequestPreview({
-      credentials: await cloneRepo.getCredentials(),
+      credentials: requestCredentials,
       capability: requestCapability,
       positivePrompt: finalPositivePrompt,
       negativePrompt: finalNegativePrompt,
@@ -12005,6 +12011,10 @@ export const cloneService = {
       productReferenceImagePaths,
       modelReferenceImagePaths,
     })
+    const requestQuality = (() => {
+      const value = String(requestCredentials.openaiImageQuality || 'high').trim().toLowerCase()
+      return value === 'low' || value === 'medium' || value === 'high' ? value : 'high'
+    })()
     return {
       shotId: shot.id,
       promptBuildSentinel: SHOT_VIDEO_PROMPT_PREVIEW_SENTINEL,
@@ -12051,6 +12061,7 @@ export const cloneService = {
           aspectRatio: '9:16',
           prompt: finalPositivePrompt,
           negativePrompt: finalNegativePrompt || undefined,
+          quality: requestQuality,
           urls: [firstFramePath].filter(Boolean),
           model: requestPreview.debugLog.model || undefined,
           webHook: '-1',

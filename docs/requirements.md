@@ -20,6 +20,36 @@
 
 ## 当前生效规格
 
+## 2026-06-06 桌面端重新打包并封版为 v4.2.2
+
+- 目标：
+  - 将桌面端发布版本从 `v4.2.1` 提升并重新打包为 `v4.2.2`，用于封装图片质量设置页接入与 GRS.AI 分镜图片真实请求补传 `quality` 参数的修复。
+- 本轮最小改动：
+  - 调整：
+    - `package.json`
+    - `package-lock.json`
+    - `src/main/modules/clone/grsai.ts`
+    - `docs/requirements.md`
+- 生效规则：
+  - 应用主版本号统一更新为 `4.2.2`。
+  - 后续 `electron-builder` 产物文件名将更新为 `VideoGenerate-4.2.2-Setup.exe`。
+  - GRS.AI 分镜图片真实请求体现在必须显式带上：
+    - `quality`
+  - `quality` 取值继续复用设置页保存的 `openaiImageQuality`，仅允许：
+    - `low`
+    - `medium`
+    - `high`
+  - 非法值统一回退为：
+    - `high`
+- 使用说明：
+  - 更新到 `v4.2.2` 后，桌面端设置页里选择的图片质量会真正下发到 GRS.AI 分镜图片生成请求体，用户不再只在界面里看到设置而实际请求缺少该字段。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 npm 版本元数据、TypeScript 请求组包逻辑与文档记录；Windows 开发打包、Linux 部署发布流程保持兼容。
+- 验证：
+  - `node -p "require('./package.json').version"`
+  - `npm run typecheck`
+  - `npm run dist`
+
 ## 2026-06-06 桌面端图片模型增加“图片质量”设置并透传到实际调用
 
 - 目标：
