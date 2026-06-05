@@ -1,4 +1,4 @@
-﻿const path = require('node:path');
+const path = require('node:path');
 const fs = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const electron = require('electron');

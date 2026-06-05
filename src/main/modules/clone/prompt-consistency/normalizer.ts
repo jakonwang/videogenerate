@@ -1,7 +1,30 @@
 import type { ShotSpec } from '../types'
 import { keepEnglishLikeText, sanitizeGeneratedVideoPrompt, sanitizeNegativePrompt } from '../prompt'
 
+function compactPromptClauses(value: string) {
+  const seen = new Set<string>()
+  return value
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !/(redesign|reinterpret|beautify|overstyle|over-style|style makeover|editorial fashion|surreal|fantasy glow)/i.test(item))
+    .filter((item) => !/(dramatic movement|whip pan|extreme motion blur|hidden product|product occlusion)/i.test(item))
+    .filter((item) => {
+      const key = item.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join(' ')
+}
+
 export function normalizeShotPromptBase(shot: ShotSpec) {
+  const normalizedStyle = compactPromptClauses(
+    keepEnglishLikeText(
+      shot.generationPrompt || shot.aiPrompt || shot.prompt?.positive,
+      'Premium realistic social commerce video.',
+    ),
+  )
   return {
     scriptText: keepEnglishLikeText(shot.scriptText, 'Maintain the original shot selling logic and timing.'),
     visualDescription: keepEnglishLikeText(
@@ -16,10 +39,7 @@ export function normalizeShotPromptBase(shot: ShotSpec) {
       shot.cameraDescription || `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`,
       'Closeup framing with controlled camera continuity.',
     ),
-    styleDescription: keepEnglishLikeText(
-      shot.generationPrompt || shot.aiPrompt || shot.prompt?.positive,
-      'Premium realistic social commerce video.',
-    ),
+    styleDescription: sanitizeGeneratedVideoPrompt(normalizedStyle, 320),
     negativeDescription: sanitizeNegativePrompt(shot.negativePrompt || ''),
   }
 }

@@ -45,7 +45,7 @@
     "uploadReference": "上传爆款视频",
     "analyzeScript": "分析爆款脚本",
     "breakdownShots": "拆解分镜脚本",
-    "generateVariants": "生成脚本变体并评分",
+    "generateVariants": "生成脚本变体（默认沿用原脚本）",
     "generateStoryboards": "批量生成分镜图",
     "generateVideoShots": "生成 Top 3 视频分镜",
     "exportFinal": "合并导出成片",

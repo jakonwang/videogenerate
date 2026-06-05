@@ -1,4 +1,4 @@
-﻿import type { WalletAccount } from '@shared/web-api/types'
+import type { WalletAccount } from '@shared/web-api/types'
 
 import { getApiBaseUrl } from '@/lib/api-client'
 import { formatDateTime } from '@/lib/utils'

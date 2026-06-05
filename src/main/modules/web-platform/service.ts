@@ -21,6 +21,7 @@ import {
   createBatchSubtitleJob,
   exportBatchSubtitleJobWithCapcut,
   generateBatchSubtitleTitles,
+  generateBatchSubtitleViralTitles,
   listBatchSubtitleOutputs,
   normalizeBatchSubtitleJob,
   pauseBatchSubtitleJob,
@@ -1181,6 +1182,23 @@ export const webPlatformService = {
       titleRenderMode?: 'overlay_image' | 'ass_text'
       titleConfig?: Record<string, unknown>
       titleItems?: Array<{ sourceItemId: string; text: string; updatedAt?: number }>
+      titleStyleMode?: 'default' | 'vn_tiktok_viral'
+      viralTitleConfig?: {
+        language?: 'vi' | 'en' | 'zh'
+        tone?: 'hook' | 'conversion' | 'emotional'
+        sellingPoints?: string
+        symbolIntensity?: 'low' | 'medium' | 'high'
+        generationMode?: 'video_content'
+      }
+      titleAnalysisItems?: Array<{
+        sourceItemId: string
+        summary: string
+        subject?: string
+        action?: string
+        scene?: string
+        durationSec?: number
+        updatedAt?: number
+      }>
       overlayImageConfig?: Record<string, unknown>
       styleConfig?: Record<string, unknown>
       captionStyle?: Record<string, unknown>
@@ -1216,6 +1234,9 @@ export const webPlatformService = {
       titleRenderMode: input.titleRenderMode,
       titleConfig: input.titleConfig as any,
       titleItems: input.titleItems as any,
+      titleStyleMode: input.titleStyleMode,
+      viralTitleConfig: input.viralTitleConfig as any,
+      titleAnalysisItems: input.titleAnalysisItems as any,
       overlayImageConfig: input.overlayImageConfig as any,
       styleConfig: input.styleConfig as any,
       captionStyle: input.captionStyle as any,
@@ -1234,6 +1255,24 @@ export const webPlatformService = {
         subtitleSource?: 'whisper_compatible' | 'manual'
         exportEngine?: 'capcut_mate' | 'ass_fallback'
         titleConfig?: Record<string, unknown>
+        titleItems?: Array<{ sourceItemId: string; text: string; updatedAt?: number }>
+        titleStyleMode?: 'default' | 'vn_tiktok_viral'
+        viralTitleConfig?: {
+          language?: 'vi' | 'en' | 'zh'
+          tone?: 'hook' | 'conversion' | 'emotional'
+          sellingPoints?: string
+          symbolIntensity?: 'low' | 'medium' | 'high'
+          generationMode?: 'video_content'
+        }
+        titleAnalysisItems?: Array<{
+          sourceItemId: string
+          summary: string
+          subject?: string
+          action?: string
+          scene?: string
+          durationSec?: number
+          updatedAt?: number
+        }>
         styleConfig?: Record<string, unknown>
         captionStyle?: Record<string, unknown>
         layoutPolicy?: Record<string, unknown>
@@ -1391,6 +1430,42 @@ export const webPlatformService = {
       prompt: input.prompt,
       count: input.count,
       contentLanguage: input.contentLanguage,
+    })
+  },
+
+  async generateBatchSubtitleViralTitles(
+    token: string,
+    input: {
+      jobId?: string
+      sourceItems: Array<{
+        id?: string
+        sourceType: 'upload' | 'clone_final'
+        sourceVideoPath: string
+        sourceProjectId?: string
+        sourceProjectTitle?: string
+        fileName?: string
+        coverImagePath?: string
+        durationSec?: number
+        width?: number
+        height?: number
+      }>
+      language?: 'vi' | 'en' | 'zh'
+      tone?: 'hook' | 'conversion' | 'emotional'
+      sellingPoints?: string
+      symbolIntensity?: 'low' | 'medium' | 'high'
+    },
+  ) {
+    const auth = await this.authByToken(token)
+    const pluginRecord = await webPlatformRepo.ensurePluginRecord(auth.user.id, 'video-batch-subtitle')
+    if (pluginRecord.status !== 'installed') throw new Error('请先安装视频批量加字幕插件')
+    return await generateBatchSubtitleViralTitles({
+      userId: auth.user.id,
+      jobId: input.jobId,
+      sourceItems: input.sourceItems as any,
+      language: input.language,
+      tone: input.tone,
+      sellingPoints: input.sellingPoints,
+      symbolIntensity: input.symbolIntensity,
     })
   },
 
@@ -1620,6 +1695,7 @@ export const webPlatformService = {
       cloneProjectId: string
       productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
       productPoints?: string
+      modelProfileOptions?: import('../../../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
       imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
@@ -1647,6 +1723,7 @@ export const webPlatformService = {
       cloneProjectId: input.cloneProjectId,
       productType: input.productType,
       productPoints: input.productPoints,
+      modelProfileOptions: input.modelProfileOptions,
       productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
       imageProviderPrimary: input.imageProviderPrimary,
       openaiApiKey: input.openaiApiKey,
@@ -1715,16 +1792,32 @@ export const webPlatformService = {
     }
   },
 
-  async generateStoryboardImages(token: string, input: { cloneProjectId: string; productReferenceImagePaths?: string[]; selectedModelIdentityId?: string }) {
+  async generateStoryboardImages(
+    token: string,
+    input: {
+      cloneProjectId: string
+      productReferenceImagePaths?: string[]
+      selectedModelIdentityId?: string
+      shotIds?: string[]
+      onlyMissing?: boolean
+    },
+  ) {
     const auth = await this.authByToken(token)
     const project = await assertProjectOwnership(input.cloneProjectId, auth.user.id)
+    const shouldBatchQueryOnly = input.onlyMissing === true || (Array.isArray(input.shotIds) && input.shotIds.length > 0)
     const billing = await chargeCredits({
       userId: auth.user.id,
       action: 'generate_storyboard_images',
       relatedProjectId: project.id,
       note: '生成分镜图片',
     })
-    const result = await cloneService.generateStoryboardGridsForProject(input)
+    const result = shouldBatchQueryOnly
+      ? await cloneService.batchQueryStoryboardImages({
+          cloneProjectId: input.cloneProjectId,
+          shotIds: input.shotIds,
+          productReferenceImagePaths: input.productReferenceImagePaths,
+        })
+      : await cloneService.generateStoryboardGridsForProject(input)
     if (result?.project) {
       await patchProjectOwnership(result.project, {
         userId: auth.user.id,

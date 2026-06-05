@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, FolderOpen, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, Search, Trash2, Video, Wand2 } from 'lucide-vue-next'
 import UiCard from '../components/UiCard.vue'
 import UiButton from '../components/UiButton.vue'
+import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 
 type CloneProjectSummary = {
   id: string
@@ -42,6 +43,13 @@ type CloneTaskGroup = {
   taskCount: number
 }
 
+type RuntimeLogItem = {
+  id: string
+  level: 'info' | 'success' | 'error'
+  message: string
+  time: number
+}
+
 const router = useRouter()
 const loading = ref(false)
 const creating = ref(false)
@@ -76,7 +84,26 @@ const statusFilter = ref<'all' | 'draft' | 'running' | 'ready_for_review' | 'com
 const sortOrder = ref<'updated_desc' | 'updated_asc'>('updated_desc')
 const currentPage = ref(1)
 const pageSize = 10
+const runtimeLogs = ref<RuntimeLogItem[]>([])
+const runtimeDialogOpen = ref(false)
+let offRuntimeLog: (() => void) | undefined
 const cloneApi = window.api.clone as any
+
+function safeText(value: unknown, fallback = '') {
+  const text = String(value ?? '').replace(/\uFFFD/g, '').trim()
+  return text || fallback
+}
+
+function pushRuntimeLog(message: string, level: RuntimeLogItem['level'] = 'info') {
+  const text = safeText(message, '')
+  if (!text) return
+  const last = runtimeLogs.value[0]
+  if (last?.message === text && last.level === level) return
+  runtimeLogs.value = [
+    { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, level, message: text, time: Date.now() },
+    ...runtimeLogs.value,
+  ].slice(0, 200)
+}
 
 function hasCloneGroupApi(method: 'listCloneGroups' | 'createCloneGroup' | 'renameCloneGroup' | 'removeCloneGroup' | 'assignCloneProjectsToGroup') {
   return typeof cloneApi?.[method] === 'function'
@@ -126,15 +153,15 @@ const stats = computed(() => ({
     const status = String(item.status || '').toLowerCase()
     return status.includes('fail') || status.includes('error')
   }).length,
-  archived: rows.value.filter((item) => Boolean(item.archived)).length,
+  pendingOutput: rows.value.filter((item) => !String(item.finalOutputPath || '').trim()).length,
 }))
 
 const overviewCards = computed(() => [
-  { key: 'all', label: '全部任务', value: stats.value.all, tone: 'all', icon: Video },
-  { key: 'running', label: '进行中', value: stats.value.running, tone: 'running', icon: LoaderCircle },
-  { key: 'completed', label: '已完成', value: stats.value.completed, tone: 'success', icon: CheckCircle2 },
-  { key: 'failed', label: '失败任务', value: stats.value.failed, tone: 'danger', icon: AlertTriangle },
-  { key: 'archived', label: '草稿箱', value: stats.value.archived, tone: 'muted', icon: FolderOpen },
+  { key: 'all', label: '全部任务', helper: '总任务数', value: stats.value.all, tone: 'all', icon: Video },
+  { key: 'running', label: '进行中', helper: '任务处理中', value: stats.value.running, tone: 'running', icon: LoaderCircle },
+  { key: 'completed', label: '已完成', helper: '任务已完成', value: stats.value.completed, tone: 'success', icon: CheckCircle2 },
+  { key: 'failed', label: '失败任务', helper: '任务失败', value: stats.value.failed, tone: 'danger', icon: AlertTriangle },
+  { key: 'pending-output', label: '等待输出', helper: '草稿存储', value: stats.value.pendingOutput, tone: 'muted', icon: FolderOpen },
 ])
 
 const groupSidebarItems = computed(() => {
@@ -251,7 +278,13 @@ function toFileSrc(input?: string) {
 }
 
 function itemCoverSrc(item: CloneProjectSummary) {
-  return toFileSrc(item.coverAssetPath || item.previewOutputPath || item.finalOutputPath || item.referenceVideoPath || '')
+  return toFileSrc(
+    item.coverAssetPath ||
+      item.previewOutputPath ||
+      item.finalOutputPath ||
+      item.referenceVideoPath ||
+      '',
+  )
 }
 
 function formatTime(value?: number) {
@@ -339,6 +372,7 @@ async function exportSelectedFinalVideos() {
   if (!dir) return
   exporting.value = true
   batchExportMessage.value = ''
+  pushRuntimeLog(`[clone-task-list] export selected count=${selectedIds.value.length}`, 'info')
   try {
     const cloneProjectIds = selectedIds.value.map((id) => String(id || '').trim()).filter(Boolean)
     const result = await window.api.clone.exportFinalVideos({
@@ -355,6 +389,7 @@ async function exportSelectedFinalVideos() {
     batchExportMessage.value = skippedCount
       ? `已导出 ${exportedCount} 个成片，跳过 ${skippedCount} 个未出片或文件缺失任务。`
       : `已导出 ${exportedCount} 个成片。`
+    pushRuntimeLog(`[clone-task-list] export completed exported=${exportedCount} skipped=${skippedCount}`, skippedCount ? 'info' : 'success')
     if (exportedCount > 0) {
       await window.api.shell.openPath(result.outputDir)
     } else {
@@ -363,6 +398,7 @@ async function exportSelectedFinalVideos() {
   } catch (error: any) {
     const message = String(error?.message ?? error ?? '批量导出失败。')
     batchExportMessage.value = message
+    pushRuntimeLog(`[clone-task-list] export failed message=${safeText(message, 'unknown error')}`, 'error')
     window.alert(message)
   } finally {
     exporting.value = false
@@ -371,6 +407,7 @@ async function exportSelectedFinalVideos() {
 
 async function refresh() {
   loading.value = true
+  pushRuntimeLog('[clone-task-list] refresh list', 'info')
   try {
     rows.value = (await window.api.clone.listProjectSummaries()) as CloneProjectSummary[]
     if (cloneGroupListReady.value) {
@@ -388,6 +425,7 @@ async function refresh() {
     }
     syncSelectionWithRows(rows.value)
     goToPage(currentPage.value)
+    pushRuntimeLog(`[clone-task-list] refresh completed total=${rows.value.length}`, 'success')
   } finally {
     loading.value = false
   }
@@ -403,24 +441,29 @@ watch(filteredRows, () => {
   }
 })
 
-async function createTask() {
+async function createTask(runModeOverride?: 'auto' | 'manual') {
   if (creating.value) return
-  if (!createRunMode.value) return
+  const nextRunMode = runModeOverride || createRunMode.value
+  if (!nextRunMode) return
   creating.value = true
+  pushRuntimeLog(`[clone-task-list] create task mode=${nextRunMode}`, 'info')
   try {
     const res = (await window.api.clone.createDraftProject({
       locale: 'zh-CN',
       strength: 'structure',
-      runMode: createRunMode.value,
+      runMode: nextRunMode,
     })) as { project?: { id?: string } }
     const id = String(res?.project?.id || '').trim()
     if (id) {
-      createRunMode.value = ''
+      pushRuntimeLog(`[clone-task-list] create task completed id=${id}`, 'success')
+      if (!runModeOverride) createRunMode.value = ''
       void router.push(`/clone/${id}`)
       return
     }
+    pushRuntimeLog('[clone-task-list] create task missing project id', 'error')
     console.error('[clone-task-list] create-task-missing-id', res)
   } catch (error) {
+    pushRuntimeLog(`[clone-task-list] create task failed message=${safeText((error as any)?.message ?? error, 'unknown error')}`, 'error')
     console.error('[clone-task-list] create-task-error', error)
   } finally {
     creating.value = false
@@ -430,9 +473,11 @@ async function createTask() {
 async function removeTask(id: string) {
   if (!id) return
   removingId.value = id
+  pushRuntimeLog(`[clone-task-list] remove task id=${id}`, 'info')
   try {
     await window.api.clone.removeProject({ cloneProjectId: id })
     await refresh()
+    pushRuntimeLog(`[clone-task-list] remove task completed id=${id}`, 'success')
   } finally {
     removingId.value = ''
   }
@@ -668,11 +713,19 @@ function handlePointerDown(event: Event) {
 
 onMounted(() => {
   document.addEventListener('pointerdown', handlePointerDown)
+  offRuntimeLog = window.api.clone.onRuntimeLog?.((payload) => {
+    const message = safeText(payload?.message ?? payload, '')
+    if (!message) return
+    const level = payload?.level === 'error' || payload?.level === 'success' ? payload.level : 'info'
+    pushRuntimeLog(message, level)
+  })
   void refresh()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handlePointerDown)
+  offRuntimeLog?.()
+  offRuntimeLog = undefined
 })
 </script>
 
@@ -680,60 +733,49 @@ onBeforeUnmount(() => {
   <div class="clone-task-list-page">
     <section class="clone-task-list-shell">
       <div class="clone-task-list-main">
-        <header class="clone-list-head">
-          <div class="clone-list-head__copy">
-            <div class="clone-list-head__title">
-              <h1>爆款视频复刻</h1>
-              <span class="clone-list-head__spark">✦</span>
+        <section class="clone-console-panel">
+          <header class="clone-console-hero">
+            <div class="clone-console-hero__copy">
+              <div class="clone-console-hero__title-row">
+                <h1>爆款视频复刻</h1>
+                <span class="clone-console-hero__spark">✦</span>
+              </div>
+              <p>智能复刻热门视频，快速生成优质内容</p>
             </div>
-          </div>
-          <div class="clone-list-head__actions">
-            <label class="clone-list-search clone-list-search--head" aria-label="搜索任务">
-              <Search class="h-4 w-4" />
-              <input v-model.trim="query" type="text" placeholder="搜索任务名称、素材或错误信息" />
-              <span class="clone-list-search__shortcut">⌘K</span>
-            </label>
-            <UiButton variant="secondary" :disabled="exporting || !selectedIds.length" @click="exportSelectedFinalVideos">
-              {{ exporting ? '导出中...' : '批量导出' }}
-            </UiButton>
-            <div class="clone-list-run-mode">
-              <button class="clone-list-run-mode__option" :class="{ 'is-active': createRunMode === 'auto' }" type="button" @click="createRunMode = 'auto'">
-                自动运行
-              </button>
-              <button class="clone-list-run-mode__option" :class="{ 'is-active': createRunMode === 'manual' }" type="button" @click="createRunMode = 'manual'">
-                手动运行
-              </button>
-            </div>
-            <UiButton :disabled="creating || !createRunMode" @click="createTask">
-              <Plus class="h-4 w-4" />
-              {{ creating ? '创建中...' : '新建任务' }}
-            </UiButton>
-          </div>
-        </header>
 
-        <section class="clone-overview-panel">
-          <div class="clone-overview-cards">
-            <article v-for="card in overviewCards" :key="card.key" class="clone-overview-card" :class="`tone-${card.tone}`">
-              <div class="clone-overview-card__head">
-                <span class="clone-overview-card__icon">
+            <div class="clone-console-hero__actions">
+              <UiButton class="clone-console-hero__button" variant="secondary" :disabled="exporting || !selectedIds.length" @click="exportSelectedFinalVideos">
+                {{ exporting ? '导出中...' : '批量导出' }}
+              </UiButton>
+              <div class="clone-console-run-mode">
+                <button class="clone-console-run-mode__option" :class="{ 'is-active': createRunMode === 'auto' }" type="button" @click="createRunMode = 'auto'">
+                  自动运行
+                </button>
+                <button class="clone-console-run-mode__option" :class="{ 'is-active': createRunMode === 'manual' }" type="button" @click="createRunMode = 'manual'">
+                  手动运行
+                </button>
+              </div>
+              <UiButton class="clone-console-hero__button clone-console-hero__button--primary" :disabled="creating || !createRunMode" @click="createTask">
+                <Plus class="h-4 w-4" />
+                {{ creating ? '创建中...' : '新建任务' }}
+              </UiButton>
+            </div>
+          </header>
+
+          <section class="clone-console-overview">
+            <div class="clone-console-overview__cards">
+              <article v-for="card in overviewCards" :key="card.key" class="clone-console-stat" :class="`tone-${card.tone}`">
+                <span class="clone-console-stat__icon">
                   <component :is="card.icon" class="h-4 w-4" />
                 </span>
-                <div class="clone-overview-card__label">{{ card.label }}</div>
-                <strong>{{ card.value }}</strong>
-              </div>
-            </article>
-          </div>
-          <div class="clone-overview-filters">
-            <button class="clone-list-sort clone-list-sort--panel" type="button" @click="toggleSortOrder">
-              {{ sortOrder === 'updated_desc' ? '最近更新' : '最早更新' }}
-              <ChevronDown class="h-4 w-4" />
-            </button>
-            <button class="clone-list-sort clone-list-sort--panel" type="button">
-              全部素材
-              <ChevronDown class="h-4 w-4" />
-            </button>
-            <button class="clone-list-icon-filter" type="button" @click="toggleSelectAllFiltered">⌯</button>
-          </div>
+                <div class="clone-console-stat__copy">
+                  <strong>{{ card.label }}</strong>
+                  <span>{{ card.helper }}</span>
+                </div>
+                <b>{{ card.value }}</b>
+              </article>
+            </div>
+          </section>
         </section>
 
         <div v-if="selectedIds.length || batchExportMessage" class="clone-list-batch-bar">
@@ -744,217 +786,229 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <section class="clone-content-grid">
-          <div class="clone-grid-main clone-grid-main--board">
-            <div class="clone-group-strip">
-              <div class="clone-group-strip__tabs">
-                <div
-                  v-for="group in groupSidebarItems"
-                  :key="group.id"
-                  class="clone-group-tab"
-                  :class="{ 'is-active': activeGroupId === group.id }"
-                >
-                  <button type="button" class="clone-group-tab__main" @click="activeGroupId = group.id as any">
-                    <span>{{ group.name }}</span>
-                    <em>({{ group.taskCount }})</em>
+        <section class="clone-console-table">
+          <div class="clone-console-table__groupbar">
+            <div class="clone-console-table__groupbar-tabs">
+              <div
+                v-for="group in groupSidebarItems"
+                :key="group.id"
+                class="clone-console-group"
+                :class="{ 'is-active': activeGroupId === group.id }"
+              >
+                <button type="button" class="clone-console-group__main" @click="activeGroupId = group.id as any">
+                  <span>{{ group.name }}</span>
+                  <em>{{ group.taskCount }}</em>
+                </button>
+                <div v-if="!group.system && (cloneGroupRenameReady || cloneGroupRemoveReady)" class="clone-group-menu">
+                  <button type="button" class="clone-console-group__more" aria-label="更多操作" @click.stop="toggleGroupMenu(group.id)">
+                    <MoreHorizontal class="h-3.5 w-3.5" />
                   </button>
-                  <div v-if="!group.system && (cloneGroupRenameReady || cloneGroupRemoveReady)" class="clone-group-menu">
-                    <button type="button" class="clone-group-tab__more" aria-label="更多操作" @click.stop="toggleGroupMenu(group.id)">
-                      <MoreHorizontal class="h-3.5 w-3.5" />
-                    </button>
-                    <div v-if="groupMenuOpenId === group.id" class="clone-group-menu__dropdown">
-                      <button v-if="cloneGroupRenameReady" type="button" class="clone-group-menu__item" @click.stop="openRenameGroupDialog(group as CloneTaskGroup)">重命名</button>
-                      <button v-if="cloneGroupRemoveReady" type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveGroup(group as CloneTaskGroup)">删除</button>
-                    </div>
+                  <div v-if="groupMenuOpenId === group.id" class="clone-group-menu__dropdown">
+                    <button v-if="cloneGroupRenameReady" type="button" class="clone-group-menu__item" @click.stop="openRenameGroupDialog(group as CloneTaskGroup)">重命名</button>
+                    <button v-if="cloneGroupRemoveReady" type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveGroup(group as CloneTaskGroup)">删除</button>
                   </div>
                 </div>
-                <button v-if="cloneGroupCreateReady" type="button" class="clone-group-create" @click="openCreateGroupDialog">
-                  <Plus class="h-3.5 w-3.5" />
-                  <span>新建分组</span>
-                </button>
               </div>
-              <div class="clone-group-strip__tools">
-                <button class="clone-group-strip__tool is-active" type="button" aria-label="列表视图">
-                  <span class="clone-group-strip__tool-bars"></span>
-                </button>
-                <button class="clone-group-strip__tool" type="button" aria-label="网格视图">
-                  <span class="clone-group-strip__tool-grid"></span>
-                </button>
-                <button class="clone-group-strip__tool" type="button" aria-label="设置">
-                  ⚙
-                </button>
-              </div>
+
+              <button v-if="cloneGroupCreateReady" type="button" class="clone-console-group__create" @click="openCreateGroupDialog">
+                <Plus class="h-3.5 w-3.5" />
+                <span>新建分组</span>
+              </button>
             </div>
 
-            <div v-if="filteredRows.length" class="clone-task-list">
-              <div class="clone-task-table-head">
-                <label class="clone-task-table-head__cell cell-select clone-task-table-head__check" aria-label="全选当前筛选任务">
-                  <input
-                    type="checkbox"
-                    :checked="allFilteredSelected"
-                    @change="toggleSelectAllFiltered"
-                  />
-                  <span></span>
-                </label>
-                <span class="clone-task-table-head__cell cell-preview">预览</span>
-                <span class="clone-task-table-head__cell cell-task">任务信息</span>
-                <span class="clone-task-table-head__cell cell-stage">阶段</span>
-                <span class="clone-task-table-head__cell cell-assets">素材</span>
-                <span class="clone-task-table-head__cell cell-progress">进度</span>
-                <span class="clone-task-table-head__cell cell-updated">更新时间</span>
-                <span class="clone-task-table-head__cell cell-actions">操作</span>
-              </div>
-
-              <article v-for="item in pagedRows" :key="item.id" class="clone-task-row">
-                <label class="clone-task-row__select">
-                  <input
-                    type="checkbox"
-                    :checked="selectedSet.has(item.id)"
-                    @change="toggleSelected(item.id)"
-                  />
-                  <span></span>
-                </label>
-
-                <div class="clone-task-row__thumb" :data-duration="pseudoDurationLabel(item)">
-                  <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" />
-                  <div v-else class="clone-task-row__thumb-empty">
-                    <Video class="h-5 w-5" />
-                  </div>
-                </div>
-
-                <div class="clone-task-row__main">
-                  <div class="clone-task-row__title-wrap clone-task-row__cell clone-task-row__cell--task">
-                    <div class="clone-task-row__title-line">
-                      <h3>{{ item.title }}</h3>
-                      <button class="clone-task-row__rename" type="button" aria-label="修改任务名称" @click="openRenameDialog(item)">
-                        <Pencil class="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <p v-if="compactDescription(item.description)">{{ compactDescription(item.description) }}</p>
-                    <div class="clone-task-row__meta">
-                      <span class="clone-task-row__meta-pill">{{ humanRunMode(item.runMode) }}</span>
-                      <span class="clone-task-row__meta-pill">{{ item.selectedModelIdentityName || '未绑模特' }}</span>
-                      <span class="clone-task-row__meta-pill">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
-                    </div>
-                  </div>
-
-                  <div class="clone-task-row__head-side clone-task-row__cell clone-task-row__cell--stage">
-                    <span class="clone-task-card__status" :class="statusTone(item.status)">{{ humanStatus(item.status) }}</span>
-                    <span class="clone-task-card__step-tag" :class="stepTone(item.currentStep)">{{ humanStep(item.currentStep) }}</span>
-                    <div v-if="cloneGroupAssignReady" class="clone-row-move-menu">
-                      <button class="clone-task-row__group-link" type="button" @click.stop="toggleRowMoveMenu(item.id)">
-                        <span>{{ item.groupName || '移动到分组' }}</span>
-                        <ChevronDown class="h-3.5 w-3.5" />
-                      </button>
-                      <div v-if="rowMoveMenuOpenId === item.id" class="clone-row-move-menu__dropdown">
-                        <button
-                          type="button"
-                          class="clone-row-move-menu__item"
-                          :class="{ 'is-active': !item.groupId }"
-                          :disabled="assigningProjectId === item.id"
-                          @click.stop="assignProjectToGroup(item.id)"
-                        >
-                          未分组
-                        </button>
-                        <button
-                          v-for="group in groups.filter((entry) => entry.id !== '__ungrouped__')"
-                          :key="`${item.id}-${group.id}`"
-                          type="button"
-                          class="clone-row-move-menu__item"
-                          :class="{ 'is-active': item.groupId === group.id }"
-                          :disabled="assigningProjectId === item.id"
-                          @click.stop="assignProjectToGroup(item.id, group.id)"
-                        >
-                          {{ group.name }}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="clone-task-row__facts clone-task-row__cell clone-task-row__cell--assets">
-                    <strong>{{ item.productReferenceImageCount }} 图 / {{ item.generatedVideoCount || 0 }} 视频</strong>
-                    <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
-                  </div>
-
-                  <div class="clone-task-row__progress clone-task-row__cell clone-task-row__cell--progress">
-                    <div class="clone-task-row__progress-copy">
-                      <strong>{{ item.progressPercent }}%</strong>
-                    </div>
-                    <div class="clone-task-row__track">
-                      <span :style="{ width: `${item.progressPercent}%` }"></span>
-                    </div>
-                    <div class="clone-task-row__steps">
-                      <span
-                        v-for="(_, index) in 5"
-                        :key="`${item.id}-${index}`"
-                        class="clone-task-row__step"
-                        :class="{ 'is-active': index === Math.max(0, Math.min(4, stepIndex(item.currentStep))), 'is-done': index < stepIndex(item.currentStep) }"
-                      >
-                        {{ index + 1 }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div class="clone-task-row__updated clone-task-row__cell clone-task-row__cell--updated">
-                    <Clock3 class="h-4 w-4" />
-                    <div class="clone-task-row__updated-copy">
-                      <span>{{ formatDateOnly(item.updatedAt) }}</span>
-                      <strong>{{ formatClockOnly(item.updatedAt) }}</strong>
-                    </div>
-                  </div>
-
-                  <div class="clone-task-row__actions clone-task-row__cell clone-task-row__cell--actions">
-                    <button class="clone-task-row__action clone-task-row__action--play" type="button" @click="openTask(item.id)">
-                      <Play class="h-4 w-4" />
-                    </button>
-                    <button class="clone-task-row__action clone-task-row__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
-                      <Trash2 class="h-4 w-4" />
-                    </button>
-                    <div class="clone-row-action-menu">
-                      <button class="clone-task-row__action" type="button" aria-label="更多操作" @click.stop="toggleRowActionMenu(item.id)">
-                        <MoreHorizontal class="h-4 w-4" />
-                      </button>
-                      <div v-if="rowActionMenuOpenId === item.id" class="clone-group-menu__dropdown clone-row-action-menu__dropdown">
-                        <button type="button" class="clone-group-menu__item" @click.stop="openRenameDialog(item)">重命名</button>
-                        <button type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveTask(item)">删除</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-if="item.lastError" class="clone-task-row__error">
-                    <span class="clone-task-row__error-text">错误：{{ compactError(item.lastError) }}</span>
-                    <button class="clone-task-row__error-link" type="button" @click.stop="openErrorDialog(item)">查看错误</button>
-                  </div>
-                </div>
-              </article>
-            </div>
-
-            <div v-else class="clone-list-empty">
-              <LoaderCircle v-if="loading" class="h-5 w-5 is-spinning" />
-              <Wand2 v-else class="h-5 w-5" />
-              <strong>{{ loading ? '正在读取任务列表' : '还没有复刻任务' }}</strong>
-              <span>{{ loading ? '请稍候...' : '点击右上角“新建任务”，创建第一个复刻项目。' }}</span>
-            </div>
-
-            <div class="clone-list-pagination">
-              <span class="clone-list-pagination__summary">共 {{ filteredRows.length }} 条</span>
-              <div class="clone-list-pagination__controls">
-                <button type="button" :disabled="currentPage <= 1" @click="goToPrevPage">‹</button>
-                <button
-                  v-for="page in visiblePageNumbers"
-                  :key="page"
-                  type="button"
-                  :class="{ 'is-active': currentPage === page }"
-                  @click="goToPage(page)"
-                >
-                  {{ page }}
-                </button>
-                <button type="button" :disabled="currentPage >= pageCount" @click="goToNextPage">›</button>
-                <button type="button" class="clone-list-page-size" disabled>{{ pageSize }} 条/页 <ChevronDown class="h-3.5 w-3.5" /></button>
-              </div>
+            <div class="clone-console-table__groupbar-tools">
+              <button class="clone-console-overview__tool" type="button" @click="toggleSortOrder">
+                {{ sortOrder === 'updated_desc' ? '最近更新' : '最早更新' }}
+                <ChevronDown class="h-4 w-4" />
+              </button>
+              <button class="clone-console-overview__tool" type="button">
+                全部素材
+                <ChevronDown class="h-4 w-4" />
+              </button>
+              <button class="clone-console-overview__icon" type="button" aria-label="筛选并全选当前结果" @click="toggleSelectAllFiltered">
+                <span class="clone-console-overview__icon-bars"></span>
+              </button>
+              <button class="clone-console-table__viewtool is-active" type="button" aria-label="列表视图">
+                <span class="clone-console-table__viewtool-bars"></span>
+              </button>
+              <button class="clone-console-table__viewtool" type="button" aria-label="网格视图">
+                <span class="clone-console-table__viewtool-grid"></span>
+              </button>
+              <button class="clone-console-table__viewtool" type="button" aria-label="设置">
+                <span class="clone-console-table__viewtool-dot"></span>
+              </button>
             </div>
           </div>
 
+          <div v-if="filteredRows.length" class="clone-console-table__body">
+            <div class="clone-console-table__head">
+              <label class="clone-console-table__check" aria-label="全选当前筛选任务">
+                <input
+                  type="checkbox"
+                  :checked="allFilteredSelected"
+                  @change="toggleSelectAllFiltered"
+                />
+                <span></span>
+              </label>
+              <span class="clone-console-table__headcell">预览</span>
+              <span class="clone-console-table__headcell">任务信息</span>
+              <span class="clone-console-table__headcell">阶段</span>
+              <span class="clone-console-table__headcell">素材</span>
+              <span class="clone-console-table__headcell">进度</span>
+              <span class="clone-console-table__headcell">更新时间</span>
+              <span class="clone-console-table__headcell">操作</span>
+            </div>
+
+            <article v-for="item in pagedRows" :key="item.id" class="clone-console-row">
+              <label class="clone-console-row__check">
+                <input
+                  type="checkbox"
+                  :checked="selectedSet.has(item.id)"
+                  @change="toggleSelected(item.id)"
+                />
+                <span></span>
+              </label>
+
+              <div class="clone-console-row__preview">
+                <div class="clone-console-row__thumb" :data-duration="pseudoDurationLabel(item)">
+                  <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" />
+                  <div v-else class="clone-console-row__thumb-empty">
+                    <Video class="h-5 w-5" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="clone-console-row__task">
+                <div class="clone-console-row__titleline">
+                  <h3>{{ item.title }}</h3>
+                  <button class="clone-console-row__rename" type="button" aria-label="修改任务名称" @click="openRenameDialog(item)">
+                    <Pencil class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div class="clone-console-row__meta">
+                  <span class="clone-console-row__mode">{{ humanRunMode(item.runMode) }}</span>
+                  <span class="clone-console-row__dot"></span>
+                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || 'AI模特 003' }}</span>
+                  <span class="clone-console-row__dot"></span>
+                  <span class="clone-console-row__text">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
+                </div>
+                <div v-if="item.lastError" class="clone-console-row__error">
+                  <span class="clone-console-row__error-text">{{ compactError(item.lastError, 72) }}</span>
+                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">查看错误</button>
+                </div>
+              </div>
+
+              <div class="clone-console-row__stage">
+                <div class="clone-console-row__statuswrap">
+                  <span class="clone-console-row__status" :class="statusTone(item.status)">{{ humanStatus(item.status) }}</span>
+                  <span class="clone-console-row__stepbadge" :class="stepTone(item.currentStep)">{{ humanStep(item.currentStep) }}</span>
+                </div>
+                <div v-if="cloneGroupAssignReady" class="clone-row-move-menu clone-row-move-menu--inline">
+                  <button class="clone-console-row__groupmove" type="button" @click.stop="toggleRowMoveMenu(item.id)">
+                    <span>{{ item.groupName || '移动到分组' }}</span>
+                    <ChevronDown class="h-3.5 w-3.5" />
+                  </button>
+                  <div v-if="rowMoveMenuOpenId === item.id" class="clone-row-move-menu__dropdown">
+                    <button
+                      type="button"
+                      class="clone-row-move-menu__item"
+                      :class="{ 'is-active': !item.groupId }"
+                      :disabled="assigningProjectId === item.id"
+                      @click.stop="assignProjectToGroup(item.id)"
+                    >
+                      未分组
+                    </button>
+                    <button
+                      v-for="group in groups.filter((entry) => entry.id !== '__ungrouped__')"
+                      :key="`${item.id}-${group.id}`"
+                      type="button"
+                      class="clone-row-move-menu__item"
+                      :class="{ 'is-active': item.groupId === group.id }"
+                      :disabled="assigningProjectId === item.id"
+                      @click.stop="assignProjectToGroup(item.id, group.id)"
+                    >
+                      {{ group.name }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="clone-console-row__assets">
+                <strong>{{ item.productReferenceImageCount }} 图 / {{ item.generatedVideoCount || 0 }} 视频</strong>
+                <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
+              </div>
+
+              <div class="clone-console-row__progress">
+                <div class="clone-console-row__progress-copy">
+                  <strong>{{ item.progressPercent }}%</strong>
+                </div>
+                <div class="clone-console-row__progress-track">
+                  <span :style="{ width: `${item.progressPercent}%` }"></span>
+                </div>
+                <div class="clone-console-row__progress-steps">
+                  <span
+                    v-for="(_, index) in 5"
+                    :key="`${item.id}-${index}`"
+                    class="clone-console-row__progress-step"
+                    :class="{ 'is-active': index === Math.max(0, Math.min(4, stepIndex(item.currentStep))), 'is-done': index < stepIndex(item.currentStep) }"
+                  >
+                    {{ index + 1 }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="clone-console-row__updated">
+                <Clock3 class="h-4 w-4" />
+                <div class="clone-console-row__updated-copy">
+                  <span>{{ formatDateOnly(item.updatedAt) }}</span>
+                  <strong>{{ formatClockOnly(item.updatedAt) }}</strong>
+                </div>
+              </div>
+
+              <div class="clone-console-row__actions">
+                <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openTask(item.id)">
+                  <Play class="h-4 w-4" />
+                </button>
+                <button class="clone-console-row__action clone-console-row__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+                <div class="clone-row-action-menu">
+                  <button class="clone-console-row__action" type="button" aria-label="更多操作" @click.stop="toggleRowActionMenu(item.id)">
+                    <MoreHorizontal class="h-4 w-4" />
+                  </button>
+                  <div v-if="rowActionMenuOpenId === item.id" class="clone-group-menu__dropdown clone-row-action-menu__dropdown">
+                    <button type="button" class="clone-group-menu__item" @click.stop="openRenameDialog(item)">重命名</button>
+                    <button type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveTask(item)">删除</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="clone-list-empty">
+            <LoaderCircle v-if="loading" class="h-5 w-5 is-spinning" />
+            <Wand2 v-else class="h-5 w-5" />
+            <strong>{{ loading ? '正在读取任务列表' : '还没有复刻任务' }}</strong>
+            <span>{{ loading ? '请稍候...' : '点击右上角“新建任务”，创建第一个复刻项目。' }}</span>
+          </div>
+
+          <div class="clone-list-pagination">
+            <span class="clone-list-pagination__summary">共 {{ filteredRows.length }} 条</span>
+            <div class="clone-list-pagination__controls">
+              <button type="button" :disabled="currentPage <= 1" @click="goToPrevPage">‹</button>
+              <button
+                v-for="page in visiblePageNumbers"
+                :key="page"
+                type="button"
+                :class="{ 'is-active': currentPage === page }"
+                @click="goToPage(page)"
+              >
+                {{ page }}
+              </button>
+              <button type="button" :disabled="currentPage >= pageCount" @click="goToNextPage">›</button>
+              <button type="button" class="clone-list-page-size" disabled>{{ pageSize }} 条/页 <ChevronDown class="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
         </section>
       </div>
     </section>
@@ -1051,14 +1105,26 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <RuntimeLogDialog
+      v-model="runtimeDialogOpen"
+      :logs="runtimeLogs"
+      title="运行日志"
+      description="实时查看复刻任务列表的刷新、新建、删除、导出以及主进程桥接过来的 clone 运行日志。"
+      hint="列表页会聚合 /clone 相关运行日志"
+      empty-description="在任务列表执行刷新、新建、删除、打开任务或导出操作后，这里会显示最新运行记录。"
+    />
   </div>
 </template>
 
 <style scoped>
 .clone-task-list-page {
   --clone-accent: var(--ds-primary, #22d3ee);
+  --clone-panel-border: rgba(98, 118, 168, 0.18);
+  --clone-panel-bg: linear-gradient(180deg, rgba(11, 18, 31, 0.985), rgba(7, 12, 22, 0.99));
+  --clone-card-bg: linear-gradient(180deg, rgba(17, 26, 42, 0.96), rgba(10, 17, 29, 0.96));
   min-height: 100%;
-  padding: 4px 20px 16px;
+  padding: 6px 20px 18px;
   color: #eef3ff;
   background: transparent;
 }
@@ -1067,1022 +1133,307 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
-.clone-task-list-shell,
-.clone-task-list-main,
-.clone-list-head__copy,
-.clone-content-grid,
-.clone-grid-main,
-.clone-side-feature-list,
-.clone-recent-list {
-  display: grid;
-}
-
 .clone-task-list-main {
-  gap: 10px;
-}
-
-.clone-list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: 14px;
-  padding-top: 0;
+  padding: 8px 2px 16px;
 }
 
-.clone-list-head__copy {
-  gap: 2px;
+.clone-console-panel {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 28px;
+  border: 1px solid var(--clone-panel-border);
+  background:
+    radial-gradient(circle at 88% -12%, rgba(34, 211, 238, 0.22), transparent 32%),
+    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.16), transparent 28%),
+    var(--clone-panel-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 52px rgba(0, 0, 0, 0.28);
 }
 
-.clone-list-head__eyebrow {
-  display: none;
-  align-items: center;
-  width: fit-content;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(129, 140, 248, 0.22);
-  background: rgba(99, 102, 241, 0.1);
-  color: #b8c7ff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.clone-list-head__title {
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.clone-list-head__title h1 {
-  margin: 0;
-  font-size: 22px;
-  line-height: 1.1;
-  font-weight: 800;
-}
-
-.clone-list-head__spark {
-  display: inline-flex;
-  margin-left: 3px;
-  color: #8b5cf6;
-  font-size: 13px;
-}
-
-.clone-list-head__copy p {
-  display: none;
-}
-
-.clone-list-head__actions,
-.clone-list-filters,
-.clone-list-tabs,
-.clone-list-toolbar,
-.clone-task-card__top,
-.clone-task-card__top-right,
-.clone-task-card__head,
-.clone-task-card__footer,
-.clone-task-card__actions,
+.clone-console-hero,
+.clone-console-hero__actions,
+.clone-console-overview,
+.clone-console-overview__tools,
+.clone-list-batch-bar,
+.clone-list-batch-bar__actions,
+.clone-console-table__groupbar,
+.clone-console-table__groupbar-tabs,
+.clone-console-table__groupbar-tools,
+.clone-console-table__head,
+.clone-console-row__statuswrap,
+.clone-console-row__meta,
+.clone-console-row__updated,
+.clone-console-row__actions,
 .clone-list-pagination,
 .clone-list-pagination__controls,
-.clone-side-card__row,
-.clone-recent-item {
+.clone-side-card__row {
   display: flex;
 }
 
-.clone-list-head__actions {
+.clone-console-hero {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.clone-console-hero__copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.clone-console-hero__title-row {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+.clone-console-hero__title-row h1 {
+  margin: 0;
+  color: #f8fbff;
+  font-size: 31px;
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.clone-console-hero__copy p {
+  margin: 0;
+  color: #96a9cc;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.clone-console-hero__spark {
+  color: #81e6ff;
+  font-size: 15px;
+  opacity: 0.9;
+}
+
+.clone-console-hero__actions {
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.clone-list-search--head {
-  min-width: 344px;
-  min-height: 40px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(11, 18, 32, 0.94);
-  border: 1px solid rgba(91, 107, 153, 0.14);
+.clone-console-hero__button {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.clone-console-hero__button--primary {
+  gap: 8px;
+}
+
+.clone-console-run-mode {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
-.clone-list-search__shortcut {
-  flex: 0 0 auto;
-  min-width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #7e90bb;
-  font-size: 10px;
+.clone-console-run-mode__option {
+  min-width: 92px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #97abd1;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.clone-overview-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 15px 16px 15px 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(54, 69, 108, 0.24);
-  background: linear-gradient(180deg, rgba(10, 18, 34, 0.98), rgba(8, 15, 29, 0.99));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.018),
-    0 10px 24px rgba(3, 8, 20, 0.12);
+.clone-console-run-mode__option.is-active {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.05));
+  color: #f8fbff;
 }
 
-.clone-overview-cards {
+.clone-console-overview {
+  display: grid;
+  gap: 0;
+}
+
+.clone-console-overview__cards {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 7px;
+  gap: 12px;
+}
+
+.clone-console-stat {
+  min-height: 110px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
-}
-
-.clone-overview-card {
-  display: block;
-  min-height: 60px;
-  padding: 0 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(69, 85, 127, 0.14);
-  background: linear-gradient(180deg, rgba(17, 25, 43, 0.96), rgba(12, 19, 34, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.012);
-}
-
-.clone-overview-card__head {
-  min-height: 60px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.clone-overview-card__icon {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.clone-overview-card__label {
-  color: #c8d5f0;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.clone-overview-card strong {
-  color: #f8fbff;
-  margin-left: auto;
-  font-size: 15px;
-  line-height: 1;
-  font-weight: 800;
-  min-width: 18px;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.clone-overview-card.tone-all {
-  box-shadow: inset 0 0 0 1px rgba(123, 92, 255, 0.1);
-}
-
-.clone-overview-card.tone-running {
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.1);
-}
-
-.clone-overview-card.tone-success {
-  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.1);
-}
-
-.clone-overview-card.tone-danger {
-  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.1);
-}
-
-.clone-overview-card.tone-muted {
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
-}
-
-.clone-overview-filters {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: center;
-  min-height: 60px;
-  padding-top: 1px;
-}
-
-.clone-list-sort--panel {
-  min-width: 144px;
-  min-height: 42px;
-  padding: 0 14px;
-  border-radius: 13px;
-  border-color: rgba(89, 106, 147, 0.12);
-  align-self: center;
-}
-
-.clone-list-icon-filter {
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 13px;
-  border: 1px solid rgba(89, 106, 147, 0.12);
-  background: rgba(13, 22, 38, 0.94);
-  color: #d2dcf6;
-  font-size: 18px;
-  align-self: center;
-}
-
-.clone-list-run-mode {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 4px;
-  border-radius: 13px;
-  border: 1px solid rgba(89, 106, 147, 0.1);
-  background: linear-gradient(180deg, rgba(10, 18, 30, 0.98), rgba(8, 14, 24, 0.94));
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--clone-card-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.clone-list-run-mode__option {
-  min-width: 104px;
-  min-height: 30px;
-  padding: 0 15px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: #9fb0d8;
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  transition:
-    color 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
+.clone-console-stat.tone-all {
+  background: radial-gradient(circle at top right, rgba(34, 211, 238, 0.18), transparent 34%), var(--clone-card-bg);
 }
 
-.clone-list-run-mode__option:hover {
-  color: #eef3ff;
-  border-color: rgba(129, 140, 248, 0.24);
-  background: rgba(99, 102, 241, 0.08);
+.clone-console-stat.tone-running {
+  background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.22), transparent 34%), var(--clone-card-bg);
 }
 
-.clone-list-run-mode__option.is-active {
-  color: #ffffff;
-  border-color: color-mix(in srgb, var(--clone-accent) 38%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--clone-accent) 82%, #0f172a), color-mix(in srgb, var(--clone-accent) 56%, #07111d));
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--clone-accent) 24%, transparent);
+.clone-console-stat.tone-success {
+  background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.18), transparent 34%), var(--clone-card-bg);
 }
 
-.clone-list-run-mode__option:active {
-  transform: translateY(1px);
+.clone-console-stat.tone-danger {
+  background: radial-gradient(circle at top right, rgba(248, 113, 113, 0.18), transparent 34%), var(--clone-card-bg);
 }
 
-.clone-list-run-mode__hint {
-  display: none;
+.clone-console-stat.tone-muted {
+  background: radial-gradient(circle at top right, rgba(148, 163, 184, 0.16), transparent 34%), var(--clone-card-bg);
 }
 
-.clone-list-search,
-.clone-list-sort,
-.clone-list-view {
+.clone-console-stat__icon {
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 42px;
-  padding: 0 16px;
   border-radius: 14px;
-  border: 1px solid rgba(89, 106, 147, 0.14);
-  background: rgba(13, 22, 38, 0.94);
-  color: #d2dcf6;
-  font-size: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f6ff;
 }
 
-.clone-list-search {
-  justify-content: flex-start;
-  min-width: 280px;
-  padding-right: 12px;
-  color: #8fa1c8;
-}
-
-.clone-list-search input {
-  width: 100%;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: #eef3ff;
-  font-size: 13px;
-}
-
-.clone-list-search input::placeholder {
-  color: #7e90bb;
-}
-
-.clone-content-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  align-items: start;
-  background: transparent;
-}
-
-.clone-grid-main {
-  gap: 16px;
+.clone-console-stat__copy {
+  display: grid;
+  gap: 6px;
   min-width: 0;
-  padding: 0;
-  border-radius: 20px;
-  border: 1px solid rgba(54, 69, 108, 0.24);
-  background: linear-gradient(180deg, rgba(9, 17, 32, 0.99), rgba(8, 15, 29, 0.995));
-  overflow: hidden;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.025),
-    0 12px 24px rgba(2, 6, 23, 0.16);
+  align-content: center;
+  justify-items: start;
 }
 
-.clone-grid-main--board {
-  gap: 0;
-  padding: 0;
+.clone-console-stat__copy strong {
+  color: #f8fbff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+  word-break: keep-all;
+  white-space: nowrap;
 }
 
-.clone-group-strip {
-  display: flex;
+.clone-console-stat__copy span {
+  color: #91a5ca;
+  font-size: 12px;
+  line-height: 1;
+  word-break: keep-all;
+  white-space: nowrap;
+}
+
+.clone-console-stat b {
+  color: #ffffff;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  justify-self: end;
+  text-align: right;
+}
+
+.clone-console-overview__tools {
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 60px;
-  padding: 0 18px;
-  border-bottom: 1px solid rgba(54, 69, 108, 0.22);
-  background: linear-gradient(180deg, rgba(9, 17, 32, 0.99), rgba(8, 15, 29, 0.99));
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-.clone-group-strip__tabs {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.clone-group-strip__tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.clone-group-tab {
-  position: relative;
+.clone-console-overview__tool,
+.clone-console-overview__icon,
+.clone-console-table__viewtool,
+.clone-console-row__rename,
+.clone-console-row__action,
+.clone-console-group__more {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  min-height: 60px;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.035);
+  color: #c7d6f7;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
-.clone-group-tab::after {
+.clone-console-overview__tool {
+  height: 38px;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.clone-console-overview__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  padding: 0;
+  background: linear-gradient(180deg, rgba(19, 32, 49, 0.96), rgba(14, 24, 40, 0.96));
+  border-color: rgba(86, 105, 149, 0.24);
+  color: #dbe7ff;
+}
+
+.clone-console-overview__icon-bars,
+.clone-console-table__viewtool-bars,
+.clone-console-table__viewtool-grid,
+.clone-console-table__viewtool-dot {
+  position: relative;
+  display: inline-block;
+}
+
+.clone-console-overview__icon-bars,
+.clone-console-table__viewtool-bars {
+  width: 14px;
+  height: 12px;
+  background: linear-gradient(currentColor, currentColor) left 0 top 5px / 100% 2px no-repeat;
+}
+
+.clone-console-overview__icon-bars::before,
+.clone-console-overview__icon-bars::after,
+.clone-console-table__viewtool-bars::before,
+.clone-console-table__viewtool-bars::after {
   content: '';
   position: absolute;
   left: 0;
-  right: 0;
-  bottom: -1px;
+  width: 100%;
   height: 2px;
   border-radius: 999px;
-  background: transparent;
+  background: currentColor;
 }
 
-.clone-group-tab.is-active::after {
-  background: linear-gradient(90deg, #7c5cff, #8b5cf6);
+.clone-console-overview__icon-bars::before,
+.clone-console-table__viewtool-bars::before {
+  top: 0;
 }
 
-.clone-group-tab__main {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #c4d0ec;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.clone-group-tab.is-active .clone-group-tab__main {
-  color: #f4f7ff;
-}
-
-.clone-group-tab__main em {
-  color: #a9b5d0;
-  font-style: normal;
-}
-
-.clone-group-tab.is-active .clone-group-tab__main em {
-  color: #aab7d7;
-}
-
-.clone-group-tab__more {
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(16, 24, 41, 0.84);
-  color: #8ca0c8;
-}
-
-.clone-group-create {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 16px;
-  border-radius: 13px;
-  border: 1px solid rgba(96, 116, 178, 0.14);
-  background: rgba(16, 24, 41, 0.7);
-  color: #dce7ff;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.clone-group-strip__tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  flex: 0 0 auto;
-  margin-right: 2px;
-}
-
-.clone-group-strip__tool {
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  border: 1px solid rgba(89, 106, 147, 0.12);
-  background: rgba(16, 24, 41, 0.72);
-  color: #8fa4cc;
-}
-
-.clone-group-strip__tool.is-active {
-  color: #dfe7ff;
-  border-color: rgba(123, 92, 255, 0.26);
-  background: rgba(64, 45, 132, 0.34);
-}
-
-.clone-group-strip__tool-bars {
-  position: relative;
-  width: 13px;
-  height: 11px;
-  display: inline-block;
-}
-
-.clone-group-strip__tool-bars::before,
-.clone-group-strip__tool-bars::after,
-.clone-group-strip__tool-bars {
-  background:
-    linear-gradient(#aab7d7, #aab7d7) 0 0 / 14px 2px no-repeat,
-    linear-gradient(#aab7d7, #aab7d7) 0 5px / 14px 2px no-repeat,
-    linear-gradient(#aab7d7, #aab7d7) 0 10px / 14px 2px no-repeat;
-}
-
-.clone-group-strip__tool-grid {
-  width: 13px;
-  height: 13px;
-  display: inline-block;
-  background:
-    linear-gradient(#aab7d7, #aab7d7) 0 0 / 5px 5px no-repeat,
-    linear-gradient(#aab7d7, #aab7d7) 9px 0 / 5px 5px no-repeat,
-    linear-gradient(#aab7d7, #aab7d7) 0 9px / 5px 5px no-repeat,
-    linear-gradient(#aab7d7, #aab7d7) 9px 9px / 5px 5px no-repeat;
-}
-
-.clone-task-list {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-  padding: 2px 8px 10px;
-}
-
-.clone-task-table-head {
-  display: grid;
-  grid-template-columns: 32px 104px minmax(220px, 1.7fr) 148px 126px 174px 118px 116px;
-  gap: 10px;
-  align-items: center;
-  min-height: 48px;
-  padding: 0 16px;
-  border-bottom: 1px solid rgba(54, 69, 108, 0.18);
-  color: #7f92bb;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.clone-task-table-head__cell {
-  min-width: 0;
-  align-self: center;
-  line-height: 1;
-}
-
-.clone-task-table-head .cell-select,
-.clone-task-table-head .cell-preview {
-  text-align: left;
-  padding-left: 1px;
-}
-
-.clone-task-table-head__check,
-.clone-task-row__select {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.clone-task-table-head__check input,
-.clone-task-row__select input {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.clone-task-table-head__check span,
-.clone-task-row__select span {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  border: 1px solid rgba(140, 158, 196, 0.38);
-  background: rgba(10, 18, 34, 0.96);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.clone-task-table-head__check input:checked + span,
-.clone-task-row__select input:checked + span {
-  border-color: color-mix(in srgb, var(--clone-accent) 56%, transparent);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--clone-accent) 85%, #0f172a), color-mix(in srgb, var(--clone-accent) 58%, #09111d));
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 0 3px color-mix(in srgb, var(--clone-accent) 16%, transparent);
-}
-
-.clone-task-table-head__check input:checked + span::after,
-.clone-task-row__select input:checked + span::after {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 3px;
-  width: 4px;
-  height: 8px;
-  border-right: 2px solid #ffffff;
-  border-bottom: 2px solid #ffffff;
-  transform: rotate(45deg);
-}
-
-.clone-task-table-head .cell-task {
-  text-align: left;
-  padding-left: 0;
-}
-
-.clone-task-table-head .cell-stage,
-.clone-task-table-head .cell-assets,
-.clone-task-table-head .cell-progress {
-  text-align: left;
-  padding-left: 2px;
-}
-
-.clone-task-table-head .cell-updated {
-  text-align: left;
-  padding-left: 4px;
-}
-
-.clone-task-table-head .cell-actions {
-  text-align: center;
-  padding-right: 2px;
-}
-
-.clone-task-row {
-  display: grid;
-  grid-template-columns: 32px 104px minmax(220px, 1.7fr) 148px 126px 174px 118px 116px;
-  gap: 10px;
-  align-items: center;
-  min-height: 104px;
-  padding: 0 16px;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid rgba(40, 54, 90, 0.28);
-  background: rgba(10, 18, 34, 0.34);
-  box-shadow: none;
-}
-
-.clone-task-row:hover {
-  background: rgba(15, 24, 41, 0.58);
-}
-
-.clone-task-row__select {
-  place-self: start center;
-  margin-top: 2px;
-}
-
-.clone-task-row__thumb {
-  width: 92px;
-  height: 78px;
-  overflow: hidden;
-  border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.035);
-  background: rgba(255, 255, 255, 0.03);
-  position: relative;
-}
-
-.clone-task-row__thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.clone-task-row__thumb::after {
-  content: attr(data-duration);
-  position: absolute;
-  right: 7px;
-  bottom: 7px;
-  min-height: 17px;
-  padding: 0 5px;
-  border-radius: 5px;
-  background: rgba(3, 8, 18, 0.78);
-  color: #f8fafc;
-  font-size: 9px;
-  line-height: 17px;
-  font-weight: 700;
-}
-
-.clone-task-row__thumb-empty {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  color: #89a0c8;
-}
-
-.clone-task-row__main {
-  display: contents;
-}
-
-.clone-task-row__cell {
-  min-width: 0;
-}
-
-.clone-task-row__cell--task {
-  padding-right: 4px;
-  align-self: center;
-}
-
-.clone-task-row__title-wrap {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.clone-task-row__title-line {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-}
-
-.clone-task-row__title-wrap h3 {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.25;
-  font-weight: 700;
-  color: #f4f7ff;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clone-task-row__rename {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(16, 25, 40, 0.92);
-  color: #b7c7eb;
-}
-
-.clone-task-row__title-wrap p {
-  margin: 0;
-  color: #94a6cb;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.clone-task-row__head-side {
-  display: grid;
-  gap: 4px;
-  justify-items: start;
-  align-content: center;
-  padding-left: 2px;
-}
-
-.clone-task-row__meta {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.clone-task-row__meta-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(255, 255, 255, 0.02);
-  color: #cad6f4;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.clone-task-row__facts {
-  display: grid;
-  gap: 3px;
-  align-content: center;
-  padding-left: 2px;
-}
-
-.clone-task-row__facts strong {
-  color: #eef4ff;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.clone-task-row__facts span {
-  color: #91a5cc;
-  font-size: 12px;
-}
-
-.clone-task-row__progress {
-  display: grid;
-  gap: 5px;
-  align-content: center;
-  padding-left: 2px;
-}
-
-.clone-task-row__progress-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.clone-task-row__progress-copy strong {
-  font-size: 13px;
-  line-height: 1;
-  color: #f2f6ff;
-}
-
-.clone-task-row__progress-copy span {
-  color: #98a6c3;
-  font-size: 12px;
-}
-
-.clone-task-row__track {
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.clone-task-row__track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--clone-accent) 70%, white) 0%, var(--clone-accent) 100%);
-}
-
-.clone-task-row__steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.clone-task-row__step {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin: 0 auto;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  color: #98a6c3;
-  font-size: 10px;
-}
-
-.clone-task-row__step.is-active {
-  border-color: rgba(109, 93, 255, 0.52);
-  color: #fff;
-  box-shadow: 0 0 0 3px rgba(109, 93, 255, 0.12);
-}
-
-.clone-task-row__step.is-done {
-  border-color: rgba(34, 197, 94, 0.36);
-  color: #86efac;
-}
-
-.clone-task-row__updated {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #9aa7c4;
-  font-size: 10px;
-  justify-self: start;
-  white-space: nowrap;
-  padding-left: 4px;
-}
-
-.clone-task-row__updated-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.clone-task-row__updated-copy strong {
-  color: #d9e5ff;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.clone-task-row__actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  justify-self: end;
-  padding-right: 2px;
-}
-
-.clone-row-action-menu {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.clone-task-row__action {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  border: 1px solid rgba(89, 106, 147, 0.1);
-  background: rgba(9, 17, 28, 0.94);
-}
-
-.clone-task-row__action--play {
-  color: color-mix(in srgb, var(--clone-accent) 72%, white);
-}
-
-.clone-task-row__action--danger {
-  color: #ffb3bb;
-}
-
-.clone-task-row__group-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
-  color: color-mix(in srgb, var(--clone-accent) 56%, #e4f1ff);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-task-row__error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.clone-task-row__error-text {
-  min-width: 0;
-  color: #ffb1b8;
-  font-size: 12px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clone-task-row__error-link {
-  flex: 0 0 auto;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(248, 113, 113, 0.22);
-  background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.clone-task-row__error {
-  grid-column: 3 / -1;
-  margin-top: -2px;
-}
-
-.clone-task-card__step-tag,
-.clone-task-card__status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.clone-task-card__step-tag.tone-analyze {
-  background: color-mix(in srgb, var(--clone-accent) 16%, transparent);
-  color: color-mix(in srgb, var(--clone-accent) 74%, white);
-}
-
-.clone-task-card__step-tag.tone-script {
-  background: rgba(52, 211, 153, 0.14);
-  color: #8ce6bb;
-}
-
-.clone-task-card__step-tag.tone-storyboard {
-  background: rgba(59, 130, 246, 0.16);
-  color: #8cd2ff;
-}
-
-.clone-task-card__step-tag.tone-video {
-  background: color-mix(in srgb, var(--clone-accent) 18%, transparent);
-  color: color-mix(in srgb, var(--clone-accent) 78%, white);
-}
-
-.clone-task-card__step-tag.tone-compose {
-  background: rgba(34, 197, 94, 0.16);
-  color: #86efac;
-}
-
-.clone-task-card__status.is-running {
-  background: rgba(59, 130, 246, 0.16);
-  color: #a9c6ff;
-}
-
-.clone-task-card__status.is-draft {
-  background: rgba(148, 163, 184, 0.14);
-  color: #d3d9e6;
-}
-
-.clone-task-card__status.is-success {
-  background: rgba(34, 197, 94, 0.16);
-  color: #86efac;
-}
-
-.clone-task-card__status.is-danger {
-  background: rgba(239, 68, 68, 0.16);
-  color: #fda4af;
+.clone-console-overview__icon-bars::after,
+.clone-console-table__viewtool-bars::after {
+  top: 10px;
 }
 
 .clone-list-batch-bar {
-  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 16px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--clone-accent) 15%, transparent);
   background: linear-gradient(180deg, color-mix(in srgb, var(--clone-accent) 10%, rgba(8, 17, 29, 0.98)), rgba(7, 13, 24, 0.96));
   color: #d9e4ff;
@@ -2100,7 +1451,6 @@ onBeforeUnmount(() => {
 }
 
 .clone-list-batch-bar__actions {
-  display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -2118,101 +1468,600 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.clone-side-card--groups {
-  padding: 16px;
+.clone-console-table {
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid var(--clone-panel-border);
+  background: linear-gradient(180deg, rgba(11, 19, 32, 0.98), rgba(7, 12, 21, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 20px 44px rgba(0, 0, 0, 0.22);
 }
 
-.clone-group-list {
-  display: grid;
-  gap: 8px;
-}
-
-.clone-group-item {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  min-height: 44px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  text-align: left;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    transform 0.18s ease;
-}
-
-.clone-group-item:hover {
-  border-color: color-mix(in srgb, var(--clone-accent) 20%, transparent);
-  background: rgba(255, 255, 255, 0.032);
-}
-
-.clone-group-item.is-active {
-  border-color: color-mix(in srgb, var(--clone-accent) 40%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--clone-accent) 12%, rgba(255, 255, 255, 0.02)), rgba(255, 255, 255, 0.02));
-  box-shadow: inset 2px 0 0 var(--clone-accent);
-}
-
-.clone-group-item__main {
-  width: 100%;
-  min-width: 0;
-  display: flex;
+.clone-console-table__groupbar {
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
+  gap: 12px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid rgba(57, 73, 111, 0.24);
 }
 
-.clone-group-item__name {
+.clone-console-table__groupbar-tabs {
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.clone-console-group {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  padding-right: 4px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.clone-console-group.is-active {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.clone-console-group__main {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: #97abd1;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.clone-console-group.is-active .clone-console-group__main {
+  color: #f8fbff;
+}
+
+.clone-console-group__main em {
+  color: #7d93bc;
+  font-style: normal;
+  font-size: 11px;
+}
+
+.clone-console-group.is-active .clone-console-group__main::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -13px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--clone-accent), #60a5fa);
+}
+
+.clone-console-group__more {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  padding: 0;
+}
+
+.clone-console-group__create {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #dce7ff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.clone-console-table__groupbar-tools {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.clone-console-table__viewtool {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  padding: 0;
+  background: linear-gradient(180deg, rgba(20, 31, 48, 0.94), rgba(14, 24, 39, 0.94));
+  border-color: rgba(88, 105, 145, 0.22);
+  color: #9fb3db;
+}
+
+.clone-console-table__viewtool.is-active {
+  border-color: rgba(108, 88, 255, 0.42);
+  color: #eef2ff;
+  background: linear-gradient(180deg, rgba(55, 66, 135, 0.72), rgba(35, 42, 92, 0.84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(109, 93, 255, 0.08);
+}
+
+.clone-console-table__viewtool-grid {
+  width: 14px;
+  height: 14px;
+  background:
+    linear-gradient(currentColor, currentColor) left top / 5px 5px no-repeat,
+    linear-gradient(currentColor, currentColor) right top / 5px 5px no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / 5px 5px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 5px 5px no-repeat;
+}
+
+.clone-console-table__viewtool-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: -6px 0 0 currentColor, 6px 0 0 currentColor;
+}
+
+.clone-console-table__body {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 16px;
+}
+
+.clone-console-table__head {
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.024);
+  color: #7f96c1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clone-console-table__head,
+.clone-console-row {
+  display: grid;
+  grid-template-columns: 28px 96px minmax(260px, 1.58fr) 164px 118px 176px 104px 108px;
+  column-gap: 14px;
+}
+
+.clone-console-table__check,
+.clone-console-row__check {
+  width: 18px;
+  height: 18px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+}
+
+.clone-console-table__check input,
+.clone-console-row__check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.clone-console-table__check span,
+.clone-console-row__check span {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid rgba(139, 155, 196, 0.32);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.clone-console-table__check input:checked + span,
+.clone-console-row__check input:checked + span {
+  border-color: color-mix(in srgb, var(--clone-accent) 48%, transparent);
+  background: color-mix(in srgb, var(--clone-accent) 28%, rgba(255, 255, 255, 0.03));
+}
+
+.clone-console-table__check input:checked + span::after,
+.clone-console-row__check input:checked + span::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: #ffffff;
+}
+
+.clone-console-row {
+  position: relative;
+  align-items: center;
+  min-height: 112px;
+  padding: 0 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(16, 24, 40, 0.96), rgba(9, 15, 26, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.clone-console-row:hover {
+  border-color: rgba(133, 154, 208, 0.18);
+}
+
+.clone-console-row__preview,
+.clone-console-row__task,
+.clone-console-row__stage,
+.clone-console-row__assets,
+.clone-console-row__progress,
+.clone-console-row__updated,
+.clone-console-row__actions {
+  min-width: 0;
+  align-self: center;
+}
+
+.clone-console-row__thumb {
+  position: relative;
+  width: 96px;
+  height: 72px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.clone-console-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.clone-console-row__thumb::after {
+  content: attr(data-duration);
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  min-width: 40px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(4, 8, 16, 0.78);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.clone-console-row__thumb-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #7f91b4;
+}
+
+.clone-console-row__task {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  padding-block: 14px;
+}
+
+.clone-console-row__titleline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.clone-console-row__titleline h3 {
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #edf3ff;
-  font-size: 13px;
+  color: #f7fbff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.clone-console-row__rename {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.clone-console-row__meta {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #8fa3ca;
+  font-size: 11px;
   font-weight: 600;
 }
 
-.clone-group-item__count {
+.clone-console-row__mode {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce8ff;
+}
+
+.clone-console-row__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(149, 166, 204, 0.58);
+}
+
+.clone-console-row__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clone-console-row__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(161, 62, 74, 0.34);
+  background: linear-gradient(180deg, rgba(72, 24, 34, 0.34), rgba(54, 18, 28, 0.28));
+  box-shadow: inset 0 1px 0 rgba(255, 214, 214, 0.04);
+}
+
+.clone-console-row__error-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f7c1c8;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.clone-console-row__error-link {
   flex: 0 0 auto;
-  min-width: 24px;
-  height: 24px;
+  color: #ffd6db;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.clone-console-row__stage {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+}
+
+.clone-console-row__statuswrap {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clone-console-row__status,
+.clone-console-row__stepbadge {
+  min-height: 27px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 7px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.clone-console-row__status.is-success {
+  background: rgba(16, 185, 129, 0.14);
+  color: #86efac;
+}
+
+.clone-console-row__status.is-danger {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+}
+
+.clone-console-row__status.is-draft {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+}
+
+.clone-console-row__status.is-running {
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+}
+
+.clone-console-row__stepbadge {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+  color: #d8e5ff;
+}
+
+.clone-console-row__stepbadge.tone-analyze {
+  color: #67e8f9;
+}
+
+.clone-console-row__stepbadge.tone-script {
+  color: #c4b5fd;
+}
+
+.clone-console-row__stepbadge.tone-storyboard {
+  color: #f9a8d4;
+}
+
+.clone-console-row__stepbadge.tone-video {
+  color: #93c5fd;
+}
+
+.clone-console-row__stepbadge.tone-compose {
+  color: #86efac;
+}
+
+.clone-console-row__groupmove {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: #dce7ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clone-console-row__assets {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+}
+
+.clone-console-row__assets strong {
+  color: #eef4ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.clone-console-row__assets span {
+  color: #8ea3c9;
+  font-size: 11px;
+}
+
+.clone-console-row__progress {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.clone-console-row__progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.clone-console-row__progress-copy strong {
+  color: #f8fbff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.clone-console-row__progress-track {
+  height: 6px;
+  overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
-  color: #8fa5cd;
-  font-size: 11px;
-  font-weight: 700;
 }
 
-.clone-group-tool {
-  width: 28px;
-  height: 28px;
+.clone-console-row__progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22d3ee, #60a5fa);
+}
+
+.clone-console-row__progress-steps {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.clone-console-row__progress-step {
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
-  padding: 0;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(9, 17, 28, 0.96);
-  color: #b9caee;
-  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #7f93b8;
+  font-size: 10px;
   font-weight: 700;
 }
 
-.clone-group-menu {
+.clone-console-row__progress-step.is-active {
+  border-color: color-mix(in srgb, var(--clone-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--clone-accent) 18%, rgba(255, 255, 255, 0.04));
+  color: #ffffff;
+}
+
+.clone-console-row__progress-step.is-done {
+  background: rgba(255, 255, 255, 0.07);
+  color: #eef4ff;
+}
+
+.clone-console-row__updated {
+  align-items: center;
+  gap: 10px;
+  color: #a4b3cf;
+  justify-self: start;
+}
+
+.clone-console-row__updated-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.clone-console-row__updated-copy span {
+  color: #92a5ca;
+  font-size: 11px;
+}
+
+.clone-console-row__updated-copy strong {
+  color: #eff4ff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.clone-console-row__actions {
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  justify-self: end;
+}
+
+.clone-console-row__action {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  padding: 0;
+}
+
+.clone-console-row__action--play {
+  color: #dff9ff;
+}
+
+.clone-console-row__action--danger {
+  color: #ffb4bc;
+}
+
+.clone-row-action-menu,
+.clone-group-menu,
+.clone-row-move-menu {
   position: relative;
-  flex: 0 0 auto;
 }
 
 .clone-group-menu__dropdown,
@@ -2228,14 +2077,17 @@ onBeforeUnmount(() => {
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3);
 }
 
-.clone-group-menu__dropdown {
+.clone-group-menu__dropdown,
+.clone-row-action-menu__dropdown {
   right: 0;
   min-width: 132px;
 }
 
-.clone-row-action-menu__dropdown {
-  right: 0;
-  min-width: 132px;
+.clone-row-move-menu__dropdown {
+  left: 0;
+  right: auto;
+  max-height: 220px;
+  overflow: auto;
 }
 
 .clone-group-menu__item,
@@ -2263,17 +2115,6 @@ onBeforeUnmount(() => {
   color: #ffb4bc;
 }
 
-.clone-row-move-menu {
-  position: relative;
-}
-
-.clone-row-move-menu__dropdown {
-  left: 0;
-  right: auto;
-  max-height: 220px;
-  overflow: auto;
-}
-
 .clone-row-move-menu__item.is-active {
   background: color-mix(in srgb, var(--clone-accent) 16%, transparent);
   color: #ffffff;
@@ -2293,79 +2134,6 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 24px;
   background: rgba(4, 8, 18, 0.72);
-}
-
-@media (max-width: 1380px) {
-  .clone-content-grid {
-    grid-template-columns: 204px minmax(0, 1fr);
-  }
-
-  .clone-task-table-head,
-  .clone-task-row {
-    grid-template-columns: 24px 76px minmax(180px, 1.3fr) 96px 90px 138px 84px 52px;
-  }
-}
-
-@media (max-width: 1080px) {
-  .clone-content-grid {
-    grid-template-columns: 196px minmax(0, 1fr);
-  }
-
-  .clone-task-table-head {
-    display: none;
-  }
-
-  .clone-task-row {
-    grid-template-columns: 28px 104px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .clone-task-row__main {
-    display: grid;
-    gap: 10px;
-  }
-
-  .clone-task-row__head-side {
-    display: inline-flex;
-    flex-wrap: wrap;
-  }
-
-  .clone-task-row__facts,
-  .clone-task-row__updated,
-  .clone-task-row__actions,
-  .clone-task-row__progress {
-    justify-self: stretch;
-  }
-
-  .clone-task-row__updated {
-    justify-content: flex-start;
-  }
-
-  .clone-task-row__actions {
-    justify-content: flex-start;
-  }
-
-  .clone-task-row__error {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 820px) {
-  .clone-content-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .clone-task-group-side {
-    position: static;
-  }
-
-  .clone-task-row {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-
-  .clone-task-row__thumb {
-    display: none;
-  }
 }
 
 .clone-error-dialog {
@@ -2494,6 +2262,10 @@ onBeforeUnmount(() => {
   background: rgba(8, 15, 29, 0.55);
 }
 
+.clone-list-pagination {
+  align-items: center;
+}
+
 .clone-list-pagination__summary {
   color: #a6b6d6;
   font-weight: 600;
@@ -2563,36 +2335,105 @@ onBeforeUnmount(() => {
   }
 }
 
-@media (max-width: 1320px) {
-  .clone-content-grid {
-    grid-template-columns: 196px minmax(0, 1fr);
+@media (max-width: 1480px) {
+  .clone-console-table__head,
+  .clone-console-row {
+    grid-template-columns: 28px 88px minmax(220px, 1.4fr) 154px 108px 164px 96px 100px;
   }
 }
 
-@media (max-width: 1180px) {
-  .clone-list-filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .clone-list-toolbar {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-}
-
-@media (max-width: 860px) {
-  .clone-list-head,
-  .clone-list-head__actions,
+@media (max-width: 1260px) {
+  .clone-console-hero,
   .clone-list-pagination,
   .clone-list-batch-bar {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .clone-console-hero__actions,
   .clone-list-batch-bar__actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .clone-console-overview__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .clone-console-table__groupbar-tools {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 1120px) {
+  .clone-console-table__head {
+    display: none;
+  }
+
+  .clone-console-row {
+    grid-template-columns: 28px 88px minmax(0, 1fr);
+    align-items: start;
+    row-gap: 12px;
+  }
+
+  .clone-console-row__task,
+  .clone-console-row__stage,
+  .clone-console-row__assets,
+  .clone-console-row__progress,
+  .clone-console-row__updated,
+  .clone-console-row__actions {
+    grid-column: 3;
+  }
+
+  .clone-console-row__preview {
+    grid-row: span 2;
+  }
+
+  .clone-console-row__updated,
+  .clone-console-row__actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 860px) {
+  .clone-task-list-page {
+    padding-inline: 12px;
+  }
+
+  .clone-console-panel,
+  .clone-console-table {
+    border-radius: 22px;
+  }
+
+  .clone-console-overview__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .clone-console-table__groupbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clone-console-table__groupbar-tools {
+    justify-content: flex-end;
+  }
+
+  .clone-console-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .clone-console-row__preview {
+    display: none;
+  }
+
+  .clone-console-row__task,
+  .clone-console-row__stage,
+  .clone-console-row__assets,
+  .clone-console-row__progress,
+  .clone-console-row__updated,
+  .clone-console-row__actions {
+    grid-column: 2;
   }
 }
 </style>

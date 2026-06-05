@@ -44,8 +44,8 @@ const route = useRoute()
 const router = useRouter()
 
 type SegmentKey = string
-type TemplateWorkspace = 'library' | 'studio' | 'subtitle_presets' | 'voice_library'
-const TEMPLATE_WORKSPACES: TemplateWorkspace[] = ['library', 'studio', 'subtitle_presets', 'voice_library']
+type TemplateWorkspace = 'structure' | 'audio' | 'subtitle_voice' | 'visual'
+const TEMPLATE_WORKSPACES: TemplateWorkspace[] = ['structure', 'audio', 'subtitle_voice', 'visual']
 type TemplatePresetKey = 'natural' | 'fast' | 'cinematic'
 type Template = {
   id: string
@@ -85,11 +85,11 @@ type Template = {
   >
   randomizeOrder?: { mode: 'none' | 'partial'; keepFirstCount?: number }
   bgm?: { filePaths: string[]; volume: number } | null
-  // 鏃у瓧娈碉紙宸插簾寮冿級锛歞rawtext 闅忔満瀛楀箷姹?
+  // 旧字段（已废弃）：drawtext 随机字幕池
   subtitle?: { enabled: boolean; pool: string[]; x?: string; y?: string; fontSize?: number }
-  // 鐢婚潰鏍囬锛堟棤閰嶉煶锛?
+  // 画面标题（无配音）
   titleOverlay?: { enabled: boolean; textPool: string[] } | null
-  // Edge-TTS 閰嶉煶锛堝彲閫夛級
+  // Edge-TTS 配音（可选）
   tts?: {
     enabled: boolean
     textPool: string[]
@@ -100,7 +100,7 @@ type Template = {
     mixVolume: number
     keepOriginal: boolean
   }
-  // ASS 瀛楀箷锛堥珮绾ф帓鐗堬級
+  // ASS 字幕（高级排版）
   assSubtitle?: {
     enabled: boolean
     fontName: string
@@ -121,19 +121,18 @@ type Template = {
       hueDeg: { min: number; max: number }
     }
   }
-  /** 鐢婚潰璋冭壊锛堝叏灞€鍩虹鍊硷級 */
+  /** 画面调色（全局基础值） */
   colorGrade?: { enabled: boolean; brightness: number; contrast: number; saturation: number } | null
-  /** 鐢诲箙缁熶竴妯″紡 */
+  /** 画幅统一模式 */
   aspectUnifyMode?: 'contain_pad' | 'cover_crop' | null
-  /** 3D LUT锛?cube锛夋护闀?*/
+  /** 3D LUT（.cube）滤镜 */
   lut3d?: { fileName: string } | null
-  /** 褰╄壊璐寸焊锛圥NG/WebP锛?*/
+  /** 彩色贴纸（PNG/WebP） */
   sticker?: { ref?: string; fileName: string; heightPx: number } | null
   createdAt: number
   updatedAt: number
 }
 
-type Product = { id: string; name: string; assets: Record<string, any[]> }
 type FontChoice = {
   fileName: string
   sourceFile?: string
@@ -162,8 +161,6 @@ const form = reactive<{ name: string }>({ name: '' })
 const styleAnalyzeDir = ref('video')
 const styleAnalyzing = ref(false)
 const styleSummary = ref<StyleAnalyzeSummary | null>(null)
-const products = ref<Product[]>([])
-const activeProductId = ref<string>('')
 const expanded = ref<Record<string, boolean>>({})
 const saving = ref<Record<string, boolean>>({})
 const saveTimers = new Map<string, number>()
@@ -171,12 +168,12 @@ const activeTab = ref<Record<string, 'global' | 'color' | 'av_mix' | 'av_text' |
 const draggingSeg = ref<{ templateId: string; seg: SegmentKey } | null>(null)
 const copyDraft = reactive<Record<string, string>>({})
 const copyEditing = reactive<Record<string, boolean>>({})
-/** 鐢婚潰鏍囬锛氭瘡缁?= 鏍囬琛?+ 绗﹀彿琛岋紙缁撴瀯鍖栫紪杈戯紝閬垮厤鍗曟枃鏈璇悎骞跺缁勶級 */
+/** 画面标题：每组 = 标题行 + 符号行（结构化编辑，避免单文本框误合并多组） */
 const titleGroupDraft = reactive<Record<string, TitleOverlayGroupRow[]>>({})
-/** 鏂囨姹犲け鐒︽暣鐞嗘椂鐨勭煭鏆?UI 鍙嶉 */
+/** 文案池失焦整理时的短暂 UI 反馈 */
 const copyPoolBusy = reactive<Record<string, boolean>>({})
 const POOL_BLUR_UI_MS = 340
-const workspace = ref<TemplateWorkspace>('studio')
+const workspace = ref<TemplateWorkspace>('structure')
 const selectedTemplateId = ref('')
 const voiceDraft = ref('zh-CN-XiaoxiaoNeural')
 const presetPickerOpen = ref(false)
@@ -185,10 +182,10 @@ const templateAdvancedOpen = ref(false)
 const templateNewSegName = ref('')
 
 const workspaceItems = computed(() => [
-  { key: 'library', label: tr('tpl.navLibrary') },
-  { key: 'studio', label: tr('tpl.navStudio') },
-  { key: 'subtitle_presets', label: tr('tpl.navSubtitlePresets') },
-  { key: 'voice_library', label: tr('tpl.navVoiceLibrary') },
+  { key: 'structure', label: '结构规则' },
+  { key: 'audio', label: '音频规则' },
+  { key: 'subtitle_voice', label: '字幕与配音' },
+  { key: 'visual', label: '视觉输出' },
 ])
 
 const voiceQuickOptions = [
@@ -250,17 +247,17 @@ const selectedTemplate = computed<Template | null>(() => {
 })
 
 const workspaceHint = computed(() => {
-  if (workspace.value === 'subtitle_presets') return tr('tpl.wsHintSubtitle')
-  if (workspace.value === 'voice_library') return tr('tpl.wsHintVoice')
-  if (workspace.value === 'library') return tr('tpl.wsHintLibrary')
-  return tr('tpl.wsHintStudio')
+  if (workspace.value === 'structure') return '维护模板结构、时长和分镜段参数。'
+  if (workspace.value === 'audio') return '维护原声、BGM 和混音相关规则。'
+  if (workspace.value === 'subtitle_voice') return '维护字幕样式、文案池和 Edge-TTS 配音。'
+  return '维护 LUT、贴纸、颜色和画面输出规则。'
 })
 
 async function refreshLuts() {
   try {
     lutOptions.value = (await window.api.luts.list()) ?? []
-    // 纭繚鈥滄棤 LUT鈥濅笉浼氬洜寮傛 option 娓叉煋琚祻瑙堝櫒榛樿閫変腑绗竴椤?
-    // 寮哄埗瑙﹀彂涓€娆″搷搴斿紡鍒锋柊锛堜笉淇敼鎸佷箙鍖栨暟鎹級
+    // 确保“无 LUT”不会因为异步 option 渲染被浏览器默认选中第一项
+    // 强制触发一次响应式刷新，不修改持久化数据
     for (const t of list.value) {
       if (!t.lut3d) t.lut3d = null
     }
@@ -344,7 +341,7 @@ async function importFontsFromDialog() {
   const res: any = await window.api.fonts.import(paths)
   await refreshUserFonts()
 
-  // 渚挎嵎锛氳嫢褰撳墠妯℃澘瀛椾綋浠嶆槸榛樿鍊硷紝涓旀湰娆′粎瀵煎叆 1 涓瓧浣擄紝鍒欒嚜鍔ㄥ洖濉В鏋愬埌鐨?familyName
+  // 便捷处理：若当前模板字体仍是默认值，且本次仅导入 1 个字体，则自动回填解析到的 familyName
   try {
     const importedFonts = Array.isArray(res?.fonts) ? (res.fonts as FontChoice[]) : []
     const t = selectedTemplate.value as any
@@ -462,8 +459,8 @@ function poolToText(pool: string[]) {
 
 function textToPool(text: string) {
   const src = String(text ?? '').replace(/\r\n/g, '\n')
-  // 浣跨敤鍒嗛殧绗﹁鍒囧垎锛岄伩鍏嶇┖琛岃鈥滆В鏋愯鍒欌€濆悶鎺夊鑷寸湅璧锋潵鏃犳硶鍥炶溅/绌鸿
-  // 瑙勫垯锛氫竴琛屼粎鍖呭惈 "---"锛?=3 涓?"-"锛夋椂锛岃涓哄垎闅旂锛涘悓涓€鏉″瓧骞曞唴閮ㄥ厑璁稿洖杞︿笌绌鸿
+  // 使用分隔符行切分，避免空行被“解析规则”吞掉导致看起来无法回车或空行
+  // 规则：一行仅包含 "---"（3 个 "-"）时，视为分隔符；同一条字幕内部允许回车与空行
   const normalized = src
     .split('\n')
     .map((l) => l.replace(/[ \t]+$/g, ''))
@@ -513,20 +510,11 @@ function cloneTemplate(t: Template): Template {
 
 async function refresh() {
   list.value = await window.api.templates.list()
-  products.value = await window.api.products.list()
-  if (!activeProductId.value && products.value[0]) activeProductId.value = products.value[0].id
-  syncTemplatesToProduct()
-  try {
-    await window.api.products.ensureSegmentBucketsFromTemplates()
-  } catch {
-    /* ignore */
-  }
-  products.value = await window.api.products.list()
   for (const t of list.value) {
     syncCopyDraftFromTemplate(t)
     syncTitleGroupsFromTemplate(t)
   }
-  // 鍒濆鍖?Tab锛岄伩鍏嶅湪娓叉煋闃舵鍐欏叆 reactive 鐘舵€佸鑷撮€掑綊鏇存柊
+  // 初始化 Tab，避免在渲染阶段写入 reactive 状态导致递归更新
   for (const t of list.value) {
     if (!activeTab.value[t.id]) activeTab.value[t.id] = 'global'
   }
@@ -845,7 +833,7 @@ async function analyzeVideosAndCreateTemplate() {
       name?: string
       structure?: string[]
     }
-    const baseStructure = productSegments.value.length ? productSegments.value : (['hook', 'show', 'detail'] as string[])
+    const baseStructure = ['hook', 'show', 'detail'] as string[]
     await window.api.templates.upsert({
       ...suggested,
       name: String(suggested.name ?? '').trim() || `鐖嗘鍒嗘瀽-${Date.now()}`,
@@ -860,17 +848,6 @@ async function analyzeVideosAndCreateTemplate() {
   }
 }
 
-const activeProduct = computed(() => products.value.find((p) => p.id === activeProductId.value) ?? null)
-const productSegments = computed(() => {
-  const p = activeProduct.value
-  const keys = Object.keys(p?.assets ?? {})
-  const order = ['hook', 'show', 'detail']
-  const base = order.filter((k) => keys.includes(k))
-  const rest = keys.filter((k) => !order.includes(k)).sort()
-  const out = [...base, ...rest].map((x) => cleanSegKey(x)).filter(Boolean)
-  return out.length ? out : (['hook', 'show', 'detail'] as string[])
-})
-
 function defaultSegDuration() {
   return { min: 2, max: 4 }
 }
@@ -881,51 +858,8 @@ function defaultSegFx() {
   }
 }
 
-function syncTemplatesToProduct() {
-  const segs = productSegments.value
-  if (!segs.length || !list.value.length) return
-
-  for (const t of list.value) {
-    let changed = false
-    const syncMode = t.segmentSyncMode ?? 'follow_product'
-
-    // 缁撴瀯琛ュ叏锛氶粯璁ゆā寮忎笅纭繚妯℃澘鍖呭惈浜у搧鐨勬墍鏈夋锛?    // fixed 妯″紡锛堟牱鐗囧垎鏋愭ā鏉匡級淇濇寔妯℃澘鑷韩缁撴瀯锛屼笉鑷姩鎵╂銆?    const s0 = Array.isArray(t.structure) ? t.structure.map((x) => cleanSegKey(String(x))).filter(Boolean) : []
-    const structure = s0.length ? s0 : [...segs]
-    if (syncMode !== 'fixed') {
-      for (const s of segs) {
-        if (!structure.includes(s)) {
-          structure.push(s)
-          changed = true
-        }
-      }
-    }
-
-    // 榛樿鍙傛暟琛ュ叏锛歞uration + fx
-    t.segmentDurationSec = t.segmentDurationSec ?? {}
-    t.segmentFx = t.segmentFx ?? {}
-    for (const s of structure) {
-      if (!t.segmentDurationSec[s]) {
-        t.segmentDurationSec[s] = defaultSegDuration()
-        changed = true
-      }
-      if (!t.segmentFx?.[s]) {
-        ;(t.segmentFx as any)[s] = defaultSegFx()
-        changed = true
-      }
-    }
-
-    if (changed) {
-      t.structure = structure
-      scheduleSave(t)
-    }
-  }
-}
-
 function segDur(t: Template, seg: SegmentKey) {
   return t.segmentDurationSec?.[seg] ?? { min: 2, max: 6 }
-}
-function segCount(seg: SegmentKey) {
-  return activeProduct.value?.assets?.[seg]?.length ?? 0
 }
 
 function segFx(t: Template, seg: SegmentKey) {
@@ -949,9 +883,7 @@ function ensureStructure(t: Template) {
   const base =
     Array.isArray(t.structure) && t.structure.length
       ? t.structure
-      : productSegments.value.length
-        ? productSegments.value
-        : (['hook', 'show', 'detail'] as string[])
+      : (['hook', 'show', 'detail'] as string[])
   const cleaned = base.map((x) => cleanSegKey(String(x)) || 'seg')
   // 淇濇寔椤哄簭鍘婚噸
   const seen = new Set<string>()
@@ -1043,7 +975,7 @@ function scheduleSave(t: Template) {
 }
 
 function updateTemplate(t: Template, patch: Partial<Template>) {
-  // 鍏堟湰鍦版洿鏂帮紙淇濊瘉杈撳叆鍗虫椂鍥炴樉锛夛紝鍐嶉槻鎶栦繚瀛?
+  // 先本地更新（保证输入即时回显），再防抖保存
   Object.assign(t, patch)
   t.structure = ensureStructure(t)
   t.totalDurationSec = {
@@ -1085,7 +1017,7 @@ function removeBgmItem(t: Template, filePath: string) {
   updateTemplate(t, { bgm: left.length ? { filePaths: left, volume: t.bgm?.volume ?? 0.25 } : null })
 }
 
-// 宸插簾寮冿細閰嶉煶鏂囦欢澶癸紙voicePool锛夈€傚凡鍗囩骇涓?Edge-TTS 鍔ㄦ€侀厤闊炽€?
+// 已废弃：配音文件夹（voicePool）。已升级为 Edge-TTS 动态配音。
 
 function currentTab(id: string) {
   const raw = activeTab.value[id] ?? 'global'
@@ -1108,9 +1040,6 @@ watch(
     applyWorkspaceFromRoute()
   },
 )
-watch(activeProductId, () => {
-  void refresh()
-})
 watch(
   list,
   (arr) => {
@@ -1139,7 +1068,7 @@ watch(
     <ProductionTabs />
     <header class="app-card flex flex-wrap items-start justify-between gap-4 p-5">
       <div>
-        <div class="text-xs font-black uppercase tracking-[0.22em] text-violet-300">Templates</div>
+        <div class="text-xs font-black uppercase tracking-[0.22em] text-violet-300">模板中心</div>
         <h1 class="mt-2 text-2xl font-black text-white">模板结构</h1>
         <p class="mt-2 text-sm text-slate-400">选择模板，查看分镜结构、每段时长、镜头运动和转场。</p>
       </div>
@@ -1309,43 +1238,25 @@ watch(
           </div>
 
           <div class="grid gap-4 xl:grid-cols-[1fr_1fr]">
-            <section v-if="workspace === 'library'" class="app-soft-card p-4 xl:col-span-2">
+            <section v-if="workspace === 'structure'" class="app-soft-card p-4 xl:col-span-2">
               <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div class="text-sm font-black text-white">产品结构同步</div>
-                  <p class="mt-1 text-sm leading-6 text-slate-400">模板分镜可以跟随当前产品段位补齐，也可以固定为样片分析得到的结构。</p>
+                  <div class="text-sm font-black text-white">模板结构</div>
+                  <p class="mt-1 text-sm leading-6 text-slate-400">模板只负责结构和输出规则，不再跟随商品段位联动。</p>
                 </div>
-                <select v-model="activeProductId" class="ui-select h-10 min-w-[180px]">
-                  <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
               </div>
-              <div class="grid gap-3 md:grid-cols-3">
-                <label class="block text-xs font-bold text-slate-500">
-                  同步模式
-                  <select
-                    class="ui-select mt-2 h-10 w-full"
-                    :value="selectedTemplate.segmentSyncMode ?? 'follow_product'"
-                    @change="updateTemplate(selectedTemplate, { segmentSyncMode: ($event.target as HTMLSelectElement).value as any })"
-                  >
-                    <option value="follow_product">跟随产品段位</option>
-                    <option value="fixed">固定模板结构</option>
-                  </select>
-                </label>
+              <div class="grid gap-3 md:grid-cols-2">
                 <label class="block text-xs font-bold text-slate-500">
                   新增段位
                   <input v-model="templateNewSegName" class="ui-input mt-2 h-10 w-full" placeholder="proof / cta" @keydown.enter.prevent="addSegment(selectedTemplate)" />
                 </label>
                 <div class="flex items-end gap-2">
                   <button class="app-primary h-10 px-4 text-xs" @click="addSegment(selectedTemplate)">新增到模板</button>
-                  <button class="app-ghost h-10 px-4 text-xs" @click="syncTemplatesToProduct">立即同步</button>
                 </div>
-              </div>
-              <div class="mt-4 rounded-xl bg-black/20 p-3 text-xs text-slate-400">
-                当前产品段位：<span class="text-slate-200">{{ productSegments.length ? productSegments.join(' / ') : '未选择产品或产品暂无段位' }}</span>
               </div>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'structure'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">基础参数</div>
               <div class="grid gap-3 md:grid-cols-2">
                 <label class="block text-xs font-bold text-slate-500">
@@ -1440,7 +1351,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'audio'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">音频与画幅</div>
               <div class="grid gap-3 md:grid-cols-2">
                 <label class="block text-xs font-bold text-slate-500">
@@ -1489,7 +1400,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4 xl:col-span-2">
+            <section v-if="workspace === 'structure'" class="app-soft-card p-4 xl:col-span-2">
               <div class="mb-3 text-sm font-black text-white">分镜段参数</div>
               <div class="space-y-3">
                 <div v-for="seg in selectedTemplate.structure" :key="`edit-${seg}`" class="rounded-xl bg-black/20 p-3">
@@ -1588,7 +1499,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'visual'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">速度与画面微扰</div>
               <label class="flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1706,7 +1617,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'visual'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">调色</div>
               <label class="flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1750,7 +1661,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'subtitle_presets'" class="app-soft-card p-4">
+            <section v-if="workspace === 'subtitle_voice'" class="app-soft-card p-4">
               <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div class="text-sm font-black text-white">画面标题</div>
                 <label class="flex items-center gap-2 text-xs text-slate-300">
@@ -1789,7 +1700,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'subtitle_presets'" class="app-soft-card p-4">
+            <section v-if="workspace === 'subtitle_voice'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">ASS 字幕与字体</div>
               <label class="mb-3 flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1850,7 +1761,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'voice_library'" class="app-soft-card p-4 xl:col-span-2">
+            <section v-if="workspace === 'subtitle_voice'" class="app-soft-card p-4 xl:col-span-2">
               <div class="mb-3 text-sm font-black text-white">配音角色</div>
               <div class="grid gap-2 md:grid-cols-[1fr_auto]">
                 <select v-model="voiceDraft" class="ui-select h-10">
@@ -1923,7 +1834,7 @@ watch(
               <div v-if="copyPoolBusy[selectedTemplate.id]" class="mt-2 text-xs text-violet-200">正在同步文案池...</div>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'audio'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">BGM</div>
               <div class="flex gap-2">
                 <button class="app-ghost flex-1 px-3 py-2 text-xs" @click="pickBgm(selectedTemplate)">添加 BGM</button>
@@ -1950,7 +1861,7 @@ watch(
               </label>
             </section>
 
-            <section v-if="workspace === 'studio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'visual'" class="app-soft-card p-4">
               <div class="mb-3 text-sm font-black text-white">LUT 与贴纸</div>
               <div class="grid gap-3 md:grid-cols-2">
                 <select
@@ -2046,7 +1957,7 @@ watch(
     </div>
   </div>
 
-  <!-- 绗﹀彿妯℃澘搴擄紙鍙鍒犳敼锛屾寔涔呭寲 localStorage锛?-->
+  <!-- 符号模板库（可增删改，持久化到 localStorage） -->
   <div
     v-if="symbolLibOpen"
     class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"

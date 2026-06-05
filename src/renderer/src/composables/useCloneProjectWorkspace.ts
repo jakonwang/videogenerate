@@ -35,7 +35,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     loadProject,
     refreshProjectAfterFailure,
   })
-  const { pickReferenceVideo, bindProductImages, bindModelIdentity } = materialsLayer
+  const { pickReferenceVideo, bindLibraryProduct, bindProductImages, bindModelIdentity } = materialsLayer
 
   const scriptLayer = useCloneProjectWorkspaceScript(resolvedOptions, {
     applyProject,
@@ -53,7 +53,9 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     removeProductImage,
     clearProductImages,
     generateStoryboardGrids,
+    batchQueryStoryboardImages,
     regenerateStoryboardFrame,
+    regenerateStoryboardFrames,
   } = storyboardLayer
 
   const videoLayer = useCloneProjectWorkspaceVideo(resolvedOptions, {
@@ -65,6 +67,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     generateShotVideos,
     autoRunToStoryboardVideos,
     syncFailedShotVideo,
+    forceDownloadShotVideoResult,
     replaceShotVideo,
     regenerateShotClip,
     refreshRemoteStatus,
@@ -86,6 +89,7 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     refreshProjectAfterFailure,
     loadProject,
     pickReferenceVideo,
+    bindLibraryProduct,
     bindProductImages,
     bindModelIdentity,
     createBlueprint,
@@ -95,10 +99,13 @@ export function useCloneProjectWorkspace<TProject extends CloneProjectLike>(
     removeProductImage,
     clearProductImages,
     generateStoryboardGrids,
+    batchQueryStoryboardImages,
     regenerateStoryboardFrame,
+    regenerateStoryboardFrames,
     generateShotVideos,
     autoRunToStoryboardVideos,
     syncFailedShotVideo,
+    forceDownloadShotVideoResult,
     replaceShotVideo,
     regenerateShotClip,
     refreshRemoteStatus,

@@ -368,6 +368,15 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
             : undefined,
         titleConfig: body.titleConfig && typeof body.titleConfig === 'object' ? (body.titleConfig as Record<string, unknown>) : undefined,
         titleItems: Array.isArray(body.titleItems) ? (body.titleItems as any[]) : undefined,
+        titleStyleMode:
+          body.titleStyleMode === 'vn_tiktok_viral' || body.titleStyleMode === 'default'
+            ? body.titleStyleMode
+            : undefined,
+        viralTitleConfig:
+          body.viralTitleConfig && typeof body.viralTitleConfig === 'object'
+            ? (body.viralTitleConfig as Record<string, unknown>)
+            : undefined,
+        titleAnalysisItems: Array.isArray(body.titleAnalysisItems) ? (body.titleAnalysisItems as any[]) : undefined,
         overlayImageConfig:
           body.overlayImageConfig && typeof body.overlayImageConfig === 'object'
             ? (body.overlayImageConfig as Record<string, unknown>)
@@ -505,6 +514,24 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         prompt: typeof body.prompt === 'string' ? body.prompt : '',
         count: typeof body.count === 'number' ? Number(body.count) : undefined,
         contentLanguage: typeof body.contentLanguage === 'string' ? body.contentLanguage : undefined,
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/plugins/video-batch-subtitle/generate-viral-titles') {
+      const body = await readBodyClean(req)
+      const result = await webPlatformService.generateBatchSubtitleViralTitles(token, {
+        jobId: typeof body.jobId === 'string' ? body.jobId : undefined,
+        sourceItems: Array.isArray(body.sourceItems) ? (body.sourceItems as any[]) : [],
+        language: body.language === 'en' || body.language === 'zh' || body.language === 'vi' ? body.language : undefined,
+        tone:
+          body.tone === 'conversion' || body.tone === 'emotional' || body.tone === 'hook' ? body.tone : undefined,
+        sellingPoints: typeof body.sellingPoints === 'string' ? body.sellingPoints : undefined,
+        symbolIntensity:
+          body.symbolIntensity === 'low' || body.symbolIntensity === 'medium' || body.symbolIntensity === 'high'
+            ? body.symbolIntensity
+            : undefined,
       })
       json(res, 200, { ok: true, ...result })
       return
@@ -725,6 +752,10 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
             ? body.productType
             : 'general',
         productPoints: typeof body.productPoints === 'string' ? body.productPoints : undefined,
+        modelProfileOptions:
+          body.modelProfileOptions && typeof body.modelProfileOptions === 'object' && !Array.isArray(body.modelProfileOptions)
+            ? (body.modelProfileOptions as any)
+            : undefined,
         productReferenceImagePaths: Array.isArray(body.productReferenceImagePaths)
           ? body.productReferenceImagePaths.map(String)
           : [],
@@ -933,6 +964,8 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         productReferenceImagePaths: Array.isArray(body.productReferenceImagePaths)
           ? body.productReferenceImagePaths.map(String)
           : [],
+        shotIds: Array.isArray(body.shotIds) ? body.shotIds.map(String) : undefined,
+        onlyMissing: body.onlyMissing === true,
         selectedModelIdentityId:
           typeof body.selectedModelIdentityId === 'string' ? body.selectedModelIdentityId : undefined,
       })

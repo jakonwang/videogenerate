@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
@@ -41,12 +41,14 @@ export function useCloneWorkspace(projectId: string) {
     setConsoleLines((current) => [`${stamp} ${message}`, ...current].slice(0, 120))
   }
 
+  const [refetchIntervalMs, setRefetchIntervalMs] = useState<number | false>(false)
+
   const projectQuery = useQuery({
     queryKey: ['clone-project', projectId],
     queryFn: () => apiClient.getCloneProject(projectId),
     enabled: Boolean(projectId),
     staleTime: 5_000,
-    refetchInterval: polling ? 5000 : false,
+    refetchInterval: refetchIntervalMs,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   })
@@ -56,7 +58,7 @@ export function useCloneWorkspace(projectId: string) {
     queryFn: () => apiClient.getCloneRuntime(projectId),
     enabled: Boolean(projectId),
     staleTime: 5_000,
-    refetchInterval: polling ? 5000 : false,
+    refetchInterval: refetchIntervalMs,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   })
@@ -92,6 +94,19 @@ export function useCloneWorkspace(projectId: string) {
   )
   const allowMockWhenNoKey = Boolean(runtime?.pipeline?.credentials?.allowMockWhenNoKey ?? project?.allowMockWhenNoKey ?? false)
   const productionMode = !allowMockWhenNoKey
+
+  useEffect(() => {
+    if (!polling) {
+      setRefetchIntervalMs(false)
+      return
+    }
+    const projectStatus = String(project?.status || '').toLowerCase()
+    const hasActiveProject = ['processing', 'running', 'generating', 'queued'].includes(projectStatus)
+    const hasActiveShotVideoTask = shotVideoOutputs.some((item: any) =>
+      ['creating', 'remote_running', 'downloading', 'generating', 'polling_timeout'].includes(String(item?.status || '').toLowerCase()),
+    )
+    setRefetchIntervalMs(hasActiveProject || hasActiveShotVideoTask ? 5000 : 15000)
+  }, [polling, project?.status, shotVideoOutputs])
 
   const refreshAll = async () => {
     await Promise.all([

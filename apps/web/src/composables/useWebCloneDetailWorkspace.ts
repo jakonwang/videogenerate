@@ -61,7 +61,7 @@ export function useWebCloneDetailWorkspace() {
 
   function pushConsole(message: string) {
     const stamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-    consoleLines.value = [`${stamp} ${message}`, ...consoleLines.value].slice(0, 80)
+    consoleLines.value = [`${stamp} ${message}`, ...consoleLines.value].slice(0, 200)
   }
 
   function basename(input: string) {

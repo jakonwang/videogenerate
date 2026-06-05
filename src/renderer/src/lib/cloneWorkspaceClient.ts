@@ -90,10 +90,22 @@ const desktopClient: CloneWorkspaceClient<any> = {
   },
   async saveProductImages(projectId, input) {
     try {
-      return (await window.api.clone.saveProjectProductImages({
+      const project = await window.api.clone.saveProjectProductImages({
         cloneProjectId: projectId,
         productReferenceImagePaths: input.productReferenceImagePaths,
-      })) as CloneWorkspaceProjectResponse<any>
+      })
+      return resolveDesktopProject(project)
+    } catch (error) {
+      throw normalizeCloneWorkspaceError(error)
+    }
+  },
+  async bindProduct(projectId, input) {
+    try {
+      const project = await window.api.clone.bindProjectProduct({
+        cloneProjectId: projectId,
+        productId: input.productId,
+      })
+      return resolveDesktopProject(project)
     } catch (error) {
       throw normalizeCloneWorkspaceError(error)
     }
@@ -103,10 +115,11 @@ const desktopClient: CloneWorkspaceClient<any> = {
       const productReferenceImagePaths = input.files
         .map((item) => String(item.localFilePath || '').trim())
         .filter(Boolean)
-      return (await window.api.clone.saveProjectProductImages({
+      const project = await window.api.clone.saveProjectProductImages({
         cloneProjectId: projectId,
         productReferenceImagePaths,
-      })) as CloneWorkspaceProjectResponse<any>
+      })
+      return resolveDesktopProject(project)
     } catch (error) {
       throw normalizeCloneWorkspaceError(error)
     }
@@ -166,13 +179,27 @@ const desktopClient: CloneWorkspaceClient<any> = {
       throw normalizeCloneWorkspaceError(error)
     }
   },
+  async batchQueryStoryboardImages(projectId, input) {
+    try {
+      return await window.api.clone.generateAllShotFrames({
+        cloneProjectId: projectId,
+        onlyMissing: true,
+        shotIds: input.shotIds,
+        productReferenceImagePaths: input.productReferenceImagePaths,
+      })
+    } catch (error) {
+      throw normalizeCloneWorkspaceError(error)
+    }
+  },
   async regenerateStoryboardImage(projectId, shotId, input) {
     try {
       const project = await window.api.clone.generateGptShotFrames({
         cloneProjectId: projectId,
         shotId,
-        which: 'both',
+        which: 'start',
+        forceRegenerate: true,
         productReferenceImagePaths: input.productReferenceImagePaths,
+        selectedModelIdentityId: input.selectedModelIdentityId,
       })
       return resolveDesktopProject(project)
     } catch (error) {
@@ -191,6 +218,16 @@ const desktopClient: CloneWorkspaceClient<any> = {
   async syncShotVideoTask(projectId, shotId) {
     try {
       return await window.api.clone.syncShotVideoTask({
+        cloneProjectId: projectId,
+        shotId,
+      })
+    } catch (error) {
+      throw normalizeCloneWorkspaceError(error)
+    }
+  },
+  async forceDownloadShotVideoResult(projectId, shotId) {
+    try {
+      return await window.api.clone.forceDownloadShotVideoResult({
         cloneProjectId: projectId,
         shotId,
       })
@@ -250,33 +287,23 @@ export async function resolveCloneWorkspaceClient<TProject = any>(
     return { client: desktopClient as CloneWorkspaceClient<TProject>, ownership: 'local', channel: 'electron-ipc' }
   }
 
-  const ownership = await desktopClient.getOwnership(projectId)
-  if (ownership === 'local') {
-    return { client: desktopClient as CloneWorkspaceClient<TProject>, ownership, channel: 'electron-ipc' }
-  }
-  if (ownership === 'web') {
-    return { client: webClient as CloneWorkspaceClient<TProject>, ownership, channel: 'web-api' }
-  }
-
   if (projectId) {
     try {
-      const result = await webClient.getProject(projectId)
-      const projectOwnership = ownershipFromProject(result?.project)
+      const ownership = await desktopClient.getOwnership(projectId)
+      if (ownership === 'web') {
+        return { client: webClient as CloneWorkspaceClient<TProject>, ownership, channel: 'web-api' }
+      }
       return {
-        client: webClient as CloneWorkspaceClient<TProject>,
-        ownership: projectOwnership === 'unknown' ? 'web' : projectOwnership,
-        channel: 'web-api',
+        client: desktopClient as CloneWorkspaceClient<TProject>,
+        ownership: ownership === 'unknown' ? 'local' : ownership,
+        channel: 'electron-ipc',
       }
-    } catch (error) {
-      const normalized = normalizeCloneWorkspaceError(error)
-      if (normalized.code === 'UNAUTHORIZED_TASK') {
-        return { client: desktopClient as CloneWorkspaceClient<TProject>, ownership: 'local', channel: 'electron-ipc' }
-      }
-      throw normalized
+    } catch {
+      return { client: desktopClient as CloneWorkspaceClient<TProject>, ownership: 'local', channel: 'electron-ipc' }
     }
   }
 
-  return { client: desktopClient as CloneWorkspaceClient<TProject>, ownership: 'unknown', channel: 'electron-ipc' }
+  return { client: desktopClient as CloneWorkspaceClient<TProject>, ownership: 'local', channel: 'electron-ipc' }
 }
 
 export async function resolveWebCloneWorkspaceClient<TProject = any>() {

@@ -17,7 +17,7 @@ import type {
   ShotSpec,
   ViralShotRole,
 } from './types'
-import { buildReferenceLock } from './prompt'
+import { buildGenerationPromptRestraintText, buildReferenceLock, sanitizeJewelryGenerationPrompt } from './prompt'
 import { analyzeReferenceScriptWithGrs, applyScriptAnalysisToShots } from './aiScriptAnalyzer'
 
 function inferAspectRatio(width: number, height: number): '9:16' | '16:9' {
@@ -326,6 +326,10 @@ function withDefaultScriptFields(shot: ShotSpec, total: number): ShotSpec {
   const actionDescription = shot.action || shot.visualPrompt || 'reference shot action'
   const cameraDescription = `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`
   const productFocus = 'preserve the reference product-display purpose while replacing the product with the uploaded item'
+  const generationPromptRestraint = buildGenerationPromptRestraintText()
+  const baseGenerationPrompt =
+    shot.generationPrompt ||
+    [visualDescription, actionDescription, cameraDescription, productFocus, generationPromptRestraint].filter(Boolean).join('\n')
   return {
     ...shot,
     scriptText: shot.scriptText || '',
@@ -336,9 +340,7 @@ function withDefaultScriptFields(shot: ShotSpec, total: number): ShotSpec {
     actionDescription: shot.actionDescription || actionDescription,
     cameraDescription: shot.cameraDescription || cameraDescription,
     productFocus: shot.productFocus || productFocus,
-    generationPrompt:
-      shot.generationPrompt ||
-      [visualDescription, actionDescription, cameraDescription, productFocus].filter(Boolean).join('\n'),
+    generationPrompt: sanitizeJewelryGenerationPrompt(baseGenerationPrompt, shot.productType) || baseGenerationPrompt,
     negativePrompt: shot.negativePrompt || shot.negativePromptHint,
     scriptConfidence: typeof shot.scriptConfidence === 'number' ? shot.scriptConfidence : 0,
     analysisNotes: Array.isArray(shot.analysisNotes) ? shot.analysisNotes : [],

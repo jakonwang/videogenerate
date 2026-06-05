@@ -97,10 +97,12 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     }
   }
 
-  const applyProject = (next: TProject | null) => {
+  const applyProject = (next: TProject | null, mode: 'patch' | 'replace' = 'patch') => {
     const currentProject = options.current.value
     if (!next) {
       options.current.value = null
+    } else if (mode === 'replace') {
+      options.current.value = next
     } else if (currentProject?.id && currentProject.id === next.id) {
       patchObjectInPlace(currentProject as Record<string, unknown>, next as Record<string, unknown>)
       options.current.value = currentProject
@@ -143,7 +145,7 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     if (runtimeRes?.pipeline && options.applyPipelineStatus) {
       next = options.applyPipelineStatus(next, runtimeRes)
     }
-    applyProject(next)
+    applyProject(next, 'replace')
   }
 
   const refreshRuntimeProject = async () => {
@@ -153,59 +155,23 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     const resolved = await options.getWorkspaceClient?.(currentId)
     if (!resolved) return
 
+    if (resolved.channel === 'electron-ipc') {
+      const [projectRes, runtimeRes] = await Promise.all([
+        resolved.client.getProject(currentId).catch(() => null),
+        resolved.client.getRuntime(currentId).catch(() => null),
+      ])
+      let next = (projectRes?.project || currentProject) as TProject
+      if (runtimeRes?.pipeline && options.applyPipelineStatus) {
+        next = options.applyPipelineStatus(next, runtimeRes)
+      }
+      applyProject(next, 'replace')
+      return
+    }
+
     const runtimeRes = await resolved.client.getRuntime(currentId).catch(() => null)
     if (runtimeRes?.pipeline && options.applyPipelineStatus) {
       applyProject(options.applyPipelineStatus(currentProject, runtimeRes))
       return
-    }
-
-    if (resolved.channel === 'electron-ipc') {
-      const [summaryRes, pipelineStatus] = await Promise.all([
-        window.api.clone.getProjectSummary({ cloneProjectId: currentId }) as Promise<CloneProjectSummaryLike>,
-        window.api.clone.getClonePipelineStatus({ cloneProjectId: currentId }) as Promise<unknown>,
-      ])
-      const currentProjectRecord = currentProject as Record<string, unknown>
-      const currentWorkflow = (currentProject.workflowV2 || {}) as Record<string, unknown>
-      const currentPreviewPipeline = (currentProject.previewPipeline || {}) as Record<string, unknown>
-      const currentFinalCompose = (currentProject.finalCompose || {}) as Record<string, unknown>
-      const next = {
-        ...currentProject,
-        title: String(summaryRes?.title || currentProjectRecord.title || '').trim() || currentProjectRecord.title,
-        description:
-          String(summaryRes?.description || currentProjectRecord.description || '').trim() || currentProjectRecord.description,
-        status: String(summaryRes?.status || currentProjectRecord.status || '').trim() || currentProjectRecord.status,
-        updatedAt: Number(summaryRes?.updatedAt || currentProjectRecord.updatedAt || 0) || currentProjectRecord.updatedAt,
-        referenceVideoName:
-          String(summaryRes?.referenceVideoName || currentProjectRecord.referenceVideoName || '').trim() ||
-          currentProjectRecord.referenceVideoName,
-        referenceVideoPath:
-          String(summaryRes?.referenceVideoPath || currentProject.referenceVideoPath || '').trim() || currentProject.referenceVideoPath,
-        outputDir: String(summaryRes?.outputDir || currentProject.outputDir || '').trim() || currentProject.outputDir,
-        lastError: String(summaryRes?.lastError || currentProject.lastError || '').trim() || currentProject.lastError,
-        pipelineStatus,
-        workflowV2: {
-          ...currentWorkflow,
-          currentStep: String(summaryRes?.currentStep || currentWorkflow.currentStep || '').trim() || currentWorkflow.currentStep,
-        },
-        previewPipeline: {
-          ...currentPreviewPipeline,
-          status: String(summaryRes?.status || currentPreviewPipeline.status || '').trim() || currentPreviewPipeline.status,
-          previewOutputPath:
-            String(summaryRes?.previewOutputPath || currentPreviewPipeline.previewOutputPath || '').trim() ||
-            currentPreviewPipeline.previewOutputPath,
-          previewReportPath:
-            String(summaryRes?.previewReportPath || currentPreviewPipeline.previewReportPath || '').trim() ||
-            currentPreviewPipeline.previewReportPath,
-          lastError: String(summaryRes?.lastError || currentPreviewPipeline.lastError || '').trim() || currentPreviewPipeline.lastError,
-        },
-        finalCompose: {
-          ...currentFinalCompose,
-          outputPath:
-            String(summaryRes?.finalOutputPath || currentFinalCompose.outputPath || '').trim() || currentFinalCompose.outputPath,
-          error: String(summaryRes?.lastError || currentFinalCompose.error || '').trim() || currentFinalCompose.error,
-        },
-      } as TProject
-      applyProject(next)
     }
   }
 
@@ -217,7 +183,7 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
       const result = resolved ? await resolved.client.getProject(currentId) : null
       const project = (result?.project || null) as TProject | null
       if (project?.id) {
-        applyProject(project)
+        applyProject(project, 'replace')
         return project
       }
     } catch {
@@ -252,7 +218,7 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     if (!next?.id) {
       throw new Error('复刻任务不存在或已删除')
     }
-    applyProject(next)
+    applyProject(next, 'replace')
     if (options2.updateStageLog !== false) {
       options.setStageLog?.(
         next.finalCompose?.outputPath ? '任务已载入，可直接查看结果或替换分镜重新合成。' : '任务已载入，可从当前阶段继续推进。',
@@ -260,9 +226,10 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     }
   }
 
-  const waitForStoryboardFrames = async (projectId: string, timeoutMs = 20000) => {
+  const waitForStoryboardFrames = async (projectId: string, timeoutMs = 20000, shotIds?: string[]) => {
     const startedAt = Date.now()
     let latestProject: TProject | null = null
+    const targetShotIds = Array.from(new Set((shotIds ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
     while (Date.now() - startedAt < timeoutMs) {
       const resolved = await options.getWorkspaceClient?.(projectId)
       if (!resolved) return null
@@ -275,12 +242,21 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
         latestProject = options.applyPipelineStatus(latestProject, runtimeRes)
       }
       if (latestProject?.id) {
-        applyProject(latestProject)
+        applyProject(latestProject, 'replace')
         const shots = latestProject.blueprint?.shots ?? []
-        const hasAnyFrame = shots.some((shot) =>
-          Boolean(String(shot.gptFirstFramePath || '').trim() || String(shot.generatedFirstFramePath || '').trim()),
-        )
-        if (hasAnyFrame) return latestProject
+        if (targetShotIds.length) {
+          const targetReady = targetShotIds.every((shotId) => {
+            const shot = shots.find((item) => String((item as any).id || '').trim() === shotId)
+            if (!shot) return false
+            return Boolean(String((shot as any).gptFirstFramePath || '').trim() || String((shot as any).generatedFirstFramePath || '').trim())
+          })
+          if (targetReady) return latestProject
+        } else {
+          const hasAnyFrame = shots.some((shot) =>
+            Boolean(String((shot as any).gptFirstFramePath || '').trim() || String((shot as any).generatedFirstFramePath || '').trim()),
+          )
+          if (hasAnyFrame) return latestProject
+        }
       }
       await new Promise((resolve) => setTimeout(resolve, 1200))
     }

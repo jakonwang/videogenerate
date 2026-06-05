@@ -57,6 +57,8 @@ export type AiTaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 export type ConsistencyMode = 'soft' | 'hard'
 export type CloneQualityMode = 'fast' | 'standard' | 'high'
 export type CloneProductType = 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+export type CloneProductMode = 'STRICT' | 'BALANCED' | 'EXPRESSIVE'
+export type ModelProfileOptions = import('../../../shared/modelProfileOptions').ModelProfileOptions
 export type ScriptRole =
   | 'hook'
   | 'pain_point'
@@ -126,6 +128,8 @@ export type ShotSpec = {
   requiredAssetType?: RequiredAssetType
   uploadedAssetPath?: string
   uploadedImagePath?: string
+  originalProductReferenceImagePaths?: string[]
+  sanitizedProductReferenceImagePaths?: string[]
   productReferenceImagePaths?: string[]
   generatedFirstFramePath?: string
   generatedLastFramePath?: string
@@ -145,6 +149,7 @@ export type ShotSpec = {
   productDetailImages?: string[]
   productUsageImages?: string[]
   styleReferenceImages?: string[]
+  productIdentityText?: string
   gptFirstFramePath?: string
   gptLastFramePath?: string
   gptFrameStatus?: GptImageGenerationStatus
@@ -406,8 +411,29 @@ export type CloneCloudClipCacheEntry = {
 
 export type CloneGenerationQueueOptions = {
   maxConcurrentCloudJobs: number
+  maxConcurrentSubmitJobs: number
+  maxConcurrentPollJobs: number
+  maxConcurrentDownloadJobs: number
   pollIntervalMs: number
   perShotTimeoutMs: number
+}
+
+export type CloneGenerationQueueRuntime = {
+  submitActive: number
+  pollActive: number
+  downloadActive: number
+  submitQueued: number
+  pollQueued: number
+  downloadQueued: number
+  updatedAt: number
+}
+
+export type CloneShotVideoFailureBreakdown = {
+  missingTask: number
+  remoteTimeout: number
+  downloadFailed: number
+  remoteFailed: number
+  localFailed: number
 }
 
 export type ClonePreviewPipelineStatus = {
@@ -450,11 +476,17 @@ export type ModelIdentityPack = {
   market: string
   gender: string
   ageRange: string
+  faceShape?: string
   hairStyle: string
+  hairColor?: string
   skinTone: string
+  bodyType?: string
   outfitStyle: string
   mood: string
   sceneStyle: string
+  languageStyle?: string
+  cameraPresence?: string
+  styleBias?: string
   description: string
   imagePaths: string[]
   model?: string
@@ -476,6 +508,12 @@ export type ModelIdentityLibraryItem = {
   outfitStyle: string
   mood: string
   sceneStyle: string
+  faceShape?: string
+  hairColor?: string
+  bodyType?: string
+  languageStyle?: string
+  cameraPresence?: string
+  styleBias?: string
   description: string
   imagePaths: string[]
   coverImagePath?: string
@@ -560,8 +598,9 @@ export type CloneStoryboardFrame = {
   frameIndex?: number
   imagePath?: string
   aspectRatio: '9:16'
-  status: 'idle' | 'cropped' | 'failed'
+  status: 'idle' | 'generating' | 'cropped' | 'failed'
   error?: string
+  sourceEvent?: string
   retryCount?: number
   updatedAt?: number
 }
@@ -580,16 +619,52 @@ export type CloneShotVideoOutput = {
   model?: string
   requestCapability?: UnifiedCapability
   endpointStyle?: string
+  baseUrl?: string
   remoteStatus?: string
   remoteRaw?: unknown
+  submissionFingerprint?: string
+  submissionStartedAt?: number
+  submissionLockedUntil?: number
   durationSec?: number
-  status: 'idle' | 'creating' | 'remote_running' | 'polling_timeout' | 'downloading' | 'generating' | 'done' | 'failed'
+  status:
+    | 'idle'
+    | 'submit_queued'
+    | 'submitting'
+    | 'poll_queued'
+    | 'remote_pending'
+    | 'remote_running'
+    | 'download_queued'
+    | 'remote_succeeded_pending_download'
+    | 'downloading'
+    | 'done'
+    | 'failed_retryable'
+    | 'failed_terminal'
   error?: string
+  sourceEvent?: string
   retryCount?: number
   createdAt?: number
   lastPollAt?: number
   completedAt?: number
   updatedAt: number
+}
+
+export type CloneShotVideoSubmissionAuditLog = {
+  id: string
+  shotId: string
+  shotIndex?: number
+  trigger: 'single_submit' | 'batch_submit' | 'auto_run_submit' | 'force_regenerate_submit'
+  provider?: string
+  model?: string
+  requestCapability?: UnifiedCapability
+  submissionFingerprint?: string
+  firstFramePath?: string
+  lastFramePath?: string
+  taskId?: string
+  remoteStatus?: string
+  sourceEvent?: string
+  status: 'request_started' | 'task_accepted' | 'direct_output' | 'missing_task' | 'request_failed'
+  error?: string
+  createdAt: number
 }
 
 export type CloneFinalComposeStatus = {
@@ -601,11 +676,59 @@ export type CloneFinalComposeStatus = {
 }
 
 export type CloneConsistencyAssetsSnapshot = {
+  boundProductSnapshot?: {
+    id: string
+    name: string
+    type: string
+    remark?: string
+    coverImagePath?: string
+    analysisBoardPath?: string
+    analysisBoardStatus?: 'idle' | 'processing' | 'done' | 'failed'
+    canonicalSourcePath?: string
+    canonicalSourceStatus?: 'idle' | 'processing' | 'done' | 'failed'
+    productAnalysis?: {
+      category: string
+      summary: string
+      coreSubject: string
+      connectionStructure: string
+      materialDetails: string
+      wearingPosition: string
+      surfaceDetails: string
+      colorDetails: string
+      geometryDetails: string
+      sizeScale: string
+      matchingRules: string[]
+      rawDescription: string
+      updatedAt: number
+    }
+    originalImagePaths: string[]
+    frozenReferenceImagePaths: string[]
+    boundAt: number
+    updatedAt: number
+  }
   modelPackId?: string
   productImageSetIds?: string[]
+  originalProductReferenceImages?: string[]
+  sanitizedProductReferenceImages?: string[]
   referenceImages?: string[]
   modelReferenceImages?: string[]
   productReferenceImages?: string[]
+  productImageSanitization?: {
+    status: 'idle' | 'processing' | 'done' | 'failed'
+    originalPaths: string[]
+    sanitizedPaths: string[]
+    failedPaths: string[]
+    diagnostics: Array<{
+      originalPath: string
+      sanitizedPath?: string
+      status: 'kept' | 'sanitized' | 'failed'
+      note?: string
+      prompt?: string
+      fallbackToOriginal?: boolean
+    }>
+    error?: string
+    updatedAt: number
+  }
   productAnalysis?: {
     category: string
     summary: string
@@ -878,6 +1001,13 @@ export type CloneProject = {
   strength: CloneStrength
   referenceVideoPath: string
   referenceVideoName: string
+  originalProductReferenceImagePaths?: string[]
+  sanitizedProductReferenceImagePaths?: string[]
+  productImageSanitizationStatus?: 'idle' | 'processing' | 'done' | 'failed'
+  productImageSanitizationError?: string
+  productReferenceImagePaths?: string[]
+  coverAssetPath?: string
+  boundProductSnapshot?: CloneConsistencyAssetsSnapshot['boundProductSnapshot']
   baseBlueprint: CloneBlueprint | null
   executionBlueprint?: CloneExecutionBlueprint | null
   productId?: string
@@ -897,6 +1027,21 @@ export type CloneProject = {
   generationQueue?: {
     options: CloneGenerationQueueOptions
     jobs: CloneGenerationQueueJob[]
+    runtime?: CloneGenerationQueueRuntime
+    submissionAuditLogs?: CloneShotVideoSubmissionAuditLog[]
+    lastShotVideoSummary?: {
+      total?: number
+      done?: number
+      failed?: number
+      skipped?: number
+      pending?: number
+      timeout?: number
+      creating?: number
+      remoteRunning?: number
+      downloading?: number
+      retryableFailed?: number
+    }
+    lastShotVideoFailureBreakdown?: CloneShotVideoFailureBreakdown
     paused?: boolean
   }
   scriptVariantCandidates?: CloneScriptVariantCandidate[]
@@ -928,6 +1073,10 @@ export type CloneProject = {
     lastStartedAt?: number
     lastCompletedAt?: number
     lastSummary?: string
+    lastHeartbeatAt?: number
+    lastProgressAt?: number
+    lastProgressSignature?: string
+    idleHeartbeatCount?: number
   }
 }
 
@@ -941,6 +1090,9 @@ export type CloneProjectGroup = {
 
 export type CloneProjectSummary = {
   id: string
+  ownership?: 'local' | 'web'
+  sourceType?: string
+  ownerUserId?: string
   title: string
   description?: string
   groupId?: string
@@ -993,6 +1145,7 @@ export type ModelCredentials = {
   openaiApiKey?: string
   openaiImageModel?: string
   openaiImageQuality?: 'low' | 'medium' | 'high'
+  replicateApiToken?: string
   imageProviderPrimary?: ImageProviderName
   klingImageModel?: string
   grsaiImageModel?: string

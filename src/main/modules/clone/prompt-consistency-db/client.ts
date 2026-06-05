@@ -2,24 +2,23 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppPaths } from '../../../lib/paths'
 
-type PromptConsistencyDb = {
-  exec(sql: string): unknown
-  prepare(sql: string): PromptConsistencyStatement
-}
-
 type PromptConsistencyStatement = {
   run(...params: unknown[]): unknown
   get(...params: unknown[]): unknown
   all(...params: unknown[]): unknown[]
 }
 
-type SqliteModule = {
-  DatabaseSync: new (path: string) => PromptConsistencyDb
+type PromptConsistencyDb = {
+  exec(sql: string): unknown
+  prepare(sql: string): PromptConsistencyStatement
 }
 
+type SqliteCtor = new (path: string) => PromptConsistencyDb
+
 let db: PromptConsistencyDb | null = null
-let databaseSyncCtor: SqliteModule['DatabaseSync'] | null | undefined
-let sqliteUnavailableReason = ''
+let nodeSqliteCtor: SqliteCtor | null | undefined
+let betterSqliteCtor: SqliteCtor | null | undefined
+let unavailableReason = ''
 
 function schemaPath() {
   return join(__dirname, 'schema.sql')
@@ -29,35 +28,47 @@ function dbFilePath() {
   return join(getAppPaths().dbDir, 'prompt-consistency.sqlite')
 }
 
-function getDatabaseSyncCtor() {
-  if (databaseSyncCtor !== undefined) return databaseSyncCtor
+function loadNodeSqliteCtor() {
+  if (nodeSqliteCtor !== undefined) return nodeSqliteCtor
   try {
-    const sqliteModule = require('node:sqlite') as SqliteModule
-    databaseSyncCtor = sqliteModule.DatabaseSync
-    sqliteUnavailableReason = ''
+    const sqliteModule = require('node:sqlite') as { DatabaseSync: SqliteCtor }
+    nodeSqliteCtor = sqliteModule.DatabaseSync
+    unavailableReason = ''
   } catch (error) {
-    databaseSyncCtor = null
-    sqliteUnavailableReason = error instanceof Error ? error.message : String(error)
-    return databaseSyncCtor
+    nodeSqliteCtor = null
+    unavailableReason = error instanceof Error ? error.message : String(error)
   }
-  return databaseSyncCtor
+  return nodeSqliteCtor
+}
+
+function loadBetterSqliteCtor() {
+  if (betterSqliteCtor !== undefined) return betterSqliteCtor
+  try {
+    const sqliteModule = require('better-sqlite3') as SqliteCtor
+    betterSqliteCtor = sqliteModule
+    unavailableReason = ''
+  } catch (error) {
+    betterSqliteCtor = null
+    if (!unavailableReason) unavailableReason = error instanceof Error ? error.message : String(error)
+  }
+  return betterSqliteCtor
 }
 
 export function getPromptConsistencyDbUnavailableReason() {
-  return sqliteUnavailableReason
+  return unavailableReason
 }
 
 export function canInitializePromptConsistencyDb() {
-  return Boolean(getDatabaseSyncCtor())
+  return Boolean(loadNodeSqliteCtor() || loadBetterSqliteCtor())
 }
 
 export function getPromptConsistencyDb() {
   if (db) return db
   const dir = getAppPaths().dbDir
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  const DatabaseSync = getDatabaseSyncCtor()
+  const DatabaseSync = loadNodeSqliteCtor() || loadBetterSqliteCtor()
   if (!DatabaseSync) {
-    throw new Error('当前运行环境不支持可用的 SQLite 运行时')
+    throw new Error(`SQLite unavailable: ${unavailableReason || 'unknown'}`)
   }
   db = new DatabaseSync(dbFilePath())
   db.exec('PRAGMA journal_mode = WAL;')

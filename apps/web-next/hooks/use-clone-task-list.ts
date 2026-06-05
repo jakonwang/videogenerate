@@ -36,9 +36,20 @@ export function useCloneTaskList() {
     },
   })
 
+  const renameMutation = useMutation({
+    mutationFn: (input: { projectId: string; title: string }) =>
+      apiClient.updateCloneProjectMeta(input.projectId, {
+        title: input.title,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['clone-projects'] })
+    },
+  })
+
   return {
     projectsQuery,
     createMutation,
     removeMutation,
+    renameMutation,
   }
 }

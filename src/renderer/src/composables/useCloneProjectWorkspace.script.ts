@@ -1,5 +1,5 @@
 import type { CloneProjectLike, UseCloneProjectWorkspaceOptions } from './useCloneProjectWorkspace.shared'
-import { extractProjectProductRefs } from './useCloneProjectWorkspace.shared'
+import { extractProjectProductRefs, sameProjectProductRefs } from './useCloneProjectWorkspace.shared'
 
 type ScriptProjectActions<TProject extends CloneProjectLike> = {
   applyProject: (next: TProject | null) => void
@@ -52,6 +52,8 @@ export function useCloneProjectWorkspaceScript<TProject extends CloneProjectLike
     const projectId = options.resolveActiveProjectId?.(options.current.value?.id) || String(options.current.value?.id || '').trim()
     const resolvedProductRefs = resolveEffectiveProductRefs(effectiveProductRefs)
     const resolvedHasBoundModel = resolveHasBoundModel(hasBoundModel)
+    const selectedProductId = String(options.selectedProductId?.value || '').trim()
+    const boundProductId = String(options.current.value?.productId || '').trim()
     if (!projectId) {
       options.markError?.('请先完成参考视频分析。', '请先完成参考视频分析。')
       return
@@ -62,15 +64,20 @@ export function useCloneProjectWorkspaceScript<TProject extends CloneProjectLike
       return
     }
     if (!resolvedProductRefs.length) {
-      options.markError?.('请先上传商品图。', '请先上传商品图。')
-      options.setStageLog?.('缺少商品图，无法生成脚本。', 'error')
+      options.markError?.('请先选择商品库商品。', '请先选择商品库商品。')
+      options.setStageLog?.('缺少商品库商品，无法生成脚本。', 'error')
       return
     }
     if (options.loading) options.loading.value = true
     options.errorText.value = ''
-    options.setStageLog?.('正在生成脚本变体并进行评分。')
+    options.setStageLog?.('正在生成脚本变体，默认沿用参考视频原脚本。')
     try {
       const resolved = await options.getWorkspaceClient?.(projectId)
+      if (selectedProductId && selectedProductId !== boundProductId) {
+        const syncedProductProject = await resolved?.client.bindProduct(projectId, { productId: selectedProductId })
+        projectActions.applyProject((syncedProductProject?.project || options.current.value) as TProject)
+        options.pushRuntimeLog?.(`生成脚本前已自动绑定商品：${selectedProductId}`, 'info')
+      }
       const hasBlueprint = Boolean(options.current.value?.blueprint?.shots?.length || options.current.value?.baseBlueprint?.shots?.length)
       if (!hasBlueprint) {
         const fallbackVideoPath = String(options.current.value?.referenceVideoPath || options.referenceVideoPath.value || '').trim()
@@ -96,10 +103,7 @@ export function useCloneProjectWorkspaceScript<TProject extends CloneProjectLike
       }
 
       const currentSavedRefs = extractProjectProductRefs(options.current.value).map((item) => String(item || '').trim()).filter(Boolean)
-      const shouldSyncProductRefs =
-        resolvedProductRefs.length > 0 &&
-        (resolvedProductRefs.length !== currentSavedRefs.length ||
-          resolvedProductRefs.some((item, index) => item !== currentSavedRefs[index]))
+      const shouldSyncProductRefs = resolvedProductRefs.length > 0 && !sameProjectProductRefs(resolvedProductRefs, currentSavedRefs)
       if (shouldSyncProductRefs) {
         const syncedProject = await resolved?.client.saveProductImages(projectId, {
           productReferenceImagePaths: resolvedProductRefs,

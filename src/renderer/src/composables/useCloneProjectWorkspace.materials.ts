@@ -10,6 +10,61 @@ export function useCloneProjectWorkspaceMaterials<TProject extends CloneProjectL
   options: UseCloneProjectWorkspaceOptions<TProject>,
   projectActions: ProjectActions<TProject>,
 ) {
+  const bindLibraryProduct = async (productId: string) => {
+    const nextProductId = String(productId || '').trim()
+    if (!nextProductId) return
+    const projectId = options.resolveActiveProjectId?.(options.current.value?.id) || String(options.current.value?.id || '').trim()
+
+    options.pushRuntimeLog?.(
+      `[clone-debug] bind-library-product:start ${JSON.stringify({
+        productId: nextProductId,
+        projectId,
+      })}`,
+      'info',
+    )
+
+    if (!projectId) {
+      options.pushRuntimeLog?.('[clone-debug] bind-library-product:skip-no-project', 'error')
+      options.setStageLog?.('商品已选中，完成参考分析后会自动绑定到当前项目。')
+      return
+    }
+
+    if (options.loading) options.loading.value = true
+    options.errorText.value = ''
+    options.setStageLog?.('正在绑定商品库商品并同步产品标准源缓存。')
+    try {
+      const resolved = await options.getWorkspaceClient?.(projectId)
+      const res = await resolved?.client.bindProduct(projectId, { productId: nextProductId })
+      projectActions.applyProject((res?.project || options.current.value) as TProject)
+      options.productRefsDraft.value = null
+      options.pushRuntimeLog?.(
+        `[clone-debug] bind-library-product:success ${JSON.stringify({
+          productId: nextProductId,
+          projectId,
+          channel: resolved?.channel || 'unknown',
+          boundProductId: String((res?.project as TProject | undefined)?.productId || '').trim(),
+        })}`,
+        'success',
+      )
+      options.setStageLog?.(`商品库商品已绑定，当前通道：${resolved?.channel || 'unknown'}`, 'success')
+    } catch (error: any) {
+      options.pushRuntimeLog?.(
+        `[clone-debug] bind-library-product:failed ${JSON.stringify({
+          productId: nextProductId,
+          projectId,
+          message: String(error?.message ?? error ?? 'unknown error'),
+        })}`,
+        'error',
+      )
+      options.markError?.(error?.message ?? error, '商品库商品绑定失败。')
+      await projectActions.refreshProjectAfterFailure()
+      options.setStageLog?.('商品库商品绑定失败，请检查商品素材后重试。', 'error')
+      throw error
+    } finally {
+      if (options.loading) options.loading.value = false
+    }
+  }
+
   const pickReferenceVideo = async (filePath: string) => {
     const file = String(filePath || '').trim()
     if (!file) return
@@ -77,7 +132,8 @@ export function useCloneProjectWorkspaceMaterials<TProject extends CloneProjectL
     options.setStageLog?.('正在绑定商品图到当前任务。')
     try {
       const resolved = await options.getWorkspaceClient?.(projectId)
-      const useUpload = resolved?.channel === 'web-api' && options.readFileAsBase64 && options.fileNameFromPath && options.mimeTypeFromPath
+      const useUpload =
+        resolved?.channel === 'web-api' && options.readFileAsBase64 && options.fileNameFromPath && options.mimeTypeFromPath
       const res = useUpload
         ? await resolved?.client.uploadProductImages(projectId, {
             files: await Promise.all(
@@ -134,6 +190,7 @@ export function useCloneProjectWorkspaceMaterials<TProject extends CloneProjectL
 
   return {
     pickReferenceVideo,
+    bindLibraryProduct,
     bindProductImages,
     bindModelIdentity,
   }

@@ -8,12 +8,25 @@ function now() {
 export function createCloneGenerationQueue(project: CloneProject) {
   const options: CloneGenerationQueueOptions = {
     maxConcurrentCloudJobs: Math.max(1, Number(project.generationQueue?.options?.maxConcurrentCloudJobs ?? 2)),
+    maxConcurrentSubmitJobs: Math.max(1, Number(project.generationQueue?.options?.maxConcurrentSubmitJobs ?? 2)),
+    maxConcurrentPollJobs: Math.max(1, Number(project.generationQueue?.options?.maxConcurrentPollJobs ?? 4)),
+    maxConcurrentDownloadJobs: Math.max(1, Number(project.generationQueue?.options?.maxConcurrentDownloadJobs ?? 1)),
     pollIntervalMs: Math.max(500, Number(project.generationQueue?.options?.pollIntervalMs ?? 2000)),
     perShotTimeoutMs: Math.max(30_000, Number(project.generationQueue?.options?.perShotTimeoutMs ?? 10 * 60 * 1000)),
   }
   return {
     options,
     jobs: [...(project.generationQueue?.jobs ?? [])],
+    submissionAuditLogs: [...(project.generationQueue?.submissionAuditLogs ?? [])],
+    runtime: {
+      submitActive: Number(project.generationQueue?.runtime?.submitActive ?? 0) || 0,
+      pollActive: Number(project.generationQueue?.runtime?.pollActive ?? 0) || 0,
+      downloadActive: Number(project.generationQueue?.runtime?.downloadActive ?? 0) || 0,
+      submitQueued: Number(project.generationQueue?.runtime?.submitQueued ?? 0) || 0,
+      pollQueued: Number(project.generationQueue?.runtime?.pollQueued ?? 0) || 0,
+      downloadQueued: Number(project.generationQueue?.runtime?.downloadQueued ?? 0) || 0,
+      updatedAt: Number(project.generationQueue?.runtime?.updatedAt ?? now()) || now(),
+    },
     paused: Boolean(project.generationQueue?.paused),
   }
 }
@@ -61,4 +74,3 @@ export function enqueueCloneShotJob(input: {
   input.project.generationQueue = queue
   return nextJob
 }
-

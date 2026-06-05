@@ -6,6 +6,7 @@ import {
   House,
   Sparkles,
   CopyPlus,
+  Rocket,
   FolderOpen,
   ScissorsLineDashed,
   Puzzle,
@@ -51,15 +52,24 @@ const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPla
 const navItems = computed(() => [
   { to: '/home', icon: House, label: '首页', active: route.path.includes('/home') },
   { to: '/models', icon: Sparkles, label: '模特', active: route.path.includes('/models') },
+  { to: '/products', icon: FolderOpen, label: '商品', active: route.path.includes('/products') },
   { to: '/clone', icon: CopyPlus, label: '复刻', active: route.path.includes('/clone') },
   {
-    to: '/products',
-    icon: FolderOpen,
+    to: '/production',
+    icon: Rocket,
     label: '生产',
-    active: route.path.includes('/products') || route.path.includes('/tasks') || route.path.includes('/templates'),
+    active: route.path.includes('/production') || route.path.includes('/tasks') || route.path.includes('/templates'),
   },
   { to: '/live-slicer', icon: ScissorsLineDashed, label: '切片', active: route.path.includes('/live-slicer') },
 ])
+
+const helpItems = [
+  { to: '/models', title: '模特', desc: '管理统一复用的模特身份与参考素材。' },
+  { to: '/products', title: '商品', desc: '先管理商品列表，再进入详情维护图片和标准源。' },
+  { to: '/clone', title: '复刻', desc: '绑定模特和商品，生成脚本、分镜图与分镜视频。' },
+  { to: '/production', title: '生产', desc: '进入任务执行中心，发起任务并查看结果。' },
+  { to: '/live-slicer', title: '切片', desc: '处理直播长视频切片与二次素材拆分。' },
+]
 
 const sidebarSections = computed(() => [
   {
@@ -76,11 +86,11 @@ function go(path: string, query?: Record<string, string>) {
 }
 
 function openCloudWorkspace() {
-  go('/products', { ws: 'cloud' })
+  go('/production')
 }
 
 function quickExport() {
-  go('/tasks', { ws: 'media', quickStart: String(Date.now()) })
+  go('/production/tasks', { ws: 'media', quickStart: String(Date.now()) })
 }
 
 function openHelpModal() {
@@ -98,15 +108,15 @@ function openBillingCenter() {
 function onTopMenuClick(key: string) {
   moreOpen.value = false
   if (key === 'project') {
-    go('/products', { ws: 'media_library' })
+    go('/products')
     return
   }
   if (key === 'edit') {
-    go('/templates', { ws: 'studio' })
+    go('/production')
     return
   }
   if (key === 'view') {
-    go('/tasks', { ws: 'text_scripts' })
+    go('/production')
     return
   }
   if (key === 'export') quickExport()
@@ -182,7 +192,7 @@ function requestCloneStage(key: string) {
                 <div class="app-topbar-search-wrap" data-design-id="main-topbar">
                   <div class="app-top-search">
                     <Search class="h-4 w-4" />
-                    <input v-model="shellSearch" type="text" placeholder="搜索模板、素材、功能..." />
+                    <input v-model="shellSearch" type="text" placeholder="搜索商品、模板、任务、功能..." />
                     <span class="app-top-search-shortcut">⌘K</span>
                   </div>
                 </div>
@@ -221,17 +231,14 @@ function requestCloneStage(key: string) {
         <div class="text-sm font-semibold text-white/90">{{ t('shell.helpTitle') }}</div>
         <div class="mt-1 text-[11px] leading-relaxed text-white/50">{{ t('shell.helpDesc') }}</div>
         <div class="mt-4 grid gap-2">
-          <button class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-white/85 transition hover:bg-white/[0.06]" @click="helpOpen = false; go('/clone')">
-            爆款复刻
-          </button>
-          <button class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-white/85 transition hover:bg-white/[0.06]" @click="helpOpen = false; go('/products', { ws: 'media_library' })">
-            生产模块
-          </button>
-          <button class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-white/85 transition hover:bg-white/[0.06]" @click="helpOpen = false; go('/models')">
-            模特库
-          </button>
-          <button class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-white/85 transition hover:bg-white/[0.06]" @click="helpOpen = false; go('/live-slicer')">
-            直播切片
+          <button
+            v-for="item in helpItems"
+            :key="item.to"
+            class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left transition hover:bg-white/[0.06]"
+            @click="helpOpen = false; go(item.to)"
+          >
+            <strong class="block text-sm text-white/88">{{ item.title }}</strong>
+            <span class="mt-1 block text-[11px] leading-relaxed text-white/50">{{ item.desc }}</span>
           </button>
         </div>
         <div class="mt-4 flex justify-end">

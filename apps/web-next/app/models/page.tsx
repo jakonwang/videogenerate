@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { CloneRunMode } from '@shared/web-api/types'
+import type { CloneRunMode, ModelProfileOptions } from '@shared/web-api/types'
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,7 @@ import { useAuthGuard } from '@/hooks/use-auth-guard'
 import { apiClient } from '@/lib/api-client'
 import { readAppSettings } from '@/lib/app-settings'
 import { cn, formatDateTime, toPreviewSrc } from '@/lib/utils'
+import { createEmptyModelProfileOptions, getModelProfileOptionGroups, getRecommendedModelProfileOptions } from '@shared/modelProfileOptions'
 
 type CloneModelIdentitySummary = {
   id: string
@@ -188,6 +189,7 @@ export default function ModelsPage() {
   const [createProjectId, setCreateProjectId] = useState('')
   const [createProductType, setCreateProductType] = useState<CloneModelIdentitySummary['productType']>('general')
   const [createProductPoints, setCreateProductPoints] = useState('')
+  const [createModelProfileOptions, setCreateModelProfileOptions] = useState<ModelProfileOptions>(createEmptyModelProfileOptions())
   const [referenceFiles, setReferenceFiles] = useState<File[]>([])
   const [createError, setCreateError] = useState('')
   const [runModeOpen, setRunModeOpen] = useState(false)
@@ -209,6 +211,10 @@ export default function ModelsPage() {
       setCreateProjectId(projectsQuery.data[0].id)
     }
   }, [createProjectId, projectsQuery.data])
+
+  useEffect(() => {
+    setCreateModelProfileOptions(getRecommendedModelProfileOptions(createProductType))
+  }, [createProductType])
 
   const imageSettings = useMemo(() => {
     const settings = readAppSettings()
@@ -290,6 +296,7 @@ export default function ModelsPage() {
         cloneProjectId: createProjectId,
         productType: createProductType,
         productPoints: createProductPoints.trim() || undefined,
+        modelProfileOptions: createModelProfileOptions,
         productReferenceImagePaths: uploadedPaths,
         imageProviderPrimary: imageSettings.provider,
         openaiApiKey: imageSettings.provider === 'openai' ? imageSettings.apiKey || undefined : undefined,
@@ -319,6 +326,7 @@ export default function ModelsPage() {
       ])
       setCreateOpen(false)
       setCreateProductPoints('')
+      setCreateModelProfileOptions(getRecommendedModelProfileOptions(createProductType))
       setReferenceFiles([])
       setCreateError('')
       if (result.model?.id) {
@@ -336,13 +344,15 @@ export default function ModelsPage() {
   }, [modelsQuery.data])
 
   const projects = useMemo(() => {
-    return (projectsQuery.data || []).map((item) => ({
+    return ((projectsQuery.data || []).map((item) => ({
       id: item.id,
       title: item.title || item.referenceVideoName || item.id,
       referenceVideoName: item.referenceVideoName || '',
       updatedAt: item.updatedAt,
-    })) as CloneProjectSummary[]
+    })) as CloneProjectSummary[]).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
   }, [projectsQuery.data])
+
+  const modelProfileGroups = useMemo(() => getModelProfileOptionGroups(), [])
 
   const tabCounts = useMemo(
     () => ({
@@ -761,21 +771,6 @@ export default function ModelsPage() {
 
             <div className="grid min-h-0 gap-5 overflow-auto px-6 py-5 lg:grid-cols-[minmax(0,1.1fr)_320px]">
               <div className="grid content-start gap-5">
-                <FieldBlock label="来源项目" required>
-                  <select
-                    value={createProjectId}
-                    onChange={(event) => setCreateProjectId(event.target.value)}
-                    className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none"
-                  >
-                    <option value="">请选择复刻项目</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.title}
-                      </option>
-                    ))}
-                  </select>
-                </FieldBlock>
-
                 <div className="grid gap-5 sm:grid-cols-2">
                   <FieldBlock label="商品类型">
                     <select
@@ -792,12 +787,50 @@ export default function ModelsPage() {
                   </FieldBlock>
                 </div>
 
-                <FieldBlock label="商品卖点">
+                <FieldBlock label="模特设定">
+                  <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    {modelProfileGroups.map((group) => (
+                      <div key={group.key} className="grid gap-2">
+                        <div className="grid gap-1">
+                          <div className="text-sm font-medium text-white">{group.label}</div>
+                          <div className="text-xs text-slate-500">{group.description}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {group.options.map((option) => {
+                            const active = createModelProfileOptions[group.key] === option.value
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() =>
+                                  setCreateModelProfileOptions((current) => ({
+                                    ...current,
+                                    [group.key]: option.value,
+                                  }))
+                                }
+                                className={cn(
+                                  'rounded-full border px-3 py-1.5 text-xs transition',
+                                  active
+                                    ? 'border-cyan-400/60 bg-cyan-400/12 text-cyan-100'
+                                    : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/20 hover:text-white',
+                                )}
+                              >
+                                {option.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </FieldBlock>
+
+                <FieldBlock label="补充描述（可选）">
                   <textarea
                     value={createProductPoints}
                     onChange={(event) => setCreateProductPoints(event.target.value)}
                     rows={5}
-                    placeholder="例如：珍珠耳饰、轻奢通勤、白领女性、近景口播、柔光电商场景。"
+                    placeholder="例如：更温柔亲和、适合近景佩戴展示、生活化一点、偏转化型表达。"
                     className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                   />
                 </FieldBlock>
@@ -824,45 +857,26 @@ export default function ModelsPage() {
                 </FieldBlock>
 
                 <FieldBlock label="当前图片模型配置">
-                  <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-slate-400">供应商</span>
-                      <span className="font-medium text-white">{imageSettings.provider}</span>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <span>
+                        供应商：<span className="font-medium text-white">{imageSettings.provider}</span>
+                      </span>
+                      <span>
+                        模型：<span className="font-medium text-white">{imageSettings.model || '未设置'}</span>
+                      </span>
+                      <span>
+                        API Key：<span className="font-medium text-white">{imageSettings.apiKey ? '已配置' : '未设置'}</span>
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-slate-400">模型名</span>
-                      <span className="font-medium text-white">{imageSettings.model || '未设置'}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-slate-400">Host</span>
-                      <span className="max-w-[180px] truncate font-medium text-white">{imageSettings.host || '未设置'}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-slate-400">API Key</span>
-                      <span className="font-medium text-white">{imageSettings.apiKey ? '已配置' : '未设置'}</span>
-                    </div>
-                    <div className="text-xs leading-6 text-slate-500">该配置直接读取自“设置中心 / 图片模型”，创建模特时不再单独填写 Key。</div>
+                    <div className="mt-2 text-xs leading-6 text-slate-500">该配置直接读取自“设置中心 / 图片模型”。</div>
                   </div>
                 </FieldBlock>
               </div>
 
               <aside className="grid content-start gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-5">
-                <div className="grid gap-1">
-                  <div className="text-[12px] uppercase tracking-[0.22em] text-slate-500">创建说明</div>
-                  <div className="text-[15px] font-semibold text-white">真实模特生成闭环</div>
-                </div>
-
-                <div className="grid gap-3 text-sm leading-6 text-slate-300">
-                  <p>1. 从真实复刻项目读取上下文。</p>
-                  <p>2. 上传商品图到 Web API 存储。</p>
-                  <p>3. 使用设置中心里已保存的图片模型配置生成模特。</p>
-                  <p>4. 自动刷新模特库，并可直接进入 `/clone/[projectId]` 使用。</p>
-                </div>
-
-                <div className="grid gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-xs leading-6 text-cyan-100">
-                  <span>当前实现保持前后端分离。</span>
-                  <span>Windows 本地测试通过 Web API 调用，Linux 部署无需改页面逻辑。</span>
-                  <span>如需修改供应商或 API Key，请到设置页统一维护。</span>
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm leading-6 text-cyan-100">
+                  使用当前图片模型配置创建模特；创建完成后会自动出现在模特库中。
                 </div>
 
                 {createError ? <div className="rounded-2xl border border-rose-400/20 bg-rose-400/8 p-4 text-xs leading-6 text-rose-100">{createError}</div> : null}
@@ -879,7 +893,7 @@ export default function ModelsPage() {
                   onClick={() => {
                     setCreateError('')
                     if (!createProjectId) {
-                      setCreateError('请先选择来源项目。')
+                      setCreateError('请先创建一个复刻项目。')
                       return
                     }
                     if (!referenceFiles.length) {

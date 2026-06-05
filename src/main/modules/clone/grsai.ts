@@ -129,6 +129,7 @@ export async function createGrsImageTask(input: {
   prompt: string
   negativePrompt?: string
   urls: string[]
+  aspectRatio?: '1:1' | '9:16' | '16:9'
 }) {
   const key = requireGrsKey(input.credentials)
   const host = grsHost(input.credentials)
@@ -136,7 +137,7 @@ export async function createGrsImageTask(input: {
     model: String(input.credentials.grsaiImageModel || '').trim() || 'gpt-image-2',
     prompt: input.prompt,
     negativePrompt: String(input.negativePrompt || '').trim() || undefined,
-    aspectRatio: '9:16',
+    aspectRatio: input.aspectRatio || '9:16',
     urls: input.urls,
     webHook: '-1',
     shutProgress: false,

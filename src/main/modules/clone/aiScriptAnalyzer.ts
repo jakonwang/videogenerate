@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
 import { generateChatCompletion } from './unifiedChat'
-import { buildSilentCommercialGlobalRule } from './prompt'
+import { buildGenerationPromptRestraintText, buildSilentCommercialGlobalRule, sanitizeJewelryGenerationPrompt } from './prompt'
 import type { CloneGlobalScript, CloneLocale, ModelCredentials, ScriptRole, ShotSpec } from './types'
 
 type FrameSet = {
@@ -100,6 +100,27 @@ function cleanText(value: unknown, fallback = '') {
   return text || fallback
 }
 
+function cleanAsciiEnglishText(value: unknown, fallback = '') {
+  const text = String(value ?? '')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u3000-\u303f\uff00-\uffef]/g, ' ')
+    .replace(/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]+/g, ' ')
+    .replace(/[^\x20-\x7E\n]/g, ' ')
+    .replace(/\?{2,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text || fallback
+}
+
+function joinEnglishSegments(parts: Array<string | undefined>) {
+  return parts
+    .map((item) => cleanAsciiEnglishText(item, ''))
+    .filter(Boolean)
+    .join('; ')
+}
+
 function clamp01(value: unknown) {
   const n = Number(value)
   if (!Number.isFinite(n)) return 0
@@ -108,6 +129,44 @@ function clamp01(value: unknown) {
 
 function round3(value: number) {
   return Math.round(value * 1000) / 1000
+}
+
+function buildSevenDimensionPrompt(input: {
+  locale: CloneLocale
+  subject?: string
+  action?: string
+  scene?: string
+  lighting?: string
+  camera?: string
+  style?: string
+  quality?: string
+}) {
+  return [
+    `1. Subject: ${cleanAsciiEnglishText(input.subject, 'Match the actual subject and product details from the reference video')}`,
+    `2. Action: ${cleanAsciiEnglishText(input.action, 'Keep the real action and timing observed in the reference video')}`,
+    `3. Scene: ${cleanAsciiEnglishText(input.scene, 'Preserve the observed environment, spatial relation, and background depth')}`,
+    `4. Lighting: ${cleanAsciiEnglishText(input.lighting, 'Use realistic lighting consistent with the reference video')}`,
+    `5. Camera: ${cleanAsciiEnglishText(input.camera, 'Reconstruct the observed framing, angle, and camera motion')}`,
+    `6. Style: ${cleanAsciiEnglishText(input.style, 'Real short-video style, no redesign, no extra beautification')}`,
+    `7. Quality: ${cleanAsciiEnglishText(input.quality, '9:16 vertical, high fidelity, stable, no watermark, no subtitles, no platform UI')}`,
+  ].join('\n')
+}
+
+function composeShotScriptText(input: {
+  locale: CloneLocale
+  visualDescription?: string
+  actionDescription?: string
+  cameraDescription?: string
+  productFocus?: string
+}) {
+  const parts = [
+    cleanAsciiEnglishText(input.visualDescription, ''),
+    cleanAsciiEnglishText(input.actionDescription, ''),
+    cleanAsciiEnglishText(input.cameraDescription, ''),
+    cleanAsciiEnglishText(input.productFocus, ''),
+  ].filter(Boolean)
+  if (parts.length) return parts.join('; ')
+  return 'Reconstruct this shot exactly from the reference video.'
 }
 
 function clampShotWindow(startTime: number, endTime: number, fallbackStart: number, fallbackDuration: number) {
@@ -144,7 +203,7 @@ async function imageDataUrl(filePath: string) {
   return `data:${mimeForImage(filePath)};base64,${buf.toString('base64')}`
 }
 
-function fallbackShot(shot: AnalyzeInput['shots'][number], note: string): ScriptShotAnalysis {
+function fallbackShot(shot: AnalyzeInput['shots'][number], note: string, locale: CloneLocale): ScriptShotAnalysis {
   const visual = cleanText(shot.visualPrompt, 'reference product demonstration shot')
   const action = cleanText(shot.action, visual)
   const camera = cleanText(shot.cameraMovement || shot.motion, 'same camera movement as reference shot')
@@ -158,19 +217,34 @@ function fallbackShot(shot: AnalyzeInput['shots'][number], note: string): Script
     shotId: shot.id,
     startTime: timing.startTime,
     endTime: timing.endTime,
-    scriptText: '',
+    scriptText: composeShotScriptText({
+      locale,
+      visualDescription: visual,
+      actionDescription: action,
+      cameraDescription: `${shot.framing || 'closeup'} framing, ${camera}`,
+      productFocus: 'preserve the visible product focus exactly as observed in the reference video',
+    }),
     scriptRole: shot.index === 0 ? 'hook' : 'unknown',
     narrationText: '',
     onScreenText: '',
     visualDescription: visual,
     actionDescription: action,
     cameraDescription: `${shot.framing || 'closeup'} framing, ${camera}`,
-    productFocus: 'keep the product visible and consistent with the reference selling logic',
+    productFocus: 'preserve the visible product focus exactly as observed in the reference video',
     subjectPosition: { person: '', product: 'center', text: '' },
     sceneDescription: { location: '', background: '', lighting: '', style: '' },
     emotionDescription: { tone: '', intensity: 0 },
     textOverlay: { content: '', position: '', fontSize: 'medium', style: '', color: '', animation: '' },
-    generationPrompt: [visual, action, camera].filter(Boolean).join('. '),
+    generationPrompt: buildSevenDimensionPrompt({
+      locale,
+      subject: visual,
+      action,
+      scene: cleanText(shot.visualPrompt, visual),
+      lighting: 'follow the lighting that is actually visible in the reference video',
+      camera: `${shot.framing || 'closeup'} framing, ${camera}`,
+      style: 'real short-video ecommerce reference reconstruction, no redesign',
+      quality: '9:16 vertical frame, high fidelity, stable, no watermark, no subtitles, no platform UI',
+    }),
     negativePrompt: 'watermark, account name, platform UI, copied face identity, subtitles, logo mismatch',
     scriptConfidence: 0,
     analysisNotes: [note],
@@ -182,18 +256,19 @@ function fallbackAnalysisResult(input: AnalyzeInput, note: string): ScriptAnalys
     globalScript: {
       language: input.locale,
       summary: cleanText(note, 'Reference script fallback analysis.'),
-      sellingLogic: 'Fallback structure: hook, solution, proof, CTA.',
-      hook: input.locale === 'zh-CN' ? '开头快速建立产品吸引点。' : 'Mo dau tao hook nhanh cho san pham.',
-      cta: input.locale === 'zh-CN' ? '结尾给出明确行动号召。' : 'Ket thuc bang CTA ro rang.',
+      sellingLogic: '',
+      hook: '',
+      cta: '',
     },
-    shots: input.shots.map((shot) => fallbackShot(shot, note)),
+    shots: input.shots.map((shot) => fallbackShot(shot, note, input.locale)),
   }
 }
 
 export function applyScriptAnalysisToShots(shots: ShotSpec[], result: ScriptAnalysisResult | null, failureNote?: string): ShotSpec[] {
   const byId = new Map((result?.shots ?? []).map((shot) => [shot.shotId, shot]))
   return shots.map((shot) => {
-    const analyzed = byId.get(shot.id) ?? fallbackShot(shot, failureNote || 'script analysis fallback')
+    const fallbackLocale: CloneLocale = result?.globalScript?.language === 'vi-VN' ? 'vi-VN' : 'zh-CN'
+    const analyzed = byId.get(shot.id) ?? fallbackShot(shot, failureNote || 'script analysis fallback', fallbackLocale)
     const scriptRole = normalizeRole(analyzed.scriptRole)
     const scriptText = cleanText(analyzed.scriptText, cleanText(shot.scriptText, ''))
     const visualDescription = cleanText(analyzed.visualDescription, cleanText(shot.visualDescription, shot.visualPrompt || shot.visual || 'reference shot visual'))
@@ -202,11 +277,20 @@ export function applyScriptAnalysisToShots(shots: ShotSpec[], result: ScriptAnal
       analyzed.cameraDescription,
       cleanText(shot.cameraDescription, `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`),
     )
-    const productFocus = cleanText(analyzed.productFocus, cleanText(shot.productFocus, 'clear product demonstration purpose'))
+    const productFocus = cleanText(
+      analyzed.productFocus,
+      cleanText(shot.productFocus, 'preserve the visible product focus exactly as observed in the reference video'),
+    )
+    const generationPromptRestraint = cleanText(buildGenerationPromptRestraintText(), '')
     const generationPrompt = cleanText(
       analyzed.generationPrompt,
-      cleanText(shot.generationPrompt, [scriptText, visualDescription, actionDescription, cameraDescription, productFocus].filter(Boolean).join('\n')),
+      cleanText(
+        shot.generationPrompt,
+        [scriptText, visualDescription, actionDescription, cameraDescription, productFocus, generationPromptRestraint].filter(Boolean).join('\n'),
+      ),
     )
+    const sanitizedGenerationPrompt =
+      sanitizeJewelryGenerationPrompt(generationPrompt, shot.productType) || generationPrompt
     return {
       ...shot,
       scriptText,
@@ -221,7 +305,7 @@ export function applyScriptAnalysisToShots(shots: ShotSpec[], result: ScriptAnal
       sceneDescription: analyzed.sceneDescription ?? shot.sceneDescription,
       emotionDescription: analyzed.emotionDescription ?? shot.emotionDescription,
       textOverlay: analyzed.textOverlay ?? shot.textOverlay,
-      generationPrompt,
+      generationPrompt: [sanitizedGenerationPrompt, generationPromptRestraint].filter(Boolean).join('\n'),
       negativePrompt: cleanText(analyzed.negativePrompt, shot.negativePrompt || shot.negativePromptHint || '') || undefined,
       scriptConfidence: clamp01(analyzed.scriptConfidence),
       analysisNotes: Array.from(new Set([...(shot.analysisNotes ?? []), ...(analyzed.analysisNotes ?? [])].map((x) => cleanText(x, '')).filter(Boolean))),
@@ -266,7 +350,8 @@ export async function analyzeProductStructureWithGrs(input: {
         'Break the product down like peeling an onion: start from category, then core subject, then connection structure, then surface/material, then color, then geometry, then wearing or display position, then matching rules.',
         'Do not only output the product name. Output the physical structure and visual details that help an image model place it on a model with high fidelity.',
         'The result will be used as the highest-priority product lock for generating model-on-product storyboard images.',
-        `Target language: ${input.locale === 'zh-CN' ? 'Chinese' : 'Vietnamese'}.`,
+        'Target language: English.',
+        'Use concise production-ready English that can be injected directly into image-generation prompts.',
         'Return JSON only with this shape:',
         '{"category":"","summary":"","coreSubject":"","connectionStructure":"","materialDetails":"","wearingPosition":"","surfaceDetails":"","colorDetails":"","geometryDetails":"","sizeScale":"","matchingRules":[],"rawDescription":""}',
         `Known product category hint: ${cleanText(input.productCategory, 'general')}`,
@@ -351,62 +436,97 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
 
   const shots = input.shots.map((shot) => {
     const raw = byId.get(shot.id)
-    if (!raw) return fallbackShot(shot, 'GRS.AI output missed this shot; fallback generated locally')
+    if (!raw) return fallbackShot(shot, 'GRS.AI output missed this shot; fallback generated locally', input.locale)
     const timing = clampShotWindow(
       Number(raw.startTime ?? raw.start_time ?? shot.startSec ?? 0),
       Number(raw.endTime ?? raw.end_time ?? shot.endSec ?? Number(shot.startSec || 0) + Number(shot.durationSec || 1.5)),
       Number(shot.startSec || 0),
       Number(shot.durationSec || 1.5),
     )
+    const visualDescription = cleanAsciiEnglishText(raw.visualDescription ?? raw.visual_description, '')
+    const actionDescription = cleanAsciiEnglishText(raw.actionDescription ?? raw.action, '')
+    const cameraDescription = cleanAsciiEnglishText(raw.cameraDescription ?? raw.camera?.shot_type ?? raw.camera?.movement ?? raw.camera?.angle, '')
+    const productFocus = cleanAsciiEnglishText(raw.productFocus ?? raw.product_display?.selling_point ?? raw.product_display?.focus_point, '')
+    const sceneLocation = cleanAsciiEnglishText(raw.sceneDescription?.location ?? raw.scene?.location, '')
+    const sceneBackground = cleanAsciiEnglishText(raw.sceneDescription?.background ?? raw.scene?.background, '')
+    const sceneLighting = cleanAsciiEnglishText(raw.sceneDescription?.lighting ?? raw.scene?.lighting, '')
+    const sceneStyle = cleanAsciiEnglishText(raw.sceneDescription?.style ?? raw.scene?.style, '')
+    const normalizedScriptText = composeShotScriptText({
+      locale: input.locale,
+      visualDescription,
+      actionDescription,
+      cameraDescription,
+      productFocus,
+    })
+    const normalizedGenerationPrompt = buildSevenDimensionPrompt({
+      locale: input.locale,
+      subject: visualDescription,
+      action: actionDescription,
+      scene: joinEnglishSegments([sceneLocation, sceneBackground]),
+      lighting: sceneLighting,
+      camera: cameraDescription,
+      style: sceneStyle,
+      quality: cleanAsciiEnglishText(
+        raw.generationPrompt ?? raw.generation_prompt,
+        '9:16 vertical frame, high fidelity, stable, no watermark, no subtitles, no platform UI',
+      ),
+    })
     return {
       shotId: shot.id,
       startTime: timing.startTime,
       endTime: timing.endTime,
-      scriptText: cleanText(raw.scriptText ?? raw.script_text, ''),
+      scriptText: normalizedScriptText,
       scriptRole: normalizeRole(raw.scriptRole ?? raw.script_role),
-      narrationText: cleanText(raw.narrationText ?? raw.narration_text, ''),
-      onScreenText: cleanText(raw.onScreenText ?? raw.on_screen_text, ''),
-      visualDescription: cleanText(raw.visualDescription ?? raw.visual_description, ''),
-      actionDescription: cleanText(raw.actionDescription ?? raw.action, ''),
-      cameraDescription: cleanText(raw.cameraDescription ?? raw.camera?.shot_type ?? raw.camera?.movement ?? raw.camera?.angle, ''),
-      productFocus: cleanText(raw.productFocus ?? raw.product_display?.selling_point ?? raw.product_display?.focus_point, ''),
+      narrationText: cleanAsciiEnglishText(raw.narrationText ?? raw.narration_text, ''),
+      onScreenText: cleanAsciiEnglishText(raw.onScreenText ?? raw.on_screen_text, ''),
+      visualDescription,
+      actionDescription,
+      cameraDescription,
+      productFocus,
       subjectPosition: {
-        person: cleanText(raw.subjectPosition?.person ?? raw.subject_position?.person, ''),
-        product: cleanText(raw.subjectPosition?.product ?? raw.subject_position?.product, ''),
-        text: cleanText(raw.subjectPosition?.text ?? raw.subject_position?.text, ''),
+        person: cleanAsciiEnglishText(raw.subjectPosition?.person ?? raw.subject_position?.person, ''),
+        product: cleanAsciiEnglishText(raw.subjectPosition?.product ?? raw.subject_position?.product, ''),
+        text: cleanAsciiEnglishText(raw.subjectPosition?.text ?? raw.subject_position?.text, ''),
       },
       sceneDescription: {
-        location: cleanText(raw.sceneDescription?.location ?? raw.scene?.location, ''),
-        background: cleanText(raw.sceneDescription?.background ?? raw.scene?.background, ''),
-        lighting: cleanText(raw.sceneDescription?.lighting ?? raw.scene?.lighting, ''),
-        style: cleanText(raw.sceneDescription?.style ?? raw.scene?.style, ''),
+        location: sceneLocation,
+        background: sceneBackground,
+        lighting: sceneLighting,
+        style: sceneStyle,
       },
       emotionDescription: {
-        tone: cleanText(raw.emotionDescription?.tone ?? raw.emotion?.tone, ''),
+        tone: cleanAsciiEnglishText(raw.emotionDescription?.tone ?? raw.emotion?.tone, ''),
         intensity: Number(raw.emotionDescription?.intensity ?? raw.emotion?.intensity ?? 0) || 0,
       },
       textOverlay: {
-        content: cleanText(raw.textOverlay?.content ?? raw.text_overlay?.content, ''),
-        position: cleanText(raw.textOverlay?.position ?? raw.text_overlay?.position, ''),
+        content: cleanAsciiEnglishText(raw.textOverlay?.content ?? raw.text_overlay?.content, ''),
+        position: cleanAsciiEnglishText(raw.textOverlay?.position ?? raw.text_overlay?.position, ''),
         fontSize: normalizeFontSize(raw.textOverlay?.fontSize ?? raw.text_overlay?.font_size),
-        style: cleanText(raw.textOverlay?.style ?? raw.text_overlay?.style, ''),
-        color: cleanText(raw.textOverlay?.color ?? raw.text_overlay?.color, ''),
-        animation: cleanText(raw.textOverlay?.animation ?? raw.text_overlay?.animation, ''),
+        style: cleanAsciiEnglishText(raw.textOverlay?.style ?? raw.text_overlay?.style, ''),
+        color: cleanAsciiEnglishText(raw.textOverlay?.color ?? raw.text_overlay?.color, ''),
+        animation: cleanAsciiEnglishText(raw.textOverlay?.animation ?? raw.text_overlay?.animation, ''),
       },
-      generationPrompt: cleanText(raw.generationPrompt ?? raw.generation_prompt, ''),
-      negativePrompt: cleanText(raw.negativePrompt ?? raw.negative_prompt, ''),
+      generationPrompt: normalizedGenerationPrompt,
+      negativePrompt: cleanAsciiEnglishText(raw.negativePrompt ?? raw.negative_prompt, ''),
       scriptConfidence: clamp01(raw.scriptConfidence ?? raw.script_confidence),
       analysisNotes: Array.isArray(raw.analysisNotes ?? raw.analysis_notes)
-        ? (raw.analysisNotes ?? raw.analysis_notes).map((x: unknown) => cleanText(x, '')).filter(Boolean)
+        ? (raw.analysisNotes ?? raw.analysis_notes).map((x: unknown) => cleanAsciiEnglishText(x, '')).filter(Boolean)
         : [],
     }
   })
+
+  const stitchedShotContent = shots
+    .map((shot, index) => `${String(index + 1).padStart(2, '0')} ${cleanText(shot.scriptText, cleanText(shot.visualDescription, ''))}`.trim())
+    .filter(Boolean)
+    .join('\n')
+
+  globalScript.content = stitchedShotContent || globalScript.content
 
   return { globalScript, shots }
 }
 
 function buildInstruction(input: AnalyzeInput) {
-  const language = input.locale === 'zh-CN' ? 'Chinese' : 'Vietnamese'
+  const language = 'English'
   const timeline = input.shots
     .map(
       (shot) =>
@@ -416,28 +536,25 @@ function buildInstruction(input: AnalyzeInput) {
 
   return [
     buildSilentCommercialGlobalRule(),
-    'You are a top-tier TikTok ecommerce short-video director, storyboard designer, and paid-ads strategist.',
+    'You are a strict reference-video forensic analyst for storyboard reconstruction.',
     `Output language: ${language}.`,
     `Target market: ${input.targetMarket || input.locale}. Product category: ${input.productCategory || 'general'}.`,
-    'Analyze the uploaded viral reference video shot by shot. This is not a generic summary. It is a structured reconstruction script used to regenerate a new ecommerce short video.',
-    'This is for selling and product demonstration, so keep the product as the primary subject and human presence as supporting context only.',
+    'Analyze the uploaded reference video shot by shot and reconstruct only what is actually visible or reliably inferable from the video and sampled frames.',
+    'Your job is faithful reconstruction, not creative improvement, not ad strategy optimization, and not rewriting the video into a stronger ecommerce script.',
+    'If a detail is unclear, keep it minimal and conservative. Do not invent marketing claims, sales hooks, CTA language, or story beats that are not supported by the source video.',
+    'Do not convert a weak or simple video into a standard ecommerce template. Do not add extra product benefits, audience assumptions, emotional arcs, or selling logic unless they are directly evident.',
     'Every analyzed shot must be 8.0 seconds or shorter. If a source beat appears longer than 8 seconds, reverse-engineer it into multiple finer consecutive shots.',
-    'Be meticulous when reverse-engineering long actions, transitions, camera moves and product demonstrations. Split them into smaller realistic sub-shots instead of keeping any shot above 8 seconds.',
-    'Sample the video at 1 frame per second and use the sampled frames together with shot boundaries to reconstruct the visual language accurately.',
-    'For every shot, you must analyze and preserve these dimensions in the JSON fields and analysis notes:',
-    '1. Camera movement type and speed: push, pull, pan, tilt, track, orbit, handheld or static, with specific speed description.',
-    '2. Shot size changes: wide, full, medium, close-up, extreme close-up, with time points if the framing changes inside the shot.',
-    '3. Lighting type, direction and color temperature: natural or artificial, front/side/back light, and approximate Kelvin value.',
-    '4. Color tendency and tone: dominant colors, saturation level, and warm/cool tendency.',
-    '5. Subject action and expression: precise movement, pose, gesture, gaze and expression changes.',
-    '6. Background environment details: location, props, texture, depth, blur and environmental cues.',
-    'Map the above analysis into these output fields: cameraDescription, visualDescription, actionDescription, sceneDescription, emotionDescription, textOverlay, productFocus and analysisNotes.',
-    'The generation_prompt field must be a complete Jingmeng/Seedance-ready prompt written in this order: timeline + subject + scene + action + camera + atmosphere.',
-    'The generation_prompt must be directly usable for image-to-video or reference-video recreation, concise but specific, and should include motion rhythm, framing, lighting, color mood and environment cues.',
-    'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. When speech is unclear, infer the script from the visuals, but do not produce speaking-focused or face-focused performance guidance.',
+    'Be meticulous when reverse-engineering long actions, transitions, camera moves, product interactions, and human demonstrations. Split long beats into smaller factual sub-shots instead of keeping any shot above 8 seconds.',
+    'Use the sampled frames together with shot boundaries to reconstruct the actual visual sequence as accurately as possible.',
+    'For every shot, capture the observable facts: subject presence, product state, pose or movement, camera view or movement, visible environment, visible text, and the actual role this shot serves inside this specific video.',
+    'Keep human presence exactly aligned with the source. If the source shows a model wearing or demonstrating the product, preserve that instead of collapsing the shot into a static product packshot.',
+    'Map the analysis into these output fields: cameraDescription, visualDescription, actionDescription, sceneDescription, emotionDescription, textOverlay, productFocus and analysisNotes.',
+    'The generation_prompt field must be a factual reconstruction prompt for this exact shot, written in this order: subject + product state + scene + action + camera + lighting/color.',
+    'The generation_prompt must stay grounded in observed content. Do not inject unobserved selling claims, conversion strategy, beautification instructions, or cinematic reinterpretation.',
+    'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. If speech or text is unclear, leave it empty or minimal instead of guessing persuasive copy.',
     'Return ONLY valid JSON. No markdown. No explanation outside JSON.',
     'Use script_role values only from: hook,pain_point,solution,show,detail,proof,offer,cta,transition,unknown.',
-    'Prioritize realistic ecommerce reconstruction, reusable prompt detail, and mobile-native visual language.',
+    'Prefer omission over hallucination. Factual alignment to the reference video is the top priority.',
     'JSON shape:',
     '{"global_analysis":{"video_type":"","target_audience":"","core_selling_point":"","hook_strategy":"","conversion_strategy":"","emotion_curve":"","recommended_product_type":"","content":"","camera_motion":"","shot_scale":"","lighting":"","color_tone":"","subject_action":"","environment":"","reverse_prompt":""},"shots":[{"shot_id":"","time_range":"","script_role":"","script_text":"","narration_text":"","on_screen_text":"","visual_description":"","subject_position":{"person":"","product":"","text":""},"scene":{"location":"","background":"","lighting":"","style":""},"emotion":{"tone":"","intensity":1},"action":"","camera":{"shot_type":"","movement":"","angle":""},"product_display":{"method":"","focus_point":"","selling_point":""},"text_overlay":{"content":"","position":"","font_size":"medium","style":"","color":"","animation":""},"transition":"","generation_prompt":"","negative_prompt":"","script_confidence":0.8,"analysis_notes":[]}],"key_shots":[{"shot_id":"","reason":""}]}',
     'Shot timeline:',
@@ -455,7 +572,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
         hook: 'Mock hook',
         cta: 'Mock CTA',
       },
-      shots: input.shots.map((shot) => fallbackShot(shot, 'dev mock script analysis')),
+      shots: input.shots.map((shot) => fallbackShot(shot, 'dev mock script analysis', input.locale)),
     }
   }
 

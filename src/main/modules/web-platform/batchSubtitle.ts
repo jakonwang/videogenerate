@@ -36,10 +36,13 @@ import type {
   BatchSubtitleSourceEngine,
   BatchSubtitleSourceItem,
   BatchSubtitleStyleConfig,
+  BatchSubtitleTitleAnalysisItem,
   BatchSubtitleTitleConfig,
   BatchSubtitleTitleItem,
   BatchSubtitleTitleRenderMode,
+  BatchSubtitleTitleStyleMode,
   BatchSubtitleTrack,
+  BatchSubtitleViralTitleConfig,
   GeelarkClonePublishCandidate,
 } from './types'
 import { webPlatformRepo } from './repo'
@@ -101,6 +104,46 @@ function defaultLayoutPolicy(): BatchSubtitleLayoutPolicy {
 
 function defaultTitleRenderMode(): BatchSubtitleTitleRenderMode {
   return 'overlay_image'
+}
+
+function normalizeTitleStyleMode(mode?: BatchSubtitleTitleStyleMode): BatchSubtitleTitleStyleMode {
+  return mode === 'vn_tiktok_viral' ? 'vn_tiktok_viral' : 'default'
+}
+
+function normalizeViralTitleConfig(input?: BatchSubtitleViralTitleConfig | null): BatchSubtitleViralTitleConfig | undefined {
+  if (!input) return undefined
+  const language = input.language === 'en' || input.language === 'zh' ? input.language : 'vi'
+  const tone = input.tone === 'conversion' || input.tone === 'emotional' ? input.tone : 'hook'
+  const symbolIntensity =
+    input.symbolIntensity === 'low' || input.symbolIntensity === 'high' ? input.symbolIntensity : 'medium'
+  const sellingPoints = String(input.sellingPoints || '').trim()
+  return {
+    language,
+    tone,
+    sellingPoints: sellingPoints || undefined,
+    symbolIntensity,
+    generationMode: 'video_content',
+  }
+}
+
+function normalizeTitleAnalysisItems(
+  sourceItems: BatchSubtitleSourceItem[],
+  input?: BatchSubtitleTitleAnalysisItem[] | null,
+): BatchSubtitleTitleAnalysisItem[] {
+  if (!Array.isArray(input)) return []
+  const sourceIds = new Set(sourceItems.map((item) => item.id))
+  return input
+    .filter((item) => item && sourceIds.has(String(item.sourceItemId || '').trim()))
+    .map((item) => ({
+      sourceItemId: String(item.sourceItemId || '').trim(),
+      summary: String(item.summary || '').trim(),
+      subject: String(item.subject || '').trim() || undefined,
+      action: String(item.action || '').trim() || undefined,
+      scene: String(item.scene || '').trim() || undefined,
+      durationSec: typeof item.durationSec === 'number' ? item.durationSec : undefined,
+      updatedAt: Number(item.updatedAt || now()) || now(),
+    }))
+    .filter((item) => item.sourceItemId && item.summary)
 }
 
 export function defaultBatchSubtitleStyle(): BatchSubtitleStyleConfig {
@@ -631,6 +674,9 @@ export function normalizeBatchSubtitleJob(input: BatchSubtitleJob): BatchSubtitl
     titleRenderMode: normalizeTitleRenderMode((input as any).titleRenderMode),
     titleConfig,
     titleItems: normalizeTitleItems(input.sourceItems, titleConfig, (input as any).titleItems),
+    titleStyleMode: normalizeTitleStyleMode((input as any).titleStyleMode),
+    viralTitleConfig: normalizeViralTitleConfig((input as any).viralTitleConfig),
+    titleAnalysisItems: normalizeTitleAnalysisItems(input.sourceItems, (input as any).titleAnalysisItems),
     overlayImageConfig: normalizeOverlayImageConfig((input as any).overlayImageConfig, captionStyle),
     styleConfig: style,
     captionStyle,
@@ -669,6 +715,9 @@ export async function createBatchSubtitleJob(input: {
   titleRenderMode?: BatchSubtitleTitleRenderMode
   titleConfig?: Partial<BatchSubtitleTitleConfig>
   titleItems?: BatchSubtitleTitleItem[]
+  titleStyleMode?: BatchSubtitleTitleStyleMode
+  viralTitleConfig?: BatchSubtitleViralTitleConfig
+  titleAnalysisItems?: BatchSubtitleTitleAnalysisItem[]
   overlayImageConfig?: Partial<BatchSubtitleOverlayImageConfig>
   styleConfig?: Partial<BatchSubtitleStyleConfig>
   captionStyle?: Partial<BatchSubtitleCaptionStyle>
@@ -690,6 +739,9 @@ export async function createBatchSubtitleJob(input: {
     titleRenderMode: normalizeTitleRenderMode(input.titleRenderMode),
     titleConfig,
     titleItems: normalizeTitleItems(input.sourceItems, titleConfig, input.titleItems),
+    titleStyleMode: normalizeTitleStyleMode(input.titleStyleMode),
+    viralTitleConfig: normalizeViralTitleConfig(input.viralTitleConfig),
+    titleAnalysisItems: normalizeTitleAnalysisItems(input.sourceItems, input.titleAnalysisItems),
     overlayImageConfig: normalizeOverlayImageConfig(input.overlayImageConfig, captionStyle),
     styleConfig: normalizeStyleConfig(input.styleConfig),
     captionStyle,
@@ -715,6 +767,9 @@ export async function updateBatchSubtitleDraft(input: {
     exportEngine?: BatchSubtitleExportEngine
     titleRenderMode?: BatchSubtitleTitleRenderMode
     titleItems?: BatchSubtitleTitleItem[]
+    titleStyleMode?: BatchSubtitleTitleStyleMode
+    viralTitleConfig?: BatchSubtitleViralTitleConfig
+    titleAnalysisItems?: BatchSubtitleTitleAnalysisItem[]
     overlayImageConfig?: Partial<BatchSubtitleOverlayImageConfig>
     captionStyle?: Partial<BatchSubtitleCaptionStyle>
     layoutPolicy?: Partial<BatchSubtitleLayoutPolicy>
@@ -775,6 +830,16 @@ export async function updateBatchSubtitleDraft(input: {
       nextTitleConfig,
       Array.isArray(input.patch.titleItems) ? input.patch.titleItems : current.titleItems,
     ),
+    titleStyleMode:
+      'titleStyleMode' in input.patch ? normalizeTitleStyleMode(input.patch.titleStyleMode) : current.titleStyleMode,
+    viralTitleConfig:
+      'viralTitleConfig' in input.patch
+        ? normalizeViralTitleConfig(input.patch.viralTitleConfig)
+        : current.viralTitleConfig,
+    titleAnalysisItems:
+      'titleAnalysisItems' in input.patch
+        ? normalizeTitleAnalysisItems(nextSourceItems, input.patch.titleAnalysisItems)
+        : normalizeTitleAnalysisItems(nextSourceItems, current.titleAnalysisItems),
     overlayImageConfig: normalizeOverlayImageConfig(
       { ...(current.overlayImageConfig || {}), ...(input.patch.overlayImageConfig || {}) },
       nextCaptionStyle,
@@ -802,6 +867,83 @@ function titleForIndex(config: BatchSubtitleTitleConfig, index: number) {
     return pool[Math.floor(Math.random() * pool.length)] || pool[index % pool.length] || pool[0]
   }
   return String(config.singleText || '').trim()
+}
+
+function symbolStyleInstruction(level?: BatchSubtitleViralTitleConfig['symbolIntensity']) {
+  if (level === 'low') return 'Use little or no decorative symbols.'
+  if (level === 'high') return 'Use strong but readable TikTok symbols such as !!!, ??, ✨, 🔥, 😱 when helpful.'
+  return 'Use moderate, readable TikTok-style symbols.'
+}
+
+function toneInstruction(tone?: BatchSubtitleViralTitleConfig['tone']) {
+  if (tone === 'conversion') return 'Prioritize conversion, urgency, savings, and buy-now framing.'
+  if (tone === 'emotional') return 'Prioritize emotion, surprise, and curiosity framing.'
+  return 'Prioritize strong hooks, scroll-stopping phrasing, and instant curiosity.'
+}
+
+function languageInstruction(language?: BatchSubtitleViralTitleConfig['language']) {
+  if (language === 'en') return 'Output language: English.'
+  if (language === 'zh') return 'Output language: Simplified Chinese.'
+  return 'Output language: Vietnamese.'
+}
+
+function buildViralTitleAnalysisSummary(sourceItem: BatchSubtitleSourceItem) {
+  const fileHint = String(sourceItem.fileName || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim()
+  const duration = typeof sourceItem.durationSec === 'number' ? Math.round(sourceItem.durationSec) : undefined
+  const orientation =
+    sourceItem.width && sourceItem.height
+      ? sourceItem.height > sourceItem.width
+        ? 'vertical mobile short video'
+        : 'horizontal video'
+      : 'short video'
+  const summary = [fileHint ? `Filename hint: ${fileHint}.` : '', duration ? `Duration: ${duration}s.` : '', `Format: ${orientation}.`]
+    .filter(Boolean)
+    .join(' ')
+  return {
+    sourceItemId: sourceItem.id,
+    summary: summary || 'Short video with product or human-focused content.',
+    subject: fileHint || undefined,
+    action: duration && duration <= 8 ? 'quick visual hook' : 'product or scene presentation',
+    scene: orientation,
+    durationSec: sourceItem.durationSec,
+    updatedAt: now(),
+  } satisfies BatchSubtitleTitleAnalysisItem
+}
+
+function buildViralTitlePrompt(input: {
+  analysis: BatchSubtitleTitleAnalysisItem
+  config?: BatchSubtitleViralTitleConfig
+}) {
+  const config = normalizeViralTitleConfig(input.config)
+  const sellingPoints = String(config?.sellingPoints || '').trim()
+  return [
+    'You are a Vietnam TikTok short-video title writer.',
+    languageInstruction(config?.language),
+    'Generate exactly 1 short static title for a vertical short video.',
+    'The title must feel like a Vietnam TikTok viral hook, not a normal subtitle sentence.',
+    toneInstruction(config?.tone),
+    symbolStyleInstruction(config?.symbolIntensity),
+    'Keep it short, punchy, emotional, readable, and suitable for a large top or bottom overlay.',
+    'Prefer strong hook words, benefit points, and stopping-power phrasing.',
+    'Avoid generic filler, hashtags, numbering, explanations, or multiple lines.',
+    sellingPoints ? `Extra selling points: ${sellingPoints}.` : '',
+    input.analysis.subject ? `Possible subject: ${input.analysis.subject}.` : '',
+    input.analysis.action ? `Possible action: ${input.analysis.action}.` : '',
+    input.analysis.scene ? `Scene hint: ${input.analysis.scene}.` : '',
+    `Video summary: ${input.analysis.summary}`,
+    'Return only the final title text.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function cleanGeneratedTitle(text: string) {
+  return String(text || '')
+    .replace(/\r?\n+/g, ' ')
+    .replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '')
+    .replace(/^[\-\d.\s]+/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }
 
 async function getBatchSubtitlePluginConfig(userId: string) {
@@ -1680,6 +1822,84 @@ export async function generateBatchSubtitleTitles(input: {
     content: result.content,
     provider: result.provider,
     model: result.model,
+  }
+}
+
+export async function generateBatchSubtitleViralTitles(input: {
+  userId: string
+  jobId?: string
+  sourceItems: BatchSubtitleSourceItem[]
+  language?: 'vi' | 'en' | 'zh'
+  tone?: 'hook' | 'conversion' | 'emotional'
+  sellingPoints?: string
+  symbolIntensity?: 'low' | 'medium' | 'high'
+}) {
+  const credentials = await cloneRepo.getCredentials()
+  const enrichedItems = await Promise.all(
+    (input.sourceItems || []).map(async (item) => {
+      return await enrichBatchSubtitleSourceItem({
+        id: String(item.id || randomUUID()),
+        sourceType: item.sourceType,
+        sourceVideoPath: String(item.sourceVideoPath || '').trim(),
+        sourceProjectId: typeof item.sourceProjectId === 'string' ? item.sourceProjectId : undefined,
+        sourceProjectTitle: typeof item.sourceProjectTitle === 'string' ? item.sourceProjectTitle : undefined,
+        fileName: typeof item.fileName === 'string' ? item.fileName : undefined,
+        coverImagePath: typeof item.coverImagePath === 'string' ? item.coverImagePath : undefined,
+        durationSec: typeof item.durationSec === 'number' ? item.durationSec : undefined,
+        width: typeof item.width === 'number' ? item.width : undefined,
+        height: typeof item.height === 'number' ? item.height : undefined,
+      })
+    }),
+  )
+  const config = normalizeViralTitleConfig({
+    language: input.language,
+    tone: input.tone,
+    sellingPoints: input.sellingPoints,
+    symbolIntensity: input.symbolIntensity,
+    generationMode: 'video_content',
+  })
+  const analysisItems = enrichedItems.map((item) => buildViralTitleAnalysisSummary(item))
+  const titleItems: BatchSubtitleTitleItem[] = []
+  const contents: string[] = []
+  let provider = ''
+  let model = ''
+
+  for (const analysis of analysisItems) {
+    const result = await generateChatCompletion({
+      credentials,
+      system: 'Write only one viral short-video title. No explanation.',
+      prompt: buildViralTitlePrompt({ analysis, config }),
+    })
+    const title = cleanGeneratedTitle(result.content) || cleanGeneratedTitle(analysis.subject || '') || 'Xem là muốn mua ngay!'
+    titleItems.push({
+      sourceItemId: analysis.sourceItemId,
+      text: title,
+      updatedAt: now(),
+    })
+    contents.push(result.content)
+    provider = result.provider
+    model = result.model
+  }
+
+  if (input.jobId) {
+    const current = await getBatchSubtitleJobOrThrow(input.userId, input.jobId)
+    await webPlatformRepo.upsertBatchSubtitleJob({
+      ...current,
+      titleStyleMode: 'vn_tiktok_viral',
+      viralTitleConfig: config,
+      titleAnalysisItems: analysisItems,
+      titleItems: normalizeTitleItems(current.sourceItems, current.titleConfig, titleItems),
+      updatedAt: now(),
+    })
+  }
+
+  return {
+    titleItems,
+    analysisItems,
+    titleStyleMode: 'vn_tiktok_viral' as const,
+    content: contents.join('\n'),
+    provider,
+    model,
   }
 }
 

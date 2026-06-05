@@ -4,10 +4,25 @@ import type { CloneWorkspaceClient } from '../../../shared/clone-workspace/clien
 export type CloneProjectLike = {
   id: string
   referenceVideoPath: string
+  productId?: string
   productReferenceImagePaths?: string[]
+  originalProductReferenceImagePaths?: string[]
+  sanitizedProductReferenceImagePaths?: string[]
+  productImageSanitizationStatus?: 'idle' | 'processing' | 'done' | 'failed'
+  productImageSanitizationError?: string
   storyboardFrames?: Array<{ shotId: string }>
   workflowV2?: { currentStep?: string }
-  shotVideoOutputs?: Array<{ shotId: string; taskId?: string; videoPath?: string; status?: string; error?: string; retryCount?: number }>
+  shotVideoOutputs?: Array<{
+    shotId: string
+    taskId?: string
+    videoPath?: string
+    localPath?: string
+    videoUrl?: string
+    remoteStatus?: string
+    status?: string
+    error?: string
+    retryCount?: number
+  }>
   pipelineStatus?: unknown
   finalCompose?: { outputPath?: string; error?: string; status?: string }
   previewPipeline?: { lastError?: string }
@@ -18,6 +33,16 @@ export type CloneProjectLike = {
     imageRetryLimit?: number
     videoRetryLimit?: number
     lastSummary?: string
+  }
+  generationQueue?: {
+    runtime?: {
+      submitActive?: number
+      pollActive?: number
+      downloadActive?: number
+      submitQueued?: number
+      pollQueued?: number
+      downloadQueued?: number
+    }
   }
   blueprint?: {
     scriptAnalysisError?: string
@@ -50,6 +75,7 @@ export type UseCloneProjectWorkspaceOptions<TProject extends CloneProjectLike> =
   referenceVideoPath: Ref<string>
   productRefs: Ref<string[]>
   productRefsDraft: Ref<string[] | null>
+  selectedProductId?: Ref<string>
   selectedModelId: Ref<string>
   storyboardBatchSummary?: Ref<{ total: number; done: number; failed: number; skipped: number } | null>
   variantCount?: Ref<number>
@@ -88,7 +114,31 @@ export type StoryboardGenerateResponse<TProject extends CloneProjectLike> = {
 
 export type ShotVideoGenerateResponse<TProject extends CloneProjectLike> = {
   project?: TProject
-  queueSummary?: { total: number; done: number; failed: number; skipped: number; pending?: number; timeout?: number }
+  queueSummary?: {
+    total: number
+    done: number
+    failed: number
+    skipped: number
+    pending?: number
+    timeout?: number
+    creating?: number
+    remoteRunning?: number
+    downloading?: number
+    retryableFailed?: number
+    submitActive?: number
+    pollActive?: number
+    downloadActive?: number
+    submitQueued?: number
+    pollQueued?: number
+    downloadQueued?: number
+  }
+  failureBreakdown?: {
+    missingTask?: number
+    remoteTimeout?: number
+    downloadFailed?: number
+    remoteFailed?: number
+    localFailed?: number
+  }
 }
 
 export type ShotVideoSyncResponse<TProject extends CloneProjectLike> = {
@@ -126,4 +176,15 @@ export function extractProjectProductRefs<TProject extends CloneProjectLike>(pro
     if (text) refs.add(text)
   }
   return Array.from(refs).slice(0, 9)
+}
+
+export function normalizeProjectProductRefs(input: string[]) {
+  return Array.from(new Set((input || []).map((item) => String(item || '').trim()).filter(Boolean))).slice(0, 9)
+}
+
+export function sameProjectProductRefs(left: string[], right: string[]) {
+  const a = normalizeProjectProductRefs(left)
+  const b = normalizeProjectProductRefs(right)
+  if (a.length !== b.length) return false
+  return a.every((item, index) => item === b[index])
 }

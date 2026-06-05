@@ -41,6 +41,8 @@ const api = {
   },
 
   clone: {
+    debugLog: (payload: { message: string; level?: 'info' | 'error' }) =>
+      ipcRenderer.invoke('clone:debugLog', payload),
     createDraftProject: (payload?: {
       locale?: 'vi-VN' | 'zh-CN'
       strength?: 'structure'
@@ -85,6 +87,10 @@ const api = {
       cloneProjectId: string
       productReferenceImagePaths?: string[]
     }) => ipcRenderer.invoke('clone:saveProjectProductImages', payload),
+    bindProjectProduct: (payload: {
+      cloneProjectId: string
+      productId: string
+    }) => ipcRenderer.invoke('clone:bindProjectProduct', payload),
     generateVariants: (payload: {
       cloneProjectId: string
       targetProductId?: string
@@ -262,8 +268,14 @@ const api = {
     }) => ipcRenderer.invoke('clone:generateShotVideos', payload),
     getShotConsistencyReport: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:getShotConsistencyReport', payload),
-    getShotImagePromptPreview: (payload: { cloneProjectId: string; shotId: string }) =>
+    getShotImagePromptPreview: (payload: {
+      cloneProjectId: string
+      shotId: string
+      selectedModelIdentityId?: string
+    }) =>
       ipcRenderer.invoke('clone:getShotImagePromptPreview', payload),
+    getShotVideoPromptPreview: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:getShotVideoPromptPreview', payload),
     recompileShotConsistency: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:recompileShotConsistency', payload),
     listShotConsistencyAnchors: (payload: { cloneProjectId: string; shotId: string }) =>
@@ -278,6 +290,8 @@ const api = {
     generateAllShotFrames: (payload: {
       cloneProjectId: string
       onlyMissing?: boolean
+      which?: 'start' | 'end' | 'both'
+      forceRegenerate?: boolean
       shotIds?: string[]
       productReferenceImagePaths?: string[]
     }) => ipcRenderer.invoke('clone:generateAllShotFrames', payload),
@@ -285,6 +299,7 @@ const api = {
       cloneProjectId: string
       productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
       productPoints?: string
+      modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
       imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
@@ -298,6 +313,13 @@ const api = {
       grsaiImageModel?: string
       imageProviderCredentials?: Record<string, unknown>
     }) => ipcRenderer.invoke('clone:generateModelIdentityPack', payload),
+    getModelIdentityPromptPreview: (payload: {
+      cloneProjectId: string
+      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productPoints?: string
+      modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
+      productReferenceImagePaths?: string[]
+    }) => ipcRenderer.invoke('clone:getModelIdentityPromptPreview', payload),
     getGenerationQueue: (payload: { cloneProjectId: string }) =>
       ipcRenderer.invoke('clone:getGenerationQueue', payload),
     pauseGenerationQueue: (payload: { cloneProjectId: string }) =>
@@ -323,6 +345,8 @@ const api = {
       cloneProjectId: string
       shotId: string
       which?: 'start' | 'end' | 'both'
+      forceRegenerate?: boolean
+      selectedModelIdentityId?: string
       productReferenceImagePaths?: string[]
       imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
@@ -346,6 +370,8 @@ const api = {
       ipcRenderer.invoke('clone:reconcileRemoteStoryboardVideos', payload),
     syncShotVideoTask: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:syncShotVideoTask', payload),
+    forceDownloadShotVideoResult: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:forceDownloadShotVideoResult', payload),
     qualityCheckCurrentShot: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:qualityCheckCurrentShot', payload),
     diagnoseProductImages: (payload: { imagePaths: string[] }) =>
@@ -429,6 +455,11 @@ const api = {
         vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       }>,
+    getRuntimeOptions: () =>
+      ipcRenderer.invoke('clone:getRuntimeOptions') as Promise<{
+        storyboardFrameConcurrency: number
+        globalStoryboardFrameConcurrency: number
+      }>,
     setModelCredentials: (payload: {
       seedanceApiKey?: string
       seedanceHost?: string
@@ -466,6 +497,11 @@ const api = {
       apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
     }) =>
       ipcRenderer.invoke('clone:setModelCredentials', payload),
+    setRuntimeOptions: (payload: {
+      storyboardFrameConcurrency?: number
+      globalStoryboardFrameConcurrency?: number
+    }) =>
+      ipcRenderer.invoke('clone:setRuntimeOptions', payload),
     getGrsAiCredits: () =>
       ipcRenderer.invoke('clone:getGrsAiCredits') as Promise<{ available?: number; raw: unknown }>,
     onRuntimeLog: (cb: (payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => void) => {
@@ -540,8 +576,19 @@ const api = {
     list: () => ipcRenderer.invoke('products:list'),
     upsert: (payload: any) => ipcRenderer.invoke('products:upsert', payload),
     remove: (id: string) => ipcRenderer.invoke('products:remove', id),
+    refreshCanonicalSource: (payload: { productId: string; force?: boolean }) => ipcRenderer.invoke('products:refreshCanonicalSource', payload),
+    refreshProductAnalysis: (payload: { productId: string }) => ipcRenderer.invoke('products:refreshProductAnalysis', payload),
     ensureSegmentBucketsFromTemplates: () =>
       ipcRenderer.invoke('products:ensureSegmentBucketsFromTemplates') as Promise<{ ok: true; patched: number }>,
+  },
+  tiktokListing: {
+    list: () => ipcRenderer.invoke('plugin:tiktokListing:list'),
+    getExportCategoryConfigs: () => ipcRenderer.invoke('plugin:tiktokListing:getExportCategoryConfigs'),
+    saveExportCategoryConfigs: (payload: any) => ipcRenderer.invoke('plugin:tiktokListing:saveExportCategoryConfigs', payload),
+    createOrUpdate: (payload: any) => ipcRenderer.invoke('plugin:tiktokListing:createOrUpdate', payload),
+    generate: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokListing:generate', payload),
+    remove: (id: string) => ipcRenderer.invoke('plugin:tiktokListing:remove', id),
+    exportExcel: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:tiktokListing:exportExcel', payload),
   },
 
   templates: {
@@ -601,4 +648,3 @@ const api = {
 contextBridge.exposeInMainWorld('api', api)
 
 export type PreloadApi = typeof api
-

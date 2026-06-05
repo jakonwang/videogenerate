@@ -701,7 +701,18 @@ function AnalyzeStage({
   const analysis = workspace.project?.analysis || workspace.project?.analysisResult || workspace.project?.referenceAnalysis
   const referenceVideoName = toFileName(workspace.project?.referenceVideoPath || workspace.project?.referenceVideoName || workspace.referenceFile?.name || '')
   const canAnalyze = Boolean(workspace.referenceFile || workspace.project?.referenceVideoPath)
-  const referencePreview = workspace.referenceFile ? URL.createObjectURL(workspace.referenceFile) : workspace.helpers.previewSrc(workspace.project?.referenceVideoPath || '')
+  const [referencePreview, setReferencePreview] = useState('')
+  useEffect(() => {
+    if (!workspace.referenceFile) {
+      setReferencePreview(workspace.helpers.previewSrc(workspace.project?.referenceVideoPath || ''))
+      return
+    }
+    const objectUrl = URL.createObjectURL(workspace.referenceFile)
+    setReferencePreview(objectUrl)
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }, [workspace.referenceFile, workspace.helpers, workspace.project?.referenceVideoPath])
   const analysisReady = Boolean(analysis)
   const currentModel = workspace.models.find((model: any) => model.id === workspace.selectedModelId) || workspace.models[0] || null
   const analysisStatus = analysisReady ? '已完成' : workspace.analyzeMutation.isPending ? '分析中' : '待分析'
@@ -1025,6 +1036,7 @@ function ScriptStage({ workspace, onPrev, onNext }: { workspace: ReturnType<type
                   const variantId = String(item.id || item.variantId || `variant-${index}`)
                   const active = workspace.selectedVariantId === variantId
                   const score = Number(item.score || item.totalScore || 92 - index * 4)
+                  const isReferenceScript = String(item.title || '').trim() === '参考视频原脚本'
                   return (
                     <button
                       data-testid={`script-variant-option-${variantId}`}
@@ -1043,7 +1055,7 @@ function ScriptStage({ workspace, onPrev, onNext }: { workspace: ReturnType<type
                           <div className="flex items-center gap-3">
                             <span className={cn('h-5 w-5 rounded-full border', active ? 'border-violet-300 bg-violet-400/20' : 'border-white/20')} />
                             <span className="text-[15px] font-semibold text-white">{`版本 ${String(index + 1).padStart(2, '0')}`}</span>
-                            {index === 0 ? <span className="rounded-lg bg-violet-500/18 px-2 py-1 text-[11px] font-medium text-violet-100">推荐</span> : null}
+                            {isReferenceScript ? <span className="rounded-lg bg-emerald-500/18 px-2 py-1 text-[11px] font-medium text-emerald-100">默认</span> : null}
                           </div>
                           <p className="mt-4 line-clamp-3 text-[14px] leading-7 text-slate-300">
                             {compactText(item.script || item.text || item.content || item.description, '暂无脚本内容')}

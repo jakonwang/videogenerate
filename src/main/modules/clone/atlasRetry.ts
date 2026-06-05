@@ -7,6 +7,7 @@ type RetryOptions = {
   label: string
   retries?: number
   baseDelayMs?: number
+  timeoutMs?: number
 }
 
 const atlasMediaUrlCache = new Map<string, string>()
@@ -53,6 +54,35 @@ async function atlasFetchWithRetry<T>(
     }
   }
   throw new Error(`${options.label} 澶辫触: ${String((lastError as any)?.message ?? lastError ?? 'unknown error')}`)
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 90_000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error(`request timeout after ${timeoutMs}ms`)), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function readArrayBufferWithTimeout(res: Response, timeoutMs = 90_000) {
+  return await new Promise<ArrayBuffer>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`response body timeout after ${timeoutMs}ms`)), timeoutMs)
+    res.arrayBuffer().then(
+      (buffer) => {
+        clearTimeout(timer)
+        resolve(buffer)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
 }
 
 async function parseAtlasResponse(res: Response, label: string) {
@@ -135,10 +165,10 @@ export async function postAtlasJson(url: string, key: string, body: AnyJson, lab
 
 export async function getAtlasJson(url: string, key: string, label = 'AtlasCloud GET') {
   return atlasFetchWithRetry(async () => {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'GET',
       headers: { Authorization: `Bearer ${key}` },
-    })
+    }, 45_000)
     const { json } = await parseAtlasResponse(res, label)
     return json
   }, { label })
@@ -146,14 +176,14 @@ export async function getAtlasJson(url: string, key: string, label = 'AtlasCloud
 
 export async function downloadAtlasToBuffer(url: string, label = 'AtlasCloud 涓嬭浇') {
   return atlasFetchWithRetry(async () => {
-    const res = await fetch(url)
+    const res = await fetchWithTimeout(url, undefined, 90_000)
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       throw new Error(`${res.status} ${text || res.statusText}`)
     }
     const text = await res.clone().text().catch(() => '')
     if (isRetriableText(text)) throw new Error(text)
-    return Buffer.from(await res.arrayBuffer())
+    return Buffer.from(await readArrayBufferWithTimeout(res, 90_000))
   }, { label })
 }
 

@@ -108,7 +108,7 @@ export async function renderVideo(opts: RenderOptions) {
     // 容错：保证最小 duration，避免除 0 或极小值导致滤镜异常
     const fx = plan.segments[i].fx ?? { zoom: 1.0, moveX: 0, moveY: 0 }
     const dur = Math.max(0.1, plan.segments[i].durationSec)
-    const speed = Math.max(0.9, Math.min(1.12, Number(plan.segments[i].jitter?.speed ?? 1)))
+    const speed = Math.max(0.985, Math.min(1.015, Number(plan.segments[i].jitter?.speed ?? 1)))
     const color = plan.segments[i].jitter?.color
     const base = plan.colorGrade
     // 先统一到 1080x1920，再做轻微 zoom + 位置移动（更像“真人剪辑”）

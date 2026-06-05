@@ -1,4 +1,4 @@
-﻿import type { UserSubscription } from '@shared/web-api/types'
+import type { UserSubscription } from '@shared/web-api/types'
 
 import { StatusBadge } from '../ui/badge'
 import { Card } from '../ui/card'
