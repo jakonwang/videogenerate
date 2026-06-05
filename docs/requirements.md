@@ -12205,6 +12205,32 @@ Web 前端只重构视觉层级、布局系统、组件结构与文案体系，�
   - `npm run test:storyboard-model-lock`
   - `npm run typecheck`
 
+## 2026-06-03 TikTok 商品上架助手商品图尺寸要求确认
+
+- 需求
+  - TikTok 商品上架助手生成的商品图需要按上架要求固定为 `1024x1024`，避免误用非方图尺寸。
+- 变更文件
+  - `src/main/modules/clone/gptImage.ts`
+  - `src/main/modules/clone/grsai.ts`
+  - `test/tiktok-listing-grs-image-aspect-ratio.smoke.ts`
+  - `package.json`
+  - `docs/requirements.md`
+- 实现说明
+  - TikTok 商品上架助手主链路仍统一使用 `outputSize: '1024x1024'`。
+  - 修复 GRS.AI 图片请求体之前把 `aspectRatio` 写死为 `9:16` 的问题，改为根据 `outputSize` 自动推导：
+    - `1024x1024 -> 1:1`
+    - 横图尺寸 -> `16:9`
+    - 竖图尺寸 -> `9:16`
+  - TikTok 商品上架助手走 GRS.AI 生成商品图时，现在会实际下发 `aspectRatio: '1:1'`，不再出现 prompt 写方图、请求体仍是竖图的冲突。
+  - 新增 smoke test，直接校验 GRS.AI `/v1/draw/completions` 请求体中的 `aspectRatio` 为 `1:1`。
+- 使用说明
+  - 在 TikTok 商品上架助手里重新生成商品图时，默认应输出 `1024x1024` 方图，可直接用于当前商品上架场景。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 请求组包逻辑与 smoke test，不依赖平台专属能力，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run test:tiktok-listing-grs-image-aspect-ratio`
+  - `npm run test:tiktok-listing-plugin`
+
 ## 2026-06-02 分镜图提示词构造全面收紧
 
 - 需求

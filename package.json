@@ -73,6 +73,7 @@
     "test:clone-storyboard-image-force-regenerate-clears-stale-frame": "tsx test/clone-storyboard-image-force-regenerate-clears-stale-frame.smoke.ts",
     "test:clone-shot-video-succeeded-url-downloads-from-retryable": "tsx test/clone-shot-video-succeeded-url-downloads-from-retryable.smoke.ts",
     "test:tiktok-listing-plugin": "tsx test/tiktok-listing-plugin.smoke.ts",
+    "test:tiktok-listing-grs-image-aspect-ratio": "tsx test/tiktok-listing-grs-image-aspect-ratio.smoke.ts",
     "test:tiktok-listing-prompts": "tsx test/tiktok-listing-prompts.smoke.ts"
   },
   "dependencies": {

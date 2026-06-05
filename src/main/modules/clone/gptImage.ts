@@ -42,6 +42,17 @@ type GenerateImageInput = {
   outputSize?: string
 }
 
+function inferAspectRatioFromOutputSize(outputSize: string | undefined): '1:1' | '9:16' | '16:9' {
+  const value = String(outputSize || '').trim().toLowerCase()
+  const match = value.match(/^(\d+)\s*x\s*(\d+)$/)
+  if (!match) return '9:16'
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!width || !height) return '9:16'
+  if (width === height) return '1:1'
+  return width > height ? '16:9' : '9:16'
+}
+
 const OPENAI_IMAGE_URL = 'https://api.openai.com/v1/images/generations'
 const OPENAI_IMAGE_EDIT_URL = 'https://api.openai.com/v1/images/edits'
 const ATLASCLOUD_IMAGE_HOST = 'https://api.atlascloud.ai'
@@ -346,6 +357,7 @@ async function postGrsImage(input: GenerateImageInput) {
     credentials: input.credentials,
     prompt: input.prompt,
     negativePrompt: input.negativePrompt,
+    aspectRatio: inferAspectRatioFromOutputSize(input.outputSize),
     urls,
   })
   const outputUrl = created.directUrl || (created.taskId ? (await waitGrsResult(input.credentials, created.taskId)).outputUrl : '')
