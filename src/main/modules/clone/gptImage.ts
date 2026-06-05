@@ -1118,50 +1118,63 @@ export function buildGptFramePrompt(input: {
   const shot = input.shot
   const isEnd = input.which === 'end'
   const productSceneLock = buildStoryboardLockedSceneText(input.productType, shot)
-  const actionLock = buildStoryboardLockedActionText(input.productType, shot.actionDescription)
   const productFocusLock = buildStoryboardLockedProductFocusText(input.productType)
   const faceCropLock = buildStoryboardFaceCropLockText(input.productType, shot)
-  const continuityLock = buildCompactFrameContinuityText({ isEnd, shotIndex: shot.index })
   const compiledFramePrompt = sanitizeCompiledFramePrompt(input.productType, input.compiledPrompt)
   const faceControlText = buildFaceControlText(input.productType, shot)
+  const roleText = String(shot.role || shot.purpose || 'product demo').trim() || 'product demo'
+  const referenceShotTranslation = String(
+    shot.visualPrompt || shot.visual || shot.visualDescription || 'follow only the storyboard composition, crop, and viewing angle from the reference shot',
+  ).trim()
   return [
-    isEnd
-      ? `Generate the ending keyframe for shot ${shot.index + 1}. It must be a small continuation from the provided GPT start frame.`
-      : `Generate the opening keyframe for shot ${shot.index + 1}.`,
+    '[TYPE]',
+    'Storyboard keyframe (static image).',
     [
-      '[ABSOLUTE RULES]',
-      'Product = Image 1 (ONLY source of truth)',
-      'The product is fixed and must remain 100% identical',
-      'No redesign, no replacement, no approximation',
-      'If conflict occurs -> ALWAYS follow Image 1',
+      '[PRODUCT LOCK - SINGLE SOURCE]',
+      'Product must be EXACTLY identical to Image 1.',
+      'No redesign, no replacement, no approximation, no hidden-structure completion, and no inference beyond the visible reference.',
+      'If mismatch occurs -> fail generation.',
     ].join('\n'),
     [
-      '[INPUT ROLE MAP]',
+      '[ROLE MAP]',
       'Image 1 -> product only',
       'Image 2 -> model identity only',
-      isEnd ? 'Image 3 -> continuation angle / framing / composition only' : 'Image 3 -> pose / framing / composition only',
-      'No cross-usage allowed',
+      'Image 3 -> composition / framing only',
+      'No cross-usage allowed.',
       buildReferenceResponsibilityText({ mode: 'storyboard_frame', isEndFrame: isEnd }),
     ].join('\n'),
-    buildShotControlText({ productType: input.productType, shot, isEnd }),
+    [
+      '[COMPOSITION]',
+      'Single static keyframe.',
+      'Static frame only. No motion implied.',
+      `Shot role: ${roleText}.`,
+      `Reference composition anchor: ${referenceShotTranslation}.`,
+      `Scene lock: ${productSceneLock}`,
+      `Product focus lock: ${productFocusLock}`,
+    ].join('\n'),
+    [
+      '[CAMERA]',
+      'Static frame.',
+      'No motion.',
+      'No zoom description.',
+      'Express only the final framing state of the shot.',
+    ].join('\n'),
+    [
+      '[MODEL]',
+      'Use only the selected model identity from Image 2.',
+      'Neutral pose.',
+      'Neutral expression.',
+      'No motion implied.',
+      identityText(input.modelPack),
+    ].join('\n'),
+    '[HIERARCHY]\nproduct > local wearing context > body > face',
     faceControlText,
+    faceCropLock,
+    buildStoryboardAngleLockText(shot, { isEnd: false }),
+    buildStoryboardSceneAuthorityText(shot, { isEnd: false }),
+    '[STORYBOARD ALIGNMENT]\nMatch Image 3 for angle, crop, framing distance, and composition only.\nDo NOT let Image 3 redefine product design, product structure, or model identity.',
     buildRestrictionsText(input.productType, shot),
     buildOutputText(),
-    'Execution notes:',
-    faceCropLock,
-    continuityLock,
-    `Action lock: ${actionLock}`,
-    `Scene lock: ${productSceneLock}`,
-    `Product focus lock: ${productFocusLock}`,
-    identityText(input.modelPack),
-    `Reference shot translation: ${String(shot.visualPrompt || shot.visual || 'use only composition, framing, action rhythm and camera grammar from the reference shot').trim()}.`,
-    `Shot role: ${String(shot.role || shot.purpose || 'product demo')}. Duration target: ${Number(shot.durationSec || 3).toFixed(1)} seconds.`,
-    `Camera motion target: ${String(shot.motion || 'static')}. Keep changes restrained and realistic.`,
-    isEnd
-      ? 'The ending frame must keep the same new model, same product, same outfit, same location, same lighting, same emotion and same camera setup as the provided start frame. Only allow subtle hand, expression or camera-position continuation.'
-      : 'Keep the original shot background category, composition, body pose, hand placement and product demonstration action. Replace only the person identity with the new virtual model. Do not let the human become the subject.',
-    buildStoryboardAngleLockText(shot, { isEnd }),
-    buildStoryboardSceneAuthorityText(shot, { isEnd }),
     buildDirectProductReuseLockText(input.productType, input.productDescription || input.productPoints),
     compiledFramePrompt ? `Compiled product-control layer: ${compiledFramePrompt}` : '',
   ].join('\n')

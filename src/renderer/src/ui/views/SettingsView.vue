@@ -48,6 +48,7 @@ const modelCredentials = ref({
   videoModelFallback: 'google/veo3.1-lite/image-to-video',
   grsaiVideoModel: 'grok-video-3',
   imageProviderPrimary: 'apifox_hub' as ProviderKey,
+  openaiImageQuality: 'high' as 'low' | 'medium' | 'high',
   chatProviderPrimary: 'apifox_hub' as 'apifox_hub' | 'grsai',
   apifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
   videoApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
@@ -280,6 +281,8 @@ const chatPrimaryModelBinding = computed({
   },
 })
 
+const imageQualityLabel = computed(() => String(modelCredentials.value.openaiImageQuality || 'high').toUpperCase())
+
 const summaryCards = computed(() => [
   {
     title: '视频模型',
@@ -291,7 +294,7 @@ const summaryCards = computed(() => [
   {
     title: '图片模型',
     value: capabilityProviderLabel(modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
-    meta: imagePrimaryModelBinding.value || '未设置模型',
+    meta: `${imagePrimaryModelBinding.value || '未设置模型'} / ${imageQualityLabel.value}`,
     tone: 'cyan',
     icon: ImageIcon,
   },
@@ -635,6 +638,14 @@ onMounted(() => {
                   <span>图片模型</span>
                   <input v-model="imagePrimaryModelBinding" placeholder="例如 gpt-image-1" />
                 </label>
+                <label>
+                  <span>图片质量</span>
+                  <select v-model="modelCredentials.openaiImageQuality">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
               </div>
             </article>
 
@@ -705,7 +716,7 @@ onMounted(() => {
           </div>
           <div class="side-list">
             <div class="side-row"><span>视频</span><strong>{{ capabilityProviderLabel(modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || '未设置' }}</strong></div>
-            <div class="side-row"><span>图片</span><strong>{{ capabilityProviderLabel(modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || '未设置' }}</strong></div>
+            <div class="side-row"><span>图片</span><strong>{{ capabilityProviderLabel(modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || '未设置模型' }} / {{ imageQualityLabel }}</strong></div>
             <div class="side-row"><span>对话</span><strong>{{ capabilityProviderLabel(modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || '未设置' }}</strong></div>
           </div>
         </section>
@@ -718,6 +729,7 @@ onMounted(() => {
             <div class="bullet-item">先在“开放平台”填写 API Key 和 Base URL，再到“能力模型”选择平台与模型。</div>
             <div class="bullet-item">同一平台的凭证只维护一份，视频、图片、对话会复用，用户更容易理解。</div>
             <div class="bullet-item">保存后会立刻重新读取配置，避免前端展示与实际生效配置不一致。</div>
+            <div class="bullet-item">图片质量会跟随当前设置一起传递到图片生成调用，用于分镜图、模特图和商品图相关链路。</div>
           </div>
         </section>
       </aside>
