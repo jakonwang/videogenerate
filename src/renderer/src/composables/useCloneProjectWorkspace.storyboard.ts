@@ -228,17 +228,44 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
         projectActions.applyProject((syncedProject?.project || options.current.value) as TProject, 'replace')
       }
       const storyboardRefs = preferredStoryboardRefs(options.current.value, input.effectiveProductRefs)
-      const res = await window.api.clone.generateAllShotFrames({
+      const res = (await window.api.clone.generateAllShotFrames({
         cloneProjectId: projectId,
         shotIds,
         which: 'start',
         forceRegenerate: true,
         productReferenceImagePaths: storyboardRefs,
-      })
+      })) as StoryboardGenerateResponse<TProject> & {
+        errors?: Array<{ shotId?: string; index?: number; reason?: string }>
+      }
       projectActions.applyProject(((res as { project?: TProject } | null)?.project || options.current.value) as TProject, 'replace')
       const latest = (await projectActions.waitForStoryboardFrames(projectId, 20000, shotIds)) || null
       if (latest?.id) {
         projectActions.applyProject(latest, 'replace')
+      }
+      if (options.storyboardBatchSummary) {
+        options.storyboardBatchSummary.value = res.queueSummary || null
+      }
+      const failedCount = Number(res.queueSummary?.failed ?? 0)
+      if (failedCount > 0) {
+        const latestProject = (latest?.id ? latest : ((res.project || options.current.value) as TProject | null)) as TProject | null
+        const latestShots = Array.isArray(latestProject?.blueprint?.shots) ? latestProject.blueprint.shots : []
+        const firstFailedReason =
+          shotIds
+            .map((shotId) => {
+              const item = latestShots.find((shot) => String(shot?.id || '').trim() === shotId)
+              const reason = String(item?.gptFrameError || item?.error || '').trim()
+              if (!reason) return ''
+              const label = options.shotLabel?.(shotId) || shotId
+              return `${label}: ${reason}`
+            })
+            .find(Boolean) ||
+          (Array.isArray(res.errors)
+            ? res.errors
+                .map((item) => String(item?.reason || '').trim())
+                .find(Boolean)
+            : '') ||
+          `仍有 ${failedCount} 条分镜图片生成失败`
+        throw new Error(firstFailedReason)
       }
       options.pushRuntimeLog?.(
         `批量重生成分镜图片已提交，共 ${shotIds.length} 条，通道：${resolved?.channel || 'unknown'}`,

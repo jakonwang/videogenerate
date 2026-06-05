@@ -648,6 +648,35 @@ const storyboardDesignRows = computed(() =>
       }
     }),
 )
+const selectedStoryboardErrorText = computed(() => safeText(selectedStoryboardRow.value?.error, ''))
+const selectedStoryboardErrorAdvice = computed(() => {
+  const errorText = selectedStoryboardErrorText.value.toLowerCase()
+  if (!errorText) return ''
+  if (errorText.includes('请先生成并确认新模特身份包')) return '先到模特页生成并确认新的模特身份包，再回到当前任务重新生成分镜。'
+  if (errorText.includes('请先选择商品库商品')) return '先绑定商品库商品，并确认当前项目已经同步到商品参考图后再重试。'
+  if (errorText.includes('请先完成参考视频分析')) return '先回到参考分析阶段完成参考视频分析，再继续生成分镜图片。'
+  if (errorText.includes('产品标准源生成失败')) return '请更换更清晰、无遮挡的商品图，或确认当前项目已回退到可用原图后再重试。'
+  if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) {
+    return '请检查当前图片模型供应商、模型配置和 API 凭证是否可用，然后再重试。'
+  }
+  return '请先根据原始报错修正前置条件，再重新生成当前分镜；如果仍失败，再结合运行日志继续排查。'
+})
+const selectedStoryboardErrorTitle = computed(() => {
+  const errorText = selectedStoryboardErrorText.value.toLowerCase()
+  if (!errorText) return ''
+  if (errorText.includes('请先生成并确认新模特身份包')) return '缺少模特身份包'
+  if (errorText.includes('请先选择商品库商品')) return '缺少商品绑定'
+  if (errorText.includes('请先完成参考视频分析')) return '缺少参考分析'
+  if (errorText.includes('产品标准源生成失败')) return '商品参考图不可用'
+  if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) return '模型配置异常'
+  return '分镜生成失败'
+})
+const selectedStoryboardErrorAction = computed(() => {
+  const errorText = selectedStoryboardErrorText.value.toLowerCase()
+  if (!errorText) return ''
+  if (errorText.includes('请先生成并确认新模特身份包')) return 'go-models'
+  return ''
+})
 const shotVideoOutputStateSignature = computed(() =>
   shotVideoOutputs.value.reduce(
     (acc, item) => {
@@ -790,10 +819,24 @@ const activeProjectId = computed(() => resolveActiveProjectId(current.value?.id)
 const isDraftingNewProject = computed(() => Boolean(referenceVideoPath.value.trim()) && !current.value?.id)
 const hasSelectedProductBinding = computed(() => Boolean(String(selectedProductId.value || current.value?.productId || '').trim()))
 const hasBoundModel = computed(() => Boolean(selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id))
+const hasReadyModelIdentityPack = computed(() => {
+  const paths = Array.isArray(modelSnapshot.value?.imagePaths)
+    ? modelSnapshot.value?.imagePaths.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+  return Boolean(String(modelSnapshot.value?.id || '').trim()) && paths.length > 0
+})
 const hasUsableStoryboardProductRefs = computed(() => originalProductRefs.value.length > 0)
 const hasUsableExtractedProductRefs = computed(() => sanitizedProductRefs.value.length > 0 || originalProductRefs.value.length > 0)
 const canGenerateStoryboardFrames = computed(
-  () => Boolean(activeProjectId.value && selectedVariantId.value && hasUsableStoryboardProductRefs.value && hasUsableExtractedProductRefs.value && hasBoundModel.value),
+  () =>
+    Boolean(
+      activeProjectId.value &&
+        selectedVariantId.value &&
+        hasUsableStoryboardProductRefs.value &&
+        hasUsableExtractedProductRefs.value &&
+        hasBoundModel.value &&
+        hasReadyModelIdentityPack.value,
+    ),
 )
 const storyboardFrameBlockReason = computed(() => {
   if (!activeProjectId.value) return '请先完成参考视频分析'
@@ -803,6 +846,7 @@ const storyboardFrameBlockReason = computed(() => {
     return safeText(current.value?.productImageSanitizationError, '产品标准源生成失败且没有可用原图，请重新绑定更清晰的商品库商品。')
   }
   if (!hasBoundModel.value) return '请先选择模特'
+  if (!hasReadyModelIdentityPack.value) return '请先生成并确认新模特身份包'
   return ''
 })
 const failedShotOutputs = computed(() =>
@@ -1524,6 +1568,12 @@ function openRuntimeDialog() {
 
 function closeRuntimeDialog() {
   runtimeDialogOpen.value = false
+}
+
+function handleStoryboardErrorAction() {
+  if (selectedStoryboardErrorAction.value === 'go-models') {
+    void router.push('/models')
+  }
 }
 
 function extractFailureTag(errorText: string) {
@@ -2414,6 +2464,11 @@ function toggleSelectAllStoryboardShots() {
 }
 
 async function generateStoryboardGrids() {
+  if (storyboardFrameBlockReason.value) {
+    markError(storyboardFrameBlockReason.value, storyboardFrameBlockReason.value)
+    setStageLog(storyboardFrameBlockReason.value, 'error')
+    return
+  }
   await generateStoryboardGridsInWorkspace({
     effectiveProductRefs: effectiveProductRefs.value,
     hasBoundModel: hasBoundModel.value,
@@ -2425,6 +2480,11 @@ async function generateStoryboardGrids() {
 async function regenerateStoryboardFrame(shotId: string) {
   const normalizedShotId = String(shotId || '').trim()
   if (!normalizedShotId) return
+  if (storyboardFrameBlockReason.value) {
+    markError(storyboardFrameBlockReason.value, storyboardFrameBlockReason.value)
+    setStageLog(storyboardFrameBlockReason.value, 'error')
+    return
+  }
   if (regeneratingStoryboardShotIds.value.includes(normalizedShotId)) {
     setStageLog(`${shotLabel(normalizedShotId)} 正在重新生成，请不要重复点击。`)
     return
@@ -2439,6 +2499,11 @@ async function regenerateStoryboardFrame(shotId: string) {
 }
 
 async function regenerateUnlockedStoryboardFrames() {
+  if (storyboardFrameBlockReason.value) {
+    markError(storyboardFrameBlockReason.value, storyboardFrameBlockReason.value)
+    setStageLog(storyboardFrameBlockReason.value, 'error')
+    return
+  }
   const targets = blueprintShots.value
     .filter((shot) => !shot.locked)
     .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
@@ -2459,6 +2524,11 @@ async function regenerateUnlockedStoryboardFrames() {
 }
 
 async function regenerateFailedStoryboardFrames() {
+  if (storyboardFrameBlockReason.value) {
+    markError(storyboardFrameBlockReason.value, storyboardFrameBlockReason.value)
+    setStageLog(storyboardFrameBlockReason.value, 'error')
+    return
+  }
   if (regeneratingFailedStoryboardFrames.value) {
     setStageLog('失败分镜正在批量重新生成，请不要重复点击。')
     return
@@ -2487,6 +2557,11 @@ async function regenerateFailedStoryboardFrames() {
 }
 
 async function regenerateSelectedStoryboardFrames() {
+  if (storyboardFrameBlockReason.value) {
+    markError(storyboardFrameBlockReason.value, storyboardFrameBlockReason.value)
+    setStageLog(storyboardFrameBlockReason.value, 'error')
+    return
+  }
   const targets = storyboardDesignRows.value
     .map((row) => row.shotId)
     .filter((shotId) => selectedStoryboardShotIds.value.includes(shotId))
@@ -3579,6 +3654,22 @@ onUnmounted(() => {
 
                 <div class="storyboard-preview-tags">
                   <em v-for="tag in selectedStoryboardRow?.tags || []" :key="`preview-${tag}`">{{ tag }}</em>
+                </div>
+                <div v-if="selectedStoryboardErrorText" class="storyboard-preview-error">
+                  <div class="storyboard-preview-error__head">
+                    <strong>真实报错原因</strong>
+                    <span>{{ selectedStoryboardErrorTitle }}</span>
+                  </div>
+                  <div class="storyboard-preview-error__body">
+                    <p>{{ selectedStoryboardErrorText }}</p>
+                  </div>
+                  <div class="storyboard-preview-error__advice">
+                    <span>处理建议</span>
+                    <p>{{ selectedStoryboardErrorAdvice }}</p>
+                  </div>
+                  <div v-if="selectedStoryboardErrorAction === 'go-models'" class="storyboard-preview-error__actions">
+                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">去生成身份包</button>
+                  </div>
                 </div>
               </div>
 
@@ -6582,6 +6673,58 @@ localLastFramePath: ${safeText(shotVideoPromptPreview.localLastFramePath, '--')}
   color: #b8c6e6;
   font-style: normal;
   font-size: 11px;
+}
+
+.storyboard-preview-error {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 120, 120, 0.22);
+  background: linear-gradient(180deg, rgba(60, 16, 24, 0.66), rgba(37, 12, 19, 0.78));
+}
+
+.storyboard-preview-error__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.storyboard-preview-error__head strong {
+  color: #ffd7dc;
+  font-size: 13px;
+}
+
+.storyboard-preview-error__head span {
+  color: #ffb8c2;
+  font-size: 11px;
+}
+
+.storyboard-preview-error__body,
+.storyboard-preview-error__advice {
+  display: grid;
+  gap: 6px;
+}
+
+.storyboard-preview-error__body p,
+.storyboard-preview-error__advice p {
+  margin: 0;
+  color: #ffe7eb;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.storyboard-preview-error__advice span {
+  color: #ffb8c2;
+  font-size: 11px;
+}
+
+.storyboard-preview-error__actions {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .storyboard-preview-script {

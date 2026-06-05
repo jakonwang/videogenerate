@@ -37,6 +37,11 @@ const emit = defineEmits<{
 
 const runtimeNoisePatterns = [/runtime console ready/i, /open export config dialog/i, /view item/i, /remove listing image/i, /refresh list$/i]
 
+const cloneDebugNoisePatterns = [
+  /\[clone-debug\]\s+repo-upsert-project/i,
+  /\[clone-debug\]\s+stage-state/i,
+]
+
 const runtimeImportantPatterns = [
   /model-routing/i,
   /start generate/i,
@@ -57,6 +62,7 @@ function isImportantRuntimeLog(item: RuntimeLogItem) {
   if (!text) return false
   if (item.level === 'error' || item.level === 'success') return true
   if (runtimeNoisePatterns.some((pattern) => pattern.test(text))) return false
+  if (cloneDebugNoisePatterns.some((pattern) => pattern.test(text))) return false
   return runtimeImportantPatterns.some((pattern) => pattern.test(text))
 }
 
@@ -154,6 +160,8 @@ function resolveRuntimeAction(item: RuntimeLogItem) {
 function formatRuntimeMessage(message: string) {
   const text = String(message || '').trim()
   if (!text) return ''
+
+  if (cloneDebugNoisePatterns.some((pattern) => pattern.test(text))) return ''
 
   if (text.includes('tiktok-listing-model-routing')) {
     const provider = extractJsonValue(text, 'provider') || '未知平台'
