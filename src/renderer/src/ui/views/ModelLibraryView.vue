@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -168,7 +168,7 @@ const projectOptions = computed(() =>
 )
 
 const statusOptions = [
-  { value: 'all' as const, label: '全部性别' },
+  { value: 'all' as const, label: '全部状态' },
   { value: 'done' as const, label: '在线模特' },
   { value: 'generating' as const, label: '生成中' },
   { value: 'failed' as const, label: '生成失败' },
@@ -188,7 +188,7 @@ const pageSizeOptions = [
   { value: 16, label: '16 条/页' },
 ]
 
-const statusFilterLabel = computed(() => statusOptions.find((item) => item.value === statusFilter.value)?.label ?? '全部性别')
+const statusFilterLabel = computed(() => statusOptions.find((item) => item.value === statusFilter.value)?.label ?? '全部状态')
 const productTypeLabel = computed(() => productTypeOptions.find((item) => item.value === productType.value)?.label ?? '全部风格')
 const pageSizeLabel = computed(() => pageSizeOptions.find((item) => item.value === pageSize.value)?.label ?? '8 条/页')
 const modelProfileGroups = getModelProfileOptionGroups()
@@ -224,7 +224,7 @@ const modelProfileSections = computed(() => [
   {
     key: 'scene' as const,
     label: '场景倾向',
-    description: '场景与风格重心',
+    description: '场景与风格重点',
     groups: modelProfileGroups.filter((group) => ['sceneStyle', 'styleBias'].includes(group.key)),
   },
 ])
@@ -501,12 +501,12 @@ function modelStatusTone(status?: string) {
 function modelTitle(item: ModelIdentityLibraryItem, index: number) {
   const name = String(item.name || '').trim()
   if (name) return name
-  return `AI模特 ${String(index + 1).padStart(3, '0')}`
+  return `AI 模特 ${String(index + 1).padStart(3, '0')}`
 }
 
 function modelDescriptionPreview(text?: string) {
   const content = String(text || '').replace(/\s+/g, ' ').trim()
-  if (!content) return '清新自然的邻家女孩形象，笑容甜美，气质温柔，适合各类生活化和产品展示类视频内容。'
+  if (!content) return '清新自然的邻家女孩形象，笑容甜美，气质温柔，适合生活化和产品展示类视频内容。'
   return content.length > 110 ? `${content.slice(0, 110)}...` : content
 }
 
@@ -536,7 +536,7 @@ function modelMetrics(item?: ModelIdentityLibraryItem | null) {
 
 function languageText(item?: ModelIdentityLibraryItem | null) {
   const text = String(item?.model || '').trim()
-  return text || '中文 英文'
+  return text || '中文 / 英文'
 }
 
 function toggleDropdown(key: Exclude<DropdownKey, null>) {
@@ -1010,8 +1010,6 @@ async function previewModelPrompt() {
     })
     message.value = '已使用本地兜底生成提示词预览，重启桌面端后会切换为主进程真实预览'
     return
-    message.value = '已使用本地兜底生成提示词预览，重启桌面端后会切换为主进程真实预览'
-    message.value = '已生成当前创建模特的提示词预览'
   } catch (e: any) {
     console.error('[model-library] previewModelPrompt failed', e)
     message.value = `提示词预览失败：${String(e?.message ?? e)}`
@@ -1070,11 +1068,9 @@ watch(productType, (value) => {
           </div>
           <div class="models-hero__actions">
             <button type="button" class="models-ghost-button" @click="openCreatePanel">
-              <Download class="h-4 w-4" />
               <span>导入模特</span>
             </button>
             <button type="button" class="models-top-primary" data-testid="models-open-create" @click="openCreatePanel">
-              <span>+</span>
               <span>创建模特</span>
             </button>
           </div>
@@ -1154,7 +1150,6 @@ watch(productType, (value) => {
 
               <div class="models-toolbar__search">
                 <div class="models-input models-input--search">
-                  <Search class="h-4 w-4" />
                   <input v-model="search" type="text" placeholder="搜索模特名称 / 标签" />
                 </div>
                 <div class="models-view-switch">
@@ -1169,7 +1164,7 @@ watch(productType, (value) => {
             </div>
 
             <div class="models-catalog-head">
-              <div class="models-catalog-head__summary">共 {{ sortedLibrary.length }} 个模特 <span>|</span> 当前展示全部可用模特</div>
+              <div class="models-catalog-head__summary">共 {{ sortedLibrary.length }} 个模特<span>|</span> 当前显示全部可用模特</div>
             </div>
 
             <div v-if="pagedLibrary.length" class="models-card-grid" :class="{ 'is-list': viewMode === 'list' }">
@@ -1220,7 +1215,6 @@ watch(productType, (value) => {
                     <span>{{ item.skinTone || '自然' }}</span>
                   </div>
 
-                  <p class="models-library-card__meta">{{ modelMetrics(item) }}</p>
                   <p class="models-library-card__desc">支持语言：{{ languageText(item) }}</p>
                 </div>
               </article>
@@ -1350,14 +1344,14 @@ watch(productType, (value) => {
           <p class="models-detail-desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
         </div>
 
-        <div class="models-detail-section">
-          <h4>作品预览</h4>
-          <div class="models-preview-strip">
-            <div v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)" :key="`${selectedModel.id}-${imageIndex}`" class="models-preview-strip__item">
-              <img :src="mediaUrl(image)" :alt="`${selectedModel.name}-${imageIndex}`" />
+          <div class="models-detail-section">
+            <h4>作品预览</h4>
+            <div class="models-preview-strip">
+              <div v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)" :key="`${selectedModel.id}-${imageIndex}`" class="models-preview-strip__item">
+                <img :src="mediaUrl(image)" :alt="`${selectedModel.name}-${imageIndex}`" />
+              </div>
             </div>
           </div>
-        </div>
       </aside>
     </section>
 
@@ -1382,7 +1376,7 @@ watch(productType, (value) => {
                 <p>先选择模特的主要方向，再补充细节与商品素材。</p>
               </div>
 
-              <div class="models-field">
+              <label class="models-field">
                 <span>模特设定</span>
                 <div class="models-profile-summary">
                   <div class="models-profile-summary__head">
@@ -1431,16 +1425,33 @@ watch(productType, (value) => {
                     </div>
                   </div>
                 </div>
-              </div>
+              </label>
 
               <label class="models-field">
                 <span>补充描述（可选）</span>
                 <textarea v-model="productPoints" placeholder="例如：更亲和、适合近景佩戴展示、希望更生活化一点"></textarea>
               </label>
+
+              <div class="models-field">
+                <span>批量生成数量</span>
+                <div class="models-chip-row">
+                  <button
+                    v-for="option in batchGenerateOptions"
+                    :key="option.value"
+                    type="button"
+                    class="models-profile-chip models-profile-chip--lg"
+                    :class="{ active: batchGenerateCount === option.value }"
+                    :disabled="busy"
+                    @click="batchGenerateCount = option.value"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
             </section>
 
             <section class="models-create-section models-create-section--soft">
-              <div class="models-create-section__head">
+              <div class="models-section-heading">
                 <h4>参考素材</h4>
                 <p>上传主图、细节图、佩戴图或风格图，帮助模特生成更贴近商品。</p>
               </div>
@@ -1456,7 +1467,7 @@ watch(productType, (value) => {
                   </div>
                 </div>
 
-                <div class="models-upload-grid">
+                <div class="models-upload-panel__actions">
                   <button type="button" data-testid="models-upload-main" @click="pickImageGroup('main')"><ImagePlus class="h-4 w-4" />主图</button>
                   <button type="button" @click="pickImageGroup('detail')"><ImagePlus class="h-4 w-4" />细节图</button>
                   <button type="button" @click="pickImageGroup('usage')"><ImagePlus class="h-4 w-4" />佩戴图</button>
@@ -1468,7 +1479,6 @@ watch(productType, (value) => {
                 <div class="models-upload-preview__hero" :class="{ 'is-empty': !uploadPreviewHero }">
                   <img v-if="uploadPreviewHero" :src="mediaUrl(uploadPreviewHero)" alt="upload-preview" />
                   <div v-else class="models-upload-preview__empty">
-                    <ImagePlus class="h-4 w-4" />
                     <span>上传后将在这里显示素材预览</span>
                   </div>
                 </div>
@@ -1492,28 +1502,11 @@ watch(productType, (value) => {
                 </div>
               </div>
 
-              <div class="models-create-stats">
+              <div class="models-stats-row">
                 <div class="models-stat-card"><span>主图</span><strong>{{ productMainImages.length }}</strong></div>
                 <div class="models-stat-card"><span>细节图</span><strong>{{ productDetailImages.length }}</strong></div>
                 <div class="models-stat-card"><span>佩戴图</span><strong>{{ productUsageImages.length }}</strong></div>
                 <div class="models-stat-card"><span>风格图</span><strong>{{ styleReferenceImages.length }}</strong></div>
-              </div>
-
-              <div class="models-field">
-                <span>批量生成数量</span>
-                <div class="models-chip-row">
-                  <button
-                    v-for="option in batchGenerateOptions"
-                    :key="option.value"
-                    type="button"
-                    class="models-profile-chip models-profile-chip--lg"
-                    :class="{ active: batchGenerateCount === option.value }"
-                    :disabled="busy"
-                    @click="batchGenerateCount = option.value"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
               </div>
 
               <div v-if="message" class="models-hint models-hint--floating">
@@ -1530,13 +1523,12 @@ watch(productType, (value) => {
                   </div>
                   <div class="models-prompt-preview__actions">
                     <button type="button" class="models-secondary-button" :disabled="promptPreviewBusy" @click="previewModelPrompt">
-                      <LoaderCircle v-if="promptPreviewBusy" class="h-4 w-4 animate-spin" />
                       <span>{{ promptPreviewBusy ? '生成中' : '查看提示词' }}</span>
                     </button>
                     <button
                       type="button"
                       class="models-secondary-button"
-                      :disabled="!promptPreview?.prompt"
+                      :disabled="!(promptPreview?.prompt || '')"
                       @click="copyText(promptPreview?.prompt || '', '提示词已复制')"
                     >
                       复制提示词
@@ -1549,7 +1541,6 @@ watch(productType, (value) => {
                     <span>{{ promptPreview.profile.market || '未设置市场' }}</span>
                     <span>{{ promptPreview.profile.outfitStyle || '未设置穿搭' }}</span>
                     <span>{{ promptPreview.profile.sceneStyle || '未设置场景' }}</span>
-                    <span>{{ promptPreview.profile.styleBias || '未设置风格偏向' }}</span>
                     <span>参考图 {{ promptPreview.productReferenceImageCount }} 张</span>
                   </div>
                   <p class="models-prompt-preview__summary">{{ promptPreview.description }}</p>
@@ -1560,7 +1551,6 @@ watch(productType, (value) => {
 
               <button class="models-primary-button models-primary-button--wide" data-testid="models-generate-submit" type="button" :disabled="busy || !hasProductInput" @click="generateModelsBatch">
                 <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
-                <Wand2 v-else class="h-4 w-4" />
                 <span>{{ busy ? '正在生成模特' : '生成新模特' }}</span>
               </button>
             </section>
@@ -1583,9 +1573,7 @@ watch(productType, (value) => {
             <p class="models-dialog__desc">修改模特名称不会影响已生成素材和历史项目文件。</p>
             <label class="models-field">
               <span>模特名称</span>
-              <div class="models-input">
-                <input v-model="renameDraft" type="text" placeholder="输入新的模特名称" />
-              </div>
+              <input v-model="renameDraft" type="text" placeholder="输入新的模特名称" />
             </label>
           </div>
 
@@ -1606,7 +1594,6 @@ watch(productType, (value) => {
               <span>{{ dialogBusy ? '保存中' : '保存名称' }}</span>
             </button>
             <button v-else type="button" class="models-danger-button" :disabled="dialogBusy" @click="deleteModel(dialogTarget)">
-              <LoaderCircle v-if="dialogBusy" class="h-4 w-4 animate-spin" />
               <span>{{ dialogBusy ? '删除中' : '确认删除' }}</span>
             </button>
           </div>
@@ -2757,6 +2744,47 @@ watch(productType, (value) => {
   color: #8ea2bb;
   font-size: 11px;
   line-height: 1.45;
+}
+
+.models-upload-panel__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.models-upload-panel__actions button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 74px;
+  padding: 12px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(81, 99, 146, 0.16);
+  background: rgba(9, 18, 32, 0.72);
+  color: #f3f8ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.models-upload-panel__actions button svg {
+  width: 18px;
+  height: 18px;
+  color: #8fe8ff;
+}
+
+.models-upload-panel__actions button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(124, 92, 255, 0.34);
+  background: rgba(18, 28, 48, 0.92);
 }
 
 .models-upload-preview {

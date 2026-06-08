@@ -153,6 +153,7 @@ function providerQueryUrl(root: string, provider: string, taskId: string, endpoi
       ? `${officialRestBaseUrl(root)}/model/prediction/${encodeURIComponent(taskId)}`
       : `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
   }
+  if (provider === 'xibapi') return `${root}/v1/videos/${encodeURIComponent(taskId)}`
   if (provider === 'vidu') return `${root}/vidu/ent/v2/task/${encodeURIComponent(taskId)}/creations`
   if (provider === 'veo') return `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
   if (provider === 'seedance2') return `${root}/v1/video/generations/${encodeURIComponent(taskId)}`
@@ -175,6 +176,18 @@ function buildAuthHeaders(key: string) {
 
 function clampSeedanceDuration(durationSec: number) {
   return Math.max(4, Math.min(15, Math.round(Number(durationSec || 5))))
+}
+
+type XibapiVideoSize = '1280x720' | '720x1280' | '1920x1080' | '1080x1920'
+
+function normalizeXibapiSize(size?: string): XibapiVideoSize | undefined {
+  const value = String(size || '').trim()
+  if (value === '1280x720' || value === '720x1280' || value === '1920x1080' || value === '1080x1920') return value
+  return undefined
+}
+
+function xibapiSizeByAspectRatio(aspectRatio?: '9:16' | '16:9', preferredSize?: string): XibapiVideoSize {
+  return normalizeXibapiSize(preferredSize) || (aspectRatio === '16:9' ? '1280x720' : '720x1280')
 }
 
 function buildQueryCandidates(input: {
@@ -229,6 +242,7 @@ function buildQueryCandidates(input: {
 }
 
 function createUrlForProvider(root: string, provider: string, capability: UnifiedCapability, endpointStyle: string) {
+  if (provider === 'xibapi') return `${root}/v1/videos`
   if (provider === 'veo') return `${root}/v1/video/create`
   if (provider === 'vidu') return `${root}${viduCreatePath(capability)}`
   if (provider === 'jimeng') return `${root}/v1/video/generations`
@@ -383,6 +397,9 @@ function pickOutputUrl(json: any) {
         json?.data?.video?.download_url ??
         json?.data?.videos?.[0]?.url ??
         json?.data?.videos?.[0]?.download_url ??
+        json?.data?.video_url ??
+        json?.data?.download_url ??
+        json?.data?.url ??
         json?.data?.prediction?.output ??
         json?.data?.prediction?.outputs?.[0] ??
         json?.data?.prediction?.video_url ??
@@ -439,6 +456,10 @@ function pickAllOutputUrls(json: any): string[] {
     json?.videoUrl,
     json?.video_url,
     json?.url,
+    json?.data?.data,
+    json?.data?.data?.url,
+    json?.data?.data?.video_url,
+    json?.data?.data?.download_url,
     json?.data?.result?.data,
     json?.data?.result?.data?.url,
     json?.data?.result?.data?.video_url,
@@ -455,6 +476,8 @@ function pickAllOutputUrls(json: any): string[] {
   if (Array.isArray(json?.data?.output)) values.push(...json.data.output)
   if (Array.isArray(json?.data?.outputs)) values.push(...json.data.outputs)
   if (Array.isArray(json?.data?.videos)) values.push(...json.data.videos.map((item: any) => item?.url || item?.video_url || item?.download_url))
+  if (Array.isArray(json?.data?.images)) values.push(...json.data.images)
+  if (Array.isArray(json?.data?.data)) values.push(...json.data.data)
   if (Array.isArray(json?.data?.result?.videos)) values.push(...json.data.result.videos.map((item: any) => item?.url || item?.video_url || item?.download_url))
   if (Array.isArray(json?.data?.prediction?.videos)) values.push(...json.data.prediction.videos.map((item: any) => item?.url || item?.video_url || item?.download_url))
   if (Array.isArray(json?.data?.result?.data)) values.push(...json.data.result.data)
@@ -772,6 +795,8 @@ export async function createVideoTask(input: {
   lastImage?: string
   referenceImages?: string[]
   durationSec?: number
+  aspectRatio?: '9:16' | '16:9'
+  xibapiSize?: XibapiVideoSize
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
@@ -869,6 +894,13 @@ export async function createVideoTask(input: {
         images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
         aspect_ratio: '9:16',
         size: '1080P',
+      }
+    } else if (cfg.videoProvider === 'xibapi') {
+      body = {
+        model,
+        prompt: input.prompt,
+        size: xibapiSizeByAspectRatio(input.aspectRatio, input.xibapiSize),
+        images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
       }
     } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora') {
       body =
@@ -1013,6 +1045,8 @@ export async function generateVideo(input: {
   lastImage?: string
   referenceImages?: string[]
   durationSec?: number
+  aspectRatio?: '9:16' | '16:9'
+  xibapiSize?: XibapiVideoSize
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
@@ -1103,6 +1137,13 @@ export async function generateVideo(input: {
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
       aspect_ratio: '9:16',
       size: '1080P',
+    }
+  } else if (cfg.videoProvider === 'xibapi') {
+    body = {
+      model,
+      prompt: input.prompt,
+      size: xibapiSizeByAspectRatio(input.aspectRatio, input.xibapiSize),
+      images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
     }
   } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora') {
     body =

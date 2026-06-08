@@ -107,6 +107,140 @@
   "titleBar": {
     "ready": "Ready"
   },
+  "settings": {
+    "hero": {
+      "kicker": "Settings / Control Center",
+      "title": "Platform And Capability Settings",
+      "subtitle": "Configure API keys and base URLs first, then choose the platform and model for video, image, and chat features."
+    },
+    "actions": {
+      "checkUpdates": "Check Updates",
+      "openDataDir": "Open Data Directory",
+      "refresh": "Refresh",
+      "saveSettings": "Save Settings",
+      "saving": "Saving"
+    },
+    "sections": {
+      "platforms": {
+        "label": "Platforms",
+        "desc": "Configure API keys and base URLs"
+      },
+      "capabilities": {
+        "label": "Capabilities",
+        "desc": "Choose video, image, and chat platforms"
+      },
+      "qiniu": {
+        "label": "Qiniu",
+        "desc": "Upload and asset delivery settings"
+      }
+    },
+    "platforms": {
+      "title": "Platform Credentials",
+      "subtitle": "Maintain each platform credential once and reuse it across features.",
+      "fields": {
+        "apiKey": "API Key",
+        "apiToken": "API Token"
+      },
+      "cards": {
+        "kling": { "desc": "Used for AtlasCloud and Kling credentials." },
+        "grsai": { "desc": "Used for GRS.AI video, image, and chat credentials." },
+        "ai666": { "desc": "Used for AI666 platform credentials." },
+        "vectorengine": { "desc": "Used for VectorEngine platform credentials." },
+        "xibapi": { "desc": "Used for XIBAPI platform credentials." },
+        "replicate": { "desc": "Used for local clone image workflows." }
+      }
+    },
+    "capabilities": {
+      "title": "Capabilities",
+      "subtitle": "Choose which platform and model each capability should use.",
+      "fields": {
+        "primaryPlatform": "Primary Platform",
+        "primaryModel": "Primary Model",
+        "fallbackPlatform": "Fallback Platform",
+        "fallbackModel": "Fallback Model",
+        "imageQuality": "Image Quality"
+      },
+      "placeholders": {
+        "videoPrimaryModel": "For example veo_3_1-fast",
+        "videoFallbackModel": "Used when the primary path fails",
+        "imagePrimaryModel": "For example gpt-image-1",
+        "chatPrimaryModel": "For example gemini-3.1-pro"
+      },
+      "quality": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "video": {
+        "title": "Video",
+        "desc": "Primary and fallback settings for video generation."
+      },
+      "image": {
+        "title": "Image",
+        "desc": "Primary settings for image generation and editing."
+      },
+      "chat": {
+        "title": "Chat",
+        "desc": "Script analysis and workflow assistant settings."
+      }
+    },
+    "qiniu": {
+      "title": "Qiniu",
+      "subtitle": "Manage upload, external links, and resource prefixes.",
+      "fields": {
+        "accessKey": "Access Key",
+        "secretKey": "Secret Key",
+        "bucket": "Bucket",
+        "domain": "Domain",
+        "uploadHost": "Upload Host",
+        "prefix": "Prefix"
+      }
+    },
+    "summary": {
+      "title": "Current Summary",
+      "rows": {
+        "video": "Video",
+        "image": "Image",
+        "chat": "Chat"
+      },
+      "cards": {
+        "video": { "title": "Video" },
+        "image": { "title": "Image" },
+        "chat": { "title": "Chat" },
+        "status": {
+          "title": "Status",
+          "waiting": "Waiting to save",
+          "processing": "Processing",
+          "ready": "Ready"
+        }
+      }
+    },
+    "notes": {
+      "title": "Usage Notes",
+      "items": {
+        "credentialsReuse": "Configure each platform credential once under Platforms, then choose its usage under Capabilities.",
+        "xibapiIndependent": "XIBAPI is now an independent video platform and no longer grouped under VectorEngine.",
+        "reloadAfterSave": "Saving reloads the latest settings from the desktop side to keep UI and runtime aligned.",
+        "imageQualityForwarded": "Image quality is forwarded to image generation related flows."
+      }
+    },
+    "messages": {
+      "loaded": "Settings loaded",
+      "loadFailed": "Failed to load settings",
+      "savedAndReloaded": "Settings saved and reloaded",
+      "saveFailed": "Failed to save settings",
+      "dataDirNotFound": "Data directory not found",
+      "dataDirOpened": "Data directory opened",
+      "openDataDirFailed": "Failed to open data directory",
+      "updateCheckStarted": "Update check started",
+      "updateCheckFailed": "Update check failed"
+    },
+    "common": {
+      "show": "Show",
+      "hide": "Hide",
+      "notSet": "Not set"
+    }
+  },
   "cloneView": {
     "videoStage": {
       "title": "Generate Shot Videos",

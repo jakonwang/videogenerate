@@ -797,8 +797,8 @@ export type CloneBlueprintLocalization = {
 }
 
 export type CloneBlueprintRenderHints = {
-  aspectRatio: '9:16'
-  resolution: '1080x1920'
+  aspectRatio: '9:16' | '16:9'
+  resolution: '720x1280' | '1280x720' | '1080x1920' | '1920x1080'
   pacing: 'fast' | 'medium' | 'slow'
   bgmMood: string
   ttsStyle: string
@@ -1149,18 +1149,28 @@ export type ModelCredentials = {
   imageProviderPrimary?: ImageProviderName
   klingImageModel?: string
   grsaiImageModel?: string
-  apifoxHubProfile?: 'ai666' | 'vectorengine'
-  videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+  apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
+  videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
   imageApifoxHubProfile?: 'ai666' | 'vectorengine'
   chatApifoxHubProfile?: 'ai666' | 'vectorengine'
   ai666Hub?: ApifoxHubCredentials
   vectorEngineHub?: ApifoxHubCredentials
+  xibapiHub?: ApifoxHubCredentials
   apifoxHub?: ApifoxHubCredentials
 }
 
 export type ApifoxChatProvider = 'openai' | 'anthropic' | 'gemini'
 export type ApifoxImageProvider = 'openai' | 'gemini' | 'jimeng' | 'midjourney'
-export type ApifoxVideoProvider = 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2'
+export type ApifoxVideoProvider =
+  | 'openai_video'
+  | 'sora'
+  | 'veo'
+  | 'grok'
+  | 'jimeng'
+  | 'vidu'
+  | 'kling'
+  | 'seedance2'
+  | 'xibapi'
 export type ApifoxEndpointStyle = 'openai_chat' | 'openai_images' | 'openai_video' | 'official_rest' | 'gemini_native' | 'anthropic_native' | 'midjourney_task'
 export type UnifiedCapability =
   | 'chat_completion'

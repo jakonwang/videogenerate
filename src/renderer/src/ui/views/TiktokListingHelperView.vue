@@ -30,6 +30,7 @@ type ListingImage = { id: string; filePath: string; publicUrl?: string }
 type Item = {
   id: string
   sourceImagePath: string
+  referenceImagePaths: string[]
   category: Category
   sku: string
   localDisplayPrice: string
@@ -98,6 +99,7 @@ let offRuntimeLog: (() => void) | undefined
 const form = reactive({
   id: '',
   sourceImagePath: '',
+  referenceImagePaths: [] as string[],
   category: 'earring' as Category,
   sku: '',
   localDisplayPrice: '',
@@ -142,6 +144,23 @@ function statusTone(value: GenerationStatus) {
 
 function imageCount(item: Partial<Item> | null | undefined) {
   return Array.isArray(item?.listingImages) ? item!.listingImages.length : 0
+}
+
+function referenceImageCount(item: Partial<Item> | null | undefined) {
+  const refs = Array.isArray(item?.referenceImagePaths) ? item!.referenceImagePaths : []
+  if (refs.length) return refs.length
+  return String(item?.sourceImagePath || '').trim() ? 1 : 0
+}
+
+function resolveReferenceImages(item: Partial<Item> | null | undefined) {
+  const source = String(item?.sourceImagePath || '').trim()
+  const refs = Array.isArray(item?.referenceImagePaths) ? item!.referenceImagePaths : []
+  return Array.from(new Set([source, ...refs].map((entry) => String(entry || '').trim()).filter(Boolean)))
+}
+
+function extraReferenceImages(item: Partial<Item> | null | undefined) {
+  const source = String(item?.sourceImagePath || '').trim()
+  return resolveReferenceImages(item).filter((entry) => entry !== source)
 }
 
 function analysisBoardStatus(item?: Partial<Item> | null) {
@@ -313,6 +332,7 @@ async function pickImage() {
     multiple: false,
   })
   form.sourceImagePath = String(paths?.[0] || '').trim()
+  form.referenceImagePaths = resolveReferenceImages(form)
 }
 
 async function saveItem() {
@@ -339,6 +359,7 @@ async function saveItem() {
     const saved = (await window.api.tiktokListing.createOrUpdate({
       id: form.id || undefined,
       sourceImagePath: form.sourceImagePath,
+      referenceImagePaths: resolveReferenceImages(form),
       category: form.category,
       sku: form.sku,
       localDisplayPrice: form.localDisplayPrice,
@@ -355,6 +376,27 @@ async function saveItem() {
   } finally {
     saving.value = false
   }
+}
+
+async function pickReferenceImages() {
+  const paths = await window.api.pickFiles({
+    title: '閫夋嫨鍟嗗搧杈呭姪鍙傝€冨浘',
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+    multiple: true,
+  })
+  form.referenceImagePaths = Array.from(
+    new Set([...resolveReferenceImages(form), ...(Array.isArray(paths) ? paths : [])].map((entry) => String(entry || '').trim()).filter(Boolean)),
+  )
+}
+
+function removeReferenceImage(filePath: string) {
+  const target = String(filePath || '').trim()
+  if (!target) return
+  if (target === form.sourceImagePath) form.sourceImagePath = ''
+  form.referenceImagePaths = resolveReferenceImages({
+    sourceImagePath: form.sourceImagePath,
+    referenceImagePaths: form.referenceImagePaths.filter((entry) => String(entry || '').trim() !== target),
+  } as Partial<Item>)
 }
 
 async function generate(item: Item) {
@@ -480,6 +522,7 @@ async function exportExcel() {
 function resetForm() {
   form.id = ''
   form.sourceImagePath = ''
+  form.referenceImagePaths = []
   form.category = 'earring'
   form.sku = ''
   form.localDisplayPrice = ''
@@ -495,6 +538,7 @@ function openCreate() {
 function editItem(item: Item) {
   form.id = item.id
   form.sourceImagePath = item.sourceImagePath
+  form.referenceImagePaths = resolveReferenceImages(item)
   form.category = item.category
   form.sku = item.sku
   form.localDisplayPrice = item.localDisplayPrice
@@ -728,6 +772,7 @@ onBeforeUnmount(() => {
                           <ImagePlus class="h-3.5 w-3.5" />
                           {{ imageCount(item) }}
                         </span>
+                        <span class="mini-pill mini-pill--neutral">Ref {{ referenceImageCount(item) }}</span>
                       </div>
                     </div>
                   </div>
@@ -789,6 +834,7 @@ onBeforeUnmount(() => {
                   <div class="grid-card__meta">
                     <span>{{ categoryLabel(item.category) }}</span>
                     <span>{{ formatPrice(item) }}</span>
+                    <span>Ref {{ referenceImageCount(item) }}</span>
                   </div>
                   <div class="grid-card__actions">
                     <button class="row-action" type="button" @click="editItem(item)"><Pencil class="h-4 w-4" /></button>
@@ -832,6 +878,32 @@ onBeforeUnmount(() => {
                 <ChevronDown class="h-4 w-4" />
               </div>
             </label>
+
+            <div class="upload-box">
+              <div class="panel-head panel-head--compact">
+                <strong>辅助参考图</strong>
+                <span>{{ referenceImageCount(form) }} 张</span>
+              </div>
+              <button class="upload-trigger" type="button" @click="pickReferenceImages">
+                <Upload class="h-4 w-4" />
+                添加辅图
+              </button>
+              <div v-if="extraReferenceImages(form).length" class="reference-thumb-strip">
+                <button
+                  v-for="filePath in extraReferenceImages(form)"
+                  :key="filePath"
+                  class="reference-thumb"
+                  type="button"
+                  @click="previewImage(filePath)"
+                >
+                  <img :src="toFileUrl(filePath)" alt="reference" />
+                  <span class="reference-thumb__remove" @click.stop="removeReferenceImage(filePath)">
+                    <Trash2 class="h-3.5 w-3.5" />
+                  </span>
+                </button>
+              </div>
+              <small>辅图会与主图一起作为深层结构分析依据</small>
+            </div>
 
             <label class="editor-field">
               <span>SKU <em>*</em></span>
@@ -907,6 +979,21 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="result-block">
+              <div class="result-label">参考图（共 {{ referenceImageCount(currentEditorItem) }} 张）</div>
+              <div class="result-image-strip">
+                <article v-for="filePath in resolveReferenceImages(currentEditorItem)" :key="filePath" class="result-thumb-card">
+                  <img :src="toFileUrl(filePath)" alt="reference" />
+                  <div class="result-thumb-card__overlay">
+                    <div class="thumb-tools">
+                      <button class="thumb-tool" type="button" @click="previewImage(filePath)"><Eye class="h-3.5 w-3.5" /></button>
+                    </div>
+                  </div>
+                  <div v-if="filePath === currentEditorItem.sourceImagePath" class="primary-mark">主图</div>
+                </article>
+              </div>
+            </div>
+
+            <div class="result-block">
               <div class="result-label">临时多角度图</div>
               <div class="result-analysis-board">
                 <button
@@ -920,7 +1007,7 @@ onBeforeUnmount(() => {
                 <div v-else class="result-analysis-board__placeholder">本次生成会自动先产出临时多角度图</div>
                 <div class="result-analysis-board__meta">
                   <strong>{{ analysisBoardStatus(currentEditorItem) }}</strong>
-                  <p>系统会先生成 product-only 的深层多角度图，再用它作为商品图主参考。</p>
+                  <p>系统会先结合 {{ referenceImageCount(currentEditorItem) }} 张参考图生成 product-only 的深层多角度图，再用它作为商品图主参考。</p>
                 </div>
               </div>
             </div>
@@ -990,6 +1077,10 @@ onBeforeUnmount(() => {
                       {{ statusLabel((currentEditorItem.generationStatus as GenerationStatus) || 'idle') }}
                     </span>
                   </dd>
+                </div>
+                <div>
+                  <dt>参考图</dt>
+                  <dd>{{ referenceImageCount(currentEditorItem) }} 张</dd>
                 </div>
                 <div>
                   <dt>更新时间</dt>
@@ -1768,6 +1859,44 @@ onBeforeUnmount(() => {
   margin: 0;
   color: rgba(207, 215, 232, 0.74);
   line-height: 1.7;
+}
+
+.reference-thumb-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.reference-thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.reference-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reference-thumb__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(7, 10, 20, 0.74);
+  color: #ffffff;
 }
 
 .page-size {

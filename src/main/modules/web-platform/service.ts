@@ -1697,13 +1697,10 @@ export const webPlatformService = {
       productPoints?: string
       modelProfileOptions?: import('../../../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
-      klingApiKey?: string
-      klingHost?: string
-      klingImageModel?: string
       grsaiApiKey?: string
       grsaiHost?: string
       grsaiImageModel?: string
@@ -1729,9 +1726,6 @@ export const webPlatformService = {
       openaiApiKey: input.openaiApiKey,
       openaiImageModel: input.openaiImageModel,
       openaiImageQuality: input.openaiImageQuality,
-      klingApiKey: input.klingApiKey,
-      klingHost: input.klingHost,
-      klingImageModel: input.klingImageModel,
       grsaiApiKey: input.grsaiApiKey,
       grsaiHost: input.grsaiHost,
       grsaiImageModel: input.grsaiImageModel,

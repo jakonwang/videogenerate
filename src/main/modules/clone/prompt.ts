@@ -43,6 +43,12 @@ function normalizePromptLine(value: unknown) {
 function shouldDropPromptLine(line: string) {
   const lowered = line.toLowerCase()
   return (
+    lowered === '[lighting]' ||
+    lowered === '[lighting].' ||
+    lowered === 'lighting' ||
+    lowered === 'lighting.' ||
+    lowered === 'lighting:' ||
+    lowered === 'lighting:.' ||
     lowered.startsWith('script confidence:') ||
     lowered.startsWith('analysis notes:') ||
     lowered.startsWith('script negative:') ||
@@ -74,6 +80,16 @@ function stripBrokenTail(line: string) {
     .trim()
 }
 
+function stripPromptTimelineArtifacts(line: string) {
+  return line
+    .replace(/\b\d+(?:\.\d+)?\s*s\s*-\s*\d+(?:\.\d+)?\s*s\b/gi, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:seconds?|secs?)\s*-\s*\d+(?:\.\d+)?\s*(?:seconds?|secs?)\b/gi, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*s\b/gi, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:seconds?|secs?)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function dedupePromptLines(lines: string[]) {
   const kept: string[] = []
   const seen = new Set<string>()
@@ -94,6 +110,77 @@ function sentenceCase(value: string) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
+function pickPromptLinesByKeywords(value: unknown, keywords: string[]) {
+  const lines = dedupePromptLines(normalizePromptLine(value))
+  return lines.filter((line) => {
+    const lowered = line.toLowerCase()
+    return keywords.some((keyword) => lowered.includes(keyword))
+  })
+}
+
+function normalizeLightingHint(line: string) {
+  const normalized = sentenceCase(
+    line
+      .replace(/^\[lighting\]\.?\s*/i, '')
+      .replace(/^lighting\s*:?\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
+  if (!normalized) return ''
+  const lowered = normalized.toLowerCase()
+  if (lowered === 'flat diffuse lighting.' || lowered === 'flat diffuse lighting') return ''
+  return normalized.endsWith('.') ? normalized : `${normalized}.`
+}
+
+function normalizeCameraHint(line: string) {
+  const normalized = sentenceCase(
+    stripPromptTimelineArtifacts(line)
+      .replace(/^\[camera\]\.?\s*/i, '')
+      .replace(/^camera\s*:?\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
+  if (!normalized) return ''
+  const lowered = normalized.toLowerCase()
+  if (lowered === 'static camera.' || lowered === 'static camera') return ''
+  return normalized.endsWith('.') ? normalized : `${normalized}.`
+}
+
+function inferCameraFramingFromScript(input: {
+  scriptText?: unknown
+  cameraDescription?: unknown
+  framing?: unknown
+  shotType?: unknown
+}) {
+  const candidates = [
+    keepEnglishLikeText(input.scriptText || '', '').trim(),
+    keepEnglishLikeText(input.cameraDescription || '', '').trim(),
+    keepEnglishLikeText(input.framing || '', '').trim(),
+    keepEnglishLikeText(input.shotType || '', '').trim(),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  if (!candidates) return ''
+  if (candidates.includes('extreme close-up') || candidates.includes('extreme closeup') || candidates.includes('extreme_closeup')) {
+    return 'Extreme close-up.'
+  }
+  if (candidates.includes('close-up') || candidates.includes('closeup') || candidates.includes('detail shot')) {
+    return 'Close-up.'
+  }
+  if (candidates.includes('medium shot') || candidates.includes('mid shot') || candidates.includes('waist shot')) {
+    return 'Medium shot.'
+  }
+  if (candidates.includes('wide shot') || candidates.includes('full shot')) {
+    return 'Wide shot.'
+  }
+  if (candidates.includes('overhead') || candidates.includes('top-down') || candidates.includes('top down')) {
+    return 'Overhead shot.'
+  }
+  return ''
+}
+
 function composePromptParagraphs(sections: Array<string | null | undefined>, maxChars = 1800) {
   const parts = sections
     .map((item) => sanitizeGeneratedVideoPrompt(item || '', 600))
@@ -104,6 +191,41 @@ function composePromptParagraphs(sections: Array<string | null | undefined>, max
   return sanitizeGeneratedVideoPrompt(compact, maxChars)
 }
 
+export const VIDEO_PROMPT_TEMPLATE = `
+[TYPE]
+Realistic ecommerce video
+
+[ABSOLUTE RULES]
+{{absoluteRules}}
+
+[ROLE MAP]
+{{roleMap}}
+
+[SHOT CONTROL]
+{{shotControl}}
+
+[FACE CONTROL]
+{{faceControl}}
+
+[ENVIRONMENT CONTROL]
+{{environmentControl}}
+
+[LIGHTING CONTROL]
+{{lightingControl}}
+
+[RESTRICTIONS]
+{{restrictions}}
+
+[OUTPUT]
+{{output}}
+`.trim()
+
+export function fillVideoPromptTemplate(template: string, variables: Record<string, string>) {
+  return Object.entries(variables).reduce((text, [key, value]) => {
+    return text.replace(new RegExp(`{{${key}}}`, 'g'), String(value || '').trim())
+  }, template)
+}
+
 function buildAccessorLockedText(input: { productType: string; base: string; earrings: string }) {
   const normalized = String(input.productType || '').trim().toLowerCase()
   return /earrings?/.test(normalized) ? input.earrings : input.base
@@ -111,6 +233,8 @@ function buildAccessorLockedText(input: { productType: string; base: string; ear
 
 export function sanitizeGeneratedVideoPrompt(value: unknown, maxChars = 1800) {
   const lines = dedupePromptLines(normalizePromptLine(value))
+    .map((line) => stripPromptTimelineArtifacts(line))
+    .filter(Boolean)
     .filter((line) => !containsCjk(line))
     .filter((line) => /[a-z]{3,}/i.test(line))
   const compact = lines.join('\n')
@@ -847,6 +971,31 @@ export function buildOptimizedVideoPrompt(input: {
   productIdentityText?: string
   productMode?: CloneProductMode
 }) {
+  return buildVideoExecutionStackPrompt(input)
+}
+
+function buildVideoExecutionStackPrompt(input: {
+  shot: Pick<
+    ShotSpec,
+    | 'id'
+    | 'index'
+    | 'productType'
+    | 'scriptText'
+    | 'generationPrompt'
+    | 'visualDescription'
+    | 'actionDescription'
+    | 'cameraDescription'
+    | 'productFocus'
+    | 'materialNeed'
+    | 'motion'
+    | 'framing'
+    | 'shotType'
+    | 'compiledPrompt'
+  >
+  modelIdentityText?: string
+  productIdentityText?: string
+  productMode?: CloneProductMode
+}) {
   const shot = input.shot
   const productType = String(shot.productType || '').trim().toLowerCase()
   const isEarrings = /earrings?/.test(productType)
@@ -859,126 +1008,146 @@ export function buildOptimizedVideoPrompt(input: {
       productIdentityText: input.productIdentityText,
       materialNeed: shot.materialNeed,
     })
-  const modelPresentationShot = String(shot.shotType || '').trim().toLowerCase() === 'model_demo'
-  const shotIndex = Number(shot.index ?? 0) + 1
-  const scriptText = keepEnglishLikeText(shot.scriptText, '')
-  const generationPrompt = sanitizeJewelryGenerationPrompt(shot.generationPrompt, shot.productType)
-  const visual = (looksLikeEarringShot ? 'Extreme close-up of ear wearing the earring.' : buildLockedProductSceneText(productType)) || keepEnglishLikeText(
-    shot.visualDescription,
-    keepEnglishLikeText(generationPrompt, 'Real social-commerce product demonstration in a believable environment.'),
+  const wearableLike = /earrings?|ring|bracelet|necklace|pendant|wrist|finger|neck|clavicle/.test(productType)
+  const sceneText = composePromptParagraphs(
+    [
+      keepEnglishLikeText(shot.visualDescription || shot.generationPrompt || '', '').trim(),
+      'Reference composition defines scene category, framing distance, and subject placement only.',
+    ],
+    260,
   )
-  const action = looksLikeEarringShot
+  const environmentText = composePromptParagraphs(
+    [
+      keepEnglishLikeText(shot.visualDescription || shot.generationPrompt || '', '').trim(),
+      'Background may move slightly, but the product must remain unaffected and visually dominant.',
+      'No foreground blockage over key product structure.',
+    ],
+    320,
+  )
+  const lockedAction = looksLikeEarringShot
     ? buildLockedProductActionText('earrings', shot.actionDescription)
     : buildLockedProductActionText(productType, shot.actionDescription)
-  const productFocus = looksLikeEarringShot
-    ? buildLockedProductFocusText('earrings', shot.productFocus)
-    : buildLockedProductFocusText(productType, shot.productFocus)
-  const modelIdentityText = keepEnglishLikeText(input.modelIdentityText, 'Use the same selected model identity only.')
+  const motionText = composePromptParagraphs(['No product motion.', keepEnglishLikeText(lockedAction || shot.actionDescription || '', '').trim()], 220)
+  const cameraFraming =
+    inferCameraFramingFromScript({
+      scriptText: shot.scriptText,
+      cameraDescription: shot.cameraDescription,
+      framing: shot.framing,
+      shotType: shot.shotType,
+    }) || 'Close-up.'
+  const cameraHints = [
+    ...pickPromptLinesByKeywords(shot.scriptText || '', ['camera', 'push', 'pull', 'zoom', 'pan', 'tilt', 'track', 'dolly', 'close-up', 'closeup']),
+    keepEnglishLikeText(shot.cameraDescription || shot.motion || shot.framing || '', '').trim(),
+  ].map(normalizeCameraHint).filter(Boolean)
   const cameraBase = normalizeVideoCameraInstruction(
     shot.cameraDescription || `${shot.framing || 'closeup'} framing, ${shot.motion || 'subtle camera movement'}`,
   )
-  const camera =
-    (input.productMode || detectProductMode(productType)) === 'STRICT'
+  const productMode = input.productMode || detectProductMode(productType)
+  const cameraPolicy =
+    productMode === 'STRICT'
       ? 'Almost static camera. Keep the product as the visual anchor.'
-      : (input.productMode || detectProductMode(productType)) === 'BALANCED'
+      : productMode === 'BALANCED'
         ? `${cameraBase} Slight perspective variation is allowed if product readability stays stable.`
         : `${cameraBase} Allow natural motion, atmosphere, and scene expression while keeping the product recognizable.`
-  const coreRule = [
-    'CORE RULE',
-    'Use the provided reference image as primary visual source.',
-    'Preserve product shape, proportions, and structure.',
-    'Avoid deformation or redesign.',
-    'Text is only for motion, framing, action, and shot execution, not for product definition.',
+  const cameraText =
+    composePromptParagraphs([cameraFraming, ...cameraHints, cameraPolicy], 320) || `${cameraFraming}\n\n${cameraPolicy}`
+  const lightingHints = [
+    ...pickPromptLinesByKeywords(shot.compiledPrompt || '', ['light', 'lighting', 'exposure', 'shadow', 'highlight']),
+    ...pickPromptLinesByKeywords(shot.visualDescription || '', ['light', 'lighting', 'exposure', 'shadow', 'highlight']),
+    ...pickPromptLinesByKeywords(shot.generationPrompt || '', ['light', 'lighting', 'exposure', 'shadow', 'highlight']),
+  ].map(normalizeLightingHint).filter(Boolean)
+  const lightingText = composePromptParagraphs(
+    [
+      ...lightingHints,
+      looksLikeEarringShot ? 'Flat diffuse lighting.' : 'Soft diffuse lighting.',
+      'Lighting family remains stable.',
+      'Brightness may vary slightly without changing product readability.',
+      'No relighting.',
+      looksLikeEarringShot ? 'No specular highlights.' : 'No new highlight pattern that changes product reading.',
+    ],
+    300,
+  )
+  const modelIdentityText = keepEnglishLikeText(input.modelIdentityText, 'Use the same selected model identity only.')
+  const productFocus = looksLikeEarringShot
+    ? buildLockedProductFocusText('earrings', shot.productFocus)
+    : buildLockedProductFocusText(productType, shot.productFocus)
+  const scriptIntent = keepEnglishLikeText(shot.scriptText || '', '').trim()
+  const shotIntent = composePromptParagraphs(
+    [
+      scriptIntent || `Maintain the original storyboard shot ${Number(shot.index ?? 0) + 1} intent.`,
+      keepEnglishLikeText(productFocus || shot.materialNeed || '', '').trim(),
+    ],
+    240,
+  )
+  const roleMapText = [
+    'Image 1 = product canonical source.',
+    'Image 2 = model identity reference.',
+    'Image 3 = storyboard composition reference.',
+    'Strict separation. Do not use model identity to redefine the product. Do not use storyboard composition to redesign product structure.',
   ].join('\n')
-  const strictConsistency = [
-    'STRICT CONSISTENCY',
-    'Same product instance.',
-    'Same model identity.',
-    'Same scene environment.',
-    'No redesign or structural drift.',
+  const absoluteRulesText = [
+    'Product is a visual identity anchor from the canonical reference.',
+    'Preserve exact silhouette, proportions, connection points, visible structure, material finish, color family, and wearing direction.',
+    'Do not redesign, rebuild, beautify, simplify, or reconstruct unseen parts.',
+    `Model lock: ${modelIdentityText}`,
+    'If product consistency conflicts with pose, crop, anatomy, or atmosphere, preserve the product and adjust the non-product elements.',
   ].join('\n')
-  const continuityLock = [
-    'FRAME CONTINUITY',
-    `Shot ${shotIndex} must remain the same storyboard shot in continuous motion, not a regenerated new setup.`,
-    'Each frame must be a direct continuation of the previous frame.',
+  const shotControlText = [
+    `Intent: ${shotIntent || 'Keep the same storyboard shot purpose.'}`,
+    `Reference scene lock: ${sceneText || (looksLikeEarringShot ? 'Extreme close-up of ear wearing the earring.' : buildLockedProductSceneText(productType))}`,
+    `Camera behavior: ${cameraText || `${cameraFraming} Minimal camera movement only.`}`,
+    `Motion behavior: ${motionText || 'No product motion. Minimal physically believable movement only.'}`,
+    wearableLike
+      ? 'Composition priority: product is the visual center, occupies 40% to 60% of the frame, and stays larger and clearer than surrounding human features.'
+      : 'Composition priority: product remains sharp, readable, and visually primary.',
+    wearableLike ? 'Hierarchy: product > hands > body > face' : 'Hierarchy: product > hands > body > background',
+  ].join('\n')
+  const faceControlText = wearableLike
+    ? [
+        looksLikeEarringShot ? 'Do NOT show full face as the subject.' : 'Do NOT use full face as the main subject.',
+        'No eye contact.',
+        looksLikeEarringShot
+          ? 'Face must stay cropped, off-center, secondary, or reduced to ear, jawline, and neck support only.'
+          : 'Face must stay cropped, off-center, secondary, or reduced to support context only.',
+        'Never let the face dominate the frame.',
+      ].join('\n')
+    : 'Keep any human context secondary to the product.'
+  const environmentControlText = [
+    `Scene category: ${sceneText || 'Keep the original reference scene category.'}`,
+    environmentText || 'Background may move slightly, but the product must remain unaffected and visually dominant.',
+    'Environment must not overpower, relight, shrink, block, or visually compete with the product.',
+  ].join('\n')
+  const lightingControlText = [
+    lightingText || 'Soft diffuse lighting. Lighting family remains stable.',
+    'No flicker.',
+    looksLikeEarringShot ? 'No reflective response.' : 'No reflective response that changes material interpretation.',
+    'Camera must NOT introduce new angles, perspectives, or product reinterpretation.',
+    'The product is NOT a 3D object. Do NOT apply depth reconstruction or perspective transformation.',
+  ].join('\n')
+  const restrictionsText = [
+    'Do NOT infer or reconstruct hidden or unseen parts of the product.',
+    'Do NOT reduce product readability, sharpness, or visibility.',
+    'Do NOT let the product become small, distant, soft, or detail-blurred.',
+    wearableLike ? 'Do NOT let the model dominate the frame.' : 'Do NOT let non-product elements dominate the frame.',
+    'Do NOT generate speaking, dialogue, lip-sync, mouth-shape acting, subtitles, watermark, logo, or UI overlay.',
     'Do NOT redraw, reinterpret, reset composition, or regenerate the product as a new object.',
   ].join('\n')
-  const motionControl = [
-    'MOTION',
-    'Only camera movement is allowed: slow push-in, gentle pull-back, or slight angle shift within the same framing family.',
-    looksLikeEarringShot ? `Interaction: ${action}` : '',
-    `Camera execution: ${camera}`,
-    'The product and model must remain still except for minimal physically believable micro-movement.',
-    'No product movement, no random physics motion, no cloth drift, no exaggerated body motion, and no scene reset.',
-  ]
-    .filter(Boolean)
-    .join('\n')
-  const lightingControl = [
-    'LIGHTING (ANTI-GLOW)',
-    looksLikeEarringShot ? 'Flat diffuse lighting.' : 'Keep lighting soft and stable.',
-    looksLikeEarringShot ? 'No specular highlights.' : 'No enhancement, no glow, no sparkle, no bloom, no light halo, no starburst, no lens flare, and no overexposure.',
-    looksLikeEarringShot ? 'No reflective response.' : 'Keep reflections controlled and physically plausible.',
-    'Constant brightness across frames.',
-    looksLikeEarringShot ? 'Jewelry must never become a light source.' : '',
-  ]
-    .filter(Boolean)
-    .join('\n')
-  const shotExecution = [
-    'SHOT EXECUTION',
-    scriptText ? `Script: ${scriptText}` : 'Script: keep the original storyboard shot intent.',
-    action ? `Action: ${action}` : '',
-    `Camera: ${camera}`,
-    productFocus ? `Product focus: ${productFocus}` : '',
-    `Scene execution: ${visual}`,
-    `Duration: ${Number((shot as any).durationSec || 3).toFixed(1)} seconds.`,
-  ].filter(Boolean).join('\n')
-  const shotInstruction = [
-    'SHOT INSTRUCTION',
-    `Shot ${shotIndex}:`,
-    looksLikeEarringShot
-      ? `The model is wearing the earrings. Keep the ear fully readable, with product detail prioritized. ${action} No unnecessary model motion. Only camera motion is allowed.`
-      : 'Keep the product clearly readable. No unnecessary subject motion. Only restrained camera motion is allowed.',
+  const outputText = [
+    'Silent visual commercial video.',
+    'Natural TikTok ecommerce style with stable product identity.',
+    'No text, subtitle, watermark, logo, or UI overlay.',
+    'Keep the generation prompt realistic and commercially usable.',
   ].join('\n')
-  const lines = [
-    `Generate continuous video for shot ${shotIndex}: same storyboard shot in motion, not a new product generation or redesign task.`,
-    'SILENT VISUAL COMMERCIAL',
-    modelPresentationShot ? 'Avoid presenter-style delivery; keep human-use context.' : 'No face-focused composition.',
-    coreRule,
-    strictConsistency,
-    `MODEL LOCK: ${modelIdentityText}. Use the same selected model identity only.`,
-    [
-      'SCENE LOCK',
-      `Preserve original storyboard/reference scene: ${visual}.`,
-      'Keep the same scene category, same environment, same lighting family, and same composition intent.',
-      'Do NOT replace the scene with a studio void, catalog cutout, or generic regenerated background.',
-    ].join('\n'),
-    continuityLock,
-    buildHumanPriorityRuleText(),
-    'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY; ignore any person in product references.',
-    motionControl,
-    lightingControl,
-    'CAMERA LOCK: fixed focal-length feeling, fixed perspective family, no lens distortion change, no sudden reframing or layout reset.',
-    buildSpatialAnchorLockText(productType),
-    buildPhysicsConsistencyText(productType),
-    buildCompositionLockText(productType),
-    buildGenerationPromptRestraintText(),
-    'Stability control:',
-    'No sudden detail changes.',
-    'No texture shifting.',
-    'No shape morphing.',
-    shotExecution,
-    shotInstruction,
-    looksLikeEarringShot
-      ? 'Keep the same ear position, same hanging direction, and the same earring structure with physically believable gravity.'
-      : '',
-    'Natural commercial realism only.',
-    looksLikeEarringShot ? 'Use flat diffuse lighting with stable exposure only.' : 'Use soft natural light or soft window light with realistic smartphone-camera material response.',
-    'No text, watermark, logo, UI, or random letters.',
-    'Realistic smartphone social-commerce style.',
-  ]
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
-  return prependSilentCommercialGlobalRule(lines, 4200)
+  return fillVideoPromptTemplate(VIDEO_PROMPT_TEMPLATE, {
+    absoluteRules: absoluteRulesText,
+    roleMap: roleMapText,
+    shotControl: shotControlText,
+    faceControl: faceControlText,
+    environmentControl: environmentControlText,
+    lightingControl: lightingControlText,
+    restrictions: restrictionsText,
+    output: outputText,
+  })
 }
 
 export function buildFinalShotVideoPositivePrompt(input: {
@@ -1003,36 +1172,7 @@ export function buildFinalShotVideoPositivePrompt(input: {
   productIdentityText?: string
   productMode?: CloneProductMode
 }) {
-  const visualText = keepEnglishLikeText(input.shot.visualDescription || input.shot.generationPrompt || '', '').trim()
-  const cameraText = keepEnglishLikeText(input.shot.cameraDescription || input.shot.motion || input.shot.framing || '', '').trim()
-  const actionText = keepEnglishLikeText(input.shot.actionDescription || '', '').trim()
-  const compactVisual = visualText || 'Preserve storyboard composition'
-  const compactCamera = cameraText || 'Slow stable camera movement'
-  const compactMotion = actionText || 'Minimal motion'
-  return [
-    'Use reference image as visual guide.',
-    'Preserve product appearance.',
-    'Scene:',
-    compactVisual,
-    'Motion:',
-    compactMotion,
-    'No new angles or hidden parts revealed.',
-    'Camera:',
-    compactCamera,
-    'No perspective change.',
-    'Lighting:',
-    'Flat diffuse lighting.',
-    'Constant brightness.',
-    'No specular highlights.',
-    'Stability:',
-    'No deformation.',
-    'No redesign.',
-    'Keep structure identical to reference.',
-    'Style:',
-    'Realistic ecommerce video.',
-  ]
-    .filter(Boolean)
-    .join('\n')
+  return buildVideoExecutionStackPrompt(input)
 }
 
 export function buildCloneShotPrompt(input: {

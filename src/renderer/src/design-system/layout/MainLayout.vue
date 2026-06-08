@@ -2,7 +2,7 @@
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 
-defineProps<{
+const props = defineProps<{
   navItems: Array<{ to: string; label: string; active?: boolean; icon?: any }>
   sections?: Array<{
     title: string
@@ -10,6 +10,7 @@ defineProps<{
   }>
   title?: string
   subtitle?: string
+  topbarEnabled?: boolean
 }>()
 </script>
 
@@ -20,8 +21,8 @@ defineProps<{
         <slot name="sidebar-footer" />
       </template>
     </Sidebar>
-    <div class="ds-shell__main">
-      <Topbar :title="title" :subtitle="subtitle">
+    <div class="ds-shell__main" :class="{ 'ds-shell__main--with-topbar': props.topbarEnabled }">
+      <Topbar v-if="props.topbarEnabled" :title="props.title" :subtitle="props.subtitle">
         <slot name="topbar" />
       </Topbar>
       <main class="ds-workspace">
@@ -42,6 +43,10 @@ defineProps<{
   min-width: 0;
   min-height: 0;
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.ds-shell__main--with-topbar {
   grid-template-rows: 88px minmax(0, 1fr);
 }
 

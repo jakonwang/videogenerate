@@ -9,6 +9,20 @@ type DbShape = {
   exportCategoryConfigs: TiktokListingExportCategoryConfig[]
 }
 
+function normalizeReferenceImagePaths(sourceImagePath: string, referenceImagePaths?: string[]) {
+  const ordered = [sourceImagePath, ...(Array.isArray(referenceImagePaths) ? referenceImagePaths : [])]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+  return Array.from(new Set(ordered))
+}
+
+function normalizeItem(item: TiktokListingItem): TiktokListingItem {
+  return {
+    ...item,
+    referenceImagePaths: normalizeReferenceImagePaths(item.sourceImagePath, item.referenceImagePaths),
+  }
+}
+
 const dbPath = () => join(getAppPaths().dbDir, 'tiktok-listing.json')
 
 function now() {
@@ -25,7 +39,7 @@ function defaultDb(): DbShape {
 export const tiktokListingRepo = {
   async list(): Promise<TiktokListingItem[]> {
     const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
-    return [...db.items].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+    return [...db.items].map(normalizeItem).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
   },
 
   async get(id: string): Promise<TiktokListingItem | null> {
@@ -36,6 +50,7 @@ export const tiktokListingRepo = {
   async createOrUpdate(
     payload: Partial<TiktokListingItem> & {
       sourceImagePath: string
+      referenceImagePaths?: string[]
       category: TiktokListingItem['category']
       sku: string
       localDisplayPrice: string
@@ -51,19 +66,21 @@ export const tiktokListingRepo = {
         const next: TiktokListingItem = {
           ...prev,
           ...payload,
+          referenceImagePaths: normalizeReferenceImagePaths(payload.sourceImagePath, payload.referenceImagePaths ?? prev.referenceImagePaths),
           analysisBoardImage: payload.analysisBoardImage ?? prev.analysisBoardImage,
           listingImages: payload.listingImages ?? prev.listingImages ?? [],
           updatedAt: ts,
         }
-        db.items[idx] = next
+        db.items[idx] = normalizeItem(next)
         await writeJsonFile(dbPath(), db)
-        return next
+        return normalizeItem(next)
       }
     }
 
     const created: TiktokListingItem = {
       id: randomUUID(),
       sourceImagePath: payload.sourceImagePath,
+      referenceImagePaths: normalizeReferenceImagePaths(payload.sourceImagePath, payload.referenceImagePaths),
       category: payload.category,
       sku: payload.sku,
       localDisplayPrice: payload.localDisplayPrice,
@@ -78,9 +95,9 @@ export const tiktokListingRepo = {
       createdAt: ts,
       updatedAt: ts,
     }
-    db.items.unshift(created)
+    db.items.unshift(normalizeItem(created))
     await writeJsonFile(dbPath(), db)
-    return created
+    return normalizeItem(created)
   },
 
   async remove(id: string) {

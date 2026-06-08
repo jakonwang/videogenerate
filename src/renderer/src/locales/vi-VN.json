@@ -107,6 +107,140 @@
   "titleBar": {
     "ready": "San sang"
   },
+  "settings": {
+    "hero": {
+      "kicker": "Cai dat / Trung tam dieu khien",
+      "title": "Cai Dat Nen Tang Va Nang Luc",
+      "subtitle": "Cau hinh API key va base URL truoc, sau do chon nen tang va mo hinh cho tinh nang video, hinh anh va hoi thoai."
+    },
+    "actions": {
+      "checkUpdates": "Kiem tra cap nhat",
+      "openDataDir": "Mo thu muc du lieu",
+      "refresh": "Lam moi",
+      "saveSettings": "Luu cai dat",
+      "saving": "Dang luu"
+    },
+    "sections": {
+      "platforms": {
+        "label": "Nen tang",
+        "desc": "Cau hinh API key va base URL"
+      },
+      "capabilities": {
+        "label": "Nang luc",
+        "desc": "Chon nen tang video, hinh anh va hoi thoai"
+      },
+      "qiniu": {
+        "label": "Qiniu",
+        "desc": "Cai dat tai len va phan phoi tai nguyen"
+      }
+    },
+    "platforms": {
+      "title": "Thong Tin Nen Tang",
+      "subtitle": "Chi can bao tri thong tin tung nen tang mot lan va tai su dung cho cac tinh nang.",
+      "fields": {
+        "apiKey": "API Key",
+        "apiToken": "API Token"
+      },
+      "cards": {
+        "kling": { "desc": "Dung cho thong tin xac thuc AtlasCloud va Kling." },
+        "grsai": { "desc": "Dung cho thong tin video, hinh anh va hoi thoai cua GRS.AI." },
+        "ai666": { "desc": "Dung cho thong tin nen tang AI666." },
+        "vectorengine": { "desc": "Dung cho thong tin nen tang VectorEngine." },
+        "xibapi": { "desc": "Dung cho thong tin nen tang XIBAPI." },
+        "replicate": { "desc": "Dung cho quy trinh hinh anh clone cuc bo." }
+      }
+    },
+    "capabilities": {
+      "title": "Nang Luc",
+      "subtitle": "Chon nen tang va mo hinh se duoc su dung cho tung tinh nang.",
+      "fields": {
+        "primaryPlatform": "Nen tang chinh",
+        "primaryModel": "Mo hinh chinh",
+        "fallbackPlatform": "Nen tang du phong",
+        "fallbackModel": "Mo hinh du phong",
+        "imageQuality": "Chat luong hinh anh"
+      },
+      "placeholders": {
+        "videoPrimaryModel": "Vi du veo_3_1-fast",
+        "videoFallbackModel": "Su dung khi duong chinh that bai",
+        "imagePrimaryModel": "Vi du gpt-image-1",
+        "chatPrimaryModel": "Vi du gemini-3.1-pro"
+      },
+      "quality": {
+        "low": "Thap",
+        "medium": "Trung binh",
+        "high": "Cao"
+      },
+      "video": {
+        "title": "Video",
+        "desc": "Cai dat chinh va du phong cho tao video."
+      },
+      "image": {
+        "title": "Hinh Anh",
+        "desc": "Cai dat chinh cho tao va chinh sua hinh anh."
+      },
+      "chat": {
+        "title": "Hoi Thoai",
+        "desc": "Cai dat cho phan tich kich ban va tro ly quy trinh."
+      }
+    },
+    "qiniu": {
+      "title": "Qiniu",
+      "subtitle": "Quan ly tai len, lien ket ngoai va tien to tai nguyen.",
+      "fields": {
+        "accessKey": "Access Key",
+        "secretKey": "Secret Key",
+        "bucket": "Bucket",
+        "domain": "Domain",
+        "uploadHost": "Upload Host",
+        "prefix": "Prefix"
+      }
+    },
+    "summary": {
+      "title": "Tong Quan Hien Tai",
+      "rows": {
+        "video": "Video",
+        "image": "Hinh Anh",
+        "chat": "Hoi Thoai"
+      },
+      "cards": {
+        "video": { "title": "Video" },
+        "image": { "title": "Hinh Anh" },
+        "chat": { "title": "Hoi Thoai" },
+        "status": {
+          "title": "Trang Thai",
+          "waiting": "Dang cho luu",
+          "processing": "Dang xu ly",
+          "ready": "San sang"
+        }
+      }
+    },
+    "notes": {
+      "title": "Luu Y Su Dung",
+      "items": {
+        "credentialsReuse": "Cau hinh thong tin moi nen tang mot lan trong muc Nen tang, sau do chon cach su dung trong muc Nang luc.",
+        "xibapiIndependent": "XIBAPI hien la nen tang video doc lap va khong con gom chung voi VectorEngine.",
+        "reloadAfterSave": "Sau khi luu, giao dien se tai lai cai dat moi nhat tu desktop de dong bo voi runtime.",
+        "imageQualityForwarded": "Chat luong hinh anh se duoc chuyen tiep vao cac quy trinh tao hinh anh lien quan."
+      }
+    },
+    "messages": {
+      "loaded": "Da tai cai dat",
+      "loadFailed": "Tai cai dat that bai",
+      "savedAndReloaded": "Da luu va tai lai cai dat",
+      "saveFailed": "Luu cai dat that bai",
+      "dataDirNotFound": "Khong tim thay thu muc du lieu",
+      "dataDirOpened": "Da mo thu muc du lieu",
+      "openDataDirFailed": "Mo thu muc du lieu that bai",
+      "updateCheckStarted": "Da bat dau kiem tra cap nhat",
+      "updateCheckFailed": "Kiem tra cap nhat that bai"
+    },
+    "common": {
+      "show": "Hien",
+      "hide": "An",
+      "notSet": "Chua dat"
+    }
+  },
   "cloneView": {
     "videoStage": {
       "title": "Tao video theo canh",

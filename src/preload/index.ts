@@ -9,6 +9,8 @@ const api = {
   pickFiles: (opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) =>
     ipcRenderer.invoke('fs:pickFiles', opts ?? {}),
   pickDir: (opts: { title?: string }) => ipcRenderer.invoke('fs:pickDir', opts),
+  saveFileAs: (input: { sourcePath: string; defaultFileName?: string; title?: string }) =>
+    ipcRenderer.invoke('fs:saveFileAs', input) as Promise<{ ok: boolean; canceled?: boolean; filePath?: string }>,
   readFileAsBase64: (input: { path: string }) => ipcRenderer.invoke('fs:readFileAsBase64', input),
   collectVideoFilesFromDrop: (roots: string[]) =>
     ipcRenderer.invoke('fs:collectVideoFilesFromDrop', roots) as Promise<string[]>,
@@ -53,6 +55,11 @@ const api = {
       ipcRenderer.invoke('clone:createDraftProject', payload ?? {}),
     updateProjectMeta: (payload: { cloneProjectId: string; title?: string; description?: string }) =>
       ipcRenderer.invoke('clone:updateProjectMeta', payload),
+    updateProjectRenderHints: (payload: {
+      cloneProjectId: string
+      aspectRatio?: '9:16' | '16:9'
+      resolution?: '720x1280' | '1280x720' | '1080x1920' | '1920x1080'
+    }) => ipcRenderer.invoke('clone:updateProjectRenderHints', payload),
     listCloneGroups: () =>
       ipcRenderer.invoke('clone:listCloneGroups'),
     createCloneGroup: (payload: { name: string }) =>
@@ -244,14 +251,14 @@ const api = {
       cloneProjectId: string
       shotIds: string[]
       videoPlanId?: string
-      providerPolicy?: { chain?: Array<'seedance' | 'kling' | 'grsai'> }
+      providerPolicy?: { chain?: Array<'seedance' | 'grsai'> }
       qualityProfile?: 'high'
     }) => ipcRenderer.invoke('clone:generateAiShots', payload),
     generateShotKeyframes: (payload: {
       cloneProjectId: string
       shotIds: string[]
       targetProductId?: string
-      providerPolicy?: { chain?: Array<'seedance' | 'kling'> }
+      providerPolicy?: { chain?: Array<'seedance'> }
     }) => ipcRenderer.invoke('clone:generateShotKeyframes', payload),
     regenerateShotKeyframe: (payload: {
       cloneProjectId: string
@@ -264,7 +271,7 @@ const api = {
       sessionId?: string
       shotIds: string[]
       consistencyMode?: 'soft' | 'hard'
-      providerPolicy?: { chain?: Array<'seedance' | 'kling'> }
+      providerPolicy?: { chain?: Array<'seedance'> }
     }) => ipcRenderer.invoke('clone:generateShotVideos', payload),
     getShotConsistencyReport: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:getShotConsistencyReport', payload),
@@ -301,13 +308,10 @@ const api = {
       productPoints?: string
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
-      klingApiKey?: string
-      klingHost?: string
-      klingImageModel?: string
       grsaiApiKey?: string
       grsaiHost?: string
       grsaiImageModel?: string
@@ -348,13 +352,10 @@ const api = {
       forceRegenerate?: boolean
       selectedModelIdentityId?: string
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
-      klingApiKey?: string
-      klingHost?: string
-      klingImageModel?: string
       grsaiApiKey?: string
       grsaiHost?: string
       grsaiImageModel?: string
@@ -364,6 +365,8 @@ const api = {
       ipcRenderer.invoke('clone:confirmGptShotFrames', payload),
     generateShotClip: (payload: { cloneProjectId: string; shotId: string; forceRegenerate?: boolean }) =>
       ipcRenderer.invoke('clone:generateShotClip', payload),
+    regenerateShotVideo: (payload: { cloneProjectId: string; shotId: string }) =>
+      ipcRenderer.invoke('clone:regenerateShotVideo', payload),
     refreshProjectStatus: (payload: { cloneProjectId: string }) =>
       ipcRenderer.invoke('clone:refreshProjectStatus', payload),
     reconcileRemoteStoryboardVideos: (payload: { cloneProjectId: string }) =>
@@ -422,8 +425,6 @@ const api = {
       ipcRenderer.invoke('clone:getModelCredentials') as Promise<{
         seedanceApiKey?: string
         seedanceHost?: string
-        klingApiKey?: string
-        klingHost?: string
         grsaiApiKey?: string
         grsaiHost?: string
         qiniuAccessKey?: string
@@ -439,20 +440,20 @@ const api = {
         grsaiVideoModel?: string
         grsaiAnalysisModel?: string
         chatProviderPrimary?: 'apifox_hub' | 'grsai'
-        videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
-        videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
+        videoProviderPrimary?: 'seedance' | 'grsai' | 'apifox_hub'
+        videoProviderFallback?: 'seedance' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
-        klingImageModel?: string
+        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
-        apifoxHubProfile?: 'ai666' | 'vectorengine'
-        videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+        apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
+        videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
         imageApifoxHubProfile?: 'ai666' | 'vectorengine'
         chatApifoxHubProfile?: 'ai666' | 'vectorengine'
         ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
         vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
+        xibapiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       }>,
     getRuntimeOptions: () =>
@@ -463,8 +464,6 @@ const api = {
     setModelCredentials: (payload: {
       seedanceApiKey?: string
       seedanceHost?: string
-      klingApiKey?: string
-      klingHost?: string
       grsaiApiKey?: string
       grsaiHost?: string
       qiniuAccessKey?: string
@@ -480,20 +479,20 @@ const api = {
       grsaiVideoModel?: string
       grsaiAnalysisModel?: string
       chatProviderPrimary?: 'apifox_hub' | 'grsai'
-      videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
-      videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
+      videoProviderPrimary?: 'seedance' | 'grsai' | 'apifox_hub'
+      videoProviderFallback?: 'seedance' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
-      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
-      klingImageModel?: string
+      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
       grsaiImageModel?: string
-      apifoxHubProfile?: 'ai666' | 'vectorengine'
-      videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+      apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
+      videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
       imageApifoxHubProfile?: 'ai666' | 'vectorengine'
       chatApifoxHubProfile?: 'ai666' | 'vectorengine'
       ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
       vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
+      xibapiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
     }) =>
       ipcRenderer.invoke('clone:setModelCredentials', payload),

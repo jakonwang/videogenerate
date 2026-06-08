@@ -691,8 +691,6 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
       const result = await webPlatformService.setCloneModelCredentials(token, {
         seedanceApiKey: typeof body.seedanceApiKey === 'string' ? body.seedanceApiKey : undefined,
         seedanceHost: typeof body.seedanceHost === 'string' ? body.seedanceHost : undefined,
-        klingApiKey: typeof body.klingApiKey === 'string' ? body.klingApiKey : undefined,
-        klingHost: typeof body.klingHost === 'string' ? body.klingHost : undefined,
         grsaiApiKey: typeof body.grsaiApiKey === 'string' ? body.grsaiApiKey : undefined,
         grsaiHost: typeof body.grsaiHost === 'string' ? body.grsaiHost : undefined,
         qiniuAccessKey: typeof body.qiniuAccessKey === 'string' ? body.qiniuAccessKey : undefined,
@@ -709,11 +707,11 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         grsaiAnalysisModel: typeof body.grsaiAnalysisModel === 'string' ? body.grsaiAnalysisModel : undefined,
         chatProviderPrimary: body.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub',
         videoProviderPrimary:
-          body.videoProviderPrimary === 'seedance' || body.videoProviderPrimary === 'kling' || body.videoProviderPrimary === 'grsai' || body.videoProviderPrimary === 'apifox_hub'
+          body.videoProviderPrimary === 'seedance' || body.videoProviderPrimary === 'grsai' || body.videoProviderPrimary === 'apifox_hub'
             ? body.videoProviderPrimary
             : undefined,
         videoProviderFallback:
-          body.videoProviderFallback === 'seedance' || body.videoProviderFallback === 'kling' || body.videoProviderFallback === 'grsai' || body.videoProviderFallback === 'apifox_hub'
+          body.videoProviderFallback === 'seedance' || body.videoProviderFallback === 'grsai' || body.videoProviderFallback === 'apifox_hub'
             ? body.videoProviderFallback
             : undefined,
         openaiApiKey: typeof body.openaiApiKey === 'string' ? body.openaiApiKey : undefined,
@@ -723,10 +721,9 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
             ? body.openaiImageQuality
             : undefined,
         imageProviderPrimary:
-          body.imageProviderPrimary === 'openai' || body.imageProviderPrimary === 'kling' || body.imageProviderPrimary === 'grsai' || body.imageProviderPrimary === 'apifox_hub'
+          body.imageProviderPrimary === 'openai' || body.imageProviderPrimary === 'grsai' || body.imageProviderPrimary === 'apifox_hub'
             ? body.imageProviderPrimary
             : undefined,
-        klingImageModel: typeof body.klingImageModel === 'string' ? body.klingImageModel : undefined,
         grsaiImageModel: typeof body.grsaiImageModel === 'string' ? body.grsaiImageModel : undefined,
         apifoxHubProfile:
           body.apifoxHubProfile === 'ai666' || body.apifoxHubProfile === 'vectorengine'
@@ -760,7 +757,7 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
           ? body.productReferenceImagePaths.map(String)
           : [],
         imageProviderPrimary:
-          body.imageProviderPrimary === 'kling' || body.imageProviderPrimary === 'grsai' || body.imageProviderPrimary === 'apifox_hub'
+          body.imageProviderPrimary === 'grsai' || body.imageProviderPrimary === 'apifox_hub'
             ? body.imageProviderPrimary
             : 'openai',
         openaiApiKey: typeof body.openaiApiKey === 'string' ? body.openaiApiKey : undefined,
@@ -769,9 +766,6 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
           body.openaiImageQuality === 'low' || body.openaiImageQuality === 'medium'
             ? body.openaiImageQuality
             : 'high',
-        klingApiKey: typeof body.klingApiKey === 'string' ? body.klingApiKey : undefined,
-        klingHost: typeof body.klingHost === 'string' ? body.klingHost : undefined,
-        klingImageModel: typeof body.klingImageModel === 'string' ? body.klingImageModel : undefined,
         grsaiApiKey: typeof body.grsaiApiKey === 'string' ? body.grsaiApiKey : undefined,
         grsaiHost: typeof body.grsaiHost === 'string' ? body.grsaiHost : undefined,
         grsaiImageModel: typeof body.grsaiImageModel === 'string' ? body.grsaiImageModel : undefined,

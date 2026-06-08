@@ -1198,7 +1198,7 @@ function sanitizeVariantShotScriptRow<T extends {
   generationPrompt: string
 }>(row: T): T {
   const scriptText = sanitizeSafeVariantText(row.scriptText)
-  const visualDescription = sanitizeSafeVariantText(row.visualDescription, 'Close-up framing on the product area.')
+  const visualDescription = 'Keep the exact reference composition.'
   const actionDescription = 'No subject motion.'
   const cameraDescription = sanitizeSafeVariantText(row.cameraDescription, 'Slow stable camera movement.')
   return {
@@ -2032,33 +2032,19 @@ function compactStoryboardImageRefs(input: {
 }) {
   const productRefs = Array.from(new Set(input.productRefs.map((item) => String(item || '').trim()).filter(Boolean)))
   const modelPackRefs = Array.from(new Set(input.modelPackRefs.map((item) => String(item || '').trim()).filter(Boolean)))
-  const thumbnailRefs = input.thumbnailPath ? [String(input.thumbnailPath).trim()].filter(Boolean) : []
-  const startFrameRefs = input.startFramePath ? [String(input.startFramePath).trim()].filter(Boolean) : []
-  const continuityAnchorRefs = input.continuityAnchorPath ? [String(input.continuityAnchorPath).trim()].filter(Boolean) : []
   const primaryProductRefs = productRefs.slice(0, 1)
   const primaryModelRefs = modelPackRefs.slice(0, 1)
-  const secondaryModelRefs = modelPackRefs.slice(1, 2)
-  if (input.mode === 'end') {
-    return Array.from(
-      new Set([
-        ...primaryProductRefs,
-        ...primaryModelRefs,
-        ...startFrameRefs,
-        ...thumbnailRefs,
-        ...continuityAnchorRefs,
-        ...secondaryModelRefs,
-      ]),
-    ).slice(0, 6)
-  }
+  const storyboardAuthorityRefs =
+    input.mode === 'end'
+      ? [String(input.startFramePath || input.continuityAnchorPath || input.thumbnailPath || '').trim()].filter(Boolean)
+      : [String(input.thumbnailPath || input.continuityAnchorPath || '').trim()].filter(Boolean)
   return Array.from(
     new Set([
       ...primaryProductRefs,
       ...primaryModelRefs,
-      ...thumbnailRefs,
-      ...continuityAnchorRefs,
-      ...secondaryModelRefs,
+      ...storyboardAuthorityRefs,
     ]),
-  ).slice(0, 6)
+  ).slice(0, 3)
 }
 
 function previousShotContinuityAnchor(project: CloneProject, shot: ShotSpec) {
@@ -3847,10 +3833,8 @@ function buildShotVideoRequestPreview(input: {
 function buildShotImageRequestPreview(input: {
   credentials: ModelCredentials
   startPrompt: string
-  endPrompt: string
   negativePrompt: string
   startRefs: string[]
-  endRefs: string[]
 }) {
   const provider = String(input.credentials.imageProviderPrimary || 'openai').trim() || 'openai'
   const model =
@@ -3883,7 +3867,7 @@ function buildShotImageRequestPreview(input: {
     requestProvider: provider,
     requestModel: model,
     requestJsonStart: toJson(input.startPrompt, input.startRefs.map((item) => String(item || '').trim()).filter(Boolean)),
-    requestJsonEnd: toJson(input.endPrompt, input.endRefs.map((item) => String(item || '').trim()).filter(Boolean)),
+    requestJsonEnd: '',
   }
 }
 
@@ -5612,6 +5596,7 @@ function syncSegmentVideoOutput(project: CloneProject, shot: ShotSpec, patch: Pa
   const previous = resolveShotVideoOutput(project, shot)
   const previousStatus = String(previous.status || '').trim().toLowerCase()
   const incomingStatus = String(patch.status || '').trim().toLowerCase()
+  const incomingSourceEvent = String(patch.sourceEvent || '').trim().toLowerCase()
   const hasExplicitTaskReset = Object.prototype.hasOwnProperty.call(patch, 'taskId') && patch.taskId === undefined
   const previousTaskId = sanitizeVideoTaskId(previous.taskId || shot.generatedTaskId)
   const incomingTaskId = sanitizeVideoTaskId(
@@ -5631,7 +5616,13 @@ function syncSegmentVideoOutput(project: CloneProject, shot: ShotSpec, patch: Pa
     (explicitReset ||
       (Boolean(incomingTaskId) && incomingTaskId !== previousTaskId) ||
       Boolean(patch.previousTaskIds?.length))
+  const isForceRegenerateReplacement =
+    Boolean(patch.previousTaskIds?.length) ||
+    incomingSourceEvent === 'force_regenerate_reset' ||
+    incomingSourceEvent === 'segment_submit_started' ||
+    incomingSourceEvent === 'segment_submit_succeeded'
   const isStatusRegression =
+    !isForceRegenerateReplacement &&
     !shouldInvalidatePreviousCompletedVideo &&
     !explicitReset &&
     (previousHasVideo || previousStatus === 'done' || previousStatus === 'downloading' || previousStatus === 'remote_succeeded_pending_download') &&
@@ -5790,6 +5781,7 @@ function canReuseExistingShotVideoTask(output: {
 }
 
 function computeShotVideoSubmissionFingerprint(input: {
+  project?: CloneProject
   shot: ShotSpec
   firstFramePath: string
   lastFramePath?: string
@@ -5797,6 +5789,7 @@ function computeShotVideoSubmissionFingerprint(input: {
   model: string
   requestCapability: CloneShotVideoOutput['requestCapability']
 }) {
+  const explicitVideoSize = resolveShotRequestedVideoSize(input.project, input.shot)
   return computeCloudClipHash({
     promptHash: computePromptHash({
       shot: input.shot,
@@ -5815,8 +5808,8 @@ function computeShotVideoSubmissionFingerprint(input: {
     lastFrame: String(input.lastFramePath || input.firstFramePath || '').trim(),
     model: input.model,
     duration: Number(input.shot.durationSec || 0),
-    aspectRatio: input.shot.prompt?.aspectRatio || '9:16',
-    resolution: `720p|${input.provider}|${String(input.requestCapability || '').trim()}`,
+    aspectRatio: resolveProjectVideoAspectRatio(input.project, input.shot),
+    resolution: `${explicitVideoSize || '720p'}|${input.provider}|${String(input.requestCapability || '').trim()}`,
   })
 }
 
@@ -5842,6 +5835,52 @@ function buildShotVideoCreatingLockReason(output?: Partial<CloneShotVideoOutput>
     return `[submit_locked] 当前分镜视频任务已提交，等待任务号回写中，锁定至 ${new Date(lockedUntil).toISOString()}`
   }
   return '[submit_locked] 当前分镜视频任务正在提交中，等待任务号回写，不重复创建'
+}
+
+function normalizeXibapiVideoSize(size: unknown): '1280x720' | '720x1280' | '1920x1080' | '1080x1920' | undefined {
+  const value = String(size || '').trim()
+  if (value === '1280x720' || value === '720x1280' || value === '1920x1080' || value === '1080x1920') return value
+  return undefined
+}
+
+function resolveShotRequestedVideoSize(
+  project: CloneProject | undefined,
+  shot: ShotSpec,
+): '1280x720' | '720x1280' | '1920x1080' | '1080x1920' | undefined {
+  return normalizeXibapiVideoSize(project?.blueprint?.renderHints?.resolution) || normalizeXibapiVideoSize((shot as any)?.resolution)
+}
+
+function resolveProjectVideoAspectRatio(project: CloneProject | undefined, shot: ShotSpec): '9:16' | '16:9' {
+  if (project?.blueprint?.renderHints?.aspectRatio === '16:9') return '16:9'
+  if (project?.blueprint?.renderHints?.aspectRatio === '9:16') return '9:16'
+  return shot.prompt?.aspectRatio === '16:9' ? '16:9' : '9:16'
+}
+
+async function inferProjectRenderHintsFromStoryboardFrames(project: CloneProject) {
+  const shots = projectBlueprintShots(project).sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+  for (const shot of shots) {
+    const framePath = String(shot.gptFirstFramePath || shot.generatedFirstFramePath || shot.gptLastFramePath || shot.generatedLastFramePath || '').trim()
+    if (!framePath) continue
+    try {
+      const meta = await probeMedia(framePath)
+      const width = Number(meta.width || 0)
+      const height = Number(meta.height || 0)
+      if (!width || !height) continue
+      const aspectRatio: '9:16' | '16:9' = width > height ? '16:9' : '9:16'
+      const resolution: '720x1280' | '1280x720' | '1080x1920' | '1920x1080' =
+        aspectRatio === '16:9'
+          ? Math.max(width, height) >= 1920
+            ? '1920x1080'
+            : '1280x720'
+          : Math.max(width, height) >= 1920
+            ? '1080x1920'
+            : '720x1280'
+      return { aspectRatio, resolution }
+    } catch {
+      continue
+    }
+  }
+  return undefined
 }
 
 type NormalizedShotVideoIntent =
@@ -5902,6 +5941,39 @@ function hasSucceededRemoteVideoResult(output: Partial<CloneShotVideoOutput> | u
   const remoteStatus = String(output?.remoteStatus || remoteRaw?.status || remoteRawData?.status || '').trim().toLowerCase()
   const hasVideoUrl = Boolean(String(output?.videoUrl || remoteRaw?.video_url || remoteRawData?.video_url || '').trim())
   return hasVideoUrl && ['succeeded', 'success', 'completed', 'done', 'finished'].includes(remoteStatus)
+}
+
+function isShotVideoAwaitingReplacementTask(output: Partial<CloneShotVideoOutput> | undefined) {
+  const status = String(output?.status || '').trim().toLowerCase()
+  return (
+    (status === 'submitting' || status === 'remote_pending' || status === 'remote_running') &&
+    Boolean(output?.previousTaskIds?.length) &&
+    !Boolean(String(output?.taskId || '').trim())
+  )
+}
+
+function isStaleShotVideoDownloadBlocked(output: Partial<CloneShotVideoOutput> | undefined) {
+  const taskId = String(output?.taskId || '').trim()
+  const previousTaskIds = Array.isArray(output?.previousTaskIds) ? output.previousTaskIds.map((item) => String(item || '').trim()).filter(Boolean) : []
+  return (
+    isShotVideoAwaitingReplacementTask(output) ||
+    (Boolean(taskId) && previousTaskIds.includes(taskId))
+  )
+}
+
+function isSupersededShotVideoTaskBinding(input: {
+  currentTaskId?: unknown
+  activeTaskId?: unknown
+  previousTaskIds?: unknown
+}) {
+  const currentTaskId = String(input.currentTaskId || '').trim()
+  const activeTaskId = String(input.activeTaskId || '').trim()
+  const previousTaskIds = Array.isArray(input.previousTaskIds)
+    ? input.previousTaskIds.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+  if (!currentTaskId || !activeTaskId) return false
+  if (currentTaskId === activeTaskId) return false
+  return previousTaskIds.includes(currentTaskId)
 }
 
 function resolveStoryboardFrameSource(shot: ShotSpec) {
@@ -6118,6 +6190,29 @@ async function pollExistingSegmentTask(input: {
     const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
     ensureCloneFlowState(latestProject)
     const latestShot = projectBlueprintShots(latestProject).find((item) => item.id === input.shot.id) || input.shot
+    const latestOutputBeforePoll = resolveShotVideoOutput(latestProject, latestShot)
+    const latestActiveTaskId = resolveEffectiveVideoTaskId(latestOutputBeforePoll.taskId, latestShot.generatedTaskId)
+    if (
+      isSupersededShotVideoTaskBinding({
+        currentTaskId: taskId,
+        activeTaskId: latestActiveTaskId,
+        previousTaskIds: latestOutputBeforePoll.previousTaskIds,
+      })
+    ) {
+      console.log('[clone-debug] shot-video-poll:skip-superseded-task', {
+        projectId: latestProject.id,
+        shotId: latestShot.id,
+        taskId,
+        activeTaskId: latestActiveTaskId || undefined,
+        previousTaskIds: latestOutputBeforePoll.previousTaskIds ?? [],
+      })
+      return {
+        project: latestProject,
+        task: lastTask,
+        synced: false,
+        status: String(latestOutputBeforePoll.status || 'submitting') as CloneShotVideoOutput['status'],
+      }
+    }
     try {
       syncSegmentVideoOutput(latestProject, latestShot, {
         status: 'remote_running',
@@ -6319,6 +6414,36 @@ async function downloadCompletedSegmentTask(input: {
   const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
   const latestShot = projectBlueprintShots(latestProject).find((item) => item.id === input.shot.id) || input.shot
   const currentOutput = resolveShotVideoOutput(latestProject, latestShot)
+  const activeTaskId = resolveEffectiveVideoTaskId(currentOutput.taskId, latestShot.generatedTaskId)
+  const currentTaskId = String(currentOutput.taskId || latestShot.generatedTaskId || '').trim()
+  if (
+    isSupersededShotVideoTaskBinding({
+      currentTaskId,
+      activeTaskId,
+      previousTaskIds: currentOutput.previousTaskIds,
+    })
+  ) {
+    console.log('[clone-debug] shot-video-download:skip-superseded-task', {
+      projectId: latestProject.id,
+      shotId: latestShot.id,
+      taskId: currentTaskId || undefined,
+      activeTaskId: activeTaskId || undefined,
+      previousTaskIds: currentOutput.previousTaskIds ?? [],
+      status: currentOutput.status,
+    })
+    return { project: latestProject, status: String(currentOutput.status || 'submitting') as 'submitting' }
+  }
+  if (isStaleShotVideoDownloadBlocked(currentOutput)) {
+    console.log('[clone-debug] shot-video-download:skip-stale-replacement', {
+      projectId: latestProject.id,
+      shotId: latestShot.id,
+      taskId: currentOutput.taskId || latestShot.generatedTaskId || undefined,
+      previousTaskIds: currentOutput.previousTaskIds ?? [],
+      status: currentOutput.status,
+      sourceEvent: currentOutput.sourceEvent,
+    })
+    return { project: latestProject, status: String(currentOutput.status || 'submitting') as 'submitting' }
+  }
   const remoteRaw = (currentOutput.remoteRaw ?? {}) as Record<string, any>
   const remoteRawData =
     remoteRaw?.data && typeof remoteRaw.data === 'object' ? (remoteRaw.data as Record<string, any>) : {}
@@ -6435,6 +6560,21 @@ async function continueShotVideoResultFlow(input: {
     hasVideoUrl: Boolean(String(repairedOutput.videoUrl || '').trim()),
     hasLocalVideo: Boolean(String(repairedOutput.videoPath || repairedOutput.localPath || '').trim()),
   })
+  if (isStaleShotVideoDownloadBlocked(repairedOutput)) {
+    console.log('[clone-debug] shot-video-continue-flow:skip-stale-replacement', {
+      projectId: currentProject.id,
+      shotId: currentShot.id,
+      status: repairedOutput.status,
+      taskId: resolveEffectiveVideoTaskId(repairedOutput.taskId, currentShot.generatedTaskId) || undefined,
+      previousTaskIds: repairedOutput.previousTaskIds ?? [],
+    })
+    return {
+      project: currentProject,
+      task: null,
+      synced: false,
+      status: String(repairedOutput.status || 'submitting') as CloneShotVideoOutput['status'],
+    }
+  }
   if (String(repairedOutput.videoUrl || '').trim() && !String(repairedOutput.videoPath || repairedOutput.localPath || '').trim()) {
     syncSegmentVideoOutput(currentProject, currentShot, {
       status: 'downloading',
@@ -6660,6 +6800,7 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
   const status = String(output.status || '').trim().toLowerCase()
 
   if (intent === 'force_regenerate') {
+    const replacementStartedAt = now()
     await clearShotVideoArtifacts(projectId, shotId)
     syncSegmentVideoOutput(project, shot, {
       previousTaskIds: Array.from(
@@ -6669,12 +6810,13 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
           ),
         ),
       ),
+      retryCount: 0,
       taskId: undefined,
       provider: undefined,
       model: undefined,
       submissionFingerprint: undefined,
-      submissionStartedAt: undefined,
-      submissionLockedUntil: undefined,
+      submissionStartedAt: replacementStartedAt,
+      submissionLockedUntil: replacementStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
       videoPath: undefined,
       localPath: undefined,
       videoUrl: undefined,
@@ -6684,6 +6826,7 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
       status: 'submitting',
       remoteStatus: undefined,
       error: undefined,
+      sourceEvent: 'force_regenerate_reset',
     })
     replaceProjectShot(project, shot.id, {
       generatedClipPath: undefined,
@@ -6695,6 +6838,7 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
       uploadedAssetPath: undefined,
       error: '',
       status: 'generating',
+      retryCount: 0,
       qualityStatus: 'unchecked',
       qualityReasons: [],
       canEnterRender: false,
@@ -6731,6 +6875,9 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
   }
 
   if (intent === 'download_if_ready') {
+    if (isShotVideoAwaitingReplacementTask(output)) {
+      return project
+    }
     if (
       status === 'remote_succeeded_pending_download' ||
       (status === 'downloading' && hasSucceededRemoteVideoResult(output)) ||
@@ -6744,6 +6891,9 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
   if (intent === 'poll_only') {
     const normalizedOutput = await normalizeShotVideoState(project, shot)
     const normalizedStatus = String(normalizedOutput.status || '').trim().toLowerCase()
+    if (isShotVideoAwaitingReplacementTask(normalizedOutput)) {
+      return await cloneRepo.upsertProject(project)
+    }
     if (
       normalizedStatus === 'remote_pending' ||
       normalizedStatus === 'remote_running' ||
@@ -6781,6 +6931,9 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
       await normalizeShotVideoState(project, shot)
       return await cloneRepo.upsertProject(project)
     }
+    if (isShotVideoAwaitingReplacementTask(output)) {
+      return project
+    }
     if (String(output.videoUrl || '').trim() || hasSucceededRemoteVideoResult(output)) {
       return (await downloadCompletedSegmentTask({ project, shot })).project
     }
@@ -6792,6 +6945,7 @@ async function ensureShotVideoState(projectId: string, shotId: string, intent: N
 
   if (intent === 'submit_if_needed') {
     if (status === 'done') return project
+    if (isShotVideoAwaitingReplacementTask(output)) return project
     if (
       status === 'remote_succeeded_pending_download' ||
       status === 'downloading' ||
@@ -6883,7 +7037,7 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
     }
     if (output.status === 'done') return
     if (!isRecoverableVideoStatus(output.status)) return
-    const recoverTaskId = effectiveTaskId
+    const recoverTaskId = isShotVideoAwaitingReplacementTask(output) ? '' : effectiveTaskId
     if (!recoverTaskId) {
       const pendingRemoteState = resolvePendingRemoteState(output.remoteStatus, output.remoteRaw)
       const currentRetryCount = Number(currentShot.retryCount ?? shot.retryCount ?? 0)
@@ -7264,7 +7418,9 @@ async function ensureAi666SegmentVideoTask(input: {
     const provider = 'apifox_hub'
     const model = videoProviderModel(creds)
     const endpointStyle = resolveApifoxHubCredentials(creds, 'video')?.videoEndpointStyle
+    const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
     const submissionFingerprint = computeShotVideoSubmissionFingerprint({
+      project: latestProject,
       shot: input.shot,
       firstFramePath: input.firstFramePath,
       lastFramePath: input.lastFramePath || input.firstFramePath,
@@ -7272,7 +7428,6 @@ async function ensureAi666SegmentVideoTask(input: {
       model,
       requestCapability: capability,
     })
-    const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
     ensureCloneFlowState(latestProject)
     let latestShot = projectBlueprintShots(latestProject).find((item) => item.id === input.shot.id) || input.shot
     clearInvalidVideoTaskMapping(latestProject, latestShot, 'before-apifox-video-create')
@@ -7361,7 +7516,15 @@ async function ensureAi666SegmentVideoTask(input: {
       })
       return await cloneRepo.upsertProject(latestProject)
     }
-    if (isShotVideoSubmissionLocked(existing, submissionFingerprint)) {
+    const resetSubmissionLockOnly =
+      Boolean(input.forceRegenerate) &&
+      !String(existing.taskId || '').trim() &&
+      !String(existing.videoPath || existing.localPath || latestShot.generatedClipPath || '').trim() &&
+      (
+        String(existing.sourceEvent || '').trim().toLowerCase() === 'force_regenerate_reset' ||
+        String(existing.status || '').trim().toLowerCase() === 'submitting'
+      )
+    if (!resetSubmissionLockOnly && isShotVideoSubmissionLocked(existing, submissionFingerprint)) {
       console.log('[clone-debug] ensure-apifox-video-task:submission-locked', {
         projectId: latestProject.id,
         shotId: latestShot.id,
@@ -7458,6 +7621,8 @@ async function ensureAi666SegmentVideoTask(input: {
     await cloneRepo.upsertProject(latestProject)
     let created
     try {
+      const requestedVideoSize = resolveShotRequestedVideoSize(latestProject, latestShot)
+      const requestedAspectRatio = resolveProjectVideoAspectRatio(latestProject, latestShot)
       created = await createAi666VideoTask({
         credentials: creds,
         capability,
@@ -7466,6 +7631,8 @@ async function ensureAi666SegmentVideoTask(input: {
         image: uploadedOrderedReferenceImages[0],
         lastImage: uploadedLastFrameImage,
         referenceImages: [],
+        aspectRatio: requestedAspectRatio,
+        xibapiSize: requestedVideoSize,
       })
     } catch (error: any) {
       appendShotVideoSubmissionAuditLog(latestProject, {
@@ -8518,6 +8685,19 @@ export const cloneService = {
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
     assertStoryboardExtractionReady(project)
+    const inferredRenderHints = await inferProjectRenderHintsFromStoryboardFrames(project)
+    if (project.blueprint && inferredRenderHints) {
+      project.blueprint = {
+        ...project.blueprint,
+        renderHints: {
+          aspectRatio: inferredRenderHints.aspectRatio,
+          resolution: inferredRenderHints.resolution,
+          pacing: project.blueprint.renderHints?.pacing === 'slow' || project.blueprint.renderHints?.pacing === 'medium' ? project.blueprint.renderHints.pacing : 'fast',
+          bgmMood: String(project.blueprint.renderHints?.bgmMood || '').trim(),
+          ttsStyle: String(project.blueprint.renderHints?.ttsStyle || '').trim(),
+        },
+      }
+    }
     const productAnalysisText = buildPromptProductDescriptionText(project, normalizeProductType(project.baseBlueprint?.productCategory || 'general'))
     const shots = projectBlueprintShots(project)
       .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
@@ -9331,6 +9511,41 @@ export const cloneService = {
     if (!item) throw new Error('复刻项目不存在')
     item.title = String(input.title ?? item.title ?? '').trim() || item.title
     item.description = String(input.description ?? item.description ?? '').trim() || undefined
+    const saved = await cloneRepo.upsertProject(item)
+    return {
+      project: saved,
+      summary: buildProjectSummary(saved),
+    }
+  },
+
+  async updateProjectRenderHints(input: {
+    cloneProjectId: string
+    aspectRatio?: '9:16' | '16:9'
+    resolution?: '720x1280' | '1280x720' | '1080x1920' | '1920x1080'
+  }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item) throw new Error('Project not found')
+    if (!item.blueprint) throw new Error('Blueprint is not ready')
+    const nextAspectRatio = input.aspectRatio === '16:9' ? '16:9' : '9:16'
+    const nextResolution =
+      input.resolution === '1280x720' ||
+      input.resolution === '720x1280' ||
+      input.resolution === '1920x1080' ||
+      input.resolution === '1080x1920'
+        ? input.resolution
+        : nextAspectRatio === '16:9'
+          ? '1280x720'
+          : '1080x1920'
+    item.blueprint = {
+      ...item.blueprint,
+      renderHints: {
+        aspectRatio: nextAspectRatio,
+        resolution: nextResolution,
+        pacing: item.blueprint.renderHints?.pacing === 'slow' || item.blueprint.renderHints?.pacing === 'medium' ? item.blueprint.renderHints.pacing : 'fast',
+        bgmMood: String(item.blueprint.renderHints?.bgmMood || '').trim(),
+        ttsStyle: String(item.blueprint.renderHints?.ttsStyle || '').trim(),
+      },
+    }
     const saved = await cloneRepo.upsertProject(item)
     return {
       project: saved,
@@ -10935,7 +11150,7 @@ export const cloneService = {
     const refreshedShot = latest.blueprint.shots.find((x) => x.id === input.shotId) ?? latestShot
     const outDir = join(getAppPaths().dataDir, 'viral-clone', latest.id, 'shots', refreshedShot.id, 'gpt-frames')
     await mkdir(outDir, { recursive: true })
-    const which = input.which ?? 'both'
+    const which = input.which === 'end' ? 'end' : 'start'
     const compiled = promptConsistencyService.compileAndPersist({
       projectId: latest.id,
       shot: refreshedShot,
@@ -10953,15 +11168,6 @@ export const cloneService = {
       which: 'start',
       compiledPrompt: compiled.finalPrompt,
     })
-    const endPrompt = buildGptFramePrompt({
-      shot: refreshedShot,
-      productType,
-      modelPack: pack,
-      productPoints: refreshedShot.aiPrompt || refreshedShot.materialNeed,
-      productDescription: productIdentityText,
-      which: 'end',
-      compiledPrompt: compiled.finalPrompt,
-    })
     const promptHash = computePromptHash({
       shot: refreshedShot,
       productRefs: refs,
@@ -10975,18 +11181,17 @@ export const cloneService = {
       which,
       refs: [...pack.imagePaths.slice(0, 1), ...refs, continuityAnchorPath].filter(Boolean),
       model: imageProviderModel(creds),
-      positivePrompt: which === 'end' ? endPrompt : which === 'both' ? `${startPrompt}\n---\n${endPrompt}` : startPrompt,
+      positivePrompt: startPrompt,
       negativePrompt: compiled.finalNegativePrompt,
     })
     const cachedFrame = input.forceRegenerate ? null : getCachedFrameResult(latest, imagePromptHash)
     let firstPath = refreshedShot.gptFirstFramePath
-    let lastPath = refreshedShot.gptLastFramePath
+    let lastPath = ''
     try {
       if (cachedFrame?.imagePaths?.length) {
         firstPath = cachedFrame.imagePaths[0] || firstPath
-        lastPath = cachedFrame.imagePaths[1] || firstPath || lastPath
       } else {
-      if (which === 'start' || which === 'both') {
+      if (which === 'start') {
         const startRefs = compactStoryboardImageRefs({
           productRefs: refs,
           modelPackRefs: pack.imagePaths,
@@ -11003,28 +11208,10 @@ export const cloneService = {
           imagePaths: startRefs,
         })
       }
-      if (which === 'end' || which === 'both') {
-        const endRefs = compactStoryboardImageRefs({
-          productRefs: refs,
-          modelPackRefs: pack.imagePaths,
-          thumbnailPath: refreshedShot.thumbnailPath,
-          startFramePath: firstPath,
-          continuityAnchorPath,
-          mode: 'end',
-        })
-        lastPath = await generateGptShotFrameImage({
-          credentials: creds,
-          outDir,
-          filePrefix: `gpt_last_${refreshedShot.index + 1}`,
-          prompt: endPrompt,
-          negativePrompt: compiled.finalNegativePrompt,
-          imagePaths: endRefs,
-        })
-      }
         setCachedFrameResult(latest, {
           hash: imagePromptHash,
           shotId: refreshedShot.id,
-          imagePaths: [firstPath, lastPath].filter(Boolean) as string[],
+          imagePaths: [firstPath].filter(Boolean) as string[],
           provider: generatedImageProvider(creds),
           model: imageProviderModel(creds),
           createdAt: now(),
@@ -11046,7 +11233,7 @@ export const cloneService = {
       latestProjectForSave.promptCache = latest.promptCache
       replaceProjectShot(latestProjectForSave, latestShot.id, {
         gptFirstFramePath: firstPath,
-        gptLastFramePath: lastPath,
+        gptLastFramePath: undefined,
         gptFrameStatus: 'done',
         gptFrameError: '',
         gptFrameSource: 'gpt_image',
@@ -11055,7 +11242,7 @@ export const cloneService = {
         productReferenceImagePaths: refs,
         productType,
         generatedFirstFramePath: firstPath,
-        generatedLastFramePath: lastPath,
+        generatedLastFramePath: undefined,
         generatedSource: 'cloud',
         generatedProvider: generatedImageProvider(creds),
         generatedModel: imageProviderModel(creds),
@@ -11190,6 +11377,7 @@ export const cloneService = {
     assertShotHasScriptPrompt(shot)
     let existingOutput = resolveShotVideoOutput(item, shot)
     if (input.forceRegenerate && (existingOutput.taskId || existingOutput.videoPath || existingOutput.localPath || shot.generatedClipPath)) {
+      const replacementStartedAt = now()
       console.log('[clone-debug] generate-shot-clip:force-regenerate-clear-old-output', {
         projectId: item.id,
         shotId: shot.id,
@@ -11216,8 +11404,9 @@ export const cloneService = {
         remoteRaw: undefined,
         error: undefined,
         submissionFingerprint: undefined,
-        submissionStartedAt: undefined,
-        submissionLockedUntil: undefined,
+        submissionStartedAt: replacementStartedAt,
+        submissionLockedUntil: replacementStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
+        sourceEvent: 'force_regenerate_reset',
         status: 'submitting',
         completedAt: undefined,
       })
@@ -11335,11 +11524,11 @@ export const cloneService = {
           ? activeShot.uploadedImagePath
           : activeShot.gptFrameConfirmed && activeShot.gptLastFramePath
             ? activeShot.gptLastFramePath
-            : activeShot.generatedLastFramePath || activeShot.generatedFirstFramePath || activeShot.uploadedImagePath || '',
+            : activeShot.generatedLastFramePath || '',
       ).trim(),
       provider: 'apifox_hub',
       model: videoProviderModel(await cloneRepo.getCredentials()),
-      requestCapability: 'video_start_end_to_video',
+      requestCapability: 'video_image_to_video',
     })
     if (!input.forceRegenerate && isShotVideoSubmissionLocked(existingOutput, currentSubmissionFingerprint)) {
       console.log('[clone-debug] generate-shot-clip:submission-locked', {
@@ -11507,7 +11696,7 @@ export const cloneService = {
               ? shot.uploadedImagePath
               : shot.gptFrameConfirmed && shot.gptLastFramePath
                 ? shot.gptLastFramePath
-                : shot.generatedLastFramePath || first
+                : shot.generatedLastFramePath || (mode === 'high' ? first : '')
         console.log('[clone-debug] generate-shot-clip:attempt-input', {
           projectId: item.id,
           shotId: shot.id,
@@ -11518,12 +11707,15 @@ export const cloneService = {
         })
         if (!first) throw new Error('[未提交视频模型请求] 缺少首帧，请先生成首帧或上传图片')
         if (mode === 'high' && !last) throw new Error('[未提交视频模型请求] 高质量模式缺少尾帧，请先生成首尾帧')
-        if (videoProviderChain(creds)[0] === 'apifox_hub') {
+        const primaryVideoProvider = videoProviderChain(creds)[0]
+        if (mode === 'high' && !last && primaryVideoProvider !== 'apifox_hub') throw new Error('[鏈彁浜よ棰戞ā鍨嬭姹俔 楂樿川閲忔ā寮忕己灏戝熬甯э紝璇峰厛鐢熸垚棣栧熬甯?')
+        if (primaryVideoProvider === 'apifox_hub') {
           console.log('[clone-debug] generate-shot-clip:delegate-apifox-hub', {
             projectId: item.id,
             shotId: shot.id,
             attempt,
             mode,
+            usedFirstFrameAsLastFrame: mode === 'high' && !last,
           })
           const latest = (await cloneRepo.getProject(input.cloneProjectId)) || item
           ensureCloneFlowState(latest)
@@ -11532,14 +11724,14 @@ export const cloneService = {
             pool: 'submit',
             project: latest,
             shotId: latestShot.id,
-            worker: () => ensureAi666SegmentVideoTask({
-              project: latest,
-              shot: latestShot,
-              firstFramePath: first,
-              lastFramePath: last || first,
-              mode,
-              forceRegenerate: Boolean(input.forceRegenerate),
-            }),
+              worker: () => ensureAi666SegmentVideoTask({
+                project: latest,
+                shot: latestShot,
+                firstFramePath: first,
+                lastFramePath: last || first,
+                mode,
+                forceRegenerate: Boolean(input.forceRegenerate),
+              }),
           })
           scheduleRemoteStoryboardVideoReconcile(input.cloneProjectId)
           const next = (await refreshGenerationQueueRuntime(input.cloneProjectId)) || submitted
@@ -11806,8 +11998,6 @@ export const cloneService = {
     const productReferenceImagePaths = normalizePreviewReferencePaths(resolveStoryboardProductRefs(item, shot))
     if (!hasProductLock(shot, productReferenceImagePaths)) throw new Error('请先为绑定商品生成标准源')
     const productType = normalizeProductType(shot.productType)
-    item = await ensureProjectProductAnalysis(item, productReferenceImagePaths, productType, item.locale || 'zh-CN')
-    await cloneRepo.upsertProject(item)
     shot = item.blueprint?.shots.find((x) => x.id === input.shotId) || shot
     const compiled =
       promptConsistencyService.getShotConsistencyReport(item.id, shot.id) ||
@@ -11851,15 +12041,6 @@ export const cloneService = {
       which: 'start',
       compiledPrompt: compiled.finalPrompt,
     })
-    const endPrompt = buildGptFramePrompt({
-      shot,
-      productType,
-      modelPack: pack,
-      productPoints: shot.aiPrompt || shot.materialNeed,
-      productDescription: productDescriptionText,
-      which: 'end',
-      compiledPrompt: compiled.finalPrompt,
-    })
     const continuityAnchorPath = previousShotContinuityAnchor(item, shot)
     const startRefs = compactStoryboardImageRefs({
       productRefs: productReferenceImagePaths,
@@ -11868,21 +12049,11 @@ export const cloneService = {
       continuityAnchorPath,
       mode: 'start',
     })
-    const endRefs = compactStoryboardImageRefs({
-      productRefs: productReferenceImagePaths,
-      modelPackRefs: pack.imagePaths,
-      thumbnailPath: shot.thumbnailPath,
-      startFramePath: String(shot.gptFirstFramePath || shot.generatedFirstFramePath || '').trim(),
-      continuityAnchorPath,
-      mode: 'end',
-    })
     const requestPreview = buildShotImageRequestPreview({
       credentials: await cloneRepo.getCredentials(),
       startPrompt,
-      endPrompt,
       negativePrompt: compiled.finalNegativePrompt,
       startRefs,
-      endRefs,
     })
 
     return {
@@ -11902,11 +12073,11 @@ export const cloneService = {
       referenceResponsibilityBlock,
       hasCompiledProductLock: Boolean(String(compiled.finalPrompt || '').trim()),
       hasProductDescriptionBlock: Boolean(productDescriptionBlock),
-      hasDirectProductReuseLock: startPrompt.includes('PRODUCT VISUAL ANCHOR LOCK') && endPrompt.includes('PRODUCT VISUAL ANCHOR LOCK'),
+      hasDirectProductReuseLock: startPrompt.includes('PRODUCT VISUAL ANCHOR LOCK'),
       hasSceneAtmosphereBlock: Boolean(sceneAtmosphereBlock),
       hasModelIdentityBlock: Boolean(modelIdentityBlock),
       startPrompt,
-      endPrompt,
+      endPrompt: '',
       negativePrompt: compiled.finalNegativePrompt,
       referenceImageCount: productReferenceImagePaths.length + modelReferenceImagePaths.length,
       modelIdentityPackId: pack.id,
@@ -11917,7 +12088,7 @@ export const cloneService = {
       requestProvider: requestPreview.requestProvider,
       requestModel: requestPreview.requestModel,
       requestJsonStart: requestPreview.requestJsonStart,
-      requestJsonEnd: requestPreview.requestJsonEnd,
+      requestJsonEnd: '',
       boundProductSnapshot: item.boundProductSnapshot || item.baseBlueprint?.consistencyAssets?.boundProductSnapshot || item.blueprint?.consistencyAssets?.boundProductSnapshot,
     }
   },
@@ -11997,7 +12168,7 @@ export const cloneService = {
     const lastFramePath = String(
       shot.gptFrameConfirmed && shot.gptLastFramePath
         ? shot.gptLastFramePath
-        : shot.generatedLastFramePath || shot.gptLastFramePath || firstFramePath,
+        : shot.generatedLastFramePath || shot.gptLastFramePath || '',
     ).trim()
     const requestCapability = lastFramePath ? 'video_start_end_to_video' : 'video_image_to_video'
     const requestCredentials = await cloneRepo.getCredentials()

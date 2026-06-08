@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
-import { createReadStream } from 'node:fs'
+import { createReadStream, existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { ensureAppDirs, getAppPaths } from './lib/paths'
@@ -34,6 +34,21 @@ import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 
 let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
+let appTray: Tray | null = null
+let isAppQuitting = false
+
+function createTrayIcon() {
+  const candidates = [
+    join(process.cwd(), 'resources', 'icon-brand.png'),
+    join(process.resourcesPath, 'icon-brand.png'),
+  ]
+  for (const filePath of candidates) {
+    if (!existsSync(filePath)) continue
+    const icon = nativeImage.createFromPath(filePath)
+    if (!icon.isEmpty()) return icon.resize({ width: 16, height: 16 })
+  }
+  return nativeImage.createEmpty()
+}
 
 function ignoreBrokenPipeOnStdStreams() {
   const swallowBrokenPipe = (error: unknown) => {
@@ -137,9 +152,41 @@ async function wireMediaProtocol() {
 
 function revealMainWindow() {
   if (!mainWindow) return
+  mainWindow.setSkipTaskbar(false)
   if (mainWindow.isMinimized()) mainWindow.restore()
   if (!mainWindow.isVisible()) mainWindow.show()
   mainWindow.focus()
+}
+
+function hideMainWindowToTray() {
+  if (!mainWindow) return
+  mainWindow.hide()
+  mainWindow.setSkipTaskbar(true)
+}
+
+function ensureTray() {
+  if (appTray) return appTray
+  const trayIcon = createTrayIcon()
+  appTray = new Tray(trayIcon)
+  appTray.setToolTip(app.getName())
+  appTray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: '显示主窗口',
+        click: () => revealMainWindow(),
+      },
+      {
+        label: '退出',
+        click: () => {
+          isAppQuitting = true
+          app.quit()
+        },
+      },
+    ]),
+  )
+  appTray.on('double-click', () => revealMainWindow())
+  appTray.on('click', () => revealMainWindow())
+  return appTray
 }
 
 function setupCloneDebugConsoleBridge() {
@@ -178,12 +225,21 @@ function setupCloneDebugConsoleBridge() {
 
 function createWindow() {
   const { preload } = getAppPaths()
+  ensureTray()
+  const iconCandidates = [
+    join(process.cwd(), 'resources', 'icon-brand.png'),
+    join(process.resourcesPath, 'icon-brand.png'),
+  ]
+  const windowIcon = iconCandidates
+    .map((filePath) => (existsSync(filePath) ? nativeImage.createFromPath(filePath) : nativeImage.createEmpty()))
+    .find((icon) => !icon.isEmpty())
   mainWindow = new BrowserWindow({
     width: 1080,
     height: 720,
     show: false,
     frame: false,
     titleBarStyle: 'hidden',
+    ...(windowIcon && !windowIcon.isEmpty() ? { icon: windowIcon } : {}),
     webPreferences: {
       preload,
       contextIsolation: true,
@@ -193,6 +249,11 @@ function createWindow() {
 
   mainWindow.center()
   mainWindow.once('ready-to-show', revealMainWindow)
+  mainWindow.on('close', (event) => {
+    if (isAppQuitting) return
+    event.preventDefault()
+    hideMainWindowToTray()
+  })
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -616,6 +677,19 @@ function wireIpc() {
       return await cloneService.updateProjectMeta(payload)
     },
   )
+  ipcMain.handle(
+    'clone:updateProjectRenderHints',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        aspectRatio?: '9:16' | '16:9'
+        resolution?: '720x1280' | '1280x720' | '1080x1920' | '1920x1080'
+      },
+    ) => {
+      return await cloneService.updateProjectRenderHints(payload)
+    },
+  )
   ipcMain.handle('clone:listCloneGroups', async () => {
     return await cloneService.listCloneGroups()
   })
@@ -848,7 +922,7 @@ function wireIpc() {
           cloneProjectId: string
           shotIds: string[]
           videoPlanId?: string
-          providerPolicy?: { chain?: Array<'seedance' | 'kling' | 'grsai'> }
+          providerPolicy?: { chain?: Array<'seedance' | 'grsai'> }
           qualityProfile?: 'high'
         },
     ) => {
@@ -863,7 +937,7 @@ function wireIpc() {
         cloneProjectId: string
         shotIds: string[]
         targetProductId?: string
-        providerPolicy?: { chain?: Array<'seedance' | 'kling'> }
+        providerPolicy?: { chain?: Array<'seedance'> }
       },
     ) => {
       return await cloneService.generateShotKeyframes(payload)
@@ -892,7 +966,7 @@ function wireIpc() {
         sessionId?: string
         shotIds: string[]
         consistencyMode?: 'soft' | 'hard'
-        providerPolicy?: { chain?: Array<'seedance' | 'kling'> }
+        providerPolicy?: { chain?: Array<'seedance'> }
       },
     ) => {
       return await cloneService.generateShotVideos(payload)
@@ -951,13 +1025,10 @@ function wireIpc() {
         productPoints?: string
         modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
         productReferenceImagePaths?: string[]
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
+        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        klingApiKey?: string
-        klingHost?: string
-        klingImageModel?: string
         grsaiApiKey?: string
         grsaiHost?: string
         grsaiImageModel?: string
@@ -993,13 +1064,10 @@ function wireIpc() {
         which?: 'start' | 'end' | 'both'
         selectedModelIdentityId?: string
         productReferenceImagePaths?: string[]
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
+        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        klingApiKey?: string
-        klingHost?: string
-        klingImageModel?: string
         grsaiApiKey?: string
         grsaiHost?: string
         grsaiImageModel?: string
@@ -1015,6 +1083,10 @@ function wireIpc() {
   ipcMain.handle(
     'clone:generateShotClip',
     async (_e, payload: { cloneProjectId: string; shotId: string; forceRegenerate?: boolean }) => cloneService.generateShotClip(payload),
+  )
+  ipcMain.handle(
+    'clone:regenerateShotVideo',
+    async (_e, payload: { cloneProjectId: string; shotId: string }) => cloneService.regenerateShotVideo(payload),
   )
   ipcMain.handle(
     'clone:syncShotVideoTask',
@@ -1134,8 +1206,6 @@ function wireIpc() {
       payload: {
         seedanceApiKey?: string
         seedanceHost?: string
-        klingApiKey?: string
-        klingHost?: string
         grsaiApiKey?: string
         grsaiHost?: string
         qiniuAccessKey?: string
@@ -1151,28 +1221,26 @@ function wireIpc() {
         grsaiVideoModel?: string
         grsaiAnalysisModel?: string
         chatProviderPrimary?: 'apifox_hub' | 'grsai'
-        videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
-        videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
+        videoProviderPrimary?: 'seedance' | 'grsai' | 'apifox_hub'
+        videoProviderFallback?: 'seedance' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
-        klingImageModel?: string
+        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
-        apifoxHubProfile?: 'ai666' | 'vectorengine'
-        videoApifoxHubProfile?: 'ai666' | 'vectorengine'
+        apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
+        videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
         imageApifoxHubProfile?: 'ai666' | 'vectorengine'
         chatApifoxHubProfile?: 'ai666' | 'vectorengine'
         ai666Hub?: import('./modules/clone/types').ApifoxHubCredentials
         vectorEngineHub?: import('./modules/clone/types').ApifoxHubCredentials
+        xibapiHub?: import('./modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('./modules/clone/types').ApifoxHubCredentials
       },
     ) => {
       return await cloneService.setModelCredentials({
         seedanceApiKey: payload?.seedanceApiKey,
         seedanceHost: payload?.seedanceHost,
-        klingApiKey: payload?.klingApiKey,
-        klingHost: payload?.klingHost,
         grsaiApiKey: payload?.grsaiApiKey,
         grsaiHost: payload?.grsaiHost,
         qiniuAccessKey: payload?.qiniuAccessKey,
@@ -1194,7 +1262,6 @@ function wireIpc() {
         openaiImageModel: payload?.openaiImageModel,
         openaiImageQuality: payload?.openaiImageQuality,
         imageProviderPrimary: payload?.imageProviderPrimary,
-        klingImageModel: payload?.klingImageModel,
         grsaiImageModel: payload?.grsaiImageModel,
         apifoxHubProfile: payload?.apifoxHubProfile,
         videoApifoxHubProfile: payload?.videoApifoxHubProfile,
@@ -1202,6 +1269,7 @@ function wireIpc() {
         chatApifoxHubProfile: payload?.chatApifoxHubProfile,
         ai666Hub: payload?.ai666Hub,
         vectorEngineHub: payload?.vectorEngineHub,
+        xibapiHub: payload?.xibapiHub,
         apifoxHub: payload?.apifoxHub,
       })
     },
@@ -1259,10 +1327,11 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (isAppQuitting && process.platform !== 'darwin') app.quit()
 })
 
 app.on('before-quit', () => {
+  isAppQuitting = true
   void stopPreviewHttpServer()
   void stopWebApiServer()
 })

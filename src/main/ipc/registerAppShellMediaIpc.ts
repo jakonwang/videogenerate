@@ -1,5 +1,7 @@
 import type { BrowserWindow, IpcMain } from 'electron'
-import { shell } from 'electron'
+import { dialog, shell } from 'electron'
+import { basename, extname } from 'node:path'
+import { copyFile } from 'node:fs/promises'
 import { getMediaInfo } from '../modules/media/info'
 import { splitVideoToSegmentFiles } from '../modules/media/segmentSplit'
 import type { AppLocale } from '../../shared/locale'
@@ -45,5 +47,23 @@ export function registerAppShellMediaIpc(
     const p = String(fullPath ?? '')
     await shell.openPath(p)
     return { ok: true }
+  })
+
+  ipcMain.handle('fs:saveFileAs', async (_e, payload: { sourcePath: string; defaultFileName?: string; title?: string }) => {
+    const sourcePath = String(payload?.sourcePath ?? '').trim()
+    if (!sourcePath) throw new Error('源文件路径不能为空')
+    const defaultFileName = String(payload?.defaultFileName ?? '').trim() || basename(sourcePath) || 'download'
+    const extension = extname(defaultFileName)
+    const filters = extension
+      ? [{ name: `${extension.replace('.', '').toUpperCase()} 文件`, extensions: [extension.replace('.', '')] }]
+      : undefined
+    const result = await dialog.showSaveDialog({
+      title: String(payload?.title ?? '').trim() || '保存文件',
+      defaultPath: defaultFileName,
+      filters,
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await copyFile(sourcePath, result.filePath)
+    return { ok: true as const, canceled: false as const, filePath: result.filePath }
   })
 }

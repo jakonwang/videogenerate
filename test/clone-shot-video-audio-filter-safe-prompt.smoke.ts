@@ -24,11 +24,14 @@ async function main() {
     productMode: 'STRICT' as any,
   })
 
-  assert.doesNotMatch(prompt, /\bspeaking\b/i)
-  assert.doesNotMatch(prompt, /\bdialogue\b/i)
-  assert.doesNotMatch(prompt, /\blip-sync\b/i)
-  assert.doesNotMatch(prompt, /\bmouth shapes\b/i)
-  assert.match(prompt, /host-style/i)
+  assert.doesNotMatch(prompt, /\bpresenter-style\b/i)
+  assert.doesNotMatch(prompt, /\btalking head\b/i)
+  assert.match(prompt, /\[TYPE\]\s+Realistic ecommerce video/i)
+  assert.match(prompt, /\[RESTRICTIONS\]/i)
+  assert.match(prompt, /Camera must NOT introduce new angles, perspectives, or product reinterpretation/i)
+  assert.match(prompt, /No product motion/i)
+  assert.match(prompt, /Do NOT generate speaking, dialogue, lip-sync, mouth-shape acting/i)
+  assert.match(prompt, /Silent visual commercial video/i)
   console.log('clone shot video audio filter safe prompt smoke test passed')
 }
 

@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "4.2.2",
+  "version": "4.6.0",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -50,6 +50,10 @@
     "test:clone-shot-video-intent-router": "tsx test/clone-shot-video-intent-router.smoke.ts",
     "test:clone-shot-video-done-requires-local-file": "tsx test/clone-shot-video-done-requires-local-file.smoke.ts",
     "test:clone-shot-video-force-regenerate-no-reuse": "tsx test/clone-shot-video-force-regenerate-no-reuse.smoke.ts",
+    "test:clone-shot-video-force-regenerate-stale-reset-does-not-restore": "tsx test/clone-shot-video-force-regenerate-stale-reset-does-not-restore.smoke.ts",
+    "test:clone-shot-video-force-regenerate-late-old-task-does-not-win": "tsx test/clone-shot-video-force-regenerate-late-old-task-does-not-win.smoke.ts",
+    "test:clone-shot-video-batch-retry-old-task-does-not-restore": "tsx test/clone-shot-video-batch-retry-old-task-does-not-restore.smoke.ts",
+    "test:clone-shot-video-batch-submit-manual-sync-late-old-task-guard": "tsx test/clone-shot-video-batch-submit-manual-sync-late-old-task-guard.smoke.ts",
     "test:clone-shot-video-force-regenerate-bypass-submission-lock": "tsx test/clone-shot-video-force-regenerate-bypass-submission-lock.smoke.ts",
     "dist": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --win --dir",
@@ -144,12 +148,19 @@
       "out/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "resources/icon-brand-ui-v2.png",
+        "to": "icon-brand.png"
+      }
+    ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**",
       "node_modules/ffmpeg-static/**",
       "node_modules/ffprobe-static/**"
     ],
     "win": {
+      "icon": "resources/icon-brand-ui-v2.png",
       "target": [
         {
           "target": "nsis",

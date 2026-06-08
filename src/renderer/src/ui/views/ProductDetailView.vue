@@ -18,7 +18,17 @@ import {
 } from 'lucide-vue-next'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
-type ProductType = 'phone_case' | 'earring'
+type ProductType =
+  | 'phone_case'
+  | 'earring'
+  | 'necklace'
+  | 'ring'
+  | 'bracelet'
+  | 'clothes'
+  | 'bag'
+  | 'shoes'
+  | 'toy'
+  | 'general'
 type GalleryViewMode = 'grid' | 'list'
 
 type ProductImageAsset = {
@@ -104,6 +114,19 @@ const analysisBoardPollTimer = ref<ReturnType<typeof window.setInterval> | null>
 const feedback = ref('')
 const feedbackTone = ref<FeedbackTone>('info')
 const galleryViewMode = ref<GalleryViewMode>('grid')
+
+const productTypeOptionsV2: Array<{ value: ProductType; label: string }> = [
+  { value: 'phone_case', label: '手机壳' },
+  { value: 'earring', label: '耳环' },
+  { value: 'necklace', label: '项链' },
+  { value: 'ring', label: '戒指' },
+  { value: 'bracelet', label: '手链' },
+  { value: 'clothes', label: '服饰' },
+  { value: 'bag', label: '包袋' },
+  { value: 'shoes', label: '鞋靴' },
+  { value: 'toy', label: '玩具' },
+  { value: 'general', label: '通用商品' },
+]
 
 const productId = computed(() => String(route.params.productId || '').trim())
 const selected = computed(() => list.value.find((item) => item.id === productId.value) ?? null)
@@ -245,7 +268,7 @@ function canonicalDiagnosticStatusLabel(status: ProductCanonicalDiagnostic['stat
 }
 
 function productTypeLabel(type: ProductType) {
-  return type === 'earring' ? '耳环' : '手机壳'
+  return productTypeOptionsV2.find((item) => item.value === type)?.label ?? '通用商品'
 }
 
 function shortFileName(filePath?: string) {
@@ -649,8 +672,9 @@ watch(productId, () => {
               <div class="type-editor">
                 <label class="type-editor__field">
                   <select v-model="typeDraft" data-testid="product-type-select">
-                    <option value="phone_case">手机壳</option>
-                    <option value="earring">耳环</option>
+                    <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
                   </select>
                 </label>
                 <div class="type-editor__actions">
@@ -2085,5 +2109,3 @@ watch(productId, () => {
   }
 }
 </style>
-
-

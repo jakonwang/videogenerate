@@ -1,15 +1,24 @@
-﻿<script setup lang="ts">
-defineProps<{
+<script setup lang="ts">
+import { computed, useSlots } from 'vue'
+
+const props = defineProps<{
   title?: string
   subtitle?: string
 }>()
+
+const slots = useSlots()
+const hasContent = computed(() => {
+  const title = String(props.title || '').trim()
+  const subtitle = String(props.subtitle || '').trim()
+  return Boolean(title || subtitle || slots.default)
+})
 </script>
 
 <template>
-  <header class="ds-topbar">
+  <header v-if="hasContent" class="ds-topbar">
     <div class="ds-topbar__spacer">
-      <div v-if="subtitle" class="ds-topbar__subtitle">{{ subtitle }}</div>
-      <div v-if="title" class="ds-topbar__title">{{ title }}</div>
+      <div v-if="props.subtitle" class="ds-topbar__subtitle">{{ props.subtitle }}</div>
+      <div v-if="props.title" class="ds-topbar__title">{{ props.title }}</div>
     </div>
     <div class="ds-topbar__actions">
       <slot />
@@ -40,4 +49,3 @@ defineProps<{
   width: auto;
 }
 </style>
-

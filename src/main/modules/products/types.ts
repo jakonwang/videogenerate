@@ -1,4 +1,14 @@
-export type ProductType = 'phone_case' | 'earring'
+export type ProductType =
+  | 'phone_case'
+  | 'earring'
+  | 'necklace'
+  | 'ring'
+  | 'bracelet'
+  | 'clothes'
+  | 'bag'
+  | 'shoes'
+  | 'toy'
+  | 'general'
 export type SegmentKey = string
 export type ProductCanonicalSourceStatus = 'idle' | 'processing' | 'done' | 'failed'
 
@@ -80,4 +90,3 @@ export type Product = {
   createdAt: number
   updatedAt: number
 }
-

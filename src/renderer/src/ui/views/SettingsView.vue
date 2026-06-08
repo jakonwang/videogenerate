@@ -1,128 +1,167 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Clapperboard, Cloud, Image as ImageIcon, KeyRound, MessagesSquare, Server } from 'lucide-vue-next'
 
 type ProviderKey = 'kling' | 'grsai' | 'apifox_hub'
-type PlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine'
-type CapabilityPlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine'
+type PlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine' | 'xibapi'
+type CapabilityPlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine' | 'xibapi'
+type ChatPlatformKey = 'grsai' | 'ai666' | 'vectorengine'
+type ApifoxProfileKey = 'ai666' | 'vectorengine' | 'xibapi'
+type ApifoxImageProfileKey = 'ai666' | 'vectorengine'
 type SecretKey =
   | 'klingApiKey'
   | 'grsaiApiKey'
   | 'ai666ApiKey'
   | 'vectorEngineApiKey'
+  | 'xibapiApiKey'
   | 'replicateApiToken'
   | 'qiniuAccessKey'
   | 'qiniuSecretKey'
+
+type HubCredentials = {
+  enabled: boolean
+  baseUrl: string
+  apiKey: string
+  chatProvider: 'openai' | 'anthropic' | 'gemini'
+  chatModel: string
+  chatEndpointStyle: 'openai_chat' | 'anthropic_native' | 'gemini_native'
+  imageProvider: 'openai' | 'gemini' | 'jimeng' | 'midjourney'
+  imageModel: string
+  imageEditModel: string
+  imageEndpointStyle: 'openai_images' | 'official_rest' | 'midjourney_task'
+  videoProvider: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi'
+  textToVideoModel: string
+  imageToVideoModel: string
+  startEndVideoModel: string
+  referenceVideoModel: string
+  videoEndpointStyle: 'openai_video' | 'official_rest'
+  defaultPollIntervalMs: number
+  defaultTimeoutMs: number
+}
+
+type ModelCredentialsView = {
+  klingApiKey: string
+  klingHost: string
+  grsaiApiKey: string
+  grsaiHost: string
+  replicateApiToken: string
+  qiniuAccessKey: string
+  qiniuSecretKey: string
+  qiniuBucket: string
+  qiniuDomain: string
+  qiniuUploadHost: string
+  qiniuPrefix: string
+  allowMockWhenNoKey: boolean
+  keyframeModel: string
+  videoProviderPrimary: ProviderKey
+  videoModelPrimary: string
+  videoProviderFallback: ProviderKey
+  videoModelFallback: string
+  grsaiVideoModel: string
+  imageProviderPrimary: ProviderKey
+  openaiImageQuality: 'low' | 'medium' | 'high'
+  chatProviderPrimary: 'apifox_hub' | 'grsai'
+  apifoxHubProfile: ApifoxProfileKey
+  videoApifoxHubProfile: ApifoxProfileKey
+  imageApifoxHubProfile: ApifoxImageProfileKey
+  chatApifoxHubProfile: Exclude<ApifoxProfileKey, 'xibapi'>
+  klingImageModel: string
+  grsaiImageModel: string
+  grsaiAnalysisModel: string
+  ai666Hub: HubCredentials
+  vectorEngineHub: HubCredentials
+  xibapiHub: HubCredentials
+  apifoxHub: HubCredentials
+}
+
+function createHubDefaults(input?: Partial<HubCredentials>): HubCredentials {
+  return {
+    enabled: input?.enabled ?? true,
+    baseUrl: String(input?.baseUrl ?? ''),
+    apiKey: String(input?.apiKey ?? ''),
+    chatProvider: input?.chatProvider ?? 'openai',
+    chatModel: String(input?.chatModel ?? 'gpt-4.1-mini'),
+    chatEndpointStyle: input?.chatEndpointStyle ?? 'openai_chat',
+    imageProvider: input?.imageProvider ?? 'openai',
+    imageModel: String(input?.imageModel ?? 'gpt-image-1'),
+    imageEditModel: String(input?.imageEditModel ?? ''),
+    imageEndpointStyle: input?.imageEndpointStyle ?? 'openai_images',
+    videoProvider: input?.videoProvider ?? 'veo',
+    textToVideoModel: String(input?.textToVideoModel ?? 'veo_3_1-lite'),
+    imageToVideoModel: String(input?.imageToVideoModel ?? 'veo_3_1-lite'),
+    startEndVideoModel: String(input?.startEndVideoModel ?? 'veo_3_1-lite'),
+    referenceVideoModel: String(input?.referenceVideoModel ?? 'veo_3_1-lite'),
+    videoEndpointStyle: input?.videoEndpointStyle ?? 'official_rest',
+    defaultPollIntervalMs: Number(input?.defaultPollIntervalMs ?? 2000) || 2000,
+    defaultTimeoutMs: Number(input?.defaultTimeoutMs ?? 600000) || 600000,
+  }
+}
+
+function createDefaultCredentials(): ModelCredentialsView {
+  return {
+    klingApiKey: '',
+    klingHost: '',
+    grsaiApiKey: '',
+    grsaiHost: '',
+    replicateApiToken: '',
+    qiniuAccessKey: '',
+    qiniuSecretKey: '',
+    qiniuBucket: '',
+    qiniuDomain: '',
+    qiniuUploadHost: '',
+    qiniuPrefix: '',
+    allowMockWhenNoKey: false,
+    keyframeModel: '',
+    videoProviderPrimary: 'grsai',
+    videoModelPrimary: 'veo_3_1-lite',
+    videoProviderFallback: 'grsai',
+    videoModelFallback: 'google/veo3.1-lite/image-to-video',
+    grsaiVideoModel: 'grok-video-3',
+    imageProviderPrimary: 'apifox_hub',
+    openaiImageQuality: 'high',
+    chatProviderPrimary: 'apifox_hub',
+    apifoxHubProfile: 'vectorengine',
+    videoApifoxHubProfile: 'vectorengine',
+    imageApifoxHubProfile: 'vectorengine',
+    chatApifoxHubProfile: 'vectorengine',
+    klingImageModel: '',
+    grsaiImageModel: '',
+    grsaiAnalysisModel: '',
+    ai666Hub: createHubDefaults(),
+    vectorEngineHub: createHubDefaults(),
+    xibapiHub: createHubDefaults({
+      videoProvider: 'xibapi',
+      textToVideoModel: 'veo_3_1-fast',
+      imageToVideoModel: 'veo_3_1-fast',
+      startEndVideoModel: 'veo_3_1-fast',
+      referenceVideoModel: 'veo_3_1-fast',
+    }),
+    apifoxHub: createHubDefaults(),
+  }
+}
 
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
 const modelSettingsBusy = ref(false)
 const modelSettingsSection = ref<'platforms' | 'capabilities' | 'qiniu'>('platforms')
+const { t } = useI18n()
 const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
   grsaiApiKey: false,
   ai666ApiKey: false,
   vectorEngineApiKey: false,
+  xibapiApiKey: false,
   replicateApiToken: false,
   qiniuAccessKey: false,
   qiniuSecretKey: false,
 })
-
-const modelCredentials = ref({
-  klingApiKey: '',
-  klingHost: '',
-  grsaiApiKey: '',
-  grsaiHost: '',
-  replicateApiToken: '',
-  qiniuAccessKey: '',
-  qiniuSecretKey: '',
-  qiniuBucket: '',
-  qiniuDomain: '',
-  qiniuUploadHost: '',
-  qiniuPrefix: '',
-  allowMockWhenNoKey: false,
-  keyframeModel: '',
-  videoProviderPrimary: 'kling' as ProviderKey,
-  videoModelPrimary: 'veo_3_1-lite',
-  videoProviderFallback: 'kling' as ProviderKey,
-  videoModelFallback: 'google/veo3.1-lite/image-to-video',
-  grsaiVideoModel: 'grok-video-3',
-  imageProviderPrimary: 'apifox_hub' as ProviderKey,
-  openaiImageQuality: 'high' as 'low' | 'medium' | 'high',
-  chatProviderPrimary: 'apifox_hub' as 'apifox_hub' | 'grsai',
-  apifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
-  videoApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
-  imageApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
-  chatApifoxHubProfile: 'vectorengine' as 'ai666' | 'vectorengine',
-  klingImageModel: '',
-  grsaiImageModel: '',
-  grsaiAnalysisModel: '',
-  ai666Hub: {
-    enabled: true,
-    baseUrl: '',
-    apiKey: '',
-    chatProvider: 'openai',
-    chatModel: 'gpt-4.1-mini',
-    chatEndpointStyle: 'openai_chat',
-    imageProvider: 'openai',
-    imageModel: 'gpt-image-1',
-    imageEditModel: '',
-    imageEndpointStyle: 'openai_images',
-    videoProvider: 'veo',
-    textToVideoModel: 'veo_3_1-lite',
-    imageToVideoModel: 'veo_3_1-lite',
-    startEndVideoModel: 'veo_3_1-lite',
-    referenceVideoModel: 'veo_3_1-lite',
-    videoEndpointStyle: 'official_rest',
-    defaultPollIntervalMs: 2000,
-    defaultTimeoutMs: 600000,
-  },
-  vectorEngineHub: {
-    enabled: true,
-    baseUrl: '',
-    apiKey: '',
-    chatProvider: 'openai',
-    chatModel: 'gpt-4.1-mini',
-    chatEndpointStyle: 'openai_chat',
-    imageProvider: 'openai',
-    imageModel: 'gpt-image-1',
-    imageEditModel: '',
-    imageEndpointStyle: 'openai_images',
-    videoProvider: 'veo',
-    textToVideoModel: 'veo_3_1-lite',
-    imageToVideoModel: 'veo_3_1-lite',
-    startEndVideoModel: 'veo_3_1-lite',
-    referenceVideoModel: 'veo_3_1-lite',
-    videoEndpointStyle: 'official_rest',
-    defaultPollIntervalMs: 2000,
-    defaultTimeoutMs: 600000,
-  },
-  apifoxHub: {
-    enabled: false,
-    baseUrl: '',
-    apiKey: '',
-    chatProvider: 'openai',
-    chatModel: 'gpt-4.1-mini',
-    chatEndpointStyle: 'openai_chat',
-    imageProvider: 'openai',
-    imageModel: 'gpt-image-1',
-    imageEditModel: '',
-    imageEndpointStyle: 'openai_images',
-    videoProvider: 'veo',
-    textToVideoModel: 'veo_3_1-lite',
-    imageToVideoModel: 'veo_3_1-lite',
-    startEndVideoModel: 'veo_3_1-lite',
-    referenceVideoModel: 'veo_3_1-lite',
-    videoEndpointStyle: 'official_rest',
-    defaultPollIntervalMs: 2000,
-    defaultTimeoutMs: 600000,
-  },
-})
+const modelCredentials = ref<ModelCredentialsView>(createDefaultCredentials())
 
 const sectionMeta = [
-  { key: 'platforms', label: '开放平台', desc: '先配置平台 Key 与 Base URL', icon: KeyRound },
-  { key: 'capabilities', label: '能力模型', desc: '再选择视频、图片、对话模型', icon: Server },
-  { key: 'qiniu', label: '云存储', desc: '七牛上传、外链与资源前缀', icon: Cloud },
+  { key: 'platforms', labelKey: 'settings.sections.platforms.label', descKey: 'settings.sections.platforms.desc', icon: KeyRound },
+  { key: 'capabilities', labelKey: 'settings.sections.capabilities.label', descKey: 'settings.sections.capabilities.desc', icon: Server },
+  { key: 'qiniu', labelKey: 'settings.sections.qiniu.label', descKey: 'settings.sections.qiniu.desc', icon: Cloud },
 ] as const
 
 const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; hostPlaceholder: string; keyName: SecretKey }> = {
@@ -150,19 +189,26 @@ const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; host
     hostPlaceholder: 'https://your-vector-engine-host',
     keyName: 'vectorEngineApiKey',
   },
+  xibapi: {
+    label: 'XIBAPI',
+    hostLabel: 'Base URL',
+    hostPlaceholder: 'https://xibapi.com',
+    keyName: 'xibapiApiKey',
+  },
 }
 
 const settingsMessageTone = computed(() => {
-  const text = String(settingsMessage.value || '').trim()
+  const text = String(settingsMessage.value || '').trim().toLowerCase()
   if (!text) return 'neutral'
-  return /已|成功|完成|打开|开始/.test(text) ? 'success' : 'error'
+  return /saved|loaded|opened|started|success/.test(text) ? 'success' : 'error'
 })
 
-const providerLabel = (provider: string) =>
-  provider === 'apifox_hub' ? 'VectorEngine' : provider === 'grsai' ? 'GRS.AI' : 'AtlasCloud'
-
-function capabilityProviderLabel(provider: ProviderKey | 'grsai', profile?: 'ai666' | 'vectorengine') {
-  if (provider === 'apifox_hub') return profile === 'ai666' ? 'AI666' : 'VectorEngine'
+function capabilityProviderLabel(provider: ProviderKey | 'grsai', profile?: ApifoxProfileKey) {
+  if (provider === 'apifox_hub') {
+    if (profile === 'ai666') return 'AI666'
+    if (profile === 'xibapi') return 'XIBAPI'
+    return 'VectorEngine'
+  }
   return provider === 'grsai' ? 'GRS.AI' : 'AtlasCloud'
 }
 
@@ -172,22 +218,30 @@ function capabilityProfileKey(target: 'videoProviderPrimary' | 'videoProviderFal
   return 'videoApifoxHubProfile'
 }
 
-function toCapabilityPlatform(provider: ProviderKey | 'grsai', profile?: 'ai666' | 'vectorengine'): CapabilityPlatformKey {
-  if (provider === 'apifox_hub') return profile === 'ai666' ? 'ai666' : 'vectorengine'
+function toCapabilityPlatform(provider: ProviderKey | 'grsai', profile?: ApifoxProfileKey): CapabilityPlatformKey {
+  if (provider === 'apifox_hub') {
+    if (profile === 'ai666') return 'ai666'
+    if (profile === 'xibapi') return 'xibapi'
+    return 'vectorengine'
+  }
   return provider === 'grsai' ? 'grsai' : 'kling'
 }
 
 function applyCapabilityPlatform(
   target: 'videoProviderPrimary' | 'videoProviderFallback' | 'imageProviderPrimary' | 'chatProviderPrimary',
-  platform: CapabilityPlatformKey,
+  platform: CapabilityPlatformKey | ChatPlatformKey,
 ) {
   const profileKey = capabilityProfileKey(target)
-  if (platform === 'ai666' || platform === 'vectorengine') {
+  if (platform === 'ai666' || platform === 'vectorengine' || platform === 'xibapi') {
     ;(modelCredentials.value[target] as ProviderKey | 'grsai') = 'apifox_hub'
-    modelCredentials.value[profileKey] = platform
+    if (profileKey === 'chatApifoxHubProfile' && platform === 'xibapi') {
+      modelCredentials.value.chatApifoxHubProfile = 'vectorengine'
+      return
+    }
+    ;(modelCredentials.value[profileKey] as ApifoxProfileKey | ApifoxImageProfileKey) = platform as ApifoxProfileKey
     return
   }
-  ;(modelCredentials.value[target] as ProviderKey | 'grsai') = platform
+  ;(modelCredentials.value[target] as ProviderKey | 'grsai') = platform as ProviderKey | 'grsai'
 }
 
 const videoPrimaryPlatformBinding = computed({
@@ -206,8 +260,8 @@ const imagePrimaryPlatformBinding = computed({
 })
 
 const chatPrimaryPlatformBinding = computed({
-  get: () => toCapabilityPlatform(modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
-  set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('chatProviderPrimary', value),
+  get: () => (modelCredentials.value.chatProviderPrimary === 'grsai' ? 'grsai' : modelCredentials.value.chatApifoxHubProfile),
+  set: (value: ChatPlatformKey) => applyCapabilityPlatform('chatProviderPrimary', value),
 })
 
 function activeApifoxHub(capability: 'video' | 'image' | 'chat') {
@@ -217,7 +271,9 @@ function activeApifoxHub(capability: 'video' | 'image' | 'chat') {
       : capability === 'image'
         ? modelCredentials.value.imageApifoxHubProfile
         : modelCredentials.value.chatApifoxHubProfile
-  return profile === 'ai666' ? modelCredentials.value.ai666Hub : modelCredentials.value.vectorEngineHub
+  if (profile === 'ai666') return modelCredentials.value.ai666Hub
+  if (profile === 'xibapi') return modelCredentials.value.xibapiHub
+  return modelCredentials.value.vectorEngineHub
 }
 
 const videoPrimaryModelBinding = computed({
@@ -244,8 +300,8 @@ const videoPrimaryModelBinding = computed({
       creds.grsaiVideoModel = value
       return
     }
-    creds.videoModelFallback = value
     creds.videoModelPrimary = value
+    creds.videoModelFallback = value
   },
 })
 
@@ -285,30 +341,30 @@ const imageQualityLabel = computed(() => String(modelCredentials.value.openaiIma
 
 const summaryCards = computed(() => [
   {
-    title: '视频模型',
+    title: t('settings.summary.cards.video.title'),
     value: capabilityProviderLabel(modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
-    meta: videoPrimaryModelBinding.value || '未设置模型',
+    meta: videoPrimaryModelBinding.value || t('settings.common.notSet'),
     tone: 'violet',
     icon: Clapperboard,
   },
   {
-    title: '图片模型',
+    title: t('settings.summary.cards.image.title'),
     value: capabilityProviderLabel(modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
-    meta: `${imagePrimaryModelBinding.value || '未设置模型'} / ${imageQualityLabel.value}`,
+    meta: `${imagePrimaryModelBinding.value || t('settings.common.notSet')} / ${imageQualityLabel.value}`,
     tone: 'cyan',
     icon: ImageIcon,
   },
   {
-    title: '对话模型',
+    title: t('settings.summary.cards.chat.title'),
     value: capabilityProviderLabel(modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
-    meta: chatPrimaryModelBinding.value || '未设置模型',
+    meta: chatPrimaryModelBinding.value || t('settings.common.notSet'),
     tone: 'green',
     icon: MessagesSquare,
   },
   {
-    title: '当前状态',
-    value: settingsMessage.value || '等待保存',
-    meta: modelSettingsBusy.value ? '处理中' : '可保存',
+    title: t('settings.summary.cards.status.title'),
+    value: settingsMessage.value || t('settings.summary.cards.status.waiting'),
+    meta: modelSettingsBusy.value ? t('settings.summary.cards.status.processing') : t('settings.summary.cards.status.ready'),
     tone: 'slate',
     icon: Server,
   },
@@ -316,27 +372,33 @@ const summaryCards = computed(() => [
 
 const platformCards = computed(() => [
   {
-    provider: 'kling' as ProviderKey,
+    provider: 'kling' as PlatformKey,
     title: 'AtlasCloud',
-    desc: '用于 AtlasCloud / Kling 链路的通用凭证。',
+    desc: t('settings.platforms.cards.kling.desc'),
     icon: Clapperboard,
   },
   {
-    provider: 'grsai' as ProviderKey,
+    provider: 'grsai' as PlatformKey,
     title: 'GRS.AI',
-    desc: '用于 GRS.AI 的视频、图片和对话能力。',
+    desc: t('settings.platforms.cards.grsai.desc'),
     icon: MessagesSquare,
   },
   {
     provider: 'ai666' as PlatformKey,
     title: 'AI666',
-    desc: '用于 AI666 开放平台独立凭证。',
+    desc: t('settings.platforms.cards.ai666.desc'),
     icon: Server,
   },
   {
     provider: 'vectorengine' as PlatformKey,
     title: 'VectorEngine',
-    desc: '用于 VectorEngine 开放平台独立凭证。',
+    desc: t('settings.platforms.cards.vectorengine.desc'),
+    icon: Server,
+  },
+  {
+    provider: 'xibapi' as PlatformKey,
+    title: 'XIBAPI',
+    desc: t('settings.platforms.cards.xibapi.desc'),
     icon: Server,
   },
 ])
@@ -353,6 +415,7 @@ function providerApiKey(provider: PlatformKey) {
   if (provider === 'kling') return modelCredentials.value.klingApiKey
   if (provider === 'grsai') return modelCredentials.value.grsaiApiKey
   if (provider === 'ai666') return modelCredentials.value.ai666Hub.apiKey
+  if (provider === 'xibapi') return modelCredentials.value.xibapiHub.apiKey
   return modelCredentials.value.vectorEngineHub.apiKey
 }
 
@@ -360,17 +423,78 @@ function providerHost(provider: PlatformKey) {
   if (provider === 'kling') return modelCredentials.value.klingHost
   if (provider === 'grsai') return modelCredentials.value.grsaiHost
   if (provider === 'ai666') return modelCredentials.value.ai666Hub.baseUrl
+  if (provider === 'xibapi') return modelCredentials.value.xibapiHub.baseUrl
   return modelCredentials.value.vectorEngineHub.baseUrl
+}
+
+function assignProviderApiKey(provider: PlatformKey, value: string) {
+  if (provider === 'kling') {
+    modelCredentials.value.klingApiKey = value
+    return
+  }
+  if (provider === 'grsai') {
+    modelCredentials.value.grsaiApiKey = value
+    return
+  }
+  if (provider === 'ai666') {
+    modelCredentials.value.ai666Hub.apiKey = value
+    return
+  }
+  if (provider === 'xibapi') {
+    modelCredentials.value.xibapiHub.apiKey = value
+    return
+  }
+  modelCredentials.value.vectorEngineHub.apiKey = value
+}
+
+function assignProviderHost(provider: PlatformKey, value: string) {
+  if (provider === 'kling') {
+    modelCredentials.value.klingHost = value
+    return
+  }
+  if (provider === 'grsai') {
+    modelCredentials.value.grsaiHost = value
+    return
+  }
+  if (provider === 'ai666') {
+    modelCredentials.value.ai666Hub.baseUrl = value
+    return
+  }
+  if (provider === 'xibapi') {
+    modelCredentials.value.xibapiHub.baseUrl = value
+    modelCredentials.value.xibapiHub.videoProvider = 'xibapi'
+    return
+  }
+  modelCredentials.value.vectorEngineHub.baseUrl = value
+}
+
+function normalizeIncomingCredentials(next: any): ModelCredentialsView {
+  const defaults = createDefaultCredentials()
+  return {
+    ...defaults,
+    ...next,
+    ai666Hub: createHubDefaults(next?.ai666Hub),
+    vectorEngineHub: createHubDefaults(next?.vectorEngineHub),
+    xibapiHub: createHubDefaults({
+      ...next?.xibapiHub,
+      videoProvider: next?.xibapiHub?.videoProvider || 'xibapi',
+      textToVideoModel: next?.xibapiHub?.textToVideoModel || 'veo_3_1-fast',
+      imageToVideoModel: next?.xibapiHub?.imageToVideoModel || 'veo_3_1-fast',
+      startEndVideoModel: next?.xibapiHub?.startEndVideoModel || 'veo_3_1-fast',
+      referenceVideoModel: next?.xibapiHub?.referenceVideoModel || 'veo_3_1-fast',
+    }),
+    apifoxHub: createHubDefaults(next?.apifoxHub),
+  }
 }
 
 async function refreshModelSettings() {
   modelSettingsBusy.value = true
   try {
-    const next = (await window.api.clone.getModelCredentials()) as typeof modelCredentials.value
-    modelCredentials.value = { ...modelCredentials.value, ...next }
-    settingsMessage.value = '模型配置已读取'
+    const next = (await window.api.clone.getModelCredentials()) as Partial<ModelCredentialsView>
+    modelCredentials.value = normalizeIncomingCredentials(next)
+    settingsMessage.value = t('settings.messages.loaded')
   } catch (e: any) {
-    settingsMessage.value = `读取配置失败：${e?.message ?? String(e)}`
+    settingsMessage.value = `${t('settings.messages.loadFailed')}: ${e?.message ?? String(e)}`
   } finally {
     modelSettingsBusy.value = false
   }
@@ -380,15 +504,25 @@ async function saveModelSettings() {
   modelSettingsBusy.value = true
   settingsMessage.value = ''
   try {
-    const payload = JSON.parse(JSON.stringify(modelCredentials.value))
-    payload.apifoxHubProfile = payload.videoApifoxHubProfile === 'ai666' ? 'ai666' : 'vectorengine'
-    payload.apifoxHub = payload.apifoxHubProfile === 'ai666' ? { ...payload.ai666Hub } : { ...payload.vectorEngineHub }
+    const payload = JSON.parse(JSON.stringify(modelCredentials.value)) as ModelCredentialsView & Record<string, any>
+    payload.apifoxHubProfile =
+      payload.videoApifoxHubProfile === 'ai666'
+        ? 'ai666'
+        : payload.videoApifoxHubProfile === 'xibapi'
+          ? 'xibapi'
+          : 'vectorengine'
+    payload.apifoxHub =
+      payload.apifoxHubProfile === 'ai666'
+        ? { ...payload.ai666Hub }
+        : payload.apifoxHubProfile === 'xibapi'
+          ? { ...payload.xibapiHub, videoProvider: 'xibapi' }
+          : { ...payload.vectorEngineHub }
     await window.api.clone.setModelCredentials(payload)
-    const confirmed = (await window.api.clone.getModelCredentials()) as typeof modelCredentials.value
-    modelCredentials.value = { ...modelCredentials.value, ...confirmed }
-    settingsMessage.value = '模型配置已保存并重新加载'
+    const confirmed = (await window.api.clone.getModelCredentials()) as Partial<ModelCredentialsView>
+    modelCredentials.value = normalizeIncomingCredentials(confirmed)
+    settingsMessage.value = t('settings.messages.savedAndReloaded')
   } catch (e: any) {
-    settingsMessage.value = `保存失败：${e?.message ?? String(e)}`
+    settingsMessage.value = `${t('settings.messages.saveFailed')}: ${e?.message ?? String(e)}`
   } finally {
     modelSettingsBusy.value = false
   }
@@ -399,13 +533,13 @@ async function openDataDir() {
     const paths = (await window.api.getPaths()) as { dataDir?: string }
     const dir = String(paths?.dataDir ?? '').trim()
     if (!dir) {
-      settingsMessage.value = '未找到本地数据目录'
+      settingsMessage.value = t('settings.messages.dataDirNotFound')
       return
     }
     await window.api.shell.openPath(dir)
-    settingsMessage.value = '已打开本地数据目录'
+    settingsMessage.value = t('settings.messages.dataDirOpened')
   } catch (e: any) {
-    settingsMessage.value = `打开数据目录失败：${e?.message ?? String(e)}`
+    settingsMessage.value = `${t('settings.messages.openDataDirFailed')}: ${e?.message ?? String(e)}`
   }
 }
 
@@ -415,9 +549,9 @@ async function checkUpdatesNow() {
   settingsMessage.value = ''
   try {
     const res = (await window.api.updater.checkForUpdates()) as { ok: true } | { ok: false; reason?: string; message?: string }
-    settingsMessage.value = res?.ok ? '已开始检查更新' : `检查更新失败：${res?.message ?? res?.reason ?? 'unknown'}`
+    settingsMessage.value = res?.ok ? t('settings.messages.updateCheckStarted') : `${t('settings.messages.updateCheckFailed')}: ${res?.message ?? res?.reason ?? 'unknown'}`
   } catch (e: any) {
-    settingsMessage.value = `检查更新失败：${e?.message ?? String(e)}`
+    settingsMessage.value = `${t('settings.messages.updateCheckFailed')}: ${e?.message ?? String(e)}`
   } finally {
     settingsBusy.value = false
   }
@@ -433,16 +567,16 @@ onMounted(() => {
     <section class="settings-shell">
       <div class="settings-shell__hero">
         <div>
-          <div class="settings-kicker">Settings / Control Center</div>
-          <h1>模型平台与能力配置</h1>
-          <p>先配置开放平台的 API Key 和 Base URL，再为视频、图片、对话选择对应平台与模型，降低理解成本。</p>
+          <div class="settings-kicker">{{ t('settings.hero.kicker') }}</div>
+          <h1>{{ t('settings.hero.title') }}</h1>
+          <p>{{ t('settings.hero.subtitle') }}</p>
         </div>
         <div class="settings-shell__actions">
-          <button class="ghost-button small" :disabled="settingsBusy" @click="checkUpdatesNow">检查更新</button>
-          <button class="ghost-button small" @click="openDataDir">打开数据目录</button>
-          <button class="ghost-button small" @click="refreshModelSettings">刷新</button>
+          <button class="ghost-button small" :disabled="settingsBusy" @click="checkUpdatesNow">{{ t('settings.actions.checkUpdates') }}</button>
+          <button class="ghost-button small" @click="openDataDir">{{ t('settings.actions.openDataDir') }}</button>
+          <button class="ghost-button small" @click="refreshModelSettings">{{ t('settings.actions.refresh') }}</button>
           <button class="primary-button small" :disabled="modelSettingsBusy" @click="saveModelSettings">
-            {{ modelSettingsBusy ? '保存中' : '保存配置' }}
+            {{ modelSettingsBusy ? t('settings.actions.saving') : t('settings.actions.saveSettings') }}
           </button>
         </div>
       </div>
@@ -472,8 +606,8 @@ onMounted(() => {
         >
           <span class="nav-item__icon"><component :is="item.icon" :size="16" /></span>
           <div>
-            <strong>{{ item.label }}</strong>
-            <small>{{ item.desc }}</small>
+            <strong>{{ t(item.labelKey) }}</strong>
+            <small>{{ t(item.descKey) }}</small>
           </div>
         </button>
       </aside>
@@ -484,8 +618,8 @@ onMounted(() => {
         <section v-if="modelSettingsSection === 'platforms'" class="form-section">
           <div class="section-head">
             <div>
-              <h2>开放平台凭证</h2>
-              <p>平台凭证单独维护，避免用户在视频、图片、对话三个区域反复看到同一套 Key / Base URL。</p>
+              <h2>{{ t('settings.platforms.title') }}</h2>
+              <p>{{ t('settings.platforms.subtitle') }}</p>
             </div>
           </div>
 
@@ -499,27 +633,19 @@ onMounted(() => {
                   <h3>{{ card.title }}</h3>
                   <p>{{ card.desc }}</p>
                 </div>
-              </div>
+                </div>
 
               <div class="form-grid single-column">
                 <label>
-                  <span>API Key</span>
+                  <span>{{ t('settings.platforms.fields.apiKey') }}</span>
                   <div class="field-inline">
                     <input
                       :value="providerApiKey(card.provider)"
                       :type="modelSecretType(providerMeta[card.provider].keyName)"
-                      @input="
-                        card.provider === 'kling'
-                          ? (modelCredentials.klingApiKey = ($event.target as HTMLInputElement).value)
-                          : card.provider === 'grsai'
-                            ? (modelCredentials.grsaiApiKey = ($event.target as HTMLInputElement).value)
-                            : card.provider === 'ai666'
-                              ? (modelCredentials.ai666Hub.apiKey = ($event.target as HTMLInputElement).value)
-                              : (modelCredentials.vectorEngineHub.apiKey = ($event.target as HTMLInputElement).value)
-                      "
+                      @input="assignProviderApiKey(card.provider, ($event.target as HTMLInputElement).value)"
                     />
                     <button class="ghost-button tiny" type="button" @click="toggleModelSecret(providerMeta[card.provider].keyName)">
-                      {{ modelVisibleSecrets[providerMeta[card.provider].keyName] ? '隐藏' : '显示' }}
+                      {{ modelVisibleSecrets[providerMeta[card.provider].keyName] ? t('settings.common.hide') : t('settings.common.show') }}
                     </button>
                   </div>
                 </label>
@@ -529,15 +655,7 @@ onMounted(() => {
                   <input
                     :value="providerHost(card.provider)"
                     :placeholder="providerMeta[card.provider].hostPlaceholder"
-                    @input="
-                      card.provider === 'kling'
-                        ? (modelCredentials.klingHost = ($event.target as HTMLInputElement).value)
-                        : card.provider === 'grsai'
-                          ? (modelCredentials.grsaiHost = ($event.target as HTMLInputElement).value)
-                          : card.provider === 'ai666'
-                            ? (modelCredentials.ai666Hub.baseUrl = ($event.target as HTMLInputElement).value)
-                            : (modelCredentials.vectorEngineHub.baseUrl = ($event.target as HTMLInputElement).value)
-                    "
+                    @input="assignProviderHost(card.provider, ($event.target as HTMLInputElement).value)"
                   />
                 </label>
               </div>
@@ -550,17 +668,17 @@ onMounted(() => {
                 </div>
                 <div>
                   <h3>Replicate</h3>
-                  <p>用于 /clone 商品图白底处理，Token 仅保存在桌面端配置。</p>
+                  <p>{{ t('settings.platforms.cards.replicate.desc') }}</p>
                 </div>
               </div>
 
               <div class="form-grid single-column">
                 <label>
-                  <span>API Token</span>
+                  <span>{{ t('settings.platforms.fields.apiToken') }}</span>
                   <div class="field-inline">
                     <input v-model="modelCredentials.replicateApiToken" :type="modelSecretType('replicateApiToken')" />
                     <button class="ghost-button tiny" type="button" @click="toggleModelSecret('replicateApiToken')">
-                      {{ modelVisibleSecrets.replicateApiToken ? '隐藏' : '显示' }}
+                      {{ modelVisibleSecrets.replicateApiToken ? t('settings.common.hide') : t('settings.common.show') }}
                     </button>
                   </div>
                 </label>
@@ -572,8 +690,8 @@ onMounted(() => {
         <section v-else-if="modelSettingsSection === 'capabilities'" class="form-section">
           <div class="section-head">
             <div>
-              <h2>能力模型</h2>
-              <p>这里仅负责“这项能力使用哪个平台、哪个模型”，平台的凭证请在“开放平台”区域统一配置。</p>
+              <h2>{{ t('settings.capabilities.title') }}</h2>
+              <p>{{ t('settings.capabilities.subtitle') }}</p>
             </div>
           </div>
 
@@ -582,36 +700,38 @@ onMounted(() => {
               <div class="capability-card__head">
                 <div class="capability-card__icon is-violet"><Clapperboard :size="16" /></div>
                 <div>
-                  <h3>视频能力</h3>
-                  <p>主视频生成链路。</p>
+                  <h3>{{ t('settings.capabilities.video.title') }}</h3>
+                  <p>{{ t('settings.capabilities.video.desc') }}</p>
                 </div>
               </div>
               <div class="form-grid">
                 <label>
-                  <span>视频平台</span>
+                  <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
                   <select v-model="videoPrimaryPlatformBinding">
                     <option value="kling">AtlasCloud</option>
                     <option value="grsai">GRS.AI</option>
                     <option value="ai666">AI666</option>
                     <option value="vectorengine">VectorEngine</option>
+                    <option value="xibapi">XIBAPI</option>
                   </select>
                 </label>
                 <label>
-                  <span>视频模型</span>
-                  <input v-model="videoPrimaryModelBinding" placeholder="例如 veo_3_1-lite" />
+                  <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
+                  <input v-model="videoPrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.videoPrimaryModel')" />
                 </label>
                 <label>
-                  <span>回退平台</span>
+                  <span>{{ t('settings.capabilities.fields.fallbackPlatform') }}</span>
                   <select v-model="videoFallbackPlatformBinding">
                     <option value="kling">AtlasCloud</option>
                     <option value="grsai">GRS.AI</option>
                     <option value="ai666">AI666</option>
                     <option value="vectorengine">VectorEngine</option>
+                    <option value="xibapi">XIBAPI</option>
                   </select>
                 </label>
                 <label>
-                  <span>回退模型</span>
-                  <input v-model="modelCredentials.videoModelFallback" placeholder="当主模型失败时使用" />
+                  <span>{{ t('settings.capabilities.fields.fallbackModel') }}</span>
+                  <input v-model="modelCredentials.videoModelFallback" :placeholder="t('settings.capabilities.placeholders.videoFallbackModel')" />
                 </label>
               </div>
             </article>
@@ -620,13 +740,13 @@ onMounted(() => {
               <div class="capability-card__head">
                 <div class="capability-card__icon is-cyan"><ImageIcon :size="16" /></div>
                 <div>
-                  <h3>图片能力</h3>
-                  <p>文生图、图像编辑、分镜图生成。</p>
+                  <h3>{{ t('settings.capabilities.image.title') }}</h3>
+                  <p>{{ t('settings.capabilities.image.desc') }}</p>
                 </div>
               </div>
               <div class="form-grid">
                 <label>
-                  <span>图片平台</span>
+                  <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
                   <select v-model="imagePrimaryPlatformBinding">
                     <option value="kling">AtlasCloud</option>
                     <option value="grsai">GRS.AI</option>
@@ -635,15 +755,15 @@ onMounted(() => {
                   </select>
                 </label>
                 <label>
-                  <span>图片模型</span>
-                  <input v-model="imagePrimaryModelBinding" placeholder="例如 gpt-image-1" />
+                  <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
+                  <input v-model="imagePrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.imagePrimaryModel')" />
                 </label>
                 <label>
-                  <span>图片质量</span>
+                  <span>{{ t('settings.capabilities.fields.imageQuality') }}</span>
                   <select v-model="modelCredentials.openaiImageQuality">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="low">{{ t('settings.capabilities.quality.low') }}</option>
+                    <option value="medium">{{ t('settings.capabilities.quality.medium') }}</option>
+                    <option value="high">{{ t('settings.capabilities.quality.high') }}</option>
                   </select>
                 </label>
               </div>
@@ -653,13 +773,13 @@ onMounted(() => {
               <div class="capability-card__head">
                 <div class="capability-card__icon is-green"><MessagesSquare :size="16" /></div>
                 <div>
-                  <h3>对话能力</h3>
-                  <p>脚本分析、流程辅助与通用问答。</p>
+                  <h3>{{ t('settings.capabilities.chat.title') }}</h3>
+                  <p>{{ t('settings.capabilities.chat.desc') }}</p>
                 </div>
               </div>
               <div class="form-grid">
                 <label>
-                  <span>对话平台</span>
+                  <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
                   <select v-model="chatPrimaryPlatformBinding">
                     <option value="ai666">AI666</option>
                     <option value="vectorengine">VectorEngine</option>
@@ -667,8 +787,8 @@ onMounted(() => {
                   </select>
                 </label>
                 <label>
-                  <span>对话模型</span>
-                  <input v-model="chatPrimaryModelBinding" placeholder="例如 gemini-3.1-pro" />
+                  <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
+                  <input v-model="chatPrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.chatPrimaryModel')" />
                 </label>
               </div>
             </article>
@@ -678,33 +798,33 @@ onMounted(() => {
         <section v-else class="form-section">
           <div class="section-head">
             <div>
-              <h2>七牛云配置</h2>
-              <p>统一管理上传、外链与资源前缀。</p>
+              <h2>{{ t('settings.qiniu.title') }}</h2>
+              <p>{{ t('settings.qiniu.subtitle') }}</p>
             </div>
           </div>
           <div class="form-grid">
             <label>
-              <span>Access Key</span>
+              <span>{{ t('settings.qiniu.fields.accessKey') }}</span>
               <div class="field-inline">
                 <input v-model="modelCredentials.qiniuAccessKey" :type="modelSecretType('qiniuAccessKey')" />
                 <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuAccessKey')">
-                  {{ modelVisibleSecrets.qiniuAccessKey ? '隐藏' : '显示' }}
+                  {{ modelVisibleSecrets.qiniuAccessKey ? t('settings.common.hide') : t('settings.common.show') }}
                 </button>
               </div>
             </label>
             <label>
-              <span>Secret Key</span>
+              <span>{{ t('settings.qiniu.fields.secretKey') }}</span>
               <div class="field-inline">
                 <input v-model="modelCredentials.qiniuSecretKey" :type="modelSecretType('qiniuSecretKey')" />
                 <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuSecretKey')">
-                  {{ modelVisibleSecrets.qiniuSecretKey ? '隐藏' : '显示' }}
+                  {{ modelVisibleSecrets.qiniuSecretKey ? t('settings.common.hide') : t('settings.common.show') }}
                 </button>
               </div>
             </label>
-            <label><span>Bucket</span><input v-model="modelCredentials.qiniuBucket" /></label>
-            <label><span>Domain</span><input v-model="modelCredentials.qiniuDomain" /></label>
-            <label><span>Upload Host</span><input v-model="modelCredentials.qiniuUploadHost" /></label>
-            <label><span>Prefix</span><input v-model="modelCredentials.qiniuPrefix" /></label>
+            <label><span>{{ t('settings.qiniu.fields.bucket') }}</span><input v-model="modelCredentials.qiniuBucket" /></label>
+            <label><span>{{ t('settings.qiniu.fields.domain') }}</span><input v-model="modelCredentials.qiniuDomain" /></label>
+            <label><span>{{ t('settings.qiniu.fields.uploadHost') }}</span><input v-model="modelCredentials.qiniuUploadHost" /></label>
+            <label><span>{{ t('settings.qiniu.fields.prefix') }}</span><input v-model="modelCredentials.qiniuPrefix" /></label>
           </div>
         </section>
       </main>
@@ -712,24 +832,24 @@ onMounted(() => {
       <aside class="settings-side-panel">
         <section class="side-card">
           <div class="side-card__head">
-            <h3>当前生效摘要</h3>
+            <h3>{{ t('settings.summary.title') }}</h3>
           </div>
           <div class="side-list">
-            <div class="side-row"><span>视频</span><strong>{{ capabilityProviderLabel(modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || '未设置' }}</strong></div>
-            <div class="side-row"><span>图片</span><strong>{{ capabilityProviderLabel(modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || '未设置模型' }} / {{ imageQualityLabel }}</strong></div>
-            <div class="side-row"><span>对话</span><strong>{{ capabilityProviderLabel(modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || '未设置' }}</strong></div>
+            <div class="side-row"><span>{{ t('settings.summary.rows.video') }}</span><strong>{{ capabilityProviderLabel(modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
+            <div class="side-row"><span>{{ t('settings.summary.rows.image') }}</span><strong>{{ capabilityProviderLabel(modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || t('settings.common.notSet') }} / {{ imageQualityLabel }}</strong></div>
+            <div class="side-row"><span>{{ t('settings.summary.rows.chat') }}</span><strong>{{ capabilityProviderLabel(modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
           </div>
         </section>
 
         <section class="side-card">
           <div class="side-card__head">
-            <h3>使用说明</h3>
+            <h3>{{ t('settings.notes.title') }}</h3>
           </div>
           <div class="bullet-list">
-            <div class="bullet-item">先在“开放平台”填写 API Key 和 Base URL，再到“能力模型”选择平台与模型。</div>
-            <div class="bullet-item">同一平台的凭证只维护一份，视频、图片、对话会复用，用户更容易理解。</div>
-            <div class="bullet-item">保存后会立刻重新读取配置，避免前端展示与实际生效配置不一致。</div>
-            <div class="bullet-item">图片质量会跟随当前设置一起传递到图片生成调用，用于分镜图、模特图和商品图相关链路。</div>
+            <div class="bullet-item">{{ t('settings.notes.items.credentialsReuse') }}</div>
+            <div class="bullet-item">{{ t('settings.notes.items.xibapiIndependent') }}</div>
+            <div class="bullet-item">{{ t('settings.notes.items.reloadAfterSave') }}</div>
+            <div class="bullet-item">{{ t('settings.notes.items.imageQualityForwarded') }}</div>
           </div>
         </section>
       </aside>
@@ -740,9 +860,9 @@ onMounted(() => {
 <style scoped>
 .settings-console {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-height: 100%;
-  padding: 16px;
+  padding: 12px;
   background:
     radial-gradient(circle at 16% 0, rgba(109, 93, 255, 0.12), transparent 24%),
     radial-gradient(circle at 84% 10%, rgba(34, 211, 238, 0.08), transparent 18%),
@@ -768,15 +888,15 @@ onMounted(() => {
 }
 
 .settings-shell {
-  padding: 18px;
+  padding: 14px 16px;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .settings-shell__hero {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
 }
 
@@ -789,8 +909,8 @@ onMounted(() => {
 }
 
 .settings-shell__hero h1 {
-  margin: 6px 0 8px;
-  font-size: 28px;
+  margin: 4px 0 6px;
+  font-size: 24px;
 }
 
 .settings-shell__hero p,
@@ -819,37 +939,38 @@ onMounted(() => {
 .settings-shell__actions {
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
 }
 
 .settings-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .summary-card {
-  padding: 12px;
+  padding: 10px 12px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 8px;
 }
 
 .summary-card__icon,
 .platform-card__icon,
 .capability-card__icon,
 .nav-item__icon {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
 }
 
 .platform-card__icon,
 .capability-card__icon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
 }
 
 .capability-card__icon.is-violet,
@@ -875,20 +996,21 @@ onMounted(() => {
 
 .summary-card strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 2px;
+  line-height: 1.2;
 }
 
 .settings-layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 320px;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
 }
 
 .settings-nav-panel,
 .settings-form-panel,
 .settings-side-panel {
-  padding: 14px;
+  padding: 12px;
   min-height: 0;
 }
 
@@ -899,16 +1021,16 @@ onMounted(() => {
 .form-section,
 .capability-stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
 }
 
 .nav-item {
-  padding: 12px;
+  padding: 10px;
   text-align: left;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
   background: rgba(10, 19, 36, 0.78);
 }
 
@@ -918,7 +1040,7 @@ onMounted(() => {
 }
 
 .settings-message {
-  padding: 12px;
+  padding: 10px 12px;
   font-size: 12px;
 }
 
@@ -937,7 +1059,7 @@ onMounted(() => {
 .section-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
 }
 
@@ -951,19 +1073,19 @@ onMounted(() => {
 .platform-grid,
 .capability-stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .platform-card,
 .capability-card,
 .side-card {
-  padding: 14px;
+  padding: 12px;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .form-grid.single-column {
@@ -983,8 +1105,8 @@ onMounted(() => {
 
 .form-grid input,
 .form-grid select {
-  height: 42px;
-  border-radius: 12px;
+  height: 38px;
+  border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: #0a1324;
   padding: 0 12px;
@@ -997,7 +1119,7 @@ onMounted(() => {
 
 .side-row {
   justify-content: space-between;
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.08);
 }
 
@@ -1007,11 +1129,11 @@ onMounted(() => {
 
 .bullet-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .bullet-item {
-  padding: 12px;
+  padding: 10px 12px;
   background: rgba(10, 19, 36, 0.78);
   font-size: 12px;
   color: #cbd5e1;
@@ -1019,9 +1141,9 @@ onMounted(() => {
 
 .primary-button,
 .ghost-button {
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
 }

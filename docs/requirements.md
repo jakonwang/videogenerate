@@ -20,6 +20,33 @@
 
 ## 当前生效规格
 
+## 2026-06-06 `/clone` 分镜图预览禁止重复触发 Gemini 商品分析，分镜视频单独展示真实报错原因
+
+- 目标：
+  - 修复桌面端 `/clone` 在打开分镜图提示词预览时仍重复触发 `gemini-3.1-pro` 商品分析的问题，并将分镜视频失败诊断放回分镜视频界面，避免错误提示挂错阶段。
+- 本轮最小改动：
+  - 调整：
+    - `src/main/modules/clone/service.ts`
+    - `src/renderer/src/ui/views/CloneView.vue`
+    - `docs/requirements.md`
+- 生效规则：
+  - 分镜图提示词预览接口 `getShotImagePromptPreview(...)` 只允许读取当前项目已有的商品分析结果或回退描述，不再为了预览额外调用 `ensureProjectProductAnalysis(...)`。
+  - 因此在仅查看分镜图提示词预览时，不应再额外触发 `grsaiAnalysisModel=gemini-3.1-pro` 的商品结构分析请求。
+  - 分镜视频阶段如果当前镜头存在真实错误信息，右侧预览面板必须显示：
+    - `真实报错原因`
+    - 归类后的错误标题
+    - 对应处理建议
+  - 缺少模特身份包时，分镜视频界面同样需要提供：
+    - `去生成身份包`
+  - 本轮不重写分镜图主提示词，也不调整视频生成主链路，只做阶段归位和预览去重。
+- 使用说明：
+  - 现在仅打开分镜图提示词预览时，不会再平白多打一轮 Gemini 商品分析。
+  - 如果分镜视频生成失败，用户可直接在分镜视频界面右侧看到真实失败原因与修复建议，而不是只在分镜图界面里看到这类提示。
+- Windows / Linux 兼容说明：
+  - 本轮仅调整 TypeScript 服务层判定与 Vue 前端展示逻辑，不依赖平台专属能力，Windows 开发与 Linux 部署环境通用。
+- 验证：
+  - `npm run typecheck`
+
 ## 2026-06-06 桌面端重新打包并封版为 v4.2.2
 
 - 目标：
@@ -12402,6 +12429,232 @@ Web 前端只重构视觉层级、布局系统、组件结构与文案体系，�
   - `npm run test:tiktok-listing-grs-image-aspect-ratio`
   - `npm run test:tiktok-listing-plugin`
 
+## 2026-06-06 分镜视频提示词预览参考图显示补齐
+
+- 需求
+  - 修复 `/clone` 分镜视频提示词预览中“输入参考图”未显示的问题，要求界面展示必须和真实视频请求保持一致。
+- 变更文件
+  - `src/renderer/src/ui/views/CloneView.vue`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜视频提示词预览原先只从请求 JSON 的 `urls` 字段提取参考图，导致部分视频模型虽然真实提交了参考图，但界面仍错误显示“当前视频请求没有参考图”。
+  - 现在前端统一兼容真实请求中常见的参考图字段，包括：
+    - `urls`
+    - `images`
+    - `image`
+    - `last_image`
+    - `image_url`
+    - `last_image_url`
+    - `content[].image_url.url`
+  - 提取结果会自动去重，继续按“参数表 + 参考图下载按钮”的形式展示，保证预览内容和真实送模参数一致。
+- 使用说明
+  - 在分镜视频提示词预览弹窗中，系统会根据当前真实请求体自动展示全部输入参考图；如果某个模型只传 1 张，就只显示 1 张。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 Vue 前端请求预览解析逻辑，不依赖平台专属能力，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run typecheck`
+
+## 2026-06-06 分镜提示词参考图下载改为原生另存为
+
+- 需求
+  - 修复 `/clone` 分镜图 / 分镜视频提示词预览中的“下载”按钮只弹出预览、不提供本地保存路径的问题。
+- 变更文件
+  - `src/main/ipc/registerAppShellMediaIpc.ts`
+  - `src/preload/index.ts`
+  - `src/renderer/src/ui/views/CloneView.vue`
+  - `docs/requirements.md`
+- 实现说明
+  - 新增 `fs:saveFileAs` IPC，主进程通过 Electron 原生 `showSaveDialog` 弹出“另存为”窗口，用户可自行选择保存目录和文件名。
+  - 选择保存位置后，主进程会将本地参考图文件直接复制到目标路径，真正完成落盘，而不是再打开一个 `vg://file` 预览页。
+  - 分镜图和分镜视频提示词预览里的每个参考图“下载”按钮现在统一走这条原生保存链路。
+- 使用说明
+  - 点击参考图下方的“下载”后，桌面端会弹出系统保存窗口；选定目标路径并确认后，图片会保存到你指定的位置。
+- Windows / Linux 兼容说明
+  - 本轮基于 Electron 原生保存对话框与 Node 文件复制实现，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run typecheck`
+
+## 2026-06-06 分镜图提示词改为静态关键帧结构
+
+- 需求
+  - 调整 `/clone` 分镜图生成提示词，避免继续用“视频生成逻辑”写“分镜图静态关键帧”，并移除重复的产品锁层，统一按单一产品真源和静态结果态构图生成。
+- 变更文件
+  - `src/main/modules/clone/gptImage.ts`
+  - `test/storyboard-model-identity-lock.smoke.ts`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜图主提示词 `buildGptFramePrompt(...)` 改为静态关键帧结构，不再输出“镜头过程”导向的描述，统一强调：
+    - `Storyboard keyframe (static image)`
+    - 单一 `Product Authority / Model Authority / Storyboard Authority`
+    - `Priority 1: Product`
+    - `Interpret motion as final static result`
+  - 去掉多层互相稀释的重复产品锁，只保留一套核心的 `[PRODUCT LOCK - SINGLE SOURCE]` 与 `[PRODUCT PRIORITY OVERRIDE]`。
+  - 对耳饰等佩戴类镜头，改为更明确的结果态控制：
+    - `Product occupies 65% to 80% of frame`
+    - `Right-shifted composition (end position of track-right)`
+    - `Hand is already near chin as a static end-state pose`
+    - `No motion depiction`
+  - 保留编译层的产品控制补丁作为附加保护，但主提示词不再堆叠多套同义产品锁。
+- 使用说明
+  - 重新生成分镜图时，系统会优先按“静态关键帧”理解分镜，不再把分镜图误当成视频中间帧去处理。
+  - 对佩戴类镜头，系统会更强地把产品放大、居中、拉清晰，人物只保留最小必要的佩戴支撑关系。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 提示词拼装和 smoke test，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run test:storyboard-model-lock`
+  - `npm run typecheck`
+
+## 2026-06-06 分镜图参考图提交收紧为 3 张 authority 图
+
+- 需求
+  - 分镜图生成只提交 3 张核心参考图，不再把前面其它图片一并带入真实请求。
+- 变更文件
+  - `src/main/modules/clone/service.ts`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜图参考图组装函数 `compactStoryboardImageRefs(...)` 已改为严格只保留 3 张 authority 图：
+    - `Image 1`: 商品真源图
+    - `Image 2`: 模特身份图
+    - `Image 3`: 分镜 authority 图
+  - 不再继续把以下内容混入分镜图请求：
+    - 额外商品参考图
+    - 第二张模特图
+    - 其它前置缩略图或补充 continuity 图
+  - 对结束帧模式，也统一只保留同样的 3 张 authority 图，其中第 3 张优先使用开始帧/continuity authority 作为静态结果参考。
+- 使用说明
+  - 在分镜图提示词预览里，如果真实请求按当前规则只提交 3 张图，界面也会同步只显示这 3 张，不会再出现前置图片被一起送模的情况。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 请求组装逻辑，不依赖平台专属能力，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run typecheck`
+
+## 2026-06-06 分镜图背景控制补齐
+
+- 需求
+  - 修复分镜图在产品锁收紧后容易退化成白底/纯色底的问题，在不削弱产品优先级的前提下，为分镜图加入可控背景层。
+- 变更文件
+  - `src/main/modules/clone/gptImage.ts`
+  - `test/storyboard-model-identity-lock.smoke.ts`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜图主提示词新增 `[BACKGROUND CONTROL]` 模块，不再只写模糊的 `Clean background`，而是明确要求：
+    - 背景不能是纯白或空白
+    - 背景必须是柔和、自然、生活化环境
+    - 背景保持虚化，不与产品争主体
+    - 避免高对比纹理、硬边缘和扁平白光
+  - 提供受控背景风格选项：
+    - `soft greenery / outdoor bokeh`
+    - `warm indoor lifestyle setting`
+    - `neutral textured wall`
+    - `shallow depth-of-field natural environment`
+  - 保留“产品第一优先级”，背景只负责提供景深、氛围和真实感，不允许反向抢画面。
+- 使用说明
+  - 重新生成分镜图后，背景会更偏向 TikTok 风格的浅景深生活化环境，不再轻易退回白底电商感。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 提示词拼装和 smoke test，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run test:storyboard-model-lock`
+  - `npm run typecheck`
+
+## 2026-06-06 分镜图背景锁定为户外绿植虚化
+
+- 需求
+  - 进一步解决分镜图仍偶发回到白底/浅灰底的问题，要求背景不再是可选集合，而是绑定为唯一安全环境类型。
+- 变更文件
+  - `src/main/modules/clone/gptImage.ts`
+  - `test/storyboard-model-identity-lock.smoke.ts`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜图背景控制由可选型 `[BACKGROUND CONTROL]` 改为唯一解 `[BACKGROUND LOCK]`。
+  - 现在明确禁止以下背景：
+    - `white`
+    - `plain studio background`
+    - `flat color backdrop`
+  - 同时强制唯一背景类型：
+    - `soft outdoor greenery environment with natural bokeh`
+  - 新增一致性要求：
+    - `background must remain consistent across all shots`
+  - 这样模型在产品约束很强时，不再退回“白底最安全解”，而会稳定落到绿植虚化生活化环境。
+- 使用说明
+  - 重新生成分镜图后，背景会优先固定为户外绿植虚化环境，而不是在室内、灰墙、白底之间随机选择。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 提示词拼装和 smoke test，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run test:storyboard-model-lock`
+  - `npm run typecheck`
+
+## 2026-06-06 分镜图补齐背景隔离层
+
+- 需求
+  - 在“强制非白背景”的基础上，进一步避免环境颜色、景深和对比度反向污染产品主体，让背景存在但不影响产品还原。
+- 变更文件
+  - `src/main/modules/clone/gptImage.ts`
+  - `test/storyboard-model-identity-lock.smoke.ts`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜图系统层新增 `[BACKGROUND CONTROL]`，位置前移到 `[SYSTEM]` 下，作为基础环境约束，而不是后置补充说明。
+  - 在 `[FOCUS LOCK]` 后新增 `[BACKGROUND ISOLATION]`，明确要求：
+    - 背景不能影响产品颜色、亮度、对比度和材质感知
+    - 产品必须保持中性白光，不允许绿色溢色
+    - 只允许背景虚化，不允许产品边缘发糊
+    - 背景与产品轮廓之间保持清晰分离
+  - 分镜图产品占比同步提升为 `70% to 85%`，进一步降低背景对主体的竞争权重。
+- 使用说明
+  - 重新生成分镜图后，背景会继续保持户外绿植虚化，但绿色环境不应再明显污染产品颜色或边缘清晰度。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 提示词拼装和 smoke test，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run test:storyboard-model-lock`
+  - `npm run typecheck`
+
+## 2026-06-06 分镜图提示词模板刚性化
+
+- 需求
+  - 分镜图提示词必须严格按照指定英文模板输出，只允许替换少量变量内容，不允许继续大范围改写模板主体。
+- 变更文件
+  - `src/main/modules/clone/gptImage.ts`
+  - `test/storyboard-model-identity-lock.smoke.ts`
+  - `docs/requirements.md`
+- 实现说明
+  - 分镜图主提示词构造函数改为固定模板骨架输出，严格保留以下区块顺序：
+    - `TYPE`
+    - `SYSTEM MODE`
+    - `ROLE MAP`
+    - `PRODUCT - PIXEL LOCK`
+    - `PRODUCT STRUCTURE LOCK`
+    - `ANTI-HALLUCINATION LOCK`
+    - `PRODUCT PRIORITY OVERRIDE`
+    - `PRODUCT INTEGRATION RULE`
+    - `COMPOSITION`
+    - `FOCUS LOCK`
+    - `MODEL CONTROL`
+    - `HIERARCHY`
+    - `BACKGROUND SYSTEM - 解决灰背景核心`
+    - `LIGHTING SYSTEM`
+    - `STORYBOARD CONTROL`
+    - `CONSISTENCY CORE`
+    - `FAIL CONDITIONS`
+    - `OUTPUT`
+  - 当前系统里自定义的分镜图提示词区块名不再直接暴露到最终 prompt 正文，例如：
+    - `BACKGROUND CONTROL`
+    - `BACKGROUND ISOLATION`
+    - `PRODUCT LOCK - SINGLE SOURCE`
+    - `FACE CONTROL`
+    - `STORYBOARD ALIGNMENT`
+    - `RESTRICTIONS`
+  - 最终模板只允许替换少量变量：
+    - 可见区域描述
+    - 模特年龄 / 发型最小字段
+    - 耳饰/非耳饰场景下的局部构图差异
+    - `Image 3` 对应的 framing / crop / angle 说明
+- 使用说明
+  - 重新生成分镜图后，主 prompt 会尽量逐字贴合指定模板，不再保留当前系统的大部分自由发挥文案。
+- Windows / Linux 兼容说明
+  - 本轮仅调整 TypeScript 提示词拼装和 smoke test，Windows 开发环境与 Linux 部署环境通用。
+- 验证
+  - `npm run test:storyboard-model-lock`
+  - `npm run typecheck`
+
 ## 2026-06-02 分镜图提示词构造全面收紧
 
 - 需求
@@ -12428,3 +12681,27 @@ Web 前端只重构视觉层级、布局系统、组件结构与文案体系，�
 - 验证
   - `npm run test:storyboard-model-lock`
   - `npm run typecheck`
+
+## 2026-06-08 分镜视频 Prompt 系统优化方案 v2
+
+- 需求
+  - 将现有分镜视频 prompt 体系从“系统说明文档”继续收敛成“执行优先级文档”，目标是稳定优先，优先解决产品锁定不稳、镜头动作冲突、人物抢主体、环境过强、光照误导等问题。
+- 变更文件
+  - `docs/requirements-2026-06-08-storyboard-video-prompt-system-v2.md`
+  - `docs/requirements.md`
+- 实现说明
+  - 保留现有 `Product Lock -> Shot Planner -> Shot Templates -> Builder -> Validator -> Final Output` 六层架构，但正式规格要求最终 prompt 固定按 `ABSOLUTE RULES -> ROLE MAP -> SHOT CONTROL -> FACE CONTROL -> ENVIRONMENT CONTROL -> LIGHTING CONTROL -> RESTRICTIONS -> OUTPUT` 输出。
+  - `Product Lock` 从 “fixed 2D visual object” 升级为 `visual identity anchor`，要求锁定 `silhouette / proportions / connection points / visible structure / material finish / color family / wearing direction`，避免模型把产品误解成可自由重建的平面贴图或 3D 物体。
+  - `planShots(duration)` 需要补足 `intent / cameraBehavior / backgroundBehavior / priority / forbidden` 五类字段，用于明确每个镜头的职责，而不是只按时间切片。
+  - `SHOTS[type]` 规范为结构化模板，至少包含 `camera / environment / stability / composition / restrictions`，并要求每个模板只保留一个主镜头动作、一个背景动作、一个稳定性约束、一个禁止项。
+  - 对耳饰、项链、戒指、手链等佩戴类镜头，正式要求加入 `FACE CONTROL` 与 `COMPOSITION PRIORITY`，默认执行 `Hierarchy: product > hands > body > face`、产品占画面 `40% to 60%`、禁止 `full face`、禁止 `eye contact`。
+  - 新增 `ENVIRONMENT CONTROL` 与 `LIGHTING CONTROL` 正式章节，要求环境可以微动但不能抢主体，光型保持稳定且不允许通过新高光或反射重构产品轮廓与材质判断。
+  - `Validator` 升级为规则检查器，至少覆盖 `camera_conflict`、`product_motion_conflict`、`missing_composition_priority`、`missing_face_control`、`environment_overpower`、`lighting_reconstruction_risk`、`abstract_language_overuse`、`missing_role_map`，且 `fixPrompt()` 必须按问题类型定向修复。
+  - 正式规范中不再把“系统本质”“最终能力”“可卖钱”等宣传性表达放在主文档，主文档只保留开发落地所需实现信息。
+- 使用说明
+  - 后续如果把该规范落实到代码实现，分镜视频 prompt 应优先执行产品锁定、参考图职责和构图主次，再执行环境与光照层，避免再回到自由发挥型长段落拼接。
+  - 对 wearable 类产品，默认以 `product-first` 为唯一主导构图原则，人物仅保留最小必要的佩戴或支撑关系。
+- Windows / Linux 兼容说明
+  - 本轮只新增正式系统文档，不涉及平台专属逻辑；后续如落地到 TypeScript prompt 组装，Windows 开发环境与 Linux 部署环境应保持一致行为。
+- 验证
+  - 文档规范自检：固定 section 顺序、wearable 构图优先级、validator 问题类型、镜头职责分配均已明确写入正式文档。

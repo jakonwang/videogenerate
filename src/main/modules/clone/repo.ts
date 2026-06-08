@@ -108,6 +108,13 @@ function sanitizeCloneDbText(raw: string) {
   return raw.replace(/(^\s*"[^"\r\n]*)\?(\r?\n\s*[\],])/gm, '$1。"$2')
 }
 
+function normalizeOptionalTrimmedField(item: any, key: string) {
+  if (!Object.prototype.hasOwnProperty.call(item ?? {}, key)) return undefined
+  if (item?.[key] === undefined) return undefined
+  const value = String(item?.[key] ?? '').trim()
+  return value || undefined
+}
+
 async function readCloneDbFileAt(filePath: string): Promise<CloneDbShape> {
   try {
     const raw = await readFile(filePath, 'utf-8')
@@ -240,12 +247,15 @@ function shouldPreferExistingShotVideoState(existing: any, incoming: any, resolv
   const incomingUpdatedAt = Number(incoming?.updatedAt ?? 0)
   const existingTaskId = String(existing?.taskId ?? '').trim()
   const incomingTaskId = String(incoming?.taskId ?? '').trim()
+  const incomingSourceEvent = String(incoming?.sourceEvent ?? '').trim().toLowerCase()
+  const incomingIsReplacementReset = incomingSourceEvent === 'force_regenerate_reset'
   const sameTask = Boolean(existingTaskId) && Boolean(incomingTaskId) && existingTaskId === incomingTaskId
   const taskChanged = Boolean(existingTaskId && incomingTaskId && existingTaskId !== incomingTaskId)
   const existingPriority = shotVideoStatusPriority(existing?.status)
   const incomingPriority = shotVideoStatusPriority(incoming?.status)
   const incomingRemoteStatus = String(incoming?.remoteStatus ?? incoming?.remoteRaw?.status ?? '').trim().toLowerCase()
   const incomingKeepsRemoteInFlightWithoutTask =
+    !incomingIsReplacementReset &&
     Boolean(existingTaskId) &&
     !incomingTaskId &&
     (
@@ -256,6 +266,7 @@ function shouldPreferExistingShotVideoState(existing: any, incoming: any, resolv
       incomingRemoteStatus === 'processing' ||
       incomingRemoteStatus === 'running'
     )
+  if (incomingIsReplacementReset) return false
   if (incomingKeepsRemoteInFlightWithoutTask) return true
   if (taskChanged && resolvedTaskId === existingTaskId && existingUpdatedAt >= incomingUpdatedAt) return true
   if (incomingUpdatedAt <= 0 || existingUpdatedAt <= 0) return false
@@ -296,6 +307,10 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
       Boolean(item?.submissionLockedUntil) ||
       isPendingRemoteShotVideoStatus(item?.remoteStatus) ||
       isPendingRemoteShotVideoStatus(item?.remoteRaw?.status)
+    const incomingRemoteStatus = String(item?.remoteStatus ?? item?.remoteRaw?.status ?? '').trim().toLowerCase()
+    const incomingSourceEvent = String(item?.sourceEvent ?? '').trim()
+    const incomingSourceEventLower = incomingSourceEvent.toLowerCase()
+    const incomingIsForceRegenerateReset = incomingSourceEventLower === 'force_regenerate_reset'
     const existingHasStickyTaskBinding =
       Boolean(existingTaskId) &&
       (
@@ -309,15 +324,34 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
         Boolean(String(existing?.localPath ?? '').trim())
       )
     const incomingLosesStickyTaskBinding =
+      !incomingIsForceRegenerateReset &&
       !hasExplicitTaskReset &&
       !incomingTaskId &&
       existingHasStickyTaskBinding &&
       !String(item?.videoUrl ?? '').trim() &&
       !String(item?.videoPath ?? '').trim() &&
       !String(item?.localPath ?? '').trim()
-    const incomingRemoteStatus = String(item?.remoteStatus ?? item?.remoteRaw?.status ?? '').trim().toLowerCase()
-    const incomingSourceEvent = String(item?.sourceEvent ?? '').trim()
+    const existingErrorText = String(existing?.error ?? '').trim().toLowerCase()
+    const incomingStatus = String(item?.status ?? '').trim().toLowerCase()
+    const incomingStartsReplacementRun =
+      (hasPendingReplacementMarkers || incomingIsForceRegenerateReset) &&
+      (
+        incomingIsForceRegenerateReset ||
+        incomingStatus === 'submitting' ||
+        incomingStatus === 'remote_pending' ||
+        incomingStatus === 'remote_running' ||
+        incomingSourceEvent === 'segment_submit_started' ||
+        incomingSourceEvent === 'segment_submit_succeeded' ||
+        incomingSourceEvent === 'force_regenerate_submit' ||
+        incomingSourceEvent === 'storyboard_video_batch_submit_started'
+      )
+    const existingSourceEvent = String(existing?.sourceEvent ?? '').trim().toLowerCase()
+    const existingIsForceRegenerateReset = existingSourceEvent === 'force_regenerate_reset'
+    const existingIsRetryLimitTerminal =
+      String(existing?.status ?? '').trim().toLowerCase() === 'failed_terminal' &&
+      existingErrorText.includes('[retry_limit]')
     const incomingKeepsRemoteInFlightWithoutTask =
+      !incomingIsForceRegenerateReset &&
       !hasExplicitTaskReset &&
       !incomingTaskId &&
       Boolean(existingTaskId) &&
@@ -333,6 +367,7 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
       hasExplicitTaskReset &&
       !incomingTaskId &&
       Boolean(existingTaskId) &&
+      !incomingIsForceRegenerateReset &&
       !Boolean(item?.previousTaskIds?.length) &&
       !Boolean(item?.submissionStartedAt) &&
       !Boolean(item?.submissionLockedUntil) &&
@@ -351,8 +386,9 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
         incomingSourceEvent === 'segment_submit_succeeded'
       )
     const shouldClearCompletedArtifactsForPendingReplacement =
-      hasPendingReplacementMarkers &&
+      (hasPendingReplacementMarkers || incomingIsForceRegenerateReset) &&
       (
+        incomingIsForceRegenerateReset ||
         hasExplicitVideoPathReset ||
         hasExplicitLocalPathReset ||
         hasExplicitVideoUrlReset ||
@@ -360,24 +396,32 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
         isPendingRemoteShotVideoStatus(item?.remoteStatus) ||
         isPendingRemoteShotVideoStatus(item?.remoteRaw?.status)
       )
-    const candidateTaskId = hasExplicitTaskReset
-      ? undefined
-      : incomingTaskId && !isStaleImageTaskId(incomingTaskId)
-        ? incomingTaskId
-        : existingTaskId && !isStaleImageTaskId(existingTaskId)
-          ? existingTaskId
-          : incomingTaskId || existingTaskId || undefined
+    const candidateTaskId = incomingStartsReplacementRun
+      ? (incomingTaskId && !isStaleImageTaskId(incomingTaskId) ? incomingTaskId : undefined)
+      : hasExplicitTaskReset
+        ? undefined
+        : incomingTaskId && !isStaleImageTaskId(incomingTaskId)
+          ? incomingTaskId
+          : existingTaskId && !isStaleImageTaskId(existingTaskId)
+            ? existingTaskId
+            : incomingTaskId || existingTaskId || undefined
     const preferExistingState = shouldPreferExistingShotVideoState(existing, item, candidateTaskId)
     const shouldForcePreferExistingState =
       (incomingLosesStickyTaskBinding || incomingKeepsRemoteInFlightWithoutTask || explicitTaskResetLooksStale) &&
+      !incomingIsForceRegenerateReset &&
       !String(item?.error ?? '').trim()
-    const resolvedTaskId = hasExplicitTaskReset
-      ? explicitTaskResetLooksStale
-        ? existingTaskId || undefined
-        : undefined
-      : (preferExistingState || incomingLosesStickyTaskBinding || explicitTaskResetLooksStale) && existingTaskId
-        ? existingTaskId
-        : candidateTaskId
+    const shouldPreferIncomingReplacementState = incomingStartsReplacementRun && existingIsRetryLimitTerminal
+    const resolvedTaskId = incomingStartsReplacementRun
+      ? candidateTaskId
+      : hasExplicitTaskReset
+        ? explicitTaskResetLooksStale
+          ? existingTaskId || undefined
+          : undefined
+        : (preferExistingState || incomingLosesStickyTaskBinding || explicitTaskResetLooksStale) &&
+            existingTaskId &&
+            !shouldPreferIncomingReplacementState
+          ? existingTaskId
+          : candidateTaskId
     const existingHasCompletedArtifacts =
       Boolean(existing?.videoPath || existing?.localPath || existing?.videoUrl)
     const incomingHasLocalVideoArtifacts =
@@ -386,62 +430,111 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
       existingHasCompletedArtifacts &&
       isCompletedShotVideoStatus(existing?.status) &&
       isActiveShotVideoStatus(item?.status) &&
+      !incomingIsForceRegenerateReset &&
       !incomingHasLocalVideoArtifacts &&
       !hasPendingReplacementMarkers &&
       !hasExplicitTaskReset &&
       !hasExplicitVideoPathReset &&
       !hasExplicitLocalPathReset &&
       (!incomingTaskId || !existingTaskId || incomingTaskId === existingTaskId)
+    const shouldReplaceCompletedStateWithNewTask =
+      existingHasCompletedArtifacts &&
+      isCompletedShotVideoStatus(existing?.status) &&
+      isActiveShotVideoStatus(item?.status) &&
+      Boolean(existingTaskId) &&
+      Boolean(incomingTaskId) &&
+      incomingTaskId !== existingTaskId
+    const shouldPreserveArtifactsFromNewerTask =
+      Boolean(existingTaskId) &&
+      Boolean(incomingTaskId) &&
+      existingTaskId !== incomingTaskId &&
+      Boolean(String(existing?.videoPath ?? existing?.localPath ?? existing?.videoUrl ?? '').trim()) &&
+      Number(existing?.updatedAt ?? 0) >= Number(item?.updatedAt ?? 0)
     return {
       ...existing,
       ...item,
       taskId: resolvedTaskId,
-      provider: hasExplicitProviderReset ? undefined : String(item?.provider ?? '').trim() ? item.provider : existing?.provider,
-      model: hasExplicitModelReset ? undefined : String(item?.model ?? '').trim() ? item.model : existing?.model,
+      provider:
+        shouldPreferIncomingReplacementState
+          ? (hasExplicitProviderReset ? undefined : String(item?.provider ?? '').trim() ? item.provider : undefined)
+          : hasExplicitProviderReset
+            ? undefined
+            : String(item?.provider ?? '').trim()
+              ? item.provider
+              : existing?.provider,
+      model:
+        shouldPreferIncomingReplacementState
+          ? (hasExplicitModelReset ? undefined : String(item?.model ?? '').trim() ? item.model : undefined)
+          : hasExplicitModelReset
+            ? undefined
+            : String(item?.model ?? '').trim()
+              ? item.model
+              : existing?.model,
       videoUrl:
-        shouldClearCompletedArtifactsForPendingReplacement
+        shouldPreferIncomingReplacementState || shouldClearCompletedArtifactsForPendingReplacement
           ? undefined
+          : shouldPreserveArtifactsFromNewerTask
+            ? existing?.videoUrl
           : hasExplicitVideoUrlReset
             ? undefined
             : String(item?.videoUrl ?? '').trim()
               ? item.videoUrl
               : existing?.videoUrl,
       videoPath:
-        shouldClearCompletedArtifactsForPendingReplacement
+        shouldPreferIncomingReplacementState || shouldClearCompletedArtifactsForPendingReplacement
           ? undefined
+          : shouldPreserveArtifactsFromNewerTask
+            ? existing?.videoPath
           : hasExplicitVideoPathReset
             ? undefined
             : String(item?.videoPath ?? '').trim()
               ? item.videoPath
               : existing?.videoPath,
       localPath:
-        shouldClearCompletedArtifactsForPendingReplacement
+        shouldPreferIncomingReplacementState || shouldClearCompletedArtifactsForPendingReplacement
           ? undefined
+          : shouldPreserveArtifactsFromNewerTask
+            ? existing?.localPath
           : hasExplicitLocalPathReset
             ? undefined
             : String(item?.localPath ?? '').trim()
               ? item.localPath
               : existing?.localPath,
       status:
-        shouldPreserveCompletedState || preferExistingState || shouldForcePreferExistingState
+        shouldReplaceCompletedStateWithNewTask
+          ? item?.status ?? existing?.status
+          : shouldPreferIncomingReplacementState
+            ? item?.status ?? existing?.status
+          : shouldPreserveCompletedState || preferExistingState || shouldForcePreferExistingState
           ? existing?.status
           : item?.status ?? existing?.status,
       remoteStatus:
-        shouldPreserveCompletedState || preferExistingState || shouldForcePreferExistingState
+        shouldReplaceCompletedStateWithNewTask
+          ? item?.remoteStatus ?? existing?.remoteStatus
+          : shouldPreferIncomingReplacementState
+            ? item?.remoteStatus ?? existing?.remoteStatus
+          : shouldPreserveCompletedState || preferExistingState || shouldForcePreferExistingState
           ? existing?.remoteStatus ?? item?.remoteStatus
           : item?.remoteStatus ?? existing?.remoteStatus,
       completedAt:
-        shouldClearCompletedArtifactsForPendingReplacement
+        shouldPreferIncomingReplacementState || shouldClearCompletedArtifactsForPendingReplacement
           ? undefined
-          : shouldPreserveCompletedState
+          : shouldReplaceCompletedStateWithNewTask
+            ? item?.completedAt ?? existing?.completedAt
+            : shouldPreserveCompletedState
             ? existing?.completedAt ?? item?.completedAt
             : item?.completedAt ?? existing?.completedAt,
       updatedAt:
-        preferExistingState && Number(existing?.updatedAt ?? 0) > Number(item?.updatedAt ?? 0)
+        preferExistingState && !shouldPreferIncomingReplacementState && Number(existing?.updatedAt ?? 0) > Number(item?.updatedAt ?? 0)
           ? existing?.updatedAt
           : item?.updatedAt ?? existing?.updatedAt,
       sourceEvent:
-        (preferExistingState || shouldForcePreferExistingState) && String(existing?.sourceEvent ?? '').trim()
+        ((preferExistingState ||
+          shouldForcePreferExistingState ||
+          (incomingStartsReplacementRun && !incomingTaskId) ||
+          (existingIsForceRegenerateReset && !incomingTaskId)) &&
+          !shouldPreferIncomingReplacementState &&
+          String(existing?.sourceEvent ?? '').trim())
           ? existing?.sourceEvent
           : item?.sourceEvent ?? existing?.sourceEvent,
     }
@@ -506,7 +599,13 @@ function mergeBlueprintShotsForPersistence(currentBlueprint: any, incomingBluepr
         !hasExplicitClipPathReset &&
         !hasExplicitProviderReset &&
         !hasExplicitModelReset
+      const incomingHasReplacementTaskBinding =
+        Boolean(incomingTaskId) &&
+        Boolean(existingTaskId) &&
+        incomingTaskId !== existingTaskId &&
+        incomingHasRemoteInFlightState
       const shouldKeepExistingTaskBinding =
+        !incomingHasReplacementTaskBinding &&
         !incomingTaskId &&
         existingHasRemoteTaskBinding &&
         (incomingHasRemoteInFlightState || explicitTaskResetLooksStale)
@@ -828,17 +927,11 @@ function normalizeQueueJobs(input: any): CloneGenerationQueueJob[] {
 }
 
 function normalizeVideoProvider(v: unknown, fallback: AiProviderName): AiProviderName {
-  return v === 'seedance' || v === 'kling' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
+  return v === 'seedance' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
 }
 
 function normalizeImageProvider(v: unknown, fallback: ImageProviderName): ImageProviderName {
-  return v === 'openai' || v === 'kling' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
-}
-
-function normalizeAtlasCloudHost(v: unknown) {
-  const raw = String(v ?? '').trim().replace(/\/+$/, '')
-  if (!raw || /kling/i.test(raw)) return 'https://api.atlascloud.ai'
-  return raw
+  return v === 'openai' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
 }
 
 function normalizeAi666VideoModel(value: unknown, fallback: string) {
@@ -899,7 +992,8 @@ function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
       parsed?.videoProvider === 'jimeng' ||
       parsed?.videoProvider === 'vidu' ||
       parsed?.videoProvider === 'kling' ||
-      parsed?.videoProvider === 'seedance2'
+      parsed?.videoProvider === 'seedance2' ||
+      parsed?.videoProvider === 'xibapi'
         ? parsed.videoProvider
         : 'openai_video',
     textToVideoModel: normalizeAi666VideoModel(parsed?.textToVideoModel, 'veo_3_1-lite'),
@@ -1050,19 +1144,25 @@ function inferAspectRatio(value: unknown, fallback: '9:16' | '16:9' = '9:16'): '
 function normalizeCredentials(parsed: any): ModelCredentials {
   const ai666Hub = normalizeApifoxHubCredentials(parsed?.ai666Hub ?? parsed?.apifoxHub)
   const vectorEngineHub = normalizeApifoxHubCredentials(parsed?.vectorEngineHub ?? parsed?.apifoxHub)
-  const profile: 'ai666' | 'vectorengine' = parsed?.apifoxHubProfile === 'ai666' ? 'ai666' : 'vectorengine'
-  const videoProfile: 'ai666' | 'vectorengine' =
-    parsed?.videoApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.videoApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
+  const xibapiHub = normalizeApifoxHubCredentials(parsed?.xibapiHub ?? parsed?.apifoxHub)
+  const profile: 'ai666' | 'vectorengine' | 'xibapi' =
+    parsed?.apifoxHubProfile === 'ai666' ? 'ai666' : parsed?.apifoxHubProfile === 'xibapi' ? 'xibapi' : 'vectorengine'
+  const videoProfile: 'ai666' | 'vectorengine' | 'xibapi' =
+    parsed?.videoApifoxHubProfile === 'ai666'
+      ? 'ai666'
+      : parsed?.videoApifoxHubProfile === 'xibapi'
+        ? 'xibapi'
+        : parsed?.videoApifoxHubProfile === 'vectorengine'
+          ? 'vectorengine'
+          : profile
   const imageProfile: 'ai666' | 'vectorengine' =
     parsed?.imageApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.imageApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
   const chatProfile: 'ai666' | 'vectorengine' =
     parsed?.chatApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.chatApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
-  const activeHub = videoProfile === 'ai666' ? ai666Hub : vectorEngineHub
+  const activeHub = videoProfile === 'ai666' ? ai666Hub : videoProfile === 'xibapi' ? xibapiHub : vectorEngineHub
   return {
     seedanceApiKey: String(parsed?.seedanceApiKey ?? '').trim() || undefined,
     seedanceHost: String(parsed?.seedanceHost ?? '').trim() || 'https://ark.ap-southeast.bytepluses.com',
-    klingApiKey: String(parsed?.klingApiKey ?? '').trim() || undefined,
-    klingHost: normalizeAtlasCloudHost(parsed?.klingHost),
     grsaiApiKey: String(parsed?.grsaiApiKey ?? '').trim() || undefined,
     grsaiHost: String(parsed?.grsaiHost ?? '').trim() || 'https://grsaiapi.com',
     qiniuAccessKey: String(parsed?.qiniuAccessKey ?? '').trim() || undefined,
@@ -1079,7 +1179,7 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     grsaiAnalysisModel: String(parsed?.grsaiAnalysisModel ?? '').trim() || 'gemini-3.1-pro',
     chatProviderPrimary: parsed?.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub',
     videoProviderPrimary: normalizeVideoProvider(parsed?.videoProviderPrimary, 'apifox_hub'),
-    videoProviderFallback: normalizeVideoProvider(parsed?.videoProviderFallback, 'kling'),
+    videoProviderFallback: normalizeVideoProvider(parsed?.videoProviderFallback, 'grsai'),
     openaiApiKey: String(parsed?.openaiApiKey ?? '').trim() || undefined,
     openaiImageModel: String(parsed?.openaiImageModel ?? '').trim() || 'gpt-image-2',
     openaiImageQuality:
@@ -1088,7 +1188,6 @@ function normalizeCredentials(parsed: any): ModelCredentials {
         : 'high',
     replicateApiToken: String(parsed?.replicateApiToken ?? '').trim() || undefined,
     imageProviderPrimary: normalizeImageProvider(parsed?.imageProviderPrimary, 'apifox_hub'),
-    klingImageModel: String(parsed?.klingImageModel ?? '').trim() || 'openai/gpt-image-1/edit',
     grsaiImageModel: String(parsed?.grsaiImageModel ?? '').trim() || 'gpt-image-2',
     apifoxHubProfile: profile,
     videoApifoxHubProfile: videoProfile,
@@ -1096,6 +1195,7 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     chatApifoxHubProfile: chatProfile,
     ai666Hub,
     vectorEngineHub,
+    xibapiHub,
     apifoxHub: activeHub,
   }
 }
@@ -1650,10 +1750,20 @@ function normalizeProject(p: CloneProject): CloneProject {
         index: typeof item?.index === 'number' ? Number(item.index) : undefined,
         shotId: String(item?.shotId ?? '').trim(),
         source: item?.source === 'uploaded_replacement' ? 'uploaded_replacement' : 'generated',
-        videoPath: String(item?.videoPath ?? '').trim() || undefined,
-        localPath: String(item?.localPath ?? item?.videoPath ?? '').trim() || undefined,
-        videoUrl: String(item?.videoUrl ?? '').trim() || undefined,
-        taskId: String(item?.taskId ?? '').trim() || undefined,
+        videoPath: Object.prototype.hasOwnProperty.call(item ?? {}, 'videoPath')
+          ? normalizeOptionalTrimmedField(item, 'videoPath')
+          : undefined,
+        localPath: Object.prototype.hasOwnProperty.call(item ?? {}, 'localPath')
+          ? normalizeOptionalTrimmedField(item, 'localPath')
+          : Object.prototype.hasOwnProperty.call(item ?? {}, 'videoPath')
+            ? normalizeOptionalTrimmedField(item, 'videoPath')
+            : undefined,
+        videoUrl: Object.prototype.hasOwnProperty.call(item ?? {}, 'videoUrl')
+          ? normalizeOptionalTrimmedField(item, 'videoUrl')
+          : undefined,
+        taskId: Object.prototype.hasOwnProperty.call(item ?? {}, 'taskId')
+          ? normalizeOptionalTrimmedField(item, 'taskId')
+          : undefined,
         previousTaskIds: Array.isArray(item?.previousTaskIds) ? item.previousTaskIds.map(String).filter(Boolean) : undefined,
         provider: String(item?.provider ?? '').trim() || undefined,
         model: String(item?.model ?? '').trim() || undefined,
@@ -1724,7 +1834,16 @@ function normalizeProject(p: CloneProject): CloneProject {
   }
   for (const output of generatedShotOutputs) {
     const existing = mergedShotVideoOutputs.get(output.shotId)
-    if (!existing?.videoPath) mergedShotVideoOutputs.set(output.shotId, output)
+    const existingSourceEvent = String(existing?.sourceEvent ?? '').trim().toLowerCase()
+    const existingIsReplacementRun =
+      Boolean(existing?.previousTaskIds?.length) ||
+      Boolean(existing?.submissionStartedAt) ||
+      Boolean(existing?.submissionLockedUntil) ||
+      existingSourceEvent === 'force_regenerate_reset' ||
+      existingSourceEvent === 'segment_submit_started' ||
+      existingSourceEvent === 'segment_submit_succeeded' ||
+      existingSourceEvent === 'storyboard_video_batch_submit_started'
+    if (!existing?.videoPath && !existingIsReplacementRun) mergedShotVideoOutputs.set(output.shotId, output)
   }
   for (const [shotId, output] of mergedShotVideoOutputs.entries()) {
     if (!output.segmentId) {

@@ -237,10 +237,9 @@ const desktopClient: CloneWorkspaceClient<any> = {
   },
   async regenerateShotVideo(projectId, shotId) {
     try {
-      const project = await window.api.clone.generateShotClip({
+      const project = await window.api.clone.regenerateShotVideo({
         cloneProjectId: projectId,
         shotId,
-        forceRegenerate: true,
       })
       return resolveDesktopProject(project)
     } catch (error) {

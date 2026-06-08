@@ -86,6 +86,9 @@ const currentPage = ref(1)
 const pageSize = 10
 const runtimeLogs = ref<RuntimeLogItem[]>([])
 const runtimeDialogOpen = ref(false)
+const videoPreviewDialogOpen = ref(false)
+const videoPreviewItem = ref<CloneProjectSummary | null>(null)
+const videoPreviewSaving = ref(false)
 let offRuntimeLog: (() => void) | undefined
 const cloneApi = window.api.clone as any
 
@@ -173,6 +176,11 @@ const groupSidebarItems = computed(() => {
     ...dynamicGroups.map((item) => ({ id: item.id, name: item.name, taskCount: item.taskCount, system: false })),
   ]
 })
+const visibleGroupLimit = 4
+const visibleGroupItems = computed(() => groupSidebarItems.value.slice(0, visibleGroupLimit))
+const overflowGroupItems = computed(() => groupSidebarItems.value.slice(visibleGroupLimit))
+const hasOverflowGroups = computed(() => overflowGroupItems.value.length > 0)
+const activeOverflowGroup = computed(() => overflowGroupItems.value.find((item) => item.id === activeGroupId.value) || null)
 
 const activeGroupLabel = computed(() => {
   const current = groupSidebarItems.value.find((item) => item.id === activeGroupId.value)
@@ -275,6 +283,11 @@ function toFileSrc(input?: string) {
   if (!text) return ''
   if (/^(https?:|data:|vg:|file:)/i.test(text)) return text
   return `vg://file?path=${encodeURIComponent(text)}`
+}
+
+function itemPlayableVideoPath(item?: CloneProjectSummary | null) {
+  if (!item) return ''
+  return String(item.finalOutputPath || item.previewOutputPath || '').trim()
 }
 
 function itemCoverSrc(item: CloneProjectSummary) {
@@ -690,6 +703,49 @@ function openTask(id: string) {
   void router.push(`/clone/${id}`)
 }
 
+function openVideoPreview(item: CloneProjectSummary) {
+  if (!itemPlayableVideoPath(item)) {
+    openTask(item.id)
+    return
+  }
+  videoPreviewItem.value = item
+  videoPreviewDialogOpen.value = true
+}
+
+function closeVideoPreview() {
+  if (videoPreviewSaving.value) return
+  videoPreviewDialogOpen.value = false
+  videoPreviewItem.value = null
+}
+
+async function savePreviewVideo() {
+  const sourcePath = itemPlayableVideoPath(videoPreviewItem.value)
+  if (!sourcePath || videoPreviewSaving.value) return
+  videoPreviewSaving.value = true
+  try {
+    const result = await window.api.saveFileAs({
+      sourcePath,
+      defaultFileName: sourcePath.split(/[\\/]/).pop() || 'video.mp4',
+      title: '保存复刻视频',
+    })
+    if (result?.ok && !result?.canceled) {
+      pushRuntimeLog(`[clone-task-list] save preview video success path=${safeText(result.filePath, '')}`, 'success')
+    }
+  } catch (error: any) {
+    const message = String(error?.message ?? error ?? '保存视频失败。')
+    pushRuntimeLog(`[clone-task-list] save preview video failed message=${safeText(message, 'unknown error')}`, 'error')
+    window.alert(message)
+  } finally {
+    videoPreviewSaving.value = false
+  }
+}
+
+async function revealPreviewVideo() {
+  const sourcePath = itemPlayableVideoPath(videoPreviewItem.value)
+  if (!sourcePath) return
+  await window.api.shell.showItemInFolder(sourcePath)
+}
+
 function openErrorDialog(item: CloneProjectSummary) {
   const text = String(item.lastError || '').trim()
   if (!text) return
@@ -790,7 +846,7 @@ onBeforeUnmount(() => {
           <div class="clone-console-table__groupbar">
             <div class="clone-console-table__groupbar-tabs">
               <div
-                v-for="group in groupSidebarItems"
+                v-for="group in visibleGroupItems"
                 :key="group.id"
                 class="clone-console-group"
                 :class="{ 'is-active': activeGroupId === group.id }"
@@ -809,14 +865,38 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
+            </div>
 
+            <div v-if="hasOverflowGroups" class="clone-console-group clone-console-group--overflow" :class="{ 'is-active': Boolean(activeOverflowGroup) }">
+              <button type="button" class="clone-console-group__main" @click.stop="toggleGroupMenu('__overflow__')">
+                <span>{{ activeOverflowGroup ? activeOverflowGroup.name : '更多分组' }}</span>
+                <em>{{ activeOverflowGroup ? activeOverflowGroup.taskCount : overflowGroupItems.length }}</em>
+              </button>
+              <div class="clone-group-menu">
+                <button type="button" class="clone-console-group__more" aria-label="更多分组" @click.stop="toggleGroupMenu('__overflow__')">
+                  <MoreHorizontal class="h-3.5 w-3.5" />
+                </button>
+                <div v-if="groupMenuOpenId === '__overflow__'" class="clone-group-menu__dropdown">
+                  <button
+                    v-for="group in overflowGroupItems"
+                    :key="`overflow-${group.id}`"
+                    type="button"
+                    class="clone-group-menu__item"
+                    :class="{ 'is-active': activeGroupId === group.id }"
+                    @click.stop="activeGroupId = group.id as any; groupMenuOpenId = ''"
+                  >
+                    <span>{{ group.name }}</span>
+                    <em>{{ group.taskCount }}</em>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="clone-console-table__groupbar-tools">
               <button v-if="cloneGroupCreateReady" type="button" class="clone-console-group__create" @click="openCreateGroupDialog">
                 <Plus class="h-3.5 w-3.5" />
                 <span>新建分组</span>
               </button>
-            </div>
-
-            <div class="clone-console-table__groupbar-tools">
               <button class="clone-console-overview__tool" type="button" @click="toggleSortOrder">
                 {{ sortOrder === 'updated_desc' ? '最近更新' : '最早更新' }}
                 <ChevronDown class="h-4 w-4" />
@@ -966,7 +1046,10 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="clone-console-row__actions">
-                <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openTask(item.id)">
+                <button class="clone-console-row__action clone-console-row__action--edit" type="button" title="编辑任务" @click="openTask(item.id)">
+                  <Pencil class="h-4 w-4" />
+                </button>
+                <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openVideoPreview(item)">
                   <Play class="h-4 w-4" />
                 </button>
                 <button class="clone-console-row__action clone-console-row__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
@@ -1047,6 +1130,41 @@ onBeforeUnmount(() => {
             <UiButton :disabled="savingRename || !renameDraft.trim()" @click="submitRename">
               {{ savingRename ? '保存中...' : '保存' }}
             </UiButton>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="videoPreviewDialogOpen && videoPreviewItem" class="clone-error-dialog-mask" @click.self="closeVideoPreview">
+      <div class="clone-error-dialog clone-video-preview-dialog" @click.stop>
+        <div class="clone-error-dialog__head">
+          <div class="clone-error-dialog__copy">
+            <strong>{{ videoPreviewItem.title || '复刻视频预览' }}</strong>
+            <span>{{ safeText(shortPath(itemPlayableVideoPath(videoPreviewItem)), '暂无视频文件') }}</span>
+          </div>
+          <UiButton variant="ghost" :disabled="videoPreviewSaving" @click="closeVideoPreview">关闭</UiButton>
+        </div>
+        <div class="clone-video-preview-dialog__body">
+          <div class="clone-video-preview-dialog__player">
+            <video
+              v-if="itemPlayableVideoPath(videoPreviewItem)"
+              :src="toFileSrc(itemPlayableVideoPath(videoPreviewItem))"
+              controls
+              preload="metadata"
+              autoplay
+            ></video>
+            <div v-else class="clone-video-preview-dialog__empty">当前任务还没有可播放的成片视频。</div>
+          </div>
+          <div class="clone-video-preview-dialog__meta">
+            <span>任务：{{ videoPreviewItem.selectedModelIdentityName || '未命名模型' }}</span>
+            <span>时间：{{ formatTime(videoPreviewItem.updatedAt) }}</span>
+          </div>
+          <div class="clone-rename-dialog__actions clone-video-preview-dialog__actions">
+            <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem)" @click="revealPreviewVideo">在文件夹中显示</UiButton>
+            <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving" @click="savePreviewVideo">
+              {{ videoPreviewSaving ? '保存中...' : '下载保存' }}
+            </UiButton>
+            <UiButton :disabled="!videoPreviewItem.id" @click="openTask(videoPreviewItem.id)">打开详情</UiButton>
           </div>
         </div>
       </div>
@@ -1268,17 +1386,17 @@ onBeforeUnmount(() => {
 .clone-console-overview__cards {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .clone-console-stat {
-  min-height: 110px;
+  min-height: 78px;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding: 18px 20px;
-  border-radius: 22px;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: var(--clone-card-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -1305,19 +1423,19 @@ onBeforeUnmount(() => {
 }
 
 .clone-console-stat__icon {
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.08);
   color: #e8f6ff;
 }
 
 .clone-console-stat__copy {
   display: grid;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
   align-content: center;
   justify-items: start;
@@ -1325,7 +1443,7 @@ onBeforeUnmount(() => {
 
 .clone-console-stat__copy strong {
   color: #f8fbff;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.1;
   word-break: keep-all;
@@ -1334,7 +1452,7 @@ onBeforeUnmount(() => {
 
 .clone-console-stat__copy span {
   color: #91a5ca;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1;
   word-break: keep-all;
   white-space: nowrap;
@@ -1342,7 +1460,7 @@ onBeforeUnmount(() => {
 
 .clone-console-stat b {
   color: #ffffff;
-  font-size: 30px;
+  font-size: 22px;
   line-height: 1;
   font-weight: 700;
   justify-self: end;
@@ -1469,7 +1587,7 @@ onBeforeUnmount(() => {
 }
 
 .clone-console-table {
-  overflow: hidden;
+  overflow: visible;
   border-radius: 28px;
   border: 1px solid var(--clone-panel-border);
   background: linear-gradient(180deg, rgba(11, 19, 32, 0.98), rgba(7, 12, 21, 0.98));
@@ -1478,18 +1596,33 @@ onBeforeUnmount(() => {
 
 .clone-console-table__groupbar {
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px 12px;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 14px 18px;
   border-bottom: 1px solid rgba(57, 73, 111, 0.24);
+  min-width: 0;
+  flex-wrap: nowrap;
+  position: relative;
+  z-index: 3;
+  overflow: visible;
 }
 
 .clone-console-table__groupbar-tabs {
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex: 1 1 0;
   min-width: 0;
+  flex-wrap: nowrap;
   overflow-x: auto;
-  padding-bottom: 2px;
+  overflow-y: visible;
+  padding-bottom: 6px;
+  margin-bottom: -6px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.clone-console-table__groupbar-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .clone-console-group {
@@ -1497,24 +1630,35 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  min-height: 40px;
-  padding-right: 4px;
-  border-radius: 12px;
+  gap: 4px;
+  min-height: 38px;
+  padding-right: 0;
+  border-radius: 14px;
   border: 1px solid transparent;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .clone-console-group.is-active {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(24, 36, 58, 0.96), rgba(16, 25, 43, 0.96));
+  border-color: rgba(94, 116, 164, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.clone-console-group:hover {
+  background: rgba(255, 255, 255, 0.028);
+  border-color: rgba(148, 163, 184, 0.08);
 }
 
 .clone-console-group__main {
-  min-height: 40px;
+  flex: 0 0 auto;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 0;
   background: transparent;
   color: #97abd1;
@@ -1527,21 +1671,30 @@ onBeforeUnmount(() => {
   color: #f8fbff;
 }
 
-.clone-console-group__main em {
-  color: #7d93bc;
-  font-style: normal;
-  font-size: 11px;
+.clone-console-group__main span {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.clone-console-group.is-active .clone-console-group__main::after {
-  content: '';
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: -13px;
-  height: 2px;
+.clone-console-group__main em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--clone-accent), #60a5fa);
+  background: rgba(255, 255, 255, 0.06);
+  color: #8fa5cf;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.clone-console-group.is-active .clone-console-group__main em {
+  background: rgba(115, 132, 255, 0.18);
+  color: #dfe8ff;
 }
 
 .clone-console-group__more {
@@ -1550,9 +1703,21 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   border-radius: 9px;
   padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+.clone-console-group:hover .clone-console-group__more,
+.clone-console-group.is-active .clone-console-group__more,
+.clone-group-menu__dropdown + .clone-console-group__more,
+.clone-group-menu:focus-within .clone-console-group__more {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .clone-console-group__create {
+  flex: 0 0 auto;
   height: 34px;
   display: inline-flex;
   align-items: center;
@@ -1567,10 +1732,42 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.clone-console-group--overflow .clone-group-menu__dropdown {
+  min-width: 180px;
+  max-height: min(320px, calc(100vh - 220px));
+  overflow-y: auto;
+}
+
+.clone-console-group--overflow .clone-console-group__main {
+  color: #b2c4e8;
+}
+
+.clone-console-group--overflow {
+  flex: 0 0 auto;
+}
+
+.clone-group-menu__item.is-active {
+  background: rgba(109, 93, 255, 0.16);
+  color: #f8fbff;
+}
+
+.clone-group-menu__item em {
+  margin-left: auto;
+  color: #8ea3ca;
+  font-style: normal;
+  font-size: 11px;
+}
+
 .clone-console-table__groupbar-tools {
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+  min-width: fit-content;
+  padding-left: 12px;
+  border-left: 1px solid rgba(57, 73, 111, 0.2);
+  flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
 .clone-console-table__viewtool {
@@ -1614,6 +1811,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 10px;
   padding: 12px 14px 16px;
+  overflow: hidden;
+  border-bottom-left-radius: 28px;
+  border-bottom-right-radius: 28px;
 }
 
 .clone-console-table__head {
@@ -2054,6 +2254,10 @@ onBeforeUnmount(() => {
   color: #dff9ff;
 }
 
+.clone-console-row__action--edit {
+  color: #a9bdf8;
+}
+
 .clone-console-row__action--danger {
   color: #ffb4bc;
 }
@@ -2188,6 +2392,52 @@ onBeforeUnmount(() => {
 
 .clone-rename-dialog {
   width: min(520px, 100%);
+}
+
+.clone-video-preview-dialog {
+  width: min(860px, 100%);
+  border-color: rgba(118, 136, 196, 0.16);
+}
+
+.clone-video-preview-dialog__body {
+  display: grid;
+  gap: 16px;
+}
+
+.clone-video-preview-dialog__player {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(118, 136, 196, 0.16);
+  background: rgba(3, 8, 18, 0.94);
+}
+
+.clone-video-preview-dialog__player video {
+  width: 100%;
+  max-height: 72vh;
+  display: block;
+  background: #02060f;
+}
+
+.clone-video-preview-dialog__empty {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  color: #95a3c3;
+  font-size: 13px;
+}
+
+.clone-video-preview-dialog__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #98a6c3;
+  font-size: 12px;
+}
+
+.clone-video-preview-dialog__actions {
+  justify-content: flex-end;
 }
 
 .clone-rename-dialog__body {
@@ -2360,7 +2610,18 @@ onBeforeUnmount(() => {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .clone-console-table__groupbar {
+    flex-wrap: wrap;
+  }
+
+  .clone-console-table__groupbar-tabs {
+    min-width: 100%;
+    flex-wrap: wrap;
+  }
+
   .clone-console-table__groupbar-tools {
+    width: 100%;
+    min-width: 0;
     flex-wrap: wrap;
     justify-content: flex-end;
   }
@@ -2413,6 +2674,10 @@ onBeforeUnmount(() => {
   .clone-console-table__groupbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .clone-console-table__groupbar-tabs {
+    min-width: 0;
   }
 
   .clone-console-table__groupbar-tools {

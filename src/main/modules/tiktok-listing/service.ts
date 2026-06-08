@@ -383,6 +383,7 @@ function buildListingDescriptionFromImages(images: TiktokListingImage[]) {
 async function generateListingAnalysisBoard(input: {
   credentials: ModelCredentials
   sourceImagePath: string
+  referenceImagePaths?: string[]
   itemId: string
 }) {
   assertTiktokListingImageProviderReady(input.credentials)
@@ -391,7 +392,7 @@ async function generateListingAnalysisBoard(input: {
   await mkdir(outDir, { recursive: true })
   const outputPath = await buildProductAnalysisBoard({
     credentials: strictCredentials,
-    imagePaths: [input.sourceImagePath],
+    imagePaths: input.referenceImagePaths?.length ? input.referenceImagePaths : [input.sourceImagePath],
     outDir,
     filePrefix: 'listing_analysis_board',
     allowFallback: true,
@@ -409,6 +410,7 @@ async function generateListingImages(input: {
   credentials: ModelCredentials
   category: TiktokListingCategory
   sourceImagePath: string
+  referenceImagePaths?: string[]
   analysisBoardPath: string
   itemId: string
   sku: string
@@ -419,11 +421,18 @@ async function generateListingImages(input: {
   await mkdir(outDir, { recursive: true })
   const images: TiktokListingImage[] = []
   let heroImagePath = ''
+  const extraReferenceImagePaths = Array.from(
+    new Set(
+      (Array.isArray(input.referenceImagePaths) ? input.referenceImagePaths : [])
+        .map((item) => String(item || '').trim())
+        .filter((item) => item && item !== input.sourceImagePath),
+    ),
+  )
   for (let index = 0; index < 5; index += 1) {
     const imagePaths =
       index === 0 || !heroImagePath
-        ? [input.sourceImagePath, input.analysisBoardPath]
-        : [input.sourceImagePath, input.analysisBoardPath, heroImagePath]
+        ? [input.sourceImagePath, input.analysisBoardPath, ...extraReferenceImagePaths]
+        : [input.sourceImagePath, input.analysisBoardPath, heroImagePath, ...extraReferenceImagePaths]
     const outputPath = await generateGptShotFrameImage({
       credentials: strictCredentials,
       prompt: buildImagePrompt({
@@ -567,6 +576,7 @@ export const tiktokListingService = {
   async createOrUpdate(
     payload: Partial<TiktokListingItem> & {
       sourceImagePath: string
+      referenceImagePaths?: string[]
       category: TiktokListingCategory
       sku: string
       localDisplayPrice: string
@@ -623,6 +633,7 @@ export const tiktokListingService = {
           await (deps?.generateAnalysisBoard || generateListingAnalysisBoard)({
             credentials,
             sourceImagePath: current.sourceImagePath,
+            referenceImagePaths: current.referenceImagePaths,
             itemId: current.id,
           }),
       })
@@ -636,6 +647,7 @@ export const tiktokListingService = {
             credentials,
             category: current.category,
             sourceImagePath: current.sourceImagePath,
+            referenceImagePaths: current.referenceImagePaths,
             analysisBoardPath: analysisBoardImage.filePath,
             itemId: current.id,
             sku: current.sku,

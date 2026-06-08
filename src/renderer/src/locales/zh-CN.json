@@ -107,6 +107,140 @@
   "titleBar": {
     "ready": "就绪"
   },
+  "settings": {
+    "hero": {
+      "kicker": "设置 / 控制中心",
+      "title": "平台与能力设置",
+      "subtitle": "先配置 API Key 和 Base URL，再为视频、图片和对话功能选择平台与模型。"
+    },
+    "actions": {
+      "checkUpdates": "检查更新",
+      "openDataDir": "打开数据目录",
+      "refresh": "刷新",
+      "saveSettings": "保存设置",
+      "saving": "保存中"
+    },
+    "sections": {
+      "platforms": {
+        "label": "平台",
+        "desc": "配置 API Key 和 Base URL"
+      },
+      "capabilities": {
+        "label": "能力",
+        "desc": "选择视频、图片和对话平台"
+      },
+      "qiniu": {
+        "label": "七牛",
+        "desc": "上传与资源分发设置"
+      }
+    },
+    "platforms": {
+      "title": "平台凭证",
+      "subtitle": "每个平台的凭证只维护一次，并在各项能力中复用。",
+      "fields": {
+        "apiKey": "API Key",
+        "apiToken": "API Token"
+      },
+      "cards": {
+        "kling": { "desc": "用于 AtlasCloud 与 Kling 的凭证配置。" },
+        "grsai": { "desc": "用于 GRS.AI 的视频、图片和对话凭证。" },
+        "ai666": { "desc": "用于 AI666 平台凭证配置。" },
+        "vectorengine": { "desc": "用于 VectorEngine 平台凭证配置。" },
+        "xibapi": { "desc": "用于 XIBAPI 平台凭证配置。" },
+        "replicate": { "desc": "用于本地 clone 图片工作流。" }
+      }
+    },
+    "capabilities": {
+      "title": "能力设置",
+      "subtitle": "为每项能力选择实际使用的平台与模型。",
+      "fields": {
+        "primaryPlatform": "主平台",
+        "primaryModel": "主模型",
+        "fallbackPlatform": "回退平台",
+        "fallbackModel": "回退模型",
+        "imageQuality": "图片质量"
+      },
+      "placeholders": {
+        "videoPrimaryModel": "例如 veo_3_1-fast",
+        "videoFallbackModel": "主链路失败时使用",
+        "imagePrimaryModel": "例如 gpt-image-1",
+        "chatPrimaryModel": "例如 gemini-3.1-pro"
+      },
+      "quality": {
+        "low": "低",
+        "medium": "中",
+        "high": "高"
+      },
+      "video": {
+        "title": "视频",
+        "desc": "视频生成的主链路与回退链路设置。"
+      },
+      "image": {
+        "title": "图片",
+        "desc": "图片生成与编辑的主设置。"
+      },
+      "chat": {
+        "title": "对话",
+        "desc": "脚本分析与流程辅助设置。"
+      }
+    },
+    "qiniu": {
+      "title": "七牛云",
+      "subtitle": "管理上传、外链和资源前缀。",
+      "fields": {
+        "accessKey": "Access Key",
+        "secretKey": "Secret Key",
+        "bucket": "Bucket",
+        "domain": "Domain",
+        "uploadHost": "Upload Host",
+        "prefix": "Prefix"
+      }
+    },
+    "summary": {
+      "title": "当前摘要",
+      "rows": {
+        "video": "视频",
+        "image": "图片",
+        "chat": "对话"
+      },
+      "cards": {
+        "video": { "title": "视频" },
+        "image": { "title": "图片" },
+        "chat": { "title": "对话" },
+        "status": {
+          "title": "状态",
+          "waiting": "等待保存",
+          "processing": "处理中",
+          "ready": "可操作"
+        }
+      }
+    },
+    "notes": {
+      "title": "使用说明",
+      "items": {
+        "credentialsReuse": "先在“平台”中配置凭证，再到“能力”中选择这些凭证的使用方式。",
+        "xibapiIndependent": "XIBAPI 现在是独立的视频平台，不再归入 VectorEngine。",
+        "reloadAfterSave": "保存后会从桌面端重新读取最新配置，确保界面与运行时状态一致。",
+        "imageQualityForwarded": "图片质量会传递到相关图片生成流程中。"
+      }
+    },
+    "messages": {
+      "loaded": "设置已加载",
+      "loadFailed": "加载设置失败",
+      "savedAndReloaded": "设置已保存并重新加载",
+      "saveFailed": "保存设置失败",
+      "dataDirNotFound": "未找到数据目录",
+      "dataDirOpened": "数据目录已打开",
+      "openDataDirFailed": "打开数据目录失败",
+      "updateCheckStarted": "已开始检查更新",
+      "updateCheckFailed": "检查更新失败"
+    },
+    "common": {
+      "show": "显示",
+      "hide": "隐藏",
+      "notSet": "未设置"
+    }
+  },
   "cloneView": {
     "videoStage": {
       "title": "生成分镜视频",

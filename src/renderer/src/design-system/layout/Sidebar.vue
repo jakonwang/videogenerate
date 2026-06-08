@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -24,28 +25,23 @@ defineProps<{
 function navigate(to: string) {
   void router.push(to)
 }
+
+const sidebarBrandIconPath = 'D:\\phpstudy_pro\\WWW\\videogenerate\\resources\\icon-brand-ui-v2.png'
+const sidebarBrandIconVersion = String(Date.now())
+const sidebarBrandIconSrc = computed(
+  () => `vg://file?path=${encodeURIComponent(sidebarBrandIconPath)}&v=${encodeURIComponent(sidebarBrandIconVersion)}`,
+)
 </script>
 
 <template>
   <aside class="ds-sidebar">
-    <div class="ds-sidebar__brand">
-      <div class="ds-sidebar__mark" aria-hidden="true">
-        <svg viewBox="0 0 40 40" class="ds-sidebar__mark-icon" role="img" aria-hidden="true">
-          <defs>
-            <linearGradient id="vg-mark-a" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#38d8ff" />
-              <stop offset="100%" stop-color="#8b5cf6" />
-            </linearGradient>
-          </defs>
-          <path d="M14 6h12c4.4 0 8 3.6 8 8v12c0 4.4-3.6 8-8 8H14c-4.4 0-8-3.6-8-8V14c0-4.4 3.6-8 8-8Z" fill="url(#vg-mark-a)" opacity="0.16" />
-          <path d="M12.5 10.5h15c3.3 0 6 2.7 6 6v7c0 3.3-2.7 6-6 6h-15c-3.3 0-6-2.7-6-6v-7c0-3.3 2.7-6 6-6Z" fill="url(#vg-mark-a)" />
-          <path d="M17 14.5h6.5c2.5 0 4.5 2 4.5 4.5v2.5c0 2.5-2 4.5-4.5 4.5H17c-2.5 0-4.5-2-4.5-4.5V19c0-2.5 2-4.5 4.5-4.5Z" fill="#0b1220" opacity="0.28" />
-          <path d="M16 14.5h8.2c1.8 0 3.3 1.5 3.3 3.3v4.4c0 1.8-1.5 3.3-3.3 3.3H16c-1.8 0-3.3-1.5-3.3-3.3v-4.4c0-1.8 1.5-3.3 3.3-3.3Z" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.1" />
-        </svg>
+    <div class="ds-sidebar__brand sidebar-brand-v2">
+      <div class="sidebar-brand-v2__icon" aria-hidden="true">
+        <img :src="sidebarBrandIconSrc" alt="CreateCut" class="sidebar-brand-v2__icon-image" />
       </div>
-      <div class="ds-sidebar__brand-copy">
-        <div class="ds-sidebar__title">VideoGen</div>
-        <div class="ds-sidebar__subtitle">Studio</div>
+      <div class="sidebar-brand-v2__copy">
+        <div class="sidebar-brand-v2__title">CreateCut</div>
+        <div class="sidebar-brand-v2__subtitle">AI Editing Suite</div>
       </div>
     </div>
     <nav class="ds-sidebar__nav">
@@ -101,29 +97,81 @@ function navigate(to: string) {
   justify-content: start !important;
   overflow: auto;
   padding-right: 2px;
-  gap: 12px;
+  gap: 8px;
 }
 
 .ds-sidebar__section {
   display: grid;
-  gap: 10px;
-  padding-top: 12px;
+  gap: 8px;
+  padding-top: 8px;
 }
 
 .ds-sidebar__section-title {
-  padding: 0 10px;
+  padding: 0 8px;
   color: rgba(226, 232, 240, 0.72);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .ds-sidebar__section-items {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ds-sidebar__item--sub {
   margin-left: 0;
+}
+
+.sidebar-brand-v2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 6px 6px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.sidebar-brand-v2__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-brand-v2__icon-image {
+  width: 34px;
+  height: 34px;
+  display: block;
+  border-radius: 10px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.sidebar-brand-v2__copy {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.sidebar-brand-v2__title {
+  margin: 0;
+  color: #f8fbff;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.sidebar-brand-v2__subtitle {
+  margin: 0;
+  color: rgba(162, 178, 204, 0.82);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 </style>

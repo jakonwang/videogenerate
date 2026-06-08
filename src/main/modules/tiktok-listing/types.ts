@@ -19,6 +19,7 @@ export type TiktokListingImage = {
 export type TiktokListingItem = {
   id: string
   sourceImagePath: string
+  referenceImagePaths: string[]
   category: TiktokListingCategory
   sku: string
   localDisplayPrice: string

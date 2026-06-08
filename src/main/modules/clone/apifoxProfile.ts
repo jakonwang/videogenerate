@@ -1,7 +1,7 @@
 import type { ApifoxHubCredentials, ModelCredentials } from './types'
 
 export type ApifoxCapability = 'video' | 'image' | 'chat'
-export type ApifoxProfile = 'ai666' | 'vectorengine'
+export type ApifoxProfile = 'ai666' | 'vectorengine' | 'xibapi'
 
 export function resolveApifoxHubProfile(credentials: ModelCredentials | undefined, capability: ApifoxCapability): ApifoxProfile {
   const profile =
@@ -10,8 +10,12 @@ export function resolveApifoxHubProfile(credentials: ModelCredentials | undefine
       : capability === 'image'
         ? credentials?.imageApifoxHubProfile
         : credentials?.chatApifoxHubProfile
-  if (profile === 'ai666' || profile === 'vectorengine') return profile
-  return credentials?.apifoxHubProfile === 'ai666' ? 'ai666' : 'vectorengine'
+  if (profile === 'ai666' || profile === 'vectorengine' || profile === 'xibapi') return profile
+  return credentials?.apifoxHubProfile === 'ai666'
+    ? 'ai666'
+    : credentials?.apifoxHubProfile === 'xibapi'
+      ? 'xibapi'
+      : 'vectorengine'
 }
 
 export function resolveApifoxHubCredentials(
@@ -20,5 +24,7 @@ export function resolveApifoxHubCredentials(
 ): ApifoxHubCredentials | undefined {
   if (!credentials) return undefined
   const profile = resolveApifoxHubProfile(credentials, capability)
-  return profile === 'ai666' ? credentials.ai666Hub ?? credentials.apifoxHub : credentials.vectorEngineHub ?? credentials.apifoxHub
+  if (profile === 'ai666') return credentials.ai666Hub ?? credentials.apifoxHub
+  if (profile === 'xibapi') return credentials.xibapiHub ?? credentials.apifoxHub
+  return credentials.vectorEngineHub ?? credentials.apifoxHub
 }

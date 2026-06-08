@@ -19,7 +19,17 @@ import {
 } from 'lucide-vue-next'
 import UiChip from '../components/UiChip.vue'
 
-type ProductType = 'phone_case' | 'earring'
+type ProductType =
+  | 'phone_case'
+  | 'earring'
+  | 'necklace'
+  | 'ring'
+  | 'bracelet'
+  | 'clothes'
+  | 'bag'
+  | 'shoes'
+  | 'toy'
+  | 'general'
 type ProductStatusFilter = 'all' | 'pending' | 'processing' | 'done' | 'failed'
 type ViewMode = 'grid' | 'list'
 type SortMode = 'updated_desc' | 'name_asc' | 'analysis_board_status'
@@ -64,6 +74,19 @@ const viewMode = ref<ViewMode>('grid')
 const creating = reactive({ name: '', type: 'phone_case' as ProductType })
 const actionMenuOpenId = ref('')
 
+const productTypeOptionsV2: Array<{ value: ProductType; label: string }> = [
+  { value: 'phone_case', label: '手机壳' },
+  { value: 'earring', label: '耳环' },
+  { value: 'necklace', label: '项链' },
+  { value: 'ring', label: '戒指' },
+  { value: 'bracelet', label: '手链' },
+  { value: 'clothes', label: '服饰' },
+  { value: 'bag', label: '包袋' },
+  { value: 'shoes', label: '鞋靴' },
+  { value: 'toy', label: '玩具' },
+  { value: 'general', label: '通用商品' },
+]
+
 const analysisBoardStatusRank: Record<'idle' | 'processing' | 'done' | 'failed', number> = {
   done: 0,
   processing: 1,
@@ -100,7 +123,7 @@ const filteredProducts = computed(() => {
       !q ||
       String(item.name || '').toLowerCase().includes(q) ||
       String(item.id || '').toLowerCase().includes(q) ||
-      productTypeLabel(item.type).toLowerCase().includes(q) ||
+      productTypeLabelV2(item.type).toLowerCase().includes(q) ||
       productBusinessStatusLabel(item).toLowerCase().includes(q)
     const hitType = typeFilter.value === 'all' || item.type === typeFilter.value
     const hitStatus = statusFilter.value === 'all' || matchStatusFilter(item, statusFilter.value)
@@ -149,8 +172,8 @@ function productImageCount(product: Product) {
   return legacy.filter((item) => isImagePath(item?.filePath)).length
 }
 
-function productTypeLabel(type: ProductType) {
-  return type === 'earring' ? '耳环' : '手机壳'
+function productTypeLabelV2(type: ProductType) {
+  return productTypeOptionsV2.find((item) => item.value === type)?.label ?? '通用商品'
 }
 
 function formatDateTime(ts?: number) {
@@ -202,7 +225,7 @@ function productAnalysisSummary(product: Product) {
 }
 
 function productAnalysisStatusLabel(product: Product) {
-  return productAnalysisSummary(product) ? 'DNA 已生成' : 'DNA 未生成'
+  return productAnalysisSummary(product) ? 'DNA 已生成' : 'DNA 待生成'
 }
 
 function productAnalysisTone(product: Product) {
@@ -214,7 +237,8 @@ async function refresh() {
 }
 
 async function createProduct() {
-  const name = creating.name.trim() || `未命名商品_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`
+  const fallbackName = `未命名商品_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`
+  const name = creating.name.trim() || fallbackName
   const created = (await window.api.products.upsert({
     name,
     type: creating.type,
@@ -281,8 +305,9 @@ onBeforeUnmount(() => {
             <label class="products-create-card__type">
               <span>商品类型</span>
               <select v-model="creating.type" data-testid="product-create-type-select">
-                <option value="phone_case">手机壳</option>
-                <option value="earring">耳饰</option>
+                <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
               </select>
               <ChevronDown class="products-create-card__icon h-4 w-4" />
             </label>
@@ -324,7 +349,7 @@ onBeforeUnmount(() => {
           <div class="stat-card__body">
             <span>异常</span>
             <strong>{{ issueOnlyCount }}</strong>
-            <small>生成失败或异常</small>
+            <small>生成失败或无图片</small>
           </div>
         </article>
         <article class="stat-card">
@@ -332,7 +357,7 @@ onBeforeUnmount(() => {
           <div class="stat-card__body">
             <span>最近更新</span>
             <strong>{{ recentCount }}</strong>
-            <small>7 天内有编辑行为的商品</small>
+            <small>7 天内有编辑的商品</small>
           </div>
         </article>
       </section>
@@ -353,8 +378,9 @@ onBeforeUnmount(() => {
             <span>商品类型</span>
             <select v-model="typeFilter" data-testid="product-library-type-filter-select">
               <option value="all">全部类型</option>
-              <option value="phone_case">手机壳</option>
-              <option value="earring">耳环</option>
+              <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
             </select>
             <ChevronDown class="select-field__icon h-4 w-4" />
           </label>
@@ -400,7 +426,7 @@ onBeforeUnmount(() => {
               <select v-model="sortMode" data-testid="product-library-sort-select">
                 <option value="updated_desc">按最近更新</option>
                 <option value="name_asc">按商品名称</option>
-                <option value="analysis_board_status">按分析画板状态</option>
+                <option value="analysis_board_status">按分析状态</option>
               </select>
               <ChevronDown class="sort-field__icon h-4 w-4" />
             </label>
@@ -451,13 +477,13 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="product-card__chips">
-                <UiChip tone="neutral">{{ productTypeLabel(product.type) }}</UiChip>
+                <UiChip tone="neutral">{{ productTypeLabelV2(product.type) }}</UiChip>
                 <UiChip :tone="productBusinessStatusTone(product)">{{ productBusinessStatusLabel(product) }}</UiChip>
                 <UiChip :tone="productAnalysisTone(product)">{{ productAnalysisStatusLabel(product) }}</UiChip>
               </div>
 
               <div class="product-card__analysis">
-                <span>联合商品分析</span>
+                <span>商品分析摘要</span>
                 <p>{{ productAnalysisSummary(product) || '标准图与多角度图尚未生成，完成商品建模后会在这里显示 Product DNA 摘要。' }}</p>
               </div>
 
@@ -468,7 +494,7 @@ onBeforeUnmount(() => {
 
               <div class="product-card__actions">
                 <button class="product-card__primary" type="button" @click="openDetail(product.id)">进入详情</button>
-                <button class="product-card__secondary" type="button" @click="openDetail(product.id)">生成</button>
+                <button class="product-card__secondary" type="button" @click="openDetail(product.id)">继续处理</button>
                 <div class="product-card__menu">
                   <button class="product-card__ghost" type="button" aria-label="更多操作" @click.stop="toggleActionMenu(product.id)">
                     <MoreHorizontal class="h-4 w-4" />
@@ -500,10 +526,10 @@ onBeforeUnmount(() => {
 
         <footer class="pagination-row">
           <div class="pagination-nav">
-            <button class="pagination-button" type="button">‹</button>
+            <button class="pagination-button" type="button">上一页</button>
             <button class="pagination-button pagination-button--active" type="button">1</button>
             <button class="pagination-button" type="button">2</button>
-            <button class="pagination-button" type="button">›</button>
+            <button class="pagination-button" type="button">下一页</button>
           </div>
           <button class="page-size-button" type="button">
             <span>12 条 / 页</span>
@@ -511,7 +537,6 @@ onBeforeUnmount(() => {
           </button>
         </footer>
       </section>
-
     </section>
   </div>
 </template>
@@ -569,6 +594,7 @@ onBeforeUnmount(() => {
   align-items: flex-end;
   gap: 10px;
   min-width: 520px;
+  -webkit-app-region: no-drag;
 }
 
 .products-create-card__fields {
@@ -576,6 +602,7 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(220px, 1fr) 148px;
   gap: 10px;
   flex: 1 1 auto;
+  -webkit-app-region: no-drag;
 }
 
 .products-create-card__input,
@@ -589,6 +616,7 @@ onBeforeUnmount(() => {
   color: #eef3ff;
   font-size: 13px;
   outline: none;
+  -webkit-app-region: no-drag;
 }
 
 .products-create-card__input::placeholder {
@@ -599,6 +627,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   gap: 4px;
+  -webkit-app-region: no-drag;
 }
 
 .products-create-card__type span {
@@ -635,6 +664,7 @@ onBeforeUnmount(() => {
   font-size: 15px;
   font-weight: 800;
   box-shadow: 0 14px 34px rgba(90, 63, 255, 0.28);
+  -webkit-app-region: no-drag;
 }
 
 .stats-grid {
@@ -1141,15 +1171,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 0 14px;
-}
-
-.products-create-draft {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
 }
 
 @media (max-width: 1600px) {

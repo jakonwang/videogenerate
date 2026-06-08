@@ -20,6 +20,7 @@ async function main() {
   let failTitleAttempts = 2
   let failAnalysisBoardAttempts = 0
   let failImageAttempts = 0
+  const analysisBoardRequests: Array<{ referenceImagePaths: string[] }> = []
   const imageRequests: Array<{ prompt: string; imagePaths: string[]; filePrefix: string; outputSize: string }> = []
 
   cloneRepoModule.cloneRepo.getCredentials = async () =>
@@ -76,6 +77,9 @@ async function main() {
         failAnalysisBoardAttempts -= 1
         throw new Error(`analysis board transient failure ${failAnalysisBoardAttempts}`)
       }
+      analysisBoardRequests.push({
+        referenceImagePaths: Array.isArray((input as any).referenceImagePaths) ? [...((input as any).referenceImagePaths as string[])] : [input.sourceImagePath],
+      })
       return {
         id: 'analysis-board-1',
         filePath: path.join(root, 'mock-images', input.itemId, 'listing_analysis_board.png'),
@@ -99,7 +103,10 @@ async function main() {
             sku: input.sku,
             anchorMode: index === 0 ? 'source_only' : 'source_plus_hero',
           }),
-          imagePaths: index === 0 ? [input.sourceImagePath, analysisBoardPath] : [input.sourceImagePath, analysisBoardPath, heroPath],
+          imagePaths:
+            index === 0
+              ? [input.sourceImagePath, analysisBoardPath, ...((input.referenceImagePaths || []).filter((entry) => entry !== input.sourceImagePath))]
+              : [input.sourceImagePath, analysisBoardPath, heroPath, ...((input.referenceImagePaths || []).filter((entry) => entry !== input.sourceImagePath))],
           filePrefix: `listing_${index + 1}`,
           outputSize: '1024x1024',
         })
@@ -117,6 +124,7 @@ async function main() {
   try {
     const created = await tiktokListingRepo.createOrUpdate({
       sourceImagePath: 'C:/demo/source.jpg',
+      referenceImagePaths: ['C:/demo/source.jpg', 'C:/demo/detail-back.jpg', 'C:/demo/detail-side.jpg'],
       category: 'earring',
       sku: 'SKU-001',
       localDisplayPrice: '19.99',
@@ -133,9 +141,27 @@ async function main() {
     assert.equal(titleCalls, 3)
     assert.match(String(generated.generatedDescription || ''), /<img src="https:\/\/example\.com\/listing_1\.png" \/>/)
     assert.equal(imageRequests.length, 5)
-    assert.deepEqual(imageRequests[0]?.imagePaths, ['C:/demo/source.jpg', generated.analysisBoardImage?.filePath || ''])
-    assert.deepEqual(imageRequests[1]?.imagePaths, ['C:/demo/source.jpg', generated.analysisBoardImage?.filePath || '', generated.listingImages[0]?.filePath || ''])
-    assert.deepEqual(imageRequests[4]?.imagePaths, ['C:/demo/source.jpg', generated.analysisBoardImage?.filePath || '', generated.listingImages[0]?.filePath || ''])
+    assert.deepEqual(analysisBoardRequests[0]?.referenceImagePaths, ['C:/demo/source.jpg', 'C:/demo/detail-back.jpg', 'C:/demo/detail-side.jpg'])
+    assert.deepEqual(imageRequests[0]?.imagePaths, [
+      'C:/demo/source.jpg',
+      generated.analysisBoardImage?.filePath || '',
+      'C:/demo/detail-back.jpg',
+      'C:/demo/detail-side.jpg',
+    ])
+    assert.deepEqual(imageRequests[1]?.imagePaths, [
+      'C:/demo/source.jpg',
+      generated.analysisBoardImage?.filePath || '',
+      generated.listingImages[0]?.filePath || '',
+      'C:/demo/detail-back.jpg',
+      'C:/demo/detail-side.jpg',
+    ])
+    assert.deepEqual(imageRequests[4]?.imagePaths, [
+      'C:/demo/source.jpg',
+      generated.analysisBoardImage?.filePath || '',
+      generated.listingImages[0]?.filePath || '',
+      'C:/demo/detail-back.jpg',
+      'C:/demo/detail-side.jpg',
+    ])
     assert.equal(imageRequests[0]?.outputSize, '1024x1024')
     assert.match(String(imageRequests[1]?.prompt || ''), /Reference image 2 is the approved hero result/i)
 
@@ -166,7 +192,13 @@ async function main() {
     assert.equal(regenerated.listingImages.length, 5)
     assert.deepEqual(
       imageRequests[1]?.imagePaths,
-      ['C:/demo/source.jpg', regenerated.analysisBoardImage?.filePath || '', regenerated.listingImages[0]?.filePath || ''],
+      [
+        'C:/demo/source.jpg',
+        regenerated.analysisBoardImage?.filePath || '',
+        regenerated.listingImages[0]?.filePath || '',
+        'C:/demo/detail-back.jpg',
+        'C:/demo/detail-side.jpg',
+      ],
     )
 
     const second = await tiktokListingRepo.createOrUpdate({
