@@ -797,6 +797,7 @@ export async function createVideoTask(input: {
   durationSec?: number
   aspectRatio?: '9:16' | '16:9'
   xibapiSize?: XibapiVideoSize
+  motionStrength?: number
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
@@ -809,6 +810,7 @@ export async function createVideoTask(input: {
   if (!modelCandidates.length) throw new Error(`未配置 ${input.capability} 对应的视频模型`)
 
   const referenceImages = Array.from(new Set((input.referenceImages ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
+  const motionStrength = Math.max(1, Math.min(3, Math.round(Number(input.motionStrength ?? 2) || 2)))
   const ai666Kling = isAi666KlingVideo(input.credentials, cfg)
   const ai666Seedance2 = isAi666Seedance2Video(input.credentials, cfg)
   const url = ai666Kling
@@ -827,6 +829,8 @@ export async function createVideoTask(input: {
       duration: 8,
       resolution: '720p',
       seed: -1,
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
 
     if (cfg.videoProvider === 'vidu') {
@@ -838,6 +842,8 @@ export async function createVideoTask(input: {
         duration: 8,
         ...(input.image ? { image: input.image } : {}),
         ...(input.lastImage ? { last_image: input.lastImage } : {}),
+        motion_strength: motionStrength,
+        weight: motionStrength,
       }
     } else if (cfg.videoProvider === 'veo') {
       body = {
@@ -847,6 +853,8 @@ export async function createVideoTask(input: {
         images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
         enhance_prompt: true,
         aspect_ratio: '9:16',
+        motion_strength: motionStrength,
+        weight: motionStrength,
       }
     } else if (cfg.videoProvider === 'jimeng') {
       body = {
@@ -858,6 +866,8 @@ export async function createVideoTask(input: {
         metadata: {
           aspect_ratio: '9:16',
           duration: 8,
+          motion_strength: motionStrength,
+          weight: motionStrength,
         },
       }
     } else if (cfg.videoProvider === 'seedance2') {
@@ -874,6 +884,8 @@ export async function createVideoTask(input: {
         ratio: '9:16',
         duration: 5,
         watermark: false,
+        motion_strength: motionStrength,
+        weight: motionStrength,
       }
     } else if (cfg.videoProvider === 'kling') {
       body = {
@@ -886,6 +898,8 @@ export async function createVideoTask(input: {
         duration: 8,
         resolution: '720p',
         seed: -1,
+        motion_strength: motionStrength,
+        weight: motionStrength,
       }
     } else if (cfg.videoProvider === 'grok') {
       body = {
@@ -894,6 +908,8 @@ export async function createVideoTask(input: {
         images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
         aspect_ratio: '9:16',
         size: '1080P',
+        motion_strength: motionStrength,
+        weight: motionStrength,
       }
     } else if (cfg.videoProvider === 'xibapi') {
       body = {
@@ -901,6 +917,8 @@ export async function createVideoTask(input: {
         prompt: input.prompt,
         size: xibapiSizeByAspectRatio(input.aspectRatio, input.xibapiSize),
         images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
+        motion_strength: motionStrength,
+        weight: motionStrength,
       }
     } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora') {
       body =
@@ -909,10 +927,12 @@ export async function createVideoTask(input: {
               model,
               prompt: input.prompt,
               negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-              images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-              aspect_ratio: '9:16',
-              enhance_prompt: true,
-            }
+            images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
+            aspect_ratio: '9:16',
+            enhance_prompt: true,
+            motion_strength: motionStrength,
+            weight: motionStrength,
+          }
           : {
               model,
               prompt: input.prompt,
@@ -923,6 +943,8 @@ export async function createVideoTask(input: {
               duration: 8,
               resolution: '720p',
               seed: -1,
+              motion_strength: motionStrength,
+              weight: motionStrength,
             }
     } else {
       if (input.image) body.image = input.image
@@ -937,12 +959,16 @@ export async function createVideoTask(input: {
         seconds: '5',
         ...(images.length ? { images } : {}),
         size: '1280x720',
+        motion_strength: motionStrength,
+        weight: motionStrength,
         metadata: {
           output_config: {
             duration: 5,
             resolution: '720P',
             aspect_ratio: '16:9',
             audio_generation: 'Enabled',
+            motion_strength: motionStrength,
+            weight: motionStrength,
           },
         },
       }
@@ -964,6 +990,8 @@ export async function createVideoTask(input: {
           duration,
           resolution: '720p',
           ratio: 'adaptive',
+          motion_strength: motionStrength,
+          weight: motionStrength,
         },
       }
     }
@@ -1047,6 +1075,7 @@ export async function generateVideo(input: {
   durationSec?: number
   aspectRatio?: '9:16' | '16:9'
   xibapiSize?: XibapiVideoSize
+  motionStrength?: number
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const root = baseUrl(input.credentials)
@@ -1055,6 +1084,7 @@ export async function generateVideo(input: {
   if (!model) throw new Error(`未配置 ${input.capability} 对应的视频模型`)
 
   const referenceImages = Array.from(new Set((input.referenceImages ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
+  const motionStrength = Math.max(1, Math.min(3, Math.round(Number(input.motionStrength ?? 2) || 2)))
   const ai666Kling = isAi666KlingVideo(input.credentials, cfg)
   const ai666Seedance2 = isAi666Seedance2Video(input.credentials, cfg)
   let url = ai666Kling
@@ -1070,6 +1100,8 @@ export async function generateVideo(input: {
     duration: 8,
     resolution: '720p',
     seed: -1,
+    motion_strength: motionStrength,
+    weight: motionStrength,
   }
 
   if (cfg.videoProvider === 'vidu') {
@@ -1081,6 +1113,8 @@ export async function generateVideo(input: {
       duration: 8,
       ...(input.image ? { image: input.image } : {}),
       ...(input.lastImage ? { last_image: input.lastImage } : {}),
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
   } else if (cfg.videoProvider === 'veo') {
     body = {
@@ -1090,6 +1124,8 @@ export async function generateVideo(input: {
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
       enhance_prompt: true,
       aspect_ratio: '9:16',
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
   } else if (cfg.videoProvider === 'jimeng') {
     body = {
@@ -1101,6 +1137,8 @@ export async function generateVideo(input: {
       metadata: {
         aspect_ratio: '9:16',
         duration: 8,
+        motion_strength: motionStrength,
+        weight: motionStrength,
       },
     }
   } else if (cfg.videoProvider === 'seedance2') {
@@ -1117,6 +1155,8 @@ export async function generateVideo(input: {
       ratio: '9:16',
       duration: 5,
       watermark: false,
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
   } else if (cfg.videoProvider === 'kling') {
     body = {
@@ -1129,6 +1169,8 @@ export async function generateVideo(input: {
       duration: 8,
       resolution: '720p',
       seed: -1,
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
   } else if (cfg.videoProvider === 'grok') {
     body = {
@@ -1137,6 +1179,8 @@ export async function generateVideo(input: {
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
       aspect_ratio: '9:16',
       size: '1080P',
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
   } else if (cfg.videoProvider === 'xibapi') {
     body = {
@@ -1144,6 +1188,8 @@ export async function generateVideo(input: {
       prompt: input.prompt,
       size: xibapiSizeByAspectRatio(input.aspectRatio, input.xibapiSize),
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
+      motion_strength: motionStrength,
+      weight: motionStrength,
     }
   } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora') {
     body =
@@ -1155,6 +1201,8 @@ export async function generateVideo(input: {
             images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
             aspect_ratio: '9:16',
             enhance_prompt: true,
+            motion_strength: motionStrength,
+            weight: motionStrength,
           }
         : {
             model,
@@ -1162,11 +1210,13 @@ export async function generateVideo(input: {
             negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             ...(input.image ? { image: input.image } : {}),
             ...(input.lastImage ? { last_image: input.lastImage } : {}),
-            aspect_ratio: '9:16',
-            duration: 8,
-            resolution: '720p',
-            seed: -1,
-          }
+              aspect_ratio: '9:16',
+              duration: 8,
+              resolution: '720p',
+              seed: -1,
+              motion_strength: motionStrength,
+              weight: motionStrength,
+            }
   } else {
     if (input.image) body.image = input.image
     if (input.lastImage) body.last_image = input.lastImage
@@ -1180,12 +1230,16 @@ export async function generateVideo(input: {
       seconds: '5',
       ...(images.length ? { images } : {}),
       size: '1280x720',
+      motion_strength: motionStrength,
+      weight: motionStrength,
       metadata: {
         output_config: {
           duration: 5,
           resolution: '720P',
           aspect_ratio: '16:9',
           audio_generation: 'Enabled',
+          motion_strength: motionStrength,
+          weight: motionStrength,
         },
       },
     }
@@ -1207,6 +1261,8 @@ export async function generateVideo(input: {
         duration,
         resolution: '720p',
         ratio: 'adaptive',
+        motion_strength: motionStrength,
+        weight: motionStrength,
       },
     }
   }

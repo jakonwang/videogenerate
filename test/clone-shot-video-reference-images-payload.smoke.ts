@@ -62,6 +62,8 @@ async function main() {
       'https://example.com/product1.png',
       'https://example.com/product2.png',
     ])
+    assert.equal(Number(capturedBody?.motion_strength || 0), 2)
+    assert.equal(Number(capturedBody?.weight || 0), 2)
     console.log('clone shot video reference images payload smoke test passed')
   } finally {
     globalThis.fetch = originalFetch

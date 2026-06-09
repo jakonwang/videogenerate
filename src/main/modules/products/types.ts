@@ -11,6 +11,7 @@ export type ProductType =
   | 'general'
 export type SegmentKey = string
 export type ProductCanonicalSourceStatus = 'idle' | 'processing' | 'done' | 'failed'
+export type ProductStoryboardTemplateType = 'general' | 'jewelry' | 'ecommerce_packaging' | 'lifestyle_interaction'
 
 export type MediaAsset = {
   id: string
@@ -56,6 +57,7 @@ export type Product = {
   id: string
   name: string
   type: ProductType
+  storyboardTemplateType?: ProductStoryboardTemplateType
   assets: Record<SegmentKey, MediaAsset[]>
   images?: ProductImageAsset[]
   coverImagePath?: string

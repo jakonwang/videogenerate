@@ -191,6 +191,146 @@ function composePromptParagraphs(sections: Array<string | null | undefined>, max
   return sanitizeGeneratedVideoPrompt(compact, maxChars)
 }
 
+const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, crisp, high-definition (HD) 60fps video with a handheld smartphone shooting look, customized for a realistic social media product review. The overall dynamic movement must be extremely subtle, organic, and everyday lifestyle-oriented. Absolutely PROHIBIT cinematic studio setups, heavy commercial color grading, and robotic PPT-style panning/zooming.
+
+1. THE COMPOSITION CORE (Ref. Base Image):
+- Timeline Initiation: Seamlessly initiate the video timeline directly from the provided base image.
+- Geometric Locked Fidelity: The {{productName}} must retain 100% strict structural consistency and clear geometric details from start to finish. There must be zero morphing of fine details, zero text blurring, and zero shape distortion as the video plays.
+
+2. REALISTIC LIFESTYLE LIGHT & RAY-TRACING SHADOWS:
+- Ambient Light Shift: The lighting must remain completely natural, soft everyday ambient light matching the lifestyle environment in the background. As the camera subtly moves, light reflections and specular highlights must shift fluidly and realistically across the {{productName}}'s surface textures.
+- Shadow Physics: The micro-shadows cast by the {{productName}} onto the background and the model's {{targetBodyPart}} must dynamically re-calculate, stretching and contracting realistically with millimeter precision based on natural ambient occlusion.
+
+3. HANDHELD CAMERA MECHANICS:
+- Micro-Handheld Shake: Implement {{cameraMovement}} with a highly controlled, microscopic handheld camera shake to perfectly simulate a real person holding a smartphone and filming naturally in real life.
+- Spatial Parallax: Force a subtle spatial parallax effect where the foreground {{productName}} moves at a minutely different visual speed than the background depth, creating an authentic 3D spatial dimension rather than a flat 2D slide-show.
+
+4. BIOMETRIC INTERACTION & ABSOLUTE ANONYMITY:
+- Micro-Action: The model exhibits a very slight, natural human breathing movement and micro-physical action: {{specificMicroAction}}. Every interaction between the body and the object must strictly obey the laws of gravity and natural physical inertia.
+- Absolute Anonymity: The camera angle remains tightly cropped on the {{targetBodyPart}}, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity.
+
+Visual Aesthetic: Casual everyday smartphone video, natural organic color tones, realistic skin textures, soft focused background, authentic lifestyle product showcase. No AI synthetic glossiness, no commercial render look. Single panel only.`
+
+type PhysicalLightingLockVideoSlotCategory = 'handheld_interaction' | 'wearable_jewelry' | 'worn_accessory'
+
+function normalizeTemplateText(value: unknown, fallback = '') {
+  return sanitizeGeneratedVideoPrompt(keepEnglishLikeText(value, fallback), 220).replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim() || fallback
+}
+
+function inferPhysicalLightingLockVideoCategory(input: {
+  productType?: unknown
+  scriptText?: unknown
+  generationPrompt?: unknown
+  visualDescription?: unknown
+  actionDescription?: unknown
+  cameraDescription?: unknown
+  productFocus?: unknown
+  materialNeed?: unknown
+  productIdentityText?: unknown
+}) {
+  const explicitType = String(input.productType || '').trim().toLowerCase()
+  if (explicitType === 'earrings') return 'wearable_jewelry' as const
+  if (explicitType === 'phone_case') return 'handheld_interaction' as const
+  if (explicitType === 'clothes') return 'worn_accessory' as const
+  if (explicitType === 'toy') return 'handheld_interaction' as const
+
+  const corpus = [
+    input.scriptText,
+    input.generationPrompt,
+    input.visualDescription,
+    input.actionDescription,
+    input.cameraDescription,
+    input.productFocus,
+    input.materialNeed,
+    input.productIdentityText,
+  ]
+    .map((item) => keepEnglishLikeText(item, '').toLowerCase())
+    .join(' ')
+
+  if (/(earring|necklace|pendant|headpiece|headwear|headband|jewelry|jewellery)/i.test(corpus)) return 'wearable_jewelry'
+  if (/(ring|bracelet|watch|cufflink|wrist|finger)/i.test(corpus)) return 'worn_accessory'
+  if (/(keychain|key chain|plush toy|toy|serum|bottle|3c|device|electronics|phone case|phonecase|beauty|cosmetic)/i.test(corpus)) {
+    return 'handheld_interaction'
+  }
+  return 'handheld_interaction'
+}
+
+function inferPhysicalLightingLockBodyPart(input: { productType?: unknown; productText: string }) {
+  const explicitType = String(input.productType || '').trim().toLowerCase()
+  const corpus = `${explicitType} ${input.productText}`.toLowerCase()
+  if (explicitType === 'earrings') return 'Ear lobe'
+  if (explicitType === 'phone_case') return 'Hands and Fingers'
+  if (explicitType === 'toy') return 'Hands and Fingers'
+  if (explicitType === 'clothes') return 'Wrist and Fingers'
+  if (/(necklace|pendant|choker)/i.test(corpus)) return 'Collarbone and Neck'
+  if (/(earring|headpiece|headwear|hair clip|hairclip|barrette)/i.test(corpus)) return 'Ear lobe and Neck area'
+  if (/(ring|bracelet|watch|cufflink|wrist|finger)/i.test(corpus)) return 'Wrist and Fingers'
+  return 'Hands and Fingers'
+}
+
+function inferPhysicalLightingLockProductName(input: {
+  category: PhysicalLightingLockVideoSlotCategory
+  productType?: unknown
+  productText: string
+}) {
+  const explicitType = String(input.productType || '').trim().toLowerCase()
+  const corpus = `${explicitType} ${input.productText}`.toLowerCase()
+  if (input.category === 'wearable_jewelry') {
+    if (explicitType === 'earrings') return 'Earring'
+    if (/(necklace|pendant|choker)/i.test(corpus)) return 'Necklace'
+    if (/(earring|stud|hoop|drop earring|dangle)/i.test(corpus)) return 'Earring'
+    return 'Jewelry Piece'
+  }
+  if (input.category === 'worn_accessory') {
+    if (/\bring\b/i.test(corpus)) return 'Ring'
+    if (/(bracelet|bangle)/i.test(corpus)) return 'Bracelet'
+    if (/\bwatch\b/i.test(corpus)) return 'Watch'
+    return 'Accessory'
+  }
+  if (/(plush toy|toy)/i.test(corpus)) return 'Plush Toy'
+  if (/(serum|essence|lotion|perfume|foundation|lip gloss|liquid|glass bottle|glass container|bottle|cosmetic|skincare)/i.test(corpus)) {
+    return 'Serum Bottle'
+  }
+  return 'Product'
+}
+
+function inferPhysicalLightingLockCameraMovement(input: {
+  category: PhysicalLightingLockVideoSlotCategory
+  scriptText?: unknown
+  cameraDescription?: unknown
+  generationPrompt?: unknown
+}) {
+  const corpus = [input.scriptText, input.cameraDescription, input.generationPrompt]
+    .map((item) => normalizeTemplateText(item, '').toLowerCase())
+    .join(' ')
+  if (input.category === 'wearable_jewelry') return 'Subtle handheld close-up on the ear area'
+  if (input.category === 'worn_accessory') return 'Subtle handheld sliding tilt across the fingers'
+  if (input.category === 'handheld_interaction') return 'Micro-handheld camera movement focusing on the hands'
+  if (/(ear|earring|earlobe|necklace|jewelry|jewellery)/i.test(corpus)) return 'Subtle handheld close-up on the ear area'
+  if (/(wrist|fingers|ring|bracelet|watch|sliding tilt|sliding pan|across)/i.test(corpus)) return 'Subtle handheld sliding tilt across the fingers'
+  return 'Micro-handheld camera movement focusing on the hands'
+}
+
+function inferPhysicalLightingLockSpecificMicroAction(input: {
+  category: PhysicalLightingLockVideoSlotCategory
+  productType?: unknown
+  scriptText?: unknown
+  actionDescription?: unknown
+  visualDescription?: unknown
+  productText: string
+}) {
+  const corpus = [input.scriptText, input.actionDescription, input.visualDescription, input.productText]
+    .map((item) => normalizeTemplateText(item, '').toLowerCase())
+    .join(' ')
+  if (input.category === 'wearable_jewelry') {
+    return 'The model slightly tilts her head by a tiny 3 degrees, causing the jewelry piece to respond naturally to gravity, swaying with a realistic, micro-pendulum effect'
+  }
+  if (input.category === 'worn_accessory') {
+    return 'The fingers move slightly and naturally, causing subtle, realistic contact shadows and highlights to shift flawlessly across the accessory\'s edges'
+  }
+  return 'The fingers gently rotate the product a few degrees, showcasing the natural textures and everyday light reflections on its surface'
+}
+
 export const VIDEO_PROMPT_TEMPLATE = `
 [TYPE]
 Realistic ecommerce video
@@ -953,6 +1093,7 @@ function isHighRiskJewelryVideoPrompt(input: {
 export function buildOptimizedVideoPrompt(input: {
   shot: Pick<
     ShotSpec,
+    | 'id'
     | 'index'
     | 'productType'
     | 'scriptText'
@@ -997,156 +1138,42 @@ function buildVideoExecutionStackPrompt(input: {
   productMode?: CloneProductMode
 }) {
   const shot = input.shot
-  const productType = String(shot.productType || '').trim().toLowerCase()
-  const isEarrings = /earrings?/.test(productType)
-  const looksLikeEarringShot =
-    isEarrings ||
-    inferJewelryLikePromptContext({
-      productType: shot.productType,
-      generationPrompt: shot.generationPrompt,
-      visualDescription: shot.visualDescription,
-      productIdentityText: input.productIdentityText,
-      materialNeed: shot.materialNeed,
-    })
-  const wearableLike = /earrings?|ring|bracelet|necklace|pendant|wrist|finger|neck|clavicle/.test(productType)
-  const sceneText = composePromptParagraphs(
-    [
-      keepEnglishLikeText(shot.visualDescription || shot.generationPrompt || '', '').trim(),
-      'Reference composition defines scene category, framing distance, and subject placement only.',
-    ],
-    260,
-  )
-  const environmentText = composePromptParagraphs(
-    [
-      keepEnglishLikeText(shot.visualDescription || shot.generationPrompt || '', '').trim(),
-      'Background may move slightly, but the product must remain unaffected and visually dominant.',
-      'No foreground blockage over key product structure.',
-    ],
-    320,
-  )
-  const lockedAction = looksLikeEarringShot
-    ? buildLockedProductActionText('earrings', shot.actionDescription)
-    : buildLockedProductActionText(productType, shot.actionDescription)
-  const motionText = composePromptParagraphs(['No product motion.', keepEnglishLikeText(lockedAction || shot.actionDescription || '', '').trim()], 220)
-  const cameraFraming =
-    inferCameraFramingFromScript({
-      scriptText: shot.scriptText,
-      cameraDescription: shot.cameraDescription,
-      framing: shot.framing,
-      shotType: shot.shotType,
-    }) || 'Close-up.'
-  const cameraHints = [
-    ...pickPromptLinesByKeywords(shot.scriptText || '', ['camera', 'push', 'pull', 'zoom', 'pan', 'tilt', 'track', 'dolly', 'close-up', 'closeup']),
-    keepEnglishLikeText(shot.cameraDescription || shot.motion || shot.framing || '', '').trim(),
-  ].map(normalizeCameraHint).filter(Boolean)
-  const cameraBase = normalizeVideoCameraInstruction(
-    shot.cameraDescription || `${shot.framing || 'closeup'} framing, ${shot.motion || 'subtle camera movement'}`,
-  )
-  const productMode = input.productMode || detectProductMode(productType)
-  const cameraPolicy =
-    productMode === 'STRICT'
-      ? 'Almost static camera. Keep the product as the visual anchor.'
-      : productMode === 'BALANCED'
-        ? `${cameraBase} Slight perspective variation is allowed if product readability stays stable.`
-        : `${cameraBase} Allow natural motion, atmosphere, and scene expression while keeping the product recognizable.`
-  const cameraText =
-    composePromptParagraphs([cameraFraming, ...cameraHints, cameraPolicy], 320) || `${cameraFraming}\n\n${cameraPolicy}`
-  const lightingHints = [
-    ...pickPromptLinesByKeywords(shot.compiledPrompt || '', ['light', 'lighting', 'exposure', 'shadow', 'highlight']),
-    ...pickPromptLinesByKeywords(shot.visualDescription || '', ['light', 'lighting', 'exposure', 'shadow', 'highlight']),
-    ...pickPromptLinesByKeywords(shot.generationPrompt || '', ['light', 'lighting', 'exposure', 'shadow', 'highlight']),
-  ].map(normalizeLightingHint).filter(Boolean)
-  const lightingText = composePromptParagraphs(
-    [
-      ...lightingHints,
-      looksLikeEarringShot ? 'Flat diffuse lighting.' : 'Soft diffuse lighting.',
-      'Lighting family remains stable.',
-      'Brightness may vary slightly without changing product readability.',
-      'No relighting.',
-      looksLikeEarringShot ? 'No specular highlights.' : 'No new highlight pattern that changes product reading.',
-    ],
-    300,
-  )
-  const modelIdentityText = keepEnglishLikeText(input.modelIdentityText, 'Use the same selected model identity only.')
-  const productFocus = looksLikeEarringShot
-    ? buildLockedProductFocusText('earrings', shot.productFocus)
-    : buildLockedProductFocusText(productType, shot.productFocus)
-  const scriptIntent = keepEnglishLikeText(shot.scriptText || '', '').trim()
-  const shotIntent = composePromptParagraphs(
-    [
-      scriptIntent || `Maintain the original storyboard shot ${Number(shot.index ?? 0) + 1} intent.`,
-      keepEnglishLikeText(productFocus || shot.materialNeed || '', '').trim(),
-    ],
-    240,
-  )
-  const roleMapText = [
-    'Image 1 = product canonical source.',
-    'Image 2 = model identity reference.',
-    'Image 3 = storyboard composition reference.',
-    'Strict separation. Do not use model identity to redefine the product. Do not use storyboard composition to redesign product structure.',
-  ].join('\n')
-  const absoluteRulesText = [
-    'Product is a visual identity anchor from the canonical reference.',
-    'Preserve exact silhouette, proportions, connection points, visible structure, material finish, color family, and wearing direction.',
-    'Do not redesign, rebuild, beautify, simplify, or reconstruct unseen parts.',
-    `Model lock: ${modelIdentityText}`,
-    'If product consistency conflicts with pose, crop, anatomy, or atmosphere, preserve the product and adjust the non-product elements.',
-  ].join('\n')
-  const shotControlText = [
-    `Intent: ${shotIntent || 'Keep the same storyboard shot purpose.'}`,
-    `Reference scene lock: ${sceneText || (looksLikeEarringShot ? 'Extreme close-up of ear wearing the earring.' : buildLockedProductSceneText(productType))}`,
-    `Camera behavior: ${cameraText || `${cameraFraming} Minimal camera movement only.`}`,
-    `Motion behavior: ${motionText || 'No product motion. Minimal physically believable movement only.'}`,
-    wearableLike
-      ? 'Composition priority: product is the visual center, occupies 40% to 60% of the frame, and stays larger and clearer than surrounding human features.'
-      : 'Composition priority: product remains sharp, readable, and visually primary.',
-    wearableLike ? 'Hierarchy: product > hands > body > face' : 'Hierarchy: product > hands > body > background',
-  ].join('\n')
-  const faceControlText = wearableLike
-    ? [
-        looksLikeEarringShot ? 'Do NOT show full face as the subject.' : 'Do NOT use full face as the main subject.',
-        'No eye contact.',
-        looksLikeEarringShot
-          ? 'Face must stay cropped, off-center, secondary, or reduced to ear, jawline, and neck support only.'
-          : 'Face must stay cropped, off-center, secondary, or reduced to support context only.',
-        'Never let the face dominate the frame.',
-      ].join('\n')
-    : 'Keep any human context secondary to the product.'
-  const environmentControlText = [
-    `Scene category: ${sceneText || 'Keep the original reference scene category.'}`,
-    environmentText || 'Background may move slightly, but the product must remain unaffected and visually dominant.',
-    'Environment must not overpower, relight, shrink, block, or visually compete with the product.',
-  ].join('\n')
-  const lightingControlText = [
-    lightingText || 'Soft diffuse lighting. Lighting family remains stable.',
-    'No flicker.',
-    looksLikeEarringShot ? 'No reflective response.' : 'No reflective response that changes material interpretation.',
-    'Camera must NOT introduce new angles, perspectives, or product reinterpretation.',
-    'The product is NOT a 3D object. Do NOT apply depth reconstruction or perspective transformation.',
-  ].join('\n')
-  const restrictionsText = [
-    'Do NOT infer or reconstruct hidden or unseen parts of the product.',
-    'Do NOT reduce product readability, sharpness, or visibility.',
-    'Do NOT let the product become small, distant, soft, or detail-blurred.',
-    wearableLike ? 'Do NOT let the model dominate the frame.' : 'Do NOT let non-product elements dominate the frame.',
-    'Do NOT generate speaking, dialogue, lip-sync, mouth-shape acting, subtitles, watermark, logo, or UI overlay.',
-    'Do NOT redraw, reinterpret, reset composition, or regenerate the product as a new object.',
-  ].join('\n')
-  const outputText = [
-    'Silent visual commercial video.',
-    'Natural TikTok ecommerce style with stable product identity.',
-    'No text, subtitle, watermark, logo, or UI overlay.',
-    'Keep the generation prompt realistic and commercially usable.',
-  ].join('\n')
-  return fillVideoPromptTemplate(VIDEO_PROMPT_TEMPLATE, {
-    absoluteRules: absoluteRulesText,
-    roleMap: roleMapText,
-    shotControl: shotControlText,
-    faceControl: faceControlText,
-    environmentControl: environmentControlText,
-    lightingControl: lightingControlText,
-    restrictions: restrictionsText,
-    output: outputText,
+  const productText = [shot.materialNeed, shot.productFocus, shot.generationPrompt, shot.visualDescription, input.productIdentityText]
+    .map((item) => normalizeTemplateText(item, ''))
+    .filter(Boolean)
+    .join(' ')
+  const category = inferPhysicalLightingLockVideoCategory({
+    productType: shot.productType,
+    scriptText: shot.scriptText,
+    generationPrompt: shot.generationPrompt,
+    visualDescription: shot.visualDescription,
+    actionDescription: shot.actionDescription,
+    cameraDescription: shot.cameraDescription,
+    productFocus: shot.productFocus,
+    materialNeed: shot.materialNeed,
+    productIdentityText: input.productIdentityText,
+  })
+  const productName = inferPhysicalLightingLockProductName({ category, productType: shot.productType, productText })
+  const targetBodyPart = inferPhysicalLightingLockBodyPart({ productType: shot.productType, productText })
+  const cameraMovement = inferPhysicalLightingLockCameraMovement({
+    category,
+    scriptText: shot.scriptText,
+    cameraDescription: shot.cameraDescription,
+    generationPrompt: shot.generationPrompt,
+  })
+  const specificMicroAction = inferPhysicalLightingLockSpecificMicroAction({
+    category,
+    productType: shot.productType,
+    scriptText: shot.scriptText,
+    actionDescription: shot.actionDescription,
+    visualDescription: shot.visualDescription,
+    productText,
+  })
+  return fillVideoPromptTemplate(PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE, {
+    productName,
+    targetBodyPart,
+    cameraMovement,
+    specificMicroAction,
   })
 }
 

@@ -132,6 +132,7 @@ import type {
   VideoPlan,
   CloneScriptCandidate,
   CloneWorkflowV2Step,
+  CloneWorkflowV2Status,
   CloneProjectSummary,
   CloneRunMode,
   CloneShotVideoFailureBreakdown,
@@ -217,6 +218,36 @@ function inferEarringLikePromptTarget(input: {
   )
 }
 
+function resolveProjectIdentityGridProductType(project: CloneProject, fallback?: CloneProductType) {
+  const candidates = [
+    fallback,
+    project.boundProductSnapshot?.productAnalysis?.category,
+    project.boundProductSnapshot?.type,
+    project.baseBlueprint?.productCategory,
+    project.blueprint?.productCategory,
+    project.baseBlueprint?.category,
+    project.blueprint?.category,
+    project.title,
+  ]
+  for (const item of candidates) {
+    const normalized = normalizeProductType(item as any)
+    if (normalized !== 'general') return normalized
+  }
+  const shotLike = project.blueprint?.shots?.find((shot) =>
+    inferEarringLikePromptTarget({
+      productType: shot.productType,
+      visualDescription: shot.visualDescription,
+      generationPrompt: shot.generationPrompt,
+      actionDescription: shot.actionDescription,
+      productFocus: shot.productFocus,
+      materialNeed: shot.materialNeed,
+      productIdentityText: shot.productIdentityText,
+    }),
+  )
+  if (shotLike) return 'earrings'
+  return normalizeProductType(fallback)
+}
+
 function shotVideoSyncKey(projectId: string, shotId: string, action: 'sync' | 'download') {
   return `${action}:${String(projectId || '').trim()}:${String(shotId || '').trim()}`
 }
@@ -264,7 +295,7 @@ async function dispatchBackgroundAutoRunIfReady(service: any, projectId: string,
     if (!retryLatest) return
     const message = String(error?.message ?? error ?? '自动后台续跑失败').trim() || '自动后台续跑失败'
     retryLatest.lastError = message
-    setAutoFlowStage(retryLatest, 'script', 'failed', message)
+        setAutoFlowStage(retryLatest, 'script_generation', 'failed', message)
     await cloneRepo.upsertProject(retryLatest)
     console.error('[clone-debug] background-auto-run:failed', {
       cloneProjectId: latest.id,
@@ -482,7 +513,7 @@ function setAutoFlowStage(
 ) {
   const autoFlow = ensureAutoFlowStatus(project)
   autoFlow.enabled = true
-  autoFlow.targetStage = project.runMode === 'auto' ? 'final_compose' : 'storyboard_video_generation'
+  autoFlow.targetStage = project.runMode === 'auto' ? 'final_compose' : 'storyboard_videos'
   autoFlow.currentStage = stage
   if (status) autoFlow.status = status
   if (summary !== undefined) autoFlow.lastSummary = summary || undefined
@@ -615,36 +646,57 @@ async function kickAutoStoryboardVideoRecovery(projectId: string) {
 }
 
 const WORKFLOW_V2_STEPS: CloneWorkflowV2Step[] = [
-  'upload_analyze_script',
-  'model_product_consistency',
-  'storyboard_video_generation',
-  'export_final',
-  'generate_script_variants',
-  'select_script_variant',
-  'generate_storyboard_grids',
-  'generate_shot_videos',
-  'review_replace_shots',
-  'compose_final_video',
+  'reference_analysis',
+  'script_generation',
+  'identity_grid',
+  'storyboard_design',
+  'storyboard_videos',
+  'final_compose',
 ]
 
 function defaultWorkflowV2() {
   const t = now()
   return {
-    currentStep: 'upload_analyze_script' as CloneWorkflowV2Step,
+    currentStep: 'reference_analysis' as CloneWorkflowV2Step,
     stepStatus: {
-      upload_analyze_script: { status: 'idle' as const, updatedAt: t },
-      model_product_consistency: { status: 'idle' as const, updatedAt: t },
-      storyboard_video_generation: { status: 'idle' as const, updatedAt: t },
-      export_final: { status: 'idle' as const, updatedAt: t },
-      generate_script_variants: { status: 'idle' as const, updatedAt: t },
-      select_script_variant: { status: 'idle' as const, updatedAt: t },
-      generate_storyboard_grids: { status: 'idle' as const, updatedAt: t },
-      generate_shot_videos: { status: 'idle' as const, updatedAt: t },
-      review_replace_shots: { status: 'idle' as const, updatedAt: t },
-      compose_final_video: { status: 'idle' as const, updatedAt: t },
-    },
+      reference_analysis: { status: 'idle' as const, updatedAt: t },
+      script_generation: { status: 'idle' as const, updatedAt: t },
+      identity_grid: { status: 'idle' as const, updatedAt: t },
+      storyboard_design: { status: 'idle' as const, updatedAt: t },
+      storyboard_videos: { status: 'idle' as const, updatedAt: t },
+      final_compose: { status: 'idle' as const, updatedAt: t },
+    } as Record<CloneWorkflowV2Step, CloneWorkflowV2Status>,
     updatedAt: t,
   }
+}
+
+function buildIdentityGridUsagePlan(productType: CloneProductType) {
+  if (productType === 'earrings') {
+    return [
+      'Wear on ear with clear left and right angle coverage',
+      'Close-up view of wearing area and metal details',
+      'Half-body lifestyle panel with stable model identity',
+    ]
+  }
+  if (productType === 'phone_case') {
+    return [
+      'Mounted on phone with full back view coverage',
+      'Handheld use angle with camera-hole visibility',
+      'Lifestyle panel showing natural daily phone usage',
+    ]
+  }
+  if (productType === 'clothes') {
+    return [
+      'Front, side, and detail views of fit and fabric',
+      'Half-body and full-body wear panels',
+      'Close-up panel for texture and pattern details',
+    ]
+  }
+  return [
+    'Front and angle coverage for reusable product identity',
+    'Hand interaction and close-up detail panels',
+    'Lifestyle usage panels aligned with the product category',
+  ]
 }
 
 function patchWorkflowV2(
@@ -829,7 +881,7 @@ function normalizePipelineErrorContext(
 }
 
 function pipelineStatusFromProject(project: CloneProject, errorContext?: ClonePipelineStatus['errorContext']): ClonePipelineStatus {
-  const workflowStep = project.workflowV2?.currentStep ?? 'upload_analyze_script'
+  const workflowStep = project.workflowV2?.currentStep ?? 'reference_analysis'
   const providerSummary = summarizeProjectProviders(project)
   return {
     workflowStep,
@@ -1245,21 +1297,22 @@ function ensureProjectTitle(project: CloneProject) {
 }
 
 function computeProjectProgress(project: CloneProject) {
-  const step = project.workflowV2?.currentStep ?? 'upload_analyze_script'
+  const step = project.workflowV2?.currentStep ?? 'reference_analysis'
   const order: CloneWorkflowV2Step[] = [
-    'upload_analyze_script',
-    'generate_script_variants',
-    'select_script_variant',
-    'generate_storyboard_grids',
-    'generate_shot_videos',
-    'compose_final_video',
+    'reference_analysis',
+    'script_generation',
+    'identity_grid',
+    'storyboard_design',
+    'storyboard_videos',
+    'final_compose',
   ]
   const index = Math.max(0, order.indexOf(step))
   const base = Math.round(((index + 1) / order.length) * 100)
   if (project.finalCompose?.outputPath) return 100
   if (project.shotVideoOutputs?.some((item) => item.videoPath)) return Math.max(base, 82)
   if (project.storyboardFrames?.some((item) => item.imagePath)) return Math.max(base, 64)
-  if (project.selectedScriptVariantId) return Math.max(base, 48)
+  if (String(project.projectIdentityGridPath || '').trim()) return Math.max(base, 52)
+  if (project.selectedScriptVariantId) return Math.max(base, 36)
   if (project.blueprint?.shots?.length) return Math.max(base, 24)
   return Math.max(base, project.referenceVideoPath ? 8 : 0)
 }
@@ -1315,7 +1368,7 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     runMode: normalizeRunMode(project.runMode),
     createdAt: Number(project.createdAt || 0),
     updatedAt: project.updatedAt,
-    currentStep: project.workflowV2?.currentStep ?? 'upload_analyze_script',
+    currentStep: project.workflowV2?.currentStep ?? 'reference_analysis',
     progressPercent: computeProjectProgress(project),
     status: project.previewPipeline?.status || project.status,
     referenceVideoName: project.referenceVideoName,
@@ -2023,21 +2076,31 @@ function imageProviderModel(credentials: ModelCredentials) {
 }
 
 function compactStoryboardImageRefs(input: {
-  productRefs: string[]
-  modelPackRefs: string[]
+  productRefs?: string[]
+  modelPackRefs?: string[]
+  identityGridPath?: string
   thumbnailPath?: string
   startFramePath?: string
   continuityAnchorPath?: string
   mode: 'start' | 'end'
 }) {
-  const productRefs = Array.from(new Set(input.productRefs.map((item) => String(item || '').trim()).filter(Boolean)))
-  const modelPackRefs = Array.from(new Set(input.modelPackRefs.map((item) => String(item || '').trim()).filter(Boolean)))
+  const productRefs = Array.from(new Set((input.productRefs ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
+  const modelPackRefs = Array.from(new Set((input.modelPackRefs ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
+  const identityGridRef = String(input.identityGridPath || '').trim()
   const primaryProductRefs = productRefs.slice(0, 1)
   const primaryModelRefs = modelPackRefs.slice(0, 1)
   const storyboardAuthorityRefs =
     input.mode === 'end'
       ? [String(input.startFramePath || input.continuityAnchorPath || input.thumbnailPath || '').trim()].filter(Boolean)
       : [String(input.thumbnailPath || input.continuityAnchorPath || '').trim()].filter(Boolean)
+  if (identityGridRef) {
+    return Array.from(
+      new Set([
+        identityGridRef,
+        ...storyboardAuthorityRefs,
+      ]),
+    ).slice(0, 3)
+  }
   return Array.from(
     new Set([
       ...primaryProductRefs,
@@ -2045,6 +2108,15 @@ function compactStoryboardImageRefs(input: {
       ...storyboardAuthorityRefs,
     ]),
   ).slice(0, 3)
+}
+
+function resolveStoryboardSceneFitRefs(project: CloneProject, shot: ShotSpec, pack?: ModelIdentityPack | null, mode: 'start' | 'end' = 'start') {
+  const identityGridPath = String(project.projectIdentityGridPath || '').trim()
+  const sceneReferencePath =
+    String(shot.thumbnailPath || '').trim() ||
+    (mode === 'end' ? previousShotContinuityAnchor(project, shot) : '') ||
+    previousShotContinuityAnchor(project, shot)
+  return [identityGridPath, sceneReferencePath].map((item) => String(item || '').trim()).filter(Boolean)
 }
 
 function previousShotContinuityAnchor(project: CloneProject, shot: ShotSpec) {
@@ -2178,6 +2250,16 @@ function resolveProjectLevelProductType(project?: CloneProject) {
       project?.boundProductSnapshot?.type ||
       'general',
   )
+}
+
+function resolveProjectStoryboardTemplateType(project?: CloneProject) {
+  const value =
+    project?.boundProductSnapshot?.storyboardTemplateType ||
+    project?.baseBlueprint?.consistencyAssets?.boundProductSnapshot?.storyboardTemplateType ||
+    project?.blueprint?.consistencyAssets?.boundProductSnapshot?.storyboardTemplateType
+  return value === 'general' || value === 'jewelry' || value === 'ecommerce_packaging' || value === 'lifestyle_interaction'
+    ? value
+    : undefined
 }
 
 function resolveShotPromptProductType(project: CloneProject | undefined, shot: Pick<ShotSpec, 'productType'>) {
@@ -2350,6 +2432,22 @@ function toPromptModelIdentity(pack: ModelIdentityPack | null | undefined) {
   }
 }
 
+function buildStoryboardImageNegativePrompt(base?: string) {
+  const fixed = [
+    'text',
+    'logo',
+    'watermark',
+    'subtitles',
+    'caption',
+    'typography',
+    'letters',
+    'numbers',
+    'brand mark',
+    'ui overlay',
+  ]
+  return sanitizeNegativePrompt([String(base || '').trim(), ...fixed].filter(Boolean).join(', '), 520)
+}
+
 function buildProductStructureDescription(input: {
   category: CloneProductType
   summary?: string
@@ -2454,6 +2552,22 @@ function buildProjectProductAnalysisText(project: CloneProject, fallbackProductT
   })
 }
 
+function buildIdentityGridProductPoints(project: CloneProject, fallbackProductType?: CloneProductType) {
+  const productAnalysis =
+    normalizeStoredProductAnalysis((project as any).boundProductSnapshot?.productAnalysis, normalizeProductType(fallbackProductType || 'general')) ||
+    (project.baseBlueprint?.consistencyAssets as any)?.productAnalysis ||
+    (project.blueprint?.consistencyAssets as any)?.productAnalysis
+  const parts = [
+    String(project.boundProductSnapshot?.name || '').trim(),
+    String(productAnalysis?.category || '').trim(),
+    String(productAnalysis?.summary || '').trim(),
+    String(productAnalysis?.coreSubject || '').trim(),
+    String(productAnalysis?.wearingPosition || '').trim(),
+    String(productAnalysis?.rawDescription || '').trim(),
+  ].filter(Boolean)
+  return parts.join(' | ')
+}
+
 function buildEffectiveVideoCompiledPrompt(input: {
   shot: ShotSpec
   project?: CloneProject
@@ -2501,6 +2615,7 @@ function buildBoundProductSnapshotText(project: CloneProject) {
     `Product ID: ${snapshot.id}`,
     `Product Name: ${snapshot.name}`,
     `Product Type: ${snapshot.type}`,
+    snapshot.storyboardTemplateType ? `Storyboard Template Type: ${snapshot.storyboardTemplateType}` : '',
     snapshot.remark ? `Product Remark: ${snapshot.remark}` : '',
     snapshot.coverImagePath ? `Product Cover: ${snapshot.coverImagePath}` : '',
     snapshot.canonicalSourcePath ? `Canonical Source: ${snapshot.canonicalSourcePath}` : '',
@@ -2528,6 +2643,13 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
     id: product.id,
     name: String(product.name || '').trim(),
     type: String(product.type || '').trim(),
+    storyboardTemplateType:
+      (product as any).storyboardTemplateType === 'general' ||
+      (product as any).storyboardTemplateType === 'jewelry' ||
+      (product as any).storyboardTemplateType === 'ecommerce_packaging' ||
+      (product as any).storyboardTemplateType === 'lifestyle_interaction'
+        ? (product as any).storyboardTemplateType
+        : undefined,
     remark: String(product.remark || '').trim() || undefined,
     coverImagePath: String(product.coverImagePath || originalRefs[0] || '').trim() || undefined,
     analysisBoardPath: analysisBoardPath || undefined,
@@ -3500,6 +3622,13 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
     id: cachedProduct.id,
     name: String(cachedProduct.name || '').trim(),
     type: String(cachedProduct.type || '').trim(),
+    storyboardTemplateType:
+      (cachedProduct as any).storyboardTemplateType === 'general' ||
+      (cachedProduct as any).storyboardTemplateType === 'jewelry' ||
+      (cachedProduct as any).storyboardTemplateType === 'ecommerce_packaging' ||
+      (cachedProduct as any).storyboardTemplateType === 'lifestyle_interaction'
+        ? (cachedProduct as any).storyboardTemplateType
+        : undefined,
     remark: String(cachedProduct.remark || '').trim() || undefined,
     coverImagePath: coverAssetPath || undefined,
     analysisBoardPath: String((cachedProduct as any).analysisBoardPath || '').trim() || undefined,
@@ -3881,8 +4010,29 @@ function normalizePreviewReferencePaths(paths: Array<string | undefined | null>)
   )
 }
 
+function resolveExistingLocalPath(...candidates: Array<string | undefined | null>) {
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim()
+    if (!value) continue
+    if (existsSync(value)) return value
+  }
+  return ''
+}
+
 function resolveShotVideoOrderedReferencePaths(project: CloneProject, shot: ShotSpec, firstFramePath: string) {
-  const storyboardReferenceImagePaths = normalizePreviewReferencePaths([firstFramePath]).slice(0, 1)
+  const resolvedFirstFramePath = resolveExistingLocalPath(
+    firstFramePath,
+    shot.gptFirstFramePath,
+    shot.generatedFirstFramePath,
+    shot.uploadedImagePath,
+    shot.gptLastFramePath,
+    shot.generatedLastFramePath,
+    resolveStoryboardFrameSource(shot),
+  )
+  if (!resolvedFirstFramePath) {
+    throw new Error(`分镜视频缺少可用首帧文件: ${shot.id}`)
+  }
+  const storyboardReferenceImagePaths = normalizePreviewReferencePaths([resolvedFirstFramePath]).slice(0, 1)
   return {
     productReferenceImagePaths: [] as string[],
     modelReferenceImagePaths: [] as string[],
@@ -5977,13 +6127,15 @@ function isSupersededShotVideoTaskBinding(input: {
 }
 
 function resolveStoryboardFrameSource(shot: ShotSpec) {
-  return String(
+  return resolveExistingLocalPath(
     (shot as any).storyboardFramePath ||
       shot.gptFirstFramePath ||
       shot.generatedFirstFramePath ||
       shot.uploadedImagePath ||
+      shot.gptLastFramePath ||
+      shot.generatedLastFramePath ||
       '',
-  ).trim()
+  )
 }
 
 function summarizeShotVideoQueue(project: CloneProject, shots: ShotSpec[]) {
@@ -7794,6 +7946,24 @@ async function ensureAi666SegmentVideoTask(input: {
   return await task
 }
 
+export function __test_resolveStoryboardSceneFitRefs(input: {
+  projectIdentityGridPath?: string
+  productRefs?: string[]
+  modelPackRefs?: string[]
+  thumbnailPath?: string
+  continuityAnchorPath?: string
+  mode?: 'start' | 'end'
+}) {
+  return compactStoryboardImageRefs({
+    identityGridPath: input.projectIdentityGridPath,
+    productRefs: input.productRefs ?? [],
+    modelPackRefs: input.modelPackRefs ?? [],
+    thumbnailPath: input.thumbnailPath,
+    continuityAnchorPath: input.continuityAnchorPath,
+    mode: input.mode ?? 'start',
+  })
+}
+
 export const cloneService = {
   async createDraftProject(input?: { locale?: CloneLocale; strength?: 'structure'; title?: string; description?: string; runMode?: CloneRunMode }) {
     const locale: CloneLocale = input?.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN'
@@ -7893,7 +8063,7 @@ export const cloneService = {
       }
       project.status = 'analyzed'
       project.workflowV2 = defaultWorkflowV2()
-      patchWorkflowV2(project, 'upload_analyze_script', 'upload_analyze_script', 'done')
+      patchWorkflowV2(project, 'reference_analysis', 'reference_analysis', 'done')
       syncProjectBlueprintLayers(project)
       const saved = await cloneRepo.upsertProject(project)
       if (canStartBackgroundAutoRun(saved)) {
@@ -7902,7 +8072,7 @@ export const cloneService = {
       const provider = summarizeProjectProviders(saved)
       return {
         project: saved,
-        workflowStep: 'upload_analyze_script' as const,
+        workflowStep: 'reference_analysis' as const,
         previewPipeline: saved.previewPipeline,
         activeProviderSummary: provider.activeProviderSummary,
         activeModelSummary: provider.activeModelSummary,
@@ -7995,7 +8165,7 @@ export const cloneService = {
     let project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project || !project.baseBlueprint) throw new Error('复刻项目或蓝图不存在')
     ensureCloneFlowState(project)
-    patchWorkflowV2(project, 'generate_script_variants', 'generate_script_variants', 'running')
+    patchWorkflowV2(project, 'script_generation', 'script_generation', 'running')
     const count = Math.max(1, Math.min(6, Math.floor(Number(input.variantCount || 3))))
     if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特。')
     const boundProductRefs = collectProjectProductReferenceImages(project)
@@ -8080,8 +8250,8 @@ export const cloneService = {
         selected: item.id === defaultCandidate.id,
       }))
       project.lastError = ''
-      patchWorkflowV2(project, 'generate_script_variants', 'generate_script_variants', 'done')
-      patchWorkflowV2(project, 'select_script_variant', 'select_script_variant', 'running')
+      patchWorkflowV2(project, 'script_generation', 'script_generation', 'done')
+      patchWorkflowV2(project, 'identity_grid', 'identity_grid', 'running')
       for (const shotScript of defaultCandidate.shotScripts) {
         replaceProjectShot(project, shotScript.shotId, {
           scriptText: shotScript.scriptText,
@@ -8207,8 +8377,8 @@ export const cloneService = {
       ...item,
       selected: item.id === defaultCandidate.id,
     }))
-    patchWorkflowV2(latest, 'generate_script_variants', 'generate_script_variants', 'done')
-    patchWorkflowV2(latest, 'select_script_variant', 'select_script_variant', 'running')
+    patchWorkflowV2(latest, 'script_generation', 'script_generation', 'done')
+    patchWorkflowV2(latest, 'identity_grid', 'identity_grid', 'running')
     for (const shotScript of defaultCandidate.shotScripts) {
       replaceProjectShot(latest, shotScript.shotId, {
         scriptText: shotScript.scriptText,
@@ -8253,8 +8423,8 @@ export const cloneService = {
         promptHint: shotScript.timeRange,
       })
     }
-    patchWorkflowV2(project, 'select_script_variant', 'select_script_variant', 'done')
-    patchWorkflowV2(project, 'generate_storyboard_grids', 'generate_storyboard_grids', 'running')
+    patchWorkflowV2(project, 'script_generation', 'script_generation', 'done')
+    patchWorkflowV2(project, 'identity_grid', 'identity_grid', 'running')
     const saved = await cloneRepo.upsertProject(project)
     return {
       project: saved,
@@ -8282,7 +8452,7 @@ export const cloneService = {
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
     ensureAutoFlowStatus(project)
-    setAutoFlowStage(project, 'analyze', 'running', '自动复制流程启动')
+    setAutoFlowStage(project, 'reference_analysis', 'running', '自动复制流程启动')
     await cloneRepo.upsertProject(project)
 
     if (input.selectedModelIdentityId && project.selectedModelIdentityId !== input.selectedModelIdentityId) {
@@ -8319,7 +8489,7 @@ export const cloneService = {
       })
     }
 
-    setAutoFlowStage(project, 'materials', 'running', '自动准备一致性素材')
+    setAutoFlowStage(project, 'identity_grid', 'running', '自动准备身份定妆图')
     await cloneRepo.upsertProject(project)
     project = (
       await this.prepareCloneMaterials({
@@ -8333,7 +8503,7 @@ export const cloneService = {
     if (!boundProductRefs.length) throw new Error('请先绑定商品图')
     if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特')
 
-    setAutoFlowStage(project, 'script', 'running', `自动生成脚本变体并按 ${SCRIPT_VARIANT_AUTO_SELECT_THRESHOLD} 分阈值选择脚本`)
+    setAutoFlowStage(project, 'script_generation', 'running', `自动生成脚本变体并按 ${SCRIPT_VARIANT_AUTO_SELECT_THRESHOLD} 分阈值选择脚本`)
     await cloneRepo.upsertProject(project)
     if (!project.scriptVariantCandidates?.length) {
       const variantResult = await this.generateScriptVariantsForProject({
@@ -8355,7 +8525,7 @@ export const cloneService = {
     })
     project = selectedResult.project
 
-    setAutoFlowStage(project, 'storyboard_images', 'running', '自动生成分镜图片')
+    setAutoFlowStage(project, 'storyboard_design', 'running', '自动生成分镜设计图')
     await cloneRepo.upsertProject(project)
     const frameResult = await this.generateStoryboardGridsForProject({
       cloneProjectId: project.id,
@@ -8515,7 +8685,7 @@ export const cloneService = {
     if (!project) throw new Error('复刻项目不存在')
     ensureCloneFlowState(project)
     ensureAutoFlowStatus(project)
-    setAutoFlowStage(project, 'quality_gate', 'running', '自动执行最终门禁检查')
+    setAutoFlowStage(project, 'final_compose', 'running', '自动执行成片前最终检查')
     project = await cloneRepo.upsertProject(project)
 
     const latestShots = project.blueprint?.shots ?? []
@@ -8533,7 +8703,7 @@ export const cloneService = {
 
     if (blockedShots.length) {
       const reason = `最终门禁未通过：${blockedShots.length} 个镜头需人工修复`
-      setAutoFlowStage(project, 'quality_gate', 'failed', reason)
+      setAutoFlowStage(project, 'final_compose', 'failed', reason)
       syncFinalCompose(project, { status: 'idle', error: reason })
       project.lastError = reason
       project = await cloneRepo.upsertProject(project)
@@ -8579,12 +8749,12 @@ export const cloneService = {
       ...input,
       generateModelPack: input.generateModelPack ?? true,
     })
-    patchWorkflowV2(project, 'model_product_consistency', 'model_product_consistency', 'done')
+    patchWorkflowV2(project, 'identity_grid', 'identity_grid', 'done')
     syncProjectBlueprintLayers(project)
     const pipelineStatus = pipelineStatusFromProject(project)
     return {
       project,
-      workflowStep: 'model_product_consistency' as const,
+      workflowStep: 'identity_grid' as const,
       previewPipeline: project.previewPipeline,
       activeProviderSummary: pipelineStatus.activeProviderSummary,
       activeModelSummary: pipelineStatus.activeModelSummary,
@@ -9171,7 +9341,7 @@ export const cloneService = {
           lastPollAt: latestOutput.lastPollAt,
           sourceEvent: latestOutput.taskId ? 'storyboard_video_batch_submit_timeout' : 'storyboard_video_batch_submit_failed',
         })
-        patchWorkflowV2(latest, 'generate_shot_videos', 'generate_shot_videos', 'running')
+        patchWorkflowV2(latest, 'storyboard_videos', 'storyboard_videos', 'running')
         await cloneRepo.upsertProject(latest)
         if (latestOutput.taskId) {
           return {
@@ -9205,9 +9375,9 @@ export const cloneService = {
     const summaryError = errors.length
       ? `已跳过 ${failed} 个失败分镜，可在分镜视频卡片点击重新生成。`
       : ''
-    patchWorkflowV2(project, failed ? 'generate_shot_videos' : 'review_replace_shots', 'generate_shot_videos', failed ? 'failed' : 'done', summaryError)
+    patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', failed ? 'failed' : 'done', summaryError)
     if (!failed) {
-      patchWorkflowV2(project, 'review_replace_shots', 'review_replace_shots', 'running')
+      patchWorkflowV2(project, 'final_compose', 'final_compose', 'running')
       syncFinalCompose(project, { status: 'ready' })
       project.lastError = ''
       setProjectErrorContext(project, null)
@@ -9286,7 +9456,7 @@ export const cloneService = {
       error: quality.canEnterRender ? undefined : quality.qualityReasons.join('；'),
       updatedAt: now(),
     })
-    patchWorkflowV2(project, 'review_replace_shots', 'review_replace_shots', 'done')
+    patchWorkflowV2(project, 'final_compose', 'final_compose', 'done')
     syncFinalCompose(project, { status: 'ready', error: undefined })
     const saved = await cloneRepo.upsertProject(project)
     return {
@@ -9305,13 +9475,13 @@ export const cloneService = {
     ensureCloneFlowState(project)
     const gate = validateProjectReadyForFinalCompose(project)
     if (!gate.ok) {
-      patchWorkflowV2(project, 'review_replace_shots', 'review_replace_shots', 'failed', gate.reason)
+      patchWorkflowV2(project, 'final_compose', 'final_compose', 'failed', gate.reason)
       syncFinalCompose(project, { status: 'idle', error: gate.reason })
       project.lastError = gate.reason
       await cloneRepo.upsertProject(project)
       throw new Error(gate.reason)
     }
-    patchWorkflowV2(project, 'compose_final_video', 'compose_final_video', 'running')
+    patchWorkflowV2(project, 'final_compose', 'final_compose', 'running')
     syncFinalCompose(project, { status: 'composing', error: undefined })
     await cloneRepo.upsertProject(project)
     try {
@@ -9322,8 +9492,8 @@ export const cloneService = {
       const latest = (await cloneRepo.getProject(project.id)) || project
       const finalOutputPath = String(rendered.output || '').trim() || undefined
       const coverImagePath = finalOutputPath ? await ensureVideoCoverImage(finalOutputPath) : undefined
-      patchWorkflowV2(latest, 'compose_final_video', 'compose_final_video', 'done')
-      patchWorkflowV2(latest, 'compose_final_video', 'export_final', 'done')
+      patchWorkflowV2(latest, 'final_compose', 'final_compose', 'done')
+      patchWorkflowV2(latest, 'final_compose', 'final_compose', 'done')
       syncFinalCompose(latest, {
         status: finalOutputPath ? 'done' : 'failed',
         outputPath: finalOutputPath,
@@ -9370,7 +9540,7 @@ export const cloneService = {
               responseSnippet: reason,
             },
       )
-      patchWorkflowV2(latest, 'compose_final_video', 'compose_final_video', 'failed', reason)
+      patchWorkflowV2(latest, 'final_compose', 'final_compose', 'failed', reason)
       syncFinalCompose(latest, {
         status: 'failed',
         error: `[${provider} / ${model}] ${reason}`,
@@ -9407,11 +9577,11 @@ export const cloneService = {
       maxVideosToGenerate: 3,
       strategy: 'balanced',
     })
-    patchWorkflowV2(project, 'storyboard_video_generation', 'storyboard_video_generation', 'running')
+    patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', 'running')
     syncProjectBlueprintLayers(project)
     return {
       project,
-      workflowStep: 'storyboard_video_generation' as const,
+      workflowStep: 'storyboard_videos' as const,
       previewPipeline: project.previewPipeline,
       activeProviderSummary: pipelineStatusFromProject(project).activeProviderSummary,
       activeModelSummary: pipelineStatusFromProject(project).activeModelSummary,
@@ -9444,7 +9614,7 @@ export const cloneService = {
         project.previewPipeline?.lastError ||
         project.lastError ||
         '首条预览未生成任何视频文件'
-      patchWorkflowV2(project, 'storyboard_video_generation', 'storyboard_video_generation', 'failed', reason)
+      patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', 'failed', reason)
       previewPipelinePatch(project, {
         status: 'failed',
         lastError: `[${provider} / ${model}] ${reason}`,
@@ -9452,12 +9622,12 @@ export const cloneService = {
       await cloneRepo.upsertProject(project)
       throw new Error(`[${provider} / ${model}] ${reason}`)
     }
-    patchWorkflowV2(project, 'export_final', 'storyboard_video_generation', 'done')
+    patchWorkflowV2(project, 'final_compose', 'storyboard_videos', 'done')
     syncProjectBlueprintLayers(project)
     const saved = await cloneRepo.upsertProject(project)
     return {
       ...result,
-      workflowStep: 'export_final' as const,
+      workflowStep: 'final_compose' as const,
       previewPipeline: saved.previewPipeline,
       activeProviderSummary: pipelineStatusFromProject(saved).activeProviderSummary,
       activeModelSummary: pipelineStatusFromProject(saved).activeModelSummary,
@@ -9989,7 +10159,17 @@ export const cloneService = {
       grsaiImageModel: input.grsaiImageModel ?? input.imageProviderCredentials?.grsaiImageModel,
     })
     assertImageProviderKey(creds, '生成新模特身份包')
-    const productType = normalizeProductType(input.productType)
+    const productType = resolveProjectIdentityGridProductType(item, input.productType)
+    const modelReferenceImagePaths = Array.from(
+      new Set(
+        [
+          ...(item.selectedModelIdentitySnapshot?.imagePaths ?? []),
+          item.selectedModelIdentitySnapshot?.coverImagePath || '',
+        ]
+          .map(String)
+          .filter(Boolean),
+      ),
+    )
     const packId = randomUUID()
     const outDir = identityLibraryDir(packId)
     await mkdir(outDir, { recursive: true })
@@ -10003,7 +10183,22 @@ export const cloneService = {
         i += 1
       }
     })()
+    void nextName
     const profile = defaultModelIdentityDescription(productType)
+    const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
+    const promptPreview = buildModelIdentityPackPromptPreview({
+      productType,
+      productPoints: resolvedProductPoints,
+      modelProfileOptions: input.modelProfileOptions,
+      productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+      modelReferenceImagePaths,
+    })
+    const requestPreview = buildShotImageRequestPreview({
+      credentials: creds,
+      startPrompt: promptPreview.prompt || '',
+      negativePrompt: '',
+      startRefs: [...(input.productReferenceImagePaths ?? []).map(String).filter(Boolean), ...modelReferenceImagePaths],
+    })
     const pendingPack: ModelIdentityPack = {
       id: packId,
       createdAt: now(),
@@ -10017,7 +10212,7 @@ export const cloneService = {
       model: imageProviderModel(creds),
     }
     pendingPack.description = [
-      'New virtual model for this clone project',
+      'Selected model identity reused for this clone project',
       `${pendingPack.market}, ${pendingPack.gender}, ${pendingPack.ageRange}`,
       `${pendingPack.faceShape || 'oval face shape'}, ${pendingPack.hairStyle}, ${pendingPack.hairColor || 'natural dark black hair color'}`,
       `${pendingPack.skinTone}, ${pendingPack.bodyType || 'slim build'}`,
@@ -10026,80 +10221,76 @@ export const cloneService = {
       `${pendingPack.languageStyle || 'Chinese-speaking social-commerce expression style'}`,
       `${pendingPack.cameraPresence || 'natural social-commerce camera presence'}, ${pendingPack.styleBias || 'conversion-focused product demo style'}`,
     ].join('. ')
-    const pendingIdentity = toLibraryItemFromPack({ ...pendingPack, name: nextName })
-    await cloneRepo.upsertModelIdentity(pendingIdentity)
-    await syncProjectSelectedIdentity(item, packId)
+    item.projectIdentityGridStatus = 'generating'
+    item.projectIdentityGridPath = undefined
+    item.projectIdentityGridUpdatedAt = now()
+    item.projectIdentityGridPromptPreview = {
+      ...promptPreview,
+      gridUsagePlan: buildIdentityGridUsagePlan(productType),
+      requestProvider: requestPreview.requestProvider,
+      requestModel: requestPreview.requestModel,
+      requestJson: requestPreview.requestJsonStart,
+    }
     await cloneRepo.upsertProject(item)
     try {
       const generated = await generateModelIdentityPackImages({
         credentials: creds,
         outDir,
         productType,
-        productPoints: input.productPoints,
+        productPoints: resolvedProductPoints,
         modelProfileOptions: input.modelProfileOptions,
         productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+        modelReferenceImagePaths,
         onImageGenerated: async (filePath) => {
-          const current = await cloneRepo.getModelIdentity(packId)
-          if (!current) return
-          const next = await cloneRepo.upsertModelIdentity({
-            ...current,
-            updatedAt: now(),
-            status: 'generating',
-            imagePaths: Array.from(new Set([...(current.imagePaths ?? []), filePath])),
-            coverImagePath: current.coverImagePath || filePath,
-          })
           const latest = await cloneRepo.getProject(input.cloneProjectId)
           if (!latest) return
-          latest.selectedModelIdentitySnapshot = { ...next }
-          latest.selectedModelIdentityId = next.id
-          latest.selectedModelIdentityPackId = next.id
-          latest.modelIdentityPacks = [toProjectPackFromLibrary(next)]
+          latest.projectIdentityGridPath = filePath
+          latest.projectIdentityGridStatus = 'generating'
+          latest.projectIdentityGridUpdatedAt = now()
           await cloneRepo.upsertProject(latest)
         },
       })
-      const donePack = toLibraryItemFromPack({
-        ...pendingPack,
-        ...generated.profile,
-        updatedAt: now(),
-        status: 'done',
-        imagePaths: generated.imagePaths,
-        model: generated.model,
-        description: [
-          'New virtual model for this clone project',
-          `${generated.profile.market}, ${generated.profile.gender}, ${generated.profile.ageRange}`,
-          `${generated.profile.faceShape || 'oval face shape'}, ${generated.profile.hairStyle}, ${generated.profile.hairColor || 'natural dark black hair color'}`,
-          `${generated.profile.skinTone}, ${generated.profile.bodyType || 'slim build'}`,
-          `${generated.profile.outfitStyle}, ${generated.profile.mood}`,
-          `${generated.profile.sceneStyle}`,
-          `${generated.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}`,
-          `${generated.profile.cameraPresence || 'natural social-commerce camera presence'}, ${generated.profile.styleBias || 'conversion-focused product demo style'}`,
-        ].join('. '),
-        error: undefined,
-        name: nextName,
-        coverImagePath: generated.imagePaths[0],
-      })
-      if (!donePack.imagePaths.length) {
+      const doneDescription = [
+        'Selected model identity reused for this clone project',
+        `${generated.profile.market}, ${generated.profile.gender}, ${generated.profile.ageRange}`,
+        `${generated.profile.faceShape || 'oval face shape'}, ${generated.profile.hairStyle}, ${generated.profile.hairColor || 'natural dark black hair color'}`,
+        `${generated.profile.skinTone}, ${generated.profile.bodyType || 'slim build'}`,
+        `${generated.profile.outfitStyle}, ${generated.profile.mood}`,
+        `${generated.profile.sceneStyle}`,
+        `${generated.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}`,
+        `${generated.profile.cameraPresence || 'natural social-commerce camera presence'}, ${generated.profile.styleBias || 'conversion-focused product demo style'}`,
+      ].join('. ')
+      if (!generated.imagePaths.length) {
         throw new Error(`AI 模特身份包生成失败：model=${generated.model || pendingPack.model} 未返回任何图片`)
       }
-      await cloneRepo.upsertModelIdentity(donePack)
       const latest = await cloneRepo.getProject(input.cloneProjectId)
       if (!latest) throw new Error('复刻项目不存在')
-      await syncProjectSelectedIdentity(latest, packId)
+      latest.projectIdentityGridPath = generated.imagePaths[0]
+      latest.projectIdentityGridStatus = 'done'
+      latest.projectIdentityGridUpdatedAt = now()
+      latest.projectIdentityGridPromptPreview = {
+        ...promptPreview,
+        profile: { ...generated.profile },
+        description: doneDescription,
+        productType,
+        productPoints: resolvedProductPoints,
+        productReferenceImageCount: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean).length,
+        productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+        modelReferenceImageCount: modelReferenceImagePaths.length,
+        modelReferenceImagePaths,
+        gridUsagePlan: buildIdentityGridUsagePlan(productType),
+        requestProvider: requestPreview.requestProvider,
+        requestModel: requestPreview.requestModel,
+        requestJson: requestPreview.requestJsonStart,
+      }
       return await cloneRepo.upsertProject(latest)
     } catch (e: any) {
       const friendlyMessage = humanizeModelPackError(e, creds)
-      const current = await cloneRepo.getModelIdentity(packId)
-      if (current) {
-        await cloneRepo.upsertModelIdentity({
-          ...current,
-          status: 'failed',
-          updatedAt: now(),
-          error: friendlyMessage,
-        })
-      }
       const latest = await cloneRepo.getProject(input.cloneProjectId)
       if (!latest) throw e
-      await syncProjectSelectedIdentity(latest, packId)
+      latest.projectIdentityGridPath = undefined
+      latest.projectIdentityGridStatus = 'failed'
+      latest.projectIdentityGridUpdatedAt = now()
       await cloneRepo.upsertProject(latest)
       throw new Error(friendlyMessage)
     }
@@ -10114,12 +10305,73 @@ export const cloneService = {
   }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
+    const productType = resolveProjectIdentityGridProductType(item, input.productType)
+    const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
     return buildModelIdentityPackPromptPreview({
-      productType: normalizeProductType(input.productType),
-      productPoints: input.productPoints,
+      productType,
+      productPoints: resolvedProductPoints,
       modelProfileOptions: input.modelProfileOptions,
       productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+      modelReferenceImagePaths: Array.from(
+        new Set(
+          [
+            ...(item.selectedModelIdentitySnapshot?.imagePaths ?? []),
+            item.selectedModelIdentitySnapshot?.coverImagePath || '',
+          ]
+            .map(String)
+            .filter(Boolean),
+        ),
+      ),
     })
+  },
+
+  async getProjectIdentityGridPromptPreview(input: {
+    cloneProjectId: string
+    productType?: CloneProductType
+    productPoints?: string
+    modelProfileOptions?: import('./types').ModelProfileOptions
+    productReferenceImagePaths?: string[]
+  }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item) throw new Error('Clone project does not exist')
+    const productType = resolveProjectIdentityGridProductType(item, input.productType)
+    const productReferenceImagePaths = (input.productReferenceImagePaths ?? collectProjectProductReferenceImages(item)).map(String).filter(Boolean)
+    const modelReferenceImagePaths = Array.from(
+      new Set(
+        [
+          ...(item.selectedModelIdentitySnapshot?.imagePaths ?? []),
+          item.selectedModelIdentitySnapshot?.coverImagePath || '',
+        ]
+          .map(String)
+          .filter(Boolean),
+      ),
+    )
+    const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
+    const preview = buildModelIdentityPackPromptPreview({
+      productType,
+      productPoints: resolvedProductPoints,
+      modelProfileOptions: input.modelProfileOptions,
+      productReferenceImagePaths,
+      modelReferenceImagePaths,
+    })
+    const creds = await cloneRepo.getCredentials()
+    const requestPreview = buildShotImageRequestPreview({
+      credentials: creds,
+      startPrompt: preview.prompt || '',
+      negativePrompt: '',
+      startRefs: [...productReferenceImagePaths, ...modelReferenceImagePaths],
+    })
+    const result = {
+      ...preview,
+      gridUsagePlan: buildIdentityGridUsagePlan(productType),
+      requestProvider: requestPreview.requestProvider,
+      requestModel: requestPreview.requestModel,
+      requestJson: requestPreview.requestJsonStart,
+    }
+    item.projectIdentityGridPromptPreview = result
+    item.projectIdentityGridUpdatedAt = now()
+    await cloneRepo.upsertProject(item)
+    return result
   },
 
   async selectModelIdentityPack(input: {
@@ -10530,11 +10782,11 @@ export const cloneService = {
   }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.baseBlueprint) throw new Error('复刻项目或蓝图不存在')
-    patchWorkflowV2(item, 'upload_analyze_script', 'upload_analyze_script', 'running')
+    patchWorkflowV2(item, 'reference_analysis', 'reference_analysis', 'running')
     const scriptCandidates = buildScriptCandidatesFromBlueprint(item)
     item.baseBlueprint = { ...item.baseBlueprint, scriptCandidates }
     item.blueprint = item.blueprint ? { ...item.blueprint, scriptCandidates } : item.baseBlueprint
-    patchWorkflowV2(item, 'model_product_consistency', 'upload_analyze_script', 'done')
+    patchWorkflowV2(item, 'reference_analysis', 'reference_analysis', 'done')
     return await cloneRepo.upsertProject(item)
   },
 
@@ -10548,7 +10800,7 @@ export const cloneService = {
   }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item || !item.baseBlueprint) throw new Error('复刻项目或蓝图不存在')
-    patchWorkflowV2(item, 'model_product_consistency', 'model_product_consistency', 'running')
+    patchWorkflowV2(item, 'identity_grid', 'identity_grid', 'running')
     const requestedRefs = (input.productReferenceImagePaths ?? [])
       .map((x) => String(x || '').trim())
       .filter(Boolean)
@@ -10602,9 +10854,9 @@ export const cloneService = {
       }
     }
     const selectedPackId = snapshotProject.selectedModelIdentityPackId || snapshotProject.selectedModelIdentityId
-    const generatedPack = selectedPackId ? await cloneRepo.getModelIdentity(selectedPackId) : undefined
+    const generatedGridPath = String(snapshotProject.projectIdentityGridPath || '').trim()
     if (shouldGenerateIdentityPack) {
-      const generatedCount = Number(generatedPack?.imagePaths?.length ?? snapshotProject.selectedModelIdentitySnapshot?.imagePaths?.length ?? 0)
+      const generatedCount = generatedGridPath ? 1 : 0
       if (!generatedCount) {
         throw new Error('一致性素材生成未产出任何模特图，请检查图片模型配置、产品参考图和 provider/model 参数后重试')
       }
@@ -10614,7 +10866,7 @@ export const cloneService = {
       modelPackId: selectedPackId,
       productImageSetIds: (primaryRefs.length ? primaryRefs : refs).map((p) => basename(p)),
       referenceImages: primaryRefs.length ? primaryRefs : refs,
-      modelReferenceImages: generatedPack?.imagePaths ?? snapshotProject.selectedModelIdentitySnapshot?.imagePaths ?? [],
+      modelReferenceImages: generatedGridPath ? [generatedGridPath] : [],
       productReferenceImages: primaryRefs.length ? primaryRefs : refs,
       originalProductReferenceImages: item.originalProductReferenceImagePaths ?? [],
       sanitizedProductReferenceImages: refs,
@@ -10629,7 +10881,7 @@ export const cloneService = {
       },
       productAnalysis: refs.length ? snapshotProject.baseBlueprint?.consistencyAssets?.productAnalysis : undefined,
       status: (shouldGenerateIdentityPack ? 'generated' : 'saved') as 'generated' | 'saved',
-      provider: generatedPack?.model,
+      provider: snapshotProject.projectIdentityGridPromptPreview?.requestModel || snapshotProject.projectIdentityGridPromptPreview?.requestProvider,
       updatedAt: now(),
     }
     snapshotProject.baseBlueprint = {
@@ -10640,7 +10892,9 @@ export const cloneService = {
     snapshotProject.blueprint = snapshotProject.blueprint
       ? { ...snapshotProject.blueprint, consistencyAssets }
       : snapshotProject.baseBlueprint
-    patchWorkflowV2(snapshotProject, 'storyboard_video_generation', 'model_product_consistency', 'done')
+    snapshotProject.projectIdentityGridStatus = snapshotProject.projectIdentityGridPath ? 'done' : 'idle'
+    snapshotProject.projectIdentityGridUpdatedAt = now()
+    patchWorkflowV2(snapshotProject, 'identity_grid', 'identity_grid', 'done')
     console.log('[clone-debug] prepare-materials-saved', {
       cloneProjectId: snapshotProject.id,
       refs,
@@ -10727,7 +10981,7 @@ export const cloneService = {
       }
     }
     const baseBlueprint = item.baseBlueprint
-    patchWorkflowV2(item, 'storyboard_video_generation', 'storyboard_video_generation', 'running')
+    patchWorkflowV2(item, 'storyboard_videos', 'storyboard_videos', 'running')
     previewPipelinePatch(item, { status: 'running', previewOutputPath: undefined, previewReportPath: undefined, foregroundPlanId: undefined, remainingPlanIds: [], lastError: undefined })
     await cloneRepo.upsertProject(item)
     let current: CloneProject = item
@@ -10838,13 +11092,13 @@ export const cloneService = {
           status: failed ? 'failed' : 'done',
           lastError: failed?.reason,
         })
-        patchWorkflowV2(finalBackgroundProject, 'export_final', 'storyboard_video_generation', 'done', failed?.reason || '')
+        patchWorkflowV2(finalBackgroundProject, 'final_compose', 'storyboard_videos', 'done', failed?.reason || '')
         await cloneRepo.upsertProject(finalBackgroundProject)
       })()
     }
     const finalProject = await cloneRepo.getProject(input.cloneProjectId)
     if (!finalProject) throw new Error('复刻项目不存在')
-    if (!remainingPlans.length) patchWorkflowV2(finalProject, 'export_final', 'storyboard_video_generation', 'done')
+    if (!remainingPlans.length) patchWorkflowV2(finalProject, 'final_compose', 'storyboard_videos', 'done')
     const saved = await cloneRepo.upsertProject(finalProject)
     return {
       project: saved,
@@ -11131,7 +11385,7 @@ export const cloneService = {
     })
     assertImageProviderKey(creds, '生成 AI 首尾帧')
     const pack = selectedIdentityPack(item)
-    if (!pack || pack.status !== 'done' || !pack.imagePaths.length) throw new Error('请先生成并确认新模特身份包')
+    if (!String(item.projectIdentityGridPath || '').trim()) throw new Error('请先生成身份定妆图')
     const refs = resolveStoryboardProductRefs(item, shot)
     if (!hasProductLock(shot, refs)) throw new Error('请先为绑定商品生成标准源')
 
@@ -11159,13 +11413,15 @@ export const cloneService = {
       modelIdentity: toPromptModelIdentity(pack),
     })
     const productIdentityText = buildPromptProductDescriptionText(latest, productType)
+    const explicitTemplateType = resolveProjectStoryboardTemplateType(latest)
     const startPrompt = buildGptFramePrompt({
       shot: refreshedShot,
       productType,
-      modelPack: pack,
+      modelPack: pack ?? undefined,
       productPoints: refreshedShot.aiPrompt || refreshedShot.materialNeed,
       productDescription: productIdentityText,
       which: 'start',
+      explicitTemplateType,
       compiledPrompt: compiled.finalPrompt,
     })
     const promptHash = computePromptHash({
@@ -11176,13 +11432,14 @@ export const cloneService = {
       qualityMode: normalizeQualityMode(latestShot.qualityMode),
     })
     const continuityAnchorPath = previousShotContinuityAnchor(latest, refreshedShot)
+    const storyboardImageNegativePrompt = buildStoryboardImageNegativePrompt(compiled.finalNegativePrompt)
     const imagePromptHash = computeImagePromptHash({
       promptHash,
       which,
-      refs: [...pack.imagePaths.slice(0, 1), ...refs, continuityAnchorPath].filter(Boolean),
+      refs: [...(pack?.imagePaths.slice(0, 1) ?? []), ...refs, continuityAnchorPath].filter(Boolean),
       model: imageProviderModel(creds),
       positivePrompt: startPrompt,
-      negativePrompt: compiled.finalNegativePrompt,
+      negativePrompt: storyboardImageNegativePrompt,
     })
     const cachedFrame = input.forceRegenerate ? null : getCachedFrameResult(latest, imagePromptHash)
     let firstPath = refreshedShot.gptFirstFramePath
@@ -11192,19 +11449,13 @@ export const cloneService = {
         firstPath = cachedFrame.imagePaths[0] || firstPath
       } else {
       if (which === 'start') {
-        const startRefs = compactStoryboardImageRefs({
-          productRefs: refs,
-          modelPackRefs: pack.imagePaths,
-          thumbnailPath: refreshedShot.thumbnailPath,
-          continuityAnchorPath,
-          mode: 'start',
-        })
+        const startRefs = resolveStoryboardSceneFitRefs(latest, refreshedShot, pack ?? undefined, 'start')
         firstPath = await generateGptShotFrameImage({
           credentials: creds,
           outDir,
           filePrefix: `gpt_first_${refreshedShot.index + 1}`,
           prompt: startPrompt,
-          negativePrompt: compiled.finalNegativePrompt,
+          negativePrompt: storyboardImageNegativePrompt,
           imagePaths: startRefs,
         })
       }
@@ -11223,7 +11474,7 @@ export const cloneService = {
         hash: promptHash,
         shotId: refreshedShot.id,
         positivePrompt: startPrompt,
-        negativePrompt: compiled.finalNegativePrompt || buildCloneNegativePrompt(productType, refreshedShot.shotType),
+        negativePrompt: storyboardImageNegativePrompt || buildCloneNegativePrompt(productType, refreshedShot.shotType),
         model: imageProviderModel(creds),
         qualityMode: normalizeQualityMode(latestShot.qualityMode),
         createdAt: now(),
@@ -11250,7 +11501,7 @@ export const cloneService = {
         promptHash,
         imagePromptHash,
         compiledPrompt: compiled.finalPrompt,
-        compiledNegativePrompt: compiled.finalNegativePrompt,
+        compiledNegativePrompt: storyboardImageNegativePrompt,
         promptCompilerVersion: compiled.compilerVersion,
         consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
         qualityStatus: 'unchecked',
@@ -11992,9 +12243,8 @@ export const cloneService = {
     let shot = blueprint.shots.find((x) => x.id === input.shotId)
     if (!shot) throw new Error('分镜不存在')
     const pack = selectedIdentityPack(item)
-    if (!pack || pack.status !== 'done' || !pack.imagePaths.length) {
-      throw new Error('请先生成并确认新模特身份包')
-    }
+    if (!String(item.projectIdentityGridPath || '').trim()) throw new Error('请先生成身份定妆图')
+    if (!String(item.projectIdentityGridPath || '').trim()) throw new Error('请先生成身份定妆图')
     const productReferenceImagePaths = normalizePreviewReferencePaths(resolveStoryboardProductRefs(item, shot))
     if (!hasProductLock(shot, productReferenceImagePaths)) throw new Error('请先为绑定商品生成标准源')
     const productType = normalizeProductType(shot.productType)
@@ -12022,37 +12272,37 @@ export const cloneService = {
       `DNA 来源：${item.boundProductSnapshot?.name ? `绑定商品 ${item.boundProductSnapshot.name}` : '当前绑定商品'}。`,
     ].join('\n')
     const sceneAtmosphereBlock = buildFrameSceneAtmosphereText(shot)
-    const modelIdentityBlock = buildModelIdentityLockText(pack)
+    const modelIdentityBlock = pack ? buildModelIdentityLockText(pack) : ''
     const referenceResponsibilityBlock = buildReferenceResponsibilityText()
-    const modelReferenceImagePaths = normalizePreviewReferencePaths((pack.imagePaths ?? []).slice(0, 1))
+    const modelReferenceImagePaths = normalizePreviewReferencePaths([String(item.projectIdentityGridPath || '').trim()])
+    const sceneReferenceImagePaths = normalizePreviewReferencePaths(
+      [String(shot.thumbnailPath || '').trim() || previousShotContinuityAnchor(item, shot)].filter(Boolean),
+    )
     console.log('[clone-debug] shot-image-prompt-preview:refs', {
       projectId: item.id,
       shotId: shot.id,
-      productCanonicalSourcePath: productReferenceImagePaths[0] || '',
-      primaryModelReferenceImagePath: modelReferenceImagePaths[0] || '',
-      missingCanonicalSource: !productReferenceImagePaths[0],
+      identityGridPath: modelReferenceImagePaths[0] || '',
+      sceneReferencePath: sceneReferenceImagePaths[0] || '',
+      missingIdentityGrid: !modelReferenceImagePaths[0],
     })
+    const explicitTemplateType = resolveProjectStoryboardTemplateType(item)
     const startPrompt = buildGptFramePrompt({
       shot,
       productType,
-      modelPack: pack,
+      modelPack: pack ?? undefined,
       productPoints: shot.aiPrompt || shot.materialNeed,
       productDescription: productDescriptionText,
       which: 'start',
       compiledPrompt: compiled.finalPrompt,
+      explicitTemplateType,
     })
     const continuityAnchorPath = previousShotContinuityAnchor(item, shot)
-    const startRefs = compactStoryboardImageRefs({
-      productRefs: productReferenceImagePaths,
-      modelPackRefs: pack.imagePaths,
-      thumbnailPath: shot.thumbnailPath,
-      continuityAnchorPath,
-      mode: 'start',
-    })
+    const startRefs = resolveStoryboardSceneFitRefs(item, shot, pack ?? undefined, 'start')
+    const storyboardImageNegativePrompt = buildStoryboardImageNegativePrompt(compiled.finalNegativePrompt)
     const requestPreview = buildShotImageRequestPreview({
       credentials: await cloneRepo.getCredentials(),
       startPrompt,
-      negativePrompt: compiled.finalNegativePrompt,
+      negativePrompt: storyboardImageNegativePrompt,
       startRefs,
     })
 
@@ -12063,7 +12313,7 @@ export const cloneService = {
       consistencyMode: compiled.strictConsistencyMode ? 'strict' : 'standard',
       productType,
       compiledPrompt: compiled.finalPrompt,
-      compiledNegativePrompt: compiled.finalNegativePrompt,
+      compiledNegativePrompt: storyboardImageNegativePrompt,
       productDescriptionText,
       productDescriptionBlock,
       productReferenceUsageSummary,
@@ -12078,13 +12328,15 @@ export const cloneService = {
       hasModelIdentityBlock: Boolean(modelIdentityBlock),
       startPrompt,
       endPrompt: '',
-      negativePrompt: compiled.finalNegativePrompt,
-      referenceImageCount: productReferenceImagePaths.length + modelReferenceImagePaths.length,
-      modelIdentityPackId: pack.id,
-      productReferenceImagePaths,
-      productReferenceImageCount: productReferenceImagePaths.length,
+      negativePrompt: storyboardImageNegativePrompt,
+      referenceImageCount: modelReferenceImagePaths.length + sceneReferenceImagePaths.length,
+      modelIdentityPackId: pack?.id || '',
+      productReferenceImagePaths: sceneReferenceImagePaths,
+      productReferenceImageCount: sceneReferenceImagePaths.length,
       modelReferenceImagePaths,
       modelReferenceImageCount: modelReferenceImagePaths.length,
+      sceneReferenceImagePath: sceneReferenceImagePaths[0] || '',
+      identityGridReferenceImagePath: modelReferenceImagePaths[0] || '',
       requestProvider: requestPreview.requestProvider,
       requestModel: requestPreview.requestModel,
       requestJsonStart: requestPreview.requestJsonStart,
@@ -12119,8 +12371,7 @@ export const cloneService = {
       `DNA 来源：${item.boundProductSnapshot?.name ? `绑定商品 ${item.boundProductSnapshot.name}` : '当前绑定商品'}。`,
     ].join('\n')
     const pack = selectedIdentityPack(item)
-    if (!pack) throw new Error('当前项目缺少模特身份包，无法预览分镜视频提示词')
-    const modelReferenceImagePaths = normalizePreviewReferencePaths((pack?.imagePaths ?? []).slice(0, 1))
+    const modelReferenceImagePaths = normalizePreviewReferencePaths([String(item.projectIdentityGridPath || '').trim()])
     console.log('[clone-debug] shot-video-prompt-preview:refs', {
       projectId: item.id,
       shotId: shot.id,
@@ -12136,23 +12387,26 @@ export const cloneService = {
       productType,
       productAnalysisText,
     })
+    const explicitTemplateType = resolveProjectStoryboardTemplateType(item)
     const startFramePrompt = buildGptFramePrompt({
       shot: effectiveShot,
       productType,
-      modelPack: pack,
+      modelPack: pack ?? undefined,
       productPoints: effectiveShot.aiPrompt || effectiveShot.materialNeed,
       productDescription: productAnalysisText,
       which: 'start',
       compiledPrompt: compiled.finalPrompt,
+      explicitTemplateType,
     })
     const endFramePrompt = buildGptFramePrompt({
       shot: effectiveShot,
       productType,
-      modelPack: pack,
+      modelPack: pack ?? undefined,
       productPoints: effectiveShot.aiPrompt || effectiveShot.materialNeed,
       productDescription: productAnalysisText,
       which: 'end',
       compiledPrompt: compiled.finalPrompt,
+      explicitTemplateType,
     })
     const finalPositivePrompt = buildFinalShotVideoPositivePrompt({
       shot: { ...effectiveShot, productType },
@@ -12599,7 +12853,7 @@ export const cloneService = {
     })
     item.outputDir = outDir
     item.status = 'ready_for_review'
-    patchWorkflowV2(item, 'export_final', 'export_final', 'done')
+    patchWorkflowV2(item, 'final_compose', 'final_compose', 'done')
     await cloneRepo.upsertProject(item)
     return rendered
   },

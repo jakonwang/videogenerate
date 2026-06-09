@@ -1156,9 +1156,17 @@ function normalizeCredentials(parsed: any): ModelCredentials {
           ? 'vectorengine'
           : profile
   const imageProfile: 'ai666' | 'vectorengine' =
-    parsed?.imageApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.imageApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
+    parsed?.imageApifoxHubProfile === 'ai666'
+      ? 'ai666'
+      : parsed?.imageApifoxHubProfile === 'vectorengine' || profile === 'xibapi'
+        ? 'vectorengine'
+        : profile
   const chatProfile: 'ai666' | 'vectorengine' =
-    parsed?.chatApifoxHubProfile === 'ai666' ? 'ai666' : parsed?.chatApifoxHubProfile === 'vectorengine' ? 'vectorengine' : profile
+    parsed?.chatApifoxHubProfile === 'ai666'
+      ? 'ai666'
+      : parsed?.chatApifoxHubProfile === 'vectorengine' || profile === 'xibapi'
+        ? 'vectorengine'
+        : profile
   const activeHub = videoProfile === 'ai666' ? ai666Hub : videoProfile === 'xibapi' ? xibapiHub : vectorEngineHub
   return {
     seedanceApiKey: String(parsed?.seedanceApiKey ?? '').trim() || undefined,
@@ -1358,6 +1366,42 @@ function sanitizeLegacyPromptText(value: unknown, productType?: unknown) {
         : line,
     )
   return lines.join('\n').trim()
+}
+
+function migrateWorkflowStep(value: unknown): CloneProject['workflowV2'] extends { currentStep: infer T } ? T : string {
+  const step = String(value || '').trim()
+  if (step === 'upload_analyze_script') return 'reference_analysis' as any
+  if (step === 'generate_script_variants' || step === 'select_script_variant') return 'script_generation' as any
+  if (step === 'model_product_consistency') return 'identity_grid' as any
+  if (step === 'generate_storyboard_grids') return 'storyboard_design' as any
+  if (step === 'generate_shot_videos' || step === 'review_replace_shots' || step === 'storyboard_video_generation') return 'storyboard_videos' as any
+  if (step === 'compose_final_video' || step === 'export_final') return 'final_compose' as any
+  if (
+    step === 'reference_analysis' ||
+    step === 'script_generation' ||
+    step === 'identity_grid' ||
+    step === 'storyboard_design' ||
+    step === 'storyboard_videos' ||
+    step === 'final_compose'
+  ) return step as any
+  return 'reference_analysis' as any
+}
+
+function migrateAutoFlowStage(value: unknown) {
+  const stage = String(value || '').trim()
+  if (stage === 'analyze') return 'reference_analysis' as const
+  if (stage === 'materials' || stage === 'script') return stage === 'materials' ? ('identity_grid' as const) : ('script_generation' as const)
+  if (stage === 'storyboard_images') return 'storyboard_design' as const
+  if (stage === 'quality_gate') return 'final_compose' as const
+  if (
+    stage === 'reference_analysis' ||
+    stage === 'script_generation' ||
+    stage === 'identity_grid' ||
+    stage === 'storyboard_design' ||
+    stage === 'storyboard_videos' ||
+    stage === 'final_compose'
+  ) return stage
+  return undefined
 }
 
 
@@ -1698,6 +1742,13 @@ function normalizeProject(p: CloneProject): CloneProject {
         id: String((p as any).boundProductSnapshot.id ?? '').trim(),
         name: String((p as any).boundProductSnapshot.name ?? '').trim(),
         type: String((p as any).boundProductSnapshot.type ?? '').trim(),
+        storyboardTemplateType:
+          (p as any).boundProductSnapshot.storyboardTemplateType === 'general' ||
+          (p as any).boundProductSnapshot.storyboardTemplateType === 'jewelry' ||
+          (p as any).boundProductSnapshot.storyboardTemplateType === 'ecommerce_packaging' ||
+          (p as any).boundProductSnapshot.storyboardTemplateType === 'lifestyle_interaction'
+            ? (p as any).boundProductSnapshot.storyboardTemplateType
+            : undefined,
         remark: String((p as any).boundProductSnapshot.remark ?? '').trim() || undefined,
         coverImagePath: String((p as any).boundProductSnapshot.coverImagePath ?? '').trim() || undefined,
         analysisBoardPath: String((p as any).boundProductSnapshot.analysisBoardPath ?? '').trim() || undefined,
@@ -1869,6 +1920,31 @@ function normalizeProject(p: CloneProject): CloneProject {
         updatedAt: Number((p as any).finalCompose.updatedAt ?? now()),
       }
     : undefined
+  const rawWorkflow = (p as any).workflowV2 && typeof (p as any).workflowV2 === 'object' ? (p as any).workflowV2 : undefined
+  const currentWorkflowStep = migrateWorkflowStep(rawWorkflow?.currentStep)
+  const workflowUpdatedAt = Number(rawWorkflow?.updatedAt ?? now()) || now()
+  const workflowStepStatus: Record<string, { status: 'idle' | 'running' | 'done' | 'failed'; error?: string; updatedAt: number }> = {
+    reference_analysis: { status: 'idle' as const, updatedAt: workflowUpdatedAt },
+    script_generation: { status: 'idle' as const, updatedAt: workflowUpdatedAt },
+    identity_grid: { status: 'idle' as const, updatedAt: workflowUpdatedAt },
+    storyboard_design: { status: 'idle' as const, updatedAt: workflowUpdatedAt },
+    storyboard_videos: { status: 'idle' as const, updatedAt: workflowUpdatedAt },
+    final_compose: { status: 'idle' as const, updatedAt: workflowUpdatedAt },
+  }
+  if (rawWorkflow?.stepStatus && typeof rawWorkflow.stepStatus === 'object') {
+    for (const [rawStep, rawStatus] of Object.entries(rawWorkflow.stepStatus)) {
+      const migratedStep = migrateWorkflowStep(rawStep) as keyof typeof workflowStepStatus
+      const normalizedStatus = String((rawStatus as any)?.status ?? '').trim()
+      workflowStepStatus[migratedStep] = {
+        status:
+          normalizedStatus === 'running' || normalizedStatus === 'done' || normalizedStatus === 'failed'
+            ? (normalizedStatus as 'idle' | 'running' | 'done' | 'failed')
+            : workflowStepStatus[migratedStep].status,
+        error: String((rawStatus as any)?.error ?? '').trim() || undefined,
+        updatedAt: Number((rawStatus as any)?.updatedAt ?? workflowUpdatedAt) || workflowUpdatedAt,
+      }
+    }
+  }
   return {
     ...p,
     userId: String((p as any)?.userId ?? '').trim() || undefined,
@@ -2021,6 +2097,48 @@ function normalizeProject(p: CloneProject): CloneProject {
     selectedScriptVariantId: String((p as any).selectedScriptVariantId ?? '').trim() || undefined,
     storyboardGridBatches,
     storyboardFrames,
+    projectIdentityGridPath: String((p as any).projectIdentityGridPath ?? '').trim() || undefined,
+    projectIdentityGridStatus:
+      (p as any).projectIdentityGridStatus === 'generating' ||
+      (p as any).projectIdentityGridStatus === 'done' ||
+      (p as any).projectIdentityGridStatus === 'failed'
+        ? (p as any).projectIdentityGridStatus
+        : 'idle',
+    projectIdentityGridUpdatedAt: Number((p as any).projectIdentityGridUpdatedAt ?? 0) || undefined,
+    projectIdentityGridPromptPreview:
+      (p as any).projectIdentityGridPromptPreview && typeof (p as any).projectIdentityGridPromptPreview === 'object'
+        ? {
+            profile:
+              (p as any).projectIdentityGridPromptPreview.profile &&
+              typeof (p as any).projectIdentityGridPromptPreview.profile === 'object'
+                ? { ...(p as any).projectIdentityGridPromptPreview.profile }
+                : undefined,
+            description: String((p as any).projectIdentityGridPromptPreview.description ?? '').trim() || undefined,
+            prompt: String((p as any).projectIdentityGridPromptPreview.prompt ?? '').trim() || undefined,
+            productType:
+              (p as any).projectIdentityGridPromptPreview.productType === 'earrings' ||
+              (p as any).projectIdentityGridPromptPreview.productType === 'phone_case' ||
+              (p as any).projectIdentityGridPromptPreview.productType === 'clothes' ||
+              (p as any).projectIdentityGridPromptPreview.productType === 'toy'
+                ? (p as any).projectIdentityGridPromptPreview.productType
+                : 'general',
+            productPoints: String((p as any).projectIdentityGridPromptPreview.productPoints ?? '').trim() || undefined,
+            productReferenceImageCount: Number((p as any).projectIdentityGridPromptPreview.productReferenceImageCount ?? 0) || 0,
+            productReferenceImagePaths: Array.isArray((p as any).projectIdentityGridPromptPreview.productReferenceImagePaths)
+              ? (p as any).projectIdentityGridPromptPreview.productReferenceImagePaths.map(String).filter(Boolean)
+              : [],
+            modelReferenceImageCount: Number((p as any).projectIdentityGridPromptPreview.modelReferenceImageCount ?? 0) || 0,
+            modelReferenceImagePaths: Array.isArray((p as any).projectIdentityGridPromptPreview.modelReferenceImagePaths)
+              ? (p as any).projectIdentityGridPromptPreview.modelReferenceImagePaths.map(String).filter(Boolean)
+              : [],
+            gridUsagePlan: Array.isArray((p as any).projectIdentityGridPromptPreview.gridUsagePlan)
+              ? (p as any).projectIdentityGridPromptPreview.gridUsagePlan.map(String).filter(Boolean)
+              : [],
+            requestProvider: String((p as any).projectIdentityGridPromptPreview.requestProvider ?? '').trim() || undefined,
+            requestModel: String((p as any).projectIdentityGridPromptPreview.requestModel ?? '').trim() || undefined,
+            requestJson: String((p as any).projectIdentityGridPromptPreview.requestJson ?? '').trim() || undefined,
+          }
+        : undefined,
     boundProductSnapshot,
     shotVideoOutputs: Array.from(mergedShotVideoOutputs.values()),
     autoFlowStatus: (p as any).autoFlowStatus
@@ -2029,7 +2147,7 @@ function normalizeProject(p: CloneProject): CloneProject {
           targetStage:
             String((p as any).autoFlowStatus.targetStage ?? '').trim() === 'final_compose'
               ? ('final_compose' as const)
-              : ('storyboard_video_generation' as const),
+              : ('storyboard_videos' as const),
           status:
             (p as any).autoFlowStatus.status === 'running' ||
             (p as any).autoFlowStatus.status === 'done' ||
@@ -2037,16 +2155,7 @@ function normalizeProject(p: CloneProject): CloneProject {
             (p as any).autoFlowStatus.status === 'failed'
               ? (p as any).autoFlowStatus.status
               : 'idle',
-          currentStage:
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'analyze' ||
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'materials' ||
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'script' ||
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'storyboard_images' ||
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'storyboard_videos' ||
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'quality_gate' ||
-            String((p as any).autoFlowStatus.currentStage ?? '').trim() === 'final_compose'
-              ? ((p as any).autoFlowStatus.currentStage as 'analyze' | 'materials' | 'script' | 'storyboard_images' | 'storyboard_videos' | 'quality_gate' | 'final_compose')
-              : undefined,
+          currentStage: migrateAutoFlowStage((p as any).autoFlowStatus.currentStage),
           imageRetryLimit: Number((p as any).autoFlowStatus.imageRetryLimit ?? 2) || 2,
           videoRetryLimit: Number((p as any).autoFlowStatus.videoRetryLimit ?? 2) || 2,
           lastStartedAt: Number((p as any).autoFlowStatus.lastStartedAt ?? 0) || undefined,
@@ -2073,6 +2182,11 @@ function normalizeProject(p: CloneProject): CloneProject {
     defaultGenerationPolicy: (p as any).defaultGenerationPolicy ?? {
       qualityProfile: 'high',
       variantStrength: 'medium',
+    },
+    workflowV2: {
+      currentStep: currentWorkflowStep as any,
+      stepStatus: workflowStepStatus as any,
+      updatedAt: workflowUpdatedAt,
     },
   }
 }

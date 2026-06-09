@@ -37,11 +37,12 @@ export function createCloneStoryboardGridWorkflow(deps: CloneStoryboardGridWorkf
       const project = await cloneRepo.getProject(input.cloneProjectId)
       if (!project) throw new Error('复刻项目不存在')
       deps.ensureCloneFlowState(project)
-      deps.patchWorkflowV2(project, 'generate_storyboard_grids', 'generate_storyboard_grids', 'running')
+      deps.patchWorkflowV2(project, 'storyboard_design', 'storyboard_design', 'running')
       if (input.selectedModelIdentityId && project.selectedModelIdentityId !== input.selectedModelIdentityId) {
         await deps.syncProjectSelectedIdentity(project, input.selectedModelIdentityId)
       }
       const refs = (input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
+      if (!String((project as any).projectIdentityGridPath || '').trim()) throw new Error('请先生成身份定妆图')
       if (!refs.length) throw new Error('请先上传商品参考图')
       deps.assertStoryboardExtractionReady(project)
       const pack = deps.selectedIdentityPack(project)
@@ -84,8 +85,8 @@ export function createCloneStoryboardGridWorkflow(deps: CloneStoryboardGridWorkf
         }))
       project.storyboardGridBatches = latest.storyboardGridBatches
       project.storyboardFrames = latest.storyboardFrames
-      deps.patchWorkflowV2(project, 'generate_storyboard_grids', 'generate_storyboard_grids', 'done')
-      deps.patchWorkflowV2(project, 'generate_shot_videos', 'generate_shot_videos', 'running')
+      deps.patchWorkflowV2(project, 'storyboard_design', 'storyboard_design', 'done')
+      deps.patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', 'running')
       const saved = await cloneRepo.upsertProject({ ...latest, workflowV2: project.workflowV2 })
       console.log('[clone-debug] generate-storyboard-grids-service:done', {
         cloneProjectId: input.cloneProjectId,

@@ -200,6 +200,13 @@ export const productsRepo = {
               updatedAt: Number((p as any).productAnalysis.updatedAt ?? 0) || now(),
             }
           : undefined
+      ;(p as any).storyboardTemplateType =
+        (p as any).storyboardTemplateType === 'general' ||
+        (p as any).storyboardTemplateType === 'jewelry' ||
+        (p as any).storyboardTemplateType === 'ecommerce_packaging' ||
+        (p as any).storyboardTemplateType === 'lifestyle_interaction'
+          ? (p as any).storyboardTemplateType
+          : undefined
       ;(p as any).images = migrateLegacyAssetsToImages(p as Product)
       ;(p as any).coverImagePath = resolveCoverImagePath(p as Product, (p as any).images)
       ;(p as any).remark = typeof (p as any).remark === 'string' ? (p as any).remark : ''
@@ -259,6 +266,10 @@ export const productsRepo = {
             !hasOwn('canonicalSourceSourceSignature')
               ? prev.canonicalSourceSourceSignature
               : payload.canonicalSourceSourceSignature,
+          storyboardTemplateType:
+            !hasOwn('storyboardTemplateType')
+              ? prev.storyboardTemplateType
+              : payload.storyboardTemplateType,
           productAnalysis:
             !hasOwn('productAnalysis')
               ? prev.productAnalysis
@@ -291,6 +302,7 @@ export const productsRepo = {
       canonicalSourceDiagnostics: payload.canonicalSourceDiagnostics,
       canonicalSourceUpdatedAt: payload.canonicalSourceUpdatedAt,
       canonicalSourceSourceSignature: payload.canonicalSourceSourceSignature,
+      storyboardTemplateType: payload.storyboardTemplateType,
       productAnalysis: payload.productAnalysis,
       createdAt: ts,
       updatedAt: ts,
@@ -365,4 +377,3 @@ export const productsRepo = {
     await writeJsonFile(filePath(), db)
   },
 }
-

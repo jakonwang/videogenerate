@@ -324,6 +324,13 @@ const api = {
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
     }) => ipcRenderer.invoke('clone:getModelIdentityPromptPreview', payload),
+    getProjectIdentityGridPromptPreview: (payload: {
+      cloneProjectId: string
+      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productPoints?: string
+      modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
+      productReferenceImagePaths?: string[]
+    }) => ipcRenderer.invoke('clone:getProjectIdentityGridPromptPreview', payload),
     getGenerationQueue: (payload: { cloneProjectId: string }) =>
       ipcRenderer.invoke('clone:getGenerationQueue', payload),
     pauseGenerationQueue: (payload: { cloneProjectId: string }) =>

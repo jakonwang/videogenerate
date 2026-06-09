@@ -158,10 +158,10 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
         options.setStageLog?.(`分镜视频调度完成，当前通道：${resolved?.channel || 'unknown'}，当前队列：${formatPoolSummary(summary)}`, 'success')
       }
     } catch (error: any) {
-      options.pushRuntimeLog?.(`分镜视频生成异常：${String(error?.message ?? error ?? '未知错误')}`, 'error')
-      options.markError?.(error?.message ?? error, '分镜视频生成失败。')
+      options.pushRuntimeLog?.(`分镜视频异常：${String(error?.message ?? error ?? '未知错误')}`, 'error')
+      options.markError?.(error?.message ?? error, '分镜视频失败。')
       await projectActions.refreshProjectAfterFailure()
-      options.setStageLog?.('分镜视频生成失败。你可以同步状态，或对失败项重新生成。', 'error')
+      options.setStageLog?.('分镜视频失败。你可以同步状态，或对失败项重新生成。', 'error')
     }
   }
 

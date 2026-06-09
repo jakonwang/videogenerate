@@ -160,9 +160,11 @@ export async function createGrsVideoTask(input: {
   negativePrompt?: string
   firstFrameUrl: string
   lastFrameUrl?: string
+  motionStrength?: number
 }) {
   const key = requireGrsKey(input.credentials)
   const host = grsHost(input.credentials)
+  const motionStrength = Math.max(1, Math.min(3, Math.round(Number(input.motionStrength ?? 2) || 2)))
   const body = {
     model: String(input.credentials.grsaiVideoModel || '').trim() || 'veo3.1-fast',
     prompt: input.prompt,
@@ -171,6 +173,8 @@ export async function createGrsVideoTask(input: {
     lastFrameUrl: input.lastFrameUrl || '',
     urls: [],
     aspectRatio: '9:16',
+    motion_strength: motionStrength,
+    weight: motionStrength,
     webHook: '-1',
     shutProgress: false,
   }

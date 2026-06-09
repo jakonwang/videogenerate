@@ -8,7 +8,14 @@ import { toPublicUrlViaQiniu } from './qiniu'
 import { downloadAtlasToBuffer, getAtlasJson, pickAtlasOutputUrl, postAtlasJson, uploadAtlasMedia } from './atlasRetry'
 import { resolveApifoxHubCredentials } from './apifoxProfile'
 import { generateImage as generateApifoxImage } from './unifiedImage'
-import type { CloneProductType, ImageProviderName, ModelCredentials, ModelIdentityPack, ShotSpec } from './types'
+import type {
+  CloneProductType,
+  ImageProviderName,
+  ModelCredentials,
+  ModelIdentityPack,
+  ShotSpec,
+  StoryboardImageTemplateType,
+} from './types'
 import type { ModelProfileOptions } from './types'
 import {
   getModelProfileOptionPrompt,
@@ -631,7 +638,7 @@ function mergeModelIdentityProfile(productType: CloneProductType, options?: Mode
 
 function buildModelIdentityDescription(profile: ReturnType<typeof defaultModelIdentityDescription>) {
   return [
-    'New virtual model for this clone project',
+    'Selected model identity reused for this clone project',
     `${profile.market}, ${profile.gender}, ${profile.ageRange}`,
     `${profile.faceShape || 'oval face shape'}, ${profile.hairStyle}, ${profile.hairColor || 'natural dark black hair color'}`,
     `${profile.skinTone}, ${profile.bodyType || 'slim build'}`,
@@ -647,6 +654,7 @@ export function buildModelIdentityPackPromptPreview(input: {
   productPoints?: string
   modelProfileOptions?: ModelProfileOptions
   productReferenceImagePaths?: string[]
+  modelReferenceImagePaths?: string[]
 }) {
   const profile = mergeModelIdentityProfile(input.productType, input.modelProfileOptions)
   return {
@@ -656,12 +664,15 @@ export function buildModelIdentityPackPromptPreview(input: {
       productType: input.productType,
       productPoints: input.productPoints,
       profile,
+      hasModelReference: Boolean((input.modelReferenceImagePaths ?? []).map(String).filter(Boolean).length),
     }),
     productType: input.productType,
     productPoints: input.productPoints || '',
     modelProfileOptions: { ...(input.modelProfileOptions ?? {}) },
     productReferenceImageCount: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean).length,
     productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+    modelReferenceImageCount: (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean).length,
+    modelReferenceImagePaths: (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean),
   }
 }
 
@@ -669,36 +680,45 @@ export function buildIdentityPackPrompt(input: {
   productType: CloneProductType
   productPoints?: string
   profile: ReturnType<typeof defaultModelIdentityDescription>
+  hasModelReference?: boolean
 }) {
-  const p = input.profile
-  const genderHardRule =
-    p.gender === 'male'
-      ? 'CRITICAL GENDER LOCK: male only. The model must read clearly as a real adult man. Do not generate a woman, feminine face, feminine styling, feminine body shape, or female-presenting identity.'
-      : 'CRITICAL GENDER LOCK: female only. The model must read clearly as a real adult woman. Do not generate a man, masculine face, masculine styling, masculine body shape, or male-presenting identity.'
-  return [
-    'Create one single realistic 3x3 contact-sheet image for a new virtual model identity package for short-form social commerce videos.',
-    'The model must be a new person and must not copy any person from the reference video.',
-    genderHardRule,
-    `Market: ${p.market}. Gender: ${p.gender}. Age range: ${p.ageRange}.`,
-    `Face shape: ${p.faceShape || 'oval face shape'}. Hair: ${p.hairStyle}. Hair color: ${p.hairColor || 'natural dark black hair color'}.`,
-    `Skin tone: ${p.skinTone}. Body type: ${p.bodyType || 'slim build'}. Outfit: ${p.outfitStyle}.`,
-    `Mood: ${p.mood}. Scene: ${p.sceneStyle}. Language style: ${p.languageStyle || 'Chinese-speaking social-commerce expression style'}.`,
-    `Camera presence: ${p.cameraPresence || 'natural social-commerce camera presence'}. Style bias: ${p.styleBias || 'conversion-focused product demo style'}.`,
-    `Product category: ${input.productType}. Product selling points: ${input.productPoints || 'realistic product texture and clean usage value'}.`,
-    'Output exactly one final image that contains 9 panels arranged in a clean 3x3 grid; do not output 9 separate files.',
-    'Keep the same person, same identity, same outfit direction, same lighting family, and same scene style across all 9 panels.',
-    'IDENTITY CONSISTENCY LOCK: all 9 panels must depict the exact same model identity, not lookalikes or identity drift.',
-    'Do not change face shape, facial proportions, eye structure, nose shape, lip shape, jawline, skin tone, age impression, hairstyle, hair color, makeup direction, or body build between panels.',
-    'Do not change outfit category, outfit color direction, neckline, accessory language, styling logic, or overall wardrobe identity between panels.',
-    'WARDROBE COLOR LOCK: keep the same outfit color family, same fabric direction, same styling set, and same accessory intensity across all 9 panels.',
-    'BACKGROUND CONSISTENCY LOCK: keep the same scene family, same background logic, same depth feeling, same light direction, and same environment mood across all 9 panels; no sudden scene switching.',
-    'Only the camera angle, crop, pose, hand position, and product-interaction viewpoint may change from panel to panel.',
-    'Panels should cover reusable product-commerce reference views: front portrait, left three-quarter, right three-quarter, side profile with visible wearing area, half-body lifestyle, hand interaction, close-up wearing area, indoor social-commerce lifestyle, and product interaction view.',
-    'Show the model in practical product-commerce reference poses. Keep face, outfit, lighting and scene style stable and reusable.',
-    'No age drift, no hairstyle swap, no makeup swap, no outfit swap, no outfit recolor, no background replacement, no scene jump, no face drift, no identity mix, and no second person.',
-    'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters.',
-    'Realistic smartphone photo style, natural skin texture, clean commercial composition.',
-  ].join('\n')
+  const productContext = `${String(input.productType || '').trim()} ${String(input.productPoints || '').trim()}`.toLowerCase()
+  let productName = 'Product'
+  let targetBodyPart = 'Hands'
+  if (/earrings?|earring|stud|hoop|drop earring|dangle/.test(productContext)) {
+    productName = 'Earrings'
+    targetBodyPart = 'Ear lobe'
+  } else if (/necklace|pendant/.test(productContext)) {
+    productName = 'Necklace'
+    targetBodyPart = 'Neck/Collarbone'
+  } else if (/ring/.test(productContext)) {
+    productName = 'Ring'
+    targetBodyPart = 'Hands/Fingers'
+  } else if (/hair clip|hairclip|barrette|shampoo|hair/.test(productContext)) {
+    productName = 'Hair clip'
+    targetBodyPart = 'Hair/Back of the head'
+  } else if (/phone.?case|case/.test(productContext)) {
+    productName = 'Phone case'
+    targetBodyPart = 'Hands'
+  } else if (/clothes|dress|shirt|hoodie|jacket|pants|skirt/.test(productContext)) {
+    productName = 'Clothing'
+    targetBodyPart = 'Upper body/Torso'
+  }
+  return `CRITICAL MANDATE: The final generated image MUST visibly and prominently feature the EXACT product from Reference Image 1. Do not omit, hide, or blur the product under any circumstances.
+
+Image Analysis Directive:
+Reference Image 1 contains the exact ${productName} with its specific structure and texture. Reference Image 2 contains the model. Combine them into one crisp, high-resolution product showcase shot based on the following strict hierarchical rules:
+
+1. ABSOLUTE PRODUCT FOCUS (Product is the absolute King):
+The primary focal point of the entire image must be the EXACT ${productName} extracted from Reference Image 1. The product must be physically attached to, worn on, interacting with, or held by the model's ${targetBodyPart}. The product's shape, geometry, color, and original material textures must be 100% identical to Ref 1, rendered with sharp, macro-level clarity.
+
+2. MODEL PRESENTATION & ANONYMITY (Model is just a canvas):
+The model from Reference Image 2 serves strictly as a background context or canvas to present the product. The camera must focus tightly on the ${targetBodyPart} where the product is prominently displayed. Crucially, the model's face MUST BE ANONYMOUS: the eyes, nose, and mouth must be completely cropped out of the frame, blurred, or entirely turned away (sharp side-view/back-view profile). Focus entirely on the flawless interaction between the product and the realistic skin/body texture of the ${targetBodyPart}.
+
+3. STAGE ENVIRONMENT:
+Use a clean, plain, neutral, solid studio background (white or light gray) for this shot. No busy textures, no complex scenery, and no distracting background elements.
+
+Style: Photorealistic commercial product photography, sharp macro focus, pristine brand quality. No sketching, no illustration, no animation, single panel only.`
 }
 
 function productLock(productType: CloneProductType) {
@@ -1105,289 +1125,114 @@ function buildStoryboardFaceCropLockText(productType: CloneProductType, shot: Sh
   return 'FACE CROP LOCK: keep the human head out of frame whenever possible.'
 }
 
+const STORYBOARD_FRAME_TRANSFER_TEMPLATE = `
+Now, analyze these two new images.
+
+Image 1 is our base model and product reference (身份定状图).
+Image 2 is our scene structure reference (场景结构图).
+
+I need you to transfer the model and product from Image 1 into the exact environmental context and geometric composition layout of Image 2.
+
+Strict Requirements:
+1. PRODUCT: Identify the product in Image 1. Keep its design, exact colors, and original material textures 100% identical to Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. Zero modifications allowed.
+
+2. MODEL & CLOTHING FIDELITY (服装与角色绝对死锁):
+Identify the model in Image 1. You must maintain 100% strict consistency for the model's appearance.
+- CLOTHING: Replicate the EXACT clothing from Image 1, including its specific style, fabric texture, and exact color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
+- POSTURE: Keep the identical presentation posture, skin tone, and the exact faceless/cropped perspective on the specific body part exactly as shown in Image 1.
+
+3. SCENE INTEGRATION: Completely replace the plain studio background of Image 1 with the exact architectural structure, perspective lines, and ambient lighting of Image 2. The new environment's light and reflections from Image 2 must wrap naturally around the model from Image 1, casting highly realistic contact shadows on the new surfaces to ensure a perfect, seamless physical integration.
+
+4. ABSOLUTE TEXT AND LOGO ERASURE:
+Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with clean, seamless background textures matching the surrounding elements of Image 2.
+
+Style: High-end, photorealistic commercial brand advertisement. Pristine quality, sharp details. No sketch, no animation, single panel only.
+`.trim()
+
+const STORYBOARD_IMAGE_TEMPLATES: Record<StoryboardImageTemplateType, string> = {
+  general: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
+  jewelry: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
+  ecommerce_packaging: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
+  lifestyle_interaction: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
+}
+
+function hasPackagingStoryboardSignal(shot: ShotSpec) {
+  const shotType = String(shot.shotType || '').trim().toLowerCase()
+  if (shotType === 'packaging') return true
+  const haystack = [
+    shot.visualPrompt,
+    shot.visualDescription,
+    shot.actionDescription,
+    shot.cameraDescription,
+    shot.productFocus,
+    shot.materialNeed,
+    shot.scriptText,
+    shot.onScreenText,
+    shot.narrationText,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .join('\n')
+  return /\bpackaging\b|\bbox\b|\bbottle\b|\btube\b|\bjar\b|\bpackage\b|\blabel\b|\bproduct \+ packaging\b/.test(haystack)
+}
+
+function hasLifestyleInteractionStoryboardSignal(productType: CloneProductType, shot: ShotSpec) {
+  if (isWearableStoryboardShot(productType, shot)) return true
+  const haystack = [
+    shot.visualPrompt,
+    shot.visualDescription,
+    shot.actionDescription,
+    shot.cameraDescription,
+    shot.productFocus,
+    shot.materialNeed,
+    shot.scriptText,
+    shot.onScreenText,
+    shot.narrationText,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .join('\n')
+  return /\bholding\b|\bwearing\b|\bworn\b|\bpresenting\b|\bshowing\b|\bhand interaction\b|\bhand-held\b|\busage\b|\bdemo\b/.test(
+    haystack,
+  )
+}
+
+export function resolveStoryboardImageTemplateType(input: {
+  productType: CloneProductType
+  shot: ShotSpec
+  explicitTemplateType?: StoryboardImageTemplateType
+}): StoryboardImageTemplateType {
+  const explicit = String(input.explicitTemplateType || '').trim()
+  if (
+    explicit === 'general' ||
+    explicit === 'jewelry' ||
+    explicit === 'ecommerce_packaging' ||
+    explicit === 'lifestyle_interaction'
+  ) {
+    return explicit
+  }
+  const normalizedType = String(input.productType || '').trim().toLowerCase()
+  if (/earrings?|ring|bracelet|necklace|pendant/.test(normalizedType)) return 'jewelry'
+  if (hasPackagingStoryboardSignal(input.shot)) return 'ecommerce_packaging'
+  if (hasLifestyleInteractionStoryboardSignal(input.productType, input.shot)) return 'lifestyle_interaction'
+  return 'general'
+}
+
 export function buildGptFramePrompt(input: {
   shot: ShotSpec
   productType: CloneProductType
-  modelPack: ModelIdentityPack
+  modelPack?: ModelIdentityPack
   productPoints?: string
   productDescription?: string
   which: 'start' | 'end'
   compiledPrompt?: string
+  explicitTemplateType?: StoryboardImageTemplateType
 }) {
-  const shot = input.shot
-  const isEnd = input.which === 'end'
-  const wearableLike = isWearableStoryboardShot(input.productType, shot)
-  const earringLike = looksLikeEarringStoryboardShot(input.productType, shot, input.productDescription)
-  const hairText = String(input.modelPack?.hairStyle || '').trim() ? String(input.modelPack.hairStyle).trim() : 'tied back or tucked'
-  const modelAgeText = String(input.modelPack?.ageRange || '').trim() || '20-28'
-  const productOccupancyText = wearableLike ? 'Product occupies 65% to 80% of frame' : 'Product occupies 65% to 80% of frame'
-  const visibleAreaText = earringLike
-    ? ['ear', 'jawline', 'neck', 'partial hand (supporting chin)']
-    : wearableLike
-      ? ['product wearing area', 'jawline', 'neck', 'partial hand (supporting chin)']
-      : ['product support area', 'jawline', 'neck', 'partial hand (supporting chin)']
-  const compositionLines = earringLike
-    ? ['- Tight crop on ear wearing area', '- Right-shifted composition', '- Final state only (NO motion)']
-    : wearableLike
-      ? ['- Tight crop on product wearing area', '- Right-shifted composition', '- Final state only (NO motion)']
-      : ['- Tight crop on product area', '- Right-shifted composition', '- Final state only (NO motion)']
-  const hierarchyText = earringLike ? 'product > ear > hand > body > face' : wearableLike ? 'product > ear > hand > body > face' : 'product > hand > body > face'
-  return [
-    '[TYPE]',
-    'Storyboard keyframe (static image).',
-    '--------------------------------------------------',
-    [
-      '[SYSTEM MODE]',
-      'This is NOT a generative task.',
-      'This is a strict compositing task.',
-      '',
-      'The goal is to PLACE an existing product into a scene,',
-      'NOT to recreate or redesign it.',
-      '',
-      'If the product cannot be preserved exactly -> FAIL',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[ROLE MAP]',
-      'Image 1 = Product (ONLY source of truth)',
-      'Image 2 = Model Identity',
-      'Image 3 = Composition / Framing',
-      '',
-      'Strict separation. No cross usage.',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[PRODUCT - PIXEL LOCK]',
-      '',
-      'CRITICAL RULE:',
-      '',
-      'The product must be treated as a FIXED 2D VISUAL ASSET.',
-      '',
-      'It must be:',
-      '- directly reused',
-      '- visually identical to Image 1',
-      '',
-      'Allowed operations ONLY:',
-      '- scale',
-      '- rotate',
-      '- translate (position)',
-      '',
-      'Forbidden:',
-      '- redraw',
-      '- reinterpret',
-      '- regenerate',
-      '- enhance details',
-      '- modify material',
-      '- change structure',
-      '- simulate new lighting',
-      '',
-      'If any deviation occurs -> FAIL',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[PRODUCT STRUCTURE LOCK]',
-      '',
-      'Must remain 100% identical:',
-      '',
-      '- silhouette',
-      '- geometry',
-      '- thickness',
-      '- connection points',
-      '- part count',
-      '- material response',
-      '- reflection pattern',
-      '- micro details',
-      '',
-      'ABSOLUTELY NO:',
-      '- smoothing',
-      '- beautification',
-      '- "more realistic" adjustment',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[ANTI-HALLUCINATION LOCK]',
-      '',
-      'The model must assume:',
-      '',
-      'ONLY the visible parts in Image 1 exist.',
-      '',
-      'DO NOT:',
-      '- infer hidden structure',
-      '- complete unseen areas',
-      '- rebuild back side',
-      '',
-      'If unseen -> keep unseen',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[PRODUCT PRIORITY OVERRIDE]',
-      '',
-      'Product visibility overrides:',
-      '',
-      '- composition',
-      '- model placement',
-      '- framing',
-      '- anatomy correctness',
-      '',
-      'If conflict occurs:',
-      '-> adjust human',
-      '-> NEVER adjust product',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[PRODUCT INTEGRATION RULE]',
-      '',
-      'The product does NOT adapt to the scene.',
-      '',
-      'Instead:',
-      '- ear adapts to product position',
-      '- lighting adapts to product',
-      '- perspective adapts to product',
-      '',
-      'Human can be slightly deformed if necessary.',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[COMPOSITION]',
-      '',
-      '- Single static frame',
-      '- Close-up shot',
-      `- ${productOccupancyText}`,
-      ...compositionLines,
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[FOCUS LOCK]',
-      '',
-      '- Product = sharpest element',
-      '- 100% in focus',
-      '- highest detail region',
-      '',
-      'Background and skin can be softer',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[MODEL CONTROL]',
-      '',
-      'Use ONLY identity from Image 2',
-      '',
-      `- Male, ${modelAgeText}`,
-      `- Hair ${hairText}`,
-      '- Clean, neutral styling',
-      '- No accessories interfering',
-      '',
-      'VISIBLE AREA ONLY:',
-      ...visibleAreaText.map((item) => `- ${item}`),
-      '',
-      'STRICT:',
-      '- No full face',
-      '- No eyes',
-      '- No expression emphasis',
-      '',
-      'Model is NOT the subject.',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [`[HIERARCHY]`, '', hierarchyText].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[BACKGROUND SYSTEM - 解决灰背景核心]',
-      '',
-      'Background MUST be:',
-      '',
-      '- soft lifestyle environment',
-      '- natural light feeling',
-      '- slightly blurred (depth separation)',
-      '- warm or neutral tone',
-      '',
-      'ALLOWED examples:',
-      '- indoor window light',
-      '- soft cream wall',
-      '- warm home environment',
-      '- blurred interior depth',
-      '',
-      'FORBIDDEN:',
-      '- pure gray background',
-      '- flat gradient',
-      '- empty studio void',
-      '',
-      'IMPORTANT:',
-      'Background must feel real BUT unobtrusive.',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[LIGHTING SYSTEM]',
-      '',
-      '- Lighting must MATCH product\'s original highlights',
-      '- Do NOT relight product independently',
-      '',
-      'Scene lighting adapts TO product lighting',
-      '',
-      'No:',
-      '- new reflections',
-      '- artificial shine boost',
-      '- dramatic shadows on product',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[STORYBOARD CONTROL]',
-      '',
-      'Use Image 3 ONLY for:',
-      '- framing',
-      '- crop',
-      '- camera angle',
-      '',
-      'IGNORE:',
-      '- motion',
-      '- identity',
-      '- narrative',
-      '',
-      isEnd ? 'Interpret as final static result' : 'Interpret as final static result',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[CONSISTENCY CORE]',
-      '',
-      'There is ONLY ONE product instance.',
-      '',
-      'Across all frames:',
-      '- identical',
-      '- no variation',
-      '- no reinterpretation',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[FAIL CONDITIONS]',
-      '',
-      'If ANY happens:',
-      '',
-      '- product shape changes',
-      '- structure mismatch',
-      '- extra parts appear',
-      '- reflections differ significantly',
-      '- product looks re-generated',
-      '',
-      '-> OUTPUT MUST FAIL',
-    ].join('\n'),
-    '--------------------------------------------------',
-    [
-      '[OUTPUT]',
-      '',
-      '- TikTok commercial style',
-      '- clean but NOT empty background',
-      '- no text',
-      '- no watermark',
-      '- no logo',
-      '- no UI',
-      '- no subtitles',
-      '',
-      'Silent visual frame',
-      '',
-      'The product is the image.',
-      'Everything else is secondary.',
-    ].join('\n'),
-  ].join('\n')
+  const templateType = resolveStoryboardImageTemplateType({
+    productType: input.productType,
+    shot: input.shot,
+    explicitTemplateType: input.explicitTemplateType,
+  })
+  return STORYBOARD_IMAGE_TEMPLATES[templateType]
 }
-
 export async function generateModelIdentityPackImages(input: {
   credentials: ModelCredentials
   outDir: string
@@ -1395,6 +1240,7 @@ export async function generateModelIdentityPackImages(input: {
   productPoints?: string
   modelProfileOptions?: ModelProfileOptions
   productReferenceImagePaths: string[]
+  modelReferenceImagePaths?: string[]
   onImageGenerated?: (filePath: string, index: number) => Promise<void> | void
 }) {
   const profile = mergeModelIdentityProfile(input.productType, input.modelProfileOptions)
@@ -1420,11 +1266,12 @@ export async function generateModelIdentityPackImages(input: {
     productType: input.productType,
     productPoints: input.productPoints,
     profile,
+    hasModelReference: Boolean((input.modelReferenceImagePaths ?? []).length),
   })
   const path = await generateProviderImage({
     credentials: input.credentials,
     prompt,
-    imagePaths: input.productReferenceImagePaths,
+    imagePaths: [...input.productReferenceImagePaths, ...(input.modelReferenceImagePaths ?? [])],
     outDir: input.outDir,
     filePrefix: 'model_identity_grid',
   })

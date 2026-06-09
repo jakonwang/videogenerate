@@ -166,6 +166,8 @@ type ShotImagePromptPreview = {
   requestModel?: string
   requestJsonStart?: string
   requestJsonEnd?: string
+  sceneReferenceImagePath?: string
+  identityGridReferenceImagePath?: string
 }
 
 type ShotVideoPromptPreview = {
@@ -211,8 +213,29 @@ type ShotVideoPromptPreview = {
   requestJson?: string
 }
 
+type IdentityGridPromptPreview = {
+  profile?: Record<string, unknown>
+  description?: string
+  prompt?: string
+  productType?: string
+  productPoints?: string
+  productReferenceImageCount?: number
+  productReferenceImagePaths?: string[]
+  modelReferenceImageCount?: number
+  modelReferenceImagePaths?: string[]
+  gridUsagePlan?: string[]
+  requestProvider?: string
+  requestModel?: string
+  requestJson?: string
+}
+
 type PromptParamRow = {
   key: string
+  value: string
+}
+
+type PromptPreviewStat = {
+  label: string
   value: string
 }
 
@@ -268,6 +291,10 @@ type CloneProject = {
   selectedScriptVariantId?: string
   storyboardGridBatches?: StoryboardGridBatch[]
   storyboardFrames?: StoryboardFrame[]
+  projectIdentityGridPath?: string
+  projectIdentityGridStatus?: 'idle' | 'generating' | 'done' | 'failed'
+  projectIdentityGridUpdatedAt?: number
+  projectIdentityGridPromptPreview?: IdentityGridPromptPreview
   shotVideoOutputs?: ShotVideoOutput[]
   finalCompose?: FinalCompose
   lastError?: string
@@ -277,7 +304,7 @@ type CloneProject = {
   autoFlowStatus?: {
     enabled?: boolean
     status?: string
-    targetStage?: 'storyboard_video_generation' | 'final_compose'
+    targetStage?: 'storyboard_videos' | 'final_compose'
     currentStage?: string
     imageRetryLimit?: number
     videoRetryLimit?: number
@@ -410,6 +437,7 @@ const framePreviewPath = ref('')
 const framePreviewTitle = ref('')
 const shotPromptPreviewOpen = ref(false)
 const shotVideoPromptPreviewOpen = ref(false)
+const identityGridPromptPreviewOpen = ref(false)
 const composeOutputDir = ref('')
 const composeLocalError = ref('')
 const shotPromptCopyMessage = ref('')
@@ -442,6 +470,9 @@ const shotVideoPromptPreviewLoading = ref(false)
 const shotVideoPromptPreviewError = ref('')
 const shotVideoPromptPreview = ref<ShotVideoPromptPreview | null>(null)
 const shotVideoPromptPreviewLoadedShotId = ref('')
+const identityGridPromptPreviewLoading = ref(false)
+const identityGridPromptPreviewError = ref('')
+const identityGridPromptPreview = ref<IdentityGridPromptPreview | null>(null)
 const geelarkPublishForm = reactive({
   publishAccountId: '',
   videoDesc: '',
@@ -450,6 +481,30 @@ const geelarkPublishForm = reactive({
   scheduleAt: '',
   needShareLink: false,
 })
+
+function closeTransientModalOverlays() {
+  modelModalOpen.value = false
+  productModalOpen.value = false
+  geelarkPublishModalOpen.value = false
+}
+
+function closePromptPreviewOverlays() {
+  shotPromptPreviewOpen.value = false
+  shotVideoPromptPreviewOpen.value = false
+  identityGridPromptPreviewOpen.value = false
+}
+
+function closeFramePreviewOverlay() {
+  framePreviewOpen.value = false
+  framePreviewPath.value = ''
+  framePreviewTitle.value = ''
+}
+
+function closeAllModalOverlays() {
+  closeTransientModalOverlays()
+  closePromptPreviewOverlays()
+  closeFramePreviewOverlay()
+}
 
 function safeArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
@@ -669,7 +724,8 @@ const selectedStoryboardErrorText = computed(() => safeText(selectedStoryboardRo
 const selectedStoryboardErrorAdvice = computed(() => {
   const errorText = selectedStoryboardErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '先到模特页生成并确认新的模特身份包，再回到当前任务重新生成分镜。'
+  if (errorText.includes('请先生成并确认新模特身份包')) return '当前分镜设计已不再依赖模特身份包，请刷新项目后重试；如果仍出现该报错，说明主进程仍有旧缓存。'
+  if (errorText.includes('请先生成身份定妆图')) return '先生成项目级身份定妆图，再回到当前任务重新生成分镜。'
   if (errorText.includes('请先选择商品库商品')) return '先绑定商品库商品，并确认当前项目已经同步到商品参考图后再重试。'
   if (errorText.includes('请先完成参考视频分析')) return '先回到参考分析阶段完成参考视频分析，再继续生成分镜图片。'
   if (errorText.includes('产品标准源生成失败')) return '请更换更清晰、无遮挡的商品图，或确认当前项目已回退到可用原图后再重试。'
@@ -681,7 +737,8 @@ const selectedStoryboardErrorAdvice = computed(() => {
 const selectedStoryboardErrorTitle = computed(() => {
   const errorText = selectedStoryboardErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '缺少模特身份包'
+  if (errorText.includes('请先生成并确认新模特身份包')) return '旧前置条件残留'
+  if (errorText.includes('请先生成身份定妆图')) return '缺少身份定妆图'
   if (errorText.includes('请先选择商品库商品')) return '缺少商品绑定'
   if (errorText.includes('请先完成参考视频分析')) return '缺少参考分析'
   if (errorText.includes('产品标准源生成失败')) return '商品参考图不可用'
@@ -691,14 +748,15 @@ const selectedStoryboardErrorTitle = computed(() => {
 const selectedStoryboardErrorAction = computed(() => {
   const errorText = selectedStoryboardErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return 'go-models'
+  if (errorText.includes('请先生成身份定妆图')) return 'go-identity-grid'
   return ''
 })
 const selectedShotVideoErrorText = computed(() => safeText(selectedShotOutput.value?.error, ''))
 const selectedShotVideoErrorAdvice = computed(() => {
   const errorText = selectedShotVideoErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '先到模特页生成并确认新的模特身份包，再回到当前任务重新生成分镜视频。'
+  if (errorText.includes('请先生成并确认新模特身份包')) return '当前分镜视频已不再依赖模特身份包，请刷新项目后重试；如果仍出现该报错，说明主进程仍有旧缓存。'
+  if (errorText.includes('请先生成身份定妆图')) return '先生成项目级身份定妆图，再回到当前任务重新生成分镜视频。'
   if (errorText.includes('请先选择商品库商品')) return '先绑定商品库商品，并确认当前项目已经同步到商品参考图后再重试。'
   if (errorText.includes('请先完成参考视频分析')) return '先回到参考分析阶段完成参考视频分析，再继续生成当前分镜视频。'
   if (errorText.includes('产品标准源生成失败')) return '请更换更清晰、无遮挡的商品图，或确认当前项目已回退到可用原图后再重试。'
@@ -710,17 +768,18 @@ const selectedShotVideoErrorAdvice = computed(() => {
 const selectedShotVideoErrorTitle = computed(() => {
   const errorText = selectedShotVideoErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '缺少模特身份包'
+  if (errorText.includes('请先生成并确认新模特身份包')) return '旧前置条件残留'
+  if (errorText.includes('请先生成身份定妆图')) return '缺少身份定妆图'
   if (errorText.includes('请先选择商品库商品')) return '缺少商品绑定'
   if (errorText.includes('请先完成参考视频分析')) return '缺少参考分析'
   if (errorText.includes('产品标准源生成失败')) return '商品参考图不可用'
   if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) return '模型配置异常'
-  return '分镜视频生成失败'
+  return '分镜视频失败'
 })
 const selectedShotVideoErrorAction = computed(() => {
   const errorText = selectedShotVideoErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return 'go-models'
+  if (errorText.includes('请先生成身份定妆图')) return 'go-identity-grid'
   return ''
 })
 const shotVideoOutputStateSignature = computed(() =>
@@ -762,7 +821,7 @@ const configuredVideoProvider = computed(() => safeText(current.value?.pipelineS
 const configuredVideoModel = computed(() => safeText(current.value?.pipelineStatus?.configuredProviderSummary?.video?.model, '--'))
 const activeImageProvider = computed(() => safeText(current.value?.pipelineStatus?.activeProviderSummary?.image?.provider, '--'))
 const activeImageModel = computed(() => safeText(current.value?.pipelineStatus?.activeProviderSummary?.image?.model, '--'))
-const workflowStep = computed(() => current.value?.workflowV2?.currentStep || 'upload_analyze_script')
+const workflowStep = computed(() => current.value?.workflowV2?.currentStep || 'reference_analysis')
 const selectedVariantId = computed(() => current.value?.selectedScriptVariantId || scriptVariants.value.find((item) => item.selected)?.id || '')
 const referenceSourcePath = computed(() => current.value?.referenceVideoPath || referenceVideoPath.value)
 const productSanitizationStatus = computed(() => current.value?.productImageSanitizationStatus || 'idle')
@@ -865,12 +924,7 @@ const activeProjectId = computed(() => resolveActiveProjectId(current.value?.id)
 const isDraftingNewProject = computed(() => Boolean(referenceVideoPath.value.trim()) && !current.value?.id)
 const hasSelectedProductBinding = computed(() => Boolean(String(selectedProductId.value || current.value?.productId || '').trim()))
 const hasBoundModel = computed(() => Boolean(selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id))
-const hasReadyModelIdentityPack = computed(() => {
-  const paths = Array.isArray(modelSnapshot.value?.imagePaths)
-    ? modelSnapshot.value?.imagePaths.map((item) => String(item || '').trim()).filter(Boolean)
-    : []
-  return Boolean(String(modelSnapshot.value?.id || '').trim()) && paths.length > 0
-})
+const hasProjectIdentityGrid = computed(() => Boolean(String(current.value?.projectIdentityGridPath || '').trim()))
 const hasUsableStoryboardProductRefs = computed(() => originalProductRefs.value.length > 0)
 const hasUsableExtractedProductRefs = computed(() => sanitizedProductRefs.value.length > 0 || originalProductRefs.value.length > 0)
 const canGenerateStoryboardFrames = computed(
@@ -881,7 +935,7 @@ const canGenerateStoryboardFrames = computed(
         hasUsableStoryboardProductRefs.value &&
         hasUsableExtractedProductRefs.value &&
         hasBoundModel.value &&
-        hasReadyModelIdentityPack.value,
+        hasProjectIdentityGrid.value,
     ),
 )
 const storyboardFrameBlockReason = computed(() => {
@@ -892,7 +946,7 @@ const storyboardFrameBlockReason = computed(() => {
     return safeText(current.value?.productImageSanitizationError, '产品标准源生成失败且没有可用原图，请重新绑定更清晰的商品库商品。')
   }
   if (!hasBoundModel.value) return '请先选择模特'
-  if (!hasReadyModelIdentityPack.value) return '请先生成并确认新模特身份包'
+  if (!hasProjectIdentityGrid.value) return '请先生成身份定妆图'
   return ''
 })
 const failedShotOutputs = computed(() =>
@@ -902,13 +956,12 @@ const failedStoryboardFrames = computed(() => storyboardFrames.value.filter((ite
 const runModeLabel = computed(() => (current.value?.runMode === 'auto' ? '自动运行' : '手动运行'))
 const autoFlowCurrentStageLabel = computed(() => {
   const stage = String(current.value?.autoFlowStatus?.currentStage || '').trim()
-  if (stage === 'analyze') return '参考分析'
-  if (stage === 'materials') return '一致性素材准备'
-  if (stage === 'script') return '脚本生成'
-  if (stage === 'storyboard_images') return '分镜图片'
+  if (stage === 'reference_analysis') return '参考分析'
+  if (stage === 'script_generation') return '脚本生成'
+  if (stage === 'identity_grid') return '身份定妆图'
+  if (stage === 'storyboard_design') return '分镜设计'
   if (stage === 'storyboard_videos') return '分镜视频'
-  if (stage === 'quality_gate') return '最终门禁'
-  if (stage === 'final_compose') return '最终成片'
+  if (stage === 'final_compose') return '成片合成'
   return '待开始'
 })
 const autoFlowTargetLabel = computed(() => (current.value?.autoFlowStatus?.targetStage === 'final_compose' ? '最终成片' : '分镜视频'))
@@ -1149,7 +1202,7 @@ const composePreviewPosterPath = computed(() => {
   return ''
 })
 const composePreviewPath = computed(() => {
-  if (hasFreshFinalCompose.value) return finalOutputPath.value
+  if (finalOutputPath.value) return finalOutputPath.value
   if (previewPipelineOutputPath.value) return previewPipelineOutputPath.value
   const selectedVideoPath = String(selectedShotOutput.value?.videoPath || '').trim()
   if (selectedVideoPath) return selectedVideoPath
@@ -1162,18 +1215,18 @@ const composePreviewPosterUrl = computed(() => previewImage(composePreviewPoster
 const selectedShotVideoMediaUrl = computed(() => mediaUrl(selectedShotOutput.value?.videoPath))
 const composePreviewLabel = computed(() => {
   if (hasFreshFinalCompose.value && finalOutputPath.value) return '最终成片预览'
+  if (finalOutputPath.value) return '最终成片预览'
   if (previewPipelineOutputPath.value) return '预览成片'
   if (selectedShotOutput.value?.videoPath) return `${safeText(shotLabel(selectedShotOutput.value.shotId), '当前镜头')} 预览`
   if (firstReadyShotOutput.value?.videoPath) return `${safeText(shotLabel(firstReadyShotOutput.value.shotId), '可用镜头')} 预览`
-  if (finalOutputPath.value) return '历史成片预览'
   return '等待成片'
 })
 const composePreviewHint = computed(() => {
   if (hasFreshFinalCompose.value && finalOutputPath.value) return '当前显示的是最新合成完成的最终成片。'
+  if (finalOutputPath.value) return '当前显示的是已生成的最终成片；如果分镜视频后续又更新，建议重新合成最新成片。'
   if (previewPipelineOutputPath.value) return '当前显示的是预览渲染输出，可继续检查后导出最终成片。'
   if (selectedShotOutput.value?.videoPath) return '最终成片尚未更新，当前先展示选中镜头，方便检查后继续合成。'
   if (firstReadyShotOutput.value?.videoPath) return '当前镜头还没有可预览视频，已自动切换到首个可用镜头预览。'
-  if (finalOutputPath.value) return '检测到历史成片，但当前分镜视频已更新，建议重新合成最新成片。'
   return '合成完成后，这里会显示最终成片；未合成前会显示当前可用镜头预览。'
 })
 const composeExportStatusLabel = computed(() => {
@@ -1221,7 +1274,7 @@ const canBootstrapAutoRun = computed(() => {
   if (shotVideoOutputs.value.length) return false
   if (finalOutputPath.value) return false
   const autoStage = String(current.value?.autoFlowStatus?.currentStage || '').trim()
-  if (autoStage && autoStage !== 'analyze') return false
+  if (autoStage && autoStage !== 'reference_analysis') return false
   return true
 })
 const autoBootstrapKey = computed(() => {
@@ -1232,7 +1285,7 @@ const autoBootstrapKey = computed(() => {
   return [projectId, referenceSourcePath.value, modelId, refs].join('::')
 })
 const analyzeStageProgress = computed(() => {
-  if (loading.value && workflowStep.value === 'upload_analyze_script') return 72
+  if (loading.value && workflowStep.value === 'reference_analysis') return 72
   if (storyBeats.value.length) return 100
   if (current.value?.blueprint) return 82
   if (referenceSourcePath.value) return 28
@@ -1361,10 +1414,12 @@ const statusTone = computed(() => {
 })
 
 const workflowStageKey = computed<StageItem['key']>(() => {
-  if (workflowStep.value === 'generate_script_variants' || workflowStep.value === 'select_script_variant') return 'variant'
-  if (workflowStep.value === 'generate_storyboard_grids') return 'grid'
-  if (workflowStep.value === 'generate_shot_videos' || workflowStep.value === 'review_replace_shots') return 'video'
-  if (workflowStep.value === 'compose_final_video') return 'compose'
+  if (workflowStep.value === 'reference_analysis') return 'analyze'
+  if (workflowStep.value === 'script_generation') return 'variant'
+  if (workflowStep.value === 'identity_grid') return 'identity-grid'
+  if (workflowStep.value === 'storyboard_design') return 'grid'
+  if (workflowStep.value === 'storyboard_videos') return 'video'
+  if (workflowStep.value === 'final_compose') return 'compose'
   return 'analyze'
 })
 const visibleStageKey = computed<StageItem['key']>(() => (selectedStageKey.value || workflowStageKey.value) as StageItem['key'])
@@ -1372,6 +1427,7 @@ const stageItems = computed<StageItem[]>(() => {
   const hasBlueprint = Boolean(current.value?.blueprint)
   const hasVariants = scriptVariants.value.length > 0
   const hasSelectedVariant = Boolean(selectedVariantId.value)
+  const hasIdentityGrid = hasProjectIdentityGrid.value
   const hasFrames = storyboardFrames.value.some((item) => item.imagePath)
   const hasVideos = shotVideoOutputs.value.some((item) => item.videoPath)
   const hasFinal = Boolean(finalOutputPath.value)
@@ -1393,6 +1449,13 @@ const stageItems = computed<StageItem[]>(() => {
         : '绑定素材后生成候选',
       done: hasVariants && hasSelectedVariant,
       active: visibleStageKey.value === 'variant',
+    },
+    {
+      key: 'identity-grid',
+      title: '身份定妆图',
+      desc: hasIdentityGrid ? '定妆图已生成，可进分镜' : '先生成产品+模特身份定妆图',
+      done: hasIdentityGrid,
+      active: visibleStageKey.value === 'identity-grid',
     },
     {
       key: 'grid',
@@ -1421,7 +1484,7 @@ const stageItems = computed<StageItem[]>(() => {
 const currentStageTitle = computed(() => stageItems.value.find((item) => item.active)?.title || stageItems.value.find((item) => !item.done)?.title || '等待继续')
 const nextStageTitle = computed(() => stageItems.value.find((item) => !item.done)?.title || '可继续复用历史项目')
 const finalButtonLabel = computed(() => {
-  if (loading.value && workflowStep.value === 'compose_final_video') return '正在合成'
+  if (loading.value && workflowStep.value === 'final_compose') return '正在合成'
   return shotVideoOutputs.value.length ? '重新合成' : '开始合成'
 })
 const analyzePrimaryButtonLabel = computed(() => (referenceSourcePath.value ? '分析脚本' : '上传参考视频'))
@@ -1581,19 +1644,17 @@ function formatRelativeSeconds(ts?: number) {
 
 function humanWorkflowStep(step: string) {
   switch (step) {
-    case 'upload_analyze_script':
+    case 'reference_analysis':
       return '参考分析'
-    case 'generate_script_variants':
+    case 'script_generation':
       return '生成脚本'
-    case 'select_script_variant':
-      return '确认脚本'
-    case 'generate_storyboard_grids':
+    case 'identity_grid':
+      return '身份定妆图'
+    case 'storyboard_design':
       return '分镜设计'
-    case 'generate_shot_videos':
+    case 'storyboard_videos':
       return '分镜视频'
-    case 'review_replace_shots':
-      return '合成前检查'
-    case 'compose_final_video':
+    case 'final_compose':
       return '成片合成'
     default:
       return step || '--'
@@ -1646,6 +1707,16 @@ function safeText(value: unknown, fallback: string) {
   return text || fallback
 }
 
+function normalizeCloneProductType(value: unknown) {
+  const text = String(value || '').trim().toLowerCase()
+  if (text === 'earrings' || text === 'phone_case' || text === 'clothes' || text === 'toy') return text
+  if (/earrings?|earring|ear jewelry|jewelry|jewellery|ear\\s|hoop|dangle|drop earring|stud|zircon|silver|gold/.test(text)) return 'earrings'
+  if (/phone\\s*case|case for phone|mobile case|iphone case/.test(text)) return 'phone_case'
+  if (/clothes|dress|shirt|hoodie|jacket|pants|skirt|garment|fashion/.test(text)) return 'clothes'
+  if (/toy|figure|doll|plush|lego|collectible/.test(text)) return 'toy'
+  return 'general'
+}
+
 function pushRuntimeLog(message: string, level: RuntimeLogItem['level'] = 'info') {
   const text = safeText(message, '')
   if (!text) return
@@ -1665,6 +1736,10 @@ function closeRuntimeDialog() {
 function handleStoryboardErrorAction() {
   if (selectedStoryboardErrorAction.value === 'go-models' || selectedShotVideoErrorAction.value === 'go-models') {
     void router.push('/models')
+    return
+  }
+  if (selectedStoryboardErrorAction.value === 'go-identity-grid' || selectedShotVideoErrorAction.value === 'go-identity-grid') {
+    visibleStageKey.value = 'identity-grid'
   }
 }
 
@@ -1866,6 +1941,75 @@ async function copyPromptText(text: string, successMessage: string) {
   }
 }
 
+async function loadIdentityGridPromptPreview(force = false, openModal = false) {
+  if (!current.value?.id) return
+  if (!force && identityGridPromptPreview.value) {
+    if (openModal) identityGridPromptPreviewOpen.value = true
+    return
+  }
+  identityGridPromptPreviewLoading.value = true
+  identityGridPromptPreviewError.value = ''
+  try {
+    const plainProductRefs = [...effectiveProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean)
+    const result = await window.api.clone.getProjectIdentityGridPromptPreview({
+      cloneProjectId: String(current.value.id || '').trim(),
+      productType: normalizeCloneProductType(current.value?.blueprint?.productCategory || current.value?.blueprint?.category || current.value?.title || 'general'),
+      productReferenceImagePaths: plainProductRefs,
+    })
+    identityGridPromptPreview.value = (result as IdentityGridPromptPreview) || null
+    if (openModal) identityGridPromptPreviewOpen.value = true
+  } catch (error: any) {
+    identityGridPromptPreview.value = null
+    identityGridPromptPreviewError.value = safeText(error?.message ?? error, '身份定妆图提示词预览加载失败')
+    if (openModal) identityGridPromptPreviewOpen.value = true
+  } finally {
+    identityGridPromptPreviewLoading.value = false
+  }
+}
+
+async function generateProjectIdentityGrid() {
+  const projectId = String(current.value?.id || '').trim()
+  if (!projectId) {
+    const message = '请先完成参考视频分析'
+    markError(message, message)
+    setStageLog(message, 'error')
+    return
+  }
+  if (!effectiveProductRefs.value.length) {
+    const message = '请先选择并绑定商品库商品'
+    markError(message, message)
+    setStageLog(message, 'error')
+    return
+  }
+  if (!hasBoundModel.value) {
+    const message = '请先选择模特'
+    markError(message, message)
+    setStageLog(message, 'error')
+    return
+  }
+
+  loading.value = true
+  errorText.value = ''
+  setStageLog('正在生成身份定妆图，请稍候。')
+
+  try {
+    const result = (await window.api.clone.generateModelIdentityPack({
+      cloneProjectId: projectId,
+      productType: normalizeCloneProductType(current.value?.blueprint?.productCategory || current.value?.blueprint?.category || current.value?.title || 'general'),
+      productReferenceImagePaths: [...effectiveProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean),
+    })) as CloneProject
+    applyProject((result || current.value) as CloneProject)
+    await loadIdentityGridPromptPreview(true, false)
+    setStageLog('身份定妆图已生成完成。', 'success')
+  } catch (error: any) {
+    const message = safeText(error?.message ?? error, '身份定妆图生成失败')
+    markError(message, message)
+    setStageLog(message, 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
 async function copyAllShotPrompts() {
   if (!shotImagePromptPreview.value) return
   const parts = [`Image Request JSON:\n${safeText(shotImagePromptPreview.value.requestJsonStart, '--')}`]
@@ -2050,11 +2194,83 @@ async function loadShotVideoPromptPreview(shotId?: string, force = false, openMo
 const highlightedStartProductDescription = computed(() => safeText(shotImagePromptPreview.value?.productDescriptionBlock, ''))
 const highlightedEndProductDescription = computed(() => safeText(shotImagePromptPreview.value?.productDescriptionBlock, ''))
 const highlightedSceneAtmosphere = computed(() => safeText(shotImagePromptPreview.value?.sceneAtmosphereBlock, ''))
-const shotImageReferencePaths = computed(() => promptJsonUrls(shotImagePromptPreview.value?.requestJsonStart))
+const shotImageDisplayRefs = computed(() => {
+  const preview = shotImagePromptPreview.value
+  if (!preview) return [] as Array<{ label: string; path: string }>
+  const refs: Array<{ label: string; path: string }> = []
+  const identityGridPath = String(preview.identityGridReferenceImagePath || '').trim() || String(preview.modelReferenceImagePaths?.[0] || '').trim()
+  const scenePath = String(preview.sceneReferenceImagePath || '').trim() || String(preview.productReferenceImagePaths?.[0] || '').trim()
+  if (identityGridPath) refs.push({ label: '身份定妆图', path: identityGridPath })
+  if (scenePath) refs.push({ label: '分镜场景图', path: scenePath })
+  return refs
+})
 const shotImageRequestParamRows = computed(() => promptParamRowsFromJson(shotImagePromptPreview.value?.requestJsonStart))
 const shotVideoRequestParamRows = computed(() =>
   promptParamRowsFromJson(shotVideoPromptPreview.value?.requestPayloadPreview || shotVideoPromptPreview.value?.requestJson),
 )
+const identityGridRequestParamRows = computed(() =>
+  promptParamRowsFromJson(identityGridPromptPreview.value?.requestJson || current.value?.projectIdentityGridPromptPreview?.requestJson),
+)
+const identityGridRequestParamRowsCompact = computed(() =>
+  identityGridRequestParamRows.value.filter((row) => row.key !== 'prompt' && row.key !== 'negativePrompt' && row.key !== 'urls' && row.key !== 'content'),
+)
+const identityGridRequestParamRowsExpanded = computed(() =>
+  identityGridRequestParamRows.value.filter((row) => row.key === 'negativePrompt' || row.key === 'urls' || row.key === 'content'),
+)
+const identityGridPromptSource = computed(
+  () => identityGridPromptPreview.value || current.value?.projectIdentityGridPromptPreview || null,
+)
+const identityGridReferencePaths = computed(() => {
+  const values: string[] = []
+  for (const item of identityGridPromptSource.value?.productReferenceImagePaths || []) {
+    const normalized = String(item || '').trim()
+    if (!normalized || values.includes(normalized)) continue
+    values.push(normalized)
+  }
+  return values
+})
+const identityGridModelReferencePaths = computed(() => {
+  const values: string[] = []
+  for (const item of identityGridPromptSource.value?.modelReferenceImagePaths || []) {
+    const normalized = String(item || '').trim()
+    if (!normalized || values.includes(normalized)) continue
+    values.push(normalized)
+  }
+  return values
+})
+const identityGridResolvedProductType = computed(() => {
+  const candidates = [
+    identityGridPromptSource.value?.productType,
+    current.value?.boundProductSnapshot?.productAnalysis?.category,
+    current.value?.boundProductSnapshot?.type,
+    current.value?.blueprint?.productCategory,
+    current.value?.blueprint?.category,
+    current.value?.title,
+  ]
+  for (const item of candidates) {
+    const normalized = normalizeCloneProductType(item)
+    if (normalized !== 'general') return normalized
+  }
+  return normalizeCloneProductType(identityGridPromptSource.value?.productType || 'general')
+})
+const identityGridPreviewStats = computed<PromptPreviewStat[]>(() => [
+  {
+    label: '商品类型',
+    value: safeText(identityGridResolvedProductType.value, '--'),
+  },
+  {
+    label: '参考图数量',
+    value: String(Number(identityGridPromptSource.value?.productReferenceImageCount || identityGridReferencePaths.value.length || 0)),
+  },
+  {
+    label: '模特图数量',
+    value: String(Number(identityGridPromptSource.value?.modelReferenceImageCount || identityGridModelReferencePaths.value.length || 0)),
+  },
+  {
+    label: '请求模型',
+    value: safeText(identityGridPromptSource.value?.requestModel || identityGridPromptSource.value?.requestProvider, '--'),
+  },
+])
 const shotVideoReferencePaths = computed(() => resolveShotVideoReferencePaths(shotVideoPromptPreview.value))
 const promptDiagnosticSummary = computed(() => {
   const startPrompt = safeText(shotImagePromptPreview.value?.startPrompt, '')
@@ -2101,7 +2317,7 @@ const promptHealthStatus = computed(() => {
   return {
     tone: 'success',
     label: '状态安全',
-    message: '核心块齐全且长度安全，可以继续用于分镜图片生成。',
+    message: '核心块齐全且长度安全，可以继续用于分镜设计生成。',
   }
 })
 
@@ -2193,13 +2409,19 @@ const {
 
 watch(
   () => current.value,
-  (project) => {
+  (project, previousProject) => {
+    const nextId = String(project?.id || '').trim()
+    const prevId = String(previousProject?.id || '').trim()
+    if (prevId && nextId && prevId !== nextId) {
+      closeAllModalOverlays()
+    }
     syncVideoRenderHintsFromProject(project)
   },
   { immediate: true },
 )
 
 function startNewDraft() {
+  closeAllModalOverlays()
   current.value = null
   referenceVideoPath.value = ''
   errorText.value = ''
@@ -2208,6 +2430,7 @@ function startNewDraft() {
 }
 
 function selectStage(key: StageItem['key']) {
+  closeTransientModalOverlays()
   console.log('[clone-debug] select-stage-click', {
     targetStage: key,
     previousSelectedStageKey: selectedStageKey.value || '',
@@ -2303,11 +2526,28 @@ function shotLabel(shotId: string) {
   return `分镜 ${Number(frame?.frameIndex ?? 0) + 1}`
 }
 
-function openFramePreview(frame: StoryboardFrame) {
+function openFramePreview(frameOrPath: StoryboardFrame | string, title?: string) {
+  if (typeof frameOrPath === 'string') {
+    const directPath = String(frameOrPath || '').trim()
+    if (!directPath) return
+    framePreviewPath.value = directPath
+    framePreviewTitle.value = safeText(title, '图片预览')
+    framePreviewOpen.value = true
+    return
+  }
+  const frame = frameOrPath
   if (!frame.imagePath) return
   const shot = blueprintShots.value.find((item) => item.id === frame.shotId)
   framePreviewPath.value = frame.imagePath
   framePreviewTitle.value = `${safeText(shotLabel(frame.shotId), '分镜')} ${shot ? `· ${storyBeatRangeText(shot as StoryBeat, Number(frame.frameIndex ?? 0))}` : ''}`.trim()
+  framePreviewOpen.value = true
+}
+
+function openIdentityGridPreview() {
+  const imagePath = String(current.value?.projectIdentityGridPath || '').trim()
+  if (!imagePath) return
+  framePreviewPath.value = imagePath
+  framePreviewTitle.value = '身份定妆图预览'
   framePreviewOpen.value = true
 }
 
@@ -2976,12 +3216,12 @@ async function pickComposeOutputDir() {
 }
 
 async function openFinalOutput() {
-  if (!hasFreshFinalCompose.value || !finalOutputPath.value) return
+  if (!finalOutputPath.value) return
   await window.api.shell.openPath(finalOutputPath.value)
 }
 
 async function revealFinalOutput() {
-  if (!hasFreshFinalCompose.value || !finalOutputPath.value) return
+  if (!finalOutputPath.value) return
   await window.api.shell.showItemInFolder(finalOutputPath.value)
 }
 
@@ -3305,7 +3545,7 @@ watch(
   (key) => {
     const nextKey = String(key || '').trim() as StageItem['key']
     if (!nextKey) return
-    if (['analyze', 'variant', 'grid', 'video', 'compose'].includes(nextKey)) {
+    if (['analyze', 'variant', 'identity-grid', 'grid', 'video', 'compose'].includes(nextKey)) {
       selectStage(nextKey)
     }
     cloneTopbar.consumeRequestedStage()
@@ -3681,6 +3921,71 @@ onUnmounted(() => {
           </div>
         </article>
 
+        <article v-if="visibleStageKey === 'identity-grid'" class="panel panel-storyboard-design">
+          <div class="storyboard-stage-hero">
+            <div class="storyboard-stage-hero__copy">
+              <strong>身份定妆图</strong>
+              <p>先生成一张项目级产品+模特身份定妆图，后续所有分镜共用这一张稳定真值。</p>
+              <small class="storyboard-stage-hero__hint">身份定妆图位于脚本生成和分镜设计之间，并支持查看主进程真实提示词。</small>
+            </div>
+            <div class="storyboard-stage-hero__actions">
+              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="identityGridPromptPreviewLoading || !current?.id" @click="loadIdentityGridPromptPreview(true, true)">
+                {{ identityGridPromptPreviewLoading ? '加载中' : '查看提示词' }}
+              </button>
+              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', '提示词已复制')">
+                复制提示词
+              </button>
+              <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !current?.id || !hasBoundModel || !effectiveProductRefs.length" @click="generateProjectIdentityGrid">
+                {{ hasProjectIdentityGrid ? '重新生成身份定妆图' : '生成身份定妆图' }}
+              </button>
+            </div>
+          </div>
+          <div class="storyboard-preview-card storyboard-preview-card--identity-grid">
+            <div class="storyboard-preview-card__head">
+              <div>
+                <strong>项目级身份定妆图</strong>
+                <span>{{ current?.projectIdentityGridStatus === 'done' ? '已就绪' : current?.projectIdentityGridStatus === 'generating' ? '生成中' : current?.projectIdentityGridStatus === 'failed' ? '生成失败' : '待生成' }}</span>
+              </div>
+              <button class="ghost-button small" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">进入分镜设计</button>
+            </div>
+            <div class="identity-grid-preview-layout">
+              <button
+                class="storyboard-preview-media storyboard-preview-media--identity-grid storyboard-preview-media--clickable"
+                type="button"
+                :disabled="!current?.projectIdentityGridPath"
+                @click="openIdentityGridPreview"
+              >
+                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" alt="身份定妆图">
+                <div v-else class="storyboard-preview-media__empty storyboard-preview-media__empty--identity-grid">
+                  <strong>等待生成身份定妆图</strong>
+                  <span>完成后，这里会显示当前项目的身份定妆图。</span>
+                </div>
+                <span v-if="current?.projectIdentityGridPath" class="storyboard-preview-media__hint">点击放大预览</span>
+              </button>
+              <div class="identity-grid-preview-aside">
+                <div class="identity-grid-preview-copy">
+                  <strong>项目级统一真值</strong>
+                  <p>身份定妆图只需要确认人物与商品展示一致，后续分镜设计会直接复用这张项目级资产。</p>
+                </div>
+                <div class="storyboard-preview-meta storyboard-preview-meta--identity-grid">
+                  <div class="storyboard-preview-meta__item">
+                    <span>商品图</span>
+                    <strong>{{ effectiveProductRefs.length }}</strong>
+                  </div>
+                  <div class="storyboard-preview-meta__item">
+                    <span>模特</span>
+                    <strong>{{ hasBoundModel ? '已绑定' : '待绑定' }}</strong>
+                  </div>
+                  <div class="storyboard-preview-meta__item">
+                    <span>用途</span>
+                    <strong>{{ (current?.projectIdentityGridPromptPreview?.gridUsagePlan || []).join(' / ') || '--' }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
         <article v-if="visibleStageKey === 'grid'" class="panel panel-storyboard-design">
           <div class="storyboard-stage-hero">
             <div class="storyboard-stage-hero__copy">
@@ -3889,8 +4194,8 @@ onUnmounted(() => {
                     <span>处理建议</span>
                     <p>{{ selectedStoryboardErrorAdvice }}</p>
                   </div>
-                  <div v-if="selectedStoryboardErrorAction === 'go-models'" class="storyboard-preview-error__actions">
-                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">去生成身份包</button>
+                  <div v-if="selectedStoryboardErrorAction === 'go-models' || selectedStoryboardErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
+                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? '去生成身份定妆图' : '去生成身份包' }}</button>
                   </div>
                 </div>
               </div>
@@ -4180,8 +4485,8 @@ onUnmounted(() => {
                           <span>处理建议</span>
                           <p>{{ selectedShotVideoErrorAdvice }}</p>
                         </div>
-                        <div v-if="selectedShotVideoErrorAction === 'go-models'" class="storyboard-preview-error__actions">
-                          <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">去生成身份包</button>
+                        <div v-if="selectedShotVideoErrorAction === 'go-models' || selectedShotVideoErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
+                          <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? '去生成身份定妆图' : '去生成身份包' }}</button>
                         </div>
                       </div>
                     </section>
@@ -4210,7 +4515,7 @@ onUnmounted(() => {
             v-else
             class="empty-state section-empty"
             title="等待视频结果"
-            description="分镜图片生成完成后，这里会进入镜头队列工作区，并按镜头顺序查看生成结果。"
+            description="分镜设计完成后，这里会进入镜头队列工作区，并按镜头顺序查看生成结果。"
           />
         </article>
 
@@ -4317,7 +4622,7 @@ onUnmounted(() => {
                   v-else
                   class="empty-state section-empty"
                   title="等待检查片段"
-                  description="分镜视频生成完成后，这里可以逐个替换镜头再重新合成。"
+                  description="分镜视频完成后，这里可以逐个替换镜头再重新合成。"
                 />
               </section>
             </div>
@@ -4414,6 +4719,171 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <div v-if="identityGridPromptPreviewOpen" class="modal-mask" @click.self="identityGridPromptPreviewOpen = false">
+      <div class="modal-card prompt-preview-modal prompt-preview-modal--identity-grid">
+        <div class="modal-card__header">
+          <div class="prompt-preview-modal__title">
+            <span class="panel-tag">身份定妆图</span>
+            <strong>身份定妆图提示词预览</strong>
+            <p>主进程真实生成 prompt</p>
+          </div>
+          <div class="modal-card__actions">
+            <button class="ghost-button small" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', '提示词已复制')">复制全部</button>
+            <button class="ghost-button small" type="button" @click="identityGridPromptPreviewOpen = false">关闭</button>
+          </div>
+        </div>
+        <div v-if="identityGridPromptSource" class="prompt-preview-card prompt-preview-card--identity-grid">
+          <div class="identity-grid-preview-summary identity-grid-preview-summary--compact">
+            <div v-for="item in identityGridPreviewStats" :key="item.label" class="identity-grid-preview-stat identity-grid-preview-stat--compact">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+          <div class="identity-grid-preview-main">
+            <div class="identity-grid-preview-column">
+              <div v-if="identityGridReferencePaths.length || identityGridModelReferencePaths.length" class="prompt-preview-section identity-grid-preview-section">
+                <div class="prompt-preview-section__header">
+                  <strong>参考素材</strong>
+                  <span>产品图和模特图并排对照展示</span>
+                </div>
+                <div class="identity-grid-asset-pair">
+                  <div class="identity-grid-asset-group">
+                    <div class="identity-grid-asset-group__head">
+                      <strong>产品图</strong>
+                      <span>{{ identityGridReferencePaths.length ? `${identityGridReferencePaths.length} 张` : '暂无' }}</span>
+                    </div>
+                    <div v-if="identityGridReferencePaths.length" class="prompt-reference-grid prompt-reference-grid--identity-grid">
+                      <div v-for="(item, index) in identityGridReferencePaths" :key="`identity-ref-${item}`" class="prompt-reference-card prompt-reference-card--compact prompt-reference-card--identity-grid">
+                        <button class="prompt-reference-card__thumb" type="button" @click="openFramePreview(item, `参考图 ${index + 1}`)">
+                          <img :src="previewImage(item)" alt="identity-grid-reference" />
+                        </button>
+                        <div class="prompt-reference-card__actions">
+                          <button class="ghost-button tiny" type="button" @click="openFramePreview(item, `参考图 ${index + 1}`)">放大</button>
+                          <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">下载</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="prompt-reference-empty">当前没有产品参考图。</div>
+                  </div>
+                  <div class="identity-grid-asset-group">
+                    <div class="identity-grid-asset-group__head">
+                      <strong>模特图</strong>
+                      <span>{{ identityGridModelReferencePaths.length ? `${identityGridModelReferencePaths.length} 张` : '暂无' }}</span>
+                    </div>
+                    <div v-if="identityGridModelReferencePaths.length" class="prompt-reference-grid prompt-reference-grid--identity-grid">
+                      <div v-for="(item, index) in identityGridModelReferencePaths" :key="`identity-model-ref-${item}`" class="prompt-reference-card prompt-reference-card--compact prompt-reference-card--identity-grid">
+                        <button class="prompt-reference-card__thumb" type="button" @click="openFramePreview(item, `模特图 ${index + 1}`)">
+                          <img :src="previewImage(item)" alt="identity-grid-model-reference" />
+                        </button>
+                        <div class="prompt-reference-card__actions">
+                          <button class="ghost-button tiny" type="button" @click="openFramePreview(item, `模特图 ${index + 1}`)">放大</button>
+                          <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">下载</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="prompt-reference-empty">当前没有模特参考图。</div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="prompt-preview-section identity-grid-preview-section">
+                <div class="prompt-preview-section__header">
+                  <strong>参考素材</strong>
+                  <span>当前没有可展示的图片</span>
+                </div>
+                <div class="prompt-reference-empty">主进程预览中未返回产品图或模特图。</div>
+              </div>
+            </div>
+            <div class="identity-grid-preview-column">
+              <div class="prompt-preview-section prompt-preview-section--textarea prompt-preview-section--identity-grid-prompt">
+                <div class="prompt-preview-section__header">
+                  <strong>完整 Prompt</strong>
+                  <span>这里展示传给模型的真实提示词</span>
+                </div>
+                <div class="prompt-preview-code-shell prompt-preview-code-shell--identity-grid-top">
+                  <pre class="prompt-preview-code prompt-preview-code--identity-grid">{{ identityGridPromptSource.prompt || '' }}</pre>
+                </div>
+              </div>
+              <div v-if="(identityGridPromptSource.gridUsagePlan || []).length" class="prompt-preview-section identity-grid-preview-usage">
+                <div class="prompt-preview-section__header">
+                  <strong>用途覆盖</strong>
+                  <span>{{ `${(identityGridPromptSource.gridUsagePlan || []).length} 个固定用途槽位，不是评分` }}</span>
+                </div>
+                <div class="prompt-preview-paths prompt-preview-paths--chips">
+                  <span v-for="item in identityGridPromptSource.gridUsagePlan || []" :key="item">{{ item }}</span>
+                </div>
+              </div>
+              <div class="prompt-preview-section identity-grid-preview-section">
+                <div class="prompt-preview-section__header">
+                  <strong>请求摘要</strong>
+                  <span>先看核心参数，避免大字段撑满界面</span>
+                </div>
+                <div v-if="identityGridRequestParamRowsCompact.length" class="prompt-param-table prompt-param-table--compact">
+                  <div class="prompt-param-table__head">
+                    <span>参数名</span>
+                    <span>参数值</span>
+                    <span>操作</span>
+                  </div>
+                  <div v-for="row in identityGridRequestParamRowsCompact" :key="`identity-grid-compact-${row.key}`" class="prompt-param-table__row">
+                    <strong>{{ row.key }}</strong>
+                    <pre>{{ row.value }}</pre>
+                    <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, `${row.key} 已复制`)">复制</button>
+                  </div>
+                </div>
+                <div v-else class="prompt-preview-empty">当前没有可展示的请求摘要参数。</div>
+              </div>
+            </div>
+          </div>
+          <div class="prompt-preview-block prompt-preview-block--identity-grid">
+            <div class="prompt-preview-block__head">
+              <strong>完整请求参数</strong>
+              <button
+                class="ghost-button small"
+                type="button"
+                :disabled="!(identityGridPromptPreview?.requestJson || current?.projectIdentityGridPromptPreview?.requestJson)"
+                @click="copyPromptText(safeText(identityGridPromptPreview?.requestJson || current?.projectIdentityGridPromptPreview?.requestJson, ''), '参数已复制')"
+              >
+                复制全部
+              </button>
+            </div>
+            <div v-if="identityGridRequestParamRowsExpanded.length" class="prompt-param-table prompt-param-table--expanded">
+              <div class="prompt-param-table__head">
+                <span>参数名</span>
+                <span>参数值</span>
+                <span>操作</span>
+              </div>
+              <div v-for="row in identityGridRequestParamRowsExpanded" :key="`identity-grid-expanded-${row.key}`" class="prompt-param-table__row">
+                <strong>{{ row.key }}</strong>
+                <pre>{{ row.value }}</pre>
+                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, `${row.key} 已复制`)">复制</button>
+              </div>
+            </div>
+            <div v-else class="prompt-preview-empty">当前没有额外的大字段参数。</div>
+          </div>
+          <div v-if="identityGridPromptSource.description" class="prompt-preview-section identity-grid-preview-section">
+            <div class="prompt-preview-section__header">
+              <strong>说明摘要</strong>
+              <span>主进程返回的身份定妆图生成说明</span>
+            </div>
+            <div class="prompt-highlight-card__block">
+              <pre>{{ identityGridPromptSource.description }}</pre>
+            </div>
+          </div>
+          <div class="prompt-preview-section prompt-preview-section--textarea">
+            <div class="prompt-preview-section__header">
+              <strong>完整 Prompt</strong>
+              <span>可直接复制用于身份定妆图生成</span>
+            </div>
+            <div class="prompt-preview-code-shell">
+              <pre class="prompt-preview-code prompt-preview-code--identity-grid">{{ identityGridPromptSource.prompt || '' }}</pre>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="identityGridPromptPreviewError" class="prompt-preview-empty prompt-preview-empty--error">
+          {{ identityGridPromptPreviewError }}
+        </div>
+      </div>
+    </div>
+
     <div v-if="shotPromptPreviewOpen" class="modal-mask" @click.self="shotPromptPreviewOpen = false">
       <div class="modal-panel modal-panel--prompt-preview">
         <div class="panel-head">
@@ -4455,21 +4925,21 @@ onUnmounted(() => {
           <div class="prompt-highlight-card">
             <div class="prompt-highlight-card__head">
               <strong>参考图</strong>
-              <span>当前这次分镜图请求实际使用的参考图</span>
+              <span>当前这次分镜图请求实际使用的两张参考图</span>
             </div>
-            <div v-if="shotImageReferencePaths.length" class="prompt-reference-grid">
-              <div v-for="(item, index) in shotImageReferencePaths" :key="`image-ref-${item}`" class="prompt-reference-card">
-                <a :href="mediaUrl(item)" target="_blank" rel="noreferrer">
-                  <img :src="previewImage(item)" alt="image-product-reference" />
+            <div v-if="shotImageDisplayRefs.length" class="prompt-reference-grid">
+              <div v-for="item in shotImageDisplayRefs" :key="`image-ref-${item.path}`" class="prompt-reference-card">
+                <a :href="mediaUrl(item.path)" target="_blank" rel="noreferrer">
+                  <img :src="previewImage(item.path)" alt="image-product-reference" />
                 </a>
-                <span>{{ `参考图 ${index + 1} · ${shortPath(item)}` }}</span>
+                <span>{{ item.label }}</span>
                 <div class="prompt-reference-card__actions">
-                  <button class="ghost-button tiny" type="button" @click="copyPromptText(item, '图片路径已复制')">复制路径</button>
-                  <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">下载</button>
+                  <button class="ghost-button tiny" type="button" @click="copyPromptText(item.path, '图片路径已复制')">复制路径</button>
+                  <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item.path)">下载</button>
                 </div>
               </div>
             </div>
-            <div v-else class="prompt-reference-empty">当前没有参考图。</div>
+            <div v-else class="prompt-reference-empty">当前没有可展示的身份定妆图或分镜场景图。</div>
           </div>
         </div>
         <div v-else-if="shotImagePromptPreviewError" class="prompt-preview-empty prompt-preview-empty--error">
@@ -6757,6 +7227,11 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.storyboard-preview-card--identity-grid {
+  gap: 16px;
+  padding: 18px;
+}
+
 .storyboard-preview-card__head {
   display: flex;
   align-items: flex-start;
@@ -6782,6 +7257,7 @@ onUnmounted(() => {
 
 .storyboard-preview-media {
   aspect-ratio: 9 / 16;
+  position: relative;
   overflow: hidden;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -6796,6 +7272,58 @@ onUnmounted(() => {
   object-fit: contain;
   display: block;
   background: #050912;
+}
+
+.identity-grid-preview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 520px) minmax(260px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.storyboard-preview-media--identity-grid {
+  aspect-ratio: 16 / 10;
+  width: 100%;
+  min-height: 220px;
+  max-height: 220px;
+  padding: 0;
+}
+
+.storyboard-preview-media--identity-grid img {
+  object-fit: contain;
+  object-position: center;
+}
+
+.storyboard-preview-media--clickable {
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.storyboard-preview-media--clickable:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(121, 102, 255, 0.32);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+.storyboard-preview-media--clickable:disabled {
+  cursor: default;
+}
+
+.storyboard-preview-media__hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(6, 11, 22, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #eef3ff;
+  font-size: 11px;
+  line-height: 1;
+  backdrop-filter: blur(10px);
 }
 
 .storyboard-preview-media__empty {
@@ -6819,6 +7347,41 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
+.storyboard-preview-media__empty--identity-grid {
+  padding: 28px;
+}
+
+.identity-grid-preview-aside {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.identity-grid-preview-copy {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.identity-grid-preview-copy strong {
+  color: #f2f6ff;
+  font-size: 14px;
+}
+
+.identity-grid-preview-copy p {
+  margin: 0;
+  color: #8fa1c6;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.storyboard-preview-meta--identity-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .storyboard-preview-copy {
   display: grid;
   gap: 6px;
@@ -6828,6 +7391,17 @@ onUnmounted(() => {
   color: #f5f8ff;
   font-size: 13px;
   line-height: 1.6;
+}
+
+@media (max-width: 1180px) {
+  .identity-grid-preview-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .storyboard-preview-media--identity-grid {
+    min-height: 200px;
+    max-height: 200px;
+  }
 }
 
 .storyboard-preview-copy span,
@@ -6951,6 +7525,61 @@ onUnmounted(() => {
   width: min(1080px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
   overflow: auto;
+}
+
+.prompt-preview-modal {
+  width: min(1120px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+}
+
+.prompt-preview-modal--identity-grid {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(980px, calc(100vw - 48px));
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(70, 92, 156, 0.2), transparent 34%),
+    linear-gradient(180deg, rgba(10, 16, 31, 0.98), rgba(7, 11, 22, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+}
+
+.modal-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-card__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.prompt-preview-modal__title {
+  display: grid;
+  gap: 6px;
+}
+
+.prompt-preview-modal__title strong {
+  color: #f4f7ff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.prompt-preview-modal__title p {
+  margin: 0;
+  color: #9aabcf;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .frame-preview-shell {
@@ -8394,8 +9023,8 @@ onUnmounted(() => {
 
 .prompt-reference-card img {
   width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
   border-radius: 12px;
   border: 1px solid rgba(255, 214, 118, 0.16);
   background: rgba(5, 8, 14, 0.7);
@@ -9243,6 +9872,13 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.prompt-preview-card--identity-grid {
+  min-height: 0;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .prompt-preview-card__head {
   display: flex;
   align-items: center;
@@ -9262,6 +9898,299 @@ onUnmounted(() => {
   gap: 8px;
   color: #9fb0d8;
   font-size: 11px;
+}
+
+.identity-grid-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.identity-grid-preview-summary--compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.identity-grid-preview-stat {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.identity-grid-preview-stat span {
+  color: #8ea1cb;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.identity-grid-preview-stat strong {
+  color: #f3f6ff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: none;
+  word-break: break-word;
+}
+
+.identity-grid-preview-stat--compact {
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+}
+
+.identity-grid-preview-stat--compact strong {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.identity-grid-preview-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.identity-grid-preview-column {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.identity-grid-preview-section {
+  padding: 14px 16px 16px;
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.015);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.identity-grid-asset-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.identity-grid-asset-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.identity-grid-asset-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.identity-grid-asset-group__head strong {
+  color: #eef3ff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.identity-grid-asset-group__head span {
+  color: #8ea3ca;
+  font-size: 11px;
+}
+
+.prompt-preview-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.prompt-preview-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prompt-preview-section__header strong {
+  color: #eef3ff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.prompt-preview-section__header span {
+  color: #89a0cf;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.identity-grid-preview-usage {
+  gap: 14px;
+}
+
+.prompt-preview-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.prompt-preview-paths--chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(129, 155, 225, 0.18);
+  background: rgba(76, 103, 173, 0.16);
+  color: #dfe8ff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.prompt-preview-section--textarea {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.prompt-preview-section--textarea .prompt-preview-section__header {
+  padding: 16px 18px 0;
+}
+
+.prompt-preview-code-shell {
+  min-height: 0;
+  max-height: min(38vh, 440px);
+  overflow: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(6, 10, 20, 0.98));
+}
+
+.prompt-preview-code-shell--identity-grid-top {
+  max-height: 220px;
+}
+
+.prompt-preview-code {
+  margin: 0;
+  padding: 18px 20px 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-preview-code--identity-grid {
+  color: #d7e2ff;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.68;
+}
+
+.prompt-preview-block--identity-grid {
+  gap: 10px;
+}
+
+.prompt-param-table--compact .prompt-param-table__head,
+.prompt-param-table--compact .prompt-param-table__row,
+.prompt-param-table--expanded .prompt-param-table__head,
+.prompt-param-table--expanded .prompt-param-table__row {
+  grid-template-columns: 120px minmax(0, 1fr) 64px;
+  gap: 8px;
+}
+
+.prompt-param-table--compact .prompt-param-table__head,
+.prompt-param-table--expanded .prompt-param-table__head {
+  padding: 8px 10px;
+}
+
+.prompt-param-table--compact .prompt-param-table__row,
+.prompt-param-table--expanded .prompt-param-table__row {
+  padding: 10px;
+}
+
+.prompt-reference-grid--identity-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.prompt-reference-card--compact {
+  gap: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(138, 160, 212, 0.1);
+  background:
+    radial-gradient(circle at top left, rgba(108, 132, 205, 0.06), transparent 42%),
+    rgba(9, 14, 28, 0.82);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+.prompt-reference-card--identity-grid {
+  align-content: start;
+}
+
+.prompt-reference-card__thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 220px;
+  padding: 12px;
+  border: 0;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+    rgba(5, 8, 14, 0.84);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.prompt-reference-card__thumb:hover {
+  transform: translateY(-1px);
+  border-color: rgba(140, 168, 236, 0.26);
+  box-shadow: 0 10px 24px rgba(42, 73, 160, 0.12);
+}
+
+.prompt-reference-card--compact img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: auto;
+  object-fit: contain;
+  object-position: center center;
+}
+
+.prompt-reference-card__actions {
+  justify-content: center;
+  gap: 8px;
+}
+
+.prompt-preview-textarea {
+  width: 100%;
+  min-height: 360px;
+  resize: vertical;
+  border: 1px solid rgba(133, 149, 196, 0.12);
+  background: rgba(8, 14, 27, 0.88);
+  color: #d7e2ff;
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 16px 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-preview-textarea--identity-grid {
+  min-height: 420px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(6, 10, 20, 0.98));
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12.5px;
 }
 
 .prompt-preview-block {
@@ -9303,6 +10232,50 @@ onUnmounted(() => {
 
 .prompt-preview-empty--error {
   color: #ff9b9b;
+}
+
+@media (max-width: 900px) {
+  .modal-card__header,
+  .prompt-preview-section__header {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .modal-card__actions {
+    justify-content: flex-start;
+  }
+
+  .identity-grid-preview-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-grid-preview-summary--compact,
+  .identity-grid-preview-main,
+  .identity-grid-asset-pair,
+  .prompt-reference-grid--identity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-preview-code-shell--identity-grid-top {
+    max-height: 180px;
+  }
+
+  .prompt-preview-modal--identity-grid {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .prompt-preview-modal__title strong {
+    font-size: 22px;
+  }
+
+  .prompt-preview-section__header span {
+    text-align: left;
+  }
+
+  .prompt-preview-code-shell {
+    max-height: min(48vh, 520px);
+  }
 }
 
 .sidebar-script-card,

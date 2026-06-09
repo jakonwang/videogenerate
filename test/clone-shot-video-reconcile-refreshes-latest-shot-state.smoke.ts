@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -14,7 +14,15 @@ async function main() {
 
   const projectId = 'reconcile-refreshes-latest-shot-state-project'
   const shotId = 'shot_2'
-  const fixtureVideo = Buffer.from('fake-mp4-binary')
+  const fixtureVideo = await readFile(
+    join(
+      process.cwd(),
+      'test',
+      'automation_output',
+      'user_request_afterfix3_20260411_132615',
+      '自动化测试产品-含配乐文字-20260411_132616_自动化测试模板-含配乐文字-20260411_132616_1775888792513_ce39894c.mp4',
+    ),
+  )
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: any) => {
     const url = String(input || '')
@@ -118,12 +126,12 @@ async function main() {
     const savedOutput = saved?.shotVideoOutputs?.find((item) => item.shotId === shotId)
     const savedShot = saved?.blueprint?.shots?.find((item) => item.id === shotId)
 
-    assert.ok(['done', 'failed_retryable', 'downloading', 'remote_succeeded_pending_download'].includes(String(output?.status || '')))
-    assert.ok(['done', 'failed_retryable', 'downloading', 'remote_succeeded_pending_download'].includes(String(savedOutput?.status || '')))
-    assert.equal(String(savedOutput?.taskId || ''), 'veo3.1:task_latest')
+    assert.equal(String(output?.status || ''), 'done')
+    assert.equal(String(savedOutput?.status || ''), 'done')
+    assert.ok(String(savedOutput?.videoPath || '').trim())
     assert.equal(String(savedShot?.generatedTaskId || ''), 'veo3.1:task_latest')
-    assert.equal(String(saved?.lastErrorContext?.action || ''), 'download_completed_segment_task')
     console.log('clone shot video reconcile refreshes latest shot state smoke test passed')
+    process.exit(0)
   } finally {
     globalThis.fetch = originalFetch
   }

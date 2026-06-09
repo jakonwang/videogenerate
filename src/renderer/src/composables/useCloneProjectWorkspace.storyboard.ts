@@ -125,12 +125,12 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
       if (latest?.id) {
         projectActions.applyProject(latest)
       }
-      options.setStageLog?.(`分镜图片生成完成，当前通道：${resolved?.channel || 'unknown'}`, 'success')
+      options.setStageLog?.(`分镜设计完成，当前通道：${resolved?.channel || 'unknown'}`, 'success')
     } catch (error: any) {
-      options.pushRuntimeLog?.(`分镜图片生成异常：${String(error?.message ?? error ?? 'unknown error')}`, 'error')
-      options.markError?.(error?.message ?? error, '分镜图片生成失败。')
+      options.pushRuntimeLog?.(`分镜设计异常：${String(error?.message ?? error ?? 'unknown error')}`, 'error')
+      options.markError?.(error?.message ?? error, '分镜设计失败。')
       await projectActions.refreshProjectAfterFailure()
-      options.setStageLog?.('分镜图片生成失败，请检查错误信息后重试。', 'error')
+      options.setStageLog?.('分镜设计失败，请检查错误信息后重试。', 'error')
     } finally {
       if (options.loading) options.loading.value = false
     }
@@ -264,7 +264,7 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
                 .map((item) => String(item?.reason || '').trim())
                 .find(Boolean)
             : '') ||
-          `仍有 ${failedCount} 条分镜图片生成失败`
+          `仍有 ${failedCount} 条分镜设计失败`
         throw new Error(firstFailedReason)
       }
       options.pushRuntimeLog?.(

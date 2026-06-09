@@ -57,6 +57,7 @@ export type AiTaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 export type ConsistencyMode = 'soft' | 'hard'
 export type CloneQualityMode = 'fast' | 'standard' | 'high'
 export type CloneProductType = 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+export type StoryboardImageTemplateType = 'general' | 'jewelry' | 'ecommerce_packaging' | 'lifestyle_interaction'
 export type CloneProductMode = 'STRICT' | 'BALANCED' | 'EXPRESSIVE'
 export type ModelProfileOptions = import('../../../shared/modelProfileOptions').ModelProfileOptions
 export type ScriptRole =
@@ -680,6 +681,7 @@ export type CloneConsistencyAssetsSnapshot = {
     id: string
     name: string
     type: string
+    storyboardTemplateType?: StoryboardImageTemplateType
     remark?: string
     coverImagePath?: string
     analysisBoardPath?: string
@@ -750,16 +752,12 @@ export type CloneConsistencyAssetsSnapshot = {
 }
 
 export type CloneWorkflowV2Step =
-  | 'upload_analyze_script'
-  | 'model_product_consistency'
-  | 'storyboard_video_generation'
-  | 'export_final'
-  | 'generate_script_variants'
-  | 'select_script_variant'
-  | 'generate_storyboard_grids'
-  | 'generate_shot_videos'
-  | 'review_replace_shots'
-  | 'compose_final_video'
+  | 'reference_analysis'
+  | 'script_generation'
+  | 'identity_grid'
+  | 'storyboard_design'
+  | 'storyboard_videos'
+  | 'final_compose'
 
 export type CloneWorkflowV2Status = {
   status: 'idle' | 'running' | 'done' | 'failed'
@@ -1048,6 +1046,24 @@ export type CloneProject = {
   selectedScriptVariantId?: string
   storyboardGridBatches?: CloneStoryboardGridBatch[]
   storyboardFrames?: CloneStoryboardFrame[]
+  projectIdentityGridPath?: string
+  projectIdentityGridStatus?: 'idle' | 'generating' | 'done' | 'failed'
+  projectIdentityGridUpdatedAt?: number
+  projectIdentityGridPromptPreview?: {
+    profile?: Record<string, unknown>
+    description?: string
+    prompt?: string
+    productType?: CloneProductType
+    productPoints?: string
+    productReferenceImageCount?: number
+    productReferenceImagePaths?: string[]
+    modelReferenceImageCount?: number
+    modelReferenceImagePaths?: string[]
+    gridUsagePlan?: string[]
+    requestProvider?: string
+    requestModel?: string
+    requestJson?: string
+  }
   shotVideoOutputs?: CloneShotVideoOutput[]
   finalCompose?: CloneFinalComposeStatus
   previewPipeline?: ClonePreviewPipelineStatus
@@ -1065,9 +1081,15 @@ export type CloneProject = {
   lastErrorContext?: ClonePipelineErrorContext
   autoFlowStatus?: {
     enabled: boolean
-    targetStage: 'storyboard_video_generation' | 'final_compose'
+    targetStage: 'storyboard_videos' | 'final_compose'
     status: 'idle' | 'running' | 'done' | 'partial_failed' | 'failed'
-    currentStage?: 'analyze' | 'materials' | 'script' | 'storyboard_images' | 'storyboard_videos' | 'quality_gate' | 'final_compose'
+    currentStage?:
+      | 'reference_analysis'
+      | 'script_generation'
+      | 'identity_grid'
+      | 'storyboard_design'
+      | 'storyboard_videos'
+      | 'final_compose'
     imageRetryLimit: number
     videoRetryLimit: number
     lastStartedAt?: number

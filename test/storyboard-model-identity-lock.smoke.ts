@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { buildGptFramePrompt } from '../src/main/modules/clone/gptImage'
-import { compilePromptConsistency } from '../src/main/modules/clone/prompt-consistency/compiler'
+import { buildGptFramePrompt, resolveStoryboardImageTemplateType } from '../src/main/modules/clone/gptImage'
+import { __test_resolveStoryboardSceneFitRefs } from '../src/main/modules/clone/service'
 import {
   buildCameraMotionLockText,
   buildCloneNegativePrompt,
@@ -12,6 +12,34 @@ import {
 } from '../src/main/modules/clone/prompt'
 import { buildRealisticPrompt } from '../src/main/modules/clone/providers'
 import type { ModelIdentityPack, ShotSpec } from '../src/main/modules/clone/types'
+
+const GENERAL_TEMPLATE = `
+Now, analyze these two new images.
+
+Image 1 is our base model and product reference (身份定状图).
+Image 2 is our scene structure reference (场景结构图).
+
+I need you to transfer the model and product from Image 1 into the exact environmental context and geometric composition layout of Image 2.
+
+Strict Requirements:
+1. PRODUCT: Identify the product in Image 1. Keep its design, exact colors, and original material textures 100% identical to Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. Zero modifications allowed.
+
+2. MODEL & CLOTHING FIDELITY (服装与角色绝对死锁):
+Identify the model in Image 1. You must maintain 100% strict consistency for the model's appearance.
+- CLOTHING: Replicate the EXACT clothing from Image 1, including its specific style, fabric texture, and exact color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
+- POSTURE: Keep the identical presentation posture, skin tone, and the exact faceless/cropped perspective on the specific body part exactly as shown in Image 1.
+
+3. SCENE INTEGRATION: Completely replace the plain studio background of Image 1 with the exact architectural structure, perspective lines, and ambient lighting of Image 2. The new environment's light and reflections from Image 2 must wrap naturally around the model from Image 1, casting highly realistic contact shadows on the new surfaces to ensure a perfect, seamless physical integration.
+
+4. ABSOLUTE TEXT AND LOGO ERASURE:
+Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with clean, seamless background textures matching the surrounding elements of Image 2.
+
+Style: High-end, photorealistic commercial brand advertisement. Pristine quality, sharp details. No sketch, no animation, single panel only.
+`.trim()
+
+const JEWELRY_TEMPLATE = GENERAL_TEMPLATE
+const PACKAGING_TEMPLATE = GENERAL_TEMPLATE
+const INTERACTION_TEMPLATE = GENERAL_TEMPLATE
 
 const modelPack: ModelIdentityPack = {
   id: 'model-pack-1',
@@ -86,43 +114,45 @@ const necklaceShot = {
   materialNeed: 'exact chain length, pendant shape and attachment relation',
 } as ShotSpec
 
-const compiled = compilePromptConsistency({
-  projectId: 'project-1',
-  shot,
-  productReferenceImagePaths: shot.productReferenceImagePaths,
-  modelIdentity: {
-    id: modelPack.id,
-    description: modelPack.description,
-    market: modelPack.market,
-    gender: modelPack.gender,
-    ageRange: modelPack.ageRange,
-    hairStyle: modelPack.hairStyle,
-    skinTone: modelPack.skinTone,
-    outfitStyle: modelPack.outfitStyle,
-    mood: modelPack.mood,
-    sceneStyle: modelPack.sceneStyle,
-    imagePaths: modelPack.imagePaths,
-  },
-}).result
+const packagingShot = {
+  ...shot,
+  id: 'shot-packaging',
+  productType: 'general',
+  shotType: 'packaging',
+  visualPrompt: 'Front-facing product plus packaging display for ecommerce conversion.',
+  visualDescription: 'Clean studio product + packaging shot with readable label and clear hierarchy.',
+  actionDescription: 'Static product and packaging presentation with slight angle.',
+  cameraDescription: 'front-facing product display with restrained angle',
+  productFocus: 'product first, packaging second, label visibility',
+  materialNeed: 'keep bottle, cap, outer box and label placement unchanged',
+} as ShotSpec
 
-const zoomOutCompiled = compilePromptConsistency({
-  projectId: 'project-1',
-  shot: zoomOutShot,
-  productReferenceImagePaths: zoomOutShot.productReferenceImagePaths,
-  modelIdentity: {
-    id: modelPack.id,
-    description: modelPack.description,
-    market: modelPack.market,
-    gender: modelPack.gender,
-    ageRange: modelPack.ageRange,
-    hairStyle: modelPack.hairStyle,
-    skinTone: modelPack.skinTone,
-    outfitStyle: modelPack.outfitStyle,
-    mood: modelPack.mood,
-    sceneStyle: modelPack.sceneStyle,
-    imagePaths: modelPack.imagePaths,
-  },
-}).result
+const interactionShot = {
+  ...shot,
+  id: 'shot-interaction',
+  productType: 'general',
+  shotType: 'model_demo',
+  visualPrompt: 'A creator is holding and presenting the product in a real home setting.',
+  visualDescription: 'Medium close-up lifestyle product interaction shot with natural hand usage.',
+  actionDescription: 'Model holding and presenting product naturally to camera side.',
+  cameraDescription: 'medium close-up handheld lifestyle framing',
+  productFocus: 'real usage and stable product visibility',
+  materialNeed: 'preserve display scale during hand interaction',
+} as ShotSpec
+
+const generalShot = {
+  ...shot,
+  id: 'shot-general',
+  productType: 'general',
+  shotType: 'closeup',
+  visualPrompt: 'Clean product-led close-up in a natural scene.',
+  visualDescription: 'Photorealistic product close-up with shallow depth of field.',
+  actionDescription: 'Stable product presentation only.',
+  cameraDescription: 'close-up static product framing',
+  productFocus: 'shape, edges and structure',
+  materialNeed: 'preserve exact structure and proportions',
+  scriptText: 'Show the product clearly in one clean frame.',
+} as ShotSpec
 
 const prompt = buildGptFramePrompt({
   shot,
@@ -130,7 +160,6 @@ const prompt = buildGptFramePrompt({
   modelPack,
   productPoints: shot.materialNeed,
   which: 'start',
-  compiledPrompt: compiled.finalPrompt,
 })
 const endPrompt = buildGptFramePrompt({
   shot,
@@ -138,14 +167,13 @@ const endPrompt = buildGptFramePrompt({
   modelPack,
   productPoints: shot.materialNeed,
   which: 'end',
-  compiledPrompt: compiled.finalPrompt,
 })
 const videoPrompt = buildRealisticPrompt(
   {
     ...shot,
     aiPrompt: 'Realistic social-commerce video shot with wearable earring demonstration.',
-    compiledPrompt: compiled.finalPrompt,
-    compiledNegativePrompt: compiled.finalNegativePrompt,
+    compiledPrompt: 'compiled prompt',
+    compiledNegativePrompt: 'compiled negative prompt',
   },
   'video',
 )
@@ -153,12 +181,11 @@ const zoomOutVideoPrompt = buildRealisticPrompt(
   {
     ...zoomOutShot,
     aiPrompt: 'Realistic social-commerce zoom-out earring demonstration.',
-    compiledPrompt: zoomOutCompiled.finalPrompt,
-    compiledNegativePrompt: zoomOutCompiled.finalNegativePrompt,
+    compiledPrompt: 'compiled prompt',
+    compiledNegativePrompt: 'compiled negative prompt',
   },
   'video',
 )
-const combined = `${prompt}\n${compiled.finalPrompt}\n${compiled.finalNegativePrompt}`
 const necklacePrompt = buildGptFramePrompt({
   shot: necklaceShot,
   productType: 'necklace',
@@ -169,6 +196,49 @@ const necklacePrompt = buildGptFramePrompt({
   productPoints: necklaceShot.materialNeed,
   which: 'start',
 })
+const packagingPrompt = buildGptFramePrompt({
+  shot: packagingShot,
+  productType: 'general',
+  modelPack,
+  productPoints: packagingShot.materialNeed,
+  which: 'start',
+})
+const interactionPrompt = buildGptFramePrompt({
+  shot: interactionShot,
+  productType: 'general',
+  modelPack,
+  productPoints: interactionShot.materialNeed,
+  which: 'start',
+})
+const generalPrompt = buildGptFramePrompt({
+  shot: generalShot,
+  productType: 'general',
+  modelPack,
+  productPoints: generalShot.materialNeed,
+  which: 'start',
+})
+const explicitPackagingPrompt = buildGptFramePrompt({
+  shot: interactionShot,
+  productType: 'general',
+  modelPack,
+  productPoints: interactionShot.materialNeed,
+  which: 'start',
+  explicitTemplateType: 'ecommerce_packaging',
+})
+const identityGridPrimaryRefs = __test_resolveStoryboardSceneFitRefs({
+  projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+  productRefs: ['D:/tmp/product-canonical.png'],
+  modelPackRefs: ['D:/tmp/model-pack-1.png'],
+  thumbnailPath: 'D:/tmp/scene-thumb.png',
+  continuityAnchorPath: 'D:/tmp/prev-frame.png',
+  mode: 'start',
+})
+const legacyFallbackRefs = __test_resolveStoryboardSceneFitRefs({
+  productRefs: ['D:/tmp/product-canonical.png'],
+  modelPackRefs: ['D:/tmp/model-pack-1.png'],
+  thumbnailPath: 'D:/tmp/scene-thumb.png',
+  mode: 'start',
+})
 const earringNegative = buildCloneNegativePrompt('earrings', 'model_demo')
 const spatialAnchorText = buildSpatialAnchorLockText('earrings')
 const physicsConsistencyText = buildPhysicsConsistencyText('earrings')
@@ -176,114 +246,46 @@ const compositionLockText = buildCompositionLockText('earrings')
 const cameraMotionLockText = buildCameraMotionLockText({ motion: 'zoom_out', framing: 'closeup', productType: 'earrings' })
 const scaleConsistencyLockText = buildScaleConsistencyLockText('earrings', 'zoom_out')
 const motionLimitText = buildMotionLimitText('earrings', 'zoom_out')
-const performanceLayerText = compiled.layers.find((item) => item.name === 'PERFORMANCE_LAYER')?.text || ''
-const shotLayerText = compiled.layers.find((item) => item.name === 'SHOT_LAYER')?.text || ''
 
-assert.match(prompt, /\[TYPE\]\nStoryboard keyframe \(static image\)\./i)
-assert.match(prompt, /\[SYSTEM MODE\]/i)
-assert.match(prompt, /This is NOT a generative task\./i)
-assert.match(prompt, /This is a strict compositing task\./i)
-assert.match(prompt, /The goal is to PLACE an existing product into a scene/i)
-assert.match(prompt, /\[ROLE MAP\]/i)
-assert.match(prompt, /Image 1 = Product \(ONLY source of truth\)/i)
-assert.match(prompt, /Image 2 = Model Identity/i)
-assert.match(prompt, /Image 3 = Composition \/ Framing/i)
-assert.match(prompt, /Strict separation\. No cross usage\./i)
-assert.match(prompt, /\[PRODUCT - PIXEL LOCK\]/i)
-assert.match(prompt, /The product must be treated as a FIXED 2D VISUAL ASSET\./i)
-assert.match(prompt, /Allowed operations ONLY:/i)
-assert.match(prompt, /- scale/i)
-assert.match(prompt, /- rotate/i)
-assert.match(prompt, /- translate \(position\)/i)
-assert.match(prompt, /- simulate new lighting/i)
-assert.match(prompt, /\[PRODUCT STRUCTURE LOCK\]/i)
-assert.match(prompt, /Must remain 100% identical:/i)
-assert.match(prompt, /- reflection pattern/i)
-assert.match(prompt, /ABSOLUTELY NO:/i)
-assert.match(prompt, /"more realistic" adjustment/i)
-assert.match(prompt, /\[ANTI-HALLUCINATION LOCK\]/i)
-assert.match(prompt, /ONLY the visible parts in Image 1 exist\./i)
-assert.match(prompt, /If unseen -> keep unseen/i)
-assert.match(prompt, /\[PRODUCT PRIORITY OVERRIDE\]/i)
-assert.match(prompt, /Product visibility overrides:/i)
-assert.match(prompt, /- anatomy correctness/i)
-assert.match(prompt, /-> NEVER adjust product/i)
-assert.match(prompt, /\[PRODUCT INTEGRATION RULE\]/i)
-assert.match(prompt, /The product does NOT adapt to the scene\./i)
-assert.match(prompt, /Human can be slightly deformed if necessary\./i)
-assert.match(prompt, /\[COMPOSITION\]/i)
-assert.match(prompt, /- Single static frame/i)
-assert.match(prompt, /- Close-up shot/i)
-assert.match(prompt, /Product occupies 65% to 80% of frame/i)
-assert.match(prompt, /- Right-shifted composition/i)
-assert.match(prompt, /- Final state only \(NO motion\)/i)
-assert.match(prompt, /\[FOCUS LOCK\]/i)
-assert.match(prompt, /Product = sharpest element/i)
-assert.match(prompt, /100% in focus/i)
-assert.match(prompt, /\[MODEL CONTROL\]/i)
-assert.match(prompt, /Use ONLY identity from Image 2/i)
-assert.match(prompt, /Male, (20-28|25-30|20–28|25–30)/i)
-assert.match(prompt, /No full face/i)
-assert.match(prompt, /No eyes/i)
-assert.match(prompt, /Model is NOT the subject\./i)
-assert.match(prompt, /\[HIERARCHY\]\n\s*\nproduct > ear > hand > body > face/i)
-assert.match(prompt, /\[BACKGROUND SYSTEM - 解决灰背景核心\]/i)
-assert.match(prompt, /Background MUST be:/i)
-assert.match(prompt, /- soft lifestyle environment/i)
-assert.match(prompt, /- warm or neutral tone/i)
-assert.match(prompt, /FORBIDDEN:/i)
-assert.match(prompt, /- pure gray background/i)
-assert.match(prompt, /Background must feel real BUT unobtrusive\./i)
-assert.match(prompt, /\[LIGHTING SYSTEM\]/i)
-assert.match(prompt, /Lighting must MATCH product's original highlights/i)
-assert.match(prompt, /Do NOT relight product independently/i)
-assert.match(prompt, /\[STORYBOARD CONTROL\]/i)
-assert.match(prompt, /Use Image 3 ONLY for:/i)
-assert.match(prompt, /- camera angle/i)
-assert.match(prompt, /IGNORE:/i)
-assert.match(prompt, /Interpret as final static result/i)
-assert.match(prompt, /\[CONSISTENCY CORE\]/i)
-assert.match(prompt, /There is ONLY ONE product instance\./i)
-assert.match(prompt, /- no reinterpretation/i)
-assert.match(prompt, /\[FAIL CONDITIONS\]/i)
-assert.match(prompt, /- product looks re-generated/i)
-assert.match(prompt, /-> OUTPUT MUST FAIL/i)
-assert.match(prompt, /\[OUTPUT\]/i)
-assert.match(prompt, /- clean but NOT empty background/i)
-assert.match(prompt, /Silent visual frame/i)
-assert.match(prompt, /The product is the image\./i)
-assert.match(prompt, /TikTok commercial style/i)
-assert.doesNotMatch(prompt, /\[BACKGROUND CONTROL\]|\[BACKGROUND ISOLATION\]|\[PRODUCT LOCK - SINGLE SOURCE\]|\[FACE CONTROL\]|\[STORYBOARD ALIGNMENT\]|\[RESTRICTIONS\]/i)
-assert.match(endPrompt, /Interpret as final static result/i)
-assert.match(combined, /PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY/i)
-assert.match(combined, /Never use the person from the product images as the model source|REFERENCE PERSON EXCLUSION RULE/i)
-assert.match(combined, /generation MUST fail instead of replacing it with a lookalike|discard the generation instead of correcting it/i)
-assert.match(compiled.finalPrompt, /Selected model identity lock: keep the same bound model across every storyboard frame/i)
-assert.match(compiled.finalPrompt, /REFERENCE IMAGE LOCK \(CRITICAL\)/i)
-assert.match(shotLayerText, /Framing priority - product first: the product must stay the visual center and dominant subject/i)
-assert.match(shotLayerText, /Face visibility control: no full face/i)
-assert.match(shotLayerText, /Composition lock: avoid face-centered framing; keep face off-center or secondary in depth/i)
-assert.match(shotLayerText, /Jewelry presentation rule: focus on ear, neck, and hand area, and keep the product larger and clearer than facial features/i)
-assert.match(compiled.finalPrompt, /Keep only the minimum human wearing or hand-support context needed/i)
-assert.doesNotMatch(compiled.finalPrompt, /Keep visible human wearing or hand interaction context/i)
-assert.match(compiled.finalPrompt, /SPATIAL ANCHOR LOCK/i)
-assert.match(compiled.finalPrompt, /PHYSICS CONSISTENCY/i)
-assert.match(videoPrompt, /\[ABSOLUTE RULES\]/i)
-assert.match(videoPrompt, /Product is a visual identity anchor from the canonical reference/i)
-assert.match(videoPrompt, /\[ROLE MAP\]/i)
-assert.match(videoPrompt, /Image 1 = product canonical source/i)
-assert.match(videoPrompt, /\[SHOT CONTROL\]/i)
-assert.match(videoPrompt, /Composition priority: product is the visual center, occupies 40% to 60% of the frame/i)
-assert.match(videoPrompt, /Hierarchy: product > hands > body > face/i)
-assert.match(videoPrompt, /Motion behavior: No product motion/i)
-assert.match(videoPrompt, /Flat diffuse lighting/i)
-assert.match(videoPrompt, /Keep the generation prompt realistic and commercially usable/i)
+assert.equal(resolveStoryboardImageTemplateType({ productType: 'earrings', shot }), 'jewelry')
+assert.equal(resolveStoryboardImageTemplateType({ productType: 'general', shot: packagingShot }), 'ecommerce_packaging')
+assert.equal(resolveStoryboardImageTemplateType({ productType: 'general', shot: interactionShot }), 'lifestyle_interaction')
+assert.equal(resolveStoryboardImageTemplateType({ productType: 'general', shot: generalShot }), 'general')
+assert.equal(
+  resolveStoryboardImageTemplateType({
+    productType: 'general',
+    shot: interactionShot,
+    explicitTemplateType: 'ecommerce_packaging',
+  }),
+  'ecommerce_packaging',
+)
+
+assert.equal(prompt, GENERAL_TEMPLATE)
+assert.equal(endPrompt, GENERAL_TEMPLATE)
+assert.equal(prompt, endPrompt)
+assert.equal(necklacePrompt, GENERAL_TEMPLATE)
+assert.equal(packagingPrompt, GENERAL_TEMPLATE)
+assert.equal(interactionPrompt, GENERAL_TEMPLATE)
+assert.equal(generalPrompt, GENERAL_TEMPLATE)
+assert.equal(explicitPackagingPrompt, GENERAL_TEMPLATE)
+assert.deepEqual(identityGridPrimaryRefs, ['D:/tmp/project-identity-grid.png', 'D:/tmp/scene-thumb.png'])
+assert.deepEqual(legacyFallbackRefs, ['D:/tmp/product-canonical.png', 'D:/tmp/model-pack-1.png', 'D:/tmp/scene-thumb.png'])
+
+assert.doesNotMatch(prompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer|Generate the opening keyframe|Generate the ending keyframe/i)
+assert.doesNotMatch(packagingPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
+assert.doesNotMatch(interactionPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
+assert.doesNotMatch(generalPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
+
+assert.match(videoPrompt, /^Main Instruction: A continuous, high-definition \(HD\) 60fps commercial brand video\./i)
+assert.match(videoPrompt, /The Luxury Metallic Earring must retain absolute, rigid geometric locked fidelity throughout the timeline\./i)
+assert.match(videoPrompt, /the model's Ear lobe must dynamically re-calculate/i)
+assert.match(videoPrompt, /Movement: Implement a highly controlled, slow Slow dramatic low-angle push\./i)
+assert.match(videoPrompt, /The camera angle remains tightly cropped on the Ear lobe, keeping eyes, nose, and lips completely out of the frame\./i)
 assert.match(earringNegative, /no exaggerated sparkle effect|no fantasy glow/i)
 assert.match(earringNegative, /no standing upright earring|no floating earring|no unsupported rigid earring pose/i)
 assert.match(earringNegative, /discard the generation instead of correcting it/i)
-assert.match(zoomOutVideoPrompt, /\[ROLE MAP\]/i)
-assert.match(zoomOutVideoPrompt, /Camera behavior:/i)
-assert.match(zoomOutVideoPrompt, /Composition priority: product is the visual center, occupies 40% to 60% of the frame/i)
+assert.match(zoomOutVideoPrompt, /^Main Instruction: A continuous, high-definition \(HD\) 60fps commercial brand video\./i)
+assert.match(zoomOutVideoPrompt, /Movement: Implement a highly controlled, slow /i)
 assert.doesNotMatch(zoomOutVideoPrompt, /Replace only the person identity and product identity\./i)
 assert.match(spatialAnchorText, /SPATIAL ANCHOR LOCK/i)
 assert.match(spatialAnchorText, /same ear side|same piercing point|same hanging direction|same distance from the ear/i)
@@ -298,11 +300,5 @@ assert.match(scaleConsistencyLockText, /do NOT enlarge, shrink, or rescale the p
 assert.match(motionLimitText, /MOTION LIMIT/i)
 assert.match(motionLimitText, /extremely subtle micro-movements caused by breathing/i)
 assert.match(motionLimitText, /no noticeable swinging/i)
-assert.match(necklacePrompt, /\[PRODUCT - PIXEL LOCK\]/i)
-assert.match(necklacePrompt, /\[MODEL CONTROL\]/i)
-assert.match(necklacePrompt, /VISIBLE AREA ONLY:/i)
-assert.match(necklacePrompt, /- product wearing area/i)
-assert.match(necklacePrompt, /\[BACKGROUND SYSTEM - 解决灰背景核心\]/i)
-assert.doesNotMatch(necklacePrompt, /\[FACE CONTROL\]/i)
 
 console.log('storyboard model identity lock smoke test passed')

@@ -220,11 +220,12 @@ const visiblePageNumbers = computed(() => {
 })
 
 function humanStep(step?: string) {
-  if (step === 'upload_analyze_script') return '分析参考视频'
-  if (step === 'generate_script_variants' || step === 'select_script_variant') return '脚本生成'
-  if (step === 'generate_storyboard_grids') return '分镜图片生成'
-  if (step === 'generate_shot_videos' || step === 'review_replace_shots') return '分镜视频生成'
-  if (step === 'compose_final_video' || step === 'export_final') return '成片合成'
+  if (step === 'reference_analysis') return '参考分析'
+  if (step === 'script_generation') return '脚本生成'
+  if (step === 'identity_grid') return '身份定妆图'
+  if (step === 'storyboard_design') return '分镜设计'
+  if (step === 'storyboard_videos') return '分镜视频'
+  if (step === 'final_compose') return '成片合成'
   return '待开始'
 }
 
@@ -251,11 +252,12 @@ function statusTone(status?: string) {
 }
 
 function stepTone(step?: string) {
-  if (step === 'upload_analyze_script') return 'tone-analyze'
-  if (step === 'generate_script_variants' || step === 'select_script_variant') return 'tone-script'
-  if (step === 'generate_storyboard_grids') return 'tone-storyboard'
-  if (step === 'generate_shot_videos' || step === 'review_replace_shots') return 'tone-video'
-  if (step === 'compose_final_video' || step === 'export_final') return 'tone-compose'
+  if (step === 'reference_analysis') return 'tone-analyze'
+  if (step === 'script_generation') return 'tone-script'
+  if (step === 'identity_grid') return 'tone-storyboard'
+  if (step === 'storyboard_design') return 'tone-storyboard'
+  if (step === 'storyboard_videos') return 'tone-video'
+  if (step === 'final_compose') return 'tone-compose'
   return 'tone-neutral'
 }
 
@@ -324,11 +326,12 @@ function pseudoDurationLabel(item: CloneProjectSummary) {
 }
 
 function stepIndex(step?: string) {
-  if (step === 'upload_analyze_script') return 0
-  if (step === 'generate_script_variants' || step === 'select_script_variant') return 1
-  if (step === 'generate_storyboard_grids') return 2
-  if (step === 'generate_shot_videos' || step === 'review_replace_shots') return 3
-  if (step === 'compose_final_video' || step === 'export_final') return 4
+  if (step === 'reference_analysis') return 0
+  if (step === 'script_generation') return 1
+  if (step === 'identity_grid') return 2
+  if (step === 'storyboard_design') return 3
+  if (step === 'storyboard_videos') return 4
+  if (step === 'final_compose') return 5
   return 0
 }
 

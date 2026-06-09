@@ -1050,6 +1050,19 @@ function wireIpc() {
     ) => cloneService.getModelIdentityPromptPreview(payload),
   )
   ipcMain.handle(
+    'clone:getProjectIdentityGridPromptPreview',
+    async (
+      _e,
+      payload: {
+        cloneProjectId: string
+        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productPoints?: string
+        modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
+        productReferenceImagePaths?: string[]
+      },
+    ) => cloneService.getProjectIdentityGridPromptPreview(payload),
+  )
+  ipcMain.handle(
     'clone:selectModelIdentityPack',
     async (_e, payload: { cloneProjectId: string; packId: string; confirmed?: boolean }) =>
       cloneService.selectModelIdentityPack(payload),

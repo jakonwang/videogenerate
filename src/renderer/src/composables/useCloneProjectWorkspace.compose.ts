@@ -29,7 +29,7 @@ export function useCloneProjectWorkspaceCompose<TProject extends CloneProjectLik
       const readyVideoCount = options.getReadyVideoCount?.() ?? 0
       const outputCount = options.getShotVideoOutputCount?.() ?? 0
       if (!readyVideoCount) {
-        throw new Error('当前没有可用于合成的分镜视频文件。请先在“分镜视频生成”阶段继续查询或重新生成。')
+        throw new Error('当前没有可用于合成的分镜视频文件。请先在“分镜视频”阶段继续查询或重新生成。')
       }
       options.pushRuntimeLog?.(
         `提交最终成片合成：project=${ensuredProject.id} readyVideos=${readyVideoCount} outputs=${outputCount}`,

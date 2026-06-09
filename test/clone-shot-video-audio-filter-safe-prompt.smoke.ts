@@ -26,12 +26,11 @@ async function main() {
 
   assert.doesNotMatch(prompt, /\bpresenter-style\b/i)
   assert.doesNotMatch(prompt, /\btalking head\b/i)
-  assert.match(prompt, /\[TYPE\]\s+Realistic ecommerce video/i)
-  assert.match(prompt, /\[RESTRICTIONS\]/i)
-  assert.match(prompt, /Camera must NOT introduce new angles, perspectives, or product reinterpretation/i)
-  assert.match(prompt, /No product motion/i)
-  assert.match(prompt, /Do NOT generate speaking, dialogue, lip-sync, mouth-shape acting/i)
-  assert.match(prompt, /Silent visual commercial video/i)
+  assert.match(prompt, /^Main Instruction: A natural, crisp, high-definition \(HD\) 60fps video with a handheld smartphone shooting look/i)
+  assert.match(prompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity\./i)
+  assert.match(prompt, /Visual Aesthetic: Casual everyday smartphone video, natural organic color tones, realistic skin textures, soft focused background, authentic lifestyle product showcase\./i)
+  assert.match(prompt, /Absolutely PROHIBIT cinematic studio setups, heavy commercial color grading, and robotic PPT-style panning\/zooming\./i)
+  assert.doesNotMatch(prompt, /\[RESTRICTIONS\]|\[OUTPUT\]|Silent visual commercial video/i)
   console.log('clone shot video audio filter safe prompt smoke test passed')
 }
 
