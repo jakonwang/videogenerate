@@ -7,6 +7,13 @@ import type { ModelCredentials, UnifiedCapability } from './types'
 
 const VECTOR_ENGINE_LABEL = 'VectorEngine'
 
+function providerLabel(credentials: ModelCredentials) {
+  const profile = resolveApifoxHubProfile(credentials, 'video')
+  if (profile === 'ai666') return 'AI666'
+  if (profile === 'xibapi') return 'XIBAPI'
+  return 'VectorEngine'
+}
+
 function baseUrl(credentials: ModelCredentials) {
   return String(resolveApifoxHubCredentials(credentials, 'video')?.baseUrl || '').trim().replace(/\/+$/, '')
 }
@@ -26,7 +33,7 @@ function officialRestBaseUrl(root: string) {
 function apiKey(credentials: ModelCredentials) {
   const cfg = resolveApifoxHubCredentials(credentials, 'video')
   const key = String(cfg?.apiKey || '').trim()
-  if (!cfg?.enabled || !key) throw new Error(`未启用 ${VECTOR_ENGINE_LABEL} 视频接口`)
+  if (!cfg?.enabled || !key) throw new Error(`未启用 ${providerLabel(credentials)} 视频接口`)
   return key
 }
 
@@ -537,8 +544,8 @@ export class Ai666TaskTimeoutError extends Error {
   taskId: string
   lastTransientError?: string
 
-  constructor(taskId: string, lastTransientError?: string) {
-    super(`${VECTOR_ENGINE_LABEL} 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
+  constructor(providerName: string, taskId: string, lastTransientError?: string) {
+    super(`${providerName} 视频任务超时: ${taskId}${lastTransientError ? `；最近一次查询错误：${lastTransientError.slice(0, 300)}` : ''}`)
     this.name = 'Ai666TaskTimeoutError'
     this.taskId = taskId
     this.lastTransientError = lastTransientError
@@ -761,6 +768,7 @@ export async function syncRemoteTaskResult(input: {
   endpointStyle?: string
   model?: string
 }) {
+  const providerName = providerLabel(input.credentials)
   const task = await queryAsyncTask({
     credentials: input.credentials,
     taskId: input.taskId,
@@ -771,7 +779,7 @@ export async function syncRemoteTaskResult(input: {
   if (task.status !== 'succeeded' || !task.outputUrls[0]) return { task, outputPath: undefined as string | undefined, synced: false }
   await mkdir(input.outDir, { recursive: true })
   const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
-  await downloadAtlasToFile(task.outputUrls[0], out, `${VECTOR_ENGINE_LABEL} 视频下载`)
+  await downloadAtlasToFile(task.outputUrls[0], out, `${providerName} 视频下载`)
   return { task, outputPath: out, synced: true }
 }
 
@@ -800,6 +808,7 @@ export async function createVideoTask(input: {
   motionStrength?: number
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
+  const providerName = providerLabel(input.credentials)
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
   const modelCandidates = pickFallbackModels({
@@ -1035,7 +1044,7 @@ export async function createVideoTask(input: {
         })
         continue
       }
-      throw new Error(`${VECTOR_ENGINE_LABEL} 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+      throw new Error(`${providerName} 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
     }
     const directOutputUrl = pickOutputUrl(json)
     const taskId = pickTaskId(json)
@@ -1048,7 +1057,7 @@ export async function createVideoTask(input: {
         response: json,
       })
     }
-    if (!taskId && !directOutputUrl) throw new Error(`${VECTOR_ENGINE_LABEL} 视频任务缺少 id: ${text.slice(0, 500)}`)
+    if (!taskId && !directOutputUrl) throw new Error(`${providerName} 视频任务缺少 id: ${text.slice(0, 500)}`)
     return {
       provider: 'apifox_hub',
       model,
@@ -1060,7 +1069,7 @@ export async function createVideoTask(input: {
       raw: json,
     }
   }
-  throw new Error(`${VECTOR_ENGINE_LABEL} 视频请求失败 HTTP ${lastFailureStatus || 503}: ${String(lastFailureText || '所有候选模型通道不可用').slice(0, 500)}`)
+  throw new Error(`${providerName} 视频请求失败 HTTP ${lastFailureStatus || 503}: ${String(lastFailureText || '所有候选模型通道不可用').slice(0, 500)}`)
 }
 
 export async function generateVideo(input: {
@@ -1078,6 +1087,7 @@ export async function generateVideo(input: {
   motionStrength?: number
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
+  const providerName = providerLabel(input.credentials)
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
   const model = modelForCapability(cfg, input.capability)
@@ -1282,14 +1292,14 @@ export async function generateVideo(input: {
   } catch {
     json = { raw: text }
   }
-  if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  if (!res.ok) throw new Error(`${providerName} 视频请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
 
   const directOutputUrl = pickOutputUrl(json)
   const taskId = pickTaskId(json)
   if (!taskId && directOutputUrl) {
     await mkdir(input.outDir, { recursive: true })
     const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
-    await downloadAtlasToFile(directOutputUrl, out, `${VECTOR_ENGINE_LABEL} 视频下载`)
+    await downloadAtlasToFile(directOutputUrl, out, `${providerName} 视频下载`)
     return {
       provider: 'apifox_hub',
       model,
@@ -1300,7 +1310,7 @@ export async function generateVideo(input: {
       raw: json,
     }
   }
-  if (!taskId) throw new Error(`${VECTOR_ENGINE_LABEL} 视频任务缺少 id: ${text.slice(0, 500)}`)
+  if (!taskId) throw new Error(`${providerName} 视频任务缺少 id: ${text.slice(0, 500)}`)
 
   const started = Date.now()
   const timeoutMs = Math.max(Number(cfg.defaultTimeoutMs || 0), 600000)
@@ -1324,11 +1334,11 @@ export async function generateVideo(input: {
       }
       throw error
     }
-    if (task.status === 'failed') throw new Error(task.errorMessage || `${VECTOR_ENGINE_LABEL} 视频任务失败: ${taskId}`)
+    if (task.status === 'failed') throw new Error(task.errorMessage || `${providerName} 视频任务失败: ${taskId}`)
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
       const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
-      await downloadAtlasToFile(task.outputUrls[0], out, `${VECTOR_ENGINE_LABEL} 视频下载`)
+      await downloadAtlasToFile(task.outputUrls[0], out, `${providerName} 视频下载`)
       return {
         provider: 'apifox_hub',
         model,
@@ -1352,7 +1362,7 @@ export async function generateVideo(input: {
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
       const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
-      await downloadAtlasToFile(task.outputUrls[0], out, `${VECTOR_ENGINE_LABEL} 视频下载`)
+      await downloadAtlasToFile(task.outputUrls[0], out, `${providerName} 视频下载`)
       return {
         provider: 'apifox_hub',
         model,
@@ -1367,5 +1377,5 @@ export async function generateVideo(input: {
     if (!isTransientQueryError(error)) throw error
     lastTransientError = String((error as any)?.message ?? error)
   }
-  throw new Ai666TaskTimeoutError(taskId, lastTransientError || undefined)
+  throw new Ai666TaskTimeoutError(providerName, taskId, lastTransientError || undefined)
 }

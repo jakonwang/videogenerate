@@ -41,6 +41,7 @@ import { taskQueue } from '../tasks/queue'
 import { probeMedia } from '../ffmpeg/probe'
 import { renderViralCloneBatch } from './renderViralCloneBatch'
 import {
+  buildModelLibraryPromptPreview,
   buildModelIdentityPackPromptPreview,
   buildFrameSceneAtmosphereText,
   buildGptFramePrompt,
@@ -1405,7 +1406,12 @@ function videoProviderLabel(credentials: ModelCredentials) {
   const p = videoProviderChain(credentials)[0]
   if (p === 'kling') return 'AtlasCloud'
   if (p === 'grsai') return 'GRS.AI'
-  if (p === 'apifox_hub') return resolveApifoxHubProfile(credentials, 'video') === 'ai666' ? 'AI666' : 'VectorEngine'
+  if (p === 'apifox_hub') {
+    const profile = resolveApifoxHubProfile(credentials, 'video')
+    if (profile === 'ai666') return 'AI666'
+    if (profile === 'xibapi') return 'XIBAPI'
+    return 'VectorEngine'
+  }
   return 'Seedance'
 }
 
@@ -3776,6 +3782,9 @@ function buildShotVideoRequestPreview(input: {
   const provider = String(cfg?.videoProvider || '').trim()
   const endpointStyle = String(cfg?.videoEndpointStyle || '').trim()
   const root = String(cfg?.baseUrl || '').trim().replace(/\/+$/, '')
+  if (!root) {
+    throw new Error(`${videoProviderLabel(input.credentials)} 视频 Base URL 未配置，无法创建分镜视频任务`)
+  }
   const createUrl = provider === 'vidu'
     ? `${root}${input.capability === 'video_start_end_to_video' ? '/vidu/ent/v2/start-end2video' : '/vidu/ent/v2/img2video'}`
     : provider === 'veo'
@@ -5861,6 +5870,10 @@ function ai666PollingTimeoutMessage() {
   return '本地等待超时，但 VectorEngine 云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。'
 }
 
+function videoPollingTimeoutMessage(providerName = 'VectorEngine') {
+  return `本地等待超时，但 ${providerName} 云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。`
+}
+
 function hasReachedShotVideoRetryLimit(retryCount: unknown, limit = AUTO_CLONE_VIDEO_RETRY_LIMIT) {
   return Number(retryCount ?? 0) >= Math.max(0, Number(limit || 0))
 }
@@ -6480,7 +6493,7 @@ async function pollExistingSegmentTask(input: {
       await cloneRepo.upsertProject(latestProject)
     } catch (error: any) {
       const reason = String(error?.message ?? error)
-      const classifiedReason = `[remote_timeout] ${ai666PollingTimeoutMessage()} taskId=${taskId}`
+      const classifiedReason = `[remote_timeout] ${videoPollingTimeoutMessage(videoProviderLabel(creds))} taskId=${taskId}`
       syncSegmentVideoOutput(latestProject, latestShot, {
         status: 'failed_retryable',
         taskId,
@@ -6498,7 +6511,7 @@ async function pollExistingSegmentTask(input: {
         ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
         action: 'poll_existing_segment_task',
         taskId,
-        message: ai666PollingTimeoutMessage(),
+        message: videoPollingTimeoutMessage(videoProviderLabel(creds)),
         responseSnippet: reason,
       })
       const saved = await cloneRepo.upsertProject(latestProject)
@@ -6541,18 +6554,18 @@ async function pollExistingSegmentTask(input: {
     remoteStatus: lastTask?.status || 'running',
     remoteRaw: lastTask?.raw,
     lastPollAt: now(),
-    error: `${ai666PollingTimeoutMessage()} taskId=${taskId} attempts=${attemptCount}/${maxPollAttempts}`,
+    error: `${videoPollingTimeoutMessage(videoProviderLabel(creds))} taskId=${taskId} attempts=${attemptCount}/${maxPollAttempts}`,
   })
   replaceProjectShot(latestProject, latestShot.id, {
     status: 'failed',
-    error: `${ai666PollingTimeoutMessage()} taskId=${taskId} attempts=${attemptCount}/${maxPollAttempts}`,
+    error: `${videoPollingTimeoutMessage(videoProviderLabel(creds))} taskId=${taskId} attempts=${attemptCount}/${maxPollAttempts}`,
     generatedClipPath: undefined,
   })
   setProjectErrorContext(latestProject, {
     ...apifoxContextByCapability(creds, 'video_start_end_to_video'),
     action: 'poll_existing_segment_task',
     taskId,
-    message: `${ai666PollingTimeoutMessage()} attempts=${attemptCount}/${maxPollAttempts}`,
+    message: `${videoPollingTimeoutMessage(videoProviderLabel(creds))} attempts=${attemptCount}/${maxPollAttempts}`,
     responseSnippet: JSON.stringify(lastTask?.raw ?? {}).slice(0, 500),
   })
   const saved = await cloneRepo.upsertProject(latestProject)
@@ -8495,7 +8508,8 @@ export const cloneService = {
       await this.prepareCloneMaterials({
         cloneProjectId: project.id,
         productReferenceImagePaths: input.productReferenceImagePaths,
-        generateModelPack: input.autoBindModelPack ?? false,
+        generateModelPack: true,
+        forceRegenerateModelPack: false,
       })
     ).project
 
@@ -9104,7 +9118,7 @@ export const cloneService = {
           shotId: shot.id,
           index: Number(shot.index ?? 0),
           status: 'timeout' as const,
-          reason: `${ai666PollingTimeoutMessage()} taskId=${existingBeforeCreate.taskId}`,
+          reason: `${videoPollingTimeoutMessage(videoProviderLabel(await cloneRepo.getCredentials()))} taskId=${existingBeforeCreate.taskId}`,
         }
       }
       try {
@@ -9291,7 +9305,7 @@ export const cloneService = {
             shotId: shot.id,
             index: Number(shot.index ?? 0),
             status: 'timeout' as const,
-            reason: `${ai666PollingTimeoutMessage()} taskId=${resolveEffectiveVideoTaskId(latestOutput?.taskId, latestShot?.generatedTaskId)}`,
+            reason: `${videoPollingTimeoutMessage(videoProviderLabel(creds))} taskId=${resolveEffectiveVideoTaskId(latestOutput?.taskId, latestShot?.generatedTaskId)}`,
           }
         }
         const reason = String(latestShot?.error || latestOutput?.error || '分镜视频提交后未生成远端 taskId').trim()
@@ -9317,7 +9331,7 @@ export const cloneService = {
         const latestOutput = resolveShotVideoOutput(latest, latest.blueprint?.shots.find((item) => item.id === shot.id) || shot)
         const nextRetryCount = Math.min(maxAutoRetryPerShot, Number(latest.blueprint?.shots.find((item) => item.id === shot.id)?.retryCount ?? shot.retryCount ?? 0))
         const classifiedReason = latestOutput.taskId
-          ? `[remote_timeout] ${ai666PollingTimeoutMessage()} taskId=${latestOutput.taskId}`
+          ? `[remote_timeout] ${videoPollingTimeoutMessage(videoProviderLabel(await cloneRepo.getCredentials()))} taskId=${latestOutput.taskId}`
           : `[local_failed] ${reason}`
         replaceProjectShot(latest, shot.id, {
           status: latestOutput.taskId ? 'generating' : 'failed',
@@ -10131,6 +10145,8 @@ export const cloneService = {
     productPoints?: string
     modelProfileOptions?: import('./types').ModelProfileOptions
     productReferenceImagePaths?: string[]
+    modelReferenceImagePaths?: string[]
+    purpose?: 'model_library' | 'identity_grid'
     imageProviderPrimary?: ImageProviderName
     openaiApiKey?: string
     openaiImageModel?: string
@@ -10144,7 +10160,7 @@ export const cloneService = {
     imageProviderCredentials?: Partial<ModelCredentials>
   }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
-    if (!item) throw new Error('复刻项目不存在')
+    if (!item) throw new Error('Clone project does not exist')
     const creds = mergeImageProviderOverrides(await cloneRepo.getCredentials(), {
       ...(input.imageProviderCredentials ?? {}),
       imageProviderPrimary: input.imageProviderPrimary ?? input.imageProviderCredentials?.imageProviderPrimary,
@@ -10158,8 +10174,85 @@ export const cloneService = {
       grsaiHost: input.grsaiHost ?? input.imageProviderCredentials?.grsaiHost,
       grsaiImageModel: input.grsaiImageModel ?? input.imageProviderCredentials?.grsaiImageModel,
     })
-    assertImageProviderKey(creds, '生成新模特身份包')
+    assertImageProviderKey(creds, 'generate model identity pack')
+
     const productType = resolveProjectIdentityGridProductType(item, input.productType)
+    const packId = randomUUID()
+    const outDir = identityLibraryDir(packId)
+    await mkdir(outDir, { recursive: true })
+    const existingLibrary = await cloneRepo.listModelIdentityLibrary()
+    const nextName = (() => {
+      const used = new Set(existingLibrary.map((x) => String(x.name || '').trim()))
+      let i = 1
+      while (true) {
+        const name = `AI Model ${String(i).padStart(3, '0')}`
+        if (!used.has(name)) return name
+        i += 1
+      }
+    })()
+    const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
+
+    if (input.purpose === 'model_library') {
+      const modelReferenceImagePaths = (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean)
+      const preview = buildModelLibraryPromptPreview({
+        productType,
+        productPoints: resolvedProductPoints,
+        modelProfileOptions: input.modelProfileOptions,
+        productReferenceImagePaths: [],
+        modelReferenceImagePaths,
+      })
+      const generated = await generateModelIdentityPackImages({
+        credentials: creds,
+        outDir,
+        productType,
+        productPoints: resolvedProductPoints,
+        modelProfileOptions: input.modelProfileOptions,
+        productReferenceImagePaths: [],
+        modelReferenceImagePaths,
+        promptMode: 'model_library',
+      })
+      if (!generated.imagePaths.length) {
+        throw new Error(`model identity generation failed: model=${generated.model || imageProviderModel(creds)} no images returned`)
+      }
+      const doneDescription = [
+        'Selected model identity reused for this clone project',
+        `${generated.profile.market}, ${generated.profile.gender}, ${generated.profile.ageRange}`,
+        `${generated.profile.faceShape || 'oval face shape'}, ${generated.profile.hairStyle}, ${generated.profile.hairColor || 'natural dark black hair color'}`,
+        `${generated.profile.skinTone}, ${generated.profile.bodyType || 'slim build'}`,
+        `${generated.profile.outfitStyle}, ${generated.profile.mood}`,
+        `${generated.profile.sceneStyle}`,
+        `${generated.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}`,
+        `${generated.profile.cameraPresence || 'natural social-commerce camera presence'}, ${generated.profile.styleBias || 'conversion-focused product demo style'}`,
+      ].join('. ')
+      await cloneRepo.upsertModelIdentity({
+        id: packId,
+        createdAt: now(),
+        updatedAt: now(),
+        status: 'done',
+        name: nextName,
+        productType,
+        market: generated.profile.market,
+        gender: generated.profile.gender,
+        ageRange: generated.profile.ageRange,
+        hairStyle: generated.profile.hairStyle,
+        skinTone: generated.profile.skinTone,
+        outfitStyle: generated.profile.outfitStyle,
+        mood: generated.profile.mood,
+        sceneStyle: generated.profile.sceneStyle,
+        faceShape: generated.profile.faceShape,
+        hairColor: generated.profile.hairColor,
+        bodyType: generated.profile.bodyType,
+        languageStyle: generated.profile.languageStyle,
+        cameraPresence: generated.profile.cameraPresence,
+        styleBias: generated.profile.styleBias,
+        description: doneDescription || preview.description || '',
+        imagePaths: generated.imagePaths,
+        coverImagePath: generated.imagePaths[0],
+        model: generated.model || imageProviderModel(creds),
+      })
+      return item
+    }
+
     const modelReferenceImagePaths = Array.from(
       new Set(
         [
@@ -10170,34 +10263,20 @@ export const cloneService = {
           .filter(Boolean),
       ),
     )
-    const packId = randomUUID()
-    const outDir = identityLibraryDir(packId)
-    await mkdir(outDir, { recursive: true })
-    const existingLibrary = await cloneRepo.listModelIdentityLibrary()
-    const nextName = (() => {
-      const used = new Set(existingLibrary.map((x) => String(x.name || '').trim()))
-      let i = 1
-      while (true) {
-        const name = `AI模特 ${String(i).padStart(3, '0')}`
-        if (!used.has(name)) return name
-        i += 1
-      }
-    })()
-    void nextName
+    const productReferenceImagePaths = (input.productReferenceImagePaths ?? []).map(String).filter(Boolean)
     const profile = defaultModelIdentityDescription(productType)
-    const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
     const promptPreview = buildModelIdentityPackPromptPreview({
       productType,
       productPoints: resolvedProductPoints,
       modelProfileOptions: input.modelProfileOptions,
-      productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+      productReferenceImagePaths,
       modelReferenceImagePaths,
     })
     const requestPreview = buildShotImageRequestPreview({
       credentials: creds,
       startPrompt: promptPreview.prompt || '',
       negativePrompt: '',
-      startRefs: [...(input.productReferenceImagePaths ?? []).map(String).filter(Boolean), ...modelReferenceImagePaths],
+      startRefs: [...productReferenceImagePaths, ...modelReferenceImagePaths],
     })
     const pendingPack: ModelIdentityPack = {
       id: packId,
@@ -10239,8 +10318,9 @@ export const cloneService = {
         productType,
         productPoints: resolvedProductPoints,
         modelProfileOptions: input.modelProfileOptions,
-        productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+        productReferenceImagePaths,
         modelReferenceImagePaths,
+        promptMode: 'identity_grid',
         onImageGenerated: async (filePath) => {
           const latest = await cloneRepo.getProject(input.cloneProjectId)
           if (!latest) return
@@ -10261,10 +10341,10 @@ export const cloneService = {
         `${generated.profile.cameraPresence || 'natural social-commerce camera presence'}, ${generated.profile.styleBias || 'conversion-focused product demo style'}`,
       ].join('. ')
       if (!generated.imagePaths.length) {
-        throw new Error(`AI 模特身份包生成失败：model=${generated.model || pendingPack.model} 未返回任何图片`)
+        throw new Error(`AI model identity pack generation failed: model=${generated.model || pendingPack.model} no images returned`)
       }
       const latest = await cloneRepo.getProject(input.cloneProjectId)
-      if (!latest) throw new Error('复刻项目不存在')
+      if (!latest) throw new Error('Clone project does not exist')
       latest.projectIdentityGridPath = generated.imagePaths[0]
       latest.projectIdentityGridStatus = 'done'
       latest.projectIdentityGridUpdatedAt = now()
@@ -10274,8 +10354,8 @@ export const cloneService = {
         description: doneDescription,
         productType,
         productPoints: resolvedProductPoints,
-        productReferenceImageCount: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean).length,
-        productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+        productReferenceImageCount: productReferenceImagePaths.length,
+        productReferenceImagePaths,
         modelReferenceImageCount: modelReferenceImagePaths.length,
         modelReferenceImagePaths,
         gridUsagePlan: buildIdentityGridUsagePlan(productType),
@@ -10284,7 +10364,7 @@ export const cloneService = {
         requestJson: requestPreview.requestJsonStart,
       }
       return await cloneRepo.upsertProject(latest)
-    } catch (e: any) {
+    } catch (e) {
       const friendlyMessage = humanizeModelPackError(e, creds)
       const latest = await cloneRepo.getProject(input.cloneProjectId)
       if (!latest) throw e
@@ -10302,26 +10382,18 @@ export const cloneService = {
     productPoints?: string
     modelProfileOptions?: import('./types').ModelProfileOptions
     productReferenceImagePaths?: string[]
+    modelReferenceImagePaths?: string[]
   }) {
     const item = await cloneRepo.getProject(input.cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
     const productType = resolveProjectIdentityGridProductType(item, input.productType)
     const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
-    return buildModelIdentityPackPromptPreview({
+    return buildModelLibraryPromptPreview({
       productType,
       productPoints: resolvedProductPoints,
       modelProfileOptions: input.modelProfileOptions,
-      productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
-      modelReferenceImagePaths: Array.from(
-        new Set(
-          [
-            ...(item.selectedModelIdentitySnapshot?.imagePaths ?? []),
-            item.selectedModelIdentitySnapshot?.coverImagePath || '',
-          ]
-            .map(String)
-            .filter(Boolean),
-        ),
-      ),
+      productReferenceImagePaths: [],
+      modelReferenceImagePaths: (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean),
     })
   },
 
@@ -10826,17 +10898,8 @@ export const cloneService = {
       }
     }
     let snapshotProject = item
-    const selectedId =
-      item.selectedModelIdentityPackId ||
-      item.selectedModelIdentityId ||
-      item.selectedModelIdentitySnapshot?.id
-    let reusable = false
-    if (!input.forceRegenerateModelPack && selectedId) {
-      const selectedIdentity = await cloneRepo.getModelIdentity(selectedId)
-      if (selectedIdentity && selectedIdentity.status === 'done' && Array.isArray(selectedIdentity.imagePaths) && selectedIdentity.imagePaths.length) {
-        reusable = true
-      }
-    }
+    const existingIdentityGridPath = String(item.projectIdentityGridPath || '').trim()
+    const reusable = !input.forceRegenerateModelPack && Boolean(existingIdentityGridPath)
     const shouldGenerateIdentityPack = Boolean(input.generateModelPack) && !reusable
     if (shouldGenerateIdentityPack) {
       const next = await this.generateModelIdentityPack({

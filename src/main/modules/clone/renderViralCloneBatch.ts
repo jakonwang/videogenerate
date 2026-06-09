@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { getFfmpegExecutable, getFfprobeExecutable } from '../../lib/binariesPath'
@@ -70,6 +70,49 @@ async function probeDurationSec(src: string) {
         return
       }
       resolve(dur)
+    })
+  })
+}
+
+async function fileExists(path: string) {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function probeHasAudioStream(src: string) {
+  const ffprobe = getFfprobeExecutable()
+  return await new Promise<boolean>((resolve, reject) => {
+    const args = [
+      '-v',
+      'error',
+      '-select_streams',
+      'a:0',
+      '-show_entries',
+      'stream=codec_type',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
+      src,
+    ]
+    let stdout = ''
+    let stderr = ''
+    const c = spawn(ffprobe, args, { windowsHide: true })
+    c.stdout.on('data', (chunk) => {
+      stdout += String(chunk)
+    })
+    c.stderr.on('data', (chunk) => {
+      stderr += String(chunk)
+    })
+    c.on('error', reject)
+    c.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`ffprobe audio probe failed: ${code} ${stderr}`.trim()))
+        return
+      }
+      resolve(/\baudio\b/i.test(stdout))
     })
   })
 }
@@ -165,7 +208,8 @@ async function normalizeClip(input: {
     '-i', input.src,
     '-t', `${Math.max(0.5, input.durationSec)}`,
     '-vf', buildNormalizeVideoFilter(input.highlightSuppressionPreset || 'none'),
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
+    '-an',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest',
     input.out,
   ])
 }
@@ -179,6 +223,27 @@ export async function renderViralCloneBatch(input: {
   maxRetry?: number
 }) {
   await mkdir(input.outDir, { recursive: true })
+  const requestedBgmPath = safeText(input.bgmPath)
+  let usableBgmPath = ''
+  if (requestedBgmPath) {
+    const exists = await fileExists(requestedBgmPath)
+    if (exists) {
+      try {
+        if (await probeHasAudioStream(requestedBgmPath)) usableBgmPath = requestedBgmPath
+      } catch (error) {
+        console.warn('[clone-compose] bgm-audio-probe-failed, fallback-to-silent-compose', {
+          projectId: input.projectId,
+          bgmPath: requestedBgmPath,
+          reason: String((error as any)?.message ?? error),
+        })
+      }
+    } else {
+      console.warn('[clone-compose] bgm-path-missing, fallback-to-silent-compose', {
+        projectId: input.projectId,
+        bgmPath: requestedBgmPath,
+      })
+    }
+  }
   const results: string[] = []
   const report: Array<{
     index: number
@@ -257,13 +322,13 @@ export async function renderViralCloneBatch(input: {
         const rawOut = join(jobDir, 'joined.mp4')
         await run(['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', rawOut])
         const finalOut = join(input.outDir, `viral_clone_${String(index).padStart(3, '0')}.mp4`)
-        if (input.bgmPath) {
+        if (usableBgmPath) {
           await run([
             '-y',
             '-stream_loop',
             '-1',
             '-i',
-            input.bgmPath,
+            usableBgmPath,
             '-i',
             rawOut,
             '-map',

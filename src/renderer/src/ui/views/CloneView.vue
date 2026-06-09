@@ -2827,8 +2827,8 @@ async function generateScriptVariants() {
   } else {
     autoBootstrapSignature.value = `script-auto-continue:${String(current.value?.id || '').trim()}:${Date.now()}`
   }
-  selectStage('grid')
-  setStageLog('脚本候选已生成，正在自动进入分镜设计并生成分镜图。')
+  selectStage('identity-grid')
+  setStageLog('脚本候选已生成，正在自动生成身份定妆图，完成后再进入分镜设计。')
   try {
     await autoRunToStoryboardVideos()
     selectedStageKey.value = ''
@@ -3094,7 +3094,7 @@ async function handleVideoResolutionChange(value: VideoRenderResolution) {
 
 async function autoRunToStoryboardVideos() {
   autoRunIntentArmed.value = true
-  selectStage('grid')
+  selectStage('identity-grid')
   await autoRunToStoryboardVideosInWorkspace({
     variantCount: variantCount.value,
     productReferenceImagePaths: [...effectiveProductRefs.value],
@@ -3550,6 +3550,17 @@ watch(
     }
     cloneTopbar.consumeRequestedStage()
   },
+)
+
+watch(
+  [workflowStageKey, selectedStageKey],
+  ([workflow, selected]) => {
+    if (!autoRunIntentArmed.value) return
+    if (selected !== 'identity-grid') return
+    if (!['grid', 'video', 'compose'].includes(workflow)) return
+    selectedStageKey.value = ''
+  },
+  { immediate: true },
 )
 
 watch(
@@ -10191,6 +10202,10 @@ onUnmounted(() => {
     linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(6, 10, 20, 0.98));
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 12.5px;
+}
+
+.prompt-preview-textarea--tall {
+  min-height: 420px;
 }
 
 .prompt-preview-block {

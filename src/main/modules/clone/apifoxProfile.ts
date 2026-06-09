@@ -24,7 +24,19 @@ export function resolveApifoxHubCredentials(
 ): ApifoxHubCredentials | undefined {
   if (!credentials) return undefined
   const profile = resolveApifoxHubProfile(credentials, capability)
-  if (profile === 'ai666') return credentials.ai666Hub ?? credentials.apifoxHub
-  if (profile === 'xibapi') return credentials.xibapiHub ?? credentials.apifoxHub
-  return credentials.vectorEngineHub ?? credentials.apifoxHub
+  const shared = credentials.apifoxHub
+  const scoped =
+    profile === 'ai666'
+      ? credentials.ai666Hub
+      : profile === 'xibapi'
+        ? credentials.xibapiHub
+        : credentials.vectorEngineHub
+  if (!scoped) return shared
+  if (!shared) return scoped
+  return {
+    ...shared,
+    ...scoped,
+    baseUrl: String(scoped.baseUrl || shared.baseUrl || '').trim(),
+    apiKey: String(scoped.apiKey || shared.apiKey || '').trim() || undefined,
+  }
 }

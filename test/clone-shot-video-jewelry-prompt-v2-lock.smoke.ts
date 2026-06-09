@@ -30,6 +30,7 @@ async function main() {
   assert.match(prompt, /Implement Subtle handheld close-up on the ear area with a highly controlled, microscopic handheld camera shake/i)
   assert.match(prompt, /The model slightly tilts her head by a tiny 3 degrees, causing the jewelry piece to respond naturally to gravity, swaying with a realistic, micro-pendulum effect\./i)
   assert.match(prompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity\./i)
+  assert.match(prompt, /The model must remain completely silent\. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, and no presenter-style delivery\./i)
   assert.doesNotMatch(prompt, /\[ABSOLUTE RULES\]|\[ROLE MAP\]|\[SHOT CONTROL\]|\[FACE CONTROL\]|\[LIGHTING CONTROL\]/i)
   console.log('clone shot video jewelry prompt v2 lock smoke test passed')
 }

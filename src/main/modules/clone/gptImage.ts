@@ -676,6 +676,61 @@ export function buildModelIdentityPackPromptPreview(input: {
   }
 }
 
+export function buildModelLibraryPromptPreview(input: {
+  productType: CloneProductType
+  productPoints?: string
+  modelProfileOptions?: ModelProfileOptions
+  productReferenceImagePaths?: string[]
+  modelReferenceImagePaths?: string[]
+}) {
+  const profile = mergeModelIdentityProfile(input.productType, input.modelProfileOptions)
+  return {
+    profile,
+    description: buildModelIdentityDescription(profile),
+    prompt: buildModelLibraryPrompt({
+      productType: input.productType,
+      productPoints: input.productPoints,
+      profile,
+      hasModelReference: Boolean((input.modelReferenceImagePaths ?? []).map(String).filter(Boolean).length),
+    }),
+    productType: input.productType,
+    productPoints: input.productPoints || '',
+    modelProfileOptions: { ...(input.modelProfileOptions ?? {}) },
+    productReferenceImageCount: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean).length,
+    productReferenceImagePaths: (input.productReferenceImagePaths ?? []).map(String).filter(Boolean),
+    modelReferenceImageCount: (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean).length,
+    modelReferenceImagePaths: (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean),
+  }
+}
+
+export function buildModelLibraryPrompt(input: {
+  productType: CloneProductType
+  productPoints?: string
+  profile: ReturnType<typeof defaultModelIdentityDescription>
+  hasModelReference?: boolean
+}) {
+  return [
+    'Create one single-image multi-angle reference sheet for a new virtual model identity package for short-form social commerce videos.',
+    'Generate the model only. Do not add, hold, wear, present, or interact with any product, accessory, prop, package, phone, jewelry, clothing item, or branded object.',
+    'The model must be a new person and must not copy any person from the reference video.',
+    `Market: ${input.profile.market}. Gender: ${input.profile.gender}. Age range: ${input.profile.ageRange}.`,
+    `Face shape: ${input.profile.faceShape || 'oval face shape'}. Hair: ${input.profile.hairStyle}. Hair color: ${input.profile.hairColor || 'natural dark black hair color'}.`,
+    `Skin tone: ${input.profile.skinTone}. Body type: ${input.profile.bodyType || 'slim build'}. Outfit: ${input.profile.outfitStyle}.`,
+    `Mood: ${input.profile.mood}. Scene: ${input.profile.sceneStyle}. Language style: ${input.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}.`,
+    `Camera presence: ${input.profile.cameraPresence || 'natural social-commerce camera presence'}. Style bias: ${input.profile.styleBias || 'conversion-focused product demo style'}.`,
+    'Output format: one single image only, arranged as a clean 3x3 multi-angle contact sheet with 9 panels.',
+    'The 9 panels must show the same exact model identity from different reusable angles and framings such as front portrait, left 45 degree, right 45 degree, left profile, right profile, half body, hands-near-face pose, seated natural pose, and one clean detail-oriented beauty angle.',
+    'Keep the same face, hair, outfit, lighting, age impression, and scene style fully consistent across all 9 panels.',
+    'Do not make every panel front-facing. The purpose is reusable multi-angle identity coverage, not a single hero portrait repeated 9 times.',
+    'Show the model alone in a clean, practical, reusable social-commerce reference set.',
+    'No product, no prop, no handbag, no jewelry showcase, no package, no phone, no bottle, no text, no subtitle, no watermark, no logo, no UI overlay, no random letters.',
+    'Realistic smartphone photo style, natural skin texture, clean commercial composition.',
+    'Single person only. One collage image only.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 export function buildIdentityPackPrompt(input: {
   productType: CloneProductType
   productPoints?: string
@@ -1241,6 +1296,7 @@ export async function generateModelIdentityPackImages(input: {
   modelProfileOptions?: ModelProfileOptions
   productReferenceImagePaths: string[]
   modelReferenceImagePaths?: string[]
+  promptMode?: 'identity_grid' | 'model_library'
   onImageGenerated?: (filePath: string, index: number) => Promise<void> | void
 }) {
   const profile = mergeModelIdentityProfile(input.productType, input.modelProfileOptions)
@@ -1262,16 +1318,27 @@ export async function generateModelIdentityPackImages(input: {
     await input.onImageGenerated?.(path, 0)
     return { profile, imagePaths, model: 'mock-image' }
   }
-  const prompt = buildIdentityPackPrompt({
-    productType: input.productType,
-    productPoints: input.productPoints,
-    profile,
-    hasModelReference: Boolean((input.modelReferenceImagePaths ?? []).length),
-  })
+  const prompt =
+    input.promptMode === 'model_library'
+      ? buildModelLibraryPrompt({
+          productType: input.productType,
+          productPoints: input.productPoints,
+          profile,
+          hasModelReference: Boolean((input.modelReferenceImagePaths ?? []).length),
+        })
+      : buildIdentityPackPrompt({
+          productType: input.productType,
+          productPoints: input.productPoints,
+          profile,
+          hasModelReference: Boolean((input.modelReferenceImagePaths ?? []).length),
+        })
   const path = await generateProviderImage({
     credentials: input.credentials,
     prompt,
-    imagePaths: [...input.productReferenceImagePaths, ...(input.modelReferenceImagePaths ?? [])],
+    imagePaths:
+      input.promptMode === 'model_library'
+        ? [...(input.modelReferenceImagePaths ?? [])]
+        : [...input.productReferenceImagePaths, ...(input.modelReferenceImagePaths ?? [])],
     outDir: input.outDir,
     filePrefix: 'model_identity_grid',
   })

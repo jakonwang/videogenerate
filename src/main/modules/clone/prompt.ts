@@ -208,6 +208,7 @@ const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, cris
 4. BIOMETRIC INTERACTION & ABSOLUTE ANONYMITY:
 - Micro-Action: The model exhibits a very slight, natural human breathing movement and micro-physical action: {{specificMicroAction}}. Every interaction between the body and the object must strictly obey the laws of gravity and natural physical inertia.
 - Absolute Anonymity: The camera angle remains tightly cropped on the {{targetBodyPart}}, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity.
+- Silent Performance Lock: The model must remain completely silent. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, and no presenter-style delivery.
 
 Visual Aesthetic: Casual everyday smartphone video, natural organic color tones, realistic skin textures, soft focused background, authentic lifestyle product showcase. No AI synthetic glossiness, no commercial render look. Single panel only.`
 

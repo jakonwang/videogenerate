@@ -70,6 +70,8 @@ type ModelPromptPreview = {
   modelProfileOptions: Record<string, string>
   productReferenceImageCount: number
   productReferenceImagePaths: string[]
+  modelReferenceImageCount?: number
+  modelReferenceImagePaths?: string[]
 }
 
 const router = useRouter()
@@ -81,14 +83,9 @@ const search = ref('')
 const statusFilter = ref<LibraryStatusFilter>('all')
 const selectedId = ref('')
 const sourceProjectId = ref('')
-const productType = ref<'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'>('earrings')
-const productPoints = ref('')
-const modelProfileOptions = ref<ModelProfileOptions>(getRecommendedModelProfileOptions('earrings'))
-const productMainImages = ref<string[]>([])
-const productDetailImages = ref<string[]>([])
-const productUsageImages = ref<string[]>([])
-const styleReferenceImages = ref<string[]>([])
-const productDiagnosis = ref('')
+const productType = ref<'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'>('general')
+const modelProfileOptions = ref<ModelProfileOptions>(getRecommendedModelProfileOptions('general'))
+const modelReferenceImages = ref<string[]>([])
 const openaiKey = ref('')
 const openaiImageModel = ref('gpt-image-2')
 const openaiImageQuality = ref<'low' | 'medium' | 'high'>('high')
@@ -130,10 +127,7 @@ const batchGenerateOptions = [
   { value: 5, label: '5 个' },
 ]
 
-const allProductRefs = computed(() =>
-  [...productMainImages.value, ...productDetailImages.value, ...productUsageImages.value, ...styleReferenceImages.value].filter(Boolean),
-)
-const hasProductInput = computed(() => allProductRefs.value.length > 0 || productPoints.value.trim().length > 0)
+const hasModelReferenceInput = computed(() => modelReferenceImages.value.length > 0)
 const imageProviderReady = computed(() =>
   imageProviderPrimary.value === 'kling'
     ? Boolean(klingKey.value.trim())
@@ -337,6 +331,7 @@ function buildLocalModelPromptPreview(input: {
   productPoints?: string
   modelProfileOptions?: ModelProfileOptions
   productReferenceImagePaths: string[]
+  modelReferenceImagePaths?: string[]
 }): ModelPromptPreview {
   const explicitGender = input.modelProfileOptions?.gender === 'male' ? 'male' : input.modelProfileOptions?.gender === 'female' ? 'female' : undefined
   const base = defaultModelPromptProfile(input.productType, explicitGender)
@@ -384,7 +379,8 @@ function buildLocalModelPromptPreview(input: {
     `${profile.cameraPresence}, ${profile.styleBias}`,
   ].join('. ')
   const prompt = [
-    'Create one realistic reference image for a new virtual model identity package for short-form social commerce videos.',
+    'Create one single-image multi-angle reference sheet for a new virtual model identity package for short-form social commerce videos.',
+    'Generate the model only. Do not add, hold, wear, present, or interact with any product, accessory, prop, package, phone, jewelry, clothing item, or branded object.',
     'The model must be a new person and must not copy any person from the reference video.',
     genderHardRule,
     `Market: ${profile.market}. Gender: ${profile.gender}. Age range: ${profile.ageRange}.`,
@@ -392,10 +388,14 @@ function buildLocalModelPromptPreview(input: {
     `Skin tone: ${profile.skinTone}. Body type: ${profile.bodyType}. Outfit: ${profile.outfitStyle}.`,
     `Mood: ${profile.mood}. Scene: ${profile.sceneStyle}. Language style: ${profile.languageStyle}.`,
     `Camera presence: ${profile.cameraPresence}. Style bias: ${profile.styleBias}.`,
-    `Product category: ${input.productType}. Product selling points: ${input.productPoints || 'realistic product texture and clean usage value'}.`,
-    'Show the model in a practical product-commerce reference pose. Keep face, outfit, lighting and scene style stable and reusable.',
-    'No text, no subtitles, no watermark, no logo, no UI overlay, no random letters.',
+    'Output format: one single image only, arranged as a clean 3x3 multi-angle contact sheet with 9 panels.',
+    'The 9 panels must show the same exact model identity from different reusable angles and framings such as front portrait, left 45 degree, right 45 degree, left profile, right profile, half body, hands-near-face pose, seated natural pose, and one clean detail-oriented beauty angle.',
+    'Keep the same face, hair, outfit, lighting, age impression, and scene style fully consistent across all 9 panels.',
+    'Do not make every panel front-facing. The purpose is reusable multi-angle identity coverage, not a single hero portrait repeated 9 times.',
+    'Show the model alone in a clean, practical, reusable social-commerce reference set. Keep face, outfit, lighting and scene style stable and reusable.',
+    'No product, no prop, no text, no subtitles, no watermark, no logo, no UI overlay, no random letters.',
     'Realistic smartphone photo style, natural skin texture, clean commercial composition.',
+    'Single person only. One collage image only.',
   ].join('\n')
   return {
     profile,
@@ -406,16 +406,12 @@ function buildLocalModelPromptPreview(input: {
     modelProfileOptions: { ...(input.modelProfileOptions ?? {}) } as Record<string, string>,
     productReferenceImageCount: input.productReferenceImagePaths.length,
     productReferenceImagePaths: input.productReferenceImagePaths,
+    modelReferenceImageCount: (input.modelReferenceImagePaths ?? []).length,
+    modelReferenceImagePaths: input.modelReferenceImagePaths ?? [],
   }
 }
 
-const uploadPreviewGroups = computed(() => [
-  { key: 'main', label: '主图', hint: '主体参考', images: productMainImages.value },
-  { key: 'detail', label: '细节图', hint: '材质结构', images: productDetailImages.value },
-  { key: 'usage', label: '佩戴图', hint: '上身关系', images: productUsageImages.value },
-  { key: 'style', label: '风格图', hint: '氛围方向', images: styleReferenceImages.value },
-])
-const uploadPreviewHero = computed(() => uploadPreviewGroups.value.find((group) => group.images.length)?.images[0] || '')
+const uploadPreviewHero = computed(() => modelReferenceImages.value[0] || '')
 
 const filteredLibrary = computed(() => {
   const keyword = search.value.trim().toLowerCase()
@@ -583,6 +579,9 @@ function closeCreatePanel() {
 function openCreatePanel() {
   activeProfileSection.value = 'identity'
   promptPreview.value = null
+  modelReferenceImages.value = []
+  productType.value = 'general'
+  modelProfileOptions.value = getRecommendedModelProfileOptions('general')
   createPanelOpen.value = true
 }
 
@@ -814,42 +813,22 @@ async function ensureSourceProjectId() {
   return sourceProjectId.value
 }
 
-async function pickImageGroup(target: 'main' | 'detail' | 'usage' | 'style') {
+async function pickModelReferenceImage() {
   const pickFilesOverride = (window as any).__VG_TEST_pickFiles as
     | ((input: { title: string; multiple: boolean; filters: Array<{ name: string; extensions: string[] }> }) => Promise<string[]>)
     | undefined
   const files = await (pickFilesOverride ?? window.api.pickFiles)({
-    title:
-      target === 'main'
-        ? '选择商品主图'
-        : target === 'detail'
-          ? '选择商品细节图'
-          : target === 'usage'
-            ? '选择佩戴或使用图'
-            : '选择风格参考图',
+    title: '选择参考模特图',
     filters: [{ name: 'Image', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
-    multiple: target !== 'main',
+    multiple: false,
   })
   const next = (files ?? []).map((x: string) => String(x)).filter(Boolean)
-  if (target === 'main') productMainImages.value = next.slice(0, 1)
-  if (target === 'detail') productDetailImages.value = next
-  if (target === 'usage') productUsageImages.value = next
-  if (target === 'style') styleReferenceImages.value = next
-  await diagnoseProductRefs()
-}
-
-async function diagnoseProductRefs() {
-  if (!allProductRefs.value.length) {
-    productDiagnosis.value = ''
-    return
-  }
-  const res = await window.api.clone.diagnoseProductImages({ imagePaths: allProductRefs.value.map(String) })
-  productDiagnosis.value = String((res as any)?.message ?? '')
+  modelReferenceImages.value = next.slice(0, 1)
 }
 
 async function generateModel() {
-  if (!hasProductInput.value) {
-    message.value = '请先上传参考图或填写商品卖点'
+  if (!hasModelReferenceInput.value) {
+    message.value = '请先上传一张参考模特图'
     return
   }
   if (!imageProviderReady.value) {
@@ -869,7 +848,7 @@ async function generateModel() {
   try {
     const projectId = await ensureSourceProjectId()
     const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
-    const plainReferenceImagePaths = allProductRefs.value.map((item) => String(item || '')).filter(Boolean)
+    const plainReferenceImagePaths = modelReferenceImages.value.map((item) => String(item || '')).filter(Boolean)
     const plainImageProviderCredentials = JSON.parse(JSON.stringify(currentImageProviderCredentials() || {}))
     await saveCredentials()
     pollTimer = setInterval(() => {
@@ -878,9 +857,11 @@ async function generateModel() {
     await window.api.clone.generateModelIdentityPack({
       cloneProjectId: projectId,
       productType: productType.value,
-      productPoints: productPoints.value.trim() || undefined,
+      productPoints: undefined,
+      purpose: 'model_library',
       modelProfileOptions: plainModelProfileOptions,
-      productReferenceImagePaths: plainReferenceImagePaths,
+      productReferenceImagePaths: [],
+      modelReferenceImagePaths: plainReferenceImagePaths,
       imageProviderPrimary: imageProviderPrimary.value,
       openaiApiKey: openaiKey.value.trim() || undefined,
       openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
@@ -894,8 +875,13 @@ async function generateModel() {
       imageProviderCredentials: plainImageProviderCredentials,
     })
     await refreshLibrary()
+    activeTab.value = 'all'
+    statusFilter.value = 'all'
+    page.value = 1
+    selectedId.value = sortedLibrary.value[0]?.id ?? library.value[0]?.id ?? ''
     createPanelOpen.value = false
-    modelProfileOptions.value = getRecommendedModelProfileOptions(productType.value)
+    modelProfileOptions.value = getRecommendedModelProfileOptions('general')
+    modelReferenceImages.value = []
     message.value = '新模特已加入全局模特库'
   } catch (e: any) {
     console.error('[model-library] generateModel failed', e)
@@ -912,8 +898,8 @@ async function generateModelsBatch() {
     await generateModel()
     return
   }
-  if (!hasProductInput.value) {
-    message.value = '请先上传参考图或填写商品卖点'
+  if (!hasModelReferenceInput.value) {
+    message.value = '请先上传一张参考模特图'
     return
   }
   if (!imageProviderReady.value) {
@@ -933,7 +919,7 @@ async function generateModelsBatch() {
   try {
     const projectId = await ensureSourceProjectId()
     const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
-    const plainReferenceImagePaths = allProductRefs.value.map((item) => String(item || '')).filter(Boolean)
+    const plainReferenceImagePaths = modelReferenceImages.value.map((item) => String(item || '')).filter(Boolean)
     const plainImageProviderCredentials = JSON.parse(JSON.stringify(currentImageProviderCredentials() || {}))
     await saveCredentials()
     pollTimer = setInterval(() => {
@@ -942,9 +928,11 @@ async function generateModelsBatch() {
     const payload = {
       cloneProjectId: projectId,
       productType: productType.value,
-      productPoints: productPoints.value.trim() || undefined,
+      productPoints: undefined,
+      purpose: 'model_library' as const,
       modelProfileOptions: plainModelProfileOptions,
-      productReferenceImagePaths: plainReferenceImagePaths,
+      productReferenceImagePaths: [],
+      modelReferenceImagePaths: plainReferenceImagePaths,
       imageProviderPrimary: imageProviderPrimary.value,
       openaiApiKey: openaiKey.value.trim() || undefined,
       openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
@@ -965,8 +953,13 @@ async function generateModelsBatch() {
       results.push(...(await Promise.allSettled(chunk)))
     }
     await refreshLibrary()
+    activeTab.value = 'all'
+    statusFilter.value = 'all'
+    page.value = 1
+    selectedId.value = sortedLibrary.value[0]?.id ?? library.value[0]?.id ?? ''
     createPanelOpen.value = false
-    modelProfileOptions.value = getRecommendedModelProfileOptions(productType.value)
+    modelProfileOptions.value = getRecommendedModelProfileOptions('general')
+    modelReferenceImages.value = []
     const successCount = results.filter((item) => item.status === 'fulfilled').length
     const failedCount = results.length - successCount
     message.value = `批量生成完成：成功 ${successCount} 个${failedCount ? `，失败 ${failedCount} 个` : ''}`
@@ -980,23 +973,20 @@ async function generateModelsBatch() {
 }
 
 async function previewModelPrompt() {
-  if (!hasProductInput.value) {
-    message.value = '请先上传参考图或填写商品卖点'
-    return
-  }
   promptPreviewBusy.value = true
   try {
     const projectId = await ensureSourceProjectId()
     const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
-    const plainReferenceImagePaths = allProductRefs.value.map((item) => String(item || '')).filter(Boolean)
+    const plainReferenceImagePaths = modelReferenceImages.value.map((item) => String(item || '')).filter(Boolean)
     const previewApi = window.api.clone.getModelIdentityPromptPreview
     if (typeof previewApi === 'function') {
       const result = await previewApi({
         cloneProjectId: projectId,
         productType: productType.value,
-        productPoints: productPoints.value.trim() || undefined,
+        productPoints: undefined,
         modelProfileOptions: plainModelProfileOptions,
-        productReferenceImagePaths: plainReferenceImagePaths,
+        productReferenceImagePaths: [],
+        modelReferenceImagePaths: plainReferenceImagePaths,
       })
       promptPreview.value = (result as ModelPromptPreview) || null
       message.value = '已生成当前创建模特的提示词预览'
@@ -1004,9 +994,10 @@ async function previewModelPrompt() {
     }
     promptPreview.value = buildLocalModelPromptPreview({
       productType: productType.value,
-      productPoints: productPoints.value.trim() || undefined,
+      productPoints: undefined,
       modelProfileOptions: plainModelProfileOptions,
-      productReferenceImagePaths: plainReferenceImagePaths,
+      productReferenceImagePaths: [],
+      modelReferenceImagePaths: plainReferenceImagePaths,
     })
     message.value = '已使用本地兜底生成提示词预览，重启桌面端后会切换为主进程真实预览'
     return
@@ -1054,6 +1045,10 @@ onBeforeUnmount(() => {
 watch(productType, (value) => {
   modelProfileOptions.value = getRecommendedModelProfileOptions(value)
   promptPreview.value = null
+})
+
+watch([activeTab, statusFilter, search], () => {
+  page.value = 1
 })
 </script>
 
@@ -1362,7 +1357,7 @@ watch(productType, (value) => {
             <div class="models-dialog__title-block">
               <span class="models-dialog__eyebrow">Model Creation</span>
               <h3>创建模特</h3>
-              <p>左侧完成模特设定，右侧补齐商品素材。当前弹窗优先保证设定清晰、素材可见和一屏可操作。</p>
+              <p>左侧完成模特设定，右侧上传一张参考模特图。当前弹窗优先保证设定清晰、素材可见和一屏可操作。</p>
             </div>
             <button type="button" class="models-dialog__close" @click="closeCreatePanel">
               <X class="h-4 w-4" />
@@ -1373,7 +1368,7 @@ watch(productType, (value) => {
             <section class="models-create-section">
               <div class="models-create-section__head">
                 <h4>基础设置</h4>
-                <p>先选择模特的主要方向，再补充细节与商品素材。</p>
+                <p>先选择模特的主要方向，再补充细节与参考模特图。</p>
               </div>
 
               <label class="models-field">
@@ -1427,11 +1422,6 @@ watch(productType, (value) => {
                 </div>
               </label>
 
-              <label class="models-field">
-                <span>补充描述（可选）</span>
-                <textarea v-model="productPoints" placeholder="例如：更亲和、适合近景佩戴展示、希望更生活化一点"></textarea>
-              </label>
-
               <div class="models-field">
                 <span>批量生成数量</span>
                 <div class="models-chip-row">
@@ -1452,8 +1442,8 @@ watch(productType, (value) => {
 
             <section class="models-create-section models-create-section--soft">
               <div class="models-section-heading">
-                <h4>参考素材</h4>
-                <p>上传主图、细节图、佩戴图或风格图，帮助模特生成更贴近商品。</p>
+                <h4>参考模特图</h4>
+                <p>只需要上传一张参考模特图，用来约束模特的大致形象方向。</p>
               </div>
 
               <div class="models-upload-panel">
@@ -1462,16 +1452,13 @@ watch(productType, (value) => {
                     <ImagePlus class="h-4 w-4" />
                   </div>
                   <div class="models-upload-panel__copy">
-                    <strong>素材上传面板</strong>
-                    <p>优先补主图和细节图，右侧会同步显示真实缩略预览。</p>
+                    <strong>参考图上传面板</strong>
+                    <p>上传一张参考模特图，右侧会同步显示真实缩略预览。</p>
                   </div>
                 </div>
 
                 <div class="models-upload-panel__actions">
-                  <button type="button" data-testid="models-upload-main" @click="pickImageGroup('main')"><ImagePlus class="h-4 w-4" />主图</button>
-                  <button type="button" @click="pickImageGroup('detail')"><ImagePlus class="h-4 w-4" />细节图</button>
-                  <button type="button" @click="pickImageGroup('usage')"><ImagePlus class="h-4 w-4" />佩戴图</button>
-                  <button type="button" @click="pickImageGroup('style')"><ImagePlus class="h-4 w-4" />风格图</button>
+                  <button type="button" data-testid="models-upload-main" @click="pickModelReferenceImage"><ImagePlus class="h-4 w-4" />上传参考模特图</button>
                 </div>
               </div>
 
@@ -1479,40 +1466,18 @@ watch(productType, (value) => {
                 <div class="models-upload-preview__hero" :class="{ 'is-empty': !uploadPreviewHero }">
                   <img v-if="uploadPreviewHero" :src="mediaUrl(uploadPreviewHero)" alt="upload-preview" />
                   <div v-else class="models-upload-preview__empty">
-                    <span>上传后将在这里显示素材预览</span>
-                  </div>
-                </div>
-
-                <div class="models-upload-preview__groups">
-                  <div v-for="group in uploadPreviewGroups" :key="group.key" class="models-upload-preview__group">
-                    <div class="models-upload-preview__group-head">
-                      <strong>{{ group.label }}</strong>
-                      <small>{{ group.hint }}</small>
-                    </div>
-                    <div class="models-upload-preview__thumbs" :class="{ 'is-empty': !group.images.length }">
-                      <img
-                        v-for="(image, index) in group.images.slice(0, 4)"
-                        :key="`${group.key}-${index}`"
-                        :src="mediaUrl(image)"
-                        :alt="`${group.label}-${index}`"
-                      />
-                      <span v-if="!group.images.length">未上传</span>
-                    </div>
+                    <span>上传后将在这里显示参考模特图预览</span>
                   </div>
                 </div>
               </div>
 
               <div class="models-stats-row">
-                <div class="models-stat-card"><span>主图</span><strong>{{ productMainImages.length }}</strong></div>
-                <div class="models-stat-card"><span>细节图</span><strong>{{ productDetailImages.length }}</strong></div>
-                <div class="models-stat-card"><span>佩戴图</span><strong>{{ productUsageImages.length }}</strong></div>
-                <div class="models-stat-card"><span>风格图</span><strong>{{ styleReferenceImages.length }}</strong></div>
+                <div class="models-stat-card"><span>参考模特图</span><strong>{{ modelReferenceImages.length }}</strong></div>
               </div>
 
               <div v-if="message" class="models-hint models-hint--floating">
                 {{ message }}
               </div>
-              <div v-if="productDiagnosis" class="models-hint">{{ productDiagnosis }}</div>
               <div v-if="imageProviderMissingText" class="models-hint is-error">{{ imageProviderMissingText }}</div>
 
               <div class="models-prompt-preview">
@@ -1541,7 +1506,7 @@ watch(productType, (value) => {
                     <span>{{ promptPreview.profile.market || '未设置市场' }}</span>
                     <span>{{ promptPreview.profile.outfitStyle || '未设置穿搭' }}</span>
                     <span>{{ promptPreview.profile.sceneStyle || '未设置场景' }}</span>
-                    <span>参考图 {{ promptPreview.productReferenceImageCount }} 张</span>
+                    <span>参考模特图 {{ (promptPreview as any).modelReferenceImageCount || 0 }} 张</span>
                   </div>
                   <p class="models-prompt-preview__summary">{{ promptPreview.description }}</p>
                   <textarea :value="promptPreview.prompt" readonly class="models-prompt-preview__textarea"></textarea>
@@ -1549,7 +1514,7 @@ watch(productType, (value) => {
                 <p v-else class="models-prompt-preview__empty">点击“查看提示词”后，可直接复制当前创建模特实际使用的 prompt 发给我排查。</p>
               </div>
 
-              <button class="models-primary-button models-primary-button--wide" data-testid="models-generate-submit" type="button" :disabled="busy || !hasProductInput" @click="generateModelsBatch">
+              <button class="models-primary-button models-primary-button--wide" data-testid="models-generate-submit" type="button" :disabled="busy || !hasModelReferenceInput" @click="generateModelsBatch">
                 <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
                 <span>{{ busy ? '正在生成模特' : '生成新模特' }}</span>
               </button>
