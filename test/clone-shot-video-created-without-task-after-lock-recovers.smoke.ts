@@ -6,13 +6,13 @@ async function main() {
   const filePath = join(process.cwd(), 'src', 'main', 'modules', 'clone', 'service.ts')
   const source = await readFile(filePath, 'utf8')
 
-  assert.match(source, /shot-video-reconcile:missing-task-force-regenerate/)
-  assert.match(source, /String\(output\.sourceEvent \|\| ''\)\.trim\(\) === 'segment_submit_started'/)
-  assert.match(source, /currentRetryCount < AUTO_CLONE_VIDEO_RETRY_LIMIT/)
-  assert.match(source, /forceRegenerate: true/)
+  assert.match(source, /const SHOT_VIDEO_MISSING_TASK_GRACE_MS = 10 \* 60 \* 1000/)
+  assert.match(source, /function isShotVideoMissingTaskGraceActive/)
+  assert.match(source, /event === 'segment_submit_missing_task'/)
+  assert.match(source, /status: 'submitting'/)
+  assert.match(source, /sourceEvent: 'segment_submit_missing_task'/)
   assert.match(source, /const createdRemoteStatus =/)
   assert.match(source, /remoteStatus: createdRemoteStatus/)
-  assert.match(source, /sourceEvent: 'segment_submit_started'/)
   assert.doesNotMatch(source, /sourceEvent: 'segment_submit_missing_task_id'/)
 
   console.log('clone shot video created without task after lock recovers smoke test passed')

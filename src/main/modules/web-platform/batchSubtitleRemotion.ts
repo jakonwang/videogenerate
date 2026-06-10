@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getAppPaths } from '../../lib/paths'
 import { resolveSubtitleRenderFont } from '../../lib/fontResolve'
@@ -40,6 +41,40 @@ function sanitizePathSegment(value: string, fallback: string) {
     .replace(/\s+/g, ' ')
     .trim()
   return cleaned || fallback
+}
+
+function resolveSubtitleCompositionEntry() {
+  let electronAppPath = ''
+  try {
+    const electron = require('electron') as typeof import('electron')
+    electronAppPath = String(electron?.app?.getAppPath?.() || '').trim()
+  } catch {
+    electronAppPath = ''
+  }
+
+  const appRootCandidates = [electronAppPath, process.cwd()].filter(Boolean)
+  for (const appRoot of appRootCandidates) {
+    const entryPoint = join(appRoot, 'src', 'main', 'modules', 'web-platform', 'remotion', 'subtitleComposition.tsx')
+    if (existsSync(entryPoint)) {
+      return {
+        entryPoint,
+        rootDir: appRoot,
+      }
+    }
+  }
+
+  const moduleLocalEntry = join(__dirname, 'remotion', 'subtitleComposition.tsx')
+  if (existsSync(moduleLocalEntry)) {
+    return {
+      entryPoint: moduleLocalEntry,
+      rootDir: dirname(dirname(dirname(dirname(__dirname)))),
+    }
+  }
+
+  return {
+    entryPoint: join(process.cwd(), 'src', 'main', 'modules', 'web-platform', 'remotion', 'subtitleComposition.tsx'),
+    rootDir: process.cwd(),
+  }
 }
 
 async function loadRemotionBundler() {
@@ -145,13 +180,13 @@ async function readCachedEmojiDataUri(emoji: string) {
 async function ensureSubtitleBundle() {
   if (!bundleCachePromise) {
     const { bundle } = await loadRemotionBundler()
-    const entryPoint = join(process.cwd(), 'src', 'main', 'modules', 'web-platform', 'remotion', 'subtitleComposition.tsx')
+    const { entryPoint, rootDir } = resolveSubtitleCompositionEntry()
     bundleCachePromise = bundle({
       entryPoint,
       webpackOverride: (config) => config,
       enableCaching: true,
       publicPath: null,
-      rootDir: process.cwd(),
+      rootDir,
       publicDir: null,
       onPublicDirCopyProgress: () => undefined,
       onSymlinkDetected: () => undefined,

@@ -187,7 +187,72 @@ async function normalizeToVerticalPng(input: string, output: string) {
 }
 
 function pickTaskId(json: any) {
-  return String(json?.taskId ?? json?.task_id ?? json?.id ?? json?.data?.task_id ?? json?.data?.taskId ?? json?.data?.id ?? '').trim()
+  const directDataValue =
+    typeof json?.data === 'string' || typeof json?.data === 'number'
+      ? String(json.data).trim()
+      : ''
+  const candidates = [
+    directDataValue,
+    json?.data?.task_uuid,
+    json?.data?.taskUuid,
+    json?.data?.task_id,
+    json?.data?.taskId,
+    json?.data?.task?.uuid,
+    json?.data?.task?.id,
+    json?.data?.task?.task_id,
+    json?.data?.task?.taskId,
+    json?.data?.record_id,
+    json?.data?.recordId,
+    json?.data?.uuid,
+    json?.data?.trace_id,
+    json?.data?.traceId,
+    json?.data?.job_id,
+    json?.data?.jobId,
+    json?.data?.prediction_id,
+    json?.data?.predictionId,
+    json?.data?.prediction?.uuid,
+    json?.data?.prediction?.id,
+    json?.data?.prediction?.task_id,
+    json?.data?.prediction?.taskId,
+    json?.data?.result?.uuid,
+    json?.data?.result?.id,
+    json?.data?.result?.task_id,
+    json?.data?.result?.taskId,
+    json?.data?.request_id,
+    json?.data?.requestId,
+    json?.data?.id,
+    json?.task?.uuid,
+    json?.task?.id,
+    json?.task?.task_id,
+    json?.task?.taskId,
+    json?.record_id,
+    json?.recordId,
+    json?.trace_id,
+    json?.traceId,
+    json?.job_id,
+    json?.jobId,
+    json?.prediction_id,
+    json?.predictionId,
+    json?.prediction?.uuid,
+    json?.prediction?.id,
+    json?.prediction?.task_id,
+    json?.prediction?.taskId,
+    json?.result?.uuid,
+    json?.result?.id,
+    json?.result?.task_id,
+    json?.result?.taskId,
+    json?.task_id,
+    json?.taskId,
+    json?.request_id,
+    json?.requestId,
+    json?.uuid,
+    json?.id,
+  ]
+  for (const candidate of candidates) {
+    const taskId = String(candidate ?? '').trim()
+    if (taskId) return taskId
+  }
+  return ''
 }
 
 function pickStatus(json: any) {
@@ -847,7 +912,7 @@ export function buildReferenceResponsibilityText(input?: {
   if (input?.mode === 'storyboard_frame') {
     return [
       'REFERENCE RESPONSIBILITY MAP:',
-      'Image 1 is the product canonical source; use it only for product identity and structure.',
+      'Image 1 is the bound product reference; use it only for product identity and structure.',
       'Image 2 is the model identity reference; use it only for the same person identity.',
       input.isEndFrame
         ? 'Image 3 is the provided start-frame continuity reference; use it only for continuity of angle, crop, composition, and scene, never product redesign.'

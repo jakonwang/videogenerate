@@ -3,9 +3,8 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   CheckCircle2,
   FolderOpen,
-  LoaderCircle,
   Play,
-  Sparkles,
+  LoaderCircle,
   Upload,
   X,
 } from 'lucide-vue-next'
@@ -18,11 +17,9 @@ import {
   type BatchSubtitleOutputItem,
   type BatchSubtitlePreviewResult,
   type BatchSubtitleSourceItem,
-  type BatchSubtitleTitleAnalysisItem,
   type BatchSubtitleTitleItem,
   type BatchSubtitleTitleRenderMode,
-  type BatchSubtitleTitleStyleMode,
-  type BatchSubtitleViralTitleConfig,
+  type BatchSubtitleTitleStrategy,
   type CloneProjectSummary,
 } from '@/lib/webApiClient'
 
@@ -44,13 +41,11 @@ const queueTab = ref<QueueTab>('all')
 const loading = ref(false)
 const runningJob = ref(false)
 const controllingJob = ref(false)
-const generatingTitles = ref(false)
 const pushingToGeelark = ref(false)
 const showAllOutputs = ref(false)
 const notice = ref('')
 const errorText = ref('')
 const previewVideoError = ref('')
-const aiPrompt = ref('')
 const jobs = ref<BatchSubtitleJob[]>([])
 const outputs = ref<BatchSubtitleOutputItem[]>([])
 const cloneProjects = ref<CloneProjectSummary[]>([])
@@ -66,18 +61,14 @@ const sourcePage = ref(1)
 const sourcePageSize = 12
 const selectedTemplatePreset = ref<CaptionTemplatePresetId>('viral-hook')
 const previewMode = ref<PreviewMode>('fast')
-const viralTitleConfig = reactive<BatchSubtitleViralTitleConfig>({
-  language: 'vi',
-  tone: 'hook',
-  sellingPoints: '',
-  symbolIntensity: 'medium',
-  generationMode: 'video_content',
-})
+const titleStrategy = ref<BatchSubtitleTitleStrategy>('single_for_all')
+const titlePoolText = ref('')
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let queuePollTimer: ReturnType<typeof setInterval> | null = null
 let previewRequestToken = 0
 let previewQueued = false
 let lastAppliedPreviewSignature = ''
+let previewDirtySinceLastRender = false
 
 function defaultCaptionStyle(): BatchSubtitleCaptionStyle {
   return {
@@ -248,8 +239,6 @@ const draft = reactive<{
   sourceItems: BatchSubtitleSourceItem[]
   titleText: string
   titleItems: BatchSubtitleTitleItem[]
-  titleStyleMode: BatchSubtitleTitleStyleMode
-  titleAnalysisItems: BatchSubtitleTitleAnalysisItem[]
   overlayImageConfig: BatchSubtitleOverlayImageConfig
   captionStyle: BatchSubtitleCaptionStyle
   layoutPolicy: BatchSubtitleLayoutPolicy
@@ -259,8 +248,6 @@ const draft = reactive<{
   sourceItems: [],
   titleText: '',
   titleItems: [],
-  titleStyleMode: 'default',
-  titleAnalysisItems: [],
   overlayImageConfig: defaultOverlayImageConfig(),
   captionStyle: defaultCaptionStyle(),
   layoutPolicy: defaultLayoutPolicy(),
@@ -274,6 +261,15 @@ const previewPosterUrl = computed(
   () => mediaUrl(previewFrame.value?.previewPosterPath || previewFrame.value?.previewImagePath),
 )
 const hasSources = computed(() => draft.sourceItems.length > 0)
+const titlePoolItems = computed(() =>
+  String(titlePoolText.value || '')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean),
+)
+const hasDraftTitles = computed(() =>
+  titleStrategy.value === 'random_pool' ? titlePoolItems.value.length > 0 : Boolean(String(draft.titleText || '').trim()),
+)
 const selectedPreviewIndex = computed(() =>
   draft.sourceItems.findIndex((item) => item.id === selectedPreviewId.value),
 )
@@ -371,7 +367,7 @@ const sourceUsagePercent = computed(() => {
 })
 const stepStates = computed<Record<'source' | 'config' | 'preview' | 'render', StepState>>(() => ({
   source: hasSources.value ? 'done' : 'active',
-  config: draft.titleText.trim() ? 'done' : hasSources.value ? 'active' : 'idle',
+  config: hasDraftTitles.value ? 'done' : hasSources.value ? 'active' : 'idle',
   preview: hasPreviewReady.value && !previewVideoError.value ? 'done' : hasSources.value ? 'active' : 'idle',
   render: hasRenderedOutputs.value ? 'done' : hasPreviewReady.value ? 'active' : 'idle',
 }))
@@ -408,6 +404,8 @@ watch(
 watch(
   () => ({
     sourceItems: draft.sourceItems.map((item) => item.id).join('|'),
+    titleStrategy: titleStrategy.value,
+    titlePoolText: titlePoolText.value,
     titleText: draft.titleText,
     titleItems: draft.titleItems.map((item) => `${item.sourceItemId}:${item.text}`).join('|'),
     fontName: draft.captionStyle.fontName,
@@ -474,7 +472,6 @@ watch(
 watch(
   () => [
     selectedPreviewId.value,
-    draft.titleText,
     draft.captionStyle.fontName,
     draft.captionStyle.fontSize,
     draft.captionStyle.fontColor,
@@ -490,7 +487,12 @@ watch(
     draft.captionStyle.lineGap,
     draft.captionStyle.bottomMargin,
   ],
-  () => scheduleAccuratePreview(),
+  () => {
+    lastAppliedPreviewSignature = ''
+    previewDirtySinceLastRender = true
+    if (previewMode.value !== 'fast') return
+    scheduleAccuratePreview()
+  },
 )
 
 function mediaUrl(path?: string) {
@@ -578,18 +580,48 @@ function resolveJobStatusLabel(status: BatchSubtitleJob['status']) {
   return '草稿'
 }
 
+function buildTitleConfig() {
+  if (titleStrategy.value === 'random_pool') {
+    return {
+      strategy: 'random_pool' as const,
+      singleText: '',
+      titlePool: [...titlePoolItems.value],
+    }
+  }
+  const titleText = String(draft.titleText || '').trim()
+  return {
+    strategy: 'single_for_all' as const,
+    singleText: titleText,
+    titlePool: titleText ? [titleText] : [],
+  }
+}
+
 function resolveTitleTextForSource(sourceItemId: string) {
-  const perItem = draft.titleItems.find((item) => item.sourceItemId === sourceItemId)?.text?.trim()
+  const activeTitleConfig = buildTitleConfig()
+  const sourceIndex = Math.max(0, draft.sourceItems.findIndex((item) => item.id === sourceItemId))
+  const fallbackTitle =
+    activeTitleConfig.strategy === 'random_pool'
+      ? activeTitleConfig.titlePool[sourceIndex % activeTitleConfig.titlePool.length] || activeTitleConfig.titlePool[0] || ''
+      : activeTitleConfig.singleText
+  const perItem =
+    activeTitleConfig.strategy === 'single_for_all'
+      ? draft.titleItems.find((item) => item.sourceItemId === sourceItemId)?.text?.trim()
+      : ''
   if (perItem) return perItem
-  return String(draft.titleText || '').trim()
+  return String(fallbackTitle || '').trim()
 }
 
 function syncDraftTitleSummary() {
+  if (titleStrategy.value === 'random_pool') {
+    draft.titleText = titlePoolItems.value[0] || ''
+    return
+  }
   const first = draft.sourceItems[0] ? resolveTitleTextForSource(draft.sourceItems[0].id) : ''
   draft.titleText = first
 }
 
 function buildTitleItems(): BatchSubtitleTitleItem[] {
+  if (titleStrategy.value === 'random_pool') return []
   return draft.sourceItems.map((item) => ({
     sourceItemId: item.id,
     text: resolveTitleTextForSource(item.id),
@@ -598,6 +630,7 @@ function buildTitleItems(): BatchSubtitleTitleItem[] {
 }
 
 function updateTitleItem(sourceItemId: string, text: string) {
+  if (titleStrategy.value !== 'single_for_all') return
   const normalized = String(text || '').trim()
   const next = draft.titleItems.filter((item) => item.sourceItemId !== sourceItemId)
   next.push({
@@ -658,11 +691,7 @@ async function refreshAccuratePreview() {
     const result = await webApiClient.previewBatchSubtitleFrame({
       sourceItem: previewSource.value,
       subtitleMode: 'static_title',
-      titleConfig: {
-        strategy: 'single_for_all',
-        singleText: previewTitle,
-        titlePool: previewTitle ? [previewTitle] : [],
-      },
+      titleConfig: buildTitleConfig(),
       titleItems: buildTitleItems(),
       titleRenderMode: draft.titleRenderMode,
       overlayImageConfig: draft.overlayImageConfig,
@@ -678,6 +707,7 @@ async function refreshAccuratePreview() {
     previewFrame.value = result
     previewVideoError.value = ''
     lastAppliedPreviewSignature = signature
+    previewDirtySinceLastRender = false
   } catch (error: any) {
     if (requestToken !== previewRequestToken) return
     previewFrame.value = null
@@ -696,7 +726,7 @@ function scheduleAccuratePreview() {
   if (previewTimer) clearTimeout(previewTimer)
   previewTimer = setTimeout(() => {
     void refreshAccuratePreview()
-  }, 560)
+  }, 900)
 }
 
 function setPreviewMode(mode: PreviewMode) {
@@ -709,7 +739,10 @@ function setPreviewMode(mode: PreviewMode) {
     }
   }
   lastAppliedPreviewSignature = ''
-  scheduleAccuratePreview()
+  previewDirtySinceLastRender = true
+  if (mode === 'fast') {
+    scheduleAccuratePreview()
+  }
 }
 
 async function refreshFontOptions() {
@@ -735,6 +768,9 @@ async function loadAll() {
     jobs.value = jobItems
     outputs.value = outputItems
     cloneProjects.value = projects.filter((item) => item.finalOutputPath)
+    if (selectedJobId.value && !jobItems.some((item) => item.id === selectedJobId.value)) {
+      selectedJobId.value = ''
+    }
     if (!selectedJobId.value && !draftDirty.value && !draft.sourceItems.length && jobItems[0]) loadJobIntoDraft(jobItems[0])
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -784,10 +820,12 @@ async function pickUploadVideos() {
 function startQueuePolling() {
   if (queuePollTimer) clearInterval(queuePollTimer)
   queuePollTimer = setInterval(() => {
+    if (document.hidden) return
+    if (previewFrameLoading.value || controllingJob.value) return
     const hasActiveJob = jobs.value.some((item) => item.status === 'processing' || item.status === 'queued' || item.status === 'paused')
     if (!hasActiveJob) return
     void loadAll()
-  }, 3500)
+  }, 8000)
 }
 
 function toggleCloneSource(project: CloneProjectSummary) {
@@ -824,65 +862,18 @@ function applyCloneSources() {
 function removeSourceItem(id: string) {
   draft.sourceItems = draft.sourceItems.filter((item) => item.id !== id)
   draft.titleItems = draft.titleItems.filter((item) => item.sourceItemId !== id)
-  draft.titleAnalysisItems = draft.titleAnalysisItems.filter((item) => item.sourceItemId !== id)
   syncDraftTitleSummary()
-}
-
-async function runGenerateTitles() {
-  if (!aiPrompt.value.trim()) {
-    errorText.value = '请先输入标题生成提示词。'
-    return
-  }
-  generatingTitles.value = true
-  errorText.value = ''
-  try {
-    const result = await webApiClient.generateBatchSubtitleTitles({
-      prompt: aiPrompt.value.trim(),
-      count: 1,
-      contentLanguage: 'zh-CN',
-    })
-    draft.titleText = result.titles[0] || ''
-    notice.value = 'AI 标题生成完成。'
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    generatingTitles.value = false
-  }
-}
-
-async function runGenerateViralTitles() {
-  if (!draft.sourceItems.length) {
-    errorText.value = '请先添加至少一条视频素材。'
-    return
-  }
-  generatingTitles.value = true
-  errorText.value = ''
-  try {
-    const result = await webApiClient.generateBatchSubtitleViralTitles({
-      jobId: selectedJobId.value || undefined,
-      sourceItems: draft.sourceItems,
-      language: viralTitleConfig.language || 'vi',
-      tone: viralTitleConfig.tone || 'hook',
-      sellingPoints: String(viralTitleConfig.sellingPoints || '').trim() || undefined,
-      symbolIntensity: viralTitleConfig.symbolIntensity || 'medium',
-    })
-    draft.titleItems = result.titleItems
-    draft.titleAnalysisItems = result.analysisItems
-    draft.titleStyleMode = result.titleStyleMode
-    syncDraftTitleSummary()
-    applyCaptionTemplatePreset('vn-viral-bold')
-    notice.value = `已为 ${result.titleItems.length} 条视频生成越南爆款标题。`
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    generatingTitles.value = false
-  }
 }
 
 async function saveCurrentDraft() {
   if (!draft.sourceItems.length) {
     errorText.value = '请先添加至少一条素材视频。'
-    return
+    return null
+  }
+  const activeJobId =
+    selectedJobId.value && jobs.value.some((item) => item.id === selectedJobId.value) ? selectedJobId.value : ''
+  if (!activeJobId && selectedJobId.value) {
+    selectedJobId.value = ''
   }
   const payload = {
     name: draft.name,
@@ -891,15 +882,8 @@ async function saveCurrentDraft() {
     exportEngine: 'ass_fallback' as const,
     titleRenderMode: draft.titleRenderMode,
     sourceItems: draft.sourceItems,
-    titleConfig: {
-      strategy: 'single_for_all' as const,
-      singleText: draft.titleText,
-      titlePool: draft.titleText ? [draft.titleText] : [],
-    },
+    titleConfig: buildTitleConfig(),
     titleItems: buildTitleItems(),
-    titleStyleMode: draft.titleStyleMode,
-    viralTitleConfig: { ...viralTitleConfig },
-    titleAnalysisItems: draft.titleAnalysisItems,
     overlayImageConfig: draft.overlayImageConfig,
     styleConfig: {
       ...draft.captionStyle,
@@ -909,15 +893,17 @@ async function saveCurrentDraft() {
     layoutPolicy: draft.layoutPolicy,
   }
   try {
-    const result = selectedJobId.value
-      ? await webApiClient.updateBatchSubtitleDraft(selectedJobId.value, payload)
+    const result = activeJobId
+      ? await webApiClient.updateBatchSubtitleDraft(activeJobId, payload)
       : await webApiClient.createBatchSubtitleJob(payload)
     loadJobIntoDraft(result)
     draftDirty.value = false
     notice.value = '当前草稿已保存。'
     await loadAll()
+    return result
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
+    return null
   }
 }
 
@@ -926,39 +912,33 @@ async function renderBatch() {
     errorText.value = '请先添加素材视频。'
     return
   }
-  if (!draft.titleText.trim()) {
-    errorText.value = '请先输入标题内容。'
+  if (!hasDraftTitles.value) {
+    errorText.value = titleStrategy.value === 'random_pool' ? 'Please add at least one random title.' : 'Please enter a title.'
     return
   }
   runningJob.value = true
   errorText.value = ''
   notice.value = '正在准备批量渲染任务…'
   try {
-    if (!selectedJobId.value) await saveCurrentDraft()
-    if (!selectedJobId.value) {
+    const ensuredJob = selectedJobId.value ? { id: selectedJobId.value } : await saveCurrentDraft()
+    const jobId = String(ensuredJob?.id || selectedJobId.value || '').trim()
+    if (!jobId) {
       errorText.value = '保存任务失败，未生成可执行任务，请先点击保存配置后重试。'
       return
     }
-    await webApiClient.updateBatchSubtitleDraft(selectedJobId.value, {
+    await webApiClient.updateBatchSubtitleDraft(jobId, {
       sourceItems: draft.sourceItems,
       subtitleSource: 'manual',
       exportEngine: 'ass_fallback',
       titleRenderMode: draft.titleRenderMode,
+      titleConfig: buildTitleConfig(),
       titleItems: buildTitleItems(),
-      titleStyleMode: draft.titleStyleMode,
-      viralTitleConfig: { ...viralTitleConfig },
-      titleAnalysisItems: draft.titleAnalysisItems,
       overlayImageConfig: draft.overlayImageConfig,
       captionStyle: draft.captionStyle,
       layoutPolicy: draft.layoutPolicy,
       subtitleMode: 'static_title',
-      titleConfig: {
-        strategy: 'single_for_all',
-        singleText: draft.titleText,
-        titlePool: draft.titleText ? [draft.titleText] : [],
-      },
     })
-    const result = await webApiClient.runBatchSubtitleJob(selectedJobId.value)
+    const result = await webApiClient.runBatchSubtitleJob(jobId)
     loadJobIntoDraft(result)
     draftDirty.value = false
     notice.value = `批量渲染完成，共输出 ${result.outputCount} 条结果。`
@@ -1051,17 +1031,10 @@ function loadJobIntoDraft(job: BatchSubtitleJob) {
   draft.name = job.name
   draft.titleRenderMode = job.titleRenderMode || 'overlay_image'
   draft.sourceItems = [...job.sourceItems]
+  titleStrategy.value = job.titleConfig?.strategy || 'single_for_all'
   draft.titleText = job.titleConfig?.singleText || ''
+  titlePoolText.value = Array.isArray(job.titleConfig?.titlePool) ? job.titleConfig.titlePool.join('\n') : ''
   draft.titleItems = [...(job.titleItems || [])]
-  draft.titleStyleMode = job.titleStyleMode || 'default'
-  draft.titleAnalysisItems = [...(job.titleAnalysisItems || [])]
-  Object.assign(viralTitleConfig, {
-    language: job.viralTitleConfig?.language || 'vi',
-    tone: job.viralTitleConfig?.tone || 'hook',
-    sellingPoints: job.viralTitleConfig?.sellingPoints || '',
-    symbolIntensity: job.viralTitleConfig?.symbolIntensity || 'medium',
-    generationMode: 'video_content',
-  })
   draft.overlayImageConfig = { ...defaultOverlayImageConfig(), ...(job.overlayImageConfig || {}) }
   draft.captionStyle = { ...defaultCaptionStyle(), ...(job.captionStyle || {}) }
   draft.layoutPolicy = { ...defaultLayoutPolicy(), ...(job.layoutPolicy || {}) }
@@ -1292,6 +1265,9 @@ onBeforeUnmount(() => {
             <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'video' }" type="button" @click="setPreviewMode('video')">
               真实视频预览
             </button>
+            <button class="toolbar-pill" type="button" @click="scheduleAccuratePreview()">
+              {{ previewDirtySinceLastRender ? '刷新预览' : '重新生成' }}
+            </button>
           </div>
         </div>
 
@@ -1366,7 +1342,7 @@ onBeforeUnmount(() => {
             <span class="section-kicker">Preview Status</span>
             <strong>{{ previewSource?.fileName || '尚未选择视频' }}</strong>
           </div>
-          <p>{{ previewMode === 'video' ? '当前为真实视频预览，仅在手动切换后生成，适合确认最终运动与封装效果。' : '当前为快速预览，优先保证大批量任务下的页面流畅度。' }}</p>
+          <p>{{ previewMode === 'video' ? '当前为真实视频预览，修改标题或样式后请手动刷新，避免页面频繁卡顿。' : '当前为快速预览，优先保证大批量任务下的页面流畅度。' }}</p>
         </div>
 
         <div v-if="previewVideoError" class="preview-error">{{ previewVideoError }}</div>
@@ -1386,7 +1362,7 @@ onBeforeUnmount(() => {
           </div>
           <button class="primary-button" type="button" :disabled="runningJob" @click="renderBatch">
             <LoaderCircle v-if="runningJob" class="h-4 w-4 animate-spin" />
-            <Sparkles v-else class="h-4 w-4" />
+            <Play v-else class="h-4 w-4" />
             <span>{{ runningJob ? '批量渲染中…' : `开始批量渲染（${draft.sourceItems.length || 0} 条）` }}</span>
           </button>
         </div>
@@ -1413,121 +1389,44 @@ onBeforeUnmount(() => {
           <section class="form-section">
             <div class="section-heading">
               <div>
-                <span class="section-kicker">Strategy</span>
-                <strong>生成策略</strong>
+                <span class="section-kicker">Title Mode</span>
+                <strong>标题配置</strong>
               </div>
             </div>
             <div class="strategy-grid">
-              <button class="strategy-card is-active" type="button">
-                <strong>AI 越南爆款</strong>
-                <small>按视频内容批量生成适合 TikTok 场景的越南标题。</small>
+              <button class="strategy-card" :class="{ 'is-active': titleStrategy === 'single_for_all' }" type="button" @click="titleStrategy = 'single_for_all'">
+                <strong>统一标题</strong>
+                <small>整批视频共用同一条标题。</small>
               </button>
-              <button class="strategy-card" type="button" disabled>
-                <strong>手工兜底</strong>
-                <small>当你已经有明确卖点时，可直接写提示词生成基础标题。</small>
+              <button class="strategy-card" :class="{ 'is-active': titleStrategy === 'random_pool' }" type="button" @click="titleStrategy = 'random_pool'">
+                <strong>随机标题池</strong>
+                <small>每条视频从标题池中随机选择一条标题。</small>
               </button>
+            </div>
+            <div v-if="titleStrategy === 'single_for_all'">
+              <input
+                v-model="draft.titleText"
+                class="dark-input"
+                type="text"
+                placeholder="输入统一标题"
+              />
+            </div>
+            <div v-else>
+              <textarea
+                v-model="titlePoolText"
+                class="dark-textarea dark-textarea--compact"
+                placeholder="每行输入一条随机标题"
+              ></textarea>
+              <p class="helper-copy helper-copy--tight">当前可用标题数：{{ titlePoolItems.length }}</p>
             </div>
           </section>
 
-          <section class="form-section">
-            <div class="section-heading">
-              <div>
-                <span class="section-kicker">Vietnam Viral Mode</span>
-                <strong>越南爆款模式</strong>
-              </div>
-              <span class="section-note">{{ draft.sourceItems.length }} 条素材</span>
-            </div>
-            <div class="form-grid form-grid--dual">
-              <label class="field-block">
-                <span>语言</span>
-                <select v-model="viralTitleConfig.language" class="dark-select">
-                  <option value="vi">越南语</option>
-                  <option value="en">英语</option>
-                  <option value="zh">中文</option>
-                </select>
-              </label>
-              <label class="field-block">
-                <span>语气</span>
-                <select v-model="viralTitleConfig.tone" class="dark-select">
-                  <option value="hook">钩子型</option>
-                  <option value="conversion">转化型</option>
-                  <option value="emotional">情绪型</option>
-                </select>
-              </label>
-            </div>
-            <div class="form-grid form-grid--dual">
-              <label class="field-block">
-                <span>符号强度</span>
-                <select v-model="viralTitleConfig.symbolIntensity" class="dark-select">
-                  <option value="low">低</option>
-                  <option value="medium">中</option>
-                  <option value="high">高</option>
-                </select>
-              </label>
-              <label class="field-block">
-                <span>标题风格</span>
-                <input :value="draft.titleStyleMode" class="dark-input" type="text" readonly />
-              </label>
-            </div>
-            <textarea
-              v-model="viralTitleConfig.sellingPoints"
-              class="dark-textarea dark-textarea--compact"
-              placeholder="补充商品卖点、价格优势、赠品信息或目标人群，帮助 AI 生成更准的标题"
-            ></textarea>
-            <div class="action-row">
-              <button class="minor-button" type="button" :disabled="generatingTitles" @click="runGenerateViralTitles">
-                <LoaderCircle v-if="generatingTitles" class="h-4 w-4 animate-spin" />
-                <Sparkles v-else class="h-4 w-4" />
-                <span>{{ generatingTitles ? 'AI 生成中...' : 'AI 生成越南标题' }}</span>
-              </button>
-              <button class="minor-button" type="button" @click="applyCaptionTemplatePreset('vn-viral-bold')">套用粗体模板</button>
-              <button class="minor-button" type="button" @click="applyCaptionTemplatePreset('vn-viral-outline')">套用描边模板</button>
-            </div>
-          </section>
 
-          <section class="form-section">
-            <div class="section-heading">
-              <div>
-                <span class="section-kicker">Manual Fallback</span>
-                <strong>基础标题生成</strong>
-              </div>
-            </div>
-            <input
-              v-model="aiPrompt"
-              class="dark-input"
-              type="text"
-              placeholder="例如：生成 1 条适合越南 TikTok 的高点击卖货标题，突出包邮、限时优惠和强对比卖点"
-            />
-            <div class="action-row">
-              <button class="minor-button" type="button" :disabled="generatingTitles" @click="runGenerateTitles">
-                <LoaderCircle v-if="generatingTitles" class="h-4 w-4 animate-spin" />
-                <Sparkles v-else class="h-4 w-4" />
-                <span>{{ generatingTitles ? 'AI 生成中...' : '生成单条标题' }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="form-section">
-            <div class="section-heading">
-              <div>
-                <span class="section-kicker">Render Mode</span>
-                <strong>渲染模式</strong>
-              </div>
-            </div>
-            <div class="mode-pills">
-              <button type="button" class="is-active">静态标题贴片</button>
-              <button type="button" class="is-active">真实预览链路</button>
-            </div>
-            <p class="helper-copy">
-              当前模式优先保证 Windows 开发与 Linux 部署共用同一条真实渲染链路。
-            </p>
-          </section>
-
-          <section class="form-section">
+          <section class="form-section" v-if="titleStrategy === 'single_for_all'">
             <div class="section-heading">
               <div>
                 <span class="section-kicker">Per Video Titles</span>
-                <strong>逐视频标题</strong>
+                <strong>逐视频覆盖</strong>
               </div>
             </div>
             <div class="title-item-list">
@@ -1542,9 +1441,7 @@ onBeforeUnmount(() => {
                   placeholder="为当前视频输入单独标题"
                   @input="updateTitleItem(item.id, ($event.target as HTMLTextAreaElement).value)"
                 ></textarea>
-                <p class="helper-copy helper-copy--tight">
-                  {{ draft.titleAnalysisItems.find((row) => row.sourceItemId === item.id)?.summary || '暂无分析摘要，可先执行 AI 批量生成。' }}
-                </p>
+                <p class="helper-copy helper-copy--tight">留空时会回退到统一标题。</p>
               </div>
             </div>
           </section>

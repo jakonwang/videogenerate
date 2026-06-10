@@ -750,6 +750,22 @@ function normalizeRunMode(value: unknown): CloneRunMode {
   return value === 'auto' ? 'auto' : 'manual'
 }
 
+function inferNormalizedRunMode(projectLike: any): CloneRunMode {
+  if (projectLike?.runMode === 'auto') return 'auto'
+  const autoTargetStage = String(projectLike?.autoFlowStatus?.targetStage ?? '').trim()
+  if (autoTargetStage === 'final_compose') return 'auto'
+  const hasAutoRunSubmitAudit = Array.isArray(projectLike?.generationQueue?.submissionAuditLogs) &&
+    projectLike.generationQueue.submissionAuditLogs.some((item: any) => String(item?.trigger ?? '').trim() === 'auto_run_submit')
+  if (hasAutoRunSubmitAudit) return 'auto'
+  return 'manual'
+}
+
+function shouldPersistInferredRunMode(projectLike: any) {
+  const stored = String(projectLike?.runMode ?? '').trim()
+  if (stored === 'auto' || stored === 'manual') return false
+  return inferNormalizedRunMode(projectLike) === 'auto'
+}
+
 function inferBeatPurpose(
   shot: any,
 ): 'hook' | 'problem' | 'demo' | 'benefit' | 'proof' | 'offer' | 'cta' {
@@ -1916,6 +1932,17 @@ function normalizeProject(p: CloneProject): CloneProject {
             : 'idle',
         outputPath: String((p as any).finalCompose.outputPath ?? '').trim() || undefined,
         coverImagePath: String((p as any).finalCompose.coverImagePath ?? '').trim() || undefined,
+        subtitleOverlay:
+          (p as any).finalCompose.subtitleOverlay && typeof (p as any).finalCompose.subtitleOverlay === 'object'
+            ? {
+                active: Boolean((p as any).finalCompose.subtitleOverlay.active),
+                originalOutputPath: String((p as any).finalCompose.subtitleOverlay.originalOutputPath ?? '').trim(),
+                originalCoverImagePath: String((p as any).finalCompose.subtitleOverlay.originalCoverImagePath ?? '').trim() || undefined,
+                subtitleOutputPath: String((p as any).finalCompose.subtitleOverlay.subtitleOutputPath ?? '').trim(),
+                subtitleCoverImagePath: String((p as any).finalCompose.subtitleOverlay.subtitleCoverImagePath ?? '').trim() || undefined,
+                appliedAt: Number((p as any).finalCompose.subtitleOverlay.appliedAt ?? now()) || now(),
+              }
+            : undefined,
         error: String((p as any).finalCompose.error ?? '').trim() || undefined,
         updatedAt: Number((p as any).finalCompose.updatedAt ?? now()),
       }
@@ -1990,7 +2017,7 @@ function normalizeProject(p: CloneProject): CloneProject {
         : 'idle',
     productImageSanitizationError: String((p as any)?.productImageSanitizationError ?? '').trim() || undefined,
     locale: p.locale === 'zh-CN' ? 'zh-CN' : 'vi-VN',
-    runMode: normalizeRunMode((p as any)?.runMode),
+    runMode: inferNormalizedRunMode(p),
     strength: 'structure',
     policy: {
       ...(p.policy ?? defaultPolicy()),
@@ -2361,13 +2388,36 @@ export const cloneRepo = {
   async listProjects(): Promise<CloneProject[]> {
     return await queueCloneDbMutation(async () => {
       const projects = readCloneProjectsFromSqlite()
-      return projects.map(normalizeProject)
+      let changed = false
+      const normalized = projects.map((project) => {
+        if (shouldPersistInferredRunMode(project)) {
+          changed = true
+          return normalizeProject({ ...project, runMode: 'auto' as const })
+        }
+        return normalizeProject(project)
+      })
+      if (changed) {
+        for (const project of normalized) upsertCloneProjectInSqlite(project)
+      }
+      return normalized
     })
   },
 
   async listRawProjects(): Promise<CloneProject[]> {
     return await queueCloneDbMutation(async () => {
-      return readCloneProjectsFromSqlite()
+      const projects = readCloneProjectsFromSqlite()
+      let changed = false
+      const normalized = projects.map((project) => {
+        if (shouldPersistInferredRunMode(project)) {
+          changed = true
+          return normalizeProject({ ...project, runMode: 'auto' as const })
+        }
+        return normalizeProject(project)
+      })
+      if (changed) {
+        for (const project of normalized) upsertCloneProjectInSqlite(project)
+      }
+      return normalized
     })
   },
 
@@ -2376,7 +2426,12 @@ export const cloneRepo = {
     if (!targetId) return null
     return await queueCloneDbMutation(async () => {
       const project = readCloneProjectByIdFromSqlite(targetId)
-      return project ? normalizeProject(project) : null
+      if (!project) return null
+      const normalized = shouldPersistInferredRunMode(project)
+        ? normalizeProject({ ...project, runMode: 'auto' as const })
+        : normalizeProject(project)
+      if (shouldPersistInferredRunMode(project)) upsertCloneProjectInSqlite(normalized)
+      return normalized
     })
   },
 
@@ -2398,7 +2453,7 @@ export const cloneRepo = {
         description: String(input.description ?? '').trim() || undefined,
         archived: false,
         status: 'draft',
-        runMode: normalizeRunMode(input.runMode),
+        runMode: inferNormalizedRunMode(input),
         locale: input.locale,
         strength: input.strength,
         referenceVideoPath: input.referenceVideoPath,

@@ -55,6 +55,13 @@ const api = {
       ipcRenderer.invoke('clone:createDraftProject', payload ?? {}),
     updateProjectMeta: (payload: { cloneProjectId: string; title?: string; description?: string }) =>
       ipcRenderer.invoke('clone:updateProjectMeta', payload),
+    applySubtitleVideoToProject: (payload: {
+      cloneProjectId: string
+      subtitleVideoPath: string
+      subtitleCoverImagePath?: string
+    }) => ipcRenderer.invoke('clone:applySubtitleVideoToProject', payload),
+    revertSubtitleVideoFromProject: (payload: { cloneProjectId: string }) =>
+      ipcRenderer.invoke('clone:revertSubtitleVideoFromProject', payload),
     updateProjectRenderHints: (payload: {
       cloneProjectId: string
       aspectRatio?: '9:16' | '16:9'

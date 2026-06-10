@@ -678,6 +678,21 @@ function wireIpc() {
     },
   )
   ipcMain.handle(
+    'clone:applySubtitleVideoToProject',
+    async (
+      _e,
+      payload: { cloneProjectId: string; subtitleVideoPath: string; subtitleCoverImagePath?: string },
+    ) => {
+      return await cloneService.applySubtitleVideoToProject(payload)
+    },
+  )
+  ipcMain.handle(
+    'clone:revertSubtitleVideoFromProject',
+    async (_e, payload: { cloneProjectId: string }) => {
+      return await cloneService.revertSubtitleVideoFromProject(payload)
+    },
+  )
+  ipcMain.handle(
     'clone:updateProjectRenderHints',
     async (
       _e,

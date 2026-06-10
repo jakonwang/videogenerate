@@ -70,6 +70,29 @@ async function main() {
     submissionLockedUntil: now + __cloneServiceInternals.SHOT_VIDEO_SUBMISSION_LOCK_MS,
   })
   assert.match(reason, /\[submit_locked\]/)
+
+  assert.equal(
+    __cloneServiceInternals.isShotVideoMissingTaskGraceActive(
+      {
+        status: 'submitting',
+        sourceEvent: 'segment_submit_missing_task',
+        submissionStartedAt: now,
+      },
+      now + 1_000,
+    ),
+    true,
+  )
+  assert.equal(
+    __cloneServiceInternals.isShotVideoMissingTaskGraceActive(
+      {
+        status: 'submitting',
+        sourceEvent: 'segment_submit_missing_task',
+        submissionStartedAt: now - __cloneServiceInternals.SHOT_VIDEO_MISSING_TASK_GRACE_MS - 1,
+      },
+      now,
+    ),
+    false,
+  )
   console.log('clone video submit idempotency smoke test passed')
 }
 

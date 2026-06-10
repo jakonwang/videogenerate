@@ -672,6 +672,14 @@ export type CloneFinalComposeStatus = {
   status: 'idle' | 'ready' | 'composing' | 'done' | 'failed'
   outputPath?: string
   coverImagePath?: string
+  subtitleOverlay?: {
+    active: boolean
+    originalOutputPath: string
+    originalCoverImagePath?: string
+    subtitleOutputPath: string
+    subtitleCoverImagePath?: string
+    appliedAt: number
+  }
   error?: string
   updatedAt: number
 }
@@ -1133,6 +1141,9 @@ export type CloneProjectSummary = {
   previewReportPath: string
   outputDir: string
   finalOutputPath: string
+  subtitleOverlayActive?: boolean
+  subtitleOriginalOutputPath?: string
+  subtitleOutputPath?: string
   selectedModelIdentityName: string
   productReferenceImageCount: number
   productReferenceImagePaths?: string[]

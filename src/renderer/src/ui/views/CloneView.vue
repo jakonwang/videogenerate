@@ -810,6 +810,26 @@ const shotVideoOutputStateSignature = computed(() =>
     },
   ),
 )
+const storyboardFrameStateSignature = computed(() =>
+  storyboardFrames.value.reduce(
+    (acc, item) => {
+      if (String(item.imagePath || '').trim()) acc.ready += 1
+      else if (String(item.error || '').trim()) acc.failed += 1
+      else acc.pending += 1
+      acc.retryableFailed += !String(item.imagePath || '').trim() && String(item.error || '').trim() && Number(item.retryCount || 0) < 2 ? 1 : 0
+      acc.updatedAtMax = Math.max(acc.updatedAtMax, Number(item.updatedAt || 0))
+      return acc
+    },
+    {
+      total: storyboardFrames.value.length,
+      ready: 0,
+      pending: 0,
+      failed: 0,
+      retryableFailed: 0,
+      updatedAtMax: 0,
+    },
+  ),
+)
 const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath || '')
 const selectedGeelarkAccount = computed(
   () => geelarkAccounts.value.find((item) => item.id === geelarkPublishForm.publishAccountId) || null,
@@ -3264,7 +3284,39 @@ let autoVideoSubmitSignature = ''
 let autoVideoDownloadRecoverySignature = ''
 let autoRemoteSyncInFlight = false
 let autoRemoteSyncLastAt = 0
+let autoStoryboardQuerySignature = ''
+let autoStoryboardRetrySignature = ''
 const AUTO_REMOTE_SYNC_INTERVAL_MS = 25_000
+
+function buildAutoVideoSubmitSignature(projectId: string, readyFrameCount: number, phase: 'timer' | 'watch') {
+  const state = shotVideoOutputStateSignature.value
+  return [
+    projectId,
+    readyFrameCount,
+    phase,
+    state.total,
+    state.taskBound,
+    state.localReady,
+    state.running,
+    state.pendingDownload,
+    state.downloading,
+    state.updatedAtMax,
+  ].join(':')
+}
+
+function buildAutoStoryboardRecoverySignature(projectId: string, kind: 'query' | 'retry') {
+  const state = storyboardFrameStateSignature.value
+  return [
+    projectId,
+    kind,
+    state.total,
+    state.ready,
+    state.pending,
+    state.failed,
+    state.retryableFailed,
+    state.updatedAtMax,
+  ].join(':')
+}
 
 onMounted(async () => {
   cloneTopbar.show(stageItems.value.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
@@ -3305,7 +3357,7 @@ onMounted(async () => {
           )
         })
         if (readyFrameCount > 0 && !hasSubmittedShotVideos) {
-          const nextSignature = `${current.value.id}:${readyFrameCount}:timer`
+          const nextSignature = buildAutoVideoSubmitSignature(current.value.id, readyFrameCount, 'timer')
           if (autoVideoSubmitSignature !== nextSignature) {
             autoVideoSubmitSignature = nextSignature
             pushRuntimeLog(
@@ -3317,6 +3369,38 @@ onMounted(async () => {
               'info',
             )
             void generateShotVideos()
+          }
+        }
+      }
+      if (visibleStageKey.value === 'grid' && !loading.value) {
+        const storyboardState = storyboardFrameStateSignature.value
+        if (storyboardState.pending > 0 && !queryingStoryboardFrames.value) {
+          const nextSignature = buildAutoStoryboardRecoverySignature(current.value.id, 'query')
+          if (autoStoryboardQuerySignature !== nextSignature) {
+            autoStoryboardQuerySignature = nextSignature
+            pushRuntimeLog(
+              `[clone-debug] storyboard-grid:timer-auto-query ${JSON.stringify({
+                projectId: current.value.id,
+                pendingCount: storyboardState.pending,
+                failedCount: storyboardState.failed,
+              })}`,
+              'info',
+            )
+            void batchQueryPendingStoryboardFrames()
+          }
+        } else if (storyboardState.retryableFailed > 0 && !regeneratingFailedStoryboardFrames.value) {
+          const nextSignature = buildAutoStoryboardRecoverySignature(current.value.id, 'retry')
+          if (autoStoryboardRetrySignature !== nextSignature) {
+            autoStoryboardRetrySignature = nextSignature
+            pushRuntimeLog(
+              `[clone-debug] storyboard-grid:timer-auto-retry ${JSON.stringify({
+                projectId: current.value.id,
+                retryableFailedCount: storyboardState.retryableFailed,
+                failedCount: storyboardState.failed,
+              })}`,
+              'info',
+            )
+            void regenerateFailedStoryboardFrames()
           }
         }
       }
@@ -3401,6 +3485,8 @@ watch(
     autoVideoDownloadRecoverySignature = ''
     autoRemoteSyncInFlight = false
     autoRemoteSyncLastAt = 0
+    autoStoryboardQuerySignature = ''
+    autoStoryboardRetrySignature = ''
     autoBootstrapSignature.value = ''
     autoRunRequestedAfterAnalyze.value = false
     autoRunIntentArmed.value = false
@@ -3468,7 +3554,7 @@ watch(
       )
     })
     if (hasSubmittedShotVideos) return
-    const nextSignature = `${projectId}:${readyFrameCount}`
+    const nextSignature = buildAutoVideoSubmitSignature(projectId, readyFrameCount, 'watch')
     if (autoVideoSubmitSignature === nextSignature) return
     autoVideoSubmitSignature = nextSignature
     console.log('[clone-debug] video-stage:auto-submit-dispatch', {

@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS plugins (
   payload TEXT NOT NULL,
   PRIMARY KEY (user_id, plugin_id)
 );
+CREATE TABLE IF NOT EXISTS batch_subtitle_jobs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  payload TEXT NOT NULL
+);
 `
 
 let db: SqliteDatabase | null = null
@@ -158,6 +164,7 @@ function clearTables(database: SqliteDatabase) {
     'compute_price_rules',
     'login_codes',
     'plugins',
+    'batch_subtitle_jobs',
   ]) {
     database.exec(`DELETE FROM ${table};`)
   }
@@ -176,6 +183,7 @@ export function isWebPlatformSqliteEmpty() {
     'compute_price_rules',
     'login_codes',
     'plugins',
+    'batch_subtitle_jobs',
   ]) {
     const row = database.prepare(`SELECT COUNT(1) AS count FROM ${table}`).get() as { count?: number } | undefined
     if (Number(row?.count || 0) > 0) return false
@@ -196,6 +204,7 @@ export function readWebPlatformDbFromSqlite(): WebPlatformDb {
     computePriceRules: selectPayloads('compute_price_rules', 'action ASC'),
     loginCodes: selectPayloads('login_codes', 'updated_at DESC'),
     plugins: selectPayloads('plugins', 'updated_at DESC'),
+    batchSubtitleJobs: selectPayloads('batch_subtitle_jobs', 'updated_at DESC'),
   }
 }
 
@@ -211,6 +220,9 @@ export function writeWebPlatformDbToSqlite(input: WebPlatformDb) {
   const insertRule = database.prepare('INSERT INTO compute_price_rules (action, payload) VALUES (?, ?)')
   const insertLoginCode = database.prepare('INSERT INTO login_codes (phone, expires_at, updated_at, payload) VALUES (?, ?, ?, ?)')
   const insertPlugin = database.prepare('INSERT INTO plugins (user_id, plugin_id, updated_at, payload) VALUES (?, ?, ?, ?)')
+  const insertBatchSubtitleJob = database.prepare(
+    'INSERT INTO batch_subtitle_jobs (id, user_id, updated_at, payload) VALUES (?, ?, ?, ?)',
+  )
 
   database.exec('BEGIN IMMEDIATE;')
   try {
@@ -233,6 +245,9 @@ export function writeWebPlatformDbToSqlite(input: WebPlatformDb) {
       insertLoginCode.run(item.phone, Number(item.expiresAt || 0), Number(item.updatedAt || 0), JSON.stringify(item))
     }
     for (const item of input.plugins) insertPlugin.run(item.userId, item.pluginId, Number(item.updatedAt || 0), JSON.stringify(item))
+    for (const item of input.batchSubtitleJobs || []) {
+      insertBatchSubtitleJob.run(item.id, item.userId, Number(item.updatedAt || 0), JSON.stringify(item))
+    }
     database.exec('COMMIT;')
   } catch (error) {
     database.exec('ROLLBACK;')

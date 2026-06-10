@@ -1,10 +1,11 @@
 ﻿<script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, FolderOpen, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, Search, Trash2, Video, Wand2 } from 'lucide-vue-next'
 import UiCard from '../components/UiCard.vue'
 import UiButton from '../components/UiButton.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import { webApiClient } from '@/lib/webApiClient'
 
 type CloneProjectSummary = {
   id: string
@@ -26,6 +27,9 @@ type CloneProjectSummary = {
   previewReportPath: string
   outputDir: string
   finalOutputPath: string
+  subtitleOverlayActive?: boolean
+  subtitleOriginalOutputPath?: string
+  subtitleOutputPath?: string
   selectedModelIdentityName: string
   productReferenceImageCount: number
   shotCount: number
@@ -48,6 +52,25 @@ type RuntimeLogItem = {
   level: 'info' | 'success' | 'error'
   message: string
   time: number
+}
+
+type SubtitlePresetId = 'viral-hook' | 'deal-punch' | 'premium-drop'
+
+type SubtitleCaptionStyle = {
+  fontName: string
+  fontSize: number
+  fontColor: string
+  strokeColor: string
+  strokeWidth: number
+  shadowColor: string
+  shadowBlur: number
+  position: 'top' | 'center' | 'bottom'
+  textAlign: 'left' | 'center' | 'right'
+  safeMargin: number
+  maxLines: number
+  maxWidthRatio: number
+  lineGap: number
+  bottomMargin: number
 }
 
 const router = useRouter()
@@ -89,8 +112,109 @@ const runtimeDialogOpen = ref(false)
 const videoPreviewDialogOpen = ref(false)
 const videoPreviewItem = ref<CloneProjectSummary | null>(null)
 const videoPreviewSaving = ref(false)
+const subtitleFeatureReady = ref(false)
+const subtitleDialogOpen = ref(false)
+const subtitleDialogBusy = ref(false)
+const subtitleDialogMode = ref<'batch' | 'single'>('batch')
+const subtitleDialogTab = ref<'title' | 'template' | 'style'>('title')
+const subtitleTargetIds = ref<string[]>([])
+const subtitleTitleStrategy = ref<'single_for_all' | 'random_pool'>('single_for_all')
+const subtitleTitleText = ref('')
+const subtitleTitlePoolText = ref('')
+const subtitleSelectedPreset = ref<SubtitlePresetId>('viral-hook')
+const subtitleCaptionStyle = reactive<SubtitleCaptionStyle>(defaultSubtitleCaptionStyle())
 let offRuntimeLog: (() => void) | undefined
 const cloneApi = window.api.clone as any
+
+const subtitlePresets: Array<{
+  id: SubtitlePresetId
+  name: string
+  summary: string
+  style: Partial<SubtitleCaptionStyle>
+}> = [
+  {
+    id: 'viral-hook',
+    name: '爆款钩子款',
+    summary: '适合统一标题、停留感强、对比明显。',
+    style: {
+      fontName: 'SimHei',
+      fontSize: 68,
+      fontColor: '#FFFFFF',
+      strokeColor: '#101116',
+      strokeWidth: 8,
+      shadowColor: 'rgba(0, 0, 0, 0.34)',
+      shadowBlur: 10,
+      position: 'bottom',
+      textAlign: 'center',
+      safeMargin: 10,
+      maxLines: 2,
+      maxWidthRatio: 0.8,
+      lineGap: 6,
+      bottomMargin: 188,
+    },
+  },
+  {
+    id: 'deal-punch',
+    name: '促单成交款',
+    summary: '更适合卖点和利益点标题，转化感更强。',
+    style: {
+      fontName: 'Microsoft YaHei',
+      fontSize: 64,
+      fontColor: '#FFF7D6',
+      strokeColor: '#17181F',
+      strokeWidth: 6,
+      shadowColor: 'rgba(4, 6, 12, 0.42)',
+      shadowBlur: 12,
+      position: 'bottom',
+      textAlign: 'center',
+      safeMargin: 11,
+      maxLines: 2,
+      maxWidthRatio: 0.76,
+      lineGap: 6,
+      bottomMargin: 194,
+    },
+  },
+  {
+    id: 'premium-drop',
+    name: '精致种草款',
+    summary: '更克制，更适合珠宝首饰这类质感商品。',
+    style: {
+      fontName: 'Noto Sans SC',
+      fontSize: 58,
+      fontColor: '#F8FAFF',
+      strokeColor: '#12131A',
+      strokeWidth: 2,
+      shadowColor: 'rgba(5, 8, 16, 0.56)',
+      shadowBlur: 16,
+      position: 'bottom',
+      textAlign: 'center',
+      safeMargin: 14,
+      maxLines: 2,
+      maxWidthRatio: 0.68,
+      lineGap: 8,
+      bottomMargin: 212,
+    },
+  },
+]
+
+function defaultSubtitleCaptionStyle(): SubtitleCaptionStyle {
+  return {
+    fontName: 'SimHei',
+    fontSize: 68,
+    fontColor: '#FFFFFF',
+    strokeColor: '#101116',
+    strokeWidth: 8,
+    shadowColor: 'rgba(0, 0, 0, 0.34)',
+    shadowBlur: 10,
+    position: 'bottom',
+    textAlign: 'center',
+    safeMargin: 10,
+    maxLines: 2,
+    maxWidthRatio: 0.8,
+    lineGap: 6,
+    bottomMargin: 188,
+  }
+}
 
 function safeText(value: unknown, fallback = '') {
   const text = String(value ?? '').replace(/\uFFFD/g, '').trim()
@@ -198,6 +322,8 @@ const statusTabs = computed(() => [
 const selectedSet = computed(() => new Set(selectedIds.value))
 const selectedRows = computed(() => filteredRows.value.filter((item) => selectedSet.value.has(item.id)))
 const exportableSelectedCount = computed(() => selectedRows.value.filter((item) => String(item.finalOutputPath || '').trim()).length)
+const subtitleEligibleSelectedRows = computed(() => selectedRows.value.filter((item) => String(item.finalOutputPath || '').trim()))
+const subtitleEligibleSelectedCount = computed(() => subtitleEligibleSelectedRows.value.length)
 const allFilteredSelected = computed(() => filteredRows.value.length > 0 && filteredRows.value.every((item) => selectedSet.value.has(item.id)))
 const pageCount = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize)))
 const pagedRows = computed(() => {
@@ -290,6 +416,10 @@ function toFileSrc(input?: string) {
 function itemPlayableVideoPath(item?: CloneProjectSummary | null) {
   if (!item) return ''
   return String(item.finalOutputPath || item.previewOutputPath || '').trim()
+}
+
+function itemHasAppliedSubtitle(item?: CloneProjectSummary | null) {
+  return Boolean(item?.subtitleOverlayActive && String(item?.subtitleOutputPath || '').trim())
 }
 
 function itemCoverSrc(item: CloneProjectSummary) {
@@ -439,11 +569,206 @@ async function refresh() {
     if (!availableGroupIds.has(String(activeGroupId.value || '').trim())) {
       activeGroupId.value = '__all__'
     }
+    if (videoPreviewItem.value?.id) {
+      videoPreviewItem.value = rows.value.find((item) => item.id === videoPreviewItem.value?.id) || null
+      if (!videoPreviewItem.value) {
+        videoPreviewDialogOpen.value = false
+      }
+    }
     syncSelectionWithRows(rows.value)
     goToPage(currentPage.value)
     pushRuntimeLog(`[clone-task-list] refresh completed total=${rows.value.length}`, 'success')
   } finally {
     loading.value = false
+  }
+}
+
+async function ensureSubtitleFeatureReady() {
+  if (!localStorage.getItem('videogen-web-token')) {
+    subtitleFeatureReady.value = false
+    return false
+  }
+  try {
+    const plugin = await webApiClient.getPlugin('video-batch-subtitle')
+    if (plugin.status !== 'installed') await webApiClient.installPlugin('video-batch-subtitle')
+    const latest = await webApiClient.getPlugin('video-batch-subtitle')
+    if (!latest.enabled) await webApiClient.enablePlugin('video-batch-subtitle')
+    subtitleFeatureReady.value = true
+    return true
+  } catch {
+    subtitleFeatureReady.value = false
+    return false
+  }
+}
+
+function resetSubtitleDialog() {
+  subtitleDialogOpen.value = false
+  subtitleDialogBusy.value = false
+  subtitleDialogMode.value = 'batch'
+  subtitleDialogTab.value = 'title'
+  subtitleTargetIds.value = []
+  subtitleTitleStrategy.value = 'single_for_all'
+  subtitleTitleText.value = ''
+  subtitleTitlePoolText.value = ''
+  subtitleSelectedPreset.value = 'viral-hook'
+  Object.assign(subtitleCaptionStyle, defaultSubtitleCaptionStyle())
+}
+
+function applySubtitlePreset(presetId: SubtitlePresetId) {
+  const preset = subtitlePresets.find((item) => item.id === presetId)
+  if (!preset) return
+  subtitleSelectedPreset.value = preset.id
+  Object.assign(subtitleCaptionStyle, defaultSubtitleCaptionStyle(), preset.style)
+}
+
+function openBatchSubtitleDialog() {
+  if (!subtitleEligibleSelectedCount.value) {
+    window.alert('请先选择至少一个已有成片的任务。')
+    return
+  }
+  applySubtitlePreset(subtitleSelectedPreset.value)
+  subtitleDialogMode.value = 'batch'
+  subtitleDialogTab.value = 'title'
+  subtitleTargetIds.value = subtitleEligibleSelectedRows.value.map((item) => item.id)
+  subtitleDialogOpen.value = true
+}
+
+function openSingleSubtitleDialog(item: CloneProjectSummary) {
+  if (!String(item.finalOutputPath || '').trim()) {
+    window.alert('当前任务还没有可添加字幕的成片。')
+    return
+  }
+  applySubtitlePreset(subtitleSelectedPreset.value)
+  subtitleDialogMode.value = 'single'
+  subtitleDialogTab.value = 'title'
+  subtitleTargetIds.value = [item.id]
+  subtitleDialogOpen.value = true
+}
+
+function closeSubtitleDialog() {
+  if (subtitleDialogBusy.value) return
+  resetSubtitleDialog()
+}
+
+function buildSubtitleTitleConfig() {
+  const pool = subtitleTitlePoolText.value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (subtitleTitleStrategy.value === 'random_pool') {
+    if (!pool.length) throw new Error('请至少输入一条随机标题。')
+    return {
+      strategy: 'random_pool' as const,
+      singleText: '',
+      titlePool: pool,
+    }
+  }
+  const singleText = String(subtitleTitleText.value || '').trim()
+  if (!singleText) throw new Error('请输入标题字幕。')
+  return {
+    strategy: 'single_for_all' as const,
+    singleText,
+    titlePool: [],
+  }
+}
+
+async function submitSubtitleDialog() {
+  if (subtitleDialogBusy.value) return
+  const targets = rows.value.filter((item) => subtitleTargetIds.value.includes(item.id) && String(item.finalOutputPath || '').trim())
+  if (!targets.length) {
+    window.alert('未找到可添加字幕的成片任务。')
+    return
+  }
+  subtitleDialogBusy.value = true
+  try {
+    const ready = await ensureSubtitleFeatureReady()
+    if (!ready) throw new Error('批量字幕插件未启用，或当前账号未登录。')
+    const titleConfig = buildSubtitleTitleConfig()
+    const sourceItems = targets.map((item) => ({
+      id: `clone-${item.id}`,
+      sourceType: 'clone_final' as const,
+      sourceVideoPath: String(item.finalOutputPath || '').trim(),
+      sourceProjectId: item.id,
+      sourceProjectTitle: item.title,
+      fileName: item.title || item.referenceVideoName || item.id,
+      coverImagePath: item.coverAssetPath || undefined,
+    }))
+    pushRuntimeLog(`[clone-task-list] subtitle submit count=${targets.length}`, 'info')
+    const job = await webApiClient.createBatchSubtitleJob({
+      name: `复刻列表字幕 ${new Date().toLocaleString('zh-CN')}`,
+      subtitleMode: 'static_title',
+      subtitleSource: 'manual',
+      exportEngine: 'ass_fallback',
+      titleRenderMode: 'overlay_image',
+      sourceItems,
+      titleConfig,
+      titleItems: [],
+      overlayImageConfig: {
+        canvasWidth: 1080,
+        canvasHeight: 1920,
+        ...subtitleCaptionStyle,
+      },
+      captionStyle: {
+        ...subtitleCaptionStyle,
+      },
+      layoutPolicy: {
+        maxLines: subtitleCaptionStyle.maxLines,
+        maxWidthRatio: subtitleCaptionStyle.maxWidthRatio,
+        reflowStrategy: 'balanced',
+        avoidPosition: 'auto',
+      },
+    })
+    const result = await webApiClient.runBatchSubtitleJob(job.id)
+    const sourceById = new Map((result.sourceItems || []).map((item) => [item.id, item] as const))
+    const appliedProjectIds = new Set<string>()
+    for (const output of result.outputs || []) {
+      if (output.renderStatus !== 'success' || !String(output.outputVideoPath || '').trim()) continue
+      const source = sourceById.get(output.sourceItemId)
+      const cloneProjectId = String(source?.sourceProjectId || '').trim()
+      if (!cloneProjectId) continue
+      await window.api.clone.applySubtitleVideoToProject({
+        cloneProjectId,
+        subtitleVideoPath: String(output.outputVideoPath || '').trim(),
+        subtitleCoverImagePath: String(output.coverImagePath || '').trim() || undefined,
+      })
+      appliedProjectIds.add(cloneProjectId)
+    }
+    await refresh()
+    pushRuntimeLog(`[clone-task-list] subtitle applied count=${appliedProjectIds.size}`, 'success')
+    if (!appliedProjectIds.size) {
+      window.alert('字幕任务已完成，但没有成功回写任何成片。')
+      return
+    }
+    resetSubtitleDialog()
+  } catch (error: any) {
+    const message = String(error?.message ?? error ?? '添加字幕失败。')
+    pushRuntimeLog(`[clone-task-list] subtitle failed message=${safeText(message, 'unknown error')}`, 'error')
+    window.alert(message)
+  } finally {
+    subtitleDialogBusy.value = false
+  }
+}
+
+async function revertSubtitleFromPreview() {
+  const item = videoPreviewItem.value
+  if (!item?.id) return
+  if (!itemHasAppliedSubtitle(item)) {
+    window.alert('当前视频没有可回退的字幕版本。')
+    return
+  }
+  const ok = window.confirm('确认回退到原始合成视频吗？字幕视频文件会被删除。')
+  if (!ok) return
+  videoPreviewSaving.value = true
+  try {
+    await window.api.clone.revertSubtitleVideoFromProject({ cloneProjectId: item.id })
+    await refresh()
+    pushRuntimeLog(`[clone-task-list] subtitle reverted id=${item.id}`, 'success')
+  } catch (error: any) {
+    const message = String(error?.message ?? error ?? '回退字幕视频失败。')
+    pushRuntimeLog(`[clone-task-list] subtitle revert failed message=${safeText(message, 'unknown error')}`, 'error')
+    window.alert(message)
+  } finally {
+    videoPreviewSaving.value = false
   }
 }
 
@@ -778,6 +1103,7 @@ onMounted(() => {
     const level = payload?.level === 'error' || payload?.level === 'success' ? payload.level : 'info'
     pushRuntimeLog(message, level)
   })
+  void ensureSubtitleFeatureReady()
   void refresh()
 })
 
@@ -838,9 +1164,29 @@ onBeforeUnmount(() => {
         </section>
 
         <div v-if="selectedIds.length || batchExportMessage" class="clone-list-batch-bar">
-          <span class="clone-list-batch-bar__summary">已选 {{ selectedIds.length }} 个任务，可导出 {{ exportableSelectedCount }} 个成片</span>
+          <div class="clone-list-batch-bar__summary">
+            <strong>已选 {{ selectedIds.length }} 个任务</strong>
+            <div class="clone-list-batch-bar__stats">
+              <span class="clone-list-batch-bar__stat">
+                <em>{{ exportableSelectedCount }}</em>
+                <small>可导出成片</small>
+              </span>
+              <span class="clone-list-batch-bar__stat">
+                <em>{{ subtitleEligibleSelectedCount }}</em>
+                <small>可加字幕</small>
+              </span>
+            </div>
+          </div>
           <div class="clone-list-batch-bar__actions">
             <button v-if="selectedIds.length && cloneGroupAssignReady" class="clone-list-batch-action" type="button" @click="openMoveBatchDialog">移动到分组</button>
+            <button
+              v-if="subtitleFeatureReady && subtitleEligibleSelectedCount"
+              class="clone-list-batch-action clone-list-batch-action--accent"
+              type="button"
+              @click="openBatchSubtitleDialog"
+            >
+              批量添加字幕
+            </button>
             <span v-if="batchExportMessage" class="clone-list-batch-bar__message">{{ batchExportMessage }}</span>
           </div>
         </div>
@@ -1145,7 +1491,9 @@ onBeforeUnmount(() => {
             <strong>{{ videoPreviewItem.title || '复刻视频预览' }}</strong>
             <span>{{ safeText(shortPath(itemPlayableVideoPath(videoPreviewItem)), '暂无视频文件') }}</span>
           </div>
-          <UiButton variant="ghost" :disabled="videoPreviewSaving" @click="closeVideoPreview">关闭</UiButton>
+          <div class="clone-video-preview-dialog__head-actions">
+            <UiButton variant="ghost" :disabled="videoPreviewSaving" @click="closeVideoPreview">关闭</UiButton>
+          </div>
         </div>
         <div class="clone-video-preview-dialog__body">
           <div class="clone-video-preview-dialog__player">
@@ -1159,15 +1507,179 @@ onBeforeUnmount(() => {
             <div v-else class="clone-video-preview-dialog__empty">当前任务还没有可播放的成片视频。</div>
           </div>
           <div class="clone-video-preview-dialog__meta">
-            <span>任务：{{ videoPreviewItem.selectedModelIdentityName || '未命名模型' }}</span>
-            <span>时间：{{ formatTime(videoPreviewItem.updatedAt) }}</span>
+            <div class="clone-video-preview-dialog__meta-copy">
+              <span>任务：{{ videoPreviewItem.selectedModelIdentityName || '未命名模型' }}</span>
+              <span>时间：{{ formatTime(videoPreviewItem.updatedAt) }}</span>
+            </div>
           </div>
           <div class="clone-rename-dialog__actions clone-video-preview-dialog__actions">
             <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem)" @click="revealPreviewVideo">在文件夹中显示</UiButton>
             <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving" @click="savePreviewVideo">
               {{ videoPreviewSaving ? '保存中...' : '下载保存' }}
             </UiButton>
+            <UiButton
+              v-if="subtitleFeatureReady && !itemHasAppliedSubtitle(videoPreviewItem)"
+              class="clone-video-preview-dialog__subtitle-button"
+              variant="secondary"
+              :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving"
+              @click="openSingleSubtitleDialog(videoPreviewItem)"
+            >
+              添加字幕
+            </UiButton>
+            <UiButton
+              v-if="itemHasAppliedSubtitle(videoPreviewItem)"
+              class="clone-video-preview-dialog__revert-button"
+              variant="secondary"
+              :disabled="videoPreviewSaving"
+              @click="revertSubtitleFromPreview"
+            >
+              {{ videoPreviewSaving ? '回退中...' : '回退原视频' }}
+            </UiButton>
             <UiButton :disabled="!videoPreviewItem.id" @click="openTask(videoPreviewItem.id)">打开详情</UiButton>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="subtitleDialogOpen" class="clone-error-dialog-mask" @click.self="closeSubtitleDialog">
+      <div class="clone-error-dialog clone-rename-dialog clone-subtitle-dialog" @click.stop>
+        <div class="clone-error-dialog__head clone-subtitle-dialog__head">
+          <div class="clone-error-dialog__copy clone-subtitle-dialog__copy">
+            <strong>{{ subtitleDialogMode === 'batch' ? '批量添加字幕' : '添加字幕' }}</strong>
+            <span>为 {{ subtitleTargetIds.length }} 个复刻成片生成标题字幕，并直接替换当前查看视频。</span>
+          </div>
+          <UiButton variant="ghost" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">关闭</UiButton>
+        </div>
+        <div class="clone-rename-dialog__body clone-subtitle-dialog__body">
+          <div class="clone-subtitle-dialog__summary">
+            <div class="clone-subtitle-dialog__summary-item">
+              <span>处理范围</span>
+              <strong>{{ subtitleDialogMode === 'batch' ? `已选 ${subtitleTargetIds.length} 条视频` : '当前视频' }}</strong>
+            </div>
+            <div class="clone-subtitle-dialog__summary-item">
+              <span>当前模板</span>
+              <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || '爆款钩子款' }}</strong>
+            </div>
+          </div>
+          <div class="clone-subtitle-dialog__tabs">
+            <button :class="{ 'is-active': subtitleDialogTab === 'title' }" type="button" @click="subtitleDialogTab = 'title'">标题</button>
+            <button :class="{ 'is-active': subtitleDialogTab === 'template' }" type="button" @click="subtitleDialogTab = 'template'">模板</button>
+            <button :class="{ 'is-active': subtitleDialogTab === 'style' }" type="button" @click="subtitleDialogTab = 'style'">样式</button>
+          </div>
+          <section v-if="subtitleDialogTab === 'title'" class="clone-subtitle-dialog__section">
+            <div class="clone-subtitle-dialog__section-head">
+              <span class="clone-subtitle-dialog__kicker">Title Mode</span>
+              <strong>标题配置</strong>
+            </div>
+            <div class="clone-subtitle-dialog__mode-pills">
+              <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'">
+                统一标题
+              </button>
+              <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'">
+                随机标题池
+              </button>
+            </div>
+            <label v-if="subtitleTitleStrategy === 'single_for_all'" class="clone-rename-dialog__field">
+              <span>标题字幕</span>
+              <input v-model.trim="subtitleTitleText" type="text" maxlength="120" placeholder="请输入标题字幕" @keydown.enter.prevent="submitSubtitleDialog" />
+            </label>
+            <label v-else class="clone-rename-dialog__field">
+              <span>随机标题池</span>
+              <textarea v-model.trim="subtitleTitlePoolText" class="clone-subtitle-dialog__textarea" placeholder="每行一条标题字幕"></textarea>
+            </label>
+            <div class="clone-subtitle-dialog__inline-tip">
+              {{ subtitleTitleStrategy === 'single_for_all' ? '整批视频会共用这一条标题字幕。' : '每行一条，渲染时会为每个视频随机分配。' }}
+            </div>
+          </section>
+          <section v-else-if="subtitleDialogTab === 'template'" class="clone-subtitle-dialog__section">
+            <div class="clone-subtitle-dialog__section-head">
+              <span class="clone-subtitle-dialog__kicker">Template</span>
+              <strong>字幕模板</strong>
+            </div>
+            <div class="clone-subtitle-dialog__preset-grid">
+              <button
+                v-for="preset in subtitlePresets"
+                :key="preset.id"
+                class="clone-subtitle-dialog__preset"
+                :class="{ 'is-active': subtitleSelectedPreset === preset.id }"
+                type="button"
+                @click="applySubtitlePreset(preset.id)"
+              >
+                <strong>{{ preset.name }}</strong>
+                <span>{{ preset.summary }}</span>
+              </button>
+            </div>
+            <div class="clone-subtitle-dialog__preset-note">优先选择最接近你商品风格的模板，再调整下面的细节样式。</div>
+          </section>
+          <section v-else class="clone-subtitle-dialog__section">
+            <div class="clone-subtitle-dialog__section-head">
+              <span class="clone-subtitle-dialog__kicker">Style</span>
+              <strong>文字样式</strong>
+            </div>
+            <div class="clone-subtitle-dialog__style-panel clone-subtitle-dialog__style-panel--full">
+              <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--compact">
+                <label class="clone-rename-dialog__field">
+                  <span>字体</span>
+                  <input v-model.trim="subtitleCaptionStyle.fontName" type="text" placeholder="例如：SimHei" />
+                </label>
+                <label class="clone-rename-dialog__field">
+                  <span>字号</span>
+                  <input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" />
+                </label>
+                <label class="clone-rename-dialog__field">
+                  <span>描边</span>
+                  <input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" />
+                </label>
+                <label class="clone-rename-dialog__field">
+                  <span>最大行数</span>
+                  <input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" />
+                </label>
+              </div>
+              <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--dual">
+                <label class="clone-rename-dialog__field">
+                  <span>文字颜色</span>
+                  <div class="clone-subtitle-dialog__color-field">
+                    <input v-model.trim="subtitleCaptionStyle.fontColor" type="text" />
+                    <input v-model="subtitleCaptionStyle.fontColor" type="color" />
+                  </div>
+                </label>
+                <label class="clone-rename-dialog__field">
+                  <span>描边颜色</span>
+                  <div class="clone-subtitle-dialog__color-field">
+                    <input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" />
+                    <input v-model="subtitleCaptionStyle.strokeColor" type="color" />
+                  </div>
+                </label>
+              </div>
+              <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--compact">
+                <label class="clone-rename-dialog__field">
+                  <span>位置</span>
+                  <select v-model="subtitleCaptionStyle.position" class="clone-group-select">
+                    <option value="top">顶部</option>
+                    <option value="center">中间</option>
+                    <option value="bottom">底部</option>
+                  </select>
+                </label>
+                <label class="clone-rename-dialog__field">
+                  <span>对齐</span>
+                  <select v-model="subtitleCaptionStyle.textAlign" class="clone-group-select">
+                    <option value="left">左对齐</option>
+                    <option value="center">居中</option>
+                    <option value="right">右对齐</option>
+                  </select>
+                </label>
+                <label class="clone-rename-dialog__field">
+                  <span>底部边距</span>
+                  <input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" />
+                </label>
+              </div>
+            </div>
+          </section>
+          <div class="clone-rename-dialog__actions">
+            <UiButton variant="secondary" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">取消</UiButton>
+            <UiButton class="clone-subtitle-dialog__submit" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">
+              {{ subtitleDialogBusy ? '处理中...' : '开始添加字幕' }}
+            </UiButton>
           </div>
         </div>
       </div>
@@ -1551,19 +2063,59 @@ onBeforeUnmount(() => {
 .clone-list-batch-bar {
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--clone-accent) 15%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--clone-accent) 10%, rgba(8, 17, 29, 0.98)), rgba(7, 13, 24, 0.96));
+  gap: 14px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 116, 168, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(73, 121, 255, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(12, 20, 34, 0.98), rgba(8, 14, 25, 0.96));
   color: #d9e4ff;
   font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .clone-list-batch-bar__summary {
-  color: #eef4ff;
-  font-weight: 600;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.clone-list-batch-bar__summary strong {
+  color: #f5f8ff;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.clone-list-batch-bar__stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clone-list-batch-bar__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.clone-list-batch-bar__stat em {
+  color: #ffffff;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.clone-list-batch-bar__stat small {
+  color: #97a9cf;
+  font-size: 11px;
 }
 
 .clone-list-batch-bar__message {
@@ -1579,14 +2131,30 @@ onBeforeUnmount(() => {
 }
 
 .clone-list-batch-action {
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--clone-accent) 18%, transparent);
-  background: rgba(11, 19, 31, 0.92);
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 136, 196, 0.2);
+  background: rgba(10, 17, 28, 0.94);
   color: #edf4ff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
+}
+
+.clone-list-batch-action:hover {
+  border-color: rgba(130, 104, 255, 0.4);
+  background: rgba(21, 31, 50, 0.98);
+}
+
+.clone-list-batch-action--accent {
+  border-color: rgba(126, 102, 255, 0.4);
+  background: linear-gradient(135deg, rgba(85, 62, 212, 0.86), rgba(115, 93, 240, 0.86));
+  box-shadow: 0 10px 22px rgba(82, 64, 203, 0.18);
+}
+
+.clone-list-batch-action--accent:hover {
+  border-color: rgba(146, 126, 255, 0.48);
+  background: linear-gradient(135deg, rgba(92, 68, 226, 0.92), rgba(124, 101, 247, 0.92));
 }
 
 .clone-console-table {
@@ -2407,6 +2975,18 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 
+.clone-video-preview-dialog__head-actions,
+.clone-video-preview-dialog__meta-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.clone-video-preview-dialog__head-actions {
+  justify-content: flex-end;
+}
+
 .clone-video-preview-dialog__player {
   overflow: hidden;
   border-radius: 18px;
@@ -2432,15 +3012,310 @@ onBeforeUnmount(() => {
 .clone-video-preview-dialog__meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   flex-wrap: wrap;
   color: #98a6c3;
   font-size: 12px;
 }
 
+.clone-video-preview-dialog__head-actions :deep(.ds-button) {
+  min-height: 36px;
+  border-radius: 11px !important;
+  padding: 0 14px !important;
+}
+
 .clone-video-preview-dialog__actions {
   justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.clone-video-preview-dialog__actions :deep(.ds-button),
+.clone-video-preview-dialog__actions:deep(.ds-button) {
+  min-height: 38px;
+  border-radius: 12px !important;
+  padding: 0 14px !important;
+}
+
+.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button.ds-button),
+.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button .ds-button),
+.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit.ds-button),
+.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit .ds-button) {
+  border-color: rgba(241, 178, 92, 0.58) !important;
+  background: linear-gradient(135deg, rgba(186, 112, 34, 0.98), rgba(228, 154, 62, 0.98)) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 16px 34px rgba(176, 106, 32, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button.ds-button:hover),
+.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button .ds-button:hover),
+.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit.ds-button:hover),
+.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit .ds-button:hover) {
+  border-color: rgba(248, 196, 118, 0.72) !important;
+  background: linear-gradient(135deg, rgba(198, 120, 38, 1), rgba(236, 166, 76, 1)) !important;
+  transform: translateY(-1px);
+}
+
+.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__revert-button.ds-button),
+.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__revert-button .ds-button) {
+  border-color: rgba(255, 184, 108, 0.34) !important;
+  background: linear-gradient(135deg, rgba(125, 87, 35, 0.92), rgba(181, 120, 40, 0.92)) !important;
+  box-shadow: 0 12px 26px rgba(168, 114, 37, 0.22);
+}
+
+.clone-subtitle-dialog {
+  width: min(660px, calc(100vw - 24px));
+  max-height: calc(100vh - 28px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.clone-subtitle-dialog__head {
+  align-items: flex-start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(118, 136, 196, 0.12);
+}
+
+.clone-subtitle-dialog__copy strong {
+  font-size: 18px;
+}
+
+.clone-subtitle-dialog__copy span {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #9eb0d6;
+}
+
+.clone-subtitle-dialog__body {
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.clone-subtitle-dialog__tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.clone-subtitle-dialog__tabs button {
+  flex: 1 1 0;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #9daed3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.clone-subtitle-dialog__tabs button.is-active {
+  color: #ffffff;
+  background: linear-gradient(180deg, rgba(116, 94, 255, 0.42), rgba(92, 74, 214, 0.42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.clone-subtitle-dialog__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.clone-subtitle-dialog__summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 138, 198, 0.12);
+  border-radius: 12px;
+  background: rgba(11, 18, 30, 0.72);
+}
+
+.clone-subtitle-dialog__summary-item span {
+  color: #8ca0d3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clone-subtitle-dialog__summary-item strong {
+  color: #f7faff;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.clone-subtitle-dialog__section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(118, 136, 196, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(15, 23, 38, 0.92), rgba(11, 17, 29, 0.94));
+}
+
+.clone-subtitle-dialog__section-head {
+  display: grid;
+  gap: 4px;
+}
+
+.clone-subtitle-dialog__kicker {
+  color: #8fa2d8;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.clone-subtitle-dialog__section-head strong {
+  color: #f3f6ff;
+  font-size: 15px;
+}
+
+.clone-subtitle-dialog__strategy-grid,
+.clone-subtitle-dialog__preset-grid,
+.clone-subtitle-dialog__form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.clone-subtitle-dialog__strategy-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clone-subtitle-dialog__mode-pills {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.clone-subtitle-dialog__mode-pills button {
+  flex: 1 1 0;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #9caed4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.clone-subtitle-dialog__mode-pills button.is-active {
+  color: #ffffff;
+  background: linear-gradient(180deg, rgba(116, 94, 255, 0.38), rgba(92, 74, 214, 0.38));
+}
+
+.clone-subtitle-dialog__preset-grid {
+  grid-template-columns: 1fr;
+}
+
+.clone-subtitle-dialog__form-grid--dual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clone-subtitle-dialog__form-grid--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clone-subtitle-dialog__style-panel {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(118, 136, 196, 0.12);
+  background: rgba(8, 14, 24, 0.55);
+}
+
+.clone-subtitle-dialog__style-panel--full {
+  gap: 9px;
+}
+
+.clone-subtitle-dialog__mini-title {
+  color: #dde6fb;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clone-subtitle-dialog__inline-tip {
+  color: #8fa3d4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.clone-subtitle-dialog__preset-note {
+  color: #8fa3d4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.clone-subtitle-dialog__strategy-card,
+.clone-subtitle-dialog__preset {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(118, 136, 196, 0.16);
+  background: rgba(9, 15, 27, 0.9);
+  color: #eef4ff;
+  text-align: left;
+  min-height: 62px;
+}
+
+.clone-subtitle-dialog__strategy-card strong,
+.clone-subtitle-dialog__preset strong {
+  font-size: 13px;
+}
+
+.clone-subtitle-dialog__strategy-card small,
+.clone-subtitle-dialog__preset span {
+  color: #98a9cf;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.clone-subtitle-dialog__strategy-card.is-active,
+.clone-subtitle-dialog__preset.is-active {
+  border-color: rgba(126, 102, 255, 0.56);
+  background: linear-gradient(180deg, rgba(47, 36, 98, 0.62), rgba(18, 19, 44, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 28px rgba(61, 46, 151, 0.18);
+}
+
+.clone-subtitle-dialog__color-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 8px;
+}
+
+.clone-subtitle-dialog__color-field input[type='color'] {
+  width: 54px;
+  min-height: 38px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 136, 196, 0.18);
+  background: rgba(10, 18, 30, 0.96);
+}
+
+.clone-subtitle-dialog__color-field input[type='text'] {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 136, 196, 0.18);
+  background: rgba(10, 18, 30, 0.96);
+  color: #eef4ff;
+  font-size: 12px;
+  outline: none;
 }
 
 .clone-rename-dialog__body {
@@ -2450,19 +3325,18 @@ onBeforeUnmount(() => {
 
 .clone-rename-dialog__field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .clone-rename-dialog__field span {
   color: #d8e3fb;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
-.clone-rename-dialog__field input {
+.clone-rename-dialog__field input,
+.clone-subtitle-dialog__textarea {
   width: 100%;
-  min-height: 44px;
-  padding: 0 14px;
   border-radius: 10px;
   border: 1px solid rgba(118, 136, 196, 0.18);
   background: rgba(10, 18, 30, 0.96);
@@ -2471,15 +3345,27 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
+.clone-rename-dialog__field input {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.clone-subtitle-dialog__textarea {
+  min-height: 104px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
 .clone-group-select {
   width: 100%;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 12px;
   border-radius: 10px;
   border: 1px solid rgba(118, 136, 196, 0.18);
   background: rgba(10, 18, 30, 0.96);
   color: #eef4ff;
-  font-size: 14px;
+  font-size: 12px;
   outline: none;
 }
 
@@ -2487,6 +3373,35 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+@media (max-width: 900px) {
+  .clone-subtitle-dialog__summary,
+  .clone-subtitle-dialog__form-grid--dual,
+  .clone-subtitle-dialog__form-grid--compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .clone-subtitle-dialog {
+    width: min(100vw - 18px, 620px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .clone-subtitle-dialog__strategy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .clone-video-preview-dialog__actions {
+    justify-content: stretch;
+  }
+
+  .clone-video-preview-dialog__actions > * {
+    flex: 1 1 100%;
+  }
 }
 
 .clone-list-empty {

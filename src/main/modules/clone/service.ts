@@ -52,7 +52,6 @@ import {
   generateGptShotFrameImage,
   generateModelIdentityPackImages,
 } from './gptImage'
-import { getProductCanonicalSourcePrompt, sanitizeProductReferenceImages } from './productImageSanitizer'
 import { buildProductAnalysisBoard } from './productAnalysisBoard'
 import {
   buildCloneShotPrompt,
@@ -73,6 +72,7 @@ import {
   expandCommercialVideoPrompt,
 } from './prompt'
 import { generateChatCompletion } from './unifiedChat'
+import { getProductCanonicalSourcePrompt, sanitizeProductReferenceImages } from './productImageSanitizer'
 import {
   computeCloudClipHash,
   computeImagePromptHash,
@@ -157,6 +157,7 @@ const shotVideoCreateInFlight = new Map<string, Promise<CloneProject>>()
 const autoRunStoryboardVideosInFlight = new Map<string, Promise<any>>()
 const storyboardBatchVideoGenerationInFlight = new Map<string, Promise<any>>()
 const SHOT_VIDEO_SUBMISSION_LOCK_MS = 2 * 60 * 1000
+const SHOT_VIDEO_MISSING_TASK_GRACE_MS = 10 * 60 * 1000
 const SHOT_VIDEO_RECONCILE_RETRY_DELAY_MS = 5_000
 const shotVideoOrchestrator = createShotVideoOrchestrator()
 let storyboardVideoReconcileTimer: NodeJS.Timeout | null = null
@@ -167,7 +168,20 @@ function now() {
 
 function isShotVideoSubmitStartedEvent(value: unknown) {
   const event = String(value ?? '').trim()
-  return event === 'segment_submit_started' || event === 'storyboard_video_batch_submit_started'
+  return (
+    event === 'segment_submit_started' ||
+    event === 'storyboard_video_batch_submit_started' ||
+    event === 'segment_submit_missing_task'
+  )
+}
+
+function isShotVideoMissingTaskGraceActive(output: Partial<CloneShotVideoOutput> | undefined, currentTime = now()) {
+  if (!output) return false
+  const sourceEvent = String(output.sourceEvent || '').trim()
+  if (sourceEvent !== 'segment_submit_missing_task' && sourceEvent !== 'segment_submit_started') return false
+  const submissionStartedAt = Number(output.submissionStartedAt ?? 0)
+  if (!submissionStartedAt) return false
+  return currentTime - submissionStartedAt < SHOT_VIDEO_MISSING_TASK_GRACE_MS
 }
 
 function sanitizeLegacyShotPromptText(value: unknown, productType?: unknown) {
@@ -456,6 +470,79 @@ function resolvePendingRemoteState(remoteStatus?: unknown, remoteRaw?: any) {
   )
 }
 
+function pickRecoverableTaskHandle(raw: any) {
+  const directDataValue =
+    typeof raw?.data === 'string' || typeof raw?.data === 'number'
+      ? String(raw.data).trim()
+      : ''
+  const candidates = [
+    directDataValue,
+    raw?.data?.task_uuid,
+    raw?.data?.taskUuid,
+    raw?.data?.task_id,
+    raw?.data?.taskId,
+    raw?.data?.task?.uuid,
+    raw?.data?.task?.id,
+    raw?.data?.task?.task_id,
+    raw?.data?.task?.taskId,
+    raw?.data?.record_id,
+    raw?.data?.recordId,
+    raw?.data?.uuid,
+    raw?.data?.trace_id,
+    raw?.data?.traceId,
+    raw?.data?.job_id,
+    raw?.data?.jobId,
+    raw?.data?.prediction_id,
+    raw?.data?.predictionId,
+    raw?.data?.prediction?.uuid,
+    raw?.data?.prediction?.id,
+    raw?.data?.prediction?.task_id,
+    raw?.data?.prediction?.taskId,
+    raw?.data?.result?.uuid,
+    raw?.data?.result?.id,
+    raw?.data?.result?.task_id,
+    raw?.data?.result?.taskId,
+    raw?.data?.video_id,
+    raw?.data?.videoId,
+    raw?.data?.request_id,
+    raw?.data?.requestId,
+    raw?.data?.id,
+    raw?.task?.uuid,
+    raw?.task?.id,
+    raw?.task?.task_id,
+    raw?.task?.taskId,
+    raw?.record_id,
+    raw?.recordId,
+    raw?.trace_id,
+    raw?.traceId,
+    raw?.job_id,
+    raw?.jobId,
+    raw?.prediction_id,
+    raw?.predictionId,
+    raw?.prediction?.uuid,
+    raw?.prediction?.id,
+    raw?.prediction?.task_id,
+    raw?.prediction?.taskId,
+    raw?.result?.uuid,
+    raw?.result?.id,
+    raw?.result?.task_id,
+    raw?.result?.taskId,
+    raw?.video_id,
+    raw?.videoId,
+    raw?.task_id,
+    raw?.taskId,
+    raw?.request_id,
+    raw?.requestId,
+    raw?.uuid,
+    raw?.id,
+  ]
+  for (const candidate of candidates) {
+    const taskHandle = String(candidate ?? '').trim()
+    if (taskHandle) return taskHandle
+  }
+  return ''
+}
+
 function isShotVideoLocalPreconditionError(error: unknown) {
   const message = String(error ?? '').trim()
   if (!message) return false
@@ -725,6 +812,17 @@ function patchWorkflowV2(
   return next
 }
 
+function advanceAutoRunWorkflow(
+  project: CloneProject,
+  phase: 'script_generation' | 'storyboard_design',
+) {
+  if (phase === 'script_generation') {
+    return patchWorkflowV2(project, 'script_generation', 'script_generation', 'running')
+  }
+  patchWorkflowV2(project, 'script_generation', 'script_generation', 'done')
+  return patchWorkflowV2(project, 'storyboard_design', 'storyboard_design', 'running')
+}
+
 function executionBlueprintOf(project: CloneProject): CloneExecutionBlueprint | null {
   return project.executionBlueprint ?? (project.baseBlueprint ? {
     shots: project.baseBlueprint.shots,
@@ -751,6 +849,16 @@ function snippetText(value: unknown, limit = 320) {
 
 function normalizeRunMode(value: unknown): CloneRunMode {
   return value === 'auto' ? 'auto' : 'manual'
+}
+
+function inferProjectRunMode(projectLike: any): CloneRunMode {
+  if (projectLike?.runMode === 'auto') return 'auto'
+  const autoTargetStage = String(projectLike?.autoFlowStatus?.targetStage ?? '').trim()
+  if (autoTargetStage === 'final_compose') return 'auto'
+  const hasAutoRunSubmitAudit = Array.isArray(projectLike?.generationQueue?.submissionAuditLogs) &&
+    projectLike.generationQueue.submissionAuditLogs.some((item: any) => String(item?.trigger ?? '').trim() === 'auto_run_submit')
+  if (hasAutoRunSubmitAudit) return 'auto'
+  return 'manual'
 }
 
 function validateProjectReadyForFinalCompose(project: CloneProject) {
@@ -1366,7 +1474,7 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     groupId: String(project.groupId || '').trim() || undefined,
     groupName: String(project.groupName || '').trim() || undefined,
     archived: Boolean(project.archived ?? false),
-    runMode: normalizeRunMode(project.runMode),
+    runMode: inferProjectRunMode(project),
     createdAt: Number(project.createdAt || 0),
     updatedAt: project.updatedAt,
     currentStep: project.workflowV2?.currentStep ?? 'reference_analysis',
@@ -1379,6 +1487,9 @@ function buildProjectSummary(project: CloneProject): CloneProjectSummary {
     previewReportPath: project.previewPipeline?.previewReportPath || '',
     outputDir: project.outputDir || '',
     finalOutputPath: project.finalCompose?.outputPath || '',
+    subtitleOverlayActive: Boolean(project.finalCompose?.subtitleOverlay?.active),
+    subtitleOriginalOutputPath: String(project.finalCompose?.subtitleOverlay?.originalOutputPath || '').trim() || '',
+    subtitleOutputPath: String(project.finalCompose?.subtitleOverlay?.subtitleOutputPath || '').trim() || '',
     selectedModelIdentityName,
     productReferenceImageCount,
     productReferenceImagePaths,
@@ -2640,12 +2751,9 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
   if (!product) return project
   const originalRefs = collectCloneProductImageRefs(product)
   const normalizedProductAnalysis = normalizeStoredProductAnalysis((product as any).productAnalysis, normalizeProductType(String(product.type || 'general')))
-  const analysisBoardPath =
-    String((product as any).analysisBoardPath || '').trim() ||
-    String(product.canonicalSourcePath || '').trim() ||
-    resolveBoundCanonicalSourcePath(project)
+  const analysisBoardPath = ''
   const boundAt = project.boundProductSnapshot?.boundAt || project.baseBlueprint?.consistencyAssets?.boundProductSnapshot?.boundAt || project.blueprint?.consistencyAssets?.boundProductSnapshot?.boundAt || now()
-  const nextSnapshot = {
+  const nextSnapshot: NonNullable<CloneProject['boundProductSnapshot']> = {
     id: product.id,
     name: String(product.name || '').trim(),
     type: String(product.type || '').trim(),
@@ -2658,13 +2766,13 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
         : undefined,
     remark: String(product.remark || '').trim() || undefined,
     coverImagePath: String(product.coverImagePath || originalRefs[0] || '').trim() || undefined,
-    analysisBoardPath: analysisBoardPath || undefined,
-    analysisBoardStatus: (product as any).analysisBoardStatus ?? product.canonicalSourceStatus ?? 'idle',
-    canonicalSourcePath: analysisBoardPath || undefined,
-    canonicalSourceStatus: product.canonicalSourceStatus ?? (product as any).analysisBoardStatus ?? 'idle',
+    analysisBoardPath: undefined,
+    analysisBoardStatus: 'idle',
+    canonicalSourcePath: String(originalRefs[0] || '').trim() || undefined,
+    canonicalSourceStatus: 'done',
     productAnalysis: normalizedProductAnalysis,
     originalImagePaths: originalRefs,
-    frozenReferenceImagePaths: analysisBoardPath ? [analysisBoardPath] : [],
+    frozenReferenceImagePaths: originalRefs,
     boundAt,
     updatedAt: now(),
   }
@@ -2676,8 +2784,8 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
         ...next.baseBlueprint.consistencyAssets,
         boundProductSnapshot: nextSnapshot,
         originalProductReferenceImages: originalRefs,
-        sanitizedProductReferenceImages: analysisBoardPath ? [analysisBoardPath] : [],
-        productReferenceImages: analysisBoardPath ? [analysisBoardPath] : originalRefs,
+        sanitizedProductReferenceImages: originalRefs,
+        productReferenceImages: originalRefs,
         productAnalysis: normalizedProductAnalysis,
         productImageSanitization: {
           ...(next.baseBlueprint.consistencyAssets.productImageSanitization ?? {
@@ -2688,10 +2796,10 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
             diagnostics: [],
             updatedAt: now(),
           }),
-          status: analysisBoardPath ? 'done' : 'idle',
+          status: 'done',
           originalPaths: originalRefs,
-          sanitizedPaths: analysisBoardPath ? [analysisBoardPath] : [],
-          failedPaths: analysisBoardPath ? [] : originalRefs,
+          sanitizedPaths: originalRefs,
+          failedPaths: [],
           updatedAt: now(),
         },
         updatedAt: now(),
@@ -2705,8 +2813,8 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
         ...next.blueprint.consistencyAssets,
         boundProductSnapshot: nextSnapshot,
         originalProductReferenceImages: originalRefs,
-        sanitizedProductReferenceImages: analysisBoardPath ? [analysisBoardPath] : [],
-        productReferenceImages: analysisBoardPath ? [analysisBoardPath] : originalRefs,
+        sanitizedProductReferenceImages: originalRefs,
+        productReferenceImages: originalRefs,
         productAnalysis: normalizedProductAnalysis,
         productImageSanitization: {
           ...(next.blueprint.consistencyAssets.productImageSanitization ?? {
@@ -2717,10 +2825,10 @@ async function syncProjectBoundProductSnapshotFromLibrary(project: CloneProject)
             diagnostics: [],
             updatedAt: now(),
           }),
-          status: analysisBoardPath ? 'done' : 'idle',
+          status: 'done',
           originalPaths: originalRefs,
-          sanitizedPaths: analysisBoardPath ? [analysisBoardPath] : [],
-          failedPaths: analysisBoardPath ? [] : originalRefs,
+          sanitizedPaths: originalRefs,
+          failedPaths: [],
           updatedAt: now(),
         },
         updatedAt: now(),
@@ -2750,7 +2858,7 @@ function resolveBoundCanonicalSourcePath(project: CloneProject) {
 
   const canonicalLike = candidates.find((item) => item.toLowerCase().includes('canonical_source'))
   if (canonicalLike) return canonicalLike
-  return ''
+  return candidates[0] || ''
 }
 
 function hasReusableBoundProductSnapshot(project: CloneProject) {
@@ -2909,6 +3017,7 @@ function buildBoardGenerationDiagnostics(input: {
   return [...canonicalDiagnostics, ...boardDiagnostics, ...sourceDiagnostics]
 }
 
+/* Legacy canonical-source extraction path retired in favor of direct product refs.
 async function ensureProductCanonicalSourceCache(input: {
   product: Product
   productRefs: string[]
@@ -3164,6 +3273,7 @@ async function ensureProductCanonicalSourceCache(input: {
     }
   }
 }
+*/
 
 const productCanonicalSourceRefreshJobs = new Set<string>()
 
@@ -3494,13 +3604,72 @@ function assertStoryboardExtractionReady(project: CloneProject) {
 }
 
 function resolveStoryboardProductRefs(project: CloneProject, shot?: ShotSpec, requestedRefs?: string[]): string[] {
-  const analysisBoardPath = resolveBoundCanonicalSourcePath(project)
-  if (!analysisBoardPath) {
+  const refs = storyboardPrimaryProductRefs(project)
+  if (!refs.length) {
     throw new Error('请先为绑定商品生成标准源')
   }
-  return [analysisBoardPath]
+  return refs
 }
 
+async function persistProjectProductRefsDirectly(project: CloneProject, originalRefs: string[]) {
+  const normalizedOriginals = Array.from(new Set(originalRefs.map((item) => String(item || '').trim()).filter(Boolean)))
+  if (!normalizedOriginals.length) return project
+  project.originalProductReferenceImagePaths = normalizedOriginals
+  project.sanitizedProductReferenceImagePaths = normalizedOriginals
+  project.productReferenceImagePaths = normalizedOriginals
+  project.productImageSanitizationStatus = 'done'
+  project.productImageSanitizationError = undefined
+  if (project.blueprint?.shots?.length) {
+    project.blueprint = {
+      ...project.blueprint,
+      shots: project.blueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, normalizedOriginals, normalizedOriginals)),
+    }
+  }
+  if (project.baseBlueprint?.shots?.length) {
+    project.baseBlueprint = {
+      ...project.baseBlueprint,
+      shots: project.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, normalizedOriginals, normalizedOriginals)),
+    }
+  }
+  if (project.executionBlueprint?.shots?.length) {
+    project.executionBlueprint = {
+      ...project.executionBlueprint,
+      shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, normalizedOriginals, normalizedOriginals)),
+    }
+  }
+  const previousAssets: Partial<CloneConsistencyAssetsSnapshot> & { updatedAt: number } =
+    project.baseBlueprint?.consistencyAssets ??
+    project.blueprint?.consistencyAssets ??
+    { updatedAt: now() }
+  const nextAssets = {
+    ...previousAssets,
+    productImageSetIds: normalizedOriginals.map((p) => basename(p)),
+    referenceImages: normalizedOriginals,
+    productReferenceImages: normalizedOriginals,
+    originalProductReferenceImages: normalizedOriginals,
+    sanitizedProductReferenceImages: normalizedOriginals,
+    productImageSanitization: {
+      status: 'done' as const,
+      originalPaths: normalizedOriginals,
+      sanitizedPaths: normalizedOriginals,
+      failedPaths: [],
+      diagnostics: [],
+      error: undefined,
+      updatedAt: now(),
+    },
+    updatedAt: now(),
+  }
+  if (project.baseBlueprint) {
+    project.baseBlueprint = { ...project.baseBlueprint, consistencyAssets: nextAssets }
+  }
+  if (project.blueprint) {
+    project.blueprint = { ...project.blueprint, consistencyAssets: nextAssets }
+  }
+  syncProjectBlueprintLayers(project)
+  return project
+}
+
+/* Legacy project-level product sanitization path retired in favor of direct product refs.
 async function sanitizeAndPersistProjectProductRefs(project: CloneProject, originalRefs: string[]) {
   const normalizedOriginals = Array.from(new Set(originalRefs.map((item) => String(item || '').trim()).filter(Boolean)))
   const sanitizationStartedAt = now()
@@ -3603,6 +3772,7 @@ async function sanitizeAndPersistProjectProductRefs(project: CloneProject, origi
   syncProjectBlueprintLayers(project)
   return project
 }
+*/
 
 async function bindProjectProductFromLibrary(project: CloneProject, productId: string) {
   const targetProductId = String(productId || '').trim()
@@ -3613,18 +3783,15 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
   if (!originalRefs.length) throw new Error('当前商品没有可用于 /clone 的商品图片')
 
   const productType = normalizeProductType(project.baseBlueprint?.productCategory || project.blueprint?.productCategory || 'general')
-  const { product: cachedProduct, canonicalRefs, fallbackToOriginal } = await ensureProductCanonicalSourceCache({
-    product,
-    productRefs: originalRefs,
-    productType,
-  })
-  const effectiveRefs = canonicalRefs.length ? canonicalRefs : originalRefs
-  const sanitizationStatus: 'done' | 'failed' = canonicalRefs.length ? 'done' : 'failed'
+  const cachedProduct = product
+  const effectiveRefs = originalRefs
+  const sanitizationStatus: 'done' = 'done'
+  const fallbackToOriginal = false
   const sanitizationError = fallbackToOriginal ? '产品标准源生成失败，当前已回退原图继续。' : undefined
-  const sanitizationDiagnostics = cachedProduct.canonicalSourceDiagnostics ?? []
+  const sanitizationDiagnostics: any[] = []
   const coverAssetPath = String(cachedProduct.coverImagePath || originalRefs[0] || '').trim()
   const boundAt = now()
-  const boundProductSnapshot = {
+  const boundProductSnapshot: NonNullable<CloneProject['boundProductSnapshot']> = {
     id: cachedProduct.id,
     name: String(cachedProduct.name || '').trim(),
     type: String(cachedProduct.type || '').trim(),
@@ -3637,15 +3804,13 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
         : undefined,
     remark: String(cachedProduct.remark || '').trim() || undefined,
     coverImagePath: coverAssetPath || undefined,
-    analysisBoardPath: String((cachedProduct as any).analysisBoardPath || '').trim() || undefined,
-    analysisBoardStatus: (cachedProduct as any).analysisBoardStatus ?? cachedProduct.canonicalSourceStatus ?? 'idle',
-    canonicalSourcePath: String(cachedProduct.canonicalSourcePath || '').trim() || undefined,
-    canonicalSourceStatus: cachedProduct.canonicalSourceStatus ?? (cachedProduct as any).analysisBoardStatus ?? 'idle',
+    analysisBoardPath: undefined,
+    analysisBoardStatus: 'idle',
+    canonicalSourcePath: String(originalRefs[0] || '').trim() || undefined,
+    canonicalSourceStatus: 'done',
     productAnalysis: normalizeStoredProductAnalysis((cachedProduct as any).productAnalysis, productType),
     originalImagePaths: originalRefs,
-    frozenReferenceImagePaths: canonicalRefs.length
-      ? canonicalRefs
-      : [String((cachedProduct as any).analysisBoardPath || cachedProduct.canonicalSourcePath || '').trim()].filter(Boolean),
+    frozenReferenceImagePaths: originalRefs,
     boundAt,
     updatedAt: boundAt,
   }
@@ -3654,7 +3819,7 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
   project.coverAssetPath = coverAssetPath || project.coverAssetPath
   project.boundProductSnapshot = boundProductSnapshot
   project.originalProductReferenceImagePaths = originalRefs
-  project.sanitizedProductReferenceImagePaths = canonicalRefs
+  project.sanitizedProductReferenceImagePaths = originalRefs
   project.productReferenceImagePaths = effectiveRefs
   project.productImageSanitizationStatus = sanitizationStatus
   project.productImageSanitizationError = sanitizationError
@@ -3662,19 +3827,19 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
   if (project.blueprint?.shots?.length) {
     project.blueprint = {
       ...project.blueprint,
-      shots: project.blueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, canonicalRefs)),
+      shots: project.blueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, originalRefs)),
     }
   }
   if (project.baseBlueprint?.shots?.length) {
     project.baseBlueprint = {
       ...project.baseBlueprint,
-      shots: project.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, canonicalRefs)),
+      shots: project.baseBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, originalRefs)),
     }
   }
   if (project.executionBlueprint?.shots?.length) {
     project.executionBlueprint = {
       ...project.executionBlueprint,
-      shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, canonicalRefs)),
+      shots: project.executionBlueprint.shots.map((shot) => replaceProductRefsIntoShotWithTracking(shot, originalRefs, originalRefs)),
     }
   }
 
@@ -3689,12 +3854,12 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
     referenceImages: originalRefs,
     productReferenceImages: effectiveRefs,
     originalProductReferenceImages: originalRefs,
-    sanitizedProductReferenceImages: canonicalRefs,
+    sanitizedProductReferenceImages: originalRefs,
     productImageSanitization: {
       status: sanitizationStatus,
       originalPaths: originalRefs,
-      sanitizedPaths: canonicalRefs,
-      failedPaths: canonicalRefs.length ? [] : originalRefs,
+      sanitizedPaths: originalRefs,
+      failedPaths: [],
       diagnostics: sanitizationDiagnostics.map((item) => ({
         ...item,
         fallbackToOriginal: Boolean(item.fallbackToOriginal ?? fallbackToOriginal),
@@ -7161,7 +7326,31 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
     const currentProject = latestProject
     const currentShot = projectBlueprintShots(currentProject).find((item) => item.id === shot.id) || shot
     const output = resolveShotVideoOutput(currentProject, currentShot)
-    const effectiveTaskId = resolveEffectiveVideoTaskId(output.taskId, currentShot.generatedTaskId)
+    const recoveredTaskHandleFromRaw =
+      !String(output.taskId || '').trim() && !String(currentShot.generatedTaskId || '').trim()
+        ? pickRecoverableTaskHandle(output.remoteRaw)
+        : ''
+    if (recoveredTaskHandleFromRaw) {
+      syncSegmentVideoOutput(currentProject, currentShot, {
+        taskId: recoveredTaskHandleFromRaw,
+        sourceEvent: 'segment_submit_missing_task',
+        error: undefined,
+      })
+      replaceProjectShot(currentProject, currentShot.id, {
+        generatedTaskId: recoveredTaskHandleFromRaw,
+        error: '',
+      })
+      project = await cloneRepo.upsertProject(currentProject)
+      console.log('[clone-debug] shot-video-reconcile:recovered-task-handle-from-raw', {
+        projectId,
+        shotId: currentShot.id,
+        taskHandle: recoveredTaskHandleFromRaw,
+      })
+    }
+    const effectiveTaskId = resolveEffectiveVideoTaskId(
+      output.taskId || recoveredTaskHandleFromRaw,
+      currentShot.generatedTaskId || recoveredTaskHandleFromRaw,
+    )
     console.log('[clone-debug] shot-video-reconcile:inspect', {
       projectId,
       shotId: currentShot.id,
@@ -7220,9 +7409,11 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
         return
       }
       if (
+        false &&
         pendingRemoteState &&
         isShotVideoSubmitStartedEvent(output.sourceEvent) &&
-        currentRetryCount < AUTO_CLONE_VIDEO_RETRY_LIMIT
+        currentRetryCount < AUTO_CLONE_VIDEO_RETRY_LIMIT &&
+        String(output.sourceEvent || '').trim() !== 'segment_submit_missing_task'
       ) {
         console.log('[clone-debug] shot-video-reconcile:missing-task-force-regenerate', {
           projectId,
@@ -7285,7 +7476,7 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
               error: localPreconditionReason,
               synced: false,
             })
-            await refreshGenerationQueueRuntime(project.id)
+            await refreshGenerationQueueRuntime(project?.id || currentProject.id)
             return
           }
           console.error('[clone-debug] shot-video-reconcile:missing-task-force-regenerate-failed', {
@@ -7323,6 +7514,35 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
         return
       }
       const reason = '当前分镜缺少可继续查询的 taskId，已跳过远端续查，请重新生成该分镜视频。'
+      const missingTaskGraceActive = isShotVideoMissingTaskGraceActive(output)
+      if (missingTaskGraceActive) {
+        syncSegmentVideoOutput(currentProject, currentShot, {
+          status: 'submitting',
+          error: '[missing_task] 当前分镜暂未回写 taskId，已锁定等待远端回写，期间不会重复创建视频任务',
+          remoteStatus: output.remoteStatus,
+          remoteRaw: output.remoteRaw,
+          lastPollAt: now(),
+          submissionLockedUntil: Math.max(
+            Number(output.submissionLockedUntil ?? 0),
+            Number(output.submissionStartedAt ?? 0) + SHOT_VIDEO_MISSING_TASK_GRACE_MS,
+          ),
+          sourceEvent: 'segment_submit_missing_task',
+        })
+        replaceProjectShot(currentProject, currentShot.id, {
+          status: 'generating',
+          error: '',
+          generatedTaskId: undefined,
+        })
+        project = await cloneRepo.upsertProject(currentProject)
+        results.push({
+          shotId: currentShot.id,
+          status: 'submitting',
+          synced: false,
+          error: '[missing_task] 当前分镜暂未回写 taskId，已锁定等待远端回写，期间不会重复创建视频任务',
+        })
+        await refreshGenerationQueueRuntime(project.id)
+        return
+      }
       const shouldKeepMissingTaskRetryable =
         Boolean(pendingRemoteState) ||
         isShotVideoSubmitStartedEvent(output.sourceEvent) ||
@@ -7886,19 +8106,23 @@ async function ensureAi666SegmentVideoTask(input: {
       })
       replaceProjectShot(latestProject, latestShot.id, {
         status: 'generating',
-        error: reason,
+        error: '',
         generatedTaskId: undefined,
       })
       syncSegmentVideoOutput(latestProject, latestShot, {
-        status: 'failed_terminal',
+        status: 'submitting',
         error: reason,
         remoteStatus: createdRemoteStatus,
         remoteRaw: created.raw,
-        sourceEvent: 'segment_submit_started',
+        submissionLockedUntil: Math.max(
+          submitStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
+          submitStartedAt + SHOT_VIDEO_MISSING_TASK_GRACE_MS,
+        ),
+        sourceEvent: 'segment_submit_missing_task',
       })
-      latestProject.lastError = reason
+      latestProject.lastError = ''
       await cloneRepo.upsertProject(latestProject)
-      throw new Error(reason)
+      return latestProject
     }
     console.log('[clone-debug] create-apifox-video-task:done', {
       projectId: latestProject.id,
@@ -7975,6 +8199,10 @@ export function __test_resolveStoryboardSceneFitRefs(input: {
     continuityAnchorPath: input.continuityAnchorPath,
     mode: input.mode ?? 'start',
   })
+}
+
+export function __test_advanceAutoRunWorkflow(project: CloneProject, phase: 'script_generation' | 'storyboard_design') {
+  return advanceAutoRunWorkflow(project, phase)
 }
 
 export const cloneService = {
@@ -8517,6 +8745,7 @@ export const cloneService = {
     if (!boundProductRefs.length) throw new Error('请先绑定商品图')
     if (!project.selectedModelIdentitySnapshot?.id) throw new Error('请先选择模特')
 
+    advanceAutoRunWorkflow(project, 'script_generation')
     setAutoFlowStage(project, 'script_generation', 'running', `自动生成脚本变体并按 ${SCRIPT_VARIANT_AUTO_SELECT_THRESHOLD} 分阈值选择脚本`)
     await cloneRepo.upsertProject(project)
     if (!project.scriptVariantCandidates?.length) {
@@ -8539,6 +8768,7 @@ export const cloneService = {
     })
     project = selectedResult.project
 
+    advanceAutoRunWorkflow(project, 'storyboard_design')
     setAutoFlowStage(project, 'storyboard_design', 'running', '自动生成分镜设计图')
     await cloneRepo.upsertProject(project)
     const frameResult = await this.generateStoryboardGridsForProject({
@@ -8789,7 +9019,7 @@ export const cloneService = {
     if (!project || (!project.baseBlueprint && !project.blueprint)) throw new Error('复刻项目或蓝图不存在')
     const refs = Array.from(new Set((input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
     if (!refs.length) throw new Error('请先上传商品图')
-    await sanitizeAndPersistProjectProductRefs(project, refs)
+    await persistProjectProductRefsDirectly(project, refs)
     console.log('[clone-debug] save-project-product-images', {
       cloneProjectId: project.id,
       refs,
@@ -9696,6 +9926,85 @@ export const cloneService = {
     item.title = String(input.title ?? item.title ?? '').trim() || item.title
     item.description = String(input.description ?? item.description ?? '').trim() || undefined
     const saved = await cloneRepo.upsertProject(item)
+    return {
+      project: saved,
+      summary: buildProjectSummary(saved),
+    }
+  },
+
+  async applySubtitleVideoToProject(input: {
+    cloneProjectId: string
+    subtitleVideoPath: string
+    subtitleCoverImagePath?: string
+  }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item) throw new Error('复刻项目不存在')
+    const subtitleVideoPath = String(input.subtitleVideoPath || '').trim()
+    if (!subtitleVideoPath) throw new Error('字幕视频不存在')
+    if (!existsSync(subtitleVideoPath)) throw new Error('字幕视频文件不存在')
+    ensureCloneFlowState(item)
+    const currentOutputPath = String(item.finalCompose?.outputPath || '').trim()
+    if (!currentOutputPath) throw new Error('当前项目还没有可替换的成片')
+    const currentCoverImagePath = String(item.finalCompose?.coverImagePath || '').trim() || undefined
+    const previousOverlay = item.finalCompose?.subtitleOverlay
+    const originalOutputPath =
+      previousOverlay?.active && previousOverlay.originalOutputPath
+        ? String(previousOverlay.originalOutputPath || '').trim()
+        : currentOutputPath
+    const originalCoverImagePath =
+      previousOverlay?.active && previousOverlay.originalCoverImagePath
+        ? String(previousOverlay.originalCoverImagePath || '').trim() || undefined
+        : currentCoverImagePath
+    const subtitleCoverImagePath =
+      String(input.subtitleCoverImagePath || '').trim() || (await ensureVideoCoverImage(subtitleVideoPath))
+    syncFinalCompose(item, {
+      status: 'done',
+      outputPath: subtitleVideoPath,
+      coverImagePath: subtitleCoverImagePath,
+      error: undefined,
+    })
+    if (!item.finalCompose) {
+      throw new Error('当前项目成片状态异常')
+    }
+    item.finalCompose.subtitleOverlay = {
+      active: true,
+      originalOutputPath,
+      originalCoverImagePath,
+      subtitleOutputPath: subtitleVideoPath,
+      subtitleCoverImagePath,
+      appliedAt: now(),
+    }
+    const saved = await cloneRepo.upsertProject(item)
+    return {
+      project: saved,
+      summary: buildProjectSummary(saved),
+    }
+  },
+
+  async revertSubtitleVideoFromProject(input: { cloneProjectId: string }) {
+    const item = await cloneRepo.getProject(input.cloneProjectId)
+    if (!item) throw new Error('复刻项目不存在')
+    ensureCloneFlowState(item)
+    const overlay = item.finalCompose?.subtitleOverlay
+    if (!overlay?.active) throw new Error('当前项目没有可回退的字幕视频')
+    const subtitleVideoPath = String(overlay.subtitleOutputPath || '').trim()
+    const subtitleCoverImagePath = String(overlay.subtitleCoverImagePath || '').trim()
+    syncFinalCompose(item, {
+      status: 'done',
+      outputPath: String(overlay.originalOutputPath || '').trim() || undefined,
+      coverImagePath: String(overlay.originalCoverImagePath || '').trim() || undefined,
+      error: undefined,
+    })
+    if (item.finalCompose) {
+      item.finalCompose.subtitleOverlay = undefined
+    }
+    const saved = await cloneRepo.upsertProject(item)
+    if (subtitleVideoPath) {
+      await rm(subtitleVideoPath, { force: true }).catch(() => undefined)
+    }
+    if (subtitleCoverImagePath) {
+      await rm(subtitleCoverImagePath, { force: true }).catch(() => undefined)
+    }
     return {
       project: saved,
       summary: buildProjectSummary(saved),
@@ -13712,7 +14021,9 @@ export const cloneService = {
 export const __cloneServiceInternals = {
   ensureAi666SegmentVideoTask,
   isShotVideoSubmissionLocked,
+  isShotVideoMissingTaskGraceActive,
   computeShotVideoSubmissionFingerprint,
   buildShotVideoCreatingLockReason,
   SHOT_VIDEO_SUBMISSION_LOCK_MS,
+  SHOT_VIDEO_MISSING_TASK_GRACE_MS,
 }
