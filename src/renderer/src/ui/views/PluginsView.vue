@@ -22,6 +22,17 @@ const LOCAL_PLUGIN_STATE_KEY = 'videogen-desktop-plugin-state'
 
 const fallbackPlugins: PluginSummary[] = [
   {
+    id: 'tiktok-creative-studio',
+    name: 'TikTok 创意视频助手',
+    category: 'video_processing',
+    description: '从复刻任务只读导入商品图和提示词，独立发起 TikTok Creative Studio 图生视频任务，不写回复刻主流程。',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/tiktok-creative-studio',
+    status: 'uninstalled',
+    enabled: false,
+  },
+  {
     id: 'video-parser-download',
     name: '视频解析下载',
     category: 'video_download',
@@ -146,12 +157,14 @@ function pluginStatusText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-creative-studio') return '创意生成'
   if (plugin.id === 'geelark-publisher') return '发布插件'
   if (plugin.category === 'video_download') return '下载工具'
   return '视频处理'
 }
 
 function pluginIconText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-creative-studio') return 'TT'
   if (plugin.id === 'geelark-publisher') return 'GK'
   if (plugin.id === 'video-parser-download') return 'DL'
   if (plugin.id === 'video-batch-watermark') return 'WM'
@@ -160,6 +173,7 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCardTone(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-creative-studio') return 'tone-green'
   if (plugin.id === 'geelark-publisher') return 'tone-cyan'
   if (plugin.id === 'video-parser-download') return 'tone-violet'
   if (plugin.id === 'video-batch-watermark') return 'tone-blue'
@@ -167,7 +181,7 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 }
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return plugin.id === 'geelark-publisher'
+  return plugin.id === 'geelark-publisher' || plugin.id === 'tiktok-creative-studio'
 }
 
 function primaryActionText(plugin: PluginSummary) {
@@ -267,6 +281,10 @@ function selectPlugin(pluginId: string) {
 }
 
 function usePlugin(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-creative-studio') {
+    void router.push('/plugins/tiktok-creative-studio')
+    return
+  }
   if (isDirectWorkspacePlugin(plugin)) {
     void router.push('/plugins/geelark-publisher/publish-center')
     return

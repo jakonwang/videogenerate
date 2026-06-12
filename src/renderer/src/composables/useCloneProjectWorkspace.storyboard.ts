@@ -17,7 +17,8 @@ function preferredStoryboardRefs<TProject extends CloneProjectLike>(project: TPr
     ? (project as any).sanitizedProductReferenceImagePaths.map((item: unknown) => String(item || '').trim()).filter(Boolean)
     : []
   const fallback = fallbackRefs.map((item) => String(item || '').trim()).filter(Boolean)
-  return Array.from(new Set([...originals, ...fallback, ...sanitized])).slice(0, 9)
+  const preferred = Array.from(new Set([...sanitized, ...fallback]))
+  return preferred.length ? preferred : originals
 }
 
 export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProjectLike>(
@@ -34,7 +35,7 @@ export function useCloneProjectWorkspaceStoryboard<TProject extends CloneProject
   }
 
   const syncProductImagesToProject = async (nextRefs: string[], successMessage: string) => {
-    const normalizedRefs = Array.from(new Set(nextRefs.map(String).filter(Boolean))).slice(0, 9)
+    const normalizedRefs = Array.from(new Set(nextRefs.map(String).filter(Boolean)))
     options.productRefsDraft.value = normalizedRefs
     const projectId =
       options.resolveActiveProjectId?.(options.current.value?.id) || String(options.current.value?.id || '').trim()

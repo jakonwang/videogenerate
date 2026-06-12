@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { buildGptFramePrompt, resolveStoryboardImageTemplateType } from '../src/main/modules/clone/gptImage'
+import { buildGptFramePrompt, buildIdentityPackPrompt, resolveStoryboardImageTemplateType } from '../src/main/modules/clone/gptImage'
 import { __test_resolveStoryboardSceneFitRefs } from '../src/main/modules/clone/service'
 import {
   buildCameraMotionLockText,
@@ -14,27 +14,27 @@ import { buildRealisticPrompt } from '../src/main/modules/clone/providers'
 import type { ModelIdentityPack, ShotSpec } from '../src/main/modules/clone/types'
 
 const GENERAL_TEMPLATE = `
-Now, analyze these two new images.
+Look at these two reference images and combine them in a natural everyday way.
 
-Image 1 is our base model and product reference (身份定状图).
-Image 2 is our scene structure reference (场景结构图).
+Image 1 is our base model and product reference (identity look reference).
+Image 2 is our daily environment reference (scene environment reference).
 
-I need you to transfer the model and product from Image 1 into the exact environmental context and geometric composition layout of Image 2.
+I need you to place the model and product from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.
 
 Strict Requirements:
-1. PRODUCT: Identify the product in Image 1. Keep its design, exact colors, and original material textures 100% identical to Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. Zero modifications allowed.
+1. PRODUCT: Identify the product in Image 1. Keep its design, colors, and original material textures fully consistent with Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. No product redesign or restyling is allowed.
 
 2. MODEL & CLOTHING FIDELITY (服装与角色绝对死锁):
-Identify the model in Image 1. You must maintain 100% strict consistency for the model's appearance.
-- CLOTHING: Replicate the EXACT clothing from Image 1, including its specific style, fabric texture, and exact color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
-- POSTURE: Keep the identical presentation posture, skin tone, and the exact faceless/cropped perspective on the specific body part exactly as shown in Image 1.
+Identify the model in Image 1. Keep the model's appearance clearly consistent with Image 1.
+- CLOTHING: Replicate the same clothing from Image 1, including its style, fabric texture, and color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
+- POSTURE: Keep the same presentation posture, skin tone, and the same faceless or cropped perspective on the specific body part as shown in Image 1.
 
-3. SCENE INTEGRATION: Completely replace the plain studio background of Image 1 with the exact architectural structure, perspective lines, and ambient lighting of Image 2. The new environment's light and reflections from Image 2 must wrap naturally around the model from Image 1, casting highly realistic contact shadows on the new surfaces to ensure a perfect, seamless physical integration.
+3. SCENE INTEGRATION: Replace the plain studio background of Image 1 with the ordinary home setting, room layout, and natural daylight feeling of Image 2. The final image should feel like it was casually captured in a real Southeast Asian home, with believable available light, mild shadows, and a relaxed unpolished atmosphere instead of a polished studio or ad campaign look.
 
-4. ABSOLUTE TEXT AND LOGO ERASURE:
-Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with clean, seamless background textures matching the surrounding elements of Image 2.
+4. TEXT AND LOGO REMOVAL:
+Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with plain, natural background textures that match the nearby surfaces in Image 2.
 
-Style: High-end, photorealistic commercial brand advertisement. Pristine quality, sharp details. No sketch, no animation, single panel only.
+Style: Natural UGC lifestyle photography with a casual smartphone-shot feel. Southeast Asian daily home environment, bright natural daylight, authentic ambient atmosphere. Real and believable like everyday user-made content, with clear details but not luxury, glossy, or overproduced. Single panel only, no sketches, no animation.
 `.trim()
 
 const JEWELRY_TEMPLATE = GENERAL_TEMPLATE
@@ -225,6 +225,27 @@ const explicitPackagingPrompt = buildGptFramePrompt({
   which: 'start',
   explicitTemplateType: 'ecommerce_packaging',
 })
+const identityPackPrompt = buildIdentityPackPrompt({
+  productType: 'general',
+  productPoints: interactionShot.materialNeed,
+  profile: {
+    market: 'Southeast Asian market',
+    gender: 'female',
+    ageRange: '20-28',
+    faceShape: 'ordinary natural face shape',
+    hairStyle: 'natural straight hair',
+    hairColor: 'natural dark black hair color',
+    skinTone: 'natural warm skin tone',
+    bodyType: 'balanced natural build',
+    outfitStyle: 'light breathable short-sleeve casual top',
+    mood: 'friendly natural everyday expression',
+    sceneStyle: 'real home daylight daily life setting',
+    languageStyle: 'Chinese-speaking social-commerce expression style',
+    cameraPresence: 'natural social-commerce camera presence',
+    styleBias: 'conversion-focused product demo style',
+  },
+  hasModelReference: true,
+})
 const identityGridPrimaryRefs = __test_resolveStoryboardSceneFitRefs({
   projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
   productRefs: ['D:/tmp/product-canonical.png'],
@@ -268,6 +289,8 @@ assert.equal(packagingPrompt, GENERAL_TEMPLATE)
 assert.equal(interactionPrompt, GENERAL_TEMPLATE)
 assert.equal(generalPrompt, GENERAL_TEMPLATE)
 assert.equal(explicitPackagingPrompt, GENERAL_TEMPLATE)
+assert.match(identityPackPrompt, /believable real-world size relative to the Hands/i)
+assert.match(identityPackPrompt, /Do not enlarge, magnify, or exaggerate the product beyond its normal wearing or handheld scale/i)
 assert.deepEqual(identityGridPrimaryRefs, ['D:/tmp/project-identity-grid.png', 'D:/tmp/scene-thumb.png'])
 assert.deepEqual(legacyFallbackRefs, ['D:/tmp/product-canonical.png', 'D:/tmp/model-pack-1.png', 'D:/tmp/scene-thumb.png'])
 
@@ -277,11 +300,14 @@ assert.doesNotMatch(interactionPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRA
 assert.doesNotMatch(generalPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
 
 assert.match(videoPrompt, /^Main Instruction: A natural, crisp, high-definition \(HD\) 60fps video with a handheld smartphone shooting look/i)
-assert.match(videoPrompt, /The Earring must retain 100% strict structural consistency and clear geometric details from start to finish\./i)
-assert.match(videoPrompt, /the model's Ear lobe must dynamically re-calculate/i)
-assert.match(videoPrompt, /Implement Subtle handheld close-up on the ear area with a highly controlled, microscopic handheld camera shake/i)
+assert.match(videoPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
+assert.match(videoPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
+assert.match(videoPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
+assert.match(videoPrompt, /Implement Subtle handheld close-up on the ear area with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
 assert.match(videoPrompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame/i)
 assert.match(videoPrompt, /Silent Performance Lock: The model must remain completely silent\./i)
+assert.match(videoPrompt, /Keep lips closed or only minimally relaxed at all times\./i)
+assert.doesNotMatch(videoPrompt, /100% strict structural consistency|millimeter precision|tiny 3 degrees|natural physical inertia|natural ambient occlusion/i)
 assert.match(earringNegative, /no exaggerated sparkle effect|no fantasy glow/i)
 assert.match(earringNegative, /no standing upright earring|no floating earring|no unsupported rigid earring pose/i)
 assert.match(earringNegative, /discard the generation instead of correcting it/i)

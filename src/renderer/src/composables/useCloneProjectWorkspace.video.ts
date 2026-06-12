@@ -48,6 +48,9 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
   const isAutomaticSyncSource = (source: ShotVideoSyncSource) =>
     source === 'auto_timer_sync' || source === 'auto_download_recovery'
 
+  const resolveShotOutputVideoPath = (item?: { videoPath?: string; localPath?: string } | null) =>
+    String(item?.videoPath || item?.localPath || '').trim()
+
   const effectiveShotTaskId = (shotId: string) => {
     const id = String(shotId || '').trim()
     if (!id) return ''
@@ -71,7 +74,7 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
   const isPendingSyncItem = (item: NonNullable<TProject['shotVideoOutputs']>[number]) => {
     const normalizedStatus = String(item.status || '').toLowerCase()
     const retryCount = Number(item.retryCount ?? 0)
-    if (String(item.videoPath || '').trim()) return false
+    if (resolveShotOutputVideoPath(item)) return false
     if (
       (normalizedStatus === 'remote_succeeded_pending_download' || normalizedStatus === 'downloading') &&
       String(item.videoUrl || '').trim()

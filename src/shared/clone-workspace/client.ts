@@ -178,10 +178,11 @@ export function normalizeCloneWorkspaceError(error: unknown): CloneWorkspaceErro
   if (error instanceof Error && 'code' in error) {
     return error as CloneWorkspaceError
   }
-  const message = String((error as Error)?.message ?? error ?? '未知错误')
+  const rawMessage = String((error as Error)?.message ?? error ?? '')
+  const message = normalizeCloneWorkspaceErrorMessage(rawMessage)
   const normalized = new Error(message) as CloneWorkspaceError
   normalized.cause = error
-  if (message.includes('无权访问该任务')) {
+  if (message.includes('无权访问该任务') || message.includes('unauthorized task')) {
     normalized.code = 'UNAUTHORIZED_TASK'
   } else if (message.includes('不存在') || message.includes('已删除') || message.includes('not found')) {
     normalized.code = 'NOT_FOUND'
@@ -193,6 +194,19 @@ export function normalizeCloneWorkspaceError(error: unknown): CloneWorkspaceErro
     normalized.code = 'TRANSPORT_ERROR'
   }
   return normalized
+}
+
+function normalizeCloneWorkspaceErrorMessage(message: string) {
+  const text = String(message || '').trim()
+  if (!text) return '未知错误'
+  if (!/[?]{4,}/.test(text) && !text.includes('\uFFFD')) return text
+  if (text.includes("clone:composeCloneVideo")) {
+    return '最终成片合成失败：出片前检查未通过，请先确认每个镜头都有可用视频并且通过生产质检。'
+  }
+  if (text.includes("clone:syncShotVideoTask") || text.includes("clone:forceDownloadShotVideoResult")) {
+    return '分镜视频同步失败：远端结果已返回，但本地回写未完成，请继续查询或重试下载。'
+  }
+  return '操作失败：当前错误信息编码异常，请查看运行日志中的原始上下文。'
 }
 
 export function createWebCloneWorkspaceClient<TProject = any>(

@@ -2,6 +2,17 @@ import type { PluginDefinition, PluginDetail, PluginRecord, PluginSummary } from
 
 export const pluginDefinitions: PluginDefinition[] = [
   {
+    id: 'tiktok-creative-studio',
+    name: 'TikTok 创意视频助手',
+    category: 'video_processing',
+    description: '从复刻任务只读导入商品图和提示词，独立发起 TikTok Creative Studio 图生视频任务，不写回复刻主流程。',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/tiktok-creative-studio',
+    usageHint: '适合把当前 clone 任务的商品图和提示词发送到 TikTok Creative Studio，生成和下载视频结果，同时与复刻主流程完全隔离。',
+    configSchema: [],
+  },
+  {
     id: 'tiktok-listing-helper',
     name: 'TikTok 商品上架助手',
     category: 'ecommerce_listing',

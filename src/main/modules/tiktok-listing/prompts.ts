@@ -31,6 +31,9 @@ const GLOBAL_PROMPT_RULES = [
   'Reference image priority is highest.',
   'Keep the exact same product identity as the reference image.',
   'Lock exact product structure, silhouette, shape, material, finish, color, proportion, and attachment details.',
+  'Keep the product at a believable real-world size relative to the body part or carrier object.',
+  'Do not enlarge, magnify, or exaggerate the product size for dramatic effect.',
+  'Maintain normal wearing or usage scale so the product never looks oversized compared with the ear, hand, neck, wrist, phone, or body anchor.',
   'Do not redesign the product.',
   'Do not add text, watermark, logo, packaging copy, or graphic overlay.',
   'Do not introduce extra props or styling that steals attention from the product.',
@@ -348,6 +351,7 @@ export function buildTiktokListingImagePrompt(input: {
           'Reference image 2 is the approved hero result that must be matched for the exact same product identity.',
           'All later images must keep the exact same product as both references with no redesign, no structural drift, and no detail substitution.',
           'Use reference image 2 to preserve the same product appearance consistency across the full 5-image set.',
+          'Keep the same believable product scale as the references and do not progressively enlarge the item across later images.',
         ].join(' ')
       : 'Reference image 1 is the original product truth source and has the highest priority.'
   return [

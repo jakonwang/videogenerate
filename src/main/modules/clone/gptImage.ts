@@ -507,106 +507,106 @@ export function defaultModelIdentityDescription(productType: CloneProductType, g
       return {
         market: 'Global social-commerce market',
         gender: 'male',
-        ageRange: '20-30',
-        faceShape: 'defined face shape',
+        ageRange: '23-32',
+        faceShape: 'ordinary natural face shape',
         hairStyle: 'hair tied back or tucked cleanly away from product area',
         hairColor: 'natural dark black hair color',
         skinTone: 'healthy neutral skin tone',
         bodyType: 'balanced natural build',
-        outfitStyle: 'minimal clean outfit that does not compete with the product',
-        mood: 'calm confident expression',
-        sceneStyle: 'real indoor environment with depth, soft natural lighting, subtle background blur, neutral lifestyle setting such as bedroom, dressing area, or minimal apartment corner',
-        languageStyle: 'Chinese-speaking social-commerce expression style',
+        outfitStyle: 'minimal clean short-sleeve top that does not compete with the product',
+        mood: 'calm natural everyday expression',
+        sceneStyle: 'real indoor home environment with soft natural lighting and ordinary daily background depth',
+        languageStyle: 'casual everyday short-video expression style',
         cameraPresence: 'close-up product-led camera presence',
-        styleBias: 'wearing demonstration focus',
+        styleBias: 'authentic everyday UGC style',
       }
     }
     if (productType === 'clothes') {
       return {
         market: 'Global social-commerce market',
         gender: 'male',
-        ageRange: '20-30',
-        faceShape: 'defined face shape',
+        ageRange: '23-32',
+        faceShape: 'ordinary natural face shape',
         hairStyle: 'natural straight hair',
         hairColor: 'natural dark black hair color',
         skinTone: 'healthy neutral skin tone',
         bodyType: 'balanced natural build',
-        outfitStyle: 'refined commute outfit',
-        mood: 'calm confident expression',
-        sceneStyle: 'light retail lifestyle environment',
-        languageStyle: 'Chinese-speaking social-commerce expression style',
+        outfitStyle: 'casual short-sleeve lifestyle outfit',
+        mood: 'calm natural everyday expression',
+        sceneStyle: 'real home daylight daily life setting',
+        languageStyle: 'casual everyday short-video expression style',
         cameraPresence: 'natural social-commerce camera presence',
-        styleBias: 'styling and look focus',
+        styleBias: 'authentic everyday UGC style',
       }
     }
     return {
       market: 'Global social-commerce market',
       gender: 'male',
-      ageRange: '20-30',
-      faceShape: 'defined face shape',
+      ageRange: '23-32',
+      faceShape: 'ordinary natural face shape',
       hairStyle: 'natural straight hair',
       hairColor: 'natural dark black hair color',
       skinTone: 'healthy neutral skin tone',
       bodyType: 'balanced natural build',
-      outfitStyle: 'clean casual outfit',
-      mood: 'calm confident expression',
-      sceneStyle: 'soft daylight clean product demo setting',
-      languageStyle: 'Chinese-speaking social-commerce expression style',
-      cameraPresence: 'natural social-commerce camera presence',
-      styleBias: 'conversion-focused product demo style',
+      outfitStyle: 'clean casual short-sleeve outfit',
+      mood: 'calm natural everyday expression',
+      sceneStyle: 'real home daylight daily life setting',
+      languageStyle: 'casual everyday short-video expression style',
+      cameraPresence: 'natural amateur smartphone camera presence',
+      styleBias: 'authentic everyday UGC style',
     }
   }
   if (productType === 'earrings') {
     return {
       market: 'Southeast Asian market',
       gender: 'female',
-      ageRange: '20-28',
-      faceShape: 'oval face shape',
+      ageRange: '23-32',
+      faceShape: 'ordinary natural face shape',
       hairStyle: 'natural dark hair tucked behind one ear',
       hairColor: 'natural dark black hair color',
       skinTone: 'natural warm skin tone',
-      bodyType: 'petite build',
-      outfitStyle: 'minimal light-colored top, clean beauty e-commerce style',
-      mood: 'calm confident friendly, subtle smile',
-      sceneStyle: 'soft daylight, clean background with gentle greenery or neutral wall',
-      languageStyle: 'soft bilingual social-sell expression style',
+      bodyType: 'balanced natural build',
+      outfitStyle: 'simple daily short-sleeve casual top that does not compete with the product',
+      mood: 'friendly natural everyday expression',
+      sceneStyle: 'real home daylight daily life setting',
+      languageStyle: 'casual everyday short-video expression style',
       cameraPresence: 'close-up product-led camera presence',
-      styleBias: 'wearing demonstration focus',
+      styleBias: 'authentic everyday UGC style',
     }
   }
   if (productType === 'clothes') {
     return {
       market: 'Southeast Asian market',
       gender: 'female',
-      ageRange: '20-30',
-      faceShape: 'oval face shape',
+      ageRange: '23-32',
+      faceShape: 'ordinary natural face shape',
       hairStyle: 'natural dark hair, tidy styling',
       hairColor: 'natural dark brown hair color',
       skinTone: 'natural warm skin tone',
       bodyType: 'balanced natural build',
-      outfitStyle: 'simple styling that does not compete with the product clothing',
-      mood: 'relaxed confident lifestyle feeling',
-      sceneStyle: 'soft daylight fitting-room or clean home setting',
-      languageStyle: 'Chinese-speaking social-commerce expression style',
-      cameraPresence: 'natural social-commerce camera presence',
-      styleBias: 'styling and look focus',
+      outfitStyle: 'simple short-sleeve daily styling that does not compete with the product clothing',
+      mood: 'relaxed natural everyday expression',
+      sceneStyle: 'real home daylight daily life setting',
+      languageStyle: 'casual everyday short-video expression style',
+      cameraPresence: 'natural amateur smartphone camera presence',
+      styleBias: 'authentic everyday UGC style',
     }
   }
   return {
     market: 'Southeast Asian market',
     gender: 'female',
     ageRange: '20-30',
-    faceShape: 'oval face shape',
+    faceShape: 'ordinary natural face shape',
     hairStyle: 'natural dark hair',
     hairColor: 'natural dark black hair color',
     skinTone: 'natural warm skin tone',
-    bodyType: 'slim build',
-    outfitStyle: 'clean casual outfit',
-    mood: 'friendly natural social-commerce model',
-    sceneStyle: 'soft daylight clean product demo setting',
-    languageStyle: 'Chinese-speaking social-commerce expression style',
-    cameraPresence: 'natural social-commerce camera presence',
-    styleBias: 'conversion-focused product demo style',
+    bodyType: 'average everyday build',
+    outfitStyle: 'simple daily short-sleeve casual outfit',
+    mood: 'friendly natural everyday amateur model',
+    sceneStyle: 'real home daylight daily life setting',
+    languageStyle: 'casual everyday short-video expression style',
+    cameraPresence: 'natural amateur smartphone camera presence',
+    styleBias: 'authentic everyday UGC style',
   }
 }
 
@@ -622,11 +622,11 @@ function recommendedMaleModelProfileOptions(productType: CloneProductType): Mode
       skinTone: 'healthy_neutral',
       bodyType: 'balanced',
       outfitStyle: 'clean_minimal',
-      mood: 'calm_confident',
-      sceneStyle: 'clean_studio',
+      mood: 'friendly_natural',
+      sceneStyle: 'home_daylight',
       languageStyle: 'chinese_fluent',
       cameraPresence: 'closeup_product_led',
-      styleBias: 'wearing_focus',
+      styleBias: 'conversion_focus',
     }
   }
   if (productType === 'clothes') {
@@ -634,31 +634,31 @@ function recommendedMaleModelProfileOptions(productType: CloneProductType): Mode
       market: 'global_female',
       gender: 'male',
       ageRange: '25_32',
-      faceShape: 'defined',
+      faceShape: 'soft_round',
       hairStyle: 'dark_straight',
       hairColor: 'dark_black',
       skinTone: 'healthy_neutral',
       bodyType: 'balanced',
-      outfitStyle: 'refined_commute',
-      mood: 'calm_confident',
-      sceneStyle: 'retail_lifestyle',
+      outfitStyle: 'casual_lifestyle',
+      mood: 'friendly_natural',
+      sceneStyle: 'home_daylight',
       languageStyle: 'chinese_fluent',
       cameraPresence: 'natural_social_commerce',
-      styleBias: 'styling_focus',
+      styleBias: 'conversion_focus',
     }
   }
   return {
     market: 'global_female',
     gender: 'male',
     ageRange: '25_32',
-    faceShape: 'defined',
+    faceShape: 'soft_round',
     hairStyle: 'dark_straight',
     hairColor: 'dark_black',
     skinTone: 'healthy_neutral',
     bodyType: 'balanced',
-    outfitStyle: 'refined_commute',
-    mood: 'calm_confident',
-    sceneStyle: 'retail_lifestyle',
+    outfitStyle: 'casual_lifestyle',
+    mood: 'friendly_natural',
+    sceneStyle: 'home_daylight',
     languageStyle: 'chinese_fluent',
     cameraPresence: 'natural_social_commerce',
     styleBias: 'conversion_focus',
@@ -783,13 +783,19 @@ export function buildModelLibraryPrompt(input: {
     `Skin tone: ${input.profile.skinTone}. Body type: ${input.profile.bodyType || 'slim build'}. Outfit: ${input.profile.outfitStyle}.`,
     `Mood: ${input.profile.mood}. Scene: ${input.profile.sceneStyle}. Language style: ${input.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}.`,
     `Camera presence: ${input.profile.cameraPresence || 'natural social-commerce camera presence'}. Style bias: ${input.profile.styleBias || 'conversion-focused product demo style'}.`,
-    'Output format: one single image only, arranged as a clean 3x3 multi-angle contact sheet with 9 panels.',
-    'The 9 panels must show the same exact model identity from different reusable angles and framings such as front portrait, left 45 degree, right 45 degree, left profile, right profile, half body, hands-near-face pose, seated natural pose, and one clean detail-oriented beauty angle.',
+    'For Southeast Asian hot-weather everyday styling, prefer short-sleeve tops, light breathable casual clothing, and simple daily outfits unless the user explicitly requests otherwise.',
+    'The model should look like a real ordinary person, not a fashion model, celebrity, luxury campaign face, or highly polished influencer.',
+    'Prefer natural facial features, realistic proportions, light everyday grooming, and believable skin texture. Avoid overly sharp jawlines, glamorous makeup, dramatic styling, or high-end editorial beauty treatment.',
+    'The face should feel ordinary and believable, not exceptionally beautiful or commercially perfected.',
+    'Allow mild asymmetry, normal pores, light under-eye presence, natural smile lines, and small everyday skin texture details.',
+    'Do not beautify the face into a luxury ad look. Do not generate flawless skin, porcelain skin, perfect symmetry, sculpted editorial cheekbones, or overly polished influencer makeup.',
+    'Output format: one single image only, arranged as a practical 3x3 multi-angle contact sheet with 9 panels.',
+    'The 9 panels must show the same exact model identity from different reusable angles and framings such as front portrait, left 45 degree, right 45 degree, left profile, right profile, half body, hands-near-face pose, seated natural pose, and one simple close detail angle.',
     'Keep the same face, hair, outfit, lighting, age impression, and scene style fully consistent across all 9 panels.',
     'Do not make every panel front-facing. The purpose is reusable multi-angle identity coverage, not a single hero portrait repeated 9 times.',
-    'Show the model alone in a clean, practical, reusable social-commerce reference set.',
+    'Show the model alone in a simple, practical, reusable everyday reference set.',
     'No product, no prop, no handbag, no jewelry showcase, no package, no phone, no bottle, no text, no subtitle, no watermark, no logo, no UI overlay, no random letters.',
-    'Realistic smartphone photo style, natural skin texture, clean commercial composition.',
+    'Realistic smartphone photo style, natural skin texture, ordinary home lighting, and authentic everyday framing.',
     'Single person only. One collage image only.',
   ]
     .filter(Boolean)
@@ -831,6 +837,7 @@ Reference Image 1 contains the exact ${productName} with its specific structure 
 
 1. ABSOLUTE PRODUCT FOCUS (Product is the absolute King):
 The primary focal point of the entire image must be the EXACT ${productName} extracted from Reference Image 1. The product must be physically attached to, worn on, interacting with, or held by the model's ${targetBodyPart}. The product's shape, geometry, color, and original material textures must be 100% identical to Ref 1, rendered with sharp, macro-level clarity.
+Keep the product at a believable real-world size relative to the ${targetBodyPart}. Do not enlarge, magnify, or exaggerate the product beyond its normal wearing or handheld scale just to make it more eye-catching.
 
 2. MODEL PRESENTATION & ANONYMITY (Model is just a canvas):
 The model from Reference Image 2 serves strictly as a background context or canvas to present the product. The camera must focus tightly on the ${targetBodyPart} where the product is prominently displayed. Crucially, the model's face MUST BE ANONYMOUS: the eyes, nose, and mouth must be completely cropped out of the frame, blurred, or entirely turned away (sharp side-view/back-view profile). Focus entirely on the flawless interaction between the product and the realistic skin/body texture of the ${targetBodyPart}.
@@ -1017,7 +1024,7 @@ function buildStoryboardLockedProductFocusText(productType: CloneProductType) {
     return 'Preserve shape, proportions, structure, connector relation, hanging direction, and ear attachment point. Keep the product close, sharp, and fully readable so small structural details remain clear. Avoid deformation or redesign.'
   }
   if (/ring|bracelet|necklace/.test(normalizedType)) {
-    return 'Preserve shape, proportions, structure, attachment relation, and wearing scale. Keep the product close, sharp, and fully readable so structural details remain clear. The product must stay larger and clearer than surrounding body features.'
+    return 'Preserve shape, proportions, structure, attachment relation, and wearing scale. Keep the product close, sharp, and fully readable so structural details remain clear. The product must stay visually primary without becoming oversized or unnaturally large relative to the surrounding body anchor.'
   }
   return 'Keep the product clearly visible and structurally stable.'
 }
@@ -1029,10 +1036,12 @@ function buildShotControlText(input: {
 }) {
   const shotType = isWearableStoryboardShot(input.productType, input.shot) ? 'Product-led demonstration' : 'Product-led commercial frame'
   const framing = isWearableStoryboardShot(input.productType, input.shot)
-    ? [
+      ? [
         'product is the visual center',
         'occupies 40% to 60% of the frame',
         'prefer a tighter crop when needed so the product reads larger and clearer than surrounding face or body context',
+        'keep believable real-world scale relative to the wearing or holding body anchor',
+        'do not oversize the product beyond normal wearing or handheld proportions',
         'always sharp and fully visible',
         'product details must remain crisp and immediately readable',
       ]
@@ -1246,27 +1255,27 @@ function buildStoryboardFaceCropLockText(productType: CloneProductType, shot: Sh
 }
 
 const STORYBOARD_FRAME_TRANSFER_TEMPLATE = `
-Now, analyze these two new images.
+Look at these two reference images and combine them in a natural everyday way.
 
-Image 1 is our base model and product reference (身份定状图).
-Image 2 is our scene structure reference (场景结构图).
+Image 1 is our base model and product reference (identity look reference).
+Image 2 is our daily environment reference (scene environment reference).
 
-I need you to transfer the model and product from Image 1 into the exact environmental context and geometric composition layout of Image 2.
+I need you to place the model and product from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.
 
 Strict Requirements:
-1. PRODUCT: Identify the product in Image 1. Keep its design, exact colors, and original material textures 100% identical to Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. Zero modifications allowed.
+1. PRODUCT: Identify the product in Image 1. Keep its design, colors, and original material textures fully consistent with Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. No product redesign or restyling is allowed.
 
 2. MODEL & CLOTHING FIDELITY (服装与角色绝对死锁):
-Identify the model in Image 1. You must maintain 100% strict consistency for the model's appearance.
-- CLOTHING: Replicate the EXACT clothing from Image 1, including its specific style, fabric texture, and exact color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
-- POSTURE: Keep the identical presentation posture, skin tone, and the exact faceless/cropped perspective on the specific body part exactly as shown in Image 1.
+Identify the model in Image 1. Keep the model's appearance clearly consistent with Image 1.
+- CLOTHING: Replicate the same clothing from Image 1, including its style, fabric texture, and color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
+- POSTURE: Keep the same presentation posture, skin tone, and the same faceless or cropped perspective on the specific body part as shown in Image 1.
 
-3. SCENE INTEGRATION: Completely replace the plain studio background of Image 1 with the exact architectural structure, perspective lines, and ambient lighting of Image 2. The new environment's light and reflections from Image 2 must wrap naturally around the model from Image 1, casting highly realistic contact shadows on the new surfaces to ensure a perfect, seamless physical integration.
+3. SCENE INTEGRATION: Replace the plain studio background of Image 1 with the ordinary home setting, room layout, and natural daylight feeling of Image 2. The final image should feel like it was casually captured in a real Southeast Asian home, with believable available light, mild shadows, and a relaxed unpolished atmosphere instead of a polished studio or ad campaign look.
 
-4. ABSOLUTE TEXT AND LOGO ERASURE:
-Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with clean, seamless background textures matching the surrounding elements of Image 2.
+4. TEXT AND LOGO REMOVAL:
+Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with plain, natural background textures that match the nearby surfaces in Image 2.
 
-Style: High-end, photorealistic commercial brand advertisement. Pristine quality, sharp details. No sketch, no animation, single panel only.
+Style: Natural UGC lifestyle photography with a casual smartphone-shot feel. Southeast Asian daily home environment, bright natural daylight, authentic ambient atmosphere. Real and believable like everyday user-made content, with clear details but not luxury, glossy, or overproduced. Single panel only, no sketches, no animation.
 `.trim()
 
 const STORYBOARD_IMAGE_TEMPLATES: Record<StoryboardImageTemplateType, string> = {

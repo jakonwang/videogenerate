@@ -147,19 +147,27 @@ export type ShotVideoSyncResponse<TProject extends CloneProjectLike> = {
   synced?: boolean
 }
 
-export function extractProjectProductRefs<TProject extends CloneProjectLike>(project: TProject | null) {
+export function extractProjectProductRefs<TProject extends CloneProjectLike>(project: TProject | null): string[] {
   if (!project) return []
   const asArray = <TItem>(value: TItem[] | null | undefined): TItem[] => (Array.isArray(value) ? value : [])
+  const sanitizedRefs = Array.isArray((project as any)?.sanitizedProductReferenceImagePaths)
+    ? (project as any).sanitizedProductReferenceImagePaths.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+    : []
+  if (sanitizedRefs.length) return Array.from(new Set(sanitizedRefs))
   const rootRefs = Array.isArray(project.productReferenceImagePaths)
     ? project.productReferenceImagePaths.map((item) => String(item || '').trim()).filter(Boolean)
     : []
-  if (rootRefs.length) return Array.from(new Set(rootRefs)).slice(0, 9)
+  if (rootRefs.length) return Array.from(new Set(rootRefs))
+  const originalRefs = Array.isArray((project as any)?.originalProductReferenceImagePaths)
+    ? (project as any).originalProductReferenceImagePaths.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+    : []
+  if (originalRefs.length) return Array.from(new Set(originalRefs))
   const savedRefs = Array.isArray(project.baseBlueprint?.consistencyAssets?.productReferenceImages)
     ? project.baseBlueprint?.consistencyAssets?.productReferenceImages
         .map((item) => String(item || '').trim())
         .filter(Boolean)
     : []
-  if (savedRefs.length) return Array.from(new Set(savedRefs)).slice(0, 9)
+  if (savedRefs.length) return Array.from(new Set(savedRefs))
   const refs = new Set<string>()
   const shotGroups = [
     ...asArray(project.blueprint?.shots),
@@ -175,11 +183,11 @@ export function extractProjectProductRefs<TProject extends CloneProjectLike>(pro
     const text = String(item || '').trim()
     if (text) refs.add(text)
   }
-  return Array.from(refs).slice(0, 9)
+  return Array.from(refs)
 }
 
 export function normalizeProjectProductRefs(input: string[]) {
-  return Array.from(new Set((input || []).map((item) => String(item || '').trim()).filter(Boolean))).slice(0, 9)
+  return Array.from(new Set((input || []).map((item) => String(item || '').trim()).filter(Boolean)))
 }
 
 export function sameProjectProductRefs(left: string[], right: string[]) {

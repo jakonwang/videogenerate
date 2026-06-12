@@ -25,13 +25,15 @@ async function main() {
   })
 
   assert.match(prompt, /^Main Instruction: A natural, crisp, high-definition \(HD\) 60fps video with a handheld smartphone shooting look/i)
-  assert.match(prompt, /The Earring must retain 100% strict structural consistency and clear geometric details from start to finish\./i)
-  assert.match(prompt, /the model's Ear lobe must dynamically re-calculate/i)
-  assert.match(prompt, /Implement Subtle handheld close-up on the ear area with a highly controlled, microscopic handheld camera shake/i)
-  assert.match(prompt, /The model slightly tilts her head by a tiny 3 degrees, causing the jewelry piece to respond naturally to gravity, swaying with a realistic, micro-pendulum effect\./i)
+  assert.match(prompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
+  assert.match(prompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
+  assert.match(prompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
+  assert.match(prompt, /Implement Subtle handheld close-up on the ear area with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
+  assert.match(prompt, /The earring sways naturally under gravity with minimal realistic movement\./i)
   assert.match(prompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity\./i)
-  assert.match(prompt, /The model must remain completely silent\. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, and no presenter-style delivery\./i)
+  assert.match(prompt, /The model must remain completely silent\. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, no open-mouth speaking expression, no speech-like lip shapes, and no presenter-style delivery\. Keep lips closed or only minimally relaxed at all times\./i)
   assert.doesNotMatch(prompt, /\[ABSOLUTE RULES\]|\[ROLE MAP\]|\[SHOT CONTROL\]|\[FACE CONTROL\]|\[LIGHTING CONTROL\]/i)
+  assert.doesNotMatch(prompt, /100% strict structural consistency|millimeter precision|tiny 3 degrees|natural physical inertia|natural ambient occlusion/i)
   console.log('clone shot video jewelry prompt v2 lock smoke test passed')
 }
 

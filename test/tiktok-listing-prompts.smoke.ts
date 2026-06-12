@@ -28,6 +28,8 @@ async function main() {
       assert.match(prompt, /Reference image priority is highest/i)
       assert.match(prompt, /Do not redesign the product/i)
       assert.match(prompt, /Cinematic styling must not override identity/i)
+      assert.match(prompt, /believable real-world size/i)
+      assert.match(prompt, /Do not enlarge, magnify, or exaggerate the product size/i)
       assert.match(prompt, testCase.imageExpected)
 
       if (index === 0) {
@@ -35,6 +37,7 @@ async function main() {
       } else {
         assert.match(prompt, /Reference image 2 is the approved hero result/i)
         assert.match(prompt, /no structural drift/i)
+        assert.match(prompt, /do not progressively enlarge the item across later images/i)
       }
     }
 

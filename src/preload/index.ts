@@ -603,6 +603,16 @@ const api = {
     remove: (id: string) => ipcRenderer.invoke('plugin:tiktokListing:remove', id),
     exportExcel: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:tiktokListing:exportExcel', payload),
   },
+  tiktokCreative: {
+    list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),
+    createDraftsFromCloneProjects: (payload: { cloneProjectIds: string[] }) => ipcRenderer.invoke('plugin:tiktokCreative:createDraftsFromCloneProjects', payload),
+    createDraftFromCloneProject: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createDraftFromCloneProject', payload),
+    startShot: (payload: { id: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:startShot', payload),
+    startNextPendingShot: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokCreative:startNextPendingShot', payload),
+    markShotCompleted: (payload: { id: string; shotId: string; resultVideoPath: string }) => ipcRenderer.invoke('plugin:tiktokCreative:markShotCompleted', payload),
+    markShotFailed: (payload: { id: string; shotId: string; error: string }) => ipcRenderer.invoke('plugin:tiktokCreative:markShotFailed', payload),
+    remove: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:remove', id),
+  },
 
   templates: {
     list: () => ipcRenderer.invoke('templates:list'),

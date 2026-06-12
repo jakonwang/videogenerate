@@ -195,20 +195,21 @@ const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, cris
 
 1. THE COMPOSITION CORE (Ref. Base Image):
 - Timeline Initiation: Seamlessly initiate the video timeline directly from the provided base image.
-- Geometric Locked Fidelity: The {{productName}} must retain 100% strict structural consistency and clear geometric details from start to finish. There must be zero morphing of fine details, zero text blurring, and zero shape distortion as the video plays.
+- NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the {{productName}}.
+- STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image.
 
-2. REALISTIC LIFESTYLE LIGHT & RAY-TRACING SHADOWS:
-- Ambient Light Shift: The lighting must remain completely natural, soft everyday ambient light matching the lifestyle environment in the background. As the camera subtly moves, light reflections and specular highlights must shift fluidly and realistically across the {{productName}}'s surface textures.
-- Shadow Physics: The micro-shadows cast by the {{productName}} onto the background and the model's {{targetBodyPart}} must dynamically re-calculate, stretching and contracting realistically with millimeter precision based on natural ambient occlusion.
+2. REALISTIC LIFESTYLE LIGHT:
+- Ambient Light Shift: Keep natural, soft everyday ambient light matching the lifestyle environment in the background.
+- Shadow Response: Keep realistic micro-shadows consistent with the scene and product placement.
 
 3. HANDHELD CAMERA MECHANICS:
-- Micro-Handheld Shake: Implement {{cameraMovement}} with a highly controlled, microscopic handheld camera shake to perfectly simulate a real person holding a smartphone and filming naturally in real life.
-- Spatial Parallax: Force a subtle spatial parallax effect where the foreground {{productName}} moves at a minutely different visual speed than the background depth, creating an authentic 3D spatial dimension rather than a flat 2D slide-show.
+- Micro-Handheld Shake: Implement {{cameraMovement}} with highly controlled subtle handheld movement to simulate natural smartphone filming in real life.
+- Spatial Parallax: Keep a subtle spatial parallax effect so the {{productName}} remains grounded in a believable 3D scene.
 
 4. BIOMETRIC INTERACTION & ABSOLUTE ANONYMITY:
-- Micro-Action: The model exhibits a very slight, natural human breathing movement and micro-physical action: {{specificMicroAction}}. Every interaction between the body and the object must strictly obey the laws of gravity and natural physical inertia.
+- Micro-Action: {{specificMicroAction}}
 - Absolute Anonymity: The camera angle remains tightly cropped on the {{targetBodyPart}}, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity.
-- Silent Performance Lock: The model must remain completely silent. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, and no presenter-style delivery.
+- Silent Performance Lock: The model must remain completely silent. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, no open-mouth speaking expression, no speech-like lip shapes, and no presenter-style delivery. Keep lips closed or only minimally relaxed at all times. Every visible frame must read as fully silent, never mid-speech, never about to speak, and never finishing a spoken line.
 
 Visual Aesthetic: Casual everyday smartphone video, natural organic color tones, realistic skin textures, soft focused background, authentic lifestyle product showcase. No AI synthetic glossiness, no commercial render look. Single panel only.`
 
@@ -324,12 +325,12 @@ function inferPhysicalLightingLockSpecificMicroAction(input: {
     .map((item) => normalizeTemplateText(item, '').toLowerCase())
     .join(' ')
   if (input.category === 'wearable_jewelry') {
-    return 'The model slightly tilts her head by a tiny 3 degrees, causing the jewelry piece to respond naturally to gravity, swaying with a realistic, micro-pendulum effect'
+    return 'The earring sways naturally under gravity with minimal realistic movement.'
   }
   if (input.category === 'worn_accessory') {
-    return 'The fingers move slightly and naturally, causing subtle, realistic contact shadows and highlights to shift flawlessly across the accessory\'s edges'
+    return 'The accessory moves minimally and naturally with realistic micro-shadows.'
   }
-  return 'The fingers gently rotate the product a few degrees, showcasing the natural textures and everyday light reflections on its surface'
+  return 'The product moves minimally and naturally with realistic micro-shadows.'
 }
 
 export const VIDEO_PROMPT_TEMPLATE = `
@@ -410,7 +411,17 @@ export function sanitizeNegativePrompt(value: unknown, maxChars = 400) {
 }
 
 export function buildNoSpeakingInstruction() {
-  return 'Silent visual performance only: no vocal performance, no conversation scene, no singing scene, no host-style delivery pose, no exaggerated mouth movement, and keep facial expression calm and visually neutral.'
+  return 'Silent visual performance only: no vocal performance, no conversation scene, no singing scene, no host-style delivery pose, no exaggerated mouth movement, no open-mouth speaking expression, no speech-like lip shapes, and keep lips closed or only minimally relaxed with a calm visually neutral facial expression. Every frame must read as silent, never mid-speech, never about to speak, and never finishing a spoken line.'
+}
+
+function stripSpeechCueText(value: unknown) {
+  const text = keepEnglishLikeText(value, '').trim()
+  if (!text) return ''
+  return text
+    .replace(/\b(talk|talks|talked|talking|speak|speaks|speaking|say|says|saying|voice|voiceover|narrate|narrates|narrating|narration|dialog|dialogue|monolog|monologue|converse|conversation|host|hosts|hosting|present|presents|presenter|presenting|explain|explains|explainer|explaining|introduce|introduces|introducing|lip-?sync|lip-?syncing|speaker)\b/gi, ' ')
+    .replace(/\b(open mouth|mouth open|speaking to camera|talking to camera|speaks to camera|says to camera)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function buildReferenceImageLockText() {
@@ -739,28 +750,28 @@ export function buildReferenceLockText(shot: ShotSpec, sceneFallback?: string) {
 }
 
 export function buildShotScriptConstraintText(shot: ShotSpec) {
-  const scriptText = keepEnglishLikeText(shot.scriptText, 'Maintain the original shot selling logic and timing.')
-  const narrationText = keepEnglishLikeText(shot.narrationText, '')
+  const scriptText = stripSpeechCueText(shot.scriptText) || 'Maintain the original shot selling logic and timing.'
+  const narrationText = stripSpeechCueText(shot.narrationText)
   const onScreenText = keepEnglishLikeText(shot.onScreenText, '')
   const visualDescription = keepEnglishLikeText(
     shot.visualDescription,
     keepEnglishLikeText(shot.visualPrompt || shot.visual, 'Real social-commerce product demonstration in a believable environment.'),
   )
-  const actionDescription = keepEnglishLikeText(
-    shot.actionDescription,
-    keepEnglishLikeText(shot.action || shot.visualPrompt, 'Natural product demonstration with believable hand movement.'),
-  )
+  const actionDescription =
+    stripSpeechCueText(shot.actionDescription) ||
+    keepEnglishLikeText(shot.action || shot.visualPrompt, 'Natural product demonstration with believable hand movement.')
   const cameraDescription = keepEnglishLikeText(
     shot.cameraDescription,
     `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`,
   )
   const productFocus = keepEnglishLikeText(shot.productFocus, 'Keep the product clearly visible and commercially relevant.')
-  const generationPrompt = keepEnglishLikeText(
-    shot.generationPrompt,
-    shot.aiPrompt || shot.prompt?.positive || 'Follow the original shot motion and selling logic.',
-  )
+  const generationPrompt =
+    stripSpeechCueText(shot.generationPrompt) ||
+    stripSpeechCueText(shot.aiPrompt || shot.prompt?.positive) ||
+    'Follow the original shot motion and selling logic.'
   return composePromptParagraphs(
     [
+      buildNoSpeakingInstruction(),
       `Preserve this exact shot logic. ${scriptText}`,
       narrationText ? `The intended selling message for this shot should remain aligned with: ${narrationText}.` : '',
       onScreenText ? `Any implied on-screen message should mean: ${onScreenText}.` : '',

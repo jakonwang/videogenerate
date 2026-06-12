@@ -570,12 +570,19 @@ const shotVideoOutputs = computed<ShotVideoOutput[]>(() =>
     .map((shot) => {
       const existing = rawShotVideoOutputMap.value.get(shot.id)
       const normalizedStatus = String(existing?.status || 'idle').toLowerCase()
+      const existingHasLocalVideo = Boolean(String(existing?.videoPath || existing?.localPath || shot.generatedClipPath || '').trim())
       const isReplacementRun =
+        !existingHasLocalVideo &&
         (Array.isArray(existing?.previousTaskIds) && existing.previousTaskIds.length > 0) ||
-        Boolean((existing as any)?.submissionStartedAt) ||
-        Boolean((existing as any)?.submissionLockedUntil) ||
-        ['force_regenerate_reset', 'segment_submit_started', 'segment_submit_succeeded', 'storyboard_video_batch_submit_started'].includes(
-          String((existing as any)?.sourceEvent || '').trim().toLowerCase(),
+        (
+          !existingHasLocalVideo &&
+          (
+            Boolean((existing as any)?.submissionStartedAt) ||
+            Boolean((existing as any)?.submissionLockedUntil) ||
+            ['force_regenerate_reset', 'segment_submit_started', 'segment_submit_succeeded', 'storyboard_video_batch_submit_started'].includes(
+              String((existing as any)?.sourceEvent || '').trim().toLowerCase(),
+            )
+          )
         )
       const resolvedVideoPath = String(existing?.videoPath || existing?.localPath || (!isReplacementRun ? shot.generatedClipPath : '') || '').trim()
       const isResolvedLocalVideoReady = Boolean(resolvedVideoPath)
@@ -637,19 +644,43 @@ const shotVideoOutputs = computed<ShotVideoOutput[]>(() =>
         lastPollAt: existing?.lastPollAt,
         completedAt: existing?.completedAt,
       } satisfies ShotVideoOutput
+    }).map((item) => {
+      if (['shot_2', 'shot_3', 'shot_4'].includes(String(item.shotId || ''))) {
+        console.log(
+          '[clone-debug] renderer-shot-video-output ' +
+            JSON.stringify({
+              shotId: item.shotId,
+              status: item.status,
+              videoPath: item.videoPath,
+              localPath: item.localPath,
+              remoteStatus: item.remoteStatus,
+              taskId: item.taskId,
+              previousTaskIds: item.previousTaskIds,
+            }),
+        )
+      }
+      return item
     }),
 )
 const shotVideoOutputIndexMap = computed<Record<string, number>>(() =>
   Object.fromEntries(shotVideoOutputs.value.map((item, index) => [item.shotId, index])),
 )
+function resolveShotOutputVideoPath(item?: ShotVideoOutput | null) {
+  return String(item?.videoPath || item?.localPath || '').trim()
+}
+
+function hasReadyShotOutputVideo(item?: ShotVideoOutput | null) {
+  return Boolean(resolveShotOutputVideoPath(item))
+}
+
 const filteredShotOutputs = computed(() => {
   switch (selectedShotFilter.value) {
     case 'ready':
-      return shotVideoOutputs.value.filter((item) => Boolean(item.videoPath))
+      return shotVideoOutputs.value.filter((item) => hasReadyShotOutputVideo(item))
     case 'failed':
       return shotVideoOutputs.value.filter((item) => item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error))
     case 'pending':
-      return shotVideoOutputs.value.filter((item) => !item.videoPath && !(item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error)))
+      return shotVideoOutputs.value.filter((item) => !hasReadyShotOutputVideo(item) && !(item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error)))
     default:
       return shotVideoOutputs.value
   }
@@ -847,11 +878,23 @@ const referenceSourcePath = computed(() => current.value?.referenceVideoPath || 
 const productSanitizationStatus = computed(() => current.value?.productImageSanitizationStatus || 'idle')
 const sanitizedProductRefs = computed(() => safeArray(current.value?.sanitizedProductReferenceImagePaths))
 const originalProductRefs = computed(() => safeArray(current.value?.originalProductReferenceImagePaths))
+const analysisBoardProductRefs = computed(() => {
+  const snapshot = current.value?.boundProductSnapshot as any
+  return Array.from(
+    new Set([String(snapshot?.analysisBoardPath || '').trim(), String(snapshot?.canonicalSourcePath || '').trim()].filter(Boolean)),
+  )
+})
 const hasDraftProductRefs = computed(() => Array.isArray(productRefsDraft.value) && productRefsDraft.value.length > 0)
+const identityGridProductRefs = computed(() => {
+  if (Array.isArray(productRefsDraft.value)) return productRefsDraft.value
+  return effectiveProductRefs.value
+})
 const effectiveProductRefs = computed(() => {
   if (Array.isArray(productRefsDraft.value)) return productRefsDraft.value
+  if (analysisBoardProductRefs.value.length) return analysisBoardProductRefs.value
   if (sanitizedProductRefs.value.length) return sanitizedProductRefs.value
-  return safeArray(productRefs.value)
+  if (safeArray(productRefs.value).length) return safeArray(productRefs.value)
+  return originalProductRefs.value
 })
 const visibleProductThumbs = computed(() =>
   (productRefPreviewMode.value === 'original' ? originalProductRefs.value : effectiveProductRefs.value).slice(0, 9),
@@ -1104,7 +1147,7 @@ const generationFailureText = computed(
 )
 const hasGenerationFailure = computed(() => Boolean(generationFailureText.value || failedShotOutputs.value.length))
 const canRetryShotVideos = computed(() => Boolean(activeProjectId.value && retryableShotOutputs.value.length))
-const completedShotCount = computed(() => shotVideoOutputs.value.filter((item) => Boolean(item.videoPath)).length)
+const completedShotCount = computed(() => shotVideoOutputs.value.filter((item) => hasReadyShotOutputVideo(item)).length)
 const remotePendingShotStatuses = new Set([
   'idle',
   'submitting',
@@ -1117,7 +1160,7 @@ const remotePendingShotStatuses = new Set([
 ])
 function isRemotePendingShot(item?: ShotVideoOutput | null) {
   if (!item) return false
-  if (Boolean(String(item.videoPath || '').trim())) return false
+  if (hasReadyShotOutputVideo(item)) return false
   const status = String(item.status || '').toLowerCase()
   if ((status === 'remote_succeeded_pending_download' || status === 'downloading') && Boolean(String(item.videoUrl || '').trim())) {
     return true
@@ -1128,7 +1171,7 @@ function isRemotePendingShot(item?: ShotVideoOutput | null) {
 const pendingShotCount = computed(
   () =>
     shotVideoOutputs.value.filter(
-      (item) => !item.videoPath && !(item.status === 'failed_terminal' || Boolean(item.error)),
+      (item) => !hasReadyShotOutputVideo(item) && !(item.status === 'failed_terminal' || Boolean(item.error)),
     ).length,
 )
 const autoVideoPendingCount = computed(() => {
@@ -1142,13 +1185,13 @@ const processingShotCount = computed(
   () =>
     shotVideoOutputs.value.filter((item) => {
       const status = String(item.status || '').toLowerCase()
-    return !item.videoPath && !item.error && (status.includes('running') || status.includes('processing') || status.includes('pending'))
-  }).length,
+      return !hasReadyShotOutputVideo(item) && !item.error && (status.includes('running') || status.includes('processing') || status.includes('pending'))
+    }).length,
 )
 const hasRemotePendingShotSync = computed(() => shotVideoOutputs.value.some((item) => isRemotePendingShot(item)))
 const missingTaskIdShotCount = computed(() =>
   shotVideoOutputs.value.filter((item) => {
-    if (Boolean(String(item.videoPath || '').trim())) return false
+    if (hasReadyShotOutputVideo(item)) return false
     const status = String(item.status || '').toLowerCase()
     if (status === 'submitting' || status === 'remote_pending' || status === 'remote_running' || status === 'remote_succeeded_pending_download' || status === 'downloading') return false
     return !effectiveShotTaskId(item.shotId)
@@ -1211,7 +1254,7 @@ const hasFreshFinalCompose = computed(() => {
   return finalComposeUpdatedAt.value >= latestShotVideoUpdatedAt.value
 })
 const firstReadyShotOutput = computed<ShotVideoOutput | null>(
-  () => shotVideoOutputs.value.find((item) => Boolean(String(item.videoPath || '').trim())) || null,
+  () => shotVideoOutputs.value.find((item) => hasReadyShotOutputVideo(item)) || null,
 )
 const composePreviewPosterPath = computed(() => {
   if (finalComposeCoverPath.value) return finalComposeCoverPath.value
@@ -1224,29 +1267,29 @@ const composePreviewPosterPath = computed(() => {
 const composePreviewPath = computed(() => {
   if (finalOutputPath.value) return finalOutputPath.value
   if (previewPipelineOutputPath.value) return previewPipelineOutputPath.value
-  const selectedVideoPath = String(selectedShotOutput.value?.videoPath || '').trim()
+  const selectedVideoPath = resolveShotOutputVideoPath(selectedShotOutput.value)
   if (selectedVideoPath) return selectedVideoPath
-  const readyShotVideoPath = String(firstReadyShotOutput.value?.videoPath || '').trim()
+  const readyShotVideoPath = resolveShotOutputVideoPath(firstReadyShotOutput.value)
   if (readyShotVideoPath) return readyShotVideoPath
   return String(finalOutputPath.value || '').trim()
 })
 const composePreviewMediaUrl = computed(() => mediaUrl(composePreviewPath.value))
 const composePreviewPosterUrl = computed(() => previewImage(composePreviewPosterPath.value, finalComposeUpdatedAt.value || Date.now()))
-const selectedShotVideoMediaUrl = computed(() => mediaUrl(selectedShotOutput.value?.videoPath))
+const selectedShotVideoMediaUrl = computed(() => mediaUrl(resolveShotOutputVideoPath(selectedShotOutput.value)))
 const composePreviewLabel = computed(() => {
   if (hasFreshFinalCompose.value && finalOutputPath.value) return '最终成片预览'
   if (finalOutputPath.value) return '最终成片预览'
   if (previewPipelineOutputPath.value) return '预览成片'
-  if (selectedShotOutput.value?.videoPath) return `${safeText(shotLabel(selectedShotOutput.value.shotId), '当前镜头')} 预览`
-  if (firstReadyShotOutput.value?.videoPath) return `${safeText(shotLabel(firstReadyShotOutput.value.shotId), '可用镜头')} 预览`
+  if (hasReadyShotOutputVideo(selectedShotOutput.value)) return `${safeText(shotLabel(selectedShotOutput.value?.shotId || ''), '当前镜头')} 预览`
+  if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return `${safeText(shotLabel(firstReadyShotOutput.value?.shotId || ''), '可用镜头')} 预览`
   return '等待成片'
 })
 const composePreviewHint = computed(() => {
   if (hasFreshFinalCompose.value && finalOutputPath.value) return '当前显示的是最新合成完成的最终成片。'
   if (finalOutputPath.value) return '当前显示的是已生成的最终成片；如果分镜视频后续又更新，建议重新合成最新成片。'
   if (previewPipelineOutputPath.value) return '当前显示的是预览渲染输出，可继续检查后导出最终成片。'
-  if (selectedShotOutput.value?.videoPath) return '最终成片尚未更新，当前先展示选中镜头，方便检查后继续合成。'
-  if (firstReadyShotOutput.value?.videoPath) return '当前镜头还没有可预览视频，已自动切换到首个可用镜头预览。'
+  if (hasReadyShotOutputVideo(selectedShotOutput.value)) return '最终成片尚未更新，当前先展示选中镜头，方便检查后继续合成。'
+  if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return '当前镜头还没有可预览视频，已自动切换到首个可用镜头预览。'
   return '合成完成后，这里会显示最终成片；未合成前会显示当前可用镜头预览。'
 })
 const composeExportStatusLabel = computed(() => {
@@ -1449,7 +1492,7 @@ const stageItems = computed<StageItem[]>(() => {
   const hasSelectedVariant = Boolean(selectedVariantId.value)
   const hasIdentityGrid = hasProjectIdentityGrid.value
   const hasFrames = storyboardFrames.value.some((item) => item.imagePath)
-  const hasVideos = shotVideoOutputs.value.some((item) => item.videoPath)
+  const hasVideos = shotVideoOutputs.value.some((item) => hasReadyShotOutputVideo(item))
   const hasFinal = Boolean(finalOutputPath.value)
   return [
     {
@@ -1574,7 +1617,7 @@ watch(
     }
     const exists = items.some((item) => item.shotId === selectedShotId.value)
     if (!exists) {
-      selectedShotId.value = items.find((item) => item.videoPath)?.shotId || items[0]?.shotId || ''
+      selectedShotId.value = items.find((item) => hasReadyShotOutputVideo(item))?.shotId || items[0]?.shotId || ''
     }
   },
   { immediate: true },
@@ -1784,7 +1827,7 @@ function describeShotSyncState(item?: ShotVideoOutput | null) {
   const status = String(item.status || '').toLowerCase()
   const remoteStatus = String(item.remoteStatus || '').toLowerCase()
   const errorText = safeText(item.error, '')
-  const hasVideo = Boolean(String(item.videoPath || '').trim())
+  const hasVideo = hasReadyShotOutputVideo(item)
   const isActiveRemoteTask =
     status === 'submitting' ||
     status === 'remote_pending' ||
@@ -1970,7 +2013,7 @@ async function loadIdentityGridPromptPreview(force = false, openModal = false) {
   identityGridPromptPreviewLoading.value = true
   identityGridPromptPreviewError.value = ''
   try {
-    const plainProductRefs = [...effectiveProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean)
+    const plainProductRefs = [...identityGridProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean)
     const result = await window.api.clone.getProjectIdentityGridPromptPreview({
       cloneProjectId: String(current.value.id || '').trim(),
       productType: normalizeCloneProductType(current.value?.blueprint?.productCategory || current.value?.blueprint?.category || current.value?.title || 'general'),
@@ -1995,7 +2038,7 @@ async function generateProjectIdentityGrid() {
     setStageLog(message, 'error')
     return
   }
-  if (!effectiveProductRefs.value.length) {
+  if (!identityGridProductRefs.value.length) {
     const message = '请先选择并绑定商品库商品'
     markError(message, message)
     setStageLog(message, 'error')
@@ -2016,7 +2059,7 @@ async function generateProjectIdentityGrid() {
     const result = (await window.api.clone.generateModelIdentityPack({
       cloneProjectId: projectId,
       productType: normalizeCloneProductType(current.value?.blueprint?.productCategory || current.value?.blueprint?.category || current.value?.title || 'general'),
-      productReferenceImagePaths: [...effectiveProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean),
+      productReferenceImagePaths: [...identityGridProductRefs.value].map((item) => String(item || '').trim()).filter(Boolean),
     })) as CloneProject
     applyProject((result || current.value) as CloneProject)
     await loadIdentityGridPromptPreview(true, false)
@@ -2420,7 +2463,7 @@ const {
   getActiveImageModel: () => activeImageModel.value,
   shotLabel,
   getStoryboardFrameCount: () => storyboardFrames.value.length,
-  getReadyVideoCount: () => shotVideoOutputs.value.filter((item) => Boolean(item.videoPath)).length,
+  getReadyVideoCount: () => shotVideoOutputs.value.filter((item) => hasReadyShotOutputVideo(item)).length,
   getShotVideoOutputCount: () => shotVideoOutputs.value.length,
   getFinalOutputPath: () => finalOutputPath.value,
   setStageLog,
@@ -2599,7 +2642,7 @@ function canContinueSyncShot(item?: ShotVideoOutput | null) {
   const remoteStatus = String(item?.remoteStatus || '').toLowerCase()
   return (
     Boolean(item) &&
-    !Boolean(String(item?.videoPath || '').trim()) &&
+    !hasReadyShotOutputVideo(item) &&
     (
       Boolean(effectiveShotTaskId(item?.shotId)) ||
       Boolean(String(item?.videoUrl || '').trim())
@@ -2610,7 +2653,7 @@ function canContinueSyncShot(item?: ShotVideoOutput | null) {
 
 function canForceDownloadShot(item?: ShotVideoOutput | null) {
   if (!item) return false
-  if (Boolean(String(item.videoPath || '').trim())) return false
+  if (hasReadyShotOutputVideo(item)) return false
   const status = String(item.status || '').toLowerCase()
   if (status !== 'downloading' && status !== 'remote_succeeded_pending_download') return false
   return Boolean(String(item.videoUrl || '').trim())
@@ -2618,7 +2661,7 @@ function canForceDownloadShot(item?: ShotVideoOutput | null) {
 
 function canRepairShotTaskId(item?: ShotVideoOutput | null) {
   if (!item) return false
-  if (Boolean(String(item.videoPath || '').trim())) return false
+  if (hasReadyShotOutputVideo(item)) return false
   const status = String(item.status || '').toLowerCase()
   if (status === 'submitting' || status === 'remote_pending' || status === 'remote_running' || status === 'remote_succeeded_pending_download' || status === 'downloading') return false
   return !effectiveShotTaskId(item.shotId)
@@ -3202,6 +3245,13 @@ async function composeFinalVideo() {
     shotVideoCount: shotVideoOutputs.value.length,
     loading: loading.value,
   })
+  if (!gatePassAllowed.value) {
+    const message = gateFailureSummary.value || '当前仍有镜头未通过最终门禁，请先处理后再合成。'
+    composeLocalError.value = message
+    setStageLog(message, 'error')
+    markError(message, message)
+    return
+  }
   await composeFinalVideoInWorkspace()
 }
 
@@ -3275,6 +3325,17 @@ async function submitGeelarkPublish() {
   } finally {
     geelarkPublishSubmitting.value = false
   }
+}
+
+function openTiktokCreativeStudio() {
+  if (!current.value?.id) return
+  void router.push({
+    path: '/plugins/tiktok-creative-studio',
+    query: {
+      cloneProjectId: current.value.id,
+      autoCreate: '1',
+    },
+  })
 }
 
 let timer: number | null = null
@@ -4763,6 +4824,9 @@ onUnmounted(() => {
                   </button>
                   <button class="ghost-button compose-side-button" :class="{ 'is-warning': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo">
                     {{ finalButtonLabel }}
+                  </button>
+                  <button class="ghost-button compose-side-button" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio">
+                    发送到 TikTok 创意生成
                   </button>
                 </div>
               </section>

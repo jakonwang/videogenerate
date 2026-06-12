@@ -23,10 +23,11 @@ async function main() {
     productIdentityText: 'exact same bound product only',
     productMode: 'STRICT' as any,
   })
-  assert.match(handheldPrompt, /The Product must retain 100% strict structural consistency and clear geometric details from start to finish/i)
-  assert.match(handheldPrompt, /the model's Hands and Fingers must dynamically re-calculate/i)
-  assert.match(handheldPrompt, /Implement Micro-handheld camera movement focusing on the hands with a highly controlled, microscopic handheld camera shake/i)
-  assert.match(handheldPrompt, /The fingers gently rotate the product a few degrees, showcasing the natural textures and everyday light reflections on its surface\./i)
+  assert.match(handheldPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Product\./i)
+  assert.match(handheldPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
+  assert.match(handheldPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
+  assert.match(handheldPrompt, /Implement Micro-handheld camera movement focusing on the hands with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
+  assert.match(handheldPrompt, /The product moves minimally and naturally with realistic micro-shadows\./i)
 
   const jewelryPrompt = buildFinalShotVideoPositivePrompt({
     shot: {
@@ -48,10 +49,11 @@ async function main() {
     productIdentityText: 'exact same bound product only',
     productMode: 'STRICT' as any,
   })
-  assert.match(jewelryPrompt, /The Earring must retain 100% strict structural consistency and clear geometric details from start to finish/i)
-  assert.match(jewelryPrompt, /the model's Ear lobe must dynamically re-calculate/i)
-  assert.match(jewelryPrompt, /Implement Subtle handheld close-up on the ear area with a highly controlled, microscopic handheld camera shake/i)
-  assert.match(jewelryPrompt, /The model slightly tilts her head by a tiny 3 degrees, causing the jewelry piece to respond naturally to gravity, swaying with a realistic, micro-pendulum effect\./i)
+  assert.match(jewelryPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
+  assert.match(jewelryPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
+  assert.match(jewelryPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
+  assert.match(jewelryPrompt, /Implement Subtle handheld close-up on the ear area with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
+  assert.match(jewelryPrompt, /The earring sways naturally under gravity with minimal realistic movement\./i)
 
   const accessoryPrompt = buildFinalShotVideoPositivePrompt({
     shot: {
@@ -73,10 +75,12 @@ async function main() {
     productIdentityText: 'exact same bound product only',
     productMode: 'STRICT' as any,
   })
-  assert.match(accessoryPrompt, /The Ring must retain 100% strict structural consistency and clear geometric details from start to finish/i)
-  assert.match(accessoryPrompt, /the model's Wrist and Fingers must dynamically re-calculate/i)
-  assert.match(accessoryPrompt, /Implement Subtle handheld sliding tilt across the fingers with a highly controlled, microscopic handheld camera shake/i)
-  assert.match(accessoryPrompt, /The fingers move slightly and naturally, causing subtle, realistic contact shadows and highlights to shift flawlessly across the accessory's edges\./i)
+  assert.match(accessoryPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Ring\./i)
+  assert.match(accessoryPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
+  assert.match(accessoryPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
+  assert.match(accessoryPrompt, /Implement Subtle handheld sliding tilt across the fingers with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
+  assert.match(accessoryPrompt, /The accessory moves minimally and naturally with realistic micro-shadows\./i)
+  assert.doesNotMatch(accessoryPrompt, /100% strict structural consistency|millimeter precision|tiny 3 degrees|natural physical inertia|natural ambient occlusion/i)
 
   console.log('clone shot video physical lighting lock template smoke test passed')
 }

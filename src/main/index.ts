@@ -29,6 +29,7 @@ import { webPlatformRepo } from './modules/web-platform/repo'
 import { configureWindowsStorageRoot, cleanupLegacyWindowsStorage, migrateLegacyWindowsUserData } from './lib/windowsStorage'
 import { registerAppShellMediaIpc } from './ipc/registerAppShellMediaIpc'
 import { registerProductsIpc } from './ipc/registerProductsIpc'
+import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 
@@ -1323,6 +1324,7 @@ function wireIpc() {
 
   registerAppShellMediaIpc(ipcMain, () => mainWindow, () => mainUiLocale)
   registerProductsIpc(ipcMain)
+  registerTiktokCreativeStudioIpc(ipcMain)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
 }
