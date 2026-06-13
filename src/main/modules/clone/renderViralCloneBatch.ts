@@ -33,6 +33,14 @@ type RhythmTransitionPlan = {
   durationSec: number
 }
 
+type RhythmStage = 'hook' | 'body' | 'close'
+
+type ViralRhythmProfile = {
+  stage: RhythmStage
+  punchBoost: number
+  holdBoost: number
+}
+
 const FINAL_COMPOSE_CLIP_MODE: FinalComposeClipMode = 'smart_middle_tail'
 const JEWELRY_PRODUCT_TYPES = new Set([
   'earrings',
@@ -242,10 +250,23 @@ function getSequencePhase(index: number, total: number) {
   return clamp(index / Math.max(1, total - 1), 0, 1)
 }
 
+function getViralRhythmProfile(input: { shot: ShotSpec; shotIndex: number; totalShots: number }): ViralRhythmProfile {
+  const phase = getSequencePhase(input.shotIndex, input.totalShots)
+  const role = normalizeShotRole(input.shot)
+  if (role === 'hook' || phase <= 0.22) {
+    return { stage: 'hook', punchBoost: 1.16, holdBoost: 0.9 }
+  }
+  if (role === 'cta' || phase >= 0.78) {
+    return { stage: 'close', punchBoost: 1.04, holdBoost: 0.86 }
+  }
+  return { stage: 'body', punchBoost: 1, holdBoost: role === 'proof' || role === 'detail' ? 1.12 : 1.04 }
+}
+
 function getRhythmBias(input: { shot: ShotSpec; shotIndex: number; totalShots: number }) {
   const phase = getSequencePhase(input.shotIndex, input.totalShots)
   const role = normalizeShotRole(input.shot)
   const motion = String(input.shot.motion || input.shot.cameraMovement || '').trim().toLowerCase()
+  const viralProfile = getViralRhythmProfile(input)
 
   let anchorOffset = 0
   let durationScale = 1
@@ -276,6 +297,16 @@ function getRhythmBias(input: { shot: ShotSpec; shotIndex: number; totalShots: n
     durationScale *= 1.06
   }
 
+  if (viralProfile.stage === 'hook') {
+    anchorOffset -= 0.06 * viralProfile.punchBoost
+    durationScale *= 0.82 * viralProfile.holdBoost
+  } else if (viralProfile.stage === 'body') {
+    durationScale *= viralProfile.holdBoost
+  } else {
+    anchorOffset += 0.03 * viralProfile.punchBoost
+    durationScale *= 0.88 * viralProfile.holdBoost
+  }
+
   return {
     anchorOffset,
     durationScale,
@@ -287,13 +318,14 @@ function getTransitionPlan(input: { shot: ShotSpec; nextShot?: ShotSpec; shotInd
   const nextRole = input.nextShot ? normalizeShotRole(input.nextShot) : ''
   const motion = String(input.shot.motion || input.shot.cameraMovement || '').trim().toLowerCase()
   const phase = getSequencePhase(input.shotIndex, input.totalShots)
+  const viralProfile = getViralRhythmProfile(input)
 
   if (!input.nextShot) return { transition: 'hardcut', durationSec: 0 }
-  if (motion === 'fast_cut' || role === 'hook' || nextRole === 'hook') {
+  if (motion === 'fast_cut' || role === 'hook' || nextRole === 'hook' || viralProfile.stage === 'hook') {
     return { transition: 'hardcut', durationSec: 0 }
   }
   if (role === 'proof' || role === 'detail' || role === 'cta' || phase >= 0.55) {
-    return { transition: 'fade', durationSec: phase >= 0.8 ? 0.22 : 0.16 }
+    return { transition: 'fade', durationSec: viralProfile.stage === 'close' ? 0.22 : 0.14 }
   }
   return { transition: 'hardcut', durationSec: 0 }
 }
