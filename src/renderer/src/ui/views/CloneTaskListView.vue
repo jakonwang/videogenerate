@@ -720,11 +720,17 @@ async function submitSubtitleDialog() {
     })
     const result = await webApiClient.runBatchSubtitleJob(job.id)
     const sourceById = new Map((result.sourceItems || []).map((item) => [item.id, item] as const))
+    const targetBySourceItemId = new Map(targets.map((item) => [`clone-${item.id}`, item.id] as const))
     const appliedProjectIds = new Set<string>()
     for (const output of result.outputs || []) {
       if (output.renderStatus !== 'success' || !String(output.outputVideoPath || '').trim()) continue
       const source = sourceById.get(output.sourceItemId)
-      const cloneProjectId = String(source?.sourceProjectId || '').trim()
+      const cloneProjectId =
+        String(source?.sourceProjectId || '').trim() ||
+        String(targetBySourceItemId.get(String(output.sourceItemId || '').trim()) || '').trim() ||
+        String(output.sourceItemId || '')
+          .trim()
+          .replace(/^clone-/, '')
       if (!cloneProjectId) continue
       await window.api.clone.applySubtitleVideoToProject({
         cloneProjectId,

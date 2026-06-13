@@ -317,6 +317,15 @@ async function renderRemotionStill(input: {
   })
 }
 
+export async function renderBatchSubtitleOverlayStillByRemotion(input: {
+  outputPath: string
+  selectedTitle: string
+  styleConfig: BatchSubtitleStyleConfig
+  overlayConfig?: Partial<BatchSubtitleOverlayImageConfig>
+}) {
+  await renderRemotionStill(input)
+}
+
 async function muxRemotionVideoWithSource(input: {
   sourceVideoPath: string
   remotionVideoPath: string

@@ -7,6 +7,7 @@ import { getAppPaths } from '../../lib/paths'
 import { prepareFontsDirForSubtitles, resolveSubtitleRenderFont } from '../../lib/fontResolve'
 import { getMediaInfo } from '../media/info'
 import { runFfmpeg } from '../ffmpeg/runner'
+import { renderBatchSubtitleOverlayStillByRemotion } from './batchSubtitleRemotion'
 import type { BatchSubtitleSourceItem, BatchSubtitleStyleConfig, BatchSubtitleTitleConfig } from './types'
 
 const CANVAS_WIDTH = 1080
@@ -336,7 +337,15 @@ export async function generateBatchSubtitleOverlayAssets(input: {
   const svgDataUrl = `data:image/svg+xml;base64,${Buffer.from(svgContent, 'utf8').toString('base64')}`
   const img = nativeImage.createFromDataURL(svgDataUrl)
   const pngBuffer = img.toPNG()
-  await writeFile(pngPath, pngBuffer)
+  if (pngBuffer.length > 0) {
+    await writeFile(pngPath, pngBuffer)
+  } else {
+    await renderBatchSubtitleOverlayStillByRemotion({
+      outputPath: pngPath,
+      selectedTitle,
+      styleConfig: input.styleConfig,
+    })
+  }
   return {
     selectedTitle,
     scene,
