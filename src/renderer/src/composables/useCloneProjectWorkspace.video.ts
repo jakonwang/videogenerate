@@ -334,7 +334,7 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
     try {
       const resolved = await options.getWorkspaceClient?.(projectId)
       const res = await resolved?.client.regenerateShotVideo(projectId, shotId)
-      const latestProject = ((await resolved?.client.getProject(projectId))?.project || res?.project || options.current.value) as TProject
+      let latestProject = ((await resolved?.client.getProject(projectId))?.project || res?.project || options.current.value) as TProject
       const nextProject = latestProject as TProject
       projectActions.applyProject(nextProject, 'replace')
       const taskId = String((res as { task?: { taskId?: string } } | undefined)?.task?.taskId || resolveShotVideoTaskIdFromProject(nextProject, shotId) || '').trim()
@@ -346,6 +346,23 @@ export function useCloneProjectWorkspaceVideo<TProject extends CloneProjectLike>
       if (res?.executionMode === 'blocking_completed') {
         options.setStageLog?.(`${shotLabel(shotId)} 已同步生成完成，当前通道：${resolved?.channel || 'unknown'}${poolSummary}`, 'success')
       } else {
+        try {
+          const synced = await resolved?.client.syncShotVideoTask(projectId, shotId)
+          latestProject = ((await resolved?.client.getProject(projectId))?.project || synced?.project || latestProject) as TProject
+          projectActions.applyProject(latestProject, 'replace')
+          const latestOutput = latestProject?.shotVideoOutputs?.find((item) => item.shotId === shotId)
+          const hasLocalVideo = Boolean(String(latestOutput?.videoPath || latestOutput?.localPath || '').trim())
+          if (!hasLocalVideo) {
+            const forced = await resolved?.client.forceDownloadShotVideoResult(projectId, shotId)
+            latestProject = ((await resolved?.client.getProject(projectId))?.project || forced?.project || latestProject) as TProject
+            projectActions.applyProject(latestProject, 'replace')
+          }
+        } catch (syncError: any) {
+          options.pushRuntimeLog?.(
+            `[clone-debug] regenerate-shot-video:post-sync-failed project=${projectId} shot=${shotId} message=${String(syncError?.message ?? syncError ?? 'unknown error')}`,
+            'error',
+          )
+        }
         options.setStageLog?.(
           `${shotLabel(shotId)} 强制重新生成已提交${taskId ? `，新 taskId=${taskId}` : ''}，后台会继续查询并在完成后自动下载回写，当前通道：${resolved?.channel || 'unknown'}${poolSummary}`,
           'success',

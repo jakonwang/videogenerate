@@ -406,11 +406,14 @@ function compactDescription(input?: string, max = 40) {
   return text.length > max ? `${text.slice(0, max)}...` : text
 }
 
-function toFileSrc(input?: string) {
+function toFileSrc(input?: string, version?: string | number) {
   const text = String(input || '').trim()
   if (!text) return ''
   if (/^(https?:|data:|vg:|file:)/i.test(text)) return text
-  return `vg://file?path=${encodeURIComponent(text)}`
+  const versionText = String(version ?? '').trim()
+  return versionText
+    ? `vg://file?path=${encodeURIComponent(text)}&v=${encodeURIComponent(versionText)}`
+    : `vg://file?path=${encodeURIComponent(text)}`
 }
 
 function itemPlayableVideoPath(item?: CloneProjectSummary | null) {
@@ -1505,7 +1508,7 @@ onBeforeUnmount(() => {
           <div class="clone-video-preview-dialog__player">
             <video
               v-if="itemPlayableVideoPath(videoPreviewItem)"
-              :src="toFileSrc(itemPlayableVideoPath(videoPreviewItem))"
+              :src="toFileSrc(itemPlayableVideoPath(videoPreviewItem), videoPreviewItem.updatedAt)"
               controls
               preload="metadata"
               autoplay

@@ -1581,6 +1581,46 @@ function previewPipelinePatch(
   return project.previewPipeline
 }
 
+async function cleanupCloneOutputArtifacts(input: {
+  outputDir?: string
+  keepVideoPath?: string
+  keepReportPath?: string
+}) {
+  const outputDir = String(input.outputDir || '').trim()
+  if (!outputDir) return
+  const keepVideoPath = String(input.keepVideoPath || '').trim()
+  const keepReportPath = String(input.keepReportPath || '').trim()
+  let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>
+  try {
+    entries = (await readdir(outputDir, { withFileTypes: true })) as Array<{
+      name: string
+      isDirectory: () => boolean
+      isFile: () => boolean
+    }>
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    const fullPath = join(outputDir, entry.name)
+    if (entry.isDirectory()) {
+      if (/^job_\d+_try_\d+$/i.test(entry.name)) {
+        try {
+          await rm(fullPath, { recursive: true, force: true })
+        } catch {}
+      }
+      continue
+    }
+    if (!entry.isFile()) continue
+    if (keepVideoPath && fullPath === keepVideoPath) continue
+    if (keepReportPath && fullPath === keepReportPath) continue
+    if (/^viral_clone_\d+.*\.mp4$/i.test(entry.name)) {
+      try {
+        await rm(fullPath, { force: true })
+      } catch {}
+    }
+  }
+}
+
 function ensureCloneFlowState(project: CloneProject) {
   project.scriptVariantCandidates ??= []
   project.storyboardGridBatches ??= []
@@ -4989,7 +5029,7 @@ function getShotVideoOutputMap(project?: CloneProject | null) {
 
 function getEffectiveShotState(shot: ShotSpec, output?: CloneShotVideoOutput) {
   const outputVideoPath = String(output?.videoPath || output?.localPath || '').trim()
-  const generatedClipPath = String(shot.generatedClipPath || outputVideoPath).trim()
+  const generatedClipPath = String(outputVideoPath || shot.generatedClipPath).trim()
   const generatedSource = String(shot.generatedSource || (outputVideoPath ? 'cloud' : '')).trim()
   const generatedProvider = String(shot.generatedProvider || output?.provider || '').trim()
   const generatedModel = String(shot.generatedModel || output?.model || '').trim()
@@ -5610,6 +5650,14 @@ async function checkLocalTaskStatus(input: {
         }
       }
     } catch {}
+  }
+  const shouldSkipManagedArtifactReuse =
+    shouldBlockLegacyLocalReuse ||
+    shouldBlockLocalReuseDuringPendingRemoteTask ||
+    shouldBlockLocalReuseDuringForcedReplacementWindow ||
+    shouldBlockLocalReuseDuringCurrentDownload
+  if (shouldSkipManagedArtifactReuse) {
+    return { skip: false as const }
   }
   try {
     const fileStat = await stat(managedSceneVideoPath)
@@ -8249,7 +8297,9 @@ async function ensureAi666SegmentVideoTask(input: {
       submissionLockedUntil: submitStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
       sourceEvent: 'segment_submit_succeeded',
     })
-    return await cloneRepo.upsertProject(latestProject)
+    const savedProject = await cloneRepo.upsertProject(latestProject)
+    scheduleRemoteStoryboardVideoReconcile(savedProject.id, 0)
+    return savedProject
   })().finally(() => {
     shotVideoCreateInFlight.delete(key)
   })
@@ -9869,6 +9919,7 @@ export const cloneService = {
     cloneProjectId: string
     outputDir?: string
   }) {
+    await reconcileRemoteStoryboardVideosInternal(input.cloneProjectId)
     const loadedProject = await cloneRepo.getProject(input.cloneProjectId)
     const project = loadedProject ? await reconcileRenderableShotsBeforeCompose(loadedProject) : loadedProject
     if (!project) throw new Error('???????')
@@ -9892,6 +9943,13 @@ export const cloneService = {
       const latest = (await cloneRepo.getProject(project.id)) || project
       const finalOutputPath = String(rendered.output || '').trim() || undefined
       const coverImagePath = finalOutputPath ? await ensureVideoCoverImage(finalOutputPath) : undefined
+      if (finalOutputPath) {
+        await cleanupCloneOutputArtifacts({
+          outputDir: String(input.outputDir || latest.outputDir || '').trim(),
+          keepVideoPath: finalOutputPath,
+          keepReportPath: String(rendered.reportPath || '').trim(),
+        })
+      }
       patchWorkflowV2(latest, 'final_compose', 'final_compose', 'done')
       patchWorkflowV2(latest, 'final_compose', 'final_compose', 'done')
       syncFinalCompose(latest, {

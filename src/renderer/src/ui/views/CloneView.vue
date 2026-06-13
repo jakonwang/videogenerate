@@ -1265,7 +1265,7 @@ const composePreviewPosterPath = computed(() => {
   return ''
 })
 const composePreviewPath = computed(() => {
-  if (finalOutputPath.value) return finalOutputPath.value
+  if (hasFreshFinalCompose.value && finalOutputPath.value) return finalOutputPath.value
   if (previewPipelineOutputPath.value) return previewPipelineOutputPath.value
   const selectedVideoPath = resolveShotOutputVideoPath(selectedShotOutput.value)
   if (selectedVideoPath) return selectedVideoPath
@@ -1273,21 +1273,28 @@ const composePreviewPath = computed(() => {
   if (readyShotVideoPath) return readyShotVideoPath
   return String(finalOutputPath.value || '').trim()
 })
-const composePreviewMediaUrl = computed(() => mediaUrl(composePreviewPath.value))
+const composePreviewMediaVersion = computed(() => {
+  if (hasFreshFinalCompose.value && finalOutputPath.value) return finalComposeUpdatedAt.value || Date.now()
+  if (previewPipelineOutputPath.value) return Number(current.value?.previewPipeline?.updatedAt || current.value?.updatedAt || Date.now())
+  return Number(selectedShotOutput.value?.updatedAt || firstReadyShotOutput.value?.updatedAt || Date.now())
+})
+const composePreviewMediaUrl = computed(() => mediaUrl(composePreviewPath.value, composePreviewMediaVersion.value))
 const composePreviewPosterUrl = computed(() => previewImage(composePreviewPosterPath.value, finalComposeUpdatedAt.value || Date.now()))
-const selectedShotVideoMediaUrl = computed(() => mediaUrl(resolveShotOutputVideoPath(selectedShotOutput.value)))
+const selectedShotVideoMediaUrl = computed(() =>
+  mediaUrl(resolveShotOutputVideoPath(selectedShotOutput.value), Number(selectedShotOutput.value?.updatedAt || Date.now())),
+)
 const composePreviewLabel = computed(() => {
   if (hasFreshFinalCompose.value && finalOutputPath.value) return '最终成片预览'
-  if (finalOutputPath.value) return '最终成片预览'
   if (previewPipelineOutputPath.value) return '预览成片'
+  if (finalOutputPath.value) return '分镜预览'
   if (hasReadyShotOutputVideo(selectedShotOutput.value)) return `${safeText(shotLabel(selectedShotOutput.value?.shotId || ''), '当前镜头')} 预览`
   if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return `${safeText(shotLabel(firstReadyShotOutput.value?.shotId || ''), '可用镜头')} 预览`
   return '等待成片'
 })
 const composePreviewHint = computed(() => {
   if (hasFreshFinalCompose.value && finalOutputPath.value) return '当前显示的是最新合成完成的最终成片。'
-  if (finalOutputPath.value) return '当前显示的是已生成的最终成片；如果分镜视频后续又更新，建议重新合成最新成片。'
   if (previewPipelineOutputPath.value) return '当前显示的是预览渲染输出，可继续检查后导出最终成片。'
+  if (finalOutputPath.value) return '旧的最终成片已过期，当前优先展示最新预览链路或最新分镜视频。重新合成后会更新最终成片。'
   if (hasReadyShotOutputVideo(selectedShotOutput.value)) return '最终成片尚未更新，当前先展示选中镜头，方便检查后继续合成。'
   if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return '当前镜头还没有可预览视频，已自动切换到首个可用镜头预览。'
   return '合成完成后，这里会显示最终成片；未合成前会显示当前可用镜头预览。'
@@ -1649,9 +1656,13 @@ watch(
   { immediate: true },
 )
 
-function mediaUrl(filePath?: string) {
+function mediaUrl(filePath?: string, version?: string | number) {
   const normalized = String(filePath || '').trim()
-  return normalized ? `vg://file?path=${encodeURIComponent(normalized)}` : ''
+  if (!normalized) return ''
+  const versionText = String(version ?? '').trim()
+  return versionText
+    ? `vg://file?path=${encodeURIComponent(normalized)}&v=${encodeURIComponent(versionText)}`
+    : `vg://file?path=${encodeURIComponent(normalized)}`
 }
 
 function previewImage(path?: string, version?: string | number) {

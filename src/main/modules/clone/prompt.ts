@@ -181,6 +181,43 @@ function inferCameraFramingFromScript(input: {
   return ''
 }
 
+function extractCameraMovementOnlySentenceList(input: {
+  scriptText?: unknown
+  cameraDescription?: unknown
+  motion?: unknown
+}) {
+  const corpus = [input.scriptText, input.cameraDescription]
+    .map((item) => keepEnglishLikeText(item || '', '').trim())
+    .filter(Boolean)
+    .join('\n')
+
+  const normalized = corpus
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => stripPromptTimelineArtifacts(line).trim())
+    .map((line) => line.replace(/^\[camera\]\.?\s*/i, '').trim())
+    .map((line) => line.replace(/^\d+(?:\.\d+)?s\s*-\s*\d+(?:\.\d+)?s\s*/i, '').trim())
+    .map((line) =>
+      line
+        .replace(/^(?:extreme\s+close-?up|close-?up|medium|wide|overhead)\s+shot\.?\s*/i, '')
+        .replace(/^(?:extreme\s+close-?up|close-?up|medium|wide|overhead)\.?\s*/i, '')
+        .trim(),
+    )
+    .map((line) => sentenceCase(line))
+    .filter(Boolean)
+
+  const movementOnly = normalized.filter((line) =>
+    /\b(camera|pan|tilt|zoom|push|pull|track|dolly|slide|glide|move|moving|movement|static|steady|handheld)\b/i.test(line),
+  )
+
+  if (movementOnly.length) {
+    return Array.from(new Set(movementOnly.map((line) => (line.endsWith('.') ? line : `${line}.`))))
+  }
+
+  const fallback = keepEnglishLikeText(input.motion || '', '').trim()
+  return fallback ? [sentenceCase(fallback.endsWith('.') ? fallback : `${fallback}.`)] : []
+}
+
 function composePromptParagraphs(sections: Array<string | null | undefined>, maxChars = 1800) {
   const parts = sections
     .map((item) => sanitizeGeneratedVideoPrompt(item || '', 600))
@@ -1173,6 +1210,11 @@ function buildVideoExecutionStackPrompt(input: {
     cameraDescription: shot.cameraDescription,
     generationPrompt: shot.generationPrompt,
   })
+  const extraCameraMovement = extractCameraMovementOnlySentenceList({
+    scriptText: shot.scriptText,
+    cameraDescription: shot.cameraDescription,
+    motion: shot.motion,
+  }).join(' ')
   const specificMicroAction = inferPhysicalLightingLockSpecificMicroAction({
     category,
     productType: shot.productType,
@@ -1184,7 +1226,7 @@ function buildVideoExecutionStackPrompt(input: {
   return fillVideoPromptTemplate(PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE, {
     productName,
     targetBodyPart,
-    cameraMovement,
+    cameraMovement: [cameraMovement, extraCameraMovement].filter(Boolean).join(' '),
     specificMicroAction,
   })
 }
