@@ -4,6 +4,7 @@ import { cleanAiText, extractJsonObjectText, extractModelMessageContent, parseMo
 import { generateChatCompletion } from './unifiedChat'
 import { buildGenerationPromptRestraintText, buildSilentCommercialGlobalRule, sanitizeJewelryGenerationPrompt } from './prompt'
 import type { CloneGlobalScript, CloneLocale, ModelCredentials, ScriptRole, ShotSpec } from './types'
+import { inferStoryboardReferenceDecision } from './storyboardReference'
 
 type FrameSet = {
   start?: string
@@ -15,6 +16,7 @@ export type ScriptShotAnalysis = {
   shotId: string
   startTime: number
   endTime: number
+  storyboardReferenceMode?: 'product_closeup' | 'model_presentation'
   scriptText: string
   scriptRole: ScriptRole
   narrationText?: string
@@ -90,6 +92,36 @@ type AnalyzeInput = {
 }
 
 const SCRIPT_ROLES: ScriptRole[] = ['hook', 'pain_point', 'solution', 'proof', 'offer', 'cta', 'transition', 'unknown']
+
+function normalizeStoryboardReferenceMode(value: unknown): 'product_closeup' | 'model_presentation' | undefined {
+  const text = String(value ?? '').trim().toLowerCase()
+  if (text === 'product_closeup' || text === 'product closeup' || text === 'product-closeup') return 'product_closeup'
+  if (text === 'model_presentation' || text === 'model presentation' || text === 'model-presentation') return 'model_presentation'
+  return undefined
+}
+
+export function inferStoryboardReferenceMode(input: {
+  analyzed?: Partial<ScriptShotAnalysis> | null
+  shot: ShotSpec
+}): 'product_closeup' | 'model_presentation' | undefined {
+  const explicit = normalizeStoryboardReferenceMode(input.analyzed?.storyboardReferenceMode)
+  const decision = inferStoryboardReferenceDecision({
+    productType: input.shot.productType,
+    shot: input.shot,
+    extraTexts: [
+      input.analyzed?.visualDescription,
+      input.analyzed?.actionDescription,
+      input.analyzed?.cameraDescription,
+      input.analyzed?.productFocus,
+      input.analyzed?.scriptText,
+      input.analyzed?.sceneDescription?.location,
+      input.analyzed?.sceneDescription?.background,
+      input.analyzed?.sceneDescription?.style,
+    ],
+  })
+  if (decision.subjectType === 'unknown') return explicit
+  return decision.mode
+}
 
 function cleanHost(value?: string) {
   return String(value || 'https://grsaiapi.com').trim().replace(/\/+$/, '') || 'https://grsaiapi.com'
@@ -291,8 +323,35 @@ export function applyScriptAnalysisToShots(shots: ShotSpec[], result: ScriptAnal
     )
     const sanitizedGenerationPrompt =
       sanitizeJewelryGenerationPrompt(generationPrompt, shot.productType) || generationPrompt
+    const resolvedStoryboardReferenceMode =
+      inferStoryboardReferenceMode({
+        analyzed,
+        shot,
+      }) ?? shot.storyboardReferenceMode
+    const referenceDecision = inferStoryboardReferenceDecision({
+      productType: shot.productType,
+      shot: {
+        ...shot,
+        visualDescription,
+        actionDescription,
+        cameraDescription,
+        productFocus,
+        scriptText,
+      },
+      extraTexts: [
+        analyzed.visualDescription,
+        analyzed.actionDescription,
+        analyzed.cameraDescription,
+        analyzed.productFocus,
+        analyzed.scriptText,
+      ],
+    })
     return {
       ...shot,
+      storyboardSubjectType: referenceDecision.subjectType,
+      storyboardReferenceMode: resolvedStoryboardReferenceMode,
+      storyboardReferenceConfidence: referenceDecision.confidence,
+      storyboardReferenceReason: referenceDecision.reasons,
       scriptText,
       scriptRole,
       narrationText: cleanText(analyzed.narrationText, shot.narrationText || '') || undefined,
@@ -475,6 +534,7 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
       shotId: shot.id,
       startTime: timing.startTime,
       endTime: timing.endTime,
+      storyboardReferenceMode: normalizeStoryboardReferenceMode(raw.storyboardReferenceMode ?? raw.storyboard_reference_mode),
       scriptText: normalizedScriptText,
       scriptRole: normalizeRole(raw.scriptRole ?? raw.script_role),
       narrationText: cleanAsciiEnglishText(raw.narrationText ?? raw.narration_text, ''),
@@ -548,7 +608,10 @@ function buildInstruction(input: AnalyzeInput) {
     'Use the sampled frames together with shot boundaries to reconstruct the actual visual sequence as accurately as possible.',
     'For every shot, capture the observable facts: subject presence, product state, pose or movement, camera view or movement, visible environment, visible text, and the actual role this shot serves inside this specific video.',
     'Keep human presence exactly aligned with the source. If the source shows a model wearing or demonstrating the product, preserve that instead of collapsing the shot into a static product packshot.',
-    'Map the analysis into these output fields: cameraDescription, visualDescription, actionDescription, sceneDescription, emotionDescription, textOverlay, productFocus and analysisNotes.',
+    'Map the analysis into these output fields: storyboardReferenceMode, cameraDescription, visualDescription, actionDescription, sceneDescription, emotionDescription, textOverlay, productFocus and analysisNotes.',
+    'Set storyboard_reference_mode to product_closeup when the visible subject is primarily the product itself or the product plus a local body anchor such as earlobe, ear area, fingers, hands, wrist, neck or clavicle, and the person identity is not the point of the shot.',
+    'Set storyboard_reference_mode to model_presentation when the visible subject is primarily the model identity, half body, portrait, face-centered presentation, upper-body try-on, or presenter-like human showcase.',
+    'Do not let legacy labels such as model_demo decide this field automatically. A wearable shot can still be product_closeup if the frame is an extreme close-up focused on the product and local body anchor only.',
     'The generation_prompt field must be a factual reconstruction prompt for this exact shot, written in this order: subject + product state + scene + action + camera + lighting/color.',
     'The generation_prompt must stay grounded in observed content. Do not inject unobserved selling claims, conversion strategy, beautification instructions, or cinematic reinterpretation.',
     'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. If speech or text is unclear, leave it empty or minimal instead of guessing persuasive copy.',
@@ -556,7 +619,7 @@ function buildInstruction(input: AnalyzeInput) {
     'Use script_role values only from: hook,pain_point,solution,show,detail,proof,offer,cta,transition,unknown.',
     'Prefer omission over hallucination. Factual alignment to the reference video is the top priority.',
     'JSON shape:',
-    '{"global_analysis":{"video_type":"","target_audience":"","core_selling_point":"","hook_strategy":"","conversion_strategy":"","emotion_curve":"","recommended_product_type":"","content":"","camera_motion":"","shot_scale":"","lighting":"","color_tone":"","subject_action":"","environment":"","reverse_prompt":""},"shots":[{"shot_id":"","time_range":"","script_role":"","script_text":"","narration_text":"","on_screen_text":"","visual_description":"","subject_position":{"person":"","product":"","text":""},"scene":{"location":"","background":"","lighting":"","style":""},"emotion":{"tone":"","intensity":1},"action":"","camera":{"shot_type":"","movement":"","angle":""},"product_display":{"method":"","focus_point":"","selling_point":""},"text_overlay":{"content":"","position":"","font_size":"medium","style":"","color":"","animation":""},"transition":"","generation_prompt":"","negative_prompt":"","script_confidence":0.8,"analysis_notes":[]}],"key_shots":[{"shot_id":"","reason":""}]}',
+    '{"global_analysis":{"video_type":"","target_audience":"","core_selling_point":"","hook_strategy":"","conversion_strategy":"","emotion_curve":"","recommended_product_type":"","content":"","camera_motion":"","shot_scale":"","lighting":"","color_tone":"","subject_action":"","environment":"","reverse_prompt":""},"shots":[{"shot_id":"","time_range":"","storyboard_reference_mode":"product_closeup","script_role":"","script_text":"","narration_text":"","on_screen_text":"","visual_description":"","subject_position":{"person":"","product":"","text":""},"scene":{"location":"","background":"","lighting":"","style":""},"emotion":{"tone":"","intensity":1},"action":"","camera":{"shot_type":"","movement":"","angle":""},"product_display":{"method":"","focus_point":"","selling_point":""},"text_overlay":{"content":"","position":"","font_size":"medium","style":"","color":"","animation":""},"transition":"","generation_prompt":"","negative_prompt":"","script_confidence":0.8,"analysis_notes":[]}],"key_shots":[{"shot_id":"","reason":""}]}',
     'Shot timeline:',
     timeline,
   ].join('\n')

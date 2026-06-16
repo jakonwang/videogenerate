@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict'
-import { buildGptFramePrompt, buildIdentityPackPrompt, resolveStoryboardImageTemplateType } from '../src/main/modules/clone/gptImage'
-import { __test_resolveStoryboardSceneFitRefs } from '../src/main/modules/clone/service'
+import {
+  buildGptFramePrompt,
+  buildIdentityPackPrompt,
+  buildReferenceResponsibilityText,
+  resolveStoryboardImageTemplateType,
+  resolveStoryboardReferenceMode,
+} from '../src/main/modules/clone/gptImage.ts'
+import {
+  __test_resolveForcedModelSceneMode,
+  __test_resolveStoryboardSceneFitRefs,
+  __test_resolveStoryboardReferenceModeForProject,
+} from '../src/main/modules/clone/service.ts'
+import { inferStoryboardReferenceDecision } from '../src/main/modules/clone/storyboardReference.ts'
 import {
   buildCameraMotionLockText,
   buildCloneNegativePrompt,
@@ -9,9 +20,9 @@ import {
   buildPhysicsConsistencyText,
   buildScaleConsistencyLockText,
   buildSpatialAnchorLockText,
-} from '../src/main/modules/clone/prompt'
-import { buildRealisticPrompt } from '../src/main/modules/clone/providers'
-import type { ModelIdentityPack, ShotSpec } from '../src/main/modules/clone/types'
+} from '../src/main/modules/clone/prompt.ts'
+import { buildRealisticPrompt } from '../src/main/modules/clone/providers.ts'
+import type { ModelIdentityPack, ShotSpec } from '../src/main/modules/clone/types.ts'
 
 const GENERAL_TEMPLATE = `
 Look at these two reference images and combine them in a natural everyday way.
@@ -144,6 +155,8 @@ const generalShot = {
   ...shot,
   id: 'shot-general',
   productType: 'general',
+  role: 'product_closeup',
+  purpose: 'detail',
   shotType: 'closeup',
   visualPrompt: 'Clean product-led close-up in a natural scene.',
   visualDescription: 'Photorealistic product close-up with shallow depth of field.',
@@ -152,6 +165,89 @@ const generalShot = {
   productFocus: 'shape, edges and structure',
   materialNeed: 'preserve exact structure and proportions',
   scriptText: 'Show the product clearly in one clean frame.',
+} as ShotSpec
+
+const handCloseupEarringShot = {
+  ...shot,
+  id: 'shot-hand-closeup-earring',
+  shotType: 'model_demo',
+  role: 'model_scene',
+  purpose: 'model_demo',
+  framing: 'closeup',
+  visualPrompt: 'Close-up shot. Camera remains static, focusing closely on the hand holding the silver star hoop.',
+  visualDescription: 'Tight close-up of fingers holding the silver hoop earring beside a table edge. No full-face presentation.',
+  actionDescription: 'Static hand-held product display with only minimal finger support.',
+  cameraDescription: 'close-up static product framing focused on the hand and earring only',
+  productFocus: 'hand-held silver star hoop detail and exact product structure',
+  scriptText: 'Close-up shot focusing closely on the hand holding the silver star hoop.',
+  onScreenText: '',
+  narrationText: '',
+} as ShotSpec
+
+const earlobeExtremeCloseupShot = {
+  ...shot,
+  id: 'shot-earlobe-extreme-closeup',
+  shotType: 'model_demo',
+  role: 'model_scene',
+  purpose: 'model_demo',
+  framing: 'closeup',
+  visualPrompt: '0.0s-3.6s Extreme close-up shot. Camera slowly pans right across the earlobe. No zoom.',
+  visualDescription: 'Extreme close-up of the earlobe and earring area only. No full-face presentation.',
+  actionDescription: 'Camera slowly pans right across the earlobe with no zoom.',
+  cameraDescription: 'Extreme close-up, slow pan right, no zoom',
+  productFocus: 'earlobe area and exact earring structure',
+  scriptText: '0.0s-3.6s Extreme close-up shot. Camera slowly pans right across the earlobe. No zoom.',
+  onScreenText: '',
+  narrationText: '',
+} as ShotSpec
+
+const realProjectShot1 = {
+  ...shot,
+  id: 'shot-real-project-1',
+  role: 'hook',
+  shotType: 'model_demo',
+  framing: 'closeup',
+  visualPrompt: 'Opening model demonstration shot. Replace the person with a target-market model while keeping gesture rhythm.',
+  visualDescription: 'Close-up of the ear area with a subtle hand movement outward.',
+  actionDescription: 'Static start on the ear, then subtle hand tracking outward.',
+  cameraDescription: 'close-up static framing focused on the ear before following the hand slightly',
+  productFocus: 'ear wearing presentation with visible product-on-body relation',
+  scriptText: '0.0s-3.5s Close-up shot. Camera is static, focus on the ear before subtly tracking the hand moving outward.',
+  onScreenText: '',
+  narrationText: '',
+} as ShotSpec
+
+const realProjectShot6 = {
+  ...shot,
+  id: 'shot-real-project-6',
+  role: 'cta',
+  shotType: 'model_demo',
+  framing: 'closeup',
+  visualPrompt: 'Model usage demonstration shot. Preserve body/hand action rhythm and replace product/model identity.',
+  visualDescription: 'Static close-up framing the ear and jawline while the product is being worn.',
+  actionDescription: 'No subject motion.',
+  cameraDescription: 'close-up static framing on the ear and jawline',
+  productFocus: 'worn product relation on the ear and jawline area',
+  scriptText: '13.0s-13.7s Close-up shot. Camera is completely static, framing the ear and jawline beautifully.',
+  onScreenText: '',
+  narrationText: '',
+} as ShotSpec
+
+const modelScenePhotoShot = {
+  ...shot,
+  id: 'shot-model-scene-photo',
+  productType: 'general',
+  role: 'hook',
+  purpose: 'model_demo',
+  shotType: 'closeup',
+  framing: 'closeup',
+  visualPrompt: 'Lifestyle model scene photo for storyboard reference. A woman presents the product in a real room.',
+  visualDescription: 'Close-up scene image of a female model presenting the product near the face in a natural home setting.',
+  actionDescription: 'Model faces the camera and lightly presents the product during a real-person scene shot.',
+  cameraDescription: 'close-up lifestyle framing with a real person in scene',
+  productFocus: 'visible product with real-person scene relation',
+  scriptText: 'Use the model scene image as the main storyboard reference for this opening shot.',
+  storyboardReferenceMode: 'product_closeup',
 } as ShotSpec
 
 const prompt = buildGptFramePrompt({
@@ -217,6 +313,30 @@ const generalPrompt = buildGptFramePrompt({
   productPoints: generalShot.materialNeed,
   which: 'start',
 })
+const handCloseupEarringPrompt = buildGptFramePrompt({
+  shot: handCloseupEarringShot,
+  productType: 'earrings',
+  modelPack,
+  productPoints: handCloseupEarringShot.materialNeed,
+  which: 'start',
+})
+const lockedProductCloseupPrompt = buildGptFramePrompt({
+  shot: {
+    ...realProjectShot6,
+    storyboardReferenceMode: 'product_closeup',
+  },
+  productType: 'earrings',
+  modelPack,
+  productPoints: realProjectShot6.materialNeed,
+  which: 'start',
+})
+const earlobeExtremeCloseupPrompt = buildGptFramePrompt({
+  shot: earlobeExtremeCloseupShot,
+  productType: 'earrings',
+  modelPack,
+  productPoints: earlobeExtremeCloseupShot.materialNeed,
+  which: 'start',
+})
 const explicitPackagingPrompt = buildGptFramePrompt({
   shot: interactionShot,
   productType: 'general',
@@ -224,6 +344,125 @@ const explicitPackagingPrompt = buildGptFramePrompt({
   productPoints: interactionShot.materialNeed,
   which: 'start',
   explicitTemplateType: 'ecommerce_packaging',
+})
+const generalReferenceMode = resolveStoryboardReferenceMode({ productType: 'general', shot: generalShot })
+const interactionReferenceMode = resolveStoryboardReferenceMode({ productType: 'general', shot: interactionShot })
+const jewelryReferenceMode = resolveStoryboardReferenceMode({ productType: 'earrings', shot })
+const handCloseupReferenceMode = resolveStoryboardReferenceMode({ productType: 'earrings', shot: handCloseupEarringShot })
+const earlobeExtremeCloseupReferenceMode = resolveStoryboardReferenceMode({ productType: 'earrings', shot: earlobeExtremeCloseupShot })
+const realProjectShot1ReferenceMode = resolveStoryboardReferenceMode({ productType: 'earrings', shot: realProjectShot1 })
+const realProjectShot6ReferenceMode = resolveStoryboardReferenceMode({ productType: 'earrings', shot: realProjectShot6 })
+const modelScenePhotoReferenceMode = resolveStoryboardReferenceMode({ productType: 'general', shot: modelScenePhotoShot })
+const wristAccessoryShot = {
+  ...interactionShot,
+  id: 'shot-wrist-accessory',
+  productType: 'bracelet',
+  shotType: 'model_demo',
+  role: 'model_scene',
+  framing: 'closeup',
+  visualPrompt: 'Extreme close-up of the wrist wearing the bracelet. No face shown.',
+  visualDescription: 'Close-up top view of the bracelet worn on a wrist with the product as dominant subject.',
+  actionDescription: 'Subtle wrist gesture only.',
+  cameraDescription: 'close-up top view of the wrist and bracelet',
+  productFocus: 'bracelet structure, wrist fit, clasp detail',
+  scriptText: 'Extreme close-up of the wrist and bracelet only.',
+} as ShotSpec
+const wristAccessoryReferenceMode = resolveStoryboardReferenceMode({ productType: 'bracelet' as any, shot: wristAccessoryShot })
+const forcedModelSceneShot = {
+  ...interactionShot,
+  id: 'shot-forced-model-scene',
+  productType: 'earrings',
+  shotType: 'closeup',
+  role: 'product_closeup',
+  thumbnailPath: 'D:/tmp/model-wearing-ear-scene.png',
+  storyboardReferenceMode: 'product_closeup',
+  visualPrompt: 'Close-up on the ear where the model is wearing the earring.',
+  visualDescription: 'The portrait crop shows the ear, jawline, and cheek while the model wears the earring.',
+  actionDescription: 'Model adjusts the earring near the earlobe.',
+  cameraDescription: 'Tight portrait close-up on the ear and jawline.',
+  productFocus: 'earring worn on ear with real face-side context',
+  scriptText: 'Model wearing the earring near the ear and jawline.',
+} as ShotSpec
+const noIdentityEarringCloseupShot = {
+  ...interactionShot,
+  id: 'shot-no-identity-earring-closeup',
+  productType: 'earrings',
+  shotType: 'model_demo',
+  role: 'model_scene',
+  framing: 'extreme_closeup',
+  thumbnailPath: 'D:/tmp/earring-closeup-scene.png',
+  storyboardReferenceMode: 'product_closeup',
+  visualPrompt: 'Extreme close-up on the earlobe and earring only. No face visible.',
+  visualDescription: 'Extreme close-up of the earlobe and earring area only. No full-face presentation and identity is not visible.',
+  actionDescription: 'Static product-led wearing close-up with only the minimum local body anchor.',
+  cameraDescription: 'Extreme close-up macro framing on the ear area only',
+  productFocus: 'exact earring structure on the earlobe with no identity emphasis',
+  scriptText: 'Extreme close-up of the earlobe and earring only. No face visible.',
+} as ShotSpec
+const handOnlyProductShot = {
+  ...interactionShot,
+  id: 'shot-hand-only-product',
+  productType: 'earrings',
+  shotType: 'model_demo',
+  role: 'model_scene',
+  framing: 'closeup',
+  visualPrompt: 'Close-up shot of fingers holding the earring only.',
+  visualDescription: 'Tight close-up of fingers holding the earring only, with no ear, face, neck, or body visible.',
+  actionDescription: 'Static hand-held product display only.',
+  cameraDescription: 'Close-up hand-only product framing.',
+  productFocus: 'exact earring structure in the fingers only',
+  scriptText: 'Fingers holding the product only.',
+} as ShotSpec
+const realProjectShot5 = {
+  ...interactionShot,
+  id: 'shot-real-project-5',
+  productType: 'earrings',
+  shotType: 'model_demo',
+  role: 'detail',
+  framing: 'closeup',
+  visualPrompt: 'Model usage demonstration shot. Preserve body/hand action rhythm and replace product/model identity.',
+  visualDescription: 'Keep the exact reference composition.',
+  actionDescription: 'No subject motion.',
+  cameraDescription: 'extreme close-up, slow zoom in',
+  productFocus: 'construction details',
+  scriptText: '8.5s-10.8s Extreme close-up shot. Camera slowly zooms in on the 4-prong setting and .',
+} as ShotSpec
+const tabletopProductShot = {
+  ...generalShot,
+  id: 'shot-tabletop-product',
+  visualPrompt: 'Static tabletop product-only close-up.',
+  visualDescription: 'Product only on tabletop with no person.',
+  actionDescription: 'No subject motion.',
+  cameraDescription: 'Static tabletop product framing.',
+  productFocus: 'product structure only',
+  scriptText: 'Product only on tabletop.',
+} as ShotSpec
+const packagingOnlyShot = {
+  ...packagingShot,
+  id: 'shot-packaging-only',
+  productType: 'general',
+  thumbnailPath: 'D:/tmp/product-only-white-background.png',
+  visualPrompt: 'Isolated product packaging on pure white background.',
+  visualDescription: 'No person. Product only display on white background.',
+  scriptText: 'Packaging only close-up with no model.',
+} as ShotSpec
+const forcedModelSceneLock = __test_resolveForcedModelSceneMode({ projectIdentityGridPath: 'D:/tmp/project-identity-grid.png' } as any, forcedModelSceneShot)
+const noIdentityEarringCloseupLock = __test_resolveForcedModelSceneMode(
+  { projectIdentityGridPath: 'D:/tmp/project-identity-grid.png' } as any,
+  noIdentityEarringCloseupShot,
+)
+const packagingOnlyLock = __test_resolveForcedModelSceneMode({ projectIdentityGridPath: 'D:/tmp/project-identity-grid.png' } as any, packagingOnlyShot)
+const handOnlyDecision = inferStoryboardReferenceDecision({ productType: 'earrings', shot: handOnlyProductShot })
+const realProjectShot5Decision = inferStoryboardReferenceDecision({ productType: 'earrings', shot: realProjectShot5 })
+const tabletopDecision = inferStoryboardReferenceDecision({ productType: 'general', shot: tabletopProductShot })
+const noIdentityDecision = inferStoryboardReferenceDecision({ productType: 'earrings', shot: noIdentityEarringCloseupShot })
+const closeupResponsibility = buildReferenceResponsibilityText({
+  mode: 'storyboard_frame',
+  storyboardReferenceMode: 'product_closeup',
+})
+const modelResponsibility = buildReferenceResponsibilityText({
+  mode: 'storyboard_frame',
+  storyboardReferenceMode: 'model_presentation',
 })
 const identityPackPrompt = buildIdentityPackPrompt({
   productType: 'general',
@@ -272,6 +511,33 @@ assert.equal(resolveStoryboardImageTemplateType({ productType: 'earrings', shot 
 assert.equal(resolveStoryboardImageTemplateType({ productType: 'general', shot: packagingShot }), 'ecommerce_packaging')
 assert.equal(resolveStoryboardImageTemplateType({ productType: 'general', shot: interactionShot }), 'lifestyle_interaction')
 assert.equal(resolveStoryboardImageTemplateType({ productType: 'general', shot: generalShot }), 'general')
+assert.equal(generalReferenceMode, 'product_closeup')
+assert.equal(interactionReferenceMode, 'product_closeup')
+assert.equal(jewelryReferenceMode, 'model_presentation')
+assert.equal(handCloseupReferenceMode, 'product_closeup')
+assert.equal(earlobeExtremeCloseupReferenceMode, 'model_presentation')
+assert.equal(realProjectShot1ReferenceMode, 'model_presentation')
+assert.equal(realProjectShot6ReferenceMode, 'model_presentation')
+assert.equal(modelScenePhotoReferenceMode, 'model_presentation')
+assert.equal(wristAccessoryReferenceMode, 'model_presentation')
+assert.equal(forcedModelSceneLock.locked, true)
+assert.equal(forcedModelSceneLock.mode, 'model_presentation')
+assert.equal(forcedModelSceneLock.reason, 'scene_contains_model_wearing')
+assert.equal(noIdentityEarringCloseupLock.locked, false)
+assert.equal(noIdentityEarringCloseupLock.mode, null)
+assert.equal(packagingOnlyLock.locked, false)
+assert.equal(packagingOnlyLock.mode, null)
+assert.equal(handOnlyDecision.subjectType, 'product_only')
+assert.equal(handOnlyDecision.mode, 'product_closeup')
+assert.equal(handOnlyDecision.confidence, 'high')
+assert.equal(realProjectShot5Decision.subjectType, 'unknown')
+assert.equal(realProjectShot5Decision.mode, 'model_presentation')
+assert.equal(realProjectShot5Decision.confidence, 'low')
+assert.equal(tabletopDecision.subjectType, 'product_only')
+assert.equal(tabletopDecision.mode, 'product_closeup')
+assert.equal(noIdentityDecision.subjectType, 'local_wearable_closeup')
+assert.equal(noIdentityDecision.mode, 'product_closeup')
+assert.equal(noIdentityDecision.confidence, 'medium')
 assert.equal(
   resolveStoryboardImageTemplateType({
     productType: 'general',
@@ -281,18 +547,124 @@ assert.equal(
   'ecommerce_packaging',
 )
 
-assert.equal(prompt, GENERAL_TEMPLATE)
-assert.equal(endPrompt, GENERAL_TEMPLATE)
+assert.match(prompt, /Identify the model in Image 1\. Keep the model's appearance clearly consistent with Image 1\./i)
+assert.match(prompt, /CLOTHING: Replicate the same clothing from Image 1/i)
 assert.equal(prompt, endPrompt)
-assert.equal(necklacePrompt, GENERAL_TEMPLATE)
-assert.equal(packagingPrompt, GENERAL_TEMPLATE)
-assert.equal(interactionPrompt, GENERAL_TEMPLATE)
-assert.equal(generalPrompt, GENERAL_TEMPLATE)
-assert.equal(explicitPackagingPrompt, GENERAL_TEMPLATE)
+assert.match(necklacePrompt, /Identify the model in Image 1\. Keep the model's appearance clearly consistent with Image 1\./i)
+assert.match(interactionPrompt, /2\. PRESENTATION STRUCTURE:/i)
+assert.doesNotMatch(interactionPrompt, /Identify the model in Image 1/i)
+assert.match(generalPrompt, /2\. PRESENTATION STRUCTURE:/i)
+assert.match(generalPrompt, /Keep the product fully consistent with Image 1/i)
+assert.match(generalPrompt, /Place that same product naturally into the daily environment, composition, and atmosphere of Image 2/i)
+assert.match(generalPrompt, /BODY CONTEXT: If human context is needed, preserve only the minimum local body-part relation required by Image 2/i)
+assert.match(generalPrompt, /POSTURE AND CROP: Follow the crop, framing tightness, and close-up storytelling intent needed to integrate the product into Image 2/i)
+assert.doesNotMatch(generalPrompt, /Identify how the product is presented in Image 1/i)
+assert.doesNotMatch(generalPrompt, /Identify the model in Image 1/i)
+assert.match(packagingPrompt, /2\. PRESENTATION STRUCTURE:/i)
+assert.doesNotMatch(packagingPrompt, /Identify the model in Image 1/i)
+assert.match(explicitPackagingPrompt, /2\. PRESENTATION STRUCTURE:/i)
+assert.doesNotMatch(explicitPackagingPrompt, /Identify the model in Image 1/i)
+assert.match(handCloseupEarringPrompt, /2\. PRESENTATION STRUCTURE:/i)
+assert.doesNotMatch(handCloseupEarringPrompt, /Identify the model in Image 1/i)
+assert.match(lockedProductCloseupPrompt, /2\. PRESENTATION STRUCTURE:/i)
+assert.doesNotMatch(lockedProductCloseupPrompt, /Identify the model in Image 1/i)
 assert.match(identityPackPrompt, /believable real-world size relative to the Hands/i)
 assert.match(identityPackPrompt, /Do not enlarge, magnify, or exaggerate the product beyond its normal wearing or handheld scale/i)
 assert.deepEqual(identityGridPrimaryRefs, ['D:/tmp/project-identity-grid.png', 'D:/tmp/scene-thumb.png'])
 assert.deepEqual(legacyFallbackRefs, ['D:/tmp/product-canonical.png', 'D:/tmp/model-pack-1.png', 'D:/tmp/scene-thumb.png'])
+assert.deepEqual(
+  __test_resolveStoryboardSceneFitRefs({
+    productRefs: ['D:/tmp/product-canonical.png'],
+    modelPackRefs: ['D:/tmp/model-pack-1.png'],
+    thumbnailPath: 'D:/tmp/scene-thumb.png',
+    mode: 'start',
+    storyboardReferenceMode: 'product_closeup',
+  }),
+  ['D:/tmp/product-canonical.png', 'D:/tmp/scene-thumb.png'],
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    {
+      ...earlobeExtremeCloseupShot,
+      storyboardReferenceMode: 'model_presentation',
+    } as ShotSpec,
+  ),
+  'product_closeup',
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    realProjectShot1,
+  ),
+  'model_presentation',
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    realProjectShot6,
+  ),
+  'model_presentation',
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    modelScenePhotoShot,
+  ),
+  'model_presentation',
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    noIdentityEarringCloseupShot,
+  ),
+  'product_closeup',
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    forcedModelSceneShot,
+  ),
+  'model_presentation',
+)
+assert.equal(
+  __test_resolveStoryboardReferenceModeForProject(
+    {
+      projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    } as any,
+    {
+      ...interactionShot,
+      storyboardReferenceMode: 'product_closeup',
+    } as ShotSpec,
+  ),
+  'model_presentation',
+)
+assert.notEqual(
+  __test_resolveStoryboardSceneFitRefs({
+    projectIdentityGridPath: 'D:/tmp/project-identity-grid.png',
+    productRefs: ['D:/tmp/product-canonical.png'],
+    thumbnailPath: 'D:/tmp/scene-thumb.png',
+    mode: 'start',
+    storyboardReferenceMode: 'product_closeup',
+  })[0],
+  'D:/tmp/project-identity-grid.png',
+)
+assert.match(closeupResponsibility, /Image 2 is the storyboard scene reference/i)
+assert.match(closeupResponsibility, /Do not infer or recreate a specific person identity/i)
+assert.doesNotMatch(closeupResponsibility, /Image 2 is the model identity reference/i)
+assert.match(modelResponsibility, /Image 2 is the model identity reference/i)
 
 assert.doesNotMatch(prompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer|Generate the opening keyframe|Generate the ending keyframe/i)
 assert.doesNotMatch(packagingPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
@@ -303,7 +675,7 @@ assert.match(videoPrompt, /^Main Instruction: A natural, crisp, high-definition 
 assert.match(videoPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
 assert.match(videoPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
 assert.match(videoPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
-assert.match(videoPrompt, /Implement Subtle handheld close-up on the ear area with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
+assert.match(videoPrompt, /Implement Subtle handheld close-up on the ear area.*with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
 assert.match(videoPrompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame/i)
 assert.match(videoPrompt, /Silent Performance Lock: The model must remain completely silent\./i)
 assert.match(videoPrompt, /Keep lips closed or only minimally relaxed at all times\./i)

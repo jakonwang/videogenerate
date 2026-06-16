@@ -74,6 +74,14 @@ export type ScriptRole =
 export type ShotQualityStatus = 'unchecked' | 'pending' | 'passed' | 'warning' | 'failed'
 export type GptImageGenerationStatus = 'idle' | 'generating' | 'done' | 'failed'
 export type GptFrameConfirmStatus = 'unconfirmed' | 'confirmed'
+export type StoryboardReferenceMode = 'product_closeup' | 'model_presentation'
+export type StoryboardSubjectType =
+  | 'product_only'
+  | 'hand_only_product'
+  | 'local_wearable_closeup'
+  | 'model_visible'
+  | 'unknown'
+export type StoryboardReferenceConfidence = 'high' | 'medium' | 'low'
 export type ShotCloneClass =
   | 'real_product'
   | 'model_demo'
@@ -151,6 +159,7 @@ export type ShotSpec = {
   productUsageImages?: string[]
   styleReferenceImages?: string[]
   productIdentityText?: string
+  nextRoundPromptDirectives?: string[]
   gptFirstFramePath?: string
   gptLastFramePath?: string
   gptFrameStatus?: GptImageGenerationStatus
@@ -177,6 +186,12 @@ export type ShotSpec = {
   selectedAssetId?: string
   shotRole?: CloneShotRole
   shotType?: CloneShotType
+  storyboardSubjectType?: StoryboardSubjectType
+  storyboardReferenceMode?: StoryboardReferenceMode
+  storyboardReferenceConfidence?: StoryboardReferenceConfidence
+  storyboardReferenceReason?: string[]
+  referenceModeLocked?: boolean
+  referenceModeLockReason?: 'manual'
   referenceLock?: ReferenceLock
   scriptText: string
   scriptRole: ScriptRole
@@ -672,6 +687,47 @@ export type CloneFinalComposeStatus = {
   status: 'idle' | 'ready' | 'composing' | 'done' | 'failed'
   outputPath?: string
   coverImagePath?: string
+  nextRoundPlanPath?: string
+  composeHealth?: {
+    verdict?: 'balanced' | 'needs_tuning'
+    flags?: string[]
+    recommendations?: string[]
+  }
+  composeSummary?: {
+    totalShots?: number
+    stageCounts?: Partial<Record<'hook' | 'body' | 'close', number>>
+    aggressiveShotCount?: number
+    readabilityProtectedCount?: number
+    productPriorityCount?: number
+    averageClipDurationSec?: number
+    strongHookCount?: number
+    payoffHandoffCount?: number
+    closeConfirmationCount?: number
+    strongCtaCount?: number
+    snapCloseCount?: number
+    rhythmScore?: number
+    optimizationLanes?: Array<'hook' | 'payoff' | 'body' | 'close'>
+    nextActions?: string[]
+    optimizationBrief?: {
+      focusArea?: 'hook' | 'payoff' | 'body' | 'close' | 'maintain'
+      urgency?: 'low' | 'medium' | 'high'
+      primaryGoal?: string
+      actionItems?: string[]
+      upstreamPromptHints?: string[]
+    }
+    bodyUpgradePlan?: {
+      proofUpgrade?: boolean
+      showUpgrade?: boolean
+      preferredMoves?: string[]
+    }
+    upstreamOptimizationPatch?: {
+      tightenOpening?: boolean
+      addImmediatePayoff?: boolean
+      increaseMidVariation?: boolean
+      strengthenCtaUrgency?: boolean
+      preferSnapClose?: boolean
+    }
+  }
   subtitleOverlay?: {
     active: boolean
     originalOutputPath: string

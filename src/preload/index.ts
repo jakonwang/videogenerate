@@ -206,7 +206,7 @@ const api = {
       status: 'draft' | 'selected' | 'generating' | 'done' | 'failed' | 'rejected'
     }) => ipcRenderer.invoke('clone:updateVideoPlanStatus', payload),
     listProjects: () => ipcRenderer.invoke('clone:listProjects'),
-    removeProject: (payload: { cloneProjectId: string }) =>
+    removeProject: (payload: { cloneProjectId: string; force?: boolean }) =>
       ipcRenderer.invoke('clone:removeProject', payload),
     updateShot: (payload: {
       cloneProjectId: string

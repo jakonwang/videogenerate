@@ -84,6 +84,7 @@ async function main() {
     const result = await cloneService.composeCloneFinalVideo({ cloneProjectId: projectId, outputDir: root })
     assert.equal(capturedShotPath, newVideoPath)
     assert.equal(String(result.project?.finalCompose?.outputPath || ''), outputPath)
+    assert.equal(result.project?.finalCompose?.composeHealth, undefined)
     const saved = savedProjects.get(projectId)
     assert.equal(String(saved?.blueprint?.shots?.[0]?.generatedClipPath || ''), newVideoPath)
     assert.equal(String(saved?.shotVideoOutputs?.[0]?.videoPath || ''), newVideoPath)

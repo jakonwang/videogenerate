@@ -905,7 +905,10 @@ export async function generateShotVideoByProviderChain(input: {
     finalPrompt,
     compiledNegativePrompt: String(input.compiledNegativePrompt || input.shot.compiledNegativePrompt || '').trim(),
     finalNegativePrompt,
-    productReferenceCount: 0,
+    productReferenceCount: Array.isArray(input.shot.productReferenceImagePaths) ? input.shot.productReferenceImagePaths.length : 0,
+    productReferenceImagePaths: (input.shot.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean),
+    startFramePath: String(input.startFramePath || '').trim(),
+    endFramePath: String(input.endFramePath || '').trim(),
   })
 
   if (

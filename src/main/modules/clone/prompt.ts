@@ -187,6 +187,7 @@ function extractCameraMovementOnlySentenceList(input: {
   motion?: unknown
 }) {
   const corpus = [input.scriptText, input.cameraDescription]
+    .map((item) => stripSpeechCueText(item || ''))
     .map((item) => keepEnglishLikeText(item || '', '').trim())
     .filter(Boolean)
     .join('\n')
@@ -449,6 +450,72 @@ export function sanitizeNegativePrompt(value: unknown, maxChars = 400) {
 
 export function buildNoSpeakingInstruction() {
   return 'Silent visual performance only: no vocal performance, no conversation scene, no singing scene, no host-style delivery pose, no exaggerated mouth movement, no open-mouth speaking expression, no speech-like lip shapes, and keep lips closed or only minimally relaxed with a calm visually neutral facial expression. Every frame must read as silent, never mid-speech, never about to speak, and never finishing a spoken line.'
+}
+
+export function buildViralRhythmShotGuidance(shot: Pick<
+  ShotSpec,
+  | 'scriptRole'
+  | 'scriptText'
+  | 'generationPrompt'
+  | 'visualDescription'
+  | 'actionDescription'
+  | 'cameraDescription'
+  | 'productFocus'
+  | 'motion'
+  | 'framing'
+  | 'shotType'
+>) {
+  const role = String(shot.scriptRole || '').trim().toLowerCase()
+  const visualDescription = keepEnglishLikeText(shot.visualDescription || '', '').toLowerCase()
+  const actionDescription = keepEnglishLikeText(shot.actionDescription || '', '').toLowerCase()
+  const generationPrompt = keepEnglishLikeText(shot.generationPrompt || '', '').toLowerCase()
+  const motion = keepEnglishLikeText(shot.motion || '', '').toLowerCase()
+  const framing = keepEnglishLikeText(shot.framing || '', '').toLowerCase()
+  const semanticText = `${visualDescription} ${actionDescription} ${generationPrompt}`
+  const closeupLike = /\bclose\b|\bcloseup\b|\bclose-up\b|\bmacro\b|\bdetail\b/.test(`${visualDescription} ${generationPrompt} ${framing}`)
+  const hasExplicitMissingPayoffSignal = /\bwithout\s+(?:explicit\s+)?result\b|\bno\s+(?:clear\s+)?result\b|\bbefore\s+the\s+product\s+moment\b|\bbefore\s+anything\s+specific\s+happens\b|\bdelayed\s+reveal\b|\bsetup\s+before\s+payoff\b|\bsoft\s+setup\b|\bambient\s+opener\b/.test(
+    semanticText,
+  )
+  const resultLike = !hasExplicitMissingPayoffSignal && /\bresult\b|\bproof\b|\breveal\b|\bshow\b|\bvisible\b|\bclear\b|\bconfirm\b/.test(
+    semanticText,
+  )
+  const repeatedStaticLike = (motion === 'static' || motion === '') && !/\bpan\b|\btilt\b|\bpush\b|\bpull\b|\bslide\b|\bglide\b/.test(
+    `${actionDescription} ${generationPrompt}`,
+  )
+  const lines: string[] = []
+
+  if (role === 'hook') {
+    lines.push('Hook Rhythm: The first beat must communicate product value immediately, not after a soft setup.')
+    if (!closeupLike) {
+      lines.push('Hook Framing: Tighten the composition so the payoff reads instantly on a vertical short-video screen.')
+    }
+    if (!resultLike) {
+      lines.push('Hook Payoff Clarity: Make the visible result or hero product confirmation unmistakable inside this shot.')
+    }
+  }
+
+  if (role === 'solution' || role === 'show' || role === 'detail' || role === 'proof') {
+    lines.push('Middle Rhythm: Keep the shot commercially readable and moving forward. Avoid flat filler energy.')
+    if (repeatedStaticLike) {
+      lines.push('Momentum Lift: Add one realistic emphasis shift in motion, framing, or reveal timing so the middle section does not feel dead.')
+      lines.push('Variation Break: Do not repeat the same static close-up coverage. Introduce a clear angle, framing, hand-demo, or motion change that earns the next beat.')
+    }
+    if (closeupLike) {
+      lines.push('Body Progression: If this is a close-up proof or detail shot, make sure the next visual idea can escalate into a wider use case, hand interaction, or cleaner product-context reveal.')
+    }
+  }
+
+  if (role === 'proof') {
+    lines.push('Proof Rhythm: This shot must feel like visible confirmation, not generic coverage.')
+    lines.push('Proof-to-Action Bridge: Let the proof already lean toward purchase intent and closing momentum.')
+  }
+
+  if (role === 'cta' || role === 'offer') {
+    lines.push('Closing Rhythm: End on a decisive action frame with direct decision pressure, not a soft fade-out feeling.')
+    lines.push('CTA Pressure: Make urgency, action, or buy-now intent visually clear without becoming spammy.')
+  }
+
+  return lines.join(' ')
 }
 
 function stripSpeechCueText(value: unknown) {
@@ -1252,8 +1319,126 @@ export function buildFinalShotVideoPositivePrompt(input: {
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode
+  composeOptimizationPatch?: {
+    tightenOpening?: boolean
+    addImmediatePayoff?: boolean
+    increaseMidVariation?: boolean
+    strengthenCtaUrgency?: boolean
+    preferSnapClose?: boolean
+  }
+  composeBodyUpgradePlan?: {
+    proofUpgrade?: boolean
+    showUpgrade?: boolean
+    preferredMoves?: string[]
+  }
 }) {
-  return buildVideoExecutionStackPrompt(input)
+  return applyComposeOptimizationPatchToPrompt(buildVideoExecutionStackPrompt(input), {
+    shot: input.shot,
+    patch: input.composeOptimizationPatch,
+    bodyUpgradePlan: input.composeBodyUpgradePlan,
+  })
+}
+
+export function applyComposeOptimizationPatchToPrompt(
+  prompt: string,
+  input: {
+    shot: Pick<
+      ShotSpec,
+      | 'scriptRole'
+      | 'scriptText'
+      | 'generationPrompt'
+      | 'visualDescription'
+      | 'actionDescription'
+      | 'cameraDescription'
+      | 'productFocus'
+      | 'motion'
+      | 'framing'
+      | 'shotType'
+    >
+    patch?: {
+      tightenOpening?: boolean
+      addImmediatePayoff?: boolean
+      increaseMidVariation?: boolean
+      strengthenCtaUrgency?: boolean
+      preferSnapClose?: boolean
+    }
+    bodyUpgradePlan?: {
+      proofUpgrade?: boolean
+      showUpgrade?: boolean
+      preferredMoves?: string[]
+    }
+  },
+) {
+  const basePrompt = String(prompt || '').trim()
+  if (!basePrompt) return ''
+  const patch = input.patch
+  const bodyUpgradePlan = input.bodyUpgradePlan
+  if (!patch && !bodyUpgradePlan) return basePrompt
+
+  const role = String(input.shot.scriptRole || '').trim().toLowerCase()
+  const sections: string[] = []
+  const rhythmGuidance = buildViralRhythmShotGuidance(input.shot)
+  const preferredMoves = Array.isArray(bodyUpgradePlan?.preferredMoves)
+    ? bodyUpgradePlan?.preferredMoves.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+  const moveText = preferredMoves
+    .map((item) => {
+      if (item === 'hand_demo') return 'hand demo'
+      if (item === 'wider_usage_context') return 'wider usage context'
+      if (item === 'angle_shift') return 'angle shift'
+      if (item === 'momentum_lift') return 'momentum lift'
+      return item.replace(/_/g, ' ')
+    })
+    .filter(Boolean)
+
+  if (patch?.tightenOpening && role === 'hook') {
+    sections.push(
+      'Opening Hook Priority: Reveal the product payoff in the first beat. Start on the clearest hero result or unmistakable product value frame, not on soft atmosphere setup.',
+    )
+  }
+  if (patch?.addImmediatePayoff && (role === 'hook' || role === 'proof' || role === 'show' || role === 'solution')) {
+    sections.push(
+      'Immediate Payoff: Move straight from the opening into visible proof, product result, or close-up confirmation. Avoid filler before the first payoff moment.',
+    )
+  }
+  if (patch?.increaseMidVariation && (role === 'detail' || role === 'show' || role === 'solution' || role === 'proof')) {
+    sections.push(
+      'Mid-Sequence Variation: Introduce one clear change in framing, motion, or emphasis so the middle section does not feel visually repetitive.',
+    )
+    if ((role === 'proof' || role === 'detail') && bodyUpgradePlan?.proofUpgrade) {
+      sections.push(
+        `Proof Move Priority: Favor ${moveText.length ? moveText.join(', ') : 'hand demo, wider usage context, angle shift, or momentum lift'} before repeating another static close-up proof beat.`,
+      )
+    }
+    if ((role === 'show' || role === 'solution') && bodyUpgradePlan?.showUpgrade) {
+      sections.push(
+        `Show Move Priority: Favor ${moveText.length ? moveText.join(', ') : 'wider usage context, body interaction, angle shift, or momentum lift'} so the middle keeps opening out instead of repeating the same usage beat.`,
+      )
+    }
+    if (role === 'proof' || role === 'detail') {
+      sections.push(
+        'Proof Upgrade: Do not stay on repeated static close-up coverage. Escalate into a clearer hand demo, wider usage context, angle shift, or motion lift so the proof feels stronger and more purchase-ready.',
+      )
+    } else {
+      sections.push(
+        'Show Upgrade: Move beyond generic usage coverage. Let the next beat open into a clearer real-use context, body interaction, or perspective lift so the middle keeps gaining momentum.',
+      )
+    }
+  }
+  if (patch?.strengthenCtaUrgency && (role === 'offer' || role === 'cta' || role === 'proof')) {
+    sections.push(
+      'Conversion Pressure: Make the action outcome immediate and direct. Emphasize urgency, limited availability, or fast decision pressure without sounding spammy.',
+    )
+  }
+  if (patch?.preferSnapClose && (role === 'cta' || role === 'offer' || role === 'proof')) {
+    sections.push(
+      'Snap Close: End with a decisive final action beat or clean proof-to-action handoff. Avoid drifting into a soft lingering finish.',
+    )
+  }
+  if (rhythmGuidance) sections.push(rhythmGuidance)
+
+  if (!sections.length) return basePrompt
+  return `${sections.join('\n')}\n\n${basePrompt}`.trim()
 }
 
 export function buildCloneShotPrompt(input: {

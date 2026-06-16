@@ -135,6 +135,12 @@ type ShotVideoOutput = {
 
 type ShotImagePromptPreview = {
   shotId: string
+  storyboardSubjectType?: 'product_only' | 'hand_only_product' | 'local_wearable_closeup' | 'model_visible' | 'unknown'
+  storyboardReferenceMode?: 'product_closeup' | 'model_presentation'
+  storyboardReferenceConfidence?: 'high' | 'medium' | 'low'
+  storyboardReferenceReason?: string[]
+  referenceModeLocked?: boolean
+  referenceModeLockReason?: string
   promptBuildSentinel?: string
   promptCompilerVersion?: string
   consistencyMode?: string
@@ -243,6 +249,20 @@ type FinalCompose = {
   status: string
   outputPath?: string
   error?: string
+  composeHealth?: {
+    verdict?: 'balanced' | 'needs_tuning'
+    flags?: string[]
+    recommendations?: string[]
+  }
+  composeSummary?: {
+    totalShots?: number
+    stageCounts?: Partial<Record<'hook' | 'body' | 'close', number>>
+    aggressiveShotCount?: number
+    readabilityProtectedCount?: number
+    productPriorityCount?: number
+    averageClipDurationSec?: number
+    strongHookCount?: number
+  }
 }
 
 type CloneProject = {
@@ -867,6 +887,51 @@ const selectedGeelarkAccount = computed(
 )
 const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), '默认项目输出目录'))
 const localComposeErrorText = computed(() => safeText(current.value?.finalCompose?.error || composeLocalError.value, ''))
+const composeHealthFlagLabelMap: Record<string, string> = {
+  hook_overloaded: '开头钩子过密',
+  weak_opening_signal: '开头重点不够直接',
+  cta_heavy: '结尾销售感偏重',
+  too_many_aggressive_shots: '高强度镜头过多',
+  product_focus_weak: '产品重点不足',
+  text_heavy: '文案信息过重',
+  low_variation_signal: '镜头变化偏少',
+}
+const composeHealthFlags = computed(() => safeArray(current.value?.finalCompose?.composeHealth?.flags).map((item) => safeText(item)).filter(Boolean))
+const composeHealthFlagLabels = computed(() =>
+  composeHealthFlags.value.map((item) => composeHealthFlagLabelMap[item] || item),
+)
+const composeHealthVerdictText = computed(() => {
+  const verdict = safeText(current.value?.finalCompose?.composeHealth?.verdict)
+  if (verdict === 'balanced') return '当前节奏基本平衡'
+  if (verdict === 'needs_tuning') return '当前节奏仍需优化'
+  return ''
+})
+const composeHealthRecommendationLabelMap: Record<string, string> = {
+  'Reduce hook-like shots or soften the first sequence to avoid front-loaded fatigue.': '减少连续钩子镜头，或放缓开头节奏，避免前段过于疲劳。',
+  'Strengthen the opening with a clearer product hero, action reveal, or more direct payoff shot.': '开头应更直接给到产品主视觉、动作展示或结果感镜头，减少铺垫感。',
+  'Reduce close-stage density so the ending feels cleaner and less sales-heavy.': '降低结尾收口镜头密度，让结尾更干净，减少过强的销售感。',
+  'Soften consecutive aggressive shots or add steadier product moments between them.': '连续高强度镜头之间加入更稳的产品镜头，或适当放缓强刺激节奏。',
+  'Increase product-priority shots so the video spends more time on clear product value.': '增加产品重点镜头，让视频有更多时间停留在清晰的产品价值上。',
+  'Reduce text density or split long selling lines so rhythm stays natural.': '降低文案密度，或把过长卖点拆开，避免节奏显得生硬。',
+  'Consider adding more variation in framing or motion if the middle feels flat.': '如果中段发平，可增加镜头景别或运动方式的变化。',
+}
+const composeHealthRecommendations = computed(() =>
+  safeArray(current.value?.finalCompose?.composeHealth?.recommendations)
+    .map((item) => safeText(item))
+    .filter(Boolean)
+    .map((item) => composeHealthRecommendationLabelMap[item] || item),
+)
+const composeSummaryStats = computed(() => current.value?.finalCompose?.composeSummary || null)
+const composeStageCountText = computed(() => {
+  const stats = composeSummaryStats.value
+  if (!stats?.stageCounts) return ''
+  return `开头 ${Number(stats.stageCounts.hook || 0)} / 中段 ${Number(stats.stageCounts.body || 0)} / 收尾 ${Number(stats.stageCounts.close || 0)}`
+})
+const composeAverageClipDurationText = computed(() => {
+  const avg = Number(composeSummaryStats.value?.averageClipDurationSec || 0)
+  if (!avg) return ''
+  return `${avg.toFixed(2)} 秒/镜头`
+})
 const pipelineErrorContext = computed(() => current.value?.pipelineStatus?.errorContext || null)
 const configuredVideoProvider = computed(() => safeText(current.value?.pipelineStatus?.configuredProviderSummary?.video?.provider, '--'))
 const configuredVideoModel = computed(() => safeText(current.value?.pipelineStatus?.configuredProviderSummary?.video?.model, '--'))
@@ -2153,6 +2218,10 @@ function promptJsonUrls(raw?: string) {
   }
 }
 
+function detectBlock(promptText: string, marker: string) {
+  return String(promptText || '').includes(marker)
+}
+
 function isUploadOnSubmitPlaceholder(value?: string) {
   return String(value || '').trim().startsWith('UPLOAD_ON_SUBMIT::')
 }
@@ -2268,16 +2337,75 @@ async function loadShotVideoPromptPreview(shotId?: string, force = false, openMo
 const highlightedStartProductDescription = computed(() => safeText(shotImagePromptPreview.value?.productDescriptionBlock, ''))
 const highlightedEndProductDescription = computed(() => safeText(shotImagePromptPreview.value?.productDescriptionBlock, ''))
 const highlightedSceneAtmosphere = computed(() => safeText(shotImagePromptPreview.value?.sceneAtmosphereBlock, ''))
+const shotImageReferenceMode = computed<'product_closeup' | 'model_presentation'>(() => {
+  const preview = shotImagePromptPreview.value
+  if (preview?.storyboardReferenceMode === 'product_closeup' || preview?.storyboardReferenceMode === 'model_presentation') {
+    return preview.storyboardReferenceMode
+  }
+  return detectBlock(
+    preview?.referenceResponsibilityBlock,
+    'Do not infer or recreate a specific person identity',
+  )
+    ? 'product_closeup'
+    : 'model_presentation'
+})
+const shotImageReferenceLockSummary = computed(() => {
+  const preview = shotImagePromptPreview.value
+  if (!preview?.referenceModeLocked) return ''
+  if (preview.referenceModeLockReason === 'manual') {
+    return '已锁定为模特场景模式，原因：手动锁定'
+  }
+  return '已锁定为模特场景模式'
+})
+const shotImageReferenceReasonSummary = computed(() => {
+  const preview = shotImagePromptPreview.value
+  if (!preview) return ''
+  if (shotImageReferenceMode.value === 'product_closeup' && preview.storyboardSubjectType === 'hand_only_product') {
+    return '识别为产品特写：仅检测到手部持物，无手外人体部位'
+  }
+  if (shotImageReferenceMode.value === 'model_presentation' && preview.storyboardReferenceConfidence === 'low') {
+    return '低置信度，已按模特场景兜底'
+  }
+  const reasons = Array.isArray(preview.storyboardReferenceReason) ? preview.storyboardReferenceReason.filter(Boolean) : []
+  return reasons.join('；')
+})
 const shotImageDisplayRefs = computed(() => {
   const preview = shotImagePromptPreview.value
   if (!preview) return [] as Array<{ label: string; path: string }>
   const refs: Array<{ label: string; path: string }> = []
+  const requestUrlPaths = promptJsonUrls(preview.requestJsonStart)
+  const referenceMode = shotImageReferenceMode.value
+  const primaryProductPath = String(preview.productReferenceImagePaths?.[0] || '').trim()
   const identityGridPath = String(preview.identityGridReferenceImagePath || '').trim() || String(preview.modelReferenceImagePaths?.[0] || '').trim()
-  const scenePath = String(preview.sceneReferenceImagePath || '').trim() || String(preview.productReferenceImagePaths?.[0] || '').trim()
+  const scenePath = String(preview.sceneReferenceImagePath || '').trim()
+  if (referenceMode === 'product_closeup') {
+    if (primaryProductPath) refs.push({ label: '产品参考图', path: primaryProductPath })
+    if (scenePath) refs.push({ label: '分镜场景图', path: scenePath })
+    if (!refs.length) {
+      if (requestUrlPaths[0]) refs.push({ label: '实际请求参考图 1', path: requestUrlPaths[0] })
+      if (requestUrlPaths[1]) refs.push({ label: '实际请求参考图 2', path: requestUrlPaths[1] })
+    }
+    return refs
+  }
   if (identityGridPath) refs.push({ label: '身份定妆图', path: identityGridPath })
   if (scenePath) refs.push({ label: '分镜场景图', path: scenePath })
+  if (!refs.length) {
+    if (requestUrlPaths[0]) refs.push({ label: '实际请求参考图 1', path: requestUrlPaths[0] })
+    if (requestUrlPaths[1]) refs.push({ label: '实际请求参考图 2', path: requestUrlPaths[1] })
+  }
+  console.log('[clone-debug] renderer-shot-image-display-refs', {
+    shotId: preview.shotId,
+    referenceMode,
+    productReferenceImagePaths: preview.productReferenceImagePaths ?? [],
+    modelReferenceImagePaths: preview.modelReferenceImagePaths ?? [],
+    sceneReferenceImagePath: preview.sceneReferenceImagePath || '',
+    identityGridReferenceImagePath: preview.identityGridReferenceImagePath || '',
+    requestUrlPaths,
+    refs,
+  })
   return refs
 })
+const safeShotImageDisplayRefs = computed(() => Array.isArray(shotImageDisplayRefs.value) ? shotImageDisplayRefs.value : [])
 const shotImageRequestParamRows = computed(() => promptParamRowsFromJson(shotImagePromptPreview.value?.requestJsonStart))
 const shotVideoRequestParamRows = computed(() =>
   promptParamRowsFromJson(shotVideoPromptPreview.value?.requestPayloadPreview || shotVideoPromptPreview.value?.requestJson),
@@ -2349,7 +2477,6 @@ const shotVideoReferencePaths = computed(() => resolveShotVideoReferencePaths(sh
 const promptDiagnosticSummary = computed(() => {
   const startPrompt = safeText(shotImagePromptPreview.value?.startPrompt, '')
   const preview = shotImagePromptPreview.value
-  const detectBlock = (promptText: string, marker: string) => promptText.includes(marker)
   const startStats = {
     length: startPrompt.length,
     hasCompiledLock: Boolean(preview?.hasCompiledProductLock) || detectBlock(startPrompt, 'STRICT PRODUCT IDENTITY LOCK FOR THIS FRAME'),
@@ -2756,10 +2883,29 @@ function localizePurpose(value?: string) {
   return map[normalized] || text
 }
 
+function localizeReferenceMode(value?: string) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'product_closeup') return '产品特写'
+  if (normalized === 'model_presentation') return '模特场景'
+  return ''
+}
+
+function shotReferenceLabel(input?: { storyboardReferenceMode?: string; shotType?: string; productRole?: string }) {
+  return localizeReferenceMode(input?.storyboardReferenceMode) || localizeShotField(input?.shotType || input?.productRole)
+}
+
 function shotScriptSummary(shotId?: string) {
   const beat = storyBeats.value.find((item) => item.id === shotId)
   if (!beat) return '当前镜头还没有可用的分镜脚本摘要。'
-  const parts = [beat.purpose, localizeShotField(beat.shotType), localizeShotField(beat.productRole)].map((item) => String(item || '').trim()).filter(Boolean)
+  const parts = [
+    beat.purpose,
+    shotReferenceLabel({
+      storyboardReferenceMode: beat.storyboardReferenceMode,
+      shotType: beat.shotType,
+      productRole: beat.productRole,
+    }),
+    localizeShotField(beat.productRole),
+  ].map((item) => String(item || '').trim()).filter(Boolean)
   return parts.join(' · ') || '当前镜头还没有可用的分镜脚本摘要。'
 }
 
@@ -3825,7 +3971,7 @@ onUnmounted(() => {
                         <span class="analyze-structure-node__index">{{ storyBeatDisplayIndex(item, index) }}</span>
                         <strong>{{ storyBeatRangeText(item, index) }}</strong>
                         <span>{{ localizePurpose(item.purpose) }}</span>
-                        <small>{{ localizeShotField(item.shotType || item.productRole) }}</small>
+                        <small>{{ shotReferenceLabel(item) }}</small>
                       </div>
                     </div>
                     <CloneStateCard
@@ -4522,7 +4668,7 @@ onUnmounted(() => {
                             <strong>{{ formatDuration(item.durationSec) }}</strong>
                           </span>
                           <span class="shot-reference-cell shot-reference-cell--metric">
-                            <strong>{{ localizeShotField(storyBeats.find((beat) => beat.id === item.shotId)?.shotType) }}</strong>
+                            <strong>{{ shotReferenceLabel(storyBeats.find((beat) => beat.id === item.shotId)) }}</strong>
                           </span>
                           <span class="shot-reference-cell shot-reference-cell--status">
                             <span
@@ -4618,7 +4764,7 @@ onUnmounted(() => {
                       <CloneDataCard class="meta-card sidebar-script-card">
                         <span>{{ tr('cloneView.videoStage.scriptTitle') }}</span>
                         <strong>{{ safeText(selectedStoryBeat?.purpose, tr('cloneView.videoStage.noScript')) }}</strong>
-                        <em>{{ tr('cloneView.videoStage.motionLabel') }}：{{ localizeShotField(selectedStoryBeat?.shotType) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</em>
+                        <em>{{ tr('cloneView.videoStage.motionLabel') }}：{{ shotReferenceLabel(selectedStoryBeat) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</em>
                       </CloneDataCard>
                       <CloneDataCard class="meta-card sidebar-frame-card">
                         <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
@@ -4846,6 +4992,15 @@ onUnmounted(() => {
                 <span>本地合成提示</span>
                 <strong>{{ localComposeErrorText }}</strong>
               </CloneDataCard>
+              <CloneDataCard v-if="composeSummaryStats || composeHealthFlags.length || composeHealthRecommendations.length || composeHealthVerdictText" class="meta-card">
+                <span>节奏体检</span>
+                <strong v-if="composeHealthVerdictText">{{ composeHealthVerdictText }}</strong>
+                <strong>{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.join(' / ') : '当前未发现明显节奏风险' }}</strong>
+                <small v-if="composeSummaryStats?.totalShots">镜头总数：{{ composeSummaryStats.totalShots }}，节奏分布：{{ composeStageCountText }}</small>
+                <small v-if="composeAverageClipDurationText">平均镜头时长：{{ composeAverageClipDurationText }}</small>
+                <small v-if="composeSummaryStats">高强度镜头：{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}，文案保护：{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}，产品重点：{{ Number(composeSummaryStats.productPriorityCount || 0) }}，强开头：{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
+                <small v-for="item in composeHealthRecommendations" :key="item">{{ item }}</small>
+              </CloneDataCard>
               <CloneDataCard v-if="previewPipelineReportPath" class="meta-card">
                 <span>预览报告</span>
                 <strong>{{ shortPath(previewPipelineReportPath) }}</strong>
@@ -4975,13 +5130,13 @@ onUnmounted(() => {
                   <pre class="prompt-preview-code prompt-preview-code--identity-grid">{{ identityGridPromptSource.prompt || '' }}</pre>
                 </div>
               </div>
-              <div v-if="(identityGridPromptSource.gridUsagePlan || []).length" class="prompt-preview-section identity-grid-preview-usage">
+              <div v-if="safeArray(identityGridPromptSource?.gridUsagePlan).length" class="prompt-preview-section identity-grid-preview-usage">
                 <div class="prompt-preview-section__header">
                   <strong>用途覆盖</strong>
-                  <span>{{ `${(identityGridPromptSource.gridUsagePlan || []).length} 个固定用途槽位，不是评分` }}</span>
+                  <span>{{ `${safeArray(identityGridPromptSource?.gridUsagePlan).length} 个固定用途槽位，不是评分` }}</span>
                 </div>
                 <div class="prompt-preview-paths prompt-preview-paths--chips">
-                  <span v-for="item in identityGridPromptSource.gridUsagePlan || []" :key="item">{{ item }}</span>
+                  <span v-for="item in safeArray(identityGridPromptSource?.gridUsagePlan)" :key="item">{{ item }}</span>
                 </div>
               </div>
               <div class="prompt-preview-section identity-grid-preview-section">
@@ -5073,6 +5228,9 @@ onUnmounted(() => {
             <span>模式：{{ safeText(shotImagePromptPreview.consistencyMode, '--') }}</span>
             <span>商品类型：{{ safeText(shotImagePromptPreview.productType, '--') }}</span>
             <span>参考图：{{ Number(shotImagePromptPreview.referenceImageCount || 0) }}</span>
+            <span>参考模式：{{ shotImageReferenceMode === 'product_closeup' ? '产品特写模式' : '模特场景模式' }}</span>
+            <span v-if="shotImageReferenceReasonSummary">{{ shotImageReferenceReasonSummary }}</span>
+            <span v-if="shotImageReferenceLockSummary">{{ shotImageReferenceLockSummary }}</span>
             <span v-if="shotPromptCopyMessage">{{ shotPromptCopyMessage }}</span>
           </div>
           <div class="prompt-preview-block">
@@ -5099,8 +5257,8 @@ onUnmounted(() => {
               <strong>参考图</strong>
               <span>当前这次分镜图请求实际使用的两张参考图</span>
             </div>
-            <div v-if="shotImageDisplayRefs.length" class="prompt-reference-grid">
-              <div v-for="item in shotImageDisplayRefs" :key="`image-ref-${item.path}`" class="prompt-reference-card">
+            <div v-if="safeShotImageDisplayRefs.length" class="prompt-reference-grid">
+              <div v-for="item in safeShotImageDisplayRefs" :key="`image-ref-${item.path}`" class="prompt-reference-card">
                 <a :href="mediaUrl(item.path)" target="_blank" rel="noreferrer">
                   <img :src="previewImage(item.path)" alt="image-product-reference" />
                 </a>

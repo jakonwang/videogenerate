@@ -105,7 +105,10 @@
     "overlayGroupTitlePh": "Nhap noi dung tieu de"
   },
   "titleBar": {
-    "ready": "San sang"
+    "ready": "San sang",
+    "minimize": "Thu nho",
+    "maximize": "Phong to",
+    "close": "Dong"
   },
   "settings": {
     "hero": {

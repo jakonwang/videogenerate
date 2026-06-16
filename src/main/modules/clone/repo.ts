@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, rm } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import {
   decryptRuntimeString,
@@ -50,6 +50,7 @@ import type {
   ApifoxHubCredentials,
 } from './types'
 import { buildReferenceLock } from './prompt'
+import { inferStoryboardReferenceDecision } from './storyboardReference'
 
 type CloneDbShape = {
   projects: CloneProject[]
@@ -77,6 +78,10 @@ const cloneDbPath = () => join(getAppPaths().dbDir, 'clone-projects.json')
 const cloneSettingsPath = () => join(getAppPaths().dbDir, 'clone-settings.json')
 const legacyUserDataCloneDbPath = () => join(getAppPaths().userData, 'videogenerate', 'db', 'clone-projects.json')
 let cloneDbMutationQueue: Promise<unknown> = Promise.resolve()
+const removedProjectTombstones = new Map<string, number>()
+const removedModelIdentityTombstones = new Map<string, number>()
+const REMOVED_PROJECT_TOMBSTONE_TTL_MS = 30 * 60 * 1000
+const REMOVED_MODEL_IDENTITY_TOMBSTONE_TTL_MS = 30 * 60 * 1000
 
 export type CloneSqliteReadyState = {
   migrated: boolean
@@ -85,6 +90,48 @@ export type CloneSqliteReadyState = {
 
 function now() {
   return Date.now()
+}
+
+function pruneRemovedProjectTombstones(currentTime = now()) {
+  for (const [projectId, expiresAt] of removedProjectTombstones.entries()) {
+    if (expiresAt <= currentTime) removedProjectTombstones.delete(projectId)
+  }
+}
+
+function markRemovedProject(projectId: string, currentTime = now()) {
+  const safeProjectId = String(projectId || '').trim()
+  if (!safeProjectId) return
+  pruneRemovedProjectTombstones(currentTime)
+  removedProjectTombstones.set(safeProjectId, currentTime + REMOVED_PROJECT_TOMBSTONE_TTL_MS)
+}
+
+function isRemovedProjectMarked(projectId: string, currentTime = now()) {
+  const safeProjectId = String(projectId || '').trim()
+  if (!safeProjectId) return false
+  pruneRemovedProjectTombstones(currentTime)
+  const expiresAt = removedProjectTombstones.get(safeProjectId)
+  return typeof expiresAt === 'number' && expiresAt > currentTime
+}
+
+function pruneRemovedModelIdentityTombstones(currentTime = now()) {
+  for (const [identityId, expiresAt] of removedModelIdentityTombstones.entries()) {
+    if (expiresAt <= currentTime) removedModelIdentityTombstones.delete(identityId)
+  }
+}
+
+function markRemovedModelIdentity(identityId: string, currentTime = now()) {
+  const safeIdentityId = String(identityId || '').trim()
+  if (!safeIdentityId) return
+  pruneRemovedModelIdentityTombstones(currentTime)
+  removedModelIdentityTombstones.set(safeIdentityId, currentTime + REMOVED_MODEL_IDENTITY_TOMBSTONE_TTL_MS)
+}
+
+function isRemovedModelIdentityMarked(identityId: string, currentTime = now()) {
+  const safeIdentityId = String(identityId || '').trim()
+  if (!safeIdentityId) return false
+  pruneRemovedModelIdentityTombstones(currentTime)
+  const expiresAt = removedModelIdentityTombstones.get(safeIdentityId)
+  return typeof expiresAt === 'number' && expiresAt > currentTime
 }
 
 function defaultCloneProjectTitle(createdAt: number) {
@@ -752,6 +799,7 @@ function normalizeRunMode(value: unknown): CloneRunMode {
 
 function inferNormalizedRunMode(projectLike: any): CloneRunMode {
   if (projectLike?.runMode === 'auto') return 'auto'
+  if (projectLike?.autoFlowStatus?.enabled) return 'auto'
   const autoTargetStage = String(projectLike?.autoFlowStatus?.targetStage ?? '').trim()
   if (autoTargetStage === 'final_compose') return 'auto'
   const hasAutoRunSubmitAudit = Array.isArray(projectLike?.generationQueue?.submissionAuditLogs) &&
@@ -1051,6 +1099,7 @@ function mergeMissingLegacyEntries(target: CloneDbShape, legacy: CloneDbShape) {
   }
   for (const item of normalizeDbCollection(legacy.modelIdentityLibrary)) {
     const id = String((item as any)?.id || '').trim()
+    if (isRemovedModelIdentityMarked(id)) continue
     if (!id || identityIds.has(id)) continue
     nextIdentities.push(item)
     identityIds.add(id)
@@ -1136,6 +1185,60 @@ async function writeCloneDbSource(input: CloneDbShape) {
     projectGroups: normalized.projectGroups ?? [],
     modelIdentityLibrary: normalized.modelIdentityLibrary ?? [],
   })
+}
+
+async function removeProjectFromLegacyJsonSnapshots(projectId: string) {
+  const safeProjectId = String(projectId || '').trim()
+  if (!safeProjectId) return
+  const legacyCandidates = [cloneDbPath(), legacyUserDataCloneDbPath()]
+    .map((item) => String(item || '').trim())
+    .filter((item, index, list) => Boolean(item) && list.indexOf(item) === index)
+  for (const legacyPath of legacyCandidates) {
+    if (!existsSync(legacyPath)) continue
+    try {
+      const legacyDb = await readCloneDbFileAt(legacyPath)
+      const currentProjects = Array.isArray(legacyDb.projects) ? legacyDb.projects : []
+      const nextProjects = currentProjects.filter((project) => String(project?.id || '').trim() !== safeProjectId)
+      if (nextProjects.length === currentProjects.length) continue
+      await writeJsonFile(legacyPath, {
+        ...legacyDb,
+        projects: nextProjects,
+      })
+    } catch (error) {
+      console.warn('[clone-repo] remove project from legacy json skipped', {
+        projectId: safeProjectId,
+        legacyPath,
+        message: String((error as Error)?.message ?? error ?? 'unknown error'),
+      })
+    }
+  }
+}
+
+async function removeModelIdentityFromLegacyJsonSnapshots(identityId: string) {
+  const safeIdentityId = String(identityId || '').trim()
+  if (!safeIdentityId) return
+  const legacyCandidates = [cloneDbPath(), legacyUserDataCloneDbPath()]
+    .map((item) => String(item || '').trim())
+    .filter((item, index, list) => Boolean(item) && list.indexOf(item) === index)
+  for (const legacyPath of legacyCandidates) {
+    if (!existsSync(legacyPath)) continue
+    try {
+      const legacyDb = await readCloneDbFileAt(legacyPath)
+      const currentLibrary = Array.isArray(legacyDb.modelIdentityLibrary) ? legacyDb.modelIdentityLibrary : []
+      const nextLibrary = currentLibrary.filter((item) => String(item?.id || '').trim() !== safeIdentityId)
+      if (nextLibrary.length === currentLibrary.length) continue
+      await writeJsonFile(legacyPath, {
+        ...legacyDb,
+        modelIdentityLibrary: nextLibrary,
+      })
+    } catch (error) {
+      console.warn('[clone-repo] remove model identity from legacy json skipped', {
+        identityId: safeIdentityId,
+        legacyPath,
+        message: String((error as Error)?.message ?? error ?? 'unknown error'),
+      })
+    }
+  }
 }
 
 export async function exportCloneDbSnapshotToJson(targetPath = cloneDbPath()) {
@@ -1420,9 +1523,67 @@ function migrateAutoFlowStage(value: unknown) {
   return undefined
 }
 
+function inferStoryboardReferenceDecisionForStoredShot(projectLike: any, shotLike: any) {
+  return inferStoryboardReferenceDecision({
+    productType:
+      normalizeProductType(
+        shotLike?.productType ||
+          projectLike?.boundProductSnapshot?.productAnalysis?.category ||
+          projectLike?.boundProductSnapshot?.type ||
+          projectLike?.baseBlueprint?.productCategory ||
+          projectLike?.blueprint?.productCategory ||
+          'general',
+      ),
+    shot: shotLike,
+    extraTexts: [projectLike?.title],
+  })
+}
+
+function resolveStoryboardReferenceDecisionForStoredShot(projectLike: any, shotLike: any) {
+  const inferred = inferStoryboardReferenceDecisionForStoredShot(projectLike, shotLike)
+  const subjectType = String(shotLike?.storyboardSubjectType ?? shotLike?.storyboard_subject_type ?? '').trim()
+  const mode = String(shotLike?.storyboardReferenceMode ?? shotLike?.storyboard_reference_mode ?? '').trim()
+  const confidence = String(shotLike?.storyboardReferenceConfidence ?? shotLike?.storyboard_reference_confidence ?? '').trim()
+  const reasonsSource = Array.isArray(shotLike?.storyboardReferenceReason)
+    ? shotLike.storyboardReferenceReason
+    : Array.isArray(shotLike?.storyboard_reference_reason)
+      ? shotLike.storyboard_reference_reason
+      : []
+  const reasons = Array.isArray(reasonsSource) ? reasonsSource.map((item: unknown) => String(item || '').trim()).filter(Boolean) : []
+  const validSubjectType =
+    subjectType === 'product_only' ||
+    subjectType === 'hand_only_product' ||
+    subjectType === 'local_wearable_closeup' ||
+    subjectType === 'model_visible' ||
+    subjectType === 'unknown'
+  const validMode = mode === 'product_closeup' || mode === 'model_presentation'
+  const validConfidence = confidence === 'high' || confidence === 'medium' || confidence === 'low'
+  if (validSubjectType && validMode && validConfidence) {
+    return {
+      ...inferred,
+      subjectType,
+      mode,
+      confidence,
+      reasons: reasons.length ? reasons : inferred.reasons,
+    }
+  }
+  return inferred
+}
+
 
 function normalizeProject(p: CloneProject): CloneProject {
+  const persistedShotVideoOutputByShotId = new Map(
+    (Array.isArray((p as any).shotVideoOutputs) ? (p as any).shotVideoOutputs : [])
+      .map((item: any) => {
+        const shotId = String(item?.shotId ?? item?.segmentId ?? '').trim()
+        if (!shotId) return null
+        return [shotId, item] as const
+      })
+      .filter(Boolean) as Array<readonly [string, any]>,
+  )
   const normalizeShot = (s: any, index: number) => {
+    const persistedStoryboardDecision = resolveStoryboardReferenceDecisionForStoredShot(p, s)
+    const persistedShotVideoOutput = persistedShotVideoOutputByShotId.get(String(s?.id ?? '').trim())
     const durationSec = Number(s?.durationSec ?? 1.5)
     const startSec = Number(s?.startSec ?? 0)
     const endSec = Number(s?.endSec ?? startSec + durationSec)
@@ -1443,6 +1604,12 @@ function normalizeProject(p: CloneProject): CloneProject {
         generatedModel.startsWith('mock-') ||
         generatedModel === 'mock-i2v' ||
         generatedModel === 'mock-image2video')
+    const persistedOutputStatus = String(persistedShotVideoOutput?.status ?? '').trim().toLowerCase()
+    const persistedOutputVideoPath =
+      String(persistedShotVideoOutput?.videoPath ?? persistedShotVideoOutput?.localPath ?? '').trim()
+    const shouldPreservePersistedDoneOutput =
+      Boolean(persistedOutputVideoPath) &&
+      (persistedOutputStatus === 'done' || persistedOutputStatus === 'success' || persistedOutputStatus === 'completed')
     return {
       ...s,
       id: String(s?.id ?? `shot_${index + 1}`),
@@ -1464,7 +1631,7 @@ function normalizeProject(p: CloneProject): CloneProject {
       isMock: Boolean(s?.isMock ?? hasLocalMockClip),
       qualityMode: s?.qualityMode === 'fast' || s?.qualityMode === 'standard' ? s.qualityMode : 'high',
       qualityStatus:
-        hasLocalMockClip
+        hasLocalMockClip && !shouldPreservePersistedDoneOutput
           ? 'failed'
           : s?.qualityStatus === 'pending' || s?.qualityStatus === 'passed' || s?.qualityStatus === 'warning' || s?.qualityStatus === 'failed'
             ? s.qualityStatus
@@ -1475,7 +1642,7 @@ function normalizeProject(p: CloneProject): CloneProject {
       freezeRatio: typeof s?.freezeRatio === 'number' ? s.freezeRatio : undefined,
       blackFrameRatio: typeof s?.blackFrameRatio === 'number' ? s.blackFrameRatio : undefined,
       productVisibilityScore: typeof s?.productVisibilityScore === 'number' ? s.productVisibilityScore : undefined,
-      canEnterRender: typeof s?.canEnterRender === 'boolean' ? s.canEnterRender : !hasLocalMockClip,
+      canEnterRender: typeof s?.canEnterRender === 'boolean' ? s.canEnterRender : (!hasLocalMockClip || shouldPreservePersistedDoneOutput),
       retryCount: Number(s?.retryCount ?? 0) || 0,
       productType:
         s?.productType === 'earrings' || s?.productType === 'phone_case' || s?.productType === 'clothes' || s?.productType === 'toy'
@@ -1500,6 +1667,16 @@ function normalizeProject(p: CloneProject): CloneProject {
       generatedClipDurationSec: typeof s?.generatedClipDurationSec === 'number' ? s.generatedClipDurationSec : undefined,
       generatedClipWidth: typeof s?.generatedClipWidth === 'number' ? s.generatedClipWidth : undefined,
       generatedClipHeight: typeof s?.generatedClipHeight === 'number' ? s.generatedClipHeight : undefined,
+      compiledPrompt: String(s?.compiledPrompt ?? '').trim() || undefined,
+      compiledNegativePrompt: String(s?.compiledNegativePrompt ?? '').trim() || undefined,
+      promptCompilerVersion: String(s?.promptCompilerVersion ?? '').trim() || undefined,
+      nextRoundPromptDirectives: Array.isArray(s?.nextRoundPromptDirectives)
+        ? s.nextRoundPromptDirectives.map(String).filter(Boolean)
+        : undefined,
+      consistencyMode:
+        s?.consistencyMode === 'strict' || s?.consistencyMode === 'standard'
+          ? s.consistencyMode
+          : undefined,
       promptHash: String(s?.promptHash ?? '').trim() || undefined,
       imagePromptHash: String(s?.imagePromptHash ?? '').trim() || undefined,
       normalizedCacheKey: String(s?.normalizedCacheKey ?? '').trim() || undefined,
@@ -1555,6 +1732,27 @@ function normalizeProject(p: CloneProject): CloneProject {
                 : s?.cloneClass === 'model_demo'
                   ? 'model_demo'
                   : 'other',
+      storyboardSubjectType: persistedStoryboardDecision.subjectType,
+      storyboardReferenceMode:
+        Boolean(s?.referenceModeLocked ?? s?.reference_mode_locked) &&
+        (s?.referenceModeLockReason === 'manual' || s?.reference_mode_lock_reason === 'manual')
+          ? (s?.storyboardReferenceMode === 'product_closeup' || s?.storyboardReferenceMode === 'model_presentation'
+              ? s.storyboardReferenceMode
+              : s?.storyboard_reference_mode === 'product_closeup' || s?.storyboard_reference_mode === 'model_presentation'
+                ? s.storyboard_reference_mode
+                : persistedStoryboardDecision.mode)
+          : persistedStoryboardDecision.mode,
+      storyboardReferenceConfidence: persistedStoryboardDecision.confidence,
+      storyboardReferenceReason: persistedStoryboardDecision.reasons,
+      referenceModeLocked:
+        Boolean(s?.referenceModeLocked ?? s?.reference_mode_locked) &&
+        (s?.referenceModeLockReason === 'manual' || s?.reference_mode_lock_reason === 'manual'),
+      referenceModeLockReason:
+        s?.referenceModeLockReason === 'manual'
+          ? s.referenceModeLockReason
+          : s?.reference_mode_lock_reason === 'manual'
+            ? s.reference_mode_lock_reason
+            : undefined,
       framing:
         s?.framing === 'extreme_closeup' || s?.framing === 'closeup' || s?.framing === 'medium' || s?.framing === 'wide'
           ? s.framing
@@ -1598,13 +1796,17 @@ function normalizeProject(p: CloneProject): CloneProject {
       ...fallbackShotScript(s, index),
       referenceLock: buildReferenceLock(s as any, String(s?.referenceLock?.sceneEnvironment ?? 'reference video scene atmosphere')),
       locked: Boolean(s?.locked ?? false),
-      generatedClipPath: hasLocalMockClip ? undefined : shouldKeepGeneratedClipPath ? s?.generatedClipPath : undefined,
-      generatedSource: hasLocalMockClip ? undefined : s?.generatedSource,
-      generatedProvider: hasLocalMockClip ? undefined : s?.generatedProvider,
-      generatedModel: hasLocalMockClip ? undefined : s?.generatedModel,
-      generatedTaskId: hasLocalMockClip ? undefined : s?.generatedTaskId,
-      status: hasLocalMockClip ? 'failed' : (s?.status ?? 'empty'),
-      error: hasLocalMockClip ? '历史本地 mock/图片拼接片段已判定无效，请重新调用 Seedance/Kling 云端生成。' : s?.error,
+      generatedClipPath:
+        hasLocalMockClip && !shouldPreservePersistedDoneOutput ? undefined : shouldKeepGeneratedClipPath ? s?.generatedClipPath : undefined,
+      generatedSource: hasLocalMockClip && !shouldPreservePersistedDoneOutput ? undefined : s?.generatedSource,
+      generatedProvider: hasLocalMockClip && !shouldPreservePersistedDoneOutput ? undefined : s?.generatedProvider,
+      generatedModel: hasLocalMockClip && !shouldPreservePersistedDoneOutput ? undefined : s?.generatedModel,
+      generatedTaskId: hasLocalMockClip && !shouldPreservePersistedDoneOutput ? undefined : s?.generatedTaskId,
+      status: hasLocalMockClip && !shouldPreservePersistedDoneOutput ? 'failed' : (s?.status ?? 'empty'),
+      error:
+        hasLocalMockClip && !shouldPreservePersistedDoneOutput
+          ? '历史本地 mock/图片拼接片段已判定无效，请重新调用 Seedance/Kling 云端生成。'
+          : s?.error,
       uploadedAssetIds: Array.isArray(s?.uploadedAssetIds) ? s.uploadedAssetIds : [],
       aiEnabled: Boolean(s?.aiEnabled ?? false),
       reviewStatus: s?.reviewStatus ?? 'pending',
@@ -1932,6 +2134,111 @@ function normalizeProject(p: CloneProject): CloneProject {
             : 'idle',
         outputPath: String((p as any).finalCompose.outputPath ?? '').trim() || undefined,
         coverImagePath: String((p as any).finalCompose.coverImagePath ?? '').trim() || undefined,
+        composeHealth:
+          (p as any).finalCompose.composeHealth && typeof (p as any).finalCompose.composeHealth === 'object'
+            ? {
+                verdict:
+                  (p as any).finalCompose.composeHealth.verdict === 'balanced' ||
+                  (p as any).finalCompose.composeHealth.verdict === 'needs_tuning'
+                    ? (p as any).finalCompose.composeHealth.verdict
+                    : undefined,
+                flags: Array.isArray((p as any).finalCompose.composeHealth.flags)
+                  ? (p as any).finalCompose.composeHealth.flags.map(String).filter(Boolean)
+                  : undefined,
+                recommendations: Array.isArray((p as any).finalCompose.composeHealth.recommendations)
+                  ? (p as any).finalCompose.composeHealth.recommendations.map(String).filter(Boolean)
+                  : undefined,
+              }
+            : undefined,
+        nextRoundPlanPath: String((p as any).finalCompose.nextRoundPlanPath ?? '').trim() || undefined,
+        composeSummary:
+          (p as any).finalCompose.composeSummary && typeof (p as any).finalCompose.composeSummary === 'object'
+            ? {
+                totalShots: Number((p as any).finalCompose.composeSummary.totalShots ?? 0) || 0,
+                stageCounts:
+                  (p as any).finalCompose.composeSummary.stageCounts &&
+                  typeof (p as any).finalCompose.composeSummary.stageCounts === 'object'
+                    ? {
+                        hook: Number((p as any).finalCompose.composeSummary.stageCounts.hook ?? 0) || 0,
+                        body: Number((p as any).finalCompose.composeSummary.stageCounts.body ?? 0) || 0,
+                        close: Number((p as any).finalCompose.composeSummary.stageCounts.close ?? 0) || 0,
+                      }
+                    : undefined,
+                aggressiveShotCount: Number((p as any).finalCompose.composeSummary.aggressiveShotCount ?? 0) || 0,
+                readabilityProtectedCount: Number((p as any).finalCompose.composeSummary.readabilityProtectedCount ?? 0) || 0,
+                productPriorityCount: Number((p as any).finalCompose.composeSummary.productPriorityCount ?? 0) || 0,
+                averageClipDurationSec: Number((p as any).finalCompose.composeSummary.averageClipDurationSec ?? 0) || 0,
+                strongHookCount: Number((p as any).finalCompose.composeSummary.strongHookCount ?? 0) || 0,
+                payoffHandoffCount: Number((p as any).finalCompose.composeSummary.payoffHandoffCount ?? 0) || 0,
+                closeConfirmationCount: Number((p as any).finalCompose.composeSummary.closeConfirmationCount ?? 0) || 0,
+                strongCtaCount: Number((p as any).finalCompose.composeSummary.strongCtaCount ?? 0) || 0,
+                snapCloseCount: Number((p as any).finalCompose.composeSummary.snapCloseCount ?? 0) || 0,
+                rhythmScore: Number((p as any).finalCompose.composeSummary.rhythmScore ?? 0) || 0,
+                optimizationLanes: Array.isArray((p as any).finalCompose.composeSummary.optimizationLanes)
+                  ? (p as any).finalCompose.composeSummary.optimizationLanes
+                      .map(String)
+                      .filter((item: string) => item === 'hook' || item === 'payoff' || item === 'body' || item === 'close')
+                  : undefined,
+                nextActions: Array.isArray((p as any).finalCompose.composeSummary.nextActions)
+                  ? (p as any).finalCompose.composeSummary.nextActions.map(String).filter(Boolean)
+                  : undefined,
+                optimizationBrief:
+                  (p as any).finalCompose.composeSummary.optimizationBrief &&
+                  typeof (p as any).finalCompose.composeSummary.optimizationBrief === 'object'
+                    ? {
+                        focusArea: ['hook', 'payoff', 'body', 'close', 'maintain'].includes(
+                          String((p as any).finalCompose.composeSummary.optimizationBrief.focusArea ?? ''),
+                        )
+                          ? (String((p as any).finalCompose.composeSummary.optimizationBrief.focusArea) as
+                              | 'hook'
+                              | 'payoff'
+                              | 'body'
+                              | 'close'
+                              | 'maintain')
+                          : undefined,
+                        urgency: ['low', 'medium', 'high'].includes(
+                          String((p as any).finalCompose.composeSummary.optimizationBrief.urgency ?? ''),
+                        )
+                          ? (String((p as any).finalCompose.composeSummary.optimizationBrief.urgency) as 'low' | 'medium' | 'high')
+                          : undefined,
+                        primaryGoal:
+                          String((p as any).finalCompose.composeSummary.optimizationBrief.primaryGoal ?? '').trim() || undefined,
+                        actionItems: Array.isArray((p as any).finalCompose.composeSummary.optimizationBrief.actionItems)
+                          ? (p as any).finalCompose.composeSummary.optimizationBrief.actionItems.map(String).filter(Boolean)
+                          : undefined,
+                        upstreamPromptHints: Array.isArray(
+                          (p as any).finalCompose.composeSummary.optimizationBrief.upstreamPromptHints,
+                        )
+                          ? (p as any).finalCompose.composeSummary.optimizationBrief.upstreamPromptHints
+                              .map(String)
+                              .filter(Boolean)
+                          : undefined,
+                      }
+                    : undefined,
+                bodyUpgradePlan:
+                  (p as any).finalCompose.composeSummary.bodyUpgradePlan &&
+                  typeof (p as any).finalCompose.composeSummary.bodyUpgradePlan === 'object'
+                    ? {
+                        proofUpgrade: Boolean((p as any).finalCompose.composeSummary.bodyUpgradePlan.proofUpgrade),
+                        showUpgrade: Boolean((p as any).finalCompose.composeSummary.bodyUpgradePlan.showUpgrade),
+                        preferredMoves: Array.isArray((p as any).finalCompose.composeSummary.bodyUpgradePlan.preferredMoves)
+                          ? (p as any).finalCompose.composeSummary.bodyUpgradePlan.preferredMoves.map(String).filter(Boolean)
+                          : undefined,
+                      }
+                    : undefined,
+                upstreamOptimizationPatch:
+                  (p as any).finalCompose.composeSummary.upstreamOptimizationPatch &&
+                  typeof (p as any).finalCompose.composeSummary.upstreamOptimizationPatch === 'object'
+                    ? {
+                        tightenOpening: Boolean((p as any).finalCompose.composeSummary.upstreamOptimizationPatch.tightenOpening),
+                        addImmediatePayoff: Boolean((p as any).finalCompose.composeSummary.upstreamOptimizationPatch.addImmediatePayoff),
+                        increaseMidVariation: Boolean((p as any).finalCompose.composeSummary.upstreamOptimizationPatch.increaseMidVariation),
+                        strengthenCtaUrgency: Boolean((p as any).finalCompose.composeSummary.upstreamOptimizationPatch.strengthenCtaUrgency),
+                        preferSnapClose: Boolean((p as any).finalCompose.composeSummary.upstreamOptimizationPatch.preferSnapClose),
+                      }
+                    : undefined,
+              }
+            : undefined,
         subtitleOverlay:
           (p as any).finalCompose.subtitleOverlay && typeof (p as any).finalCompose.subtitleOverlay === 'object'
             ? {
@@ -2286,6 +2593,7 @@ export const cloneRepo = {
             const uniqueNew = images.filter((p) => !existingImagePathSet.has(p))
             if (!uniqueNew.length) continue
             const recoveredId = `recovered-${projectId}`
+            if (isRemovedModelIdentityMarked(recoveredId)) continue
             if (libraryById.has(recoveredId)) continue
             const recovered = normalizeIdentityLibraryItem({
               id: recoveredId,
@@ -2478,7 +2786,16 @@ export const cloneRepo = {
 
   async upsertProject(input: CloneProject): Promise<CloneProject> {
     return await queueCloneDbMutation(async () => {
+      const safeProjectId = String(input?.id || '').trim()
+      if (!safeProjectId) throw new Error('clone project id is required')
       const current = readCloneProjectByIdFromSqlite(input.id)
+      if (!current && isRemovedProjectMarked(safeProjectId)) {
+        console.log('[clone-debug] repo-upsert-project:skip-removed-project', {
+          dbDir: getAppPaths().dbDir,
+          projectId: safeProjectId,
+        })
+        throw new Error(`clone project removed: ${safeProjectId}`)
+      }
       const normalizedCurrent = current ? normalizeProject(current) : null
       const mergedInput =
         normalizedCurrent
@@ -2513,7 +2830,10 @@ export const cloneRepo = {
 
   async removeProject(id: string): Promise<{ ok: true }> {
     return await queueCloneDbMutation(async () => {
-      removeCloneProjectFromSqlite(id)
+      const safeProjectId = String(id || '').trim()
+      removeCloneProjectFromSqlite(safeProjectId)
+      markRemovedProject(safeProjectId)
+      await removeProjectFromLegacyJsonSnapshots(safeProjectId)
       return { ok: true }
     })
   },
@@ -2614,6 +2934,7 @@ export const cloneRepo = {
 
   async deleteModelIdentity(id: string): Promise<{ ok: true }> {
     return await queueCloneDbMutation(async () => {
+      markRemovedModelIdentity(id)
       const db = await readCloneDbSource()
       db.modelIdentityLibrary = (db.modelIdentityLibrary ?? []).filter((x) => x.id !== id)
       db.projects = (Array.isArray(db.projects) ? db.projects : []).map((project) => {
@@ -2628,6 +2949,7 @@ export const cloneRepo = {
         })
       })
       await writeCloneDbSource(db)
+      await removeModelIdentityFromLegacyJsonSnapshots(id)
       return { ok: true }
     })
   },

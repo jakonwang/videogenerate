@@ -82,6 +82,7 @@ const projects = ref<CloneProject[]>([])
 const search = ref('')
 const statusFilter = ref<LibraryStatusFilter>('all')
 const selectedId = ref('')
+const selectedIds = ref<string[]>([])
 const sourceProjectId = ref('')
 const productType = ref<'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'>('general')
 const modelProfileOptions = ref<ModelProfileOptions>(getRecommendedModelProfileOptions('general'))
@@ -453,11 +454,15 @@ const sortedLibrary = computed(() => {
   return rows
 })
 
+const selectedSet = computed(() => new Set(selectedIds.value))
+const selectedModels = computed(() => sortedLibrary.value.filter((item) => selectedSet.value.has(item.id)))
+
 const totalPages = computed(() => Math.max(1, Math.ceil(sortedLibrary.value.length / pageSize.value)))
 const pagedLibrary = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return sortedLibrary.value.slice(start, start + pageSize.value)
 })
+const allCurrentPageSelected = computed(() => pagedLibrary.value.length > 0 && pagedLibrary.value.every((item) => selectedSet.value.has(item.id)))
 
 const selectedModel = computed(() => {
   return library.value.find((item) => item.id === selectedId.value) ?? pagedLibrary.value[0] ?? sortedLibrary.value[0] ?? null
@@ -467,6 +472,8 @@ const pages = computed(() => Array.from({ length: Math.min(totalPages.value, 4) 
 
 watch([sortedLibrary, pageSize], () => {
   page.value = Math.min(page.value, totalPages.value)
+  const available = new Set(sortedLibrary.value.map((item) => item.id))
+  selectedIds.value = selectedIds.value.filter((id) => available.has(id))
 })
 
 function normalizeAtlasCloudHost(v: unknown) {
@@ -555,6 +562,27 @@ function toggleActionMenu(key: string) {
 
 function closeActionMenu() {
   openActionMenu.value = null
+}
+
+function toggleSelected(id: string) {
+  if (!id) return
+  if (selectedSet.value.has(id)) {
+    selectedIds.value = selectedIds.value.filter((item) => item !== id)
+    return
+  }
+  selectedIds.value = [...selectedIds.value, id]
+}
+
+function toggleSelectCurrentPage() {
+  if (!pagedLibrary.value.length) return
+  if (allCurrentPageSelected.value) {
+    const currentPageIds = new Set(pagedLibrary.value.map((item) => item.id))
+    selectedIds.value = selectedIds.value.filter((id) => !currentPageIds.has(id))
+    return
+  }
+  const merged = new Set(selectedIds.value)
+  for (const item of pagedLibrary.value) merged.add(item.id)
+  selectedIds.value = Array.from(merged)
 }
 
 function openRenameDialog(item: ModelIdentityLibraryItem) {
@@ -653,11 +681,38 @@ async function deleteModel(item: ModelIdentityLibraryItem) {
     dialogBusy.value = true
     await window.api.clone.deleteModelIdentity({ id: item.id })
     if (selectedId.value === item.id) selectedId.value = ''
+    selectedIds.value = selectedIds.value.filter((id) => id !== item.id)
     await refreshLibrary()
     message.value = '模特已删除'
     closeDialog()
   } catch (e: any) {
     message.value = `删除失败：${String(e?.message ?? e)}`
+  } finally {
+    dialogBusy.value = false
+  }
+}
+
+async function deleteModelsBatch() {
+  if (dialogBusy.value) return
+  if (!selectedModels.value.length) {
+    message.value = '请先选择要删除的模特'
+    return
+  }
+  const total = selectedModels.value.length
+  const ok = window.confirm(`确认批量删除已选的 ${total} 个模特吗？这会删除角色库记录和素材目录，但不会删除历史项目产物。`)
+  if (!ok) return
+  dialogBusy.value = true
+  try {
+    const targets = [...selectedModels.value]
+    for (const item of targets) {
+      await window.api.clone.deleteModelIdentity({ id: item.id })
+      if (selectedId.value === item.id) selectedId.value = ''
+    }
+    selectedIds.value = []
+    await refreshLibrary()
+    message.value = `已批量删除 ${total} 个模特`
+  } catch (e: any) {
+    message.value = `批量删除失败：${String(e?.message ?? e)}`
   } finally {
     dialogBusy.value = false
   }
@@ -1165,7 +1220,31 @@ watch([activeTab, statusFilter, search], () => {
             </div>
 
             <div class="models-catalog-head">
-              <div class="models-catalog-head__summary">共 {{ sortedLibrary.length }} 个模特<span>|</span> 当前显示全部可用模特</div>
+              <div class="models-catalog-head__summary">
+                <strong>{{ sortedLibrary.length }}</strong>
+                <div class="models-catalog-head__summary-copy">
+                  <b>个模特</b>
+                  <small>当前显示全部可用模特</small>
+                </div>
+              </div>
+              <div class="models-catalog-head__actions" :class="{ 'is-selection-active': selectedIds.length > 0 }">
+                <div v-if="selectedIds.length" class="models-selection-pill">
+                  <strong>已选 {{ selectedIds.length }}</strong>
+                  <small>{{ allCurrentPageSelected ? '本页已全选' : '继续多选中' }}</small>
+                </div>
+                <button type="button" class="models-secondary-button models-secondary-button--compact" @click="toggleSelectCurrentPage">
+                  {{ allCurrentPageSelected ? '取消全选本页' : '全选本页' }}
+                </button>
+                <button
+                  v-if="selectedIds.length"
+                  type="button"
+                  class="models-danger-button models-danger-button--compact"
+                  :disabled="dialogBusy"
+                  @click="deleteModelsBatch"
+                >
+                  {{ dialogBusy ? '删除中' : `批量删除 ${selectedIds.length}` }}
+                </button>
+              </div>
             </div>
 
             <div v-if="pagedLibrary.length" class="models-card-grid" :class="{ 'is-list': viewMode === 'list' }">
@@ -1173,13 +1252,18 @@ watch([activeTab, statusFilter, search], () => {
                 v-for="(item, index) in pagedLibrary"
                 :key="item.id"
                 class="models-library-card"
-                :class="{ active: selectedId === item.id }"
+                :class="{ active: selectedId === item.id, 'is-checked': selectedSet.has(item.id) }"
                 @click="selectedId = item.id"
               >
                 <div class="models-library-card__media">
-                  <div class="models-library-card__badge" :class="modelStatusTone(item.status)">
-                    {{ modelStatusText(item.status) }}
-                  </div>
+                  <label class="models-library-card__check" @click.stop>
+                    <input
+                      type="checkbox"
+                      :checked="selectedSet.has(item.id)"
+                      @change="toggleSelected(item.id)"
+                    />
+                    <span></span>
+                  </label>
                   <button type="button" class="models-library-card__favorite" @click.stop="copyText(item.id, '模特 ID 已复制')">
                     <Star class="h-4 w-4" />
                   </button>
@@ -1192,9 +1276,15 @@ watch([activeTab, statusFilter, search], () => {
 
                 <div class="models-library-card__body">
                   <div class="models-library-card__head">
-                    <div class="models-library-card__title-row">
+                    <div class="models-library-card__identity">
+                      <div class="models-library-card__meta-row">
+                        <div class="models-library-card__badge" :class="modelStatusTone(item.status)">
+                          {{ modelStatusText(item.status) }}
+                        </div>
+                        <div class="models-library-card__pro">Pro</div>
+                      </div>
                       <h3>{{ modelTitle(item, index) }}</h3>
-                      <div class="models-library-card__pro">Pro</div>
+                      <p class="models-library-card__desc">支持语言：{{ languageText(item) }}</p>
                     </div>
                     <div class="models-action-menu">
                       <button type="button" class="models-library-card__more" @click.stop="toggleActionMenu(item.id)">
@@ -1215,8 +1305,6 @@ watch([activeTab, statusFilter, search], () => {
                     <span>{{ item.sceneStyle || '清新' }}</span>
                     <span>{{ item.skinTone || '自然' }}</span>
                   </div>
-
-                  <p class="models-library-card__desc">支持语言：{{ languageText(item) }}</p>
                 </div>
               </article>
             </div>
@@ -1916,18 +2004,108 @@ watch([activeTab, statusFilter, search], () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px 14px;
+  gap: 14px;
+  padding: 4px 18px 16px;
+  border-bottom: 1px solid rgba(71, 86, 128, 0.18);
+}
+
+.models-catalog-head__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  white-space: nowrap;
+}
+
+.models-catalog-head__actions.is-selection-active {
+  filter: saturate(1.02);
 }
 
 .models-catalog-head__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   color: #f4f8ff;
+}
+
+.models-catalog-head__summary strong {
+  font-size: 34px;
+  line-height: 0.88;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #f7fbff;
+}
+
+.models-catalog-head__summary-copy {
+  display: grid;
+  gap: 1px;
+  align-self: end;
+  padding-bottom: 3px;
+}
+
+.models-catalog-head__summary-copy b {
+  color: #eef4ff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.models-catalog-head__summary small {
+  color: #7e90b2;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.models-selection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(128, 111, 255, 0.22);
+  background: linear-gradient(180deg, rgba(56, 48, 108, 0.24), rgba(36, 32, 80, 0.16));
+  color: #eef2ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+}
+
+.models-selection-pill strong {
   font-size: 12px;
+  font-weight: 800;
+}
+
+.models-selection-pill small {
+  color: #b7c3f0;
+  font-size: 10px;
   font-weight: 700;
 }
 
-.models-catalog-head__summary span {
-  margin: 0 8px;
-  color: #6f80a0;
+@media (max-width: 1380px) {
+  .models-catalog-head {
+    gap: 12px;
+  }
+
+  .models-catalog-head__summary strong {
+    font-size: 28px;
+  }
+
+  .models-catalog-head__actions {
+    gap: 8px;
+  }
+
+  .models-selection-pill,
+  .models-secondary-button--compact,
+  .models-danger-button--compact {
+    min-height: 36px;
+    height: 36px;
+  }
 }
 
 .models-view-switch {
@@ -1976,27 +2154,64 @@ watch([activeTab, statusFilter, search], () => {
   position: relative;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
-  border: 1px solid rgba(81, 99, 146, 0.18);
-  border-radius: 14px;
-  background: rgba(12, 21, 38, 0.92);
-  padding: 6px;
+  gap: 12px;
+  border: 1px solid rgba(79, 94, 132, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(13, 21, 37, 0.94), rgba(10, 18, 31, 0.96));
+  padding: 8px;
   text-align: left;
   min-width: 0;
   cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .models-library-card.active {
-  border-color: rgba(123, 95, 255, 0.82);
-  box-shadow: inset 0 0 0 1px rgba(135, 111, 255, 0.16), 0 0 0 1px rgba(103, 77, 240, 0.16);
+  border-color: rgba(104, 121, 172, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), 0 14px 28px rgba(9, 15, 27, 0.2);
+}
+
+.models-library-card.is-checked {
+  border-color: rgba(126, 103, 255, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(136, 113, 255, 0.12), 0 18px 36px rgba(52, 43, 115, 0.18);
+  transform: translateY(-1px);
 }
 
 .models-library-card__media {
   position: relative;
   overflow: hidden;
   aspect-ratio: 0.8;
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(8, 16, 28, 0.92);
+}
+
+.models-library-card__check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.models-library-card__check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.models-library-card__check span {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  border: 1px solid rgba(206, 216, 235, 0.4);
+  background: rgba(8, 14, 24, 0.78);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.16);
+}
+
+.models-library-card__check input:checked + span {
+  border-color: rgba(145, 122, 255, 0.58);
+  background: linear-gradient(135deg, rgba(90, 67, 231, 0.92), rgba(120, 87, 246, 0.9));
 }
 
 .models-library-card__media img,
@@ -2007,21 +2222,10 @@ watch([activeTab, statusFilter, search], () => {
   object-fit: cover;
 }
 
-.models-library-card__badge,
 .models-library-card__favorite,
 .models-library-card__play {
   position: absolute;
   z-index: 2;
-}
-
-.models-library-card__badge {
-  top: 10px;
-  left: 10px;
-  padding: 4px 9px;
-  border-radius: 8px;
-  background: rgba(36, 48, 72, 0.84);
-  font-size: 11px;
-  font-weight: 800;
 }
 
 .models-library-card__favorite,
@@ -2030,16 +2234,16 @@ watch([activeTab, statusFilter, search], () => {
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: rgba(14, 22, 40, 0.74);
-  color: #fff;
+  background: rgba(13, 22, 40, 0.62);
+  color: #e8eefc;
   backdrop-filter: blur(10px);
 }
 
 .models-library-card__favorite {
   top: 10px;
-  right: 10px;
+  right: 38px;
 }
 
 .models-library-card__play {
@@ -2059,8 +2263,8 @@ watch([activeTab, statusFilter, search], () => {
 
 .models-library-card__body {
   display: grid;
-  gap: 7px;
-  padding: 2px 4px 4px;
+  gap: 8px;
+  padding: 2px 6px 6px;
 }
 
 .models-library-card__head,
@@ -2071,15 +2275,101 @@ watch([activeTab, statusFilter, search], () => {
   gap: 10px;
 }
 
+.models-library-card__identity,
 .models-library-card__title-row,
 .models-detail-card__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 6px;
   min-width: 0;
 }
 
-.models-library-card__title-row h3,
+.models-library-card__meta-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.models-library-card__badge,
+.models-library-card__pro,
+.models-library-card__more {
+  border-radius: 999px;
+  border: 1px solid rgba(86, 102, 145, 0.2);
+  background: rgba(18, 29, 49, 0.78);
+  color: #dce5f8;
+}
+
+.models-library-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.models-library-card__pro {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 9px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.models-library-card__more {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.models-library-card__badge.is-done {
+  border-color: rgba(62, 176, 129, 0.18);
+  background: rgba(23, 72, 56, 0.42);
+  color: #b9f2d8;
+}
+
+.models-library-card__badge.is-generating {
+  border-color: rgba(117, 101, 255, 0.22);
+  background: rgba(52, 43, 115, 0.34);
+  color: #ddd5ff;
+}
+
+.models-library-card__badge.is-failed {
+  border-color: rgba(210, 92, 122, 0.18);
+  background: rgba(88, 27, 43, 0.36);
+  color: #ffc4d0;
+}
+
+.models-library-card__badge.is-idle {
+  border-color: rgba(112, 127, 168, 0.16);
+  background: rgba(28, 39, 62, 0.42);
+  color: #c6d2eb;
+}
+
+.models-library-card__head h3 {
+  margin: 0;
+  color: #f5f8ff;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.models-library-card__desc {
+  margin: 0;
+  color: #8ea1c4;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .models-detail-card__title h3 {
   margin: 0;
   color: #fff;
@@ -2088,7 +2378,6 @@ watch([activeTab, statusFilter, search], () => {
   line-height: 1.2;
 }
 
-.models-library-card__pro,
 .models-detail-card__title span {
   display: inline-flex;
   align-items: center;
@@ -3028,6 +3317,39 @@ watch([activeTab, statusFilter, search], () => {
   border: 1px solid rgba(235, 98, 128, 0.26);
   background: linear-gradient(135deg, rgba(169, 36, 67, 0.94), rgba(208, 62, 92, 0.94));
   color: #fff6f8;
+}
+
+.models-secondary-button--compact,
+.models-danger-button--compact {
+  min-width: 0;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.models-secondary-button--compact {
+  border: 1px solid rgba(96, 112, 154, 0.2);
+  background: rgba(17, 27, 46, 0.58);
+  color: #d7e1f3;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.models-secondary-button--compact:hover {
+  border-color: rgba(126, 144, 198, 0.28);
+  background: rgba(22, 33, 56, 0.76);
+}
+
+.models-danger-button--compact {
+  min-width: 122px;
+  justify-content: center;
+  border-color: rgba(210, 92, 122, 0.18);
+  background: linear-gradient(180deg, rgba(126, 35, 59, 0.72), rgba(108, 28, 50, 0.84));
+  color: #fff3f6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(95, 22, 42, 0.14);
 }
 
 .fade-enter-active,

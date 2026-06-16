@@ -106,7 +106,9 @@ const createRunMode = ref<'auto' | 'manual' | ''>('')
 const statusFilter = ref<'all' | 'draft' | 'running' | 'ready_for_review' | 'completed' | 'failed'>('all')
 const sortOrder = ref<'updated_desc' | 'updated_asc'>('updated_desc')
 const currentPage = ref(1)
-const pageSize = 10
+const pageSizeOptions = [10, 20, 50, 100] as const
+const pageSize = ref<(typeof pageSizeOptions)[number]>(10)
+const pageSizeMenuOpen = ref(false)
 const runtimeLogs = ref<RuntimeLogItem[]>([])
 const runtimeDialogOpen = ref(false)
 const videoPreviewDialogOpen = ref(false)
@@ -324,18 +326,19 @@ const selectedRows = computed(() => filteredRows.value.filter((item) => selected
 const exportableSelectedCount = computed(() => selectedRows.value.filter((item) => String(item.finalOutputPath || '').trim()).length)
 const subtitleEligibleSelectedRows = computed(() => selectedRows.value.filter((item) => String(item.finalOutputPath || '').trim()))
 const subtitleEligibleSelectedCount = computed(() => subtitleEligibleSelectedRows.value.length)
-const allFilteredSelected = computed(() => filteredRows.value.length > 0 && filteredRows.value.every((item) => selectedSet.value.has(item.id)))
-const pageCount = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize)))
+const runningSelectedCount = computed(() => selectedRows.value.filter((item) => isRunningTask(item)).length)
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize.value)))
 const pagedRows = computed(() => {
   const page = Math.max(1, Math.min(currentPage.value, pageCount.value))
-  const start = (page - 1) * pageSize
-  return filteredRows.value.slice(start, start + pageSize)
+  const start = (page - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
 })
+const allCurrentPageSelected = computed(() => pagedRows.value.length > 0 && pagedRows.value.every((item) => selectedSet.value.has(item.id)))
 const currentPageStart = computed(() => {
   if (!filteredRows.value.length) return 0
-  return (currentPage.value - 1) * pageSize + 1
+  return (currentPage.value - 1) * pageSize.value + 1
 })
-const currentPageEnd = computed(() => Math.min(currentPage.value * pageSize, filteredRows.value.length))
+const currentPageEnd = computed(() => Math.min(currentPage.value * pageSize.value, filteredRows.value.length))
 const visiblePageNumbers = computed(() => {
   const total = pageCount.value
   const page = Math.max(1, Math.min(currentPage.value, total))
@@ -487,15 +490,15 @@ function toggleSelected(id: string) {
   selectedIds.value = [...selectedIds.value, id]
 }
 
-function toggleSelectAllFiltered() {
-  if (!filteredRows.value.length) return
-  if (allFilteredSelected.value) {
-    const filteredIdSet = new Set(filteredRows.value.map((item) => item.id))
-    selectedIds.value = selectedIds.value.filter((id) => !filteredIdSet.has(id))
+function toggleSelectCurrentPage() {
+  if (!pagedRows.value.length) return
+  if (allCurrentPageSelected.value) {
+    const currentPageIdSet = new Set(pagedRows.value.map((item) => item.id))
+    selectedIds.value = selectedIds.value.filter((id) => !currentPageIdSet.has(id))
     return
   }
   const merged = new Set(selectedIds.value)
-  for (const item of filteredRows.value) merged.add(item.id)
+  for (const item of pagedRows.value) merged.add(item.id)
   selectedIds.value = Array.from(merged)
 }
 
@@ -509,6 +512,18 @@ function goToPrevPage() {
 
 function goToNextPage() {
   goToPage(currentPage.value + 1)
+}
+
+function togglePageSizeMenu() {
+  pageSizeMenuOpen.value = !pageSizeMenuOpen.value
+}
+
+function selectPageSize(nextSize: (typeof pageSizeOptions)[number]) {
+  if (pageSize.value !== nextSize) {
+    pageSize.value = nextSize
+    currentPage.value = 1
+  }
+  pageSizeMenuOpen.value = false
 }
 
 async function exportSelectedFinalVideos() {
@@ -783,9 +798,16 @@ async function revertSubtitleFromPreview() {
 
 watch([query, statusFilter], () => {
   currentPage.value = 1
+  pageSizeMenuOpen.value = false
 })
 
 watch(filteredRows, () => {
+  if (currentPage.value > pageCount.value) {
+    currentPage.value = pageCount.value
+  }
+})
+
+watch(pageSize, () => {
   if (currentPage.value > pageCount.value) {
     currentPage.value = pageCount.value
   }
@@ -821,11 +843,15 @@ async function createTask(runModeOverride?: 'auto' | 'manual') {
 }
 
 async function removeTask(id: string) {
+  await removeTaskWithMode(id, false)
+}
+
+async function removeTaskWithMode(id: string, force = false) {
   if (!id) return
   removingId.value = id
-  pushRuntimeLog(`[clone-task-list] remove task id=${id}`, 'info')
+  pushRuntimeLog(`[clone-task-list] remove task id=${id} force=${force ? 'true' : 'false'}`, 'info')
   try {
-    await window.api.clone.removeProject({ cloneProjectId: id })
+    await window.api.clone.removeProject({ cloneProjectId: id, force })
     await refresh()
     pushRuntimeLog(`[clone-task-list] remove task completed id=${id}`, 'success')
   } finally {
@@ -833,12 +859,50 @@ async function removeTask(id: string) {
   }
 }
 
+function isRunningTask(item: CloneProjectSummary) {
+  const statusText = String(item?.status || '').trim().toLowerCase()
+  return statusText.includes('running') || statusText.includes('generating') || statusText === 'analyzed' || statusText === 'materials_ready'
+}
+
 async function confirmRemoveTask(item: CloneProjectSummary) {
   if (!item?.id) return
   const title = item.title || item.id
-  const ok = window.confirm(`确认删除「${title}」吗？删除后无法恢复。`)
+  const running = isRunningTask(item)
+  const ok = window.confirm(
+    running
+      ? `任务「${title}」正在运行中，确认强制删除吗？这会立即从列表移除，并停止当前任务的本地自动续跑。删除后无法恢复。`
+      : `确认删除「${title}」吗？删除后无法恢复。`,
+  )
   if (!ok) return
-  await removeTask(item.id)
+  await removeTaskWithMode(item.id, running)
+}
+
+async function confirmBatchRemoveTasks() {
+  if (removingId.value) return
+  if (!selectedRows.value.length) {
+    window.alert('请先选择要删除的任务。')
+    return
+  }
+  const total = selectedRows.value.length
+  const runningCount = runningSelectedCount.value
+  const message = runningCount
+    ? `已选 ${total} 个任务，其中 ${runningCount} 个正在运行中。确认批量删除吗？运行中的任务会按强制删除处理，删除后无法恢复。`
+    : `确认批量删除已选的 ${total} 个任务吗？删除后无法恢复。`
+  const ok = window.confirm(message)
+  if (!ok) return
+  batchExportMessage.value = ''
+  pushRuntimeLog(`[clone-task-list] batch remove selected count=${total} running=${runningCount}`, 'info')
+  try {
+    for (const item of selectedRows.value) {
+      await removeTaskWithMode(item.id, isRunningTask(item))
+    }
+    selectedIds.value = []
+    pushRuntimeLog(`[clone-task-list] batch remove completed count=${total}`, 'success')
+  } catch (error: any) {
+    const messageText = String(error?.message ?? error ?? '批量删除失败')
+    pushRuntimeLog(`[clone-task-list] batch remove failed message=${safeText(messageText, 'unknown error')}`, 'error')
+    window.alert(messageText)
+  }
 }
 
 function openRenameDialog(item: CloneProjectSummary) {
@@ -1187,6 +1251,24 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="clone-list-batch-bar__actions">
+            <button
+              v-if="selectedIds.length"
+              class="clone-list-batch-action clone-list-batch-action--danger"
+              type="button"
+              :disabled="Boolean(removingId)"
+              @click="confirmBatchRemoveTasks"
+            >
+              {{ removingId ? '删除中...' : '批量删除' }}
+            </button>
+            <button
+              v-if="selectedIds.length"
+              class="clone-list-batch-action"
+              type="button"
+              :disabled="exporting"
+              @click="exportSelectedFinalVideos"
+            >
+              {{ exporting ? '导出中...' : '批量导出成片' }}
+            </button>
             <button v-if="selectedIds.length && cloneGroupAssignReady" class="clone-list-batch-action" type="button" @click="openMoveBatchDialog">移动到分组</button>
             <button
               v-if="subtitleFeatureReady && subtitleEligibleSelectedCount"
@@ -1263,7 +1345,7 @@ onBeforeUnmount(() => {
                 全部素材
                 <ChevronDown class="h-4 w-4" />
               </button>
-              <button class="clone-console-overview__icon" type="button" aria-label="筛选并全选当前结果" @click="toggleSelectAllFiltered">
+              <button class="clone-console-overview__icon" type="button" aria-label="全选当前页任务" @click="toggleSelectCurrentPage">
                 <span class="clone-console-overview__icon-bars"></span>
               </button>
               <button class="clone-console-table__viewtool is-active" type="button" aria-label="列表视图">
@@ -1280,11 +1362,11 @@ onBeforeUnmount(() => {
 
           <div v-if="filteredRows.length" class="clone-console-table__body">
             <div class="clone-console-table__head">
-              <label class="clone-console-table__check" aria-label="全选当前筛选任务">
+              <label class="clone-console-table__check" aria-label="全选当前页任务">
                 <input
                   type="checkbox"
-                  :checked="allFilteredSelected"
-                  @change="toggleSelectAllFiltered"
+                  :checked="allCurrentPageSelected"
+                  @change="toggleSelectCurrentPage"
                 />
                 <span></span>
               </label>
@@ -1434,7 +1516,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="clone-list-pagination">
-            <span class="clone-list-pagination__summary">共 {{ filteredRows.length }} 条</span>
+            <span class="clone-list-pagination__summary">共 {{ filteredRows.length }} 条，当前显示 {{ currentPageStart }}-{{ currentPageEnd }}</span>
             <div class="clone-list-pagination__controls">
               <button type="button" :disabled="currentPage <= 1" @click="goToPrevPage">‹</button>
               <button
@@ -1447,7 +1529,23 @@ onBeforeUnmount(() => {
                 {{ page }}
               </button>
               <button type="button" :disabled="currentPage >= pageCount" @click="goToNextPage">›</button>
-              <button type="button" class="clone-list-page-size" disabled>{{ pageSize }} 条/页 <ChevronDown class="h-3.5 w-3.5" /></button>
+              <div class="clone-list-page-size-wrap">
+                <button type="button" class="clone-list-page-size" :aria-expanded="pageSizeMenuOpen" @click="togglePageSizeMenu">
+                  {{ pageSize }} 条/页
+                  <ChevronDown class="h-3.5 w-3.5" />
+                </button>
+                <div v-if="pageSizeMenuOpen" class="clone-list-page-size-menu">
+                  <button
+                    v-for="option in pageSizeOptions"
+                    :key="option"
+                    type="button"
+                    :class="{ 'is-active': pageSize === option }"
+                    @click="selectPageSize(option)"
+                  >
+                    {{ option }} 条/页
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -2164,6 +2262,17 @@ onBeforeUnmount(() => {
 .clone-list-batch-action--accent:hover {
   border-color: rgba(146, 126, 255, 0.48);
   background: linear-gradient(135deg, rgba(92, 68, 226, 0.92), rgba(124, 101, 247, 0.92));
+}
+
+.clone-list-batch-action--danger {
+  border-color: rgba(255, 120, 120, 0.32);
+  background: rgba(61, 17, 24, 0.92);
+  color: #ffd7dc;
+}
+
+.clone-list-batch-action--danger:hover {
+  border-color: rgba(255, 144, 144, 0.46);
+  background: rgba(84, 21, 31, 0.96);
 }
 
 .clone-console-table {
@@ -3473,6 +3582,36 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 0 14px;
+}
+
+.clone-list-page-size-wrap {
+  position: relative;
+}
+
+.clone-list-page-size-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  gap: 6px;
+  min-width: 132px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(89, 106, 147, 0.18);
+  background: rgba(9, 17, 28, 0.98);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+  z-index: 20;
+}
+
+.clone-list-page-size-menu button {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0 12px;
+}
+
+.clone-list-page-size-menu button.is-active {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--clone-accent) 84%, #0f172a), color-mix(in srgb, var(--clone-accent) 60%, #07111d));
+  color: #fff;
 }
 
 .clone-side-card {

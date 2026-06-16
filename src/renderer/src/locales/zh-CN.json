@@ -105,7 +105,10 @@
     "overlayGroupTitlePh": "输入标题文案"
   },
   "titleBar": {
-    "ready": "就绪"
+    "ready": "就绪",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "close": "关闭"
   },
   "settings": {
     "hero": {

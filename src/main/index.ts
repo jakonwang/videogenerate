@@ -860,7 +860,7 @@ function wireIpc() {
       return await cloneService.exportFinalVideos(payload)
     },
   )
-  ipcMain.handle('clone:removeProject', async (_e, payload: { cloneProjectId: string }) => {
+  ipcMain.handle('clone:removeProject', async (_e, payload: { cloneProjectId: string; force?: boolean }) => {
     return await cloneService.removeProject(payload)
   })
   ipcMain.handle(

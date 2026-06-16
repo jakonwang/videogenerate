@@ -15,6 +15,7 @@ import type {
   ModelIdentityPack,
   ShotSpec,
   StoryboardImageTemplateType,
+  StoryboardReferenceMode,
 } from './types'
 import type { ModelProfileOptions } from './types'
 import {
@@ -912,11 +913,112 @@ export function buildModelIdentityLockText(pack: ModelIdentityPack) {
     .join(' ')
 }
 
+export type StoryboardReferenceMode = 'model_presentation' | 'product_closeup'
+
+function isHandheldNonWornReferenceShot(shot: ShotSpec) {
+  const haystack = [
+    shot.shotType,
+    shot.framing,
+    shot.role,
+    shot.shotRole,
+    shot.purpose,
+    shot.visualPrompt,
+    shot.visualDescription,
+    shot.actionDescription,
+    shot.cameraDescription,
+    shot.productFocus,
+    shot.materialNeed,
+    shot.scriptText,
+    shot.onScreenText,
+    shot.narrationText,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .join('\n')
+  const anchoredBodyWornSignal =
+    /\bear wearing\b|\bearlobe\b|\bear lobe\b|\bear area\b|\bearring area\b|\bjawline\b|\bneck\b|\bclavicle\b|\binteracting with the ear\b|\badjusting the earring\b|\bframing the ear\b|\bbracelet worn on a wrist\b|\bring worn on a finger\b|\bworn on wrist\b|\bworn on finger\b/.test(
+      haystack,
+    )
+  const handheldProductSignal =
+    /\bhand holding\b|\bholding the\b|\bheld in hand\b|\bhand-held\b|\bhand held\b|\bfingers holding\b|\bproduct in hand\b|\bproduct in the hand\b|\bholding and presenting\b|\bpresenting product naturally\b|\bholding product\b|\bhand usage\b/.test(
+      haystack,
+    )
+  return handheldProductSignal && !anchoredBodyWornSignal
+}
+
+function isProductCloseupReferenceShot(productType: CloneProductType, shot: ShotSpec) {
+  const haystack = [
+    productType,
+    shot.shotType,
+    shot.framing,
+    shot.role,
+    shot.shotRole,
+    shot.purpose,
+    shot.visualPrompt,
+    shot.visualDescription,
+    shot.actionDescription,
+    shot.cameraDescription,
+    shot.productFocus,
+    shot.materialNeed,
+    shot.scriptText,
+    shot.onScreenText,
+    shot.narrationText,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .join('\n')
+  const anchoredBodyWornSignal =
+    /\bear wearing\b|\bearlobe\b|\bear lobe\b|\bear area\b|\bearring area\b|\bjawline\b|\bneck\b|\bclavicle\b|\binteracting with the ear\b|\badjusting the earring\b|\bframing the ear\b|\bbracelet worn on a wrist\b|\bring worn on a finger\b|\bworn on wrist\b|\bworn on finger\b/.test(
+      haystack,
+    )
+  const genericWearingSignal = /\bwearing\b|\bworn\b|\btry-on\b|\btry on\b/.test(haystack)
+  const handheldProductSignal =
+    /\bhand holding\b|\bholding the\b|\bheld in hand\b|\bhand-held\b|\bhand held\b|\bfingers holding\b|\bproduct in hand\b|\bproduct in the hand\b|\bholding and presenting\b|\bpresenting product naturally\b|\bholding product\b|\bhand usage\b/.test(
+      haystack,
+    )
+  const explicitNoWearingSignal = /\bno wearing scene\b|\bwithout wearing scene\b|\bno wearing display\b/.test(haystack)
+  const pureProductObjectSignal =
+    /\bdisplay card\b|\bearring card\b|\bproduct card\b|\bcard display\b|\bpackaging\b|\bproduct only\b|\bproduct itself\b|\bisolated product\b|\btabletop\b|\bflat lay\b/.test(
+      haystack,
+    )
+  if (pureProductObjectSignal && explicitNoWearingSignal) return true
+  if (handheldProductSignal && !anchoredBodyWornSignal) return true
+  if ((anchoredBodyWornSignal || genericWearingSignal) && !explicitNoWearingSignal) return false
+  if (pureProductObjectSignal) return true
+  return false
+}
+
+export function resolveStoryboardReferenceMode(input: {
+  productType: CloneProductType
+  shot: ShotSpec
+  explicitTemplateType?: StoryboardImageTemplateType
+}): StoryboardReferenceMode {
+  if (isHandheldNonWornReferenceShot(input.shot)) return 'product_closeup'
+  if (isProductCloseupReferenceShot(input.productType, input.shot)) return 'product_closeup'
+  const templateType = resolveStoryboardImageTemplateType(input)
+  if (templateType === 'ecommerce_packaging') return 'product_closeup'
+  if (templateType === 'general' && !isModelPresentationShot(input.shot) && !isWearableStoryboardShot(input.productType, input.shot)) {
+    return 'product_closeup'
+  }
+  return 'model_presentation'
+}
+
 export function buildReferenceResponsibilityText(input?: {
   mode?: 'storyboard_frame' | 'generic'
   isEndFrame?: boolean
+  storyboardReferenceMode?: StoryboardReferenceMode
 }) {
   if (input?.mode === 'storyboard_frame') {
+    if (input.storyboardReferenceMode === 'product_closeup') {
+      return [
+        'REFERENCE RESPONSIBILITY MAP:',
+        'Image 1 is the bound product reference; use it for exact product identity, structure, material, scale, and presentation structure only.',
+        'Image 2 is the storyboard scene reference; use it only for target scene, crop, composition, and environment mood.',
+        input.isEndFrame
+          ? 'Image 3 is the provided start-frame continuity reference; use it only for continuity of angle, crop, composition, and scene, never product redesign.'
+          : 'Image 3 is the storyboard shot continuity or authority reference; use it only for target angle, crop, composition, and scene layout, never product redesign.',
+        'Do not infer or recreate a specific person identity from any reference image.',
+        'PRODUCT REFERENCES LOCK PRODUCT ONLY, NOT PERSON IDENTITY. Use product images only for structure, material, color, scale, attachment details, body-part relation, and demonstration framing; never use the product-reference person as a model identity source.',
+      ].join(' ')
+    }
     return [
       'REFERENCE RESPONSIBILITY MAP:',
       'Image 1 is the bound product reference; use it only for product identity and structure.',
@@ -1122,6 +1224,26 @@ function buildDirectProductReuseLockText(productType: CloneProductType, productD
 function isModelPresentationShot(shot: ShotSpec) {
   const role = String(shot.role || shot.shotRole || shot.purpose || '').trim().toLowerCase()
   const shotType = String(shot.shotType || '').trim().toLowerCase()
+  const haystack = [
+    role,
+    shotType,
+    shot.framing,
+    shot.visualPrompt,
+    shot.visualDescription,
+    shot.actionDescription,
+    shot.cameraDescription,
+    shot.productFocus,
+    shot.scriptText,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .join('\n')
+  if (
+    /\bfull face\b|\bface-centered\b|\bportrait\b|\bhalf-body\b|\bupper body\b|\bmodel wearing\b|\bpresenter\b|\bpresenting to camera\b|\bwearing scene\b/.test(
+      haystack,
+    )
+  ) {
+    return true
+  }
   return role === 'model_scene' || shotType === 'model_demo'
 }
 
@@ -1285,6 +1407,58 @@ const STORYBOARD_IMAGE_TEMPLATES: Record<StoryboardImageTemplateType, string> = 
   lifestyle_interaction: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
 }
 
+function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode) {
+  const intro =
+    mode === 'product_closeup'
+      ? [
+        'Look at these two reference images and combine them in a natural everyday way.',
+        '',
+        'Image 1 is our product structure and presentation reference.',
+        'Image 2 is our daily environment reference.',
+        '',
+        'I need you to place the product presentation from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.',
+      ]
+      : [
+        'Look at these two reference images and combine them in a natural everyday way.',
+        '',
+        'Image 1 is our base model and product reference (identity look reference).',
+        'Image 2 is our daily environment reference (scene environment reference).',
+        '',
+        'I need you to place the model and product from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.',
+      ]
+  const fidelityBlock =
+    mode === 'product_closeup'
+      ? [
+        '2. PRESENTATION STRUCTURE:',
+        'Keep the product fully consistent with Image 1, including its visible structure, material, color, finish, proportions, and defining details.',
+        '- SCENE INTEGRATION: Place that same product naturally into the daily environment, composition, and atmosphere of Image 2 so the final result feels like a real-life casual capture in that scene.',
+        '- BODY CONTEXT: If human context is needed, preserve only the minimum local body-part relation required by Image 2 to present the product naturally, such as hand placement or ear/neck/hand relation. Do not infer or recreate a specific person identity from Image 1.',
+        '- CLOTHING: Only preserve clothing or accessory context when it is visible and necessary for the Image 2 scene composition. Ignore unrelated fashion details that do not help the product sit naturally in the scene.',
+        '- POSTURE AND CROP: Follow the crop, framing tightness, and close-up storytelling intent needed to integrate the product into Image 2 while keeping the product itself visually identical to Image 1.',
+      ]
+      : [
+        '2. MODEL & CLOTHING FIDELITY:',
+        "Identify the model in Image 1. Keep the model's appearance clearly consistent with Image 1.",
+        '- CLOTHING: Replicate the same clothing from Image 1, including its style, fabric texture, and color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.',
+        '- POSTURE: Keep the same presentation posture, skin tone, and the same faceless or cropped perspective on the specific body part as shown in Image 1.',
+      ]
+  return [
+    ...intro,
+    '',
+    'Strict Requirements:',
+    '1. PRODUCT: Identify the product in Image 1. Keep its design, colors, and original material textures fully consistent with Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. No product redesign or restyling is allowed.',
+    '',
+    ...fidelityBlock,
+    '',
+    '3. SCENE INTEGRATION: Replace the plain studio background of Image 1 with the ordinary home setting, room layout, and natural daylight feeling of Image 2. The final image should feel like it was casually captured in a real Southeast Asian home, with believable available light, mild shadows, and a relaxed unpolished atmosphere instead of a polished studio or ad campaign look.',
+    '',
+    '4. TEXT AND LOGO REMOVAL:',
+    'Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with plain, natural background textures that match the nearby surfaces in Image 2.',
+    '',
+    'Style: Natural UGC lifestyle photography with a casual smartphone-shot feel. Southeast Asian daily home environment, bright natural daylight, authentic ambient atmosphere. Real and believable like everyday user-made content, with clear details but not luxury, glossy, or overproduced. Single panel only, no sketches, no animation.',
+  ].join('\n').trim()
+}
+
 function hasPackagingStoryboardSignal(shot: ShotSpec) {
   const shotType = String(shot.shotType || '').trim().toLowerCase()
   if (shotType === 'packaging') return true
@@ -1355,12 +1529,15 @@ export function buildGptFramePrompt(input: {
   compiledPrompt?: string
   explicitTemplateType?: StoryboardImageTemplateType
 }) {
-  const templateType = resolveStoryboardImageTemplateType({
-    productType: input.productType,
-    shot: input.shot,
-    explicitTemplateType: input.explicitTemplateType,
-  })
-  return STORYBOARD_IMAGE_TEMPLATES[templateType]
+  const referenceMode: StoryboardReferenceMode =
+    input.shot.storyboardReferenceMode === 'product_closeup' || input.shot.storyboardReferenceMode === 'model_presentation'
+      ? input.shot.storyboardReferenceMode
+      : resolveStoryboardReferenceMode({
+          productType: input.productType,
+          shot: input.shot,
+          explicitTemplateType: input.explicitTemplateType,
+        })
+  return buildStoryboardFrameTransferTemplate(referenceMode)
 }
 export async function generateModelIdentityPackImages(input: {
   credentials: ModelCredentials

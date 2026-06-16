@@ -10,7 +10,7 @@ function resolveWindowsUserDataRoot() {
   const explicitRoot = String(process.env.VIDEOGENERATE_WINDOWS_STORAGE_ROOT || '').trim()
   if (explicitRoot) return join(explicitRoot, 'userData')
 
-  return join(app.getPath('appData'), 'VideoGenerate')
+  return 'E:\\VideoGenerate\\userData'
 }
 
 export function configureWindowsStorageRoot() {
