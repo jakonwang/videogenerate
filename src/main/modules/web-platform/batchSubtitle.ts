@@ -20,8 +20,8 @@ import {
 } from './capcutMate'
 import {
   generateBatchSubtitlePreviewFrameByRemotion,
-  renderBatchSubtitleVideoWithRemotionIntermediate,
 } from './batchSubtitleRemotion'
+import { renderBatchSubtitleVideoWithBitmapOverlay } from './batchSubtitleBitmap'
 import type {
   BatchSubtitleCaptionStyle,
   BatchSubtitleCue,
@@ -1259,7 +1259,7 @@ async function renderSingleOutputBitmap(input: {
   outputDir: string
 }) {
   const { job, sourceItem, selectedTitle, outputDir } = input
-  const result = await renderBatchSubtitleVideoWithRemotionIntermediate({
+  const result = await renderBatchSubtitleVideoWithBitmapOverlay({
     sourceItem,
     titleConfig: {
       strategy: 'single_for_all',
@@ -1284,7 +1284,6 @@ async function renderSingleOutputBitmap(input: {
       bottomMargin: job.overlayImageConfig?.bottomMargin || job.captionStyle.bottomMargin,
       lineMode: 'multi',
     },
-    overlayConfig: job.overlayImageConfig,
     outputDir,
   })
   const coverImagePath = (await generateThumbnailJpg({ filePath: result.outputVideoPath, atSec: 1 })) || undefined

@@ -104,7 +104,7 @@ const rowActionMenuOpenId = ref('')
 const batchExportMessage = ref('')
 const createRunMode = ref<'auto' | 'manual' | ''>('')
 const statusFilter = ref<'all' | 'draft' | 'running' | 'ready_for_review' | 'completed' | 'failed'>('all')
-const sortOrder = ref<'updated_desc' | 'updated_asc'>('updated_desc')
+const sortOrder = ref<'created_desc' | 'created_asc'>('created_desc')
 const currentPage = ref(1)
 const pageSizeOptions = [10, 20, 50, 100] as const
 const pageSize = ref<(typeof pageSizeOptions)[number]>(10)
@@ -262,8 +262,8 @@ const filteredRows = computed(() => {
     return haystack.includes(keyword)
   })
   return list.sort((a, b) => {
-    const delta = Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
-    return sortOrder.value === 'updated_desc' ? delta : -delta
+    const delta = Number(b.createdAt || 0) - Number(a.createdAt || 0)
+    return sortOrder.value === 'created_desc' ? delta : -delta
   })
 })
 
@@ -287,6 +287,7 @@ const stats = computed(() => ({
 
 const overviewCards = computed(() => [
   { key: 'all', label: '全部任务', helper: '总任务数', value: stats.value.all, tone: 'all', icon: Video },
+  { key: 'draft', label: '草稿', helper: '待完善任务', value: stats.value.draft, tone: 'muted', icon: FolderOpen },
   { key: 'running', label: '进行中', helper: '任务处理中', value: stats.value.running, tone: 'running', icon: LoaderCircle },
   { key: 'completed', label: '已完成', helper: '任务已完成', value: stats.value.completed, tone: 'success', icon: CheckCircle2 },
   { key: 'failed', label: '失败任务', helper: '任务失败', value: stats.value.failed, tone: 'danger', icon: AlertTriangle },
@@ -312,14 +313,6 @@ const activeGroupLabel = computed(() => {
   const current = groupSidebarItems.value.find((item) => item.id === activeGroupId.value)
   return current?.name || '全部任务'
 })
-
-const statusTabs = computed(() => [
-  { key: 'all' as const, label: `全部 (${stats.value.all})` },
-  { key: 'draft' as const, label: `草稿 (${stats.value.draft})` },
-  { key: 'running' as const, label: `进行中 (${stats.value.running})` },
-  { key: 'completed' as const, label: `已完成 (${stats.value.completed})` },
-  { key: 'failed' as const, label: `失败 (${stats.value.failed})` },
-])
 
 const selectedSet = computed(() => new Set(selectedIds.value))
 const selectedRows = computed(() => filteredRows.value.filter((item) => selectedSet.value.has(item.id)))
@@ -472,7 +465,7 @@ function stepIndex(step?: string) {
 }
 
 function toggleSortOrder() {
-  sortOrder.value = sortOrder.value === 'updated_desc' ? 'updated_asc' : 'updated_desc'
+  sortOrder.value = sortOrder.value === 'created_desc' ? 'created_asc' : 'created_desc'
   currentPage.value = 1
 }
 
@@ -1222,7 +1215,14 @@ onBeforeUnmount(() => {
 
           <section class="clone-console-overview">
             <div class="clone-console-overview__cards">
-              <article v-for="card in overviewCards" :key="card.key" class="clone-console-stat" :class="`tone-${card.tone}`">
+              <button
+                v-for="card in overviewCards"
+                :key="card.key"
+                type="button"
+                class="clone-console-stat"
+                :class="[`tone-${card.tone}`, { 'is-active': statusFilter === card.key || (card.key === 'pending-output' && statusFilter === 'all') }]"
+                @click="statusFilter = card.key === 'pending-output' ? 'all' : card.key"
+              >
                 <span class="clone-console-stat__icon">
                   <component :is="card.icon" class="h-4 w-4" />
                 </span>
@@ -1231,7 +1231,7 @@ onBeforeUnmount(() => {
                   <span>{{ card.helper }}</span>
                 </div>
                 <b>{{ card.value }}</b>
-              </article>
+              </button>
             </div>
           </section>
         </section>
@@ -1338,7 +1338,7 @@ onBeforeUnmount(() => {
                 <span>新建分组</span>
               </button>
               <button class="clone-console-overview__tool" type="button" @click="toggleSortOrder">
-                {{ sortOrder === 'updated_desc' ? '最近更新' : '最早更新' }}
+                {{ sortOrder === 'created_desc' ? '最新创建' : '最早创建' }}
                 <ChevronDown class="h-4 w-4" />
               </button>
               <button class="clone-console-overview__tool" type="button">
@@ -2007,7 +2007,7 @@ onBeforeUnmount(() => {
 
 .clone-console-overview__cards {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2022,6 +2022,15 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: var(--clone-card-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.clone-console-stat.is-active {
+  border-color: rgba(113, 92, 255, 0.58);
+  box-shadow: 0 0 0 1px rgba(113, 92, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
 }
 
 .clone-console-stat.tone-all {
@@ -3673,7 +3682,7 @@ onBeforeUnmount(() => {
   }
 
   .clone-console-overview__cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .clone-console-table__groupbar {
@@ -3734,7 +3743,7 @@ onBeforeUnmount(() => {
   }
 
   .clone-console-overview__cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .clone-console-table__groupbar {
