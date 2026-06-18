@@ -319,15 +319,15 @@ function getClipAnchorProfile(shot: ShotSpec, clipDurationSec: number): ClipAnch
   }
   if (role === 'proof' || role === 'detail') {
     return {
-      anchor: shortClip ? 0.56 : mediumClip ? 0.6 : 0.62,
-      leadingPadRatio: 0.14,
-      maxLeadingPadSec: 0.24,
+      anchor: shortClip ? 0.24 : mediumClip ? 0.28 : 0.32,
+      leadingPadRatio: 0.08,
+      maxLeadingPadSec: 0.16,
       clipDurationScale: 1,
     }
   }
   if (role === 'cta') {
     return {
-      anchor: shortClip ? 0.74 : mediumClip ? 0.78 : 0.82,
+      anchor: shortClip ? 0.58 : mediumClip ? 0.62 : 0.66,
       leadingPadRatio: 0.1,
       maxLeadingPadSec: 0.18,
       clipDurationScale: 1,
@@ -343,9 +343,9 @@ function getClipAnchorProfile(shot: ShotSpec, clipDurationSec: number): ClipAnch
   }
   if (motion === 'static') {
     return {
-      anchor: shortClip ? 0.62 : mediumClip ? 0.66 : 0.7,
-      leadingPadRatio: 0.18,
-      maxLeadingPadSec: 0.3,
+      anchor: shortClip ? 0.3 : mediumClip ? 0.34 : 0.38,
+      leadingPadRatio: 0.1,
+      maxLeadingPadSec: 0.18,
       clipDurationScale: 1,
     }
   }
@@ -1236,14 +1236,14 @@ function resolveAnchorDiscipline(input: { shot: ShotSpec; shotIndex: number; tot
   }
   if (isProductPriorityRole(role)) {
     return {
-      anchorBias: (motion === 'static' ? -0.04 : -0.02) - Math.min(0.03, emphasis.productPriority * 0.015),
-      leadingPadScale: Math.max(0.8, 0.92 - emphasis.productPriority * 0.035),
-      maxLeadingPadScale: Math.max(0.8, 0.9 - emphasis.productPriority * 0.03),
+      anchorBias: (motion === 'static' ? -0.1 : -0.06) - Math.min(0.05, emphasis.productPriority * 0.02),
+      leadingPadScale: Math.max(0.72, 0.88 - emphasis.productPriority * 0.04),
+      maxLeadingPadScale: Math.max(0.72, 0.86 - emphasis.productPriority * 0.035),
     }
   }
   if (stage === 'close' || role === 'cta') {
     return {
-      anchorBias: 0.03,
+      anchorBias: -0.02,
       leadingPadScale: 1,
       maxLeadingPadScale: 1,
     }
@@ -1271,7 +1271,7 @@ function getRhythmBias(input: { shot: ShotSpec; previousShot?: ShotSpec; shotInd
   let durationScale = 1
 
   if (phase <= 0.2) {
-    anchorOffset -= 0.1
+    anchorOffset -= 0.13
     durationScale *= motion === 'fast_cut' ? 0.965 : 0.985
   } else if (phase >= 0.8) {
     anchorOffset += 0.08
@@ -1304,7 +1304,7 @@ function getRhythmBias(input: { shot: ShotSpec; previousShot?: ShotSpec; shotInd
     durationScale *= 1 + readability.durationBoost * 0.6
   }
   if (adjacency.payoffHandoffCandidate) {
-    anchorOffset -= isProductPriorityRole(role) ? 0.042 : 0.024
+    anchorOffset -= isProductPriorityRole(role) ? 0.14 : 0.05
     durationScale *= isProductPriorityRole(role) ? 1.012 : 1.005
   }
   if (adjacency.preCloseConfirmationCandidate && !adjacency.closesIntoCta) {
@@ -1626,6 +1626,7 @@ function pickClipWindow(input: {
       : Math.max(0.5, targetDurationSec * getClipAnchorProfile(input.shot, targetDurationSec).clipDurationScale * sequenceBias.durationScale)
   const clampedTarget = Math.min(baseTarget, sourceDurationSec)
   const remaining = Math.max(0, sourceDurationSec - clampedTarget)
+  const isStoryboardEightSecondSource = sourceDurationSec >= 7.6 && sourceDurationSec <= 8.4
   if (input.mode === 'full_generated_clip' || remaining <= 0.2) {
     return {
       sourceDurationSec: round3(sourceDurationSec),
@@ -1651,7 +1652,7 @@ function pickClipWindow(input: {
   const payoffLeadingTrim =
     resolveComposeAdjacencySignal(input.shot, input.previousShot).payoffHandoffCandidate &&
     isProductPriorityRole(normalizeShotRole(input.shot))
-      ? Math.min(0.08, clampedTarget * 0.06)
+      ? Math.min(0.14, clampedTarget * 0.1)
       : 0
   const anchor = clamp(
     profile.anchor +
@@ -1677,7 +1678,11 @@ function pickClipWindow(input: {
     profile.maxLeadingPadSec * anchorDiscipline.maxLeadingPadScale,
     clampedTarget * profile.leadingPadRatio * anchorDiscipline.leadingPadScale,
   )
-  const clipStartSec = Math.max(0, Math.min(remaining, sourceDurationSec * anchor - leadingPad - payoffLeadingTrim))
+  const naturalClipStartSec = Math.max(0, Math.min(remaining, sourceDurationSec * anchor - leadingPad - payoffLeadingTrim))
+  const maxOpeningStartSec = Math.max(0, Math.min(remaining, Math.min(0.25, sourceDurationSec * 0.05)))
+  const clipStartSec = isStoryboardEightSecondSource
+    ? Math.min(naturalClipStartSec, maxOpeningStartSec)
+    : naturalClipStartSec
   return {
     sourceDurationSec: round3(sourceDurationSec),
     clipStartSec: round3(clipStartSec),

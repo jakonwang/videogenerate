@@ -55,6 +55,7 @@ import {
   type StoryboardReferenceMode,
 } from './gptImage'
 import { inferStoryboardReferenceDecision, type StoryboardReferenceDecision } from './storyboardReference'
+import type { StoryboardSubjectType } from './types'
 import { buildProductAnalysisBoard } from './productAnalysisBoard'
 import {
   buildCloneShotPrompt,
@@ -1670,8 +1671,8 @@ function sanitizeVariantShotScriptRow<T extends {
 }>(row: T): T {
   const scriptText = sanitizeSafeVariantText(row.scriptText)
   const visualDescription = 'Keep the exact reference composition.'
-  const actionDescription = 'No subject motion.'
-  const cameraDescription = sanitizeSafeVariantText(row.cameraDescription, 'Slow stable camera movement.')
+  const actionDescription = 'A small visible gesture or product handling beat keeps the frame alive.'
+  const cameraDescription = sanitizeSafeVariantText(row.cameraDescription, 'Gentle handheld movement with a visible sense of progression.')
   return {
     ...row,
     scriptText,
@@ -1679,10 +1680,9 @@ function sanitizeVariantShotScriptRow<T extends {
     actionDescription,
     cameraDescription,
     generationPrompt: [
-      'Only camera movement is allowed.',
-      'No subject movement.',
-      'No product motion.',
-      'No interaction.',
+      'Keep a visible sense of motion in the shot.',
+      'Use gentle camera movement and a small natural action beat.',
+      'Keep the product and subject identity stable.',
       scriptText,
       visualDescription,
       cameraDescription,
@@ -2398,7 +2398,7 @@ async function generateWholeScriptVariantsWithAi(input: {
     'You may adjust per-shot expression, focus point, and descriptive detail as long as the whole variant still feels like the same product video idea.',
     'Do not rewrite the video into a completely different concept. Do not replace the product category, the model-presented context, or the overall shot sequence.',
     'Script is only for camera guidance. Script cannot modify objects, model pose, product structure, or scene layout.',
-    'Only camera movement is allowed. No subject movement, no product motion, no interaction, no lighting effects, no sparkle language.',
+    'Keep motion clearly visible inside each shot. Use gentle camera movement plus one small natural action beat early in the shot, while keeping product structure and identity stable.',
     'visualDescription, actionDescription, cameraDescription, and generationPrompt should stay broadly aligned with the corresponding source shot, but they do not need to be near-identical.',
     'You must incorporate the bound model identity and product reference context when generating the variants.',
     'This is for product selling and visual demonstration. Keep human presence subordinate to product display.',
@@ -2854,10 +2854,10 @@ async function classifySceneReferenceWithVision(project: CloneProject, shot: Sho
     const hasWearableAnchorBodyPart =
       containsNonHandBodyPart ||
       wearableAnchorDetected ||
-      visibleBodyParts.some((part) => /ear|earlobe|cheek|jaw|neck|clavicle|shoulder|face|head|wrist|finger/.test(part))
+      visibleBodyParts.some((part: string) => /ear|earlobe|cheek|jaw|neck|clavicle|shoulder|face|head|wrist|finger/.test(part))
     const hasClearModelPresentation =
       containsClearModelIdentity ||
-      visibleBodyParts.some((part) => /face|head|shoulder|upper body|half body|portrait/.test(part))
+      visibleBodyParts.some((part: string) => /face|head|shoulder|upper body|half body|portrait/.test(part))
     const normalizedSubjectType: StoryboardSubjectType =
       validSubjectType === 'hand_only_product' && hasWearableAnchorBodyPart && !handOnlyWithoutOtherBodyParts
         ? 'local_wearable_closeup'
@@ -3567,13 +3567,14 @@ function buildEffectiveVideoCompiledPrompt(input: {
         productFocus: 'Preserve shape, proportions, and structure. Avoid deformation or redesign.',
       }
     : input.shot
+  const composeProject = input.project
   return buildFinalShotVideoPositivePrompt({
     shot: normalizedShot,
     modelIdentityText,
     productIdentityText,
     productMode: detectProductMode(resolvedProductType),
-    composeOptimizationPatch: getProjectComposeOptimizationPatch(input.project),
-    composeBodyUpgradePlan: getProjectComposeBodyUpgradePlan(input.project),
+    composeOptimizationPatch: composeProject ? getProjectComposeOptimizationPatch(composeProject) : undefined,
+    composeBodyUpgradePlan: composeProject ? getProjectComposeBodyUpgradePlan(composeProject) : undefined,
   })
 }
 
@@ -4939,7 +4940,7 @@ async function resolveNextRoundPromptDirectives(input: {
   shotId: string
 }) {
   const plan = await readNextRoundPlanEntries(input.project)
-  const match = plan.find((item) => item.shotId === input.shotId)
+  const match = plan.find((item: { shotId?: string; promptDirectives?: string[] }) => item.shotId === input.shotId)
   return Array.isArray(match?.promptDirectives) ? match.promptDirectives.map(String).filter(Boolean) : []
 }
 
@@ -4953,7 +4954,7 @@ async function applyNextRoundPlanToShotPrompt(input: {
     shotId: input.shot.id,
   })
   if (!directives.length) return input.compiledPrompt
-  const prefix = `Next Round Rhythm Upgrade:\n${directives.map((item) => `- ${item}`).join('\n')}`
+  const prefix = `Next Round Rhythm Upgrade:\n${directives.map((item: string) => `- ${item}`).join('\n')}`
   const base = String(input.compiledPrompt || '').trim()
   if (!base) return prefix
   if (base.includes(prefix)) return base
@@ -5434,13 +5435,13 @@ function framingForShot(shot: ShotSpec, productType: CloneProductType) {
 function movementForShot(shot: ShotSpec) {
   const motion = String(shot.motion || 'static')
   const map: Record<string, string> = {
-    static: 'mostly static handheld shot with tiny natural micro movement',
-    zoom_in: 'ultra-slow smooth zoom in from 1.00 to 1.04, tiny change only, with stable speed and no sudden forward motion',
-    zoom_out: 'ultra-slow smooth zoom out from 1.04 to 1.00, tiny change only, as a single uninterrupted pull-back within the same close-up family with stable speed',
-    pan_left: 'subtle pan left under 3 percent of frame width',
-    pan_right: 'subtle pan right under 3 percent of frame width',
-    shake: 'controlled handheld movement, no heavy shaking',
-    fast_cut: 'brief practical reveal motion, no aggressive transition',
+    static: 'stable handheld shot with an obvious visible motion progression',
+    zoom_in: 'smooth push in with a clear but restrained change in framing',
+    zoom_out: 'smooth pull back with a clear but restrained change in framing',
+    pan_left: 'gentle pan left that remains easy to follow',
+    pan_right: 'gentle pan right that remains easy to follow',
+    shake: 'controlled handheld movement with visible life',
+    fast_cut: 'brief practical reveal motion with a clear beat change',
   }
   return map[motion] ?? map.static
 }

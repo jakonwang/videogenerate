@@ -1339,21 +1339,31 @@ app.whenReady().then(async () => {
   app.commandLine.appendSwitch('disk-cache-dir', cacheDir)
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 
-  await productsRepo.ensureSeed()
-  await templatesRepo.ensureSeed()
-  await cloneRepo.ensureSeed()
-  await webPlatformRepo.ensureSeed()
-  await wireMediaProtocol()
-  await ensureWebApiServer()
-  createWindow()
   wireIpc()
-  void cloneService.resumePendingRemoteStoryboardVideosOnStartup().catch((error: any) => {
-    console.error('[clone-debug] startup-resume-shot-video-failed', {
-      message: String(error?.message ?? error ?? 'unknown error'),
-    })
-  })
+  createWindow()
   registerUpdaterIpc(() => mainWindow)
   setupAutoUpdater(() => mainWindow)
+
+  void (async () => {
+    try {
+      await productsRepo.ensureSeed()
+      await templatesRepo.ensureSeed()
+      await cloneRepo.ensureSeed()
+      await webPlatformRepo.ensureSeed()
+      await wireMediaProtocol()
+      await ensureWebApiServer()
+      await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
+    } catch (error: any) {
+      console.error('[app-startup] bootstrap-failed', {
+        message: String(error?.message ?? error ?? 'unknown error'),
+        stack: String(error?.stack ?? ''),
+      })
+      dialog.showErrorBox(
+        'VideoGenerate Startup Failed',
+        String(error?.message ?? error ?? 'Unknown startup error'),
+      )
+    }
+  })()
 })
 
 app.on('window-all-closed', () => {

@@ -738,9 +738,11 @@ const storyboardDesignRows = computed(() =>
     const frameStatus = safeText(frame?.status || blueprintShot?.gptFrameStatus || blueprintShot?.status, '').toLowerCase()
     const hasImage = Boolean(frame?.imagePath)
     const isRegenerating =
-      safeText(blueprintShot?.gptFrameStatus, '').toLowerCase() === 'generating' ||
-      (!hasImage && frameStatus === 'generating') ||
-      regeneratingStoryboardShotIds.value.includes(shot.shotId)
+      !hasImage && (
+        safeText(blueprintShot?.gptFrameStatus, '').toLowerCase() === 'generating' ||
+        frameStatus === 'generating' ||
+        regeneratingStoryboardShotIds.value.includes(shot.shotId)
+      )
     return {
       shotId: shot.shotId,
       shotIndex: typeof shot.shotIndex === 'number' ? shot.shotIndex + 1 : index + 1,
@@ -1081,6 +1083,9 @@ const failedShotOutputs = computed(() =>
   shotVideoOutputs.value.filter((item) => item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error)),
 )
 const failedStoryboardFrames = computed(() => storyboardFrames.value.filter((item) => !item.imagePath && Boolean(item.error)))
+const autoRetryableFailedStoryboardFrames = computed(() =>
+  failedStoryboardFrames.value.filter((item) => Number(item.retryCount || 0) < 2),
+)
 const runModeLabel = computed(() => (current.value?.runMode === 'auto' ? '自动运行' : '手动运行'))
 const autoFlowCurrentStageLabel = computed(() => {
   const stage = String(current.value?.autoFlowStatus?.currentStage || '').trim()
@@ -3588,6 +3593,20 @@ onMounted(async () => {
             )
             void generateShotVideos()
           }
+        } else if (autoRetryableFailedStoryboardFrames.value.length > 0 && !regeneratingFailedStoryboardFrames.value) {
+          const nextSignature = buildAutoStoryboardRecoverySignature(current.value.id, 'retry')
+          if (autoStoryboardRetrySignature !== nextSignature) {
+            autoStoryboardRetrySignature = nextSignature
+            pushRuntimeLog(
+              `[clone-debug] storyboard-grid:timer-auto-retry ${JSON.stringify({
+                projectId: current.value.id,
+                retryableFailedCount: autoRetryableFailedStoryboardFrames.value.length,
+                failedCount: storyboardState.failed,
+              })}`,
+              'info',
+            )
+            void regenerateFailedStoryboardFrames()
+          }
         }
       }
       if (visibleStageKey.value === 'grid' && !loading.value) {
@@ -3605,20 +3624,6 @@ onMounted(async () => {
               'info',
             )
             void batchQueryPendingStoryboardFrames()
-          }
-        } else if (storyboardState.retryableFailed > 0 && !regeneratingFailedStoryboardFrames.value) {
-          const nextSignature = buildAutoStoryboardRecoverySignature(current.value.id, 'retry')
-          if (autoStoryboardRetrySignature !== nextSignature) {
-            autoStoryboardRetrySignature = nextSignature
-            pushRuntimeLog(
-              `[clone-debug] storyboard-grid:timer-auto-retry ${JSON.stringify({
-                projectId: current.value.id,
-                retryableFailedCount: storyboardState.retryableFailed,
-                failedCount: storyboardState.failed,
-              })}`,
-              'info',
-            )
-            void regenerateFailedStoryboardFrames()
           }
         }
       }

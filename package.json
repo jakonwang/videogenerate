@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.17",
+  "version": "5.0.21",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",

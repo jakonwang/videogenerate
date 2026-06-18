@@ -15,7 +15,6 @@ import type {
   ModelIdentityPack,
   ShotSpec,
   StoryboardImageTemplateType,
-  StoryboardReferenceMode,
 } from './types'
 import type { ModelProfileOptions } from './types'
 import {
@@ -906,6 +905,9 @@ export function buildModelIdentityLockText(pack: ModelIdentityPack) {
   return [
     'STRICT MODEL IDENTITY LOCK: same selected model across all storyboard frames; one human model only.',
     'Use Image 2 as the only model identity source.',
+    pack.skinTone
+      ? `Keep the model skin tone and complexion consistent with Image 2: ${pack.skinTone}. Do not drift lighter, darker, cooler, or warmer across frames.`
+      : 'Keep the model skin tone and complexion consistent with Image 2. Do not drift lighter or darker across frames.',
     'Product references lock product only, never person identity; ignore any face, hair, skin, body, outfit, pose, or human traits from product reference images.',
     'No second model, no mixed identity, and no borrowed product-reference person.',
   ]

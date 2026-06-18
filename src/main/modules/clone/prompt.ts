@@ -229,7 +229,7 @@ function composePromptParagraphs(sections: Array<string | null | undefined>, max
   return sanitizeGeneratedVideoPrompt(compact, maxChars)
 }
 
-const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, crisp, high-definition (HD) 60fps video with a handheld smartphone shooting look, customized for a realistic social media product review. The overall dynamic movement must be extremely subtle, organic, and everyday lifestyle-oriented. Absolutely PROHIBIT cinematic studio setups, heavy commercial color grading, and robotic PPT-style panning/zooming.
+const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, crisp, high-definition (HD) 60fps video with a handheld smartphone shooting look, customized for a realistic social media product review. The overall dynamic movement must stay natural, organic, and everyday lifestyle-oriented, and it should still feel alive instead of like a static image. Absolutely PROHIBIT cinematic studio setups, heavy commercial color grading, and robotic PPT-style panning/zooming.
 
 1. THE COMPOSITION CORE (Ref. Base Image):
 - Timeline Initiation: Seamlessly initiate the video timeline directly from the provided base image.
@@ -241,8 +241,8 @@ const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, cris
 - Shadow Response: Keep realistic micro-shadows consistent with the scene and product placement.
 
 3. HANDHELD CAMERA MECHANICS:
-- Micro-Handheld Shake: Implement {{cameraMovement}} with highly controlled subtle handheld movement to simulate natural smartphone filming in real life.
-- Spatial Parallax: Keep a subtle spatial parallax effect so the {{productName}} remains grounded in a believable 3D scene.
+- Natural Motion: Implement {{cameraMovement}} with controlled handheld motion that still feels alive and product-first.
+- Spatial Parallax: Keep subtle spatial parallax so the {{productName}} remains grounded in a believable 3D scene.
 
 4. BIOMETRIC INTERACTION & ABSOLUTE ANONYMITY:
 - Micro-Action: {{specificMicroAction}}
@@ -363,12 +363,26 @@ function inferPhysicalLightingLockSpecificMicroAction(input: {
     .map((item) => normalizeTemplateText(item, '').toLowerCase())
     .join(' ')
   if (input.category === 'wearable_jewelry') {
-    return 'The earring sways naturally under gravity with minimal realistic movement.'
+    return 'The earring sways naturally under gravity with gentle realistic movement.'
   }
   if (input.category === 'worn_accessory') {
-    return 'The accessory moves minimally and naturally with realistic micro-shadows.'
+    return 'The accessory moves naturally and gently with realistic micro-shadows.'
   }
-  return 'The product moves minimally and naturally with realistic micro-shadows.'
+  return 'The product moves naturally and gently with realistic micro-shadows.'
+}
+
+function composePhysicalLightingLockCameraMovement(primary: string, extraLines: string[]) {
+  const parts = [primary, ...extraLines]
+    .map((item) => keepEnglishLikeText(item, '').trim())
+    .map((item) => item.replace(/\.+$/g, '').trim())
+    .filter(Boolean)
+  const deduped: string[] = []
+  for (const part of parts) {
+    const lowered = part.toLowerCase()
+    if (deduped.some((item) => item.toLowerCase() === lowered)) continue
+    deduped.push(part)
+  }
+  return deduped.join('; ')
 }
 
 export const VIDEO_PROMPT_TEMPLATE = `
@@ -499,6 +513,7 @@ export function buildViralRhythmShotGuidance(shot: Pick<
     if (repeatedStaticLike) {
       lines.push('Momentum Lift: Add one realistic emphasis shift in motion, framing, or reveal timing so the middle section does not feel dead.')
       lines.push('Variation Break: Do not repeat the same static close-up coverage. Introduce a clear angle, framing, hand-demo, or motion change that earns the next beat.')
+      lines.push('Motion Readability: Avoid a frozen-frame feel; the shot should have a clearly visible sense of progression.')
     }
     if (closeupLike) {
       lines.push('Body Progression: If this is a close-up proof or detail shot, make sure the next visual idea can escalate into a wider use case, hand interaction, or cleaner product-context reveal.')
@@ -551,7 +566,7 @@ export function buildFrameContinuityLockText(input: { isEnd: boolean; shotIndex:
     'FRAME CONTINUITY LOCK:',
     'The ending keyframe MUST be a direct continuation of the provided starting frame.',
     'Maintain the same product instance, same model instance, and same scene setup.',
-    'Only allow minimal natural motion and slight camera shift.',
+    'Only allow natural motion continuity and a slight camera shift while preserving the same composition logic.',
     'Do NOT reset composition or regenerate the scene.',
   ].join(' ')
 }
@@ -662,7 +677,7 @@ export function buildPhysicsConsistencyText(productType: string) {
   const base = [
     'PHYSICS CONSISTENCY:',
     'The product must obey believable real-world support and gravity.',
-    'Allow only minimal natural swing or settle motion when motion is required.',
+    'Allow only controlled natural swing or settle motion when motion is required.',
     'No floating, no rigid sculpture pose, no impossible balance, and no unnatural angles.',
   ].join(' ')
   const earrings = `${base} Earrings must hang downward naturally due to gravity and may only show minimal realistic swing.`
@@ -738,9 +753,9 @@ export function buildMotionLimitText(productType: string, motion?: string) {
   return [
     'MOTION LIMIT:',
     normalizedMotion === 'zoom_out'
-      ? 'The earring may have extremely subtle micro-movements caused by breathing during the continuous pull-back.'
-      : 'The earring may have extremely subtle micro-movements caused by breathing.',
-    'Amplitude must be minimal and physically plausible.',
+      ? 'The earring may have gentle micro-movements caused by breathing during the continuous pull-back.'
+      : 'The earring may have gentle micro-movements caused by breathing.',
+    'Amplitude must stay gentle and physically plausible.',
     'No noticeable swinging, no exaggerated motion, no sudden motion burst.',
   ].join(' ')
 }
@@ -756,7 +771,7 @@ export function prependSilentCommercialGlobalRule(parts: Array<string | null | u
 function movementLabel(shot: ShotSpec) {
   const motion = String(shot.cameraMovement || shot.motion || shot.prompt?.cameraMotion || 'static')
   const map: Record<string, string> = {
-    static: 'mostly static handheld shot with tiny natural micro movement',
+    static: 'stable handheld shot with visible natural motion progression while preserving the same framing logic',
     zoom_in: 'very slow smooth push-in following the same reference movement path',
     zoom_out: 'very slow smooth pull-back following the same reference movement path',
     pan_left: 'small smooth handheld pan left matching the reference direction',
@@ -866,7 +881,7 @@ export function buildShotScriptConstraintText(shot: ShotSpec) {
     keepEnglishLikeText(shot.action || shot.visualPrompt, 'Natural product demonstration with believable hand movement.')
   const cameraDescription = keepEnglishLikeText(
     shot.cameraDescription,
-    `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'static'} movement`,
+    `${shot.framing || 'closeup'} framing, ${shot.cameraMovement || shot.motion || 'gentle handheld motion'} movement`,
   )
   const productFocus = keepEnglishLikeText(shot.productFocus, 'Keep the product clearly visible and commercially relevant.')
   const generationPrompt =
@@ -881,6 +896,7 @@ export function buildShotScriptConstraintText(shot: ShotSpec) {
       onScreenText ? `Any implied on-screen message should mean: ${onScreenText}.` : '',
       `Visual direction: ${visualDescription}. Action direction: ${actionDescription}. Camera direction: ${cameraDescription}.`,
       `Keep the product clearly visible and commercially relevant. ${productFocus}.`,
+      'Keep the shot visibly alive with one clear motion beat or framing progression, not a frozen-frame feel.',
       generationPrompt ? `Core generation guidance: ${generationPrompt.slice(0, 320)}.` : '',
       'The first frame must already match the shot setup, and the final frame must complete the same shot beat without changing scene, product, action type, or person identity.',
     ],
@@ -1211,6 +1227,7 @@ export function buildOptimizedVideoPrompt(input: {
     ShotSpec,
     | 'id'
     | 'index'
+    | 'scriptRole'
     | 'productType'
     | 'scriptText'
     | 'generationPrompt'
@@ -1236,6 +1253,7 @@ function buildVideoExecutionStackPrompt(input: {
     ShotSpec,
     | 'id'
     | 'index'
+    | 'scriptRole'
     | 'productType'
     | 'scriptText'
     | 'generationPrompt'
@@ -1281,7 +1299,7 @@ function buildVideoExecutionStackPrompt(input: {
     scriptText: shot.scriptText,
     cameraDescription: shot.cameraDescription,
     motion: shot.motion,
-  }).join(' ')
+  })
   const specificMicroAction = inferPhysicalLightingLockSpecificMicroAction({
     category,
     productType: shot.productType,
@@ -1293,7 +1311,7 @@ function buildVideoExecutionStackPrompt(input: {
   return fillVideoPromptTemplate(PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE, {
     productName,
     targetBodyPart,
-    cameraMovement: [cameraMovement, extraCameraMovement].filter(Boolean).join(' '),
+    cameraMovement: composePhysicalLightingLockCameraMovement(cameraMovement, extraCameraMovement),
     specificMicroAction,
   })
 }
@@ -1303,6 +1321,7 @@ export function buildFinalShotVideoPositivePrompt(input: {
     ShotSpec,
     | 'id'
     | 'index'
+    | 'scriptRole'
     | 'productType'
     | 'scriptText'
     | 'generationPrompt'
@@ -1457,7 +1476,10 @@ export function buildCloneShotPrompt(input: {
   const visualStyle = blueprint.visualStyle
   const shotRole = keepEnglishLikeText(shot.shotRole || shot.role || shot.purpose || 'detail', 'detail')
   const cameraFraming = keepEnglishLikeText(shot.framing || 'closeup', 'closeup')
-  const cameraMovement = keepEnglishLikeText(shot.cameraMovement || shot.motion || 'static', 'static')
+  const cameraMovement = keepEnglishLikeText(
+    shot.cameraMovement || shot.motion || 'gentle handheld motion',
+    'gentle handheld motion',
+  )
   const action = keepEnglishLikeText(shot.action || shot.visualPrompt || 'natural product demonstration', 'natural product demonstration')
   const negative = buildCloneNegativePrompt(options.productType, shot.shotType)
   const referenceLock = buildReferenceLockText(shot, visualStyle?.scene)

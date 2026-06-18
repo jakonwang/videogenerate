@@ -191,7 +191,7 @@ export type ShotSpec = {
   storyboardReferenceConfidence?: StoryboardReferenceConfidence
   storyboardReferenceReason?: string[]
   referenceModeLocked?: boolean
-  referenceModeLockReason?: 'manual'
+  referenceModeLockReason?: 'manual' | 'scene_contains_model_wearing'
   referenceLock?: ReferenceLock
   scriptText: string
   scriptRole: ScriptRole
