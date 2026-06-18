@@ -833,6 +833,23 @@ function wireIpc() {
   ipcMain.handle('clone:listModelIdentityLibrary', async () => {
     return await cloneService.listModelIdentityLibrary()
   })
+  ipcMain.handle('clone:listModelTasks', async () => {
+    return await cloneService.listModelTasks()
+  })
+  ipcMain.handle(
+    'clone:createModelTask',
+    async (
+      _e,
+      payload?: {
+        title?: string
+        description?: string
+        sourceProjectId?: string
+        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      },
+    ) => {
+      return await cloneService.createModelTask(payload)
+    },
+  )
   ipcMain.handle('clone:getGenerationQueue', async (_e, payload: { cloneProjectId: string }) => {
     return await cloneService.getGenerationQueue(payload)
   })
@@ -1036,12 +1053,13 @@ function wireIpc() {
     async (
       _e,
       payload: {
-        cloneProjectId: string
+        cloneProjectId?: string
+        modelTaskId?: string
         productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
         productPoints?: string
         modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
         productReferenceImagePaths?: string[]
-        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -1057,7 +1075,8 @@ function wireIpc() {
     async (
       _e,
       payload: {
-        cloneProjectId: string
+        cloneProjectId?: string
+        modelTaskId?: string
         productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
         productPoints?: string
         modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
@@ -1093,7 +1112,7 @@ function wireIpc() {
         which?: 'start' | 'end' | 'both'
         selectedModelIdentityId?: string
         productReferenceImagePaths?: string[]
-        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -1255,7 +1274,7 @@ function wireIpc() {
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
         apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
         videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
@@ -1340,19 +1359,19 @@ app.whenReady().then(async () => {
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 
   wireIpc()
+  await wireMediaProtocol()
   createWindow()
   registerUpdaterIpc(() => mainWindow)
   setupAutoUpdater(() => mainWindow)
 
   void (async () => {
-    try {
-      await productsRepo.ensureSeed()
-      await templatesRepo.ensureSeed()
-      await cloneRepo.ensureSeed()
-      await webPlatformRepo.ensureSeed()
-      await wireMediaProtocol()
-      await ensureWebApiServer()
-      await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
+      try {
+        await productsRepo.ensureSeed()
+        await templatesRepo.ensureSeed()
+        await cloneRepo.ensureSeed()
+        await webPlatformRepo.ensureSeed()
+        await ensureWebApiServer()
+        await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
     } catch (error: any) {
       console.error('[app-startup] bootstrap-failed', {
         message: String(error?.message ?? error ?? 'unknown error'),

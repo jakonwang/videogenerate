@@ -157,6 +157,13 @@ const api = {
     getProject: (payload: { cloneProjectId: string }) =>
       ipcRenderer.invoke('clone:getProject', payload),
     listModelIdentityLibrary: () => ipcRenderer.invoke('clone:listModelIdentityLibrary'),
+    listModelTasks: () => ipcRenderer.invoke('clone:listModelTasks'),
+    createModelTask: (payload?: {
+      title?: string
+      description?: string
+      sourceProjectId?: string
+      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+    }) => ipcRenderer.invoke('clone:createModelTask', payload ?? {}),
     reanalyzeShotScript: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:reanalyzeShotScript', payload),
     generateShotVariants: (payload: {
@@ -310,12 +317,13 @@ const api = {
       productReferenceImagePaths?: string[]
     }) => ipcRenderer.invoke('clone:generateAllShotFrames', payload),
     generateModelIdentityPack: (payload: {
-      cloneProjectId: string
+      cloneProjectId?: string
+      modelTaskId?: string
       productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
       productPoints?: string
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -325,7 +333,8 @@ const api = {
       imageProviderCredentials?: Record<string, unknown>
     }) => ipcRenderer.invoke('clone:generateModelIdentityPack', payload),
     getModelIdentityPromptPreview: (payload: {
-      cloneProjectId: string
+      cloneProjectId?: string
+      modelTaskId?: string
       productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
       productPoints?: string
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
@@ -366,7 +375,7 @@ const api = {
       forceRegenerate?: boolean
       selectedModelIdentityId?: string
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -459,7 +468,7 @@ const api = {
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
-        imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+        imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
         apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
         videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
@@ -498,7 +507,7 @@ const api = {
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
-      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       grsaiImageModel?: string
       apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
       videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'

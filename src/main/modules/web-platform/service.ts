@@ -1697,7 +1697,7 @@ export const webPlatformService = {
       productPoints?: string
       modelProfileOptions?: import('../../../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
-      imageProviderPrimary?: 'openai' | 'grsai' | 'apifox_hub'
+      imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
@@ -1716,7 +1716,7 @@ export const webPlatformService = {
     const project = await assertProjectOwnership(input.cloneProjectId, auth.user.id)
     const currentCredentials = await cloneRepo.getCredentials()
 
-    const result = await cloneService.generateModelIdentityPack({
+    const result = (await cloneService.generateModelIdentityPack({
       cloneProjectId: input.cloneProjectId,
       productType: input.productType,
       productPoints: input.productPoints,
@@ -1753,7 +1753,7 @@ export const webPlatformService = {
             },
           }
         : undefined,
-    })
+    })) as CloneProject
 
     const saved = await patchProjectOwnership(result, {
       userId: auth.user.id,

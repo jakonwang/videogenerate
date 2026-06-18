@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
-import type { CloneProject, CloneProjectGroup, ModelIdentityLibraryItem } from './types'
+import type { CloneProject, CloneProjectGroup, ModelIdentityLibraryItem, ModelTask } from './types'
 
 type SqliteStatement = {
   run(...params: unknown[]): unknown
@@ -20,6 +20,7 @@ type CloneSqliteDbShape = {
   projects: CloneProject[]
   projectGroups: CloneProjectGroup[]
   modelIdentityLibrary: ModelIdentityLibraryItem[]
+  modelTasks: ModelTask[]
 }
 
 const schemaSql = `
@@ -43,6 +44,12 @@ CREATE TABLE IF NOT EXISTS clone_project_groups (
   sort_order INTEGER NOT NULL,
   payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS clone_model_tasks (
+  id TEXT PRIMARY KEY,
+  updated_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  payload TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_clone_projects_updated_at
 ON clone_projects(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_clone_projects_user_updated_at
@@ -51,6 +58,8 @@ CREATE INDEX IF NOT EXISTS idx_clone_project_groups_sort_created_at
 ON clone_project_groups(sort_order ASC, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_clone_model_identities_updated_at
 ON clone_model_identities(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clone_model_tasks_updated_at
+ON clone_model_tasks(updated_at DESC);
 `
 
 let db: SqliteDatabase | null = null
@@ -131,7 +140,7 @@ function selectPayloadById<T>(table: string, id: string) {
 
 export function isCloneSqliteEmpty() {
   const database = getDatabase()
-  for (const table of ['clone_projects', 'clone_model_identities', 'clone_project_groups']) {
+  for (const table of ['clone_projects', 'clone_model_identities', 'clone_project_groups', 'clone_model_tasks']) {
     const row = database.prepare(`SELECT COUNT(1) AS count FROM ${table}`).get() as { count?: number } | undefined
     if (Number(row?.count || 0) > 0) return false
   }
@@ -144,6 +153,7 @@ export function readCloneDbFromSqlite(): CloneSqliteDbShape {
     projects: selectPayloads('clone_projects', 'updated_at DESC, created_at DESC'),
     projectGroups: selectPayloads('clone_project_groups', 'sort_order ASC, created_at ASC'),
     modelIdentityLibrary: selectPayloads('clone_model_identities', 'updated_at DESC, created_at DESC'),
+    modelTasks: selectPayloads('clone_model_tasks', 'updated_at DESC, created_at DESC'),
   }
 }
 
@@ -186,6 +196,9 @@ export function writeCloneDbToSqlite(input: CloneSqliteDbShape) {
   const replaceGroup = database.prepare(
     'INSERT OR REPLACE INTO clone_project_groups (id, updated_at, created_at, sort_order, payload) VALUES (?, ?, ?, ?, ?)',
   )
+  const replaceModelTask = database.prepare(
+    'INSERT OR REPLACE INTO clone_model_tasks (id, updated_at, created_at, payload) VALUES (?, ?, ?, ?)',
+  )
   const existingProjectIds = new Set(
     (database.prepare('SELECT id FROM clone_projects').all() as Array<{ id?: string }>).map((item) => String(item.id || '')),
   )
@@ -195,12 +208,17 @@ export function writeCloneDbToSqlite(input: CloneSqliteDbShape) {
   const existingGroupIds = new Set(
     (database.prepare('SELECT id FROM clone_project_groups').all() as Array<{ id?: string }>).map((item) => String(item.id || '')),
   )
+  const existingModelTaskIds = new Set(
+    (database.prepare('SELECT id FROM clone_model_tasks').all() as Array<{ id?: string }>).map((item) => String(item.id || '')),
+  )
   const nextProjectIds = new Set(input.projects.map((item) => String(item.id || '')))
   const nextIdentityIds = new Set(input.modelIdentityLibrary.map((item) => String(item.id || '')))
   const nextGroupIds = new Set(input.projectGroups.map((item) => String(item.id || '')))
+  const nextModelTaskIds = new Set(input.modelTasks.map((item) => String(item.id || '')))
   const deleteProject = database.prepare('DELETE FROM clone_projects WHERE id = ?')
   const deleteIdentity = database.prepare('DELETE FROM clone_model_identities WHERE id = ?')
   const deleteGroup = database.prepare('DELETE FROM clone_project_groups WHERE id = ?')
+  const deleteModelTask = database.prepare('DELETE FROM clone_model_tasks WHERE id = ?')
 
   database.exec('BEGIN IMMEDIATE;')
   try {
@@ -213,6 +231,9 @@ export function writeCloneDbToSqlite(input: CloneSqliteDbShape) {
     for (const item of input.projectGroups) {
       replaceGroup.run(item.id, Number(item.updatedAt || 0), Number(item.createdAt || 0), Number(item.sortOrder || 0), JSON.stringify(item))
     }
+    for (const item of input.modelTasks) {
+      replaceModelTask.run(item.id, Number(item.updatedAt || 0), Number(item.createdAt || 0), JSON.stringify(item))
+    }
     for (const id of existingProjectIds) {
       if (id && !nextProjectIds.has(id)) deleteProject.run(id)
     }
@@ -221,6 +242,9 @@ export function writeCloneDbToSqlite(input: CloneSqliteDbShape) {
     }
     for (const id of existingGroupIds) {
       if (id && !nextGroupIds.has(id)) deleteGroup.run(id)
+    }
+    for (const id of existingModelTaskIds) {
+      if (id && !nextModelTaskIds.has(id)) deleteModelTask.run(id)
     }
     database.exec('COMMIT;')
   } catch (error) {

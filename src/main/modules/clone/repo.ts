@@ -42,6 +42,7 @@ import type {
   ImageProviderName,
   ModelCredentials,
   ModelIdentityLibraryItem,
+  ModelTask,
   CloneScriptFramework,
   ClonePromptCacheEntry,
   CloneFrameCacheEntry,
@@ -56,6 +57,7 @@ type CloneDbShape = {
   projects: CloneProject[]
   projectGroups?: CloneProjectGroup[]
   modelIdentityLibrary?: ModelIdentityLibraryItem[]
+  modelTasks?: ModelTask[]
 }
 
 type CloneSettingsShape = {
@@ -172,12 +174,63 @@ async function readCloneDbFileAt(filePath: string): Promise<CloneDbShape> {
       return JSON.parse(sanitized) as CloneDbShape
     }
   } catch {
-    return { projects: [], projectGroups: [], modelIdentityLibrary: [] }
+    return { projects: [], projectGroups: [], modelIdentityLibrary: [], modelTasks: [] }
   }
 }
 
 async function readCloneDbFile(): Promise<CloneDbShape> {
   return await readCloneDbFileAt(cloneDbPath())
+}
+
+function normalizeModelTask(item: any): ModelTask {
+  return {
+    id: String(item?.id ?? randomUUID()),
+    createdAt: Number(item?.createdAt ?? now()),
+    updatedAt: Number(item?.updatedAt ?? now()),
+    title: String(item?.title ?? '').trim() || 'New Model Task',
+    description: String(item?.description ?? '').trim() || undefined,
+    status:
+      item?.status === 'generating' || item?.status === 'done' || item?.status === 'failed'
+        ? item.status
+        : 'draft',
+    sourceProjectId: String(item?.sourceProjectId ?? '').trim() || undefined,
+    sourceProjectTitle: String(item?.sourceProjectTitle ?? '').trim() || undefined,
+    sourceProjectReferenceVideoName: String(item?.sourceProjectReferenceVideoName ?? '').trim() || undefined,
+    sourceProjectReferenceVideoPath: String(item?.sourceProjectReferenceVideoPath ?? '').trim() || undefined,
+    productType:
+      item?.productType === 'earrings' ||
+      item?.productType === 'phone_case' ||
+      item?.productType === 'clothes' ||
+      item?.productType === 'toy'
+        ? item.productType
+        : 'general',
+    productPoints: String(item?.productPoints ?? '').trim() || undefined,
+    modelProfileOptions: item?.modelProfileOptions && typeof item.modelProfileOptions === 'object' ? { ...item.modelProfileOptions } : undefined,
+    productReferenceImagePaths: Array.isArray(item?.productReferenceImagePaths) ? item.productReferenceImagePaths.map(String).filter(Boolean) : [],
+    modelReferenceImagePaths: Array.isArray(item?.modelReferenceImagePaths) ? item.modelReferenceImagePaths.map(String).filter(Boolean) : [],
+    projectIdentityGridPath: String(item?.projectIdentityGridPath ?? '').trim() || undefined,
+    projectIdentityGridStatus:
+      item?.projectIdentityGridStatus === 'generating' ||
+      item?.projectIdentityGridStatus === 'done' ||
+      item?.projectIdentityGridStatus === 'failed'
+        ? item.projectIdentityGridStatus
+        : 'idle',
+    projectIdentityGridUpdatedAt: Number(item?.projectIdentityGridUpdatedAt ?? 0) || undefined,
+    projectIdentityGridPromptPreview:
+      item?.projectIdentityGridPromptPreview && typeof item.projectIdentityGridPromptPreview === 'object'
+        ? {
+            ...item.projectIdentityGridPromptPreview,
+            profile:
+              item.projectIdentityGridPromptPreview.profile && typeof item.projectIdentityGridPromptPreview.profile === 'object'
+                ? { ...item.projectIdentityGridPromptPreview.profile }
+                : undefined,
+          }
+        : undefined,
+    selectedModelIdentityId: String(item?.selectedModelIdentityId ?? '').trim() || undefined,
+    selectedModelIdentitySnapshot: item?.selectedModelIdentitySnapshot ? normalizeIdentityLibraryItem(item.selectedModelIdentitySnapshot) : undefined,
+    modelIdentityPackId: String(item?.modelIdentityPackId ?? '').trim() || undefined,
+    error: String(item?.error ?? '').trim() || undefined,
+  }
 }
 
 function normalizeIdentityLibraryItem(item: any): ModelIdentityLibraryItem {
@@ -1078,9 +1131,11 @@ function mergeMissingLegacyEntries(target: CloneDbShape, legacy: CloneDbShape) {
   const nextProjects = [...normalizeDbCollection(target.projects)]
   const nextGroups = [...normalizeDbCollection(target.projectGroups)]
   const nextIdentities = [...normalizeDbCollection(target.modelIdentityLibrary)]
+  const nextModelTasks = [...normalizeDbCollection(target.modelTasks)]
   const projectIds = new Set(nextProjects.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
   const groupIds = new Set(nextGroups.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
   const identityIds = new Set(nextIdentities.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
+  const modelTaskIds = new Set(nextModelTasks.map((item) => String((item as any)?.id || '').trim()).filter(Boolean))
   let changed = false
 
   for (const item of normalizeDbCollection(legacy.projects)) {
@@ -1105,6 +1160,13 @@ function mergeMissingLegacyEntries(target: CloneDbShape, legacy: CloneDbShape) {
     identityIds.add(id)
     changed = true
   }
+  for (const item of normalizeDbCollection(legacy.modelTasks)) {
+    const id = String((item as any)?.id || '').trim()
+    if (!id || modelTaskIds.has(id)) continue
+    nextModelTasks.push(item)
+    modelTaskIds.add(id)
+    changed = true
+  }
 
   return {
     changed,
@@ -1112,6 +1174,7 @@ function mergeMissingLegacyEntries(target: CloneDbShape, legacy: CloneDbShape) {
       projects: nextProjects,
       projectGroups: nextGroups,
       modelIdentityLibrary: nextIdentities,
+      modelTasks: nextModelTasks,
     } satisfies CloneDbShape,
   }
 }
@@ -1143,7 +1206,7 @@ export async function ensureCloneSqliteReady(): Promise<CloneSqliteReadyState> {
   }
 
   let imported = false
-  let nextDb: CloneDbShape = { projects: [], projectGroups: [], modelIdentityLibrary: [] }
+  let nextDb: CloneDbShape = { projects: [], projectGroups: [], modelIdentityLibrary: [], modelTasks: [] }
   for (const legacyPath of legacyCandidates) {
     if (!existsSync(legacyPath)) continue
     const legacyDb = await readCloneDbFileAt(legacyPath)
@@ -1159,6 +1222,7 @@ export async function ensureCloneSqliteReady(): Promise<CloneSqliteReadyState> {
     projects: normalizeDbCollection(nextDb.projects),
     projectGroups: normalizeDbCollection(nextDb.projectGroups),
     modelIdentityLibrary: normalizeDbCollection(nextDb.modelIdentityLibrary),
+    modelTasks: normalizeDbCollection(nextDb.modelTasks),
   })
   return { migrated: true, source: 'json_import' }
 }
@@ -1170,6 +1234,7 @@ async function readCloneDbSource(): Promise<CloneDbShape> {
     projects: normalizeDbCollection(db.projects),
     projectGroups: normalizeDbCollection(db.projectGroups),
     modelIdentityLibrary: normalizeDbCollection(db.modelIdentityLibrary),
+    modelTasks: normalizeDbCollection(db.modelTasks),
   }
 }
 
@@ -1178,12 +1243,14 @@ async function writeCloneDbSource(input: CloneDbShape) {
     projects: Array.isArray(input.projects) ? input.projects : [],
     projectGroups: Array.isArray(input.projectGroups) ? input.projectGroups : [],
     modelIdentityLibrary: Array.isArray(input.modelIdentityLibrary) ? input.modelIdentityLibrary : [],
+    modelTasks: Array.isArray(input.modelTasks) ? input.modelTasks : [],
   }
   await ensureCloneSqliteReady()
   writeCloneDbToSqlite({
     projects: normalized.projects,
     projectGroups: normalized.projectGroups ?? [],
     modelIdentityLibrary: normalized.modelIdentityLibrary ?? [],
+    modelTasks: normalized.modelTasks ?? [],
   })
 }
 
@@ -2310,6 +2377,7 @@ function normalizeProject(p: CloneProject): CloneProject {
     groupId: String((p as any)?.groupId ?? '').trim() || undefined,
     groupName: String((p as any)?.groupName ?? '').trim() || undefined,
     archived: Boolean((p as any)?.archived ?? false),
+    hiddenFromCloneTaskList: Boolean((p as any)?.hiddenFromCloneTaskList ?? false),
     originalProductReferenceImagePaths: Array.isArray((p as any)?.originalProductReferenceImagePaths)
       ? (p as any).originalProductReferenceImagePaths.map(String).filter(Boolean)
       : [],
@@ -2525,6 +2593,12 @@ function normalizeProject(p: CloneProject): CloneProject {
   }
 }
 
+function isModelLibraryScratchProject(project: CloneProject) {
+  const title = String(project.title || '').trim()
+  const description = String(project.description || '').trim()
+  return title === '模特创建临时项目' || description.includes('用于桌面端创建模特时自动兜底的轻量草稿项目')
+}
+
 export const cloneRepo = {
   async readDb(): Promise<CloneDbShape> {
     return await queueCloneDbMutation(async () => {
@@ -2704,10 +2778,11 @@ export const cloneRepo = {
         }
         return normalizeProject(project)
       })
+      const visible = normalized.filter((project) => !isModelLibraryScratchProject(project))
       if (changed) {
         for (const project of normalized) upsertCloneProjectInSqlite(project)
       }
-      return normalized
+      return visible
     })
   },
 
@@ -2725,7 +2800,7 @@ export const cloneRepo = {
       if (changed) {
         for (const project of normalized) upsertCloneProjectInSqlite(project)
       }
-      return normalized
+      return normalized.filter((project) => !isModelLibraryScratchProject(project))
     })
   },
 
@@ -2760,6 +2835,7 @@ export const cloneRepo = {
         title: String(input.title ?? '').trim() || defaultCloneProjectTitle(now()),
         description: String(input.description ?? '').trim() || undefined,
         archived: false,
+        hiddenFromCloneTaskList: false,
         status: 'draft',
         runMode: inferNormalizedRunMode(input),
         locale: input.locale,
@@ -2901,6 +2977,40 @@ export const cloneRepo = {
   async listModelIdentityLibrary(): Promise<ModelIdentityLibraryItem[]> {
     const db = await this.readDb()
     return [...(db.modelIdentityLibrary ?? [])].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+  },
+
+  async listModelTasks(): Promise<ModelTask[]> {
+    const db = await this.readDb()
+    return [...(db.modelTasks ?? [])].map(normalizeModelTask).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+  },
+
+  async getModelTask(id: string): Promise<ModelTask | null> {
+    const all = await this.listModelTasks()
+    const targetId = String(id || '').trim()
+    return all.find((item) => item.id === targetId) ?? null
+  },
+
+  async upsertModelTask(input: ModelTask): Promise<ModelTask> {
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      const tasks = Array.isArray(db.modelTasks) ? db.modelTasks.map(normalizeModelTask) : []
+      const next = normalizeModelTask({ ...input, updatedAt: now() })
+      const idx = tasks.findIndex((item) => item.id === next.id)
+      if (idx >= 0) tasks[idx] = next
+      else tasks.unshift(next)
+      db.modelTasks = tasks
+      await writeCloneDbSource(db)
+      return next
+    })
+  },
+
+  async removeModelTask(id: string): Promise<{ ok: true }> {
+    return await queueCloneDbMutation(async () => {
+      const db = await readCloneDbSource()
+      db.modelTasks = (db.modelTasks ?? []).map(normalizeModelTask).filter((item) => item.id !== id)
+      await writeCloneDbSource(db)
+      return { ok: true }
+    })
   },
 
   async getModelIdentity(id: string): Promise<ModelIdentityLibraryItem | null> {

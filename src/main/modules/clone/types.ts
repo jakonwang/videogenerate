@@ -1057,6 +1057,7 @@ export type CloneProject = {
   groupId?: string
   groupName?: string
   archived?: boolean
+  hiddenFromCloneTaskList?: boolean
   status: CloneProjectStatus
   runMode: CloneRunMode
   locale: CloneLocale
@@ -1184,6 +1185,7 @@ export type CloneProjectSummary = {
   groupId?: string
   groupName?: string
   archived?: boolean
+  hiddenFromCloneTaskList?: boolean
   status: CloneProjectStatus | ClonePreviewPipelineStatus['status'] | string
   runMode: CloneRunMode
   createdAt: number
@@ -1207,6 +1209,48 @@ export type CloneProjectSummary = {
   generatedImageCount: number
   generatedVideoCount: number
   lastError: string
+}
+
+export type ModelTaskStatus = 'draft' | 'generating' | 'done' | 'failed'
+
+export type ModelTask = {
+  id: string
+  createdAt: number
+  updatedAt: number
+  title: string
+  description?: string
+  status: ModelTaskStatus
+  sourceProjectId?: string
+  sourceProjectTitle?: string
+  sourceProjectReferenceVideoName?: string
+  sourceProjectReferenceVideoPath?: string
+  productType?: CloneProductType
+  productPoints?: string
+  modelProfileOptions?: ModelProfileOptions
+  productReferenceImagePaths?: string[]
+  modelReferenceImagePaths?: string[]
+  projectIdentityGridPath?: string
+  projectIdentityGridStatus?: 'idle' | 'generating' | 'done' | 'failed'
+  projectIdentityGridUpdatedAt?: number
+  projectIdentityGridPromptPreview?: {
+    profile?: Record<string, unknown>
+    description?: string
+    prompt?: string
+    productType?: CloneProductType
+    productPoints?: string
+    productReferenceImageCount?: number
+    productReferenceImagePaths?: string[]
+    modelReferenceImageCount?: number
+    modelReferenceImagePaths?: string[]
+    gridUsagePlan?: string[]
+    requestProvider?: string
+    requestModel?: string
+    requestJson?: string
+  }
+  selectedModelIdentityId?: string
+  selectedModelIdentitySnapshot?: ModelIdentityLibraryItem
+  modelIdentityPackId?: string
+  error?: string
 }
 
 export type ModelCredentials = {

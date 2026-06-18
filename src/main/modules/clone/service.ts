@@ -11735,6 +11735,39 @@ export const cloneService = {
     return await cloneRepo.listModelIdentityLibrary()
   },
 
+  async listModelTasks() {
+    return await cloneRepo.listModelTasks()
+  },
+
+  async createModelTask(input?: {
+    title?: string
+    description?: string
+    sourceProjectId?: string
+    productType?: CloneProductType
+  }) {
+    let sourceProject = null
+    const sourceProjectId = String(input?.sourceProjectId || '').trim()
+    if (sourceProjectId) {
+      sourceProject = await cloneRepo.getProject(sourceProjectId)
+    }
+    return await cloneRepo.upsertModelTask({
+      id: randomUUID(),
+      createdAt: now(),
+      updatedAt: now(),
+      title: String(input?.title || '').trim() || '模特生成任务',
+      description: String(input?.description || '').trim() || undefined,
+      status: 'draft',
+      sourceProjectId: sourceProject?.id,
+      sourceProjectTitle: sourceProject?.title,
+      sourceProjectReferenceVideoName: sourceProject?.referenceVideoName,
+      sourceProjectReferenceVideoPath: sourceProject?.referenceVideoPath,
+      productType: input?.productType ?? 'general',
+      productReferenceImagePaths: [],
+      modelReferenceImagePaths: [],
+      projectIdentityGridStatus: 'idle',
+    })
+  },
+
   async renameModelIdentity(input: { id: string; name: string }) {
     const item = await cloneRepo.getModelIdentity(input.id)
     if (!item) throw new Error('AI 模特不存在')
@@ -11875,7 +11908,8 @@ export const cloneService = {
   },
 
   async generateModelIdentityPack(input: {
-    cloneProjectId: string
+    cloneProjectId?: string
+    modelTaskId?: string
     productType?: CloneProductType
     productPoints?: string
     modelProfileOptions?: import('./types').ModelProfileOptions
@@ -11894,8 +11928,6 @@ export const cloneService = {
     grsaiImageModel?: string
     imageProviderCredentials?: Partial<ModelCredentials>
   }) {
-    const item = await cloneRepo.getProject(input.cloneProjectId)
-    if (!item) throw new Error('Clone project does not exist')
     const creds = mergeImageProviderOverrides(await cloneRepo.getCredentials(), {
       ...(input.imageProviderCredentials ?? {}),
       imageProviderPrimary: input.imageProviderPrimary ?? input.imageProviderCredentials?.imageProviderPrimary,
@@ -11910,6 +11942,166 @@ export const cloneService = {
       grsaiImageModel: input.grsaiImageModel ?? input.imageProviderCredentials?.grsaiImageModel,
     })
     assertImageProviderKey(creds, 'generate model identity pack')
+
+    const modelTaskId = String(input.modelTaskId || '').trim()
+    if (input.purpose === 'model_library' || modelTaskId) {
+      const task = modelTaskId ? await cloneRepo.getModelTask(modelTaskId) : null
+      if (modelTaskId && !task) throw new Error('Model task does not exist')
+      const taskProductType =
+        input.productType ??
+        task?.productType ??
+        'general'
+      const packId = randomUUID()
+      const outDir = identityLibraryDir(packId)
+      await mkdir(outDir, { recursive: true })
+      const existingLibrary = await cloneRepo.listModelIdentityLibrary()
+      const nextName = (() => {
+        const used = new Set(existingLibrary.map((x) => String(x.name || '').trim()))
+        let i = 1
+        while (true) {
+          const name = `AI Model ${String(i).padStart(3, '0')}`
+          if (!used.has(name)) return name
+          i += 1
+        }
+      })()
+      const resolvedProductPoints =
+        String(input.productPoints || '').trim() ||
+        String(task?.productPoints || '').trim() ||
+        ''
+      const modelReferenceImagePaths =
+        (input.modelReferenceImagePaths ?? task?.modelReferenceImagePaths ?? []).map(String).filter(Boolean)
+      const preview = buildModelLibraryPromptPreview({
+        productType: taskProductType,
+        productPoints: resolvedProductPoints,
+        modelProfileOptions: input.modelProfileOptions ?? task?.modelProfileOptions,
+        productReferenceImagePaths: [],
+        modelReferenceImagePaths,
+      })
+      if (task) {
+        await cloneRepo.upsertModelTask({
+          ...task,
+          status: 'generating',
+          productType: taskProductType,
+          productPoints: resolvedProductPoints || undefined,
+          modelProfileOptions: input.modelProfileOptions ?? task.modelProfileOptions,
+          modelReferenceImagePaths,
+          projectIdentityGridStatus: 'generating',
+          projectIdentityGridPath: undefined,
+          projectIdentityGridUpdatedAt: now(),
+          projectIdentityGridPromptPreview: preview,
+          error: undefined,
+        })
+      }
+      try {
+        const generated = await generateModelIdentityPackImages({
+          credentials: creds,
+          outDir,
+          productType: taskProductType,
+          productPoints: resolvedProductPoints,
+          modelProfileOptions: input.modelProfileOptions ?? task?.modelProfileOptions,
+          productReferenceImagePaths: [],
+          modelReferenceImagePaths,
+          promptMode: 'model_library',
+          onImageGenerated: task
+            ? async (filePath) => {
+                const latestTask = await cloneRepo.getModelTask(task.id)
+                if (!latestTask) return
+                await cloneRepo.upsertModelTask({
+                  ...latestTask,
+                  status: 'generating',
+                  projectIdentityGridStatus: 'generating',
+                  projectIdentityGridPath: filePath,
+                  projectIdentityGridUpdatedAt: now(),
+                })
+              }
+            : undefined,
+        })
+        if (!generated.imagePaths.length) {
+          throw new Error(`model identity generation failed: model=${generated.model || imageProviderModel(creds)} no images returned`)
+        }
+        const doneDescription = [
+          'Selected model identity reused for this clone project',
+          `${generated.profile.market}, ${generated.profile.gender}, ${generated.profile.ageRange}`,
+          `${generated.profile.faceShape || 'oval face shape'}, ${generated.profile.hairStyle}, ${generated.profile.hairColor || 'natural dark black hair color'}`,
+          `${generated.profile.skinTone}, ${generated.profile.bodyType || 'slim build'}`,
+          `${generated.profile.outfitStyle}, ${generated.profile.mood}`,
+          `${generated.profile.sceneStyle}`,
+          `${generated.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}`,
+          `${generated.profile.cameraPresence || 'natural social-commerce camera presence'}, ${generated.profile.styleBias || 'conversion-focused product demo style'}`,
+        ].join('. ')
+        const libraryItem = await cloneRepo.upsertModelIdentity({
+          id: packId,
+          createdAt: now(),
+          updatedAt: now(),
+          status: 'done',
+          name: nextName,
+          productType: taskProductType,
+          market: generated.profile.market,
+          gender: generated.profile.gender,
+          ageRange: generated.profile.ageRange,
+          hairStyle: generated.profile.hairStyle,
+          skinTone: generated.profile.skinTone,
+          outfitStyle: generated.profile.outfitStyle,
+          mood: generated.profile.mood,
+          sceneStyle: generated.profile.sceneStyle,
+          faceShape: generated.profile.faceShape,
+          hairColor: generated.profile.hairColor,
+          bodyType: generated.profile.bodyType,
+          languageStyle: generated.profile.languageStyle,
+          cameraPresence: generated.profile.cameraPresence,
+          styleBias: generated.profile.styleBias,
+          description: doneDescription || preview.description || '',
+          imagePaths: generated.imagePaths,
+          coverImagePath: generated.imagePaths[0],
+          model: generated.model || imageProviderModel(creds),
+        })
+        if (task) {
+          return await cloneRepo.upsertModelTask({
+            ...task,
+            status: 'done',
+            productType: taskProductType,
+            productPoints: resolvedProductPoints || undefined,
+            modelProfileOptions: input.modelProfileOptions ?? task.modelProfileOptions,
+            modelReferenceImagePaths,
+            projectIdentityGridStatus: 'done',
+            projectIdentityGridPath: generated.imagePaths[0],
+            projectIdentityGridUpdatedAt: now(),
+            projectIdentityGridPromptPreview: {
+              ...preview,
+              profile: { ...generated.profile },
+              description: doneDescription,
+            },
+            selectedModelIdentityId: libraryItem.id,
+            selectedModelIdentitySnapshot: libraryItem,
+            modelIdentityPackId: libraryItem.id,
+            error: undefined,
+          })
+        }
+        return libraryItem
+      } catch (e) {
+        const friendlyMessage = humanizeModelPackError(e, creds)
+        if (task) {
+          await cloneRepo.upsertModelTask({
+            ...task,
+            status: 'failed',
+            productType: taskProductType,
+            productPoints: resolvedProductPoints || undefined,
+            modelProfileOptions: input.modelProfileOptions ?? task.modelProfileOptions,
+            modelReferenceImagePaths,
+            projectIdentityGridStatus: 'failed',
+            projectIdentityGridPath: undefined,
+            projectIdentityGridUpdatedAt: now(),
+            projectIdentityGridPromptPreview: preview,
+            error: friendlyMessage,
+          })
+        }
+        throw new Error(friendlyMessage)
+      }
+    }
+
+    const cloneProjectId = String(input.cloneProjectId || '').trim()
+    const item = await cloneRepo.getProject(cloneProjectId)
+    if (!item) throw new Error('Clone project does not exist')
 
     const productType = resolveProjectIdentityGridProductType(item, input.productType)
     const packId = randomUUID()
@@ -11926,67 +12118,6 @@ export const cloneService = {
       }
     })()
     const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)
-
-    if (input.purpose === 'model_library') {
-      const modelReferenceImagePaths = (input.modelReferenceImagePaths ?? []).map(String).filter(Boolean)
-      const preview = buildModelLibraryPromptPreview({
-        productType,
-        productPoints: resolvedProductPoints,
-        modelProfileOptions: input.modelProfileOptions,
-        productReferenceImagePaths: [],
-        modelReferenceImagePaths,
-      })
-      const generated = await generateModelIdentityPackImages({
-        credentials: creds,
-        outDir,
-        productType,
-        productPoints: resolvedProductPoints,
-        modelProfileOptions: input.modelProfileOptions,
-        productReferenceImagePaths: [],
-        modelReferenceImagePaths,
-        promptMode: 'model_library',
-      })
-      if (!generated.imagePaths.length) {
-        throw new Error(`model identity generation failed: model=${generated.model || imageProviderModel(creds)} no images returned`)
-      }
-      const doneDescription = [
-        'Selected model identity reused for this clone project',
-        `${generated.profile.market}, ${generated.profile.gender}, ${generated.profile.ageRange}`,
-        `${generated.profile.faceShape || 'oval face shape'}, ${generated.profile.hairStyle}, ${generated.profile.hairColor || 'natural dark black hair color'}`,
-        `${generated.profile.skinTone}, ${generated.profile.bodyType || 'slim build'}`,
-        `${generated.profile.outfitStyle}, ${generated.profile.mood}`,
-        `${generated.profile.sceneStyle}`,
-        `${generated.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}`,
-        `${generated.profile.cameraPresence || 'natural social-commerce camera presence'}, ${generated.profile.styleBias || 'conversion-focused product demo style'}`,
-      ].join('. ')
-      await cloneRepo.upsertModelIdentity({
-        id: packId,
-        createdAt: now(),
-        updatedAt: now(),
-        status: 'done',
-        name: nextName,
-        productType,
-        market: generated.profile.market,
-        gender: generated.profile.gender,
-        ageRange: generated.profile.ageRange,
-        hairStyle: generated.profile.hairStyle,
-        skinTone: generated.profile.skinTone,
-        outfitStyle: generated.profile.outfitStyle,
-        mood: generated.profile.mood,
-        sceneStyle: generated.profile.sceneStyle,
-        faceShape: generated.profile.faceShape,
-        hairColor: generated.profile.hairColor,
-        bodyType: generated.profile.bodyType,
-        languageStyle: generated.profile.languageStyle,
-        cameraPresence: generated.profile.cameraPresence,
-        styleBias: generated.profile.styleBias,
-        description: doneDescription || preview.description || '',
-        imagePaths: generated.imagePaths,
-        coverImagePath: generated.imagePaths[0],
-        model: generated.model || imageProviderModel(creds),
-      })
-      return item
-    }
 
     const modelReferenceImagePaths = Array.from(
       new Set(
@@ -12057,7 +12188,7 @@ export const cloneService = {
         modelReferenceImagePaths,
         promptMode: 'identity_grid',
         onImageGenerated: async (filePath) => {
-          const latest = await cloneRepo.getProject(input.cloneProjectId)
+          const latest = await cloneRepo.getProject(cloneProjectId)
           if (!latest) return
           latest.projectIdentityGridPath = filePath
           latest.projectIdentityGridStatus = 'generating'
@@ -12078,7 +12209,7 @@ export const cloneService = {
       if (!generated.imagePaths.length) {
         throw new Error(`AI model identity pack generation failed: model=${generated.model || pendingPack.model} no images returned`)
       }
-      const latest = await cloneRepo.getProject(input.cloneProjectId)
+      const latest = await cloneRepo.getProject(cloneProjectId)
       if (!latest) throw new Error('Clone project does not exist')
       latest.projectIdentityGridPath = generated.imagePaths[0]
       latest.projectIdentityGridStatus = 'done'
@@ -12101,7 +12232,7 @@ export const cloneService = {
       return await cloneRepo.upsertProject(latest)
     } catch (e) {
       const friendlyMessage = humanizeModelPackError(e, creds)
-      const latest = await cloneRepo.getProject(input.cloneProjectId)
+      const latest = await cloneRepo.getProject(cloneProjectId)
       if (!latest) throw e
       latest.projectIdentityGridPath = undefined
       latest.projectIdentityGridStatus = 'failed'
@@ -12112,14 +12243,30 @@ export const cloneService = {
   },
 
   async getModelIdentityPromptPreview(input: {
-    cloneProjectId: string
+    cloneProjectId?: string
+    modelTaskId?: string
     productType?: CloneProductType
     productPoints?: string
     modelProfileOptions?: import('./types').ModelProfileOptions
     productReferenceImagePaths?: string[]
     modelReferenceImagePaths?: string[]
   }) {
-    const item = await cloneRepo.getProject(input.cloneProjectId)
+    const modelTaskId = String(input.modelTaskId || '').trim()
+    if (modelTaskId) {
+      const task = await cloneRepo.getModelTask(modelTaskId)
+      if (!task) throw new Error('Model task does not exist')
+      const productType = input.productType ?? task.productType ?? 'general'
+      const resolvedProductPoints = String(input.productPoints || '').trim() || String(task.productPoints || '').trim()
+      return buildModelLibraryPromptPreview({
+        productType,
+        productPoints: resolvedProductPoints,
+        modelProfileOptions: input.modelProfileOptions ?? task.modelProfileOptions,
+        productReferenceImagePaths: [],
+        modelReferenceImagePaths: (input.modelReferenceImagePaths ?? task.modelReferenceImagePaths ?? []).map(String).filter(Boolean),
+      })
+    }
+    const cloneProjectId = String(input.cloneProjectId || '').trim()
+    const item = await cloneRepo.getProject(cloneProjectId)
     if (!item) throw new Error('复刻项目不存在')
     const productType = resolveProjectIdentityGridProductType(item, input.productType)
     const resolvedProductPoints = String(input.productPoints || '').trim() || buildIdentityGridProductPoints(item, productType)

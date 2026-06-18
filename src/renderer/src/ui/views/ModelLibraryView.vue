@@ -32,6 +32,16 @@ type CloneProject = {
   selectedModelIdentityId?: string
 }
 
+type ModelTask = {
+  id: string
+  status: 'draft' | 'generating' | 'done' | 'failed'
+  title: string
+  description?: string
+  sourceProjectId?: string
+  productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+  modelReferenceImagePaths?: string[]
+}
+
 type ModelIdentityLibraryItem = {
   id: string
   status: 'idle' | 'generating' | 'done' | 'failed'
@@ -79,11 +89,12 @@ const busy = ref(false)
 const message = ref('')
 const library = ref<ModelIdentityLibraryItem[]>([])
 const projects = ref<CloneProject[]>([])
+const modelTasks = ref<ModelTask[]>([])
 const search = ref('')
 const statusFilter = ref<LibraryStatusFilter>('all')
 const selectedId = ref('')
 const selectedIds = ref<string[]>([])
-const sourceProjectId = ref('')
+const modelTaskId = ref('')
 const productType = ref<'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'>('general')
 const modelProfileOptions = ref<ModelProfileOptions>(getRecommendedModelProfileOptions('general'))
 const modelReferenceImages = ref<string[]>([])
@@ -153,14 +164,7 @@ const tabItems = computed(() => [
   { key: 'favorites' as const, label: '收藏夹', count: counts.value.favorites },
 ])
 
-const projectOptions = computed(() =>
-  [...projects.value]
-    .sort((a, b) => Number((b as any).updatedAt || 0) - Number((a as any).updatedAt || 0))
-    .map((project) => ({
-    id: project.id,
-    label: project.referenceVideoName || project.referenceVideoPath || project.id,
-    })),
-)
+const activeModelTask = computed(() => modelTasks.value.find((item) => item.id === modelTaskId.value) || null)
 
 const statusOptions = [
   { value: 'all' as const, label: '全部状态' },
@@ -488,6 +492,7 @@ function mediaUrl(path?: string) {
   return path ? `vg://file?path=${encodeURIComponent(path)}` : ''
 }
 
+
 function primaryMediaPath(item?: ModelIdentityLibraryItem | null) {
   if (!item) return ''
   return String(item.coverImagePath || item.imagePaths?.[0] || '').trim()
@@ -720,13 +725,14 @@ async function deleteModelsBatch() {
 
 async function assignModelToProject(item: ModelIdentityLibraryItem) {
   closeActionMenu()
-  if (!sourceProjectId.value) {
+  const targetProjectId = projects.value[0]?.id
+  if (!targetProjectId) {
     message.value = '请先选择来源项目'
     return
   }
   try {
     await window.api.clone.selectProjectModelIdentity({
-      cloneProjectId: sourceProjectId.value,
+      cloneProjectId: targetProjectId,
       identityId: item.id,
     })
     message.value = '已绑定到当前复刻项目'
@@ -736,10 +742,11 @@ async function assignModelToProject(item: ModelIdentityLibraryItem) {
 }
 
 async function openCloneWithModel(item: ModelIdentityLibraryItem) {
-  if (sourceProjectId.value) {
+  const targetProjectId = projects.value[0]?.id
+  if (targetProjectId) {
     try {
       await window.api.clone.selectProjectModelIdentity({
-        cloneProjectId: sourceProjectId.value,
+        cloneProjectId: targetProjectId,
         identityId: item.id,
       })
     } catch {}
@@ -853,25 +860,27 @@ async function refreshLibrary() {
 async function refreshProjects() {
   const rows = await window.api.clone.listProjects()
   projects.value = Array.isArray(rows) ? (rows as CloneProject[]) : []
-  if (!sourceProjectId.value && projects.value[0]) sourceProjectId.value = projects.value[0].id
 }
 
-async function ensureSourceProjectId() {
-  if (sourceProjectId.value) return sourceProjectId.value
-  await refreshProjects()
-  if (sourceProjectId.value) return sourceProjectId.value
-  const created = await window.api.clone.createDraftProject({
-    locale: 'zh-CN',
-    strength: 'structure',
-    runMode: 'manual',
-    title: '模特创建临时项目',
-    description: '用于桌面端创建模特时自动兜底的轻量草稿项目',
+async function refreshModelTasks() {
+  const rows = await window.api.clone.listModelTasks()
+  modelTasks.value = Array.isArray(rows) ? (rows as ModelTask[]) : []
+  if (!modelTaskId.value && modelTasks.value[0]) modelTaskId.value = modelTasks.value[0].id
+}
+
+async function createModelTask(options?: { selectAsActive?: boolean }) {
+  const created = await window.api.clone.createModelTask({
+    title: '模特生成任务',
+    description: '用于桌面端模特生成的独立任务',
+    productType: productType.value,
   })
-  const projectId = String((created as any)?.project?.id || (created as any)?.summary?.id || '').trim()
-  if (!projectId) throw new Error('自动创建模特项目失败')
-  sourceProjectId.value = projectId
-  await refreshProjects()
-  return sourceProjectId.value
+  const nextTaskId = String((created as any)?.id || '').trim()
+  if (!nextTaskId) throw new Error('自动创建模特任务失败')
+  if (options?.selectAsActive !== false) {
+    modelTaskId.value = nextTaskId
+  }
+  await refreshModelTasks()
+  return modelTaskId.value
 }
 
 async function pickModelReferenceImage() {
@@ -907,16 +916,17 @@ async function generateModel() {
   busy.value = true
   let pollTimer: ReturnType<typeof setInterval> | undefined
   try {
-    const projectId = await ensureSourceProjectId()
+    const nextModelTaskId = await createModelTask()
     const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
     const plainReferenceImagePaths = modelReferenceImages.value.map((item) => String(item || '')).filter(Boolean)
     const plainImageProviderCredentials = JSON.parse(JSON.stringify(currentImageProviderCredentials() || {}))
     await saveCredentials()
     pollTimer = setInterval(() => {
+      refreshModelTasks().catch(() => {})
       refreshLibrary().catch(() => {})
     }, 2000)
     await window.api.clone.generateModelIdentityPack({
-      cloneProjectId: projectId,
+      modelTaskId: nextModelTaskId,
       productType: productType.value,
       productPoints: undefined,
       purpose: 'model_library',
@@ -978,36 +988,38 @@ async function generateModelsBatch() {
   busy.value = true
   let pollTimer: ReturnType<typeof setInterval> | undefined
   try {
-    const projectId = await ensureSourceProjectId()
     const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
     const plainReferenceImagePaths = modelReferenceImages.value.map((item) => String(item || '')).filter(Boolean)
     const plainImageProviderCredentials = JSON.parse(JSON.stringify(currentImageProviderCredentials() || {}))
     await saveCredentials()
     pollTimer = setInterval(() => {
+      refreshModelTasks().catch(() => {})
       refreshLibrary().catch(() => {})
     }, 2000)
-    const payload = {
-      cloneProjectId: projectId,
-      productType: productType.value,
-      productPoints: undefined,
-      purpose: 'model_library' as const,
-      modelProfileOptions: plainModelProfileOptions,
-      productReferenceImagePaths: [],
-      modelReferenceImagePaths: plainReferenceImagePaths,
-      imageProviderPrimary: imageProviderPrimary.value,
-      openaiApiKey: openaiKey.value.trim() || undefined,
-      openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
-      openaiImageQuality: openaiImageQuality.value,
-      klingApiKey: klingKey.value.trim() || undefined,
-      klingHost: normalizeAtlasCloudHost(klingHost.value),
-      klingImageModel: klingImageModel.value.trim() || 'openai/gpt-image-1/edit',
-      grsaiApiKey: grsaiKey.value.trim() || undefined,
-      grsaiHost: grsaiHost.value.trim() || 'https://grsaiapi.com',
-      grsaiImageModel: grsaiImageModel.value.trim() || 'gpt-image-2',
-      imageProviderCredentials: plainImageProviderCredentials,
-    }
     const concurrency = 2
-    const jobs = Array.from({ length: total }, () => () => window.api.clone.generateModelIdentityPack(payload))
+    const jobs = Array.from({ length: total }, () => async () => {
+      const nextModelTaskId = await createModelTask({ selectAsActive: false })
+      return await window.api.clone.generateModelIdentityPack({
+        modelTaskId: nextModelTaskId,
+        productType: productType.value,
+        productPoints: undefined,
+        purpose: 'model_library' as const,
+        modelProfileOptions: plainModelProfileOptions,
+        productReferenceImagePaths: [],
+        modelReferenceImagePaths: plainReferenceImagePaths,
+        imageProviderPrimary: imageProviderPrimary.value,
+        openaiApiKey: openaiKey.value.trim() || undefined,
+        openaiImageModel: openaiImageModel.value.trim() || 'gpt-image-2',
+        openaiImageQuality: openaiImageQuality.value,
+        klingApiKey: klingKey.value.trim() || undefined,
+        klingHost: normalizeAtlasCloudHost(klingHost.value),
+        klingImageModel: klingImageModel.value.trim() || 'openai/gpt-image-1/edit',
+        grsaiApiKey: grsaiKey.value.trim() || undefined,
+        grsaiHost: grsaiHost.value.trim() || 'https://grsaiapi.com',
+        grsaiImageModel: grsaiImageModel.value.trim() || 'gpt-image-2',
+        imageProviderCredentials: plainImageProviderCredentials,
+      })
+    })
     const results: PromiseSettledResult<unknown>[] = []
     for (let start = 0; start < jobs.length; start += concurrency) {
       const chunk = jobs.slice(start, start + concurrency).map((job) => job())
@@ -1036,13 +1048,13 @@ async function generateModelsBatch() {
 async function previewModelPrompt() {
   promptPreviewBusy.value = true
   try {
-    const projectId = await ensureSourceProjectId()
+    const nextModelTaskId = modelTaskId.value || (await createModelTask())
     const plainModelProfileOptions = JSON.parse(JSON.stringify(modelProfileOptions.value || {}))
     const plainReferenceImagePaths = modelReferenceImages.value.map((item) => String(item || '')).filter(Boolean)
     const previewApi = window.api.clone.getModelIdentityPromptPreview
     if (typeof previewApi === 'function') {
       const result = await previewApi({
-        cloneProjectId: projectId,
+        modelTaskId: nextModelTaskId,
         productType: productType.value,
         productPoints: undefined,
         modelProfileOptions: plainModelProfileOptions,
@@ -1096,7 +1108,7 @@ function setPage(value: number) {
 onMounted(async () => {
   document.addEventListener('click', handleDocumentClick)
   await loadCredentials()
-  await Promise.all([refreshLibrary(), refreshProjects()])
+  await Promise.all([refreshLibrary(), refreshProjects(), refreshModelTasks()])
 })
 
 onBeforeUnmount(() => {
@@ -1567,6 +1579,10 @@ watch([activeTab, statusFilter, search], () => {
 
               <div class="models-stats-row">
                 <div class="models-stat-card"><span>参考模特图</span><strong>{{ modelReferenceImages.length }}</strong></div>
+              </div>
+
+              <div v-if="activeModelTask" class="models-hint models-hint--floating">
+                当前模特任务：{{ activeModelTask.title }} · {{ activeModelTask.status }}
               </div>
 
               <div v-if="message" class="models-hint models-hint--floating">
@@ -3427,3 +3443,4 @@ watch([activeTab, statusFilter, search], () => {
   }
 }
 </style>
+
