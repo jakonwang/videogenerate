@@ -95,4 +95,31 @@ export async function migrateLegacyWindowsUserData() {
       // ignore migrate failures for non-critical legacy files
     }
   }
+
+  const legacyNestedDataDir = join(currentUserData, 'videogenerate')
+  const currentDataDir = getAppPaths().dataDir
+  if (legacyNestedDataDir === currentDataDir) return
+
+  const nestedEntries = await readdir(legacyNestedDataDir, { withFileTypes: true }).catch(() => [])
+  if (!nestedEntries.length) return
+
+  await mkdir(currentDataDir, { recursive: true })
+  for (const entry of nestedEntries) {
+    const source = join(legacyNestedDataDir, entry.name)
+    const target = join(currentDataDir, entry.name)
+    const exists = await stat(target).then(() => true).catch(() => false)
+    if (exists) continue
+    try {
+      await mkdir(join(target, '..'), { recursive: true })
+      await import('node:fs/promises').then(({ cp }) =>
+        cp(source, target, {
+          recursive: true,
+          force: false,
+          errorOnExist: false,
+        }),
+      )
+    } catch {
+      // ignore migrate failures for nested legacy data
+    }
+  }
 }

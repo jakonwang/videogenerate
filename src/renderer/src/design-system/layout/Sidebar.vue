@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import sidebarBrandIconAsset from '../../../../../resources/icon-brand-ui-v2.png'
 
 const router = useRouter()
 
@@ -26,11 +27,7 @@ function navigate(to: string) {
   void router.push(to)
 }
 
-const sidebarBrandIconPath = 'D:\\phpstudy_pro\\WWW\\videogenerate\\resources\\icon-brand-ui-v2.png'
-const sidebarBrandIconVersion = String(Date.now())
-const sidebarBrandIconSrc = computed(
-  () => `vg://file?path=${encodeURIComponent(sidebarBrandIconPath)}&v=${encodeURIComponent(sidebarBrandIconVersion)}`,
-)
+const sidebarBrandIconSrc = computed(() => sidebarBrandIconAsset)
 </script>
 
 <template>
