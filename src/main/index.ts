@@ -23,12 +23,15 @@ import { stopPreviewHttpServer } from './lib/previewHttpServer'
 import { ensureWebApiServer, getWebApiServerPort, stopWebApiServer } from './lib/webApiServer'
 import { cloneRepo } from './modules/clone/repo'
 import { cloneService } from './modules/clone/service'
+import { livePhotoService } from './modules/live-photo/service'
 import { productsRepo } from './modules/products/repo'
 import { templatesRepo } from './modules/templates/repo'
 import { webPlatformRepo } from './modules/web-platform/repo'
 import { configureWindowsStorageRoot, cleanupLegacyWindowsStorage, migrateLegacyWindowsUserData } from './lib/windowsStorage'
 import { registerAppShellMediaIpc } from './ipc/registerAppShellMediaIpc'
 import { registerProductsIpc } from './ipc/registerProductsIpc'
+import { registerLivePhotoIpc } from './ipc/registerLivePhotoIpc'
+import { registerHermesLivePhotoIpc } from './ipc/registerHermesLivePhotoIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
@@ -338,6 +341,12 @@ function wireIpc() {
     })
     if (res.canceled) return null
     return res.filePaths[0] ?? null
+  })
+
+  ipcMain.handle('fs:pathExists', async (_e, input: { path: string }) => {
+    const targetPath = String(input?.path || '').trim()
+    if (!targetPath) return false
+    return existsSync(targetPath)
   })
 
   ipcMain.handle('fs:collectVideoFilesFromDrop', async (_e, roots: string[]) => {
@@ -1247,6 +1256,9 @@ function wireIpc() {
   ipcMain.handle('clone:getRuntimeOptions', async () => {
     return await cloneService.getRuntimeOptions()
   })
+  ipcMain.handle('clone:getHermesIntegrationSettings', async () => {
+    return await cloneService.getHermesIntegrationSettings()
+  })
   ipcMain.handle(
     'clone:setModelCredentials',
     async (
@@ -1337,12 +1349,28 @@ function wireIpc() {
       })
     },
   )
+  ipcMain.handle(
+    'clone:setHermesIntegrationSettings',
+    async (
+      _e,
+      payload: {
+        enabled?: boolean
+        callbackBaseUrl?: string
+        feishu?: import('./modules/clone/types').HermesFeishuIntegrationSettings
+        wecom?: import('./modules/clone/types').HermesWecomIntegrationSettings
+      },
+    ) => {
+      return await cloneService.setHermesIntegrationSettings(payload)
+    },
+  )
   ipcMain.handle('clone:getGrsAiCredits', async () => {
     return await cloneService.getGrsAiCredits()
   })
 
   registerAppShellMediaIpc(ipcMain, () => mainWindow, () => mainUiLocale)
   registerProductsIpc(ipcMain)
+  registerLivePhotoIpc(ipcMain)
+  registerHermesLivePhotoIpc(ipcMain)
   registerTiktokCreativeStudioIpc(ipcMain)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
@@ -1372,6 +1400,7 @@ app.whenReady().then(async () => {
         await webPlatformRepo.ensureSeed()
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
+        await livePhotoService.resumePendingTasksOnStartup()
     } catch (error: any) {
       console.error('[app-startup] bootstrap-failed', {
         message: String(error?.message ?? error ?? 'unknown error'),

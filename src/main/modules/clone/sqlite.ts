@@ -12,6 +12,7 @@ type SqliteStatement = {
 type SqliteDatabase = {
   exec(sql: string): unknown
   prepare(sql: string): SqliteStatement
+  close?: () => unknown
 }
 
 type SqliteCtor = new (path: string) => SqliteDatabase
@@ -250,5 +251,14 @@ export function writeCloneDbToSqlite(input: CloneSqliteDbShape) {
   } catch (error) {
     database.exec('ROLLBACK;')
     throw error
+  }
+}
+
+export function closeCloneSqlite() {
+  if (!db) return
+  try {
+    db.close?.()
+  } finally {
+    db = null
   }
 }

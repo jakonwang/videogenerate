@@ -143,6 +143,7 @@ import type {
   CloneRunMode,
   CloneShotVideoFailureBreakdown,
   CloneShotVideoSubmissionAuditLog,
+  HermesIntegrationSettings,
 } from './types'
 
 const sceneModelDetectionCache = new Map<string, boolean>()
@@ -11872,6 +11873,14 @@ export const cloneService = {
 
   async setRuntimeOptions(input: { storyboardFrameConcurrency?: number; globalStoryboardFrameConcurrency?: number }) {
     return await cloneRepo.setRuntimeOptions(input)
+  },
+
+  async getHermesIntegrationSettings() {
+    return await cloneRepo.getHermesIntegrationSettings()
+  },
+
+  async setHermesIntegrationSettings(input: Partial<HermesIntegrationSettings>) {
+    return await cloneRepo.setHermesIntegrationSettings(input)
   },
 
   async getGrsAiCredits() {

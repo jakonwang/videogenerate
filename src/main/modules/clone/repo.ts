@@ -49,6 +49,7 @@ import type {
   CloneCloudClipCacheEntry,
   CloneShotVideoOutput,
   ApifoxHubCredentials,
+  HermesIntegrationSettings,
 } from './types'
 import { buildReferenceLock } from './prompt'
 import { inferStoryboardReferenceDecision } from './storyboardReference'
@@ -64,6 +65,7 @@ type CloneSettingsShape = {
   encryptedCredentials?: string
   plaintextCredentials?: ModelCredentials
   runtimeOptions?: CloneRuntimeOptions
+  hermesIntegration?: HermesIntegrationSettings
 }
 
 export type CloneRuntimeOptions = {
@@ -74,6 +76,27 @@ export type CloneRuntimeOptions = {
 const DEFAULT_CLONE_RUNTIME_OPTIONS: CloneRuntimeOptions = {
   storyboardFrameConcurrency: 3,
   globalStoryboardFrameConcurrency: 2,
+}
+
+const DEFAULT_HERMES_INTEGRATION_SETTINGS: HermesIntegrationSettings = {
+  enabled: false,
+  callbackBaseUrl: '',
+  feishu: {
+    enabled: false,
+    appId: '',
+    appSecret: '',
+    tenantAccessToken: '',
+    receiveIdType: 'open_id',
+    defaultReceiveId: '',
+  },
+  wecom: {
+    enabled: false,
+    corpId: '',
+    corpSecret: '',
+    accessToken: '',
+    agentId: '',
+    defaultToUser: '',
+  },
 }
 
 const cloneDbPath = () => join(getAppPaths().dbDir, 'clone-projects.json')
@@ -1528,6 +1551,37 @@ function normalizeCloneRuntimeOptions(input?: Partial<CloneRuntimeOptions> | nul
       1,
       Math.min(6, Number.isFinite(global) ? Math.floor(global) : DEFAULT_CLONE_RUNTIME_OPTIONS.globalStoryboardFrameConcurrency),
     ),
+  }
+}
+
+function normalizeHermesIntegrationSettings(input?: Partial<HermesIntegrationSettings> | null): HermesIntegrationSettings {
+  const feishu: Partial<HermesIntegrationSettings['feishu']> = input?.feishu ?? {}
+  const wecom: Partial<HermesIntegrationSettings['wecom']> = input?.wecom ?? {}
+  return {
+    enabled: Boolean(input?.enabled ?? false),
+    callbackBaseUrl: String(input?.callbackBaseUrl ?? '').trim(),
+    feishu: {
+      enabled: Boolean(feishu.enabled ?? false),
+      appId: String(feishu.appId ?? '').trim() || undefined,
+      appSecret: String(feishu.appSecret ?? '').trim() || undefined,
+      tenantAccessToken: String(feishu.tenantAccessToken ?? '').trim() || undefined,
+      receiveIdType:
+        feishu.receiveIdType === 'user_id' ||
+        feishu.receiveIdType === 'union_id' ||
+        feishu.receiveIdType === 'chat_id' ||
+        feishu.receiveIdType === 'email'
+          ? feishu.receiveIdType
+          : 'open_id',
+      defaultReceiveId: String(feishu.defaultReceiveId ?? '').trim() || undefined,
+    },
+    wecom: {
+      enabled: Boolean(wecom.enabled ?? false),
+      corpId: String(wecom.corpId ?? '').trim() || undefined,
+      corpSecret: String(wecom.corpSecret ?? '').trim() || undefined,
+      accessToken: String(wecom.accessToken ?? '').trim() || undefined,
+      agentId: String(wecom.agentId ?? '').trim() || undefined,
+      defaultToUser: String(wecom.defaultToUser ?? '').trim() || undefined,
+    },
   }
 }
 
@@ -3101,6 +3155,33 @@ export const cloneRepo = {
     await writeJsonFile(cloneSettingsPath(), {
       ...settings,
       runtimeOptions: next,
+    })
+    return next
+  },
+
+  async getHermesIntegrationSettings(): Promise<HermesIntegrationSettings> {
+    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    return normalizeHermesIntegrationSettings(settings.hermesIntegration ?? DEFAULT_HERMES_INTEGRATION_SETTINGS)
+  },
+
+  async setHermesIntegrationSettings(input: Partial<HermesIntegrationSettings>): Promise<HermesIntegrationSettings> {
+    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const current = normalizeHermesIntegrationSettings(settings.hermesIntegration ?? DEFAULT_HERMES_INTEGRATION_SETTINGS)
+    const next = normalizeHermesIntegrationSettings({
+      ...current,
+      ...input,
+      feishu: {
+        ...current.feishu,
+        ...(input.feishu ?? {}),
+      },
+      wecom: {
+        ...current.wecom,
+        ...(input.wecom ?? {}),
+      },
+    })
+    await writeJsonFile(cloneSettingsPath(), {
+      ...settings,
+      hermesIntegration: next,
     })
     return next
   },

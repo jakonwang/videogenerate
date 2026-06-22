@@ -1,5 +1,11 @@
 import type http from 'node:http'
+import { createReadStream } from 'node:fs'
+import { stat } from 'node:fs/promises'
 import { webPlatformService } from './service'
+import { hermesLivePhotoService } from '../live-photo/hermes'
+import { hermesLivePhotoAdapters } from '../live-photo/hermesAdapters'
+import { hermesPlatformFormatters } from '../live-photo/hermesPlatformFormatters'
+import { hermesDeliveryService } from '../live-photo/hermesDelivery'
 
 type JsonObject = Record<string, unknown>
 
@@ -16,6 +22,25 @@ export function json(res: http.ServerResponse, status: number, payload: JsonObje
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   })
   res.end(JSON.stringify(payload))
+}
+
+function mediaHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range, Content-Type',
+    'Cross-Origin-Resource-Policy': 'cross-origin',
+  }
+}
+
+function mediaMimeOf(filePath: string) {
+  const value = String(filePath || '').trim().toLowerCase()
+  if (value.endsWith('.mp4')) return 'video/mp4'
+  if (value.endsWith('.mov')) return 'video/quicktime'
+  if (value.endsWith('.webm')) return 'video/webm'
+  if (value.endsWith('.jpg') || value.endsWith('.jpeg')) return 'image/jpeg'
+  if (value.endsWith('.png')) return 'image/png'
+  return 'application/octet-stream'
 }
 
 export async function readBody(req: http.IncomingMessage) {
@@ -77,6 +102,171 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         timestamp: Date.now(),
         dataDir: String(process.env.VIDEOGENERATE_DATA_DIR || '').trim() || undefined,
       })
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/hermes/live-photo/media') {
+      const filePath = String(url.searchParams.get('path') || '').trim()
+      if (!filePath) {
+        res.writeHead(400, mediaHeaders()).end('missing path')
+        return
+      }
+      let fileStat: Awaited<ReturnType<typeof stat>>
+      try {
+        fileStat = await stat(filePath)
+      } catch {
+        res.writeHead(404, mediaHeaders()).end('not found')
+        return
+      }
+      if (!fileStat.isFile()) {
+        res.writeHead(404, mediaHeaders()).end('not found')
+        return
+      }
+      const size = fileStat.size
+      const mime = mediaMimeOf(filePath)
+      const range = req.headers.range
+      if (range) {
+        const parts = /^bytes=(\d*)-(\d*)$/.exec(range)
+        if (parts) {
+          let start = parts[1] ? parseInt(parts[1], 10) : 0
+          let end = parts[2] ? parseInt(parts[2], 10) : size - 1
+          if (Number.isNaN(start)) start = 0
+          if (Number.isNaN(end) || end >= size) end = size - 1
+          if (start > end || start >= size) {
+            res.writeHead(416, { ...mediaHeaders(), 'Content-Range': `bytes */${size}` }).end()
+            return
+          }
+          const chunkSize = end - start + 1
+          res.writeHead(206, {
+            ...mediaHeaders(),
+            'Content-Range': `bytes ${start}-${end}/${size}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(chunkSize),
+            'Content-Type': mime,
+          })
+          createReadStream(filePath, { start, end }).on('error', () => res.destroy()).pipe(res)
+          return
+        }
+      }
+      res.writeHead(200, {
+        ...mediaHeaders(),
+        'Content-Length': String(size),
+        'Accept-Ranges': 'bytes',
+        'Content-Type': mime,
+      })
+      createReadStream(filePath).on('error', () => res.destroy()).pipe(res)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/session/start') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoService.startReferenceSession({
+        channel: typeof body.channel === 'string' ? body.channel : 'unknown',
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        referenceImagePaths: Array.isArray(body.referenceImagePaths) ? body.referenceImagePaths.map(String) : [],
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/session/select-product') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoService.selectProduct({
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : '',
+        productId: typeof body.productId === 'string' ? body.productId : '',
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    const hermesSessionMatch = /^\/hermes\/live-photo\/session\/([^/]+)$/.exec(pathname)
+    if (hermesSessionMatch && req.method === 'GET') {
+      const result = await hermesLivePhotoService.getSessionStatus(decodeURIComponent(hermesSessionMatch[1] || ''))
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/feishu/webhook') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoAdapters.handleFeishuEvent({
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
+        text: typeof body.text === 'string' ? body.text : undefined,
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
+      })
+      json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/feishu/official-event') {
+      const body = await readBodyClean(req)
+      const result = await hermesPlatformFormatters.handleFeishuOfficialEvent(body as any)
+      json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/feishu/send-final') {
+      const body = await readBodyClean(req)
+      const sessionId = typeof body.sessionId === 'string' ? body.sessionId : ''
+      const status = await hermesLivePhotoService.getSessionStatus(sessionId)
+      const actions = await hermesLivePhotoAdapters.handleFeishuEvent({
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        sessionId,
+      })
+      const result = await hermesDeliveryService.sendFinalToFeishu({
+        appId: typeof body.appId === 'string' ? body.appId : undefined,
+        appSecret: typeof body.appSecret === 'string' ? body.appSecret : undefined,
+        tenantAccessToken: typeof body.tenantAccessToken === 'string' ? body.tenantAccessToken : undefined,
+        receiveId: typeof body.receiveId === 'string' ? body.receiveId : '',
+        receiveIdType:
+          body.receiveIdType === 'user_id' ||
+          body.receiveIdType === 'union_id' ||
+          body.receiveIdType === 'chat_id' ||
+          body.receiveIdType === 'email'
+            ? body.receiveIdType
+            : 'open_id',
+        actions: actions.actions as any,
+      })
+      json(res, 200, { ok: true, session: status.session, result } as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/wecom/webhook') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoAdapters.handleWecomEvent({
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
+        text: typeof body.text === 'string' ? body.text : undefined,
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
+      })
+      json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/wecom/official-event') {
+      const body = await readBodyClean(req)
+      const result = await hermesPlatformFormatters.handleWecomOfficialEvent(body as any)
+      json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/wecom/send-final') {
+      const body = await readBodyClean(req)
+      const sessionId = typeof body.sessionId === 'string' ? body.sessionId : ''
+      const status = await hermesLivePhotoService.getSessionStatus(sessionId)
+      const actions = await hermesLivePhotoAdapters.handleWecomEvent({
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        sessionId,
+      })
+      const result = await hermesDeliveryService.sendFinalToWecom({
+        corpId: typeof body.corpId === 'string' ? body.corpId : undefined,
+        corpSecret: typeof body.corpSecret === 'string' ? body.corpSecret : undefined,
+        accessToken: typeof body.accessToken === 'string' ? body.accessToken : undefined,
+        agentId: typeof body.agentId === 'string' ? body.agentId : '',
+        toUser: typeof body.toUser === 'string' ? body.toUser : '',
+        actions: actions.actions as any,
+      })
+      json(res, 200, { ok: true, session: status.session, result } as JsonObject)
       return
     }
 

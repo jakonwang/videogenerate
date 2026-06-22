@@ -135,6 +135,10 @@
       "qiniu": {
         "label": "七牛",
         "desc": "上传与资源分发设置"
+      },
+      "hermes": {
+        "label": "Hermes 接入",
+        "desc": "飞书与企业微信 Live Photo 配置"
       }
     },
     "platforms": {
@@ -145,12 +149,24 @@
         "apiToken": "API Token"
       },
       "cards": {
-        "kling": { "desc": "用于 AtlasCloud 与 Kling 的凭证配置。" },
-        "grsai": { "desc": "用于 GRS.AI 的视频、图片和对话凭证。" },
-        "ai666": { "desc": "用于 AI666 平台凭证配置。" },
-        "vectorengine": { "desc": "用于 VectorEngine 平台凭证配置。" },
-        "xibapi": { "desc": "用于 XIBAPI 平台凭证配置。" },
-        "replicate": { "desc": "用于本地 clone 图片工作流。" }
+        "kling": {
+          "desc": "用于 AtlasCloud 与 Kling 的凭证配置。"
+        },
+        "grsai": {
+          "desc": "用于 GRS.AI 的视频、图片和对话凭证。"
+        },
+        "ai666": {
+          "desc": "用于 AI666 平台凭证配置。"
+        },
+        "vectorengine": {
+          "desc": "用于 VectorEngine 平台凭证配置。"
+        },
+        "xibapi": {
+          "desc": "用于 XIBAPI 平台凭证配置。"
+        },
+        "replicate": {
+          "desc": "用于本地 clone 图片工作流。"
+        }
       }
     },
     "capabilities": {
@@ -207,9 +223,15 @@
         "chat": "对话"
       },
       "cards": {
-        "video": { "title": "视频" },
-        "image": { "title": "图片" },
-        "chat": { "title": "对话" },
+        "video": {
+          "title": "视频"
+        },
+        "image": {
+          "title": "图片"
+        },
+        "chat": {
+          "title": "对话"
+        },
         "status": {
           "title": "状态",
           "waiting": "等待保存",
@@ -242,6 +264,41 @@
       "show": "显示",
       "hide": "隐藏",
       "notSet": "未设置"
+    },
+    "hermes": {
+      "title": "Hermes 接入设置",
+      "subtitle": "配置飞书和企业微信凭证，用于 Live Photo 的图片接入与结果回传。",
+      "global": {
+        "title": "全局",
+        "desc": "用于开启 Hermes Live Photo 接入，并保存 webhook 回调基础地址。",
+        "fields": {
+          "enabled": "启用 Hermes Live Photo 接入",
+          "callbackBaseUrl": "回调基础地址"
+        }
+      },
+      "feishu": {
+        "desc": "用于飞书官方事件图片下载，以及最终生成视频的回传。",
+        "fields": {
+          "enabled": "启用飞书",
+          "appId": "应用 ID",
+          "appSecret": "应用 Secret",
+          "tenantAccessToken": "Tenant Access Token",
+          "receiveIdType": "默认接收 ID 类型",
+          "defaultReceiveId": "默认接收 ID"
+        }
+      },
+      "wecom": {
+        "title": "企业微信",
+        "desc": "用于企业微信官方事件图片下载，以及最终生成视频的回传。",
+        "fields": {
+          "enabled": "启用企业微信",
+          "corpId": "企业 ID",
+          "corpSecret": "企业 Secret",
+          "accessToken": "Access Token",
+          "agentId": "应用 Agent ID",
+          "defaultToUser": "默认接收成员"
+        }
+      }
     }
   },
   "cloneView": {
@@ -290,6 +347,147 @@
       "noReferenceFrame": "暂无参考帧",
       "modelLabel": "模型",
       "taskIdLabel": "任务 ID"
+    }
+  },
+  "plugins": {
+    "hero": {
+      "eyebrow": "插件中心",
+      "marketTitle": "插件市场",
+      "installedTitle": "我的插件",
+      "marketDesc": "发现可扩展复刻、生产、导出与发布工作流的工具插件。",
+      "installedDesc": "管理已安装工具，并快速进入对应工作台。"
+    },
+    "tabs": {
+      "market": "插件市场",
+      "installed": "我的插件"
+    },
+    "searchPlaceholder": "搜索插件...",
+    "status": {
+      "notInstalled": "未安装",
+      "enabled": "已启用",
+      "disabled": "已停用"
+    },
+    "categories": {
+      "livePhoto": "Live Photo",
+      "creativeStudio": "创意视频",
+      "publishing": "发布",
+      "download": "下载",
+      "videoProcessing": "视频处理"
+    },
+    "actions": {
+      "openWorkspace": "打开工作台",
+      "install": "安装",
+      "enable": "启用",
+      "use": "使用",
+      "installPlugin": "安装插件",
+      "enablePlugin": "启用插件",
+      "disable": "停用",
+      "uninstall": "卸载"
+    },
+    "messages": {
+      "installed": "插件已安装。",
+      "enabled": "插件已启用。",
+      "disabled": "插件已停用。",
+      "uninstalled": "插件已卸载。",
+      "markedInstalledLocal": "已在本地桌面状态中标记为已安装。",
+      "markedEnabledLocal": "已在本地桌面状态中标记为已启用。",
+      "markedDisabledLocal": "已在本地桌面状态中标记为已停用。",
+      "removedLocal": "已从本地桌面状态中移除该插件。"
+    },
+    "errors": {
+      "installFirst": "请先安装该插件。",
+      "enableFirst": "请先启用该插件。"
+    },
+    "empty": {
+      "title": "还没有已安装的插件。",
+      "desc": "请先在插件市场安装插件，再回到这里继续使用。",
+      "backToMarket": "返回插件市场"
+    },
+    "detail": {
+      "eyebrow": "插件详情"
+    }
+  },
+  "livePhoto": {
+    "hero": {
+      "back": "返回插件",
+      "eyebrow": "动态照片插件",
+      "title": "从商品参考图或复刻镜头生成可直接导出的动态照片素材。",
+      "desc": "在专用插件工作台中创建可预览的动图组合，检查提示词锁定，导出 Apple 风格素材包并打开本地输出。",
+      "refresh": "刷新",
+      "completed": "已完成"
+    },
+    "tabs": {
+      "reference": "从参考图创建",
+      "clone": "从复刻镜头创建",
+      "library": "库 / 导出"
+    },
+    "reference": {
+      "title": "参考图替换",
+      "lock": "仅替换商品锁定",
+      "referenceImage": "参考图片",
+      "referencePlaceholder": "选择模特图或真实商品图",
+      "pick": "选择",
+      "product": "商品"
+    },
+    "rules": {
+      "title": "执行规则",
+      "version": "V1 默认",
+      "items": {
+        "identity": "保持相同的人物身份、姿态、构图、光线和场景布局。",
+        "replaceOnly": "仅使用所选商品快照替换商品本身。",
+        "motion": "先调用 AI 视频模型生成目标视频片段。",
+        "package": "将生成结果整理为图片、视频和清单文件，并输出到导出包中。"
+      }
+    },
+    "clone": {
+      "title": "复刻项目",
+      "lock": "只读素材导入",
+      "project": "项目",
+      "summaryTitle": "项目摘要",
+      "eligibleShots": "可用镜头",
+      "selected": "已选择"
+    },
+    "library": {
+      "title": "库与导出",
+      "emptyTitle": "还没有动态照片任务。",
+      "emptyDesc": "请先从参考图或复刻镜头素材创建任务。",
+      "packagingMetadata": "打包元数据",
+      "preview": "预览",
+      "metadata": "元数据",
+      "reveal": "打开目录",
+      "retry": "重试",
+      "regenerate": "重新生成",
+      "remove": "移除"
+    },
+    "actions": {
+      "creating": "创建中...",
+      "createLivePhoto": "创建动态照片",
+      "createFromSelectedShots": "从选中镜头创建",
+      "exporting": "导出中...",
+      "exportSelected": "导出选中项"
+    },
+    "status": {
+      "completed": "已完成",
+      "failed": "失败",
+      "processing": "处理中",
+      "draft": "草稿"
+    },
+    "metadata": {
+      "videoTagged": "视频元数据已写入",
+      "videoFallback": "视频元数据使用回退模式",
+      "pending": "元数据待生成"
+    },
+    "pickers": {
+      "referenceImageTitle": "选择参考图片",
+      "imagesFilter": "图片",
+      "exportDirectoryTitle": "选择导出目录"
+    },
+    "messages": {
+      "referenceCreated": "参考图动态照片任务已创建。",
+      "cloneCreated": "复刻镜头动态照片任务已创建。",
+      "retried": "动态照片任务已重试。",
+      "regenerated": "动态照片任务已重新生成。",
+      "exportedCount": "已导出 {count} 个项目。"
     }
   }
 }

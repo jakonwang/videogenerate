@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowRight, Check, Download, Power, Search, Trash2, Wrench } from 'lucide-vue-next'
 import { webApiClient, type PluginDetail, type PluginSummary } from '@/lib/webApiClient'
 
@@ -9,6 +10,7 @@ type LocalPluginState = Record<string, { status: PluginSummary['status']; enable
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const loading = ref(false)
 const actionBusy = ref(false)
@@ -22,10 +24,21 @@ const LOCAL_PLUGIN_STATE_KEY = 'videogen-desktop-plugin-state'
 
 const fallbackPlugins: PluginSummary[] = [
   {
-    id: 'tiktok-creative-studio',
-    name: 'TikTok 创意视频助手',
+    id: 'live-photo-generator',
+    name: 'Live Photo Generator',
     category: 'video_processing',
-    description: '从复刻任务只读导入商品图和提示词，独立发起 TikTok Creative Studio 图生视频任务，不写回复刻主流程。',
+    description: 'Create Apple-compatible Live Photo outputs from reference images or clone shots with preview and export tools.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/live-photo-generator',
+    status: 'uninstalled',
+    enabled: false,
+  },
+  {
+    id: 'tiktok-creative-studio',
+    name: 'TikTok Creative Studio',
+    category: 'video_processing',
+    description: 'Read clone shot assets and prompts, then execute manual Creative Studio batches in an isolated workspace.',
     version: '0.1.0',
     entryType: 'tool',
     workspacePath: '/plugins/tiktok-creative-studio',
@@ -34,9 +47,9 @@ const fallbackPlugins: PluginSummary[] = [
   },
   {
     id: 'video-parser-download',
-    name: '视频解析下载',
+    name: 'Video Parser Download',
     category: 'video_download',
-    description: '用于短视频链接解析与下载的入口插件。',
+    description: 'Plugin entry for short-video link parsing and download workflows.',
     version: '0.1.0',
     entryType: 'tool',
     workspacePath: '/plugins/video-parser-download',
@@ -45,9 +58,9 @@ const fallbackPlugins: PluginSummary[] = [
   },
   {
     id: 'video-batch-watermark',
-    name: '视频批量加水印',
+    name: 'Video Batch Watermark',
     category: 'video_processing',
-    description: '用于批量处理视频水印参数与模板的入口插件。',
+    description: 'Plugin entry for watermark parameters and batch processing presets.',
     version: '0.1.0',
     entryType: 'tool',
     workspacePath: '/plugins/video-batch-watermark',
@@ -56,9 +69,9 @@ const fallbackPlugins: PluginSummary[] = [
   },
   {
     id: 'video-batch-subtitle',
-    name: '视频批量加字幕',
+    name: 'Video Batch Subtitle',
     category: 'video_processing',
-    description: '用于字幕样式、烧录开关与导出规则的入口插件。',
+    description: 'Subtitle recognition, styling, burn-in, and export workflow plugin.',
     version: '0.1.0',
     entryType: 'tool',
     workspacePath: '/plugins/video-batch-subtitle',
@@ -67,9 +80,9 @@ const fallbackPlugins: PluginSummary[] = [
   },
   {
     id: 'geelark-publisher',
-    name: 'Geelark 发布插件',
+    name: 'Geelark Publisher',
     category: 'video_processing',
-    description: '用于把复刻成片发布到 Geelark 云手机，并创建 TikTok 发布挂车任务。',
+    description: 'Publish clone outputs to Geelark cloud-phone workflows from a dedicated plugin workspace.',
     version: '0.1.0',
     entryType: 'tool',
     workspacePath: '/plugins/geelark-publisher',
@@ -108,15 +121,8 @@ function mergeLocalPluginState(source: PluginSummary[]) {
 
 function mergePluginCatalogWithFallback(source: PluginSummary[]) {
   const merged = new Map<string, PluginSummary>()
-  for (const item of fallbackPlugins) {
-    merged.set(item.id, item)
-  }
-  for (const item of source) {
-    merged.set(item.id, {
-      ...(merged.get(item.id) || item),
-      ...item,
-    })
-  }
+  for (const item of fallbackPlugins) merged.set(item.id, item)
+  for (const item of source) merged.set(item.id, { ...(merged.get(item.id) || item), ...item })
   return [...merged.values()]
 }
 
@@ -137,9 +143,7 @@ const filteredPlugins = computed(() => {
   return source.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(keyword))
 })
 
-const selectedPlugin = computed(() => {
-  return plugins.value.find((item) => item.id === selectedPluginId.value) ?? filteredPlugins.value[0] ?? null
-})
+const selectedPlugin = computed(() => plugins.value.find((item) => item.id === selectedPluginId.value) ?? filteredPlugins.value[0] ?? null)
 
 function syncRoute() {
   void router.replace({
@@ -152,18 +156,20 @@ function syncRoute() {
 }
 
 function pluginStatusText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.status !== 'installed') return '未安装'
-  return plugin.enabled ? '已启用' : '已停用'
+  if (plugin.status !== 'installed') return t('plugins.status.notInstalled')
+  return plugin.enabled ? t('plugins.status.enabled') : t('plugins.status.disabled')
 }
 
 function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === 'tiktok-creative-studio') return '创意生成'
-  if (plugin.id === 'geelark-publisher') return '发布插件'
-  if (plugin.category === 'video_download') return '下载工具'
-  return '视频处理'
+  if (plugin.id === 'live-photo-generator') return t('plugins.categories.livePhoto')
+  if (plugin.id === 'tiktok-creative-studio') return t('plugins.categories.creativeStudio')
+  if (plugin.id === 'geelark-publisher') return t('plugins.categories.publishing')
+  if (plugin.category === 'video_download') return t('plugins.categories.download')
+  return t('plugins.categories.videoProcessing')
 }
 
 function pluginIconText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'live-photo-generator') return 'LP'
   if (plugin.id === 'tiktok-creative-studio') return 'TT'
   if (plugin.id === 'geelark-publisher') return 'GK'
   if (plugin.id === 'video-parser-download') return 'DL'
@@ -173,6 +179,7 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCardTone(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'live-photo-generator') return 'tone-amber'
   if (plugin.id === 'tiktok-creative-studio') return 'tone-green'
   if (plugin.id === 'geelark-publisher') return 'tone-cyan'
   if (plugin.id === 'video-parser-download') return 'tone-violet'
@@ -181,14 +188,14 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 }
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return plugin.id === 'geelark-publisher' || plugin.id === 'tiktok-creative-studio'
+  return ['geelark-publisher', 'tiktok-creative-studio', 'live-photo-generator'].includes(plugin.id)
 }
 
 function primaryActionText(plugin: PluginSummary) {
-  if (isDirectWorkspacePlugin(plugin)) return '打开工作台'
-  if (plugin.status !== 'installed') return '安装'
-  if (!plugin.enabled) return '启用'
-  return '使用'
+  if (isDirectWorkspacePlugin(plugin)) return t('plugins.actions.openWorkspace')
+  if (plugin.status !== 'installed') return t('plugins.actions.install')
+  if (!plugin.enabled) return t('plugins.actions.enable')
+  return t('plugins.actions.use')
 }
 
 async function loadPlugins() {
@@ -201,9 +208,7 @@ async function loadPlugins() {
     plugins.value = mergeLocalPluginState(fallbackPlugins)
   } finally {
     loading.value = false
-    if (!selectedPlugin.value && filteredPlugins.value.length) {
-      selectedPluginId.value = filteredPlugins.value[0].id
-    }
+    if (!selectedPlugin.value && filteredPlugins.value.length) selectedPluginId.value = filteredPlugins.value[0].id
   }
 }
 
@@ -224,14 +229,10 @@ async function runPluginAction(action: () => Promise<{ plugin: PluginDetail }>, 
 }
 
 async function installPlugin(pluginId: string) {
-  try {
-    await runPluginAction(() => webApiClient.installPlugin(pluginId), '插件已安装。')
-  } catch {
-    // unreachable
-  }
-  if (!plugins.value.find((item) => item.id === pluginId)?.status || errorText.value) {
+  await runPluginAction(() => webApiClient.installPlugin(pluginId), t('plugins.messages.installed'))
+  if (errorText.value) {
     saveLocalPluginItem(pluginId, { status: 'installed', enabled: false })
-    notice.value = '插件已在桌面端本地安装。'
+    notice.value = t('plugins.messages.markedInstalledLocal')
     errorText.value = ''
     await loadPlugins()
     selectedPluginId.value = pluginId
@@ -239,30 +240,30 @@ async function installPlugin(pluginId: string) {
 }
 
 async function enablePlugin(pluginId: string) {
-  await runPluginAction(() => webApiClient.enablePlugin(pluginId), '插件已启用。')
+  await runPluginAction(() => webApiClient.enablePlugin(pluginId), t('plugins.messages.enabled'))
   if (errorText.value) {
     saveLocalPluginItem(pluginId, { status: 'installed', enabled: true })
-    notice.value = '插件已在桌面端本地启用。'
+    notice.value = t('plugins.messages.markedEnabledLocal')
     errorText.value = ''
     await loadPlugins()
   }
 }
 
 async function disablePlugin(pluginId: string) {
-  await runPluginAction(() => webApiClient.disablePlugin(pluginId), '插件已停用。')
+  await runPluginAction(() => webApiClient.disablePlugin(pluginId), t('plugins.messages.disabled'))
   if (errorText.value) {
     saveLocalPluginItem(pluginId, { status: 'installed', enabled: false })
-    notice.value = '插件已在桌面端本地停用。'
+    notice.value = t('plugins.messages.markedDisabledLocal')
     errorText.value = ''
     await loadPlugins()
   }
 }
 
 async function uninstallPlugin(pluginId: string) {
-  await runPluginAction(() => webApiClient.uninstallPlugin(pluginId), '插件已卸载。')
+  await runPluginAction(() => webApiClient.uninstallPlugin(pluginId), t('plugins.messages.uninstalled'))
   if (errorText.value) {
     saveLocalPluginItem(pluginId, { status: 'uninstalled', enabled: false })
-    notice.value = '插件已从桌面端本地卸载。'
+    notice.value = t('plugins.messages.removedLocal')
     errorText.value = ''
     await loadPlugins()
   }
@@ -281,20 +282,24 @@ function selectPlugin(pluginId: string) {
 }
 
 function usePlugin(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'live-photo-generator') {
+    void router.push('/plugins/live-photo-generator')
+    return
+  }
   if (plugin.id === 'tiktok-creative-studio') {
     void router.push('/plugins/tiktok-creative-studio')
     return
   }
-  if (isDirectWorkspacePlugin(plugin)) {
+  if (plugin.id === 'geelark-publisher') {
     void router.push('/plugins/geelark-publisher/publish-center')
     return
   }
   if (plugin.status !== 'installed') {
-    errorText.value = '请先安装插件。'
+    errorText.value = t('plugins.errors.installFirst')
     return
   }
   if (!plugin.enabled) {
-    errorText.value = '请先启用插件。'
+    errorText.value = t('plugins.errors.enableFirst')
     return
   }
   void router.push(plugin.workspacePath)
@@ -332,9 +337,7 @@ watch([workspace, selectedPluginId], () => {
 
 watch(filteredPlugins, (list) => {
   if (!list.length) return
-  if (!list.some((item) => item.id === selectedPluginId.value)) {
-    selectedPluginId.value = list[0].id
-  }
+  if (!list.some((item) => item.id === selectedPluginId.value)) selectedPluginId.value = list[0].id
 })
 
 onMounted(async () => {
@@ -349,26 +352,20 @@ onMounted(async () => {
   <div class="plugins-page">
     <section class="hero-card">
       <div>
-        <div class="hero-card__eyebrow">插件中心</div>
-        <h1>{{ workspace === 'installed' ? '我的插件' : '插件市场' }}</h1>
-        <p>
-          {{
-            workspace === 'installed'
-              ? '管理已安装插件，并进入对应工作台继续使用。'
-              : '发现并安装插件，扩展复刻、生产与发布能力。'
-          }}
-        </p>
+        <div class="hero-card__eyebrow">{{ t('plugins.hero.eyebrow') }}</div>
+        <h1>{{ workspace === 'installed' ? t('plugins.hero.installedTitle') : t('plugins.hero.marketTitle') }}</h1>
+        <p>{{ workspace === 'installed' ? t('plugins.hero.installedDesc') : t('plugins.hero.marketDesc') }}</p>
       </div>
 
       <div class="hero-card__actions">
         <label class="search-box">
           <Search class="h-4 w-4" />
-          <input v-model="searchKeyword" type="text" placeholder="搜索插件名称或说明" />
+          <input v-model="searchKeyword" type="text" :placeholder="t('plugins.searchPlaceholder')" />
         </label>
-        <button class="ghost-button" :class="{ active: workspace === 'market' }" type="button" @click="openMarket">插件市场</button>
+        <button class="ghost-button" :class="{ active: workspace === 'market' }" type="button" @click="openMarket">{{ t('plugins.tabs.market') }}</button>
         <button class="primary-button ghost-like" :class="{ active: workspace === 'installed' }" type="button" @click="openInstalled">
           <Download class="h-4 w-4" />
-          我的插件
+          {{ t('plugins.tabs.installed') }}
         </button>
       </div>
     </section>
@@ -382,9 +379,9 @@ onMounted(async () => {
     </div>
 
     <section v-if="workspace === 'installed' && !filteredPlugins.length && !loading" class="empty-state">
-      <strong>还没有已安装插件</strong>
-      <p>先去插件市场安装一个插件，再回到这里继续使用。</p>
-      <button class="primary-button" type="button" @click="openMarket">返回插件市场</button>
+      <strong>{{ t('plugins.empty.title') }}</strong>
+      <p>{{ t('plugins.empty.desc') }}</p>
+      <button class="primary-button" type="button" @click="openMarket">{{ t('plugins.empty.backToMarket') }}</button>
     </section>
 
     <template v-else>
@@ -419,7 +416,7 @@ onMounted(async () => {
         <div class="detail-card__hero">
           <div class="detail-card__icon" :class="pluginCardTone(selectedPlugin)">{{ pluginIconText(selectedPlugin) }}</div>
           <div class="detail-card__copy">
-            <div class="detail-card__eyebrow">插件详情</div>
+            <div class="detail-card__eyebrow">{{ t('plugins.detail.eyebrow') }}</div>
             <h2>{{ selectedPlugin.name }}</h2>
             <p>{{ selectedPlugin.description }}</p>
           </div>
@@ -439,7 +436,7 @@ onMounted(async () => {
             :disabled="actionBusy"
             @click="installPlugin(selectedPlugin.id)"
           >
-            安装插件
+            {{ t('plugins.actions.installPlugin') }}
           </button>
           <button
             v-else-if="!isDirectWorkspacePlugin(selectedPlugin) && !selectedPlugin.enabled"
@@ -449,7 +446,7 @@ onMounted(async () => {
             @click="enablePlugin(selectedPlugin.id)"
           >
             <Power class="h-4 w-4" />
-            启用插件
+            {{ t('plugins.actions.enablePlugin') }}
           </button>
           <button
             v-else
@@ -459,7 +456,7 @@ onMounted(async () => {
             @click="usePlugin(selectedPlugin)"
           >
             <Wrench class="h-4 w-4" />
-            进入工作台
+            {{ t('plugins.actions.openWorkspace') }}
           </button>
 
           <button
@@ -469,7 +466,7 @@ onMounted(async () => {
             :disabled="actionBusy"
             @click="disablePlugin(selectedPlugin.id)"
           >
-            停用
+            {{ t('plugins.actions.disable') }}
           </button>
 
           <button
@@ -479,7 +476,7 @@ onMounted(async () => {
             :disabled="actionBusy"
             @click="enablePlugin(selectedPlugin.id)"
           >
-            启用
+            {{ t('plugins.actions.enable') }}
           </button>
 
           <button
@@ -490,7 +487,7 @@ onMounted(async () => {
             @click="uninstallPlugin(selectedPlugin.id)"
           >
             <Trash2 class="h-4 w-4" />
-            卸载
+            {{ t('plugins.actions.uninstall') }}
           </button>
         </div>
       </section>
@@ -663,6 +660,10 @@ onMounted(async () => {
 
 .tone-green {
   background: linear-gradient(135deg, #10b981, #22c55e);
+}
+
+.tone-amber {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
 }
 
 .plugin-card__state,

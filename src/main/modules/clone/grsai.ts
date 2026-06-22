@@ -5,12 +5,36 @@ export type GrsAiResult = {
   task: any
 }
 
+export type GrsAiTaskSnapshot = {
+  taskId: string
+  status: string
+  outputUrl: string
+  errorMessage?: string
+  raw: any
+}
+
 export type GrsAiCredits = {
   available?: number
   raw: any
 }
 
 const DEFAULT_GRS_HOST = 'https://grsaiapi.com'
+const GRS_CONNECT_TIMEOUT_MS = 30_000
+const GRS_NETWORK_RETRY_LIMIT = 2
+const GRS_NETWORK_RETRY_DELAY_MS = 1_500
+
+async function grsFetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = GRS_CONNECT_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error(`request timeout after ${timeoutMs}ms`)), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...(init || {}),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 export function grsHost(credentials: ModelCredentials) {
   return String(credentials.grsaiHost || DEFAULT_GRS_HOST).replace(/\/+$/, '')
@@ -59,16 +83,25 @@ function formatGrsNetworkError(error: any, url: string) {
 }
 
 async function postJson(url: string, key: string, body: any, credentials?: ModelCredentials) {
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: credentials ? grsHeaders(credentials, key) : { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body ?? {}),
-    })
-  } catch (error: any) {
-    throw new Error(formatGrsNetworkError(error, url))
+  let res: Response | null = null
+  let lastNetworkError: any = null
+  for (let attempt = 0; attempt <= GRS_NETWORK_RETRY_LIMIT; attempt += 1) {
+    try {
+      res = await grsFetchWithTimeout(url, {
+        method: 'POST',
+        headers: credentials ? grsHeaders(credentials, key) : { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      })
+      break
+    } catch (error: any) {
+      lastNetworkError = error
+      if (attempt >= GRS_NETWORK_RETRY_LIMIT) {
+        throw new Error(formatGrsNetworkError(error, url))
+      }
+      await new Promise((resolve) => setTimeout(resolve, GRS_NETWORK_RETRY_DELAY_MS * (attempt + 1)))
+    }
   }
+  if (!res) throw new Error(formatGrsNetworkError(lastNetworkError, url))
   const text = await res.text().catch(() => '')
   let json: any = null
   try {
@@ -156,6 +189,7 @@ export async function createGrsImageTask(input: {
 
 export async function createGrsVideoTask(input: {
   credentials: ModelCredentials
+  model?: string
   prompt: string
   negativePrompt?: string
   firstFrameUrl: string
@@ -166,7 +200,7 @@ export async function createGrsVideoTask(input: {
   const host = grsHost(input.credentials)
   const motionStrength = Math.max(1, Math.min(3, Math.round(Number(input.motionStrength ?? 2) || 2)))
   const body = {
-    model: String(input.credentials.grsaiVideoModel || '').trim() || 'veo3.1-fast',
+    model: String(input.model || input.credentials.grsaiVideoModel || '').trim() || 'veo3.1-fast',
     prompt: input.prompt,
     negativePrompt: String(input.negativePrompt || '').trim() || undefined,
     firstFrameUrl: input.firstFrameUrl,
@@ -190,19 +224,32 @@ export async function waitGrsResult(credentials: ModelCredentials, taskId: strin
   const host = grsHost(credentials)
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
-    const json = await postJson(`${host}/v1/draw/result`, key, { id: taskId }, credentials)
-    const status = pickStatus(json)
-    const outputUrl = pickOutputUrl(json)
+    const snapshot = await queryGrsTask(credentials, taskId)
+    const status = snapshot.status
+    const outputUrl = snapshot.outputUrl
     if ((status === 'succeeded' || status === 'success' || status === 'completed' || status === 'done') && outputUrl) {
-      return { outputUrl, task: json }
+      return { outputUrl, task: snapshot.raw }
     }
-    if (outputUrl && Number(json?.data?.progress ?? 0) >= 100) return { outputUrl, task: json }
+    if (outputUrl && Number(snapshot.raw?.data?.progress ?? 0) >= 100) return { outputUrl, task: snapshot.raw }
     if (status === 'failed' || status === 'error' || status === 'cancelled' || status === 'canceled') {
-      throw new Error(pickError(json) || JSON.stringify(json))
+      throw new Error(snapshot.errorMessage || JSON.stringify(snapshot.raw))
     }
     await new Promise((r) => setTimeout(r, 3000))
   }
   throw new Error('GRS.AI 任务超时')
+}
+
+export async function queryGrsTask(credentials: ModelCredentials, taskId: string): Promise<GrsAiTaskSnapshot> {
+  const key = requireGrsKey(credentials)
+  const host = grsHost(credentials)
+  const json = await postJson(`${host}/v1/draw/result`, key, { id: taskId }, credentials)
+  return {
+    taskId: String(taskId || '').trim(),
+    status: pickStatus(json),
+    outputUrl: pickOutputUrl(json),
+    errorMessage: pickError(json) || undefined,
+    raw: json,
+  }
 }
 
 export async function queryGrsCredits(credentials: ModelCredentials): Promise<GrsAiCredits> {

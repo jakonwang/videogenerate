@@ -132,6 +132,10 @@
         "label": "Nang luc",
         "desc": "Chon nen tang video, hinh anh va hoi thoai"
       },
+      "hermes": {
+        "label": "Hermes",
+        "desc": "Tich hop Live Photo cho Feishu va WeCom"
+      },
       "qiniu": {
         "label": "Qiniu",
         "desc": "Cai dat tai len va phan phoi tai nguyen"
@@ -145,12 +149,24 @@
         "apiToken": "API Token"
       },
       "cards": {
-        "kling": { "desc": "Dung cho thong tin xac thuc AtlasCloud va Kling." },
-        "grsai": { "desc": "Dung cho thong tin video, hinh anh va hoi thoai cua GRS.AI." },
-        "ai666": { "desc": "Dung cho thong tin nen tang AI666." },
-        "vectorengine": { "desc": "Dung cho thong tin nen tang VectorEngine." },
-        "xibapi": { "desc": "Dung cho thong tin nen tang XIBAPI." },
-        "replicate": { "desc": "Dung cho quy trinh hinh anh clone cuc bo." }
+        "kling": {
+          "desc": "Dung cho thong tin xac thuc AtlasCloud va Kling."
+        },
+        "grsai": {
+          "desc": "Dung cho thong tin video, hinh anh va hoi thoai cua GRS.AI."
+        },
+        "ai666": {
+          "desc": "Dung cho thong tin nen tang AI666."
+        },
+        "vectorengine": {
+          "desc": "Dung cho thong tin nen tang VectorEngine."
+        },
+        "xibapi": {
+          "desc": "Dung cho thong tin nen tang XIBAPI."
+        },
+        "replicate": {
+          "desc": "Dung cho quy trinh hinh anh clone cuc bo."
+        }
       }
     },
     "capabilities": {
@@ -187,6 +203,41 @@
         "desc": "Cai dat cho phan tich kich ban va tro ly quy trinh."
       }
     },
+    "hermes": {
+      "title": "Tich Hop Hermes",
+      "subtitle": "Cau hinh thong tin Feishu va WeCom cho viec nhan anh Live Photo va gui tra ket qua.",
+      "global": {
+        "title": "Toan Cuc",
+        "desc": "Bat tich hop Hermes Live Photo va luu dia chi callback webhook tai day.",
+        "fields": {
+          "enabled": "Bat Hermes Live Photo",
+          "callbackBaseUrl": "Dia chi callback co so"
+        }
+      },
+      "feishu": {
+        "desc": "Dung de tai anh su kien chinh thuc tu Feishu va gui lai video da tao.",
+        "fields": {
+          "enabled": "Bat Feishu",
+          "appId": "App ID",
+          "appSecret": "App Secret",
+          "tenantAccessToken": "Tenant Access Token",
+          "receiveIdType": "Loai Receive ID mac dinh",
+          "defaultReceiveId": "Receive ID mac dinh"
+        }
+      },
+      "wecom": {
+        "title": "WeCom",
+        "desc": "Dung de tai anh su kien chinh thuc tu WeCom va gui lai video da tao.",
+        "fields": {
+          "enabled": "Bat WeCom",
+          "corpId": "Corp ID",
+          "corpSecret": "Corp Secret",
+          "accessToken": "Access Token",
+          "agentId": "Agent ID",
+          "defaultToUser": "ToUser mac dinh"
+        }
+      }
+    },
     "qiniu": {
       "title": "Qiniu",
       "subtitle": "Quan ly tai len, lien ket ngoai va tien to tai nguyen.",
@@ -207,9 +258,15 @@
         "chat": "Hoi Thoai"
       },
       "cards": {
-        "video": { "title": "Video" },
-        "image": { "title": "Hinh Anh" },
-        "chat": { "title": "Hoi Thoai" },
+        "video": {
+          "title": "Video"
+        },
+        "image": {
+          "title": "Hinh Anh"
+        },
+        "chat": {
+          "title": "Hoi Thoai"
+        },
         "status": {
           "title": "Trang Thai",
           "waiting": "Dang cho luu",
@@ -290,6 +347,64 @@
       "noReferenceFrame": "Chua co khung tham chieu",
       "modelLabel": "Mo hinh",
       "taskIdLabel": "Ma tac vu"
+    }
+  },
+  "plugins": {
+    "hero": {
+      "eyebrow": "Trung tam plugin",
+      "marketTitle": "Cho plugin",
+      "installedTitle": "Plugin da cai",
+      "marketDesc": "Kham pha cong cu mo rong quy trinh clone, san xuat, xuat va dang bai.",
+      "installedDesc": "Quan ly cac cong cu da cai va mo nhanh workspace tuong ung."
+    },
+    "tabs": {
+      "market": "Cho plugin",
+      "installed": "Da cai"
+    },
+    "searchPlaceholder": "Tim plugin...",
+    "status": {
+      "notInstalled": "Chua cai dat",
+      "enabled": "Da bat",
+      "disabled": "Da tat"
+    },
+    "categories": {
+      "livePhoto": "Live Photo",
+      "creativeStudio": "Creative Studio",
+      "publishing": "Dang bai",
+      "download": "Tai xuong",
+      "videoProcessing": "Xu ly video"
+    },
+    "actions": {
+      "openWorkspace": "Mo workspace",
+      "install": "Cai dat",
+      "enable": "Bat",
+      "use": "Su dung",
+      "installPlugin": "Cai dat plugin",
+      "enablePlugin": "Bat plugin",
+      "disable": "Tat",
+      "uninstall": "Go cai dat"
+    },
+    "messages": {
+      "installed": "Da cai dat plugin.",
+      "enabled": "Da bat plugin.",
+      "disabled": "Da tat plugin.",
+      "uninstalled": "Da go cai dat plugin.",
+      "markedInstalledLocal": "Da danh dau plugin la da cai dat tren may.",
+      "markedEnabledLocal": "Da danh dau plugin la da bat tren may.",
+      "markedDisabledLocal": "Da danh dau plugin la da tat tren may.",
+      "removedLocal": "Da xoa plugin khoi trang thai desktop cuc bo."
+    },
+    "errors": {
+      "installFirst": "Vui long cai dat plugin truoc.",
+      "enableFirst": "Vui long bat plugin truoc."
+    },
+    "empty": {
+      "title": "Chua co plugin nao duoc cai dat.",
+      "desc": "Hay cai dat plugin tu cho plugin truoc, sau do quay lai day de su dung.",
+      "backToMarket": "Quay lai cho plugin"
+    },
+    "detail": {
+      "eyebrow": "Chi tiet plugin"
     }
   }
 }

@@ -18,6 +18,10 @@ type SecretKey =
   | 'replicateApiToken'
   | 'qiniuAccessKey'
   | 'qiniuSecretKey'
+  | 'hermesFeishuAppSecret'
+  | 'hermesFeishuTenantAccessToken'
+  | 'hermesWecomCorpSecret'
+  | 'hermesWecomAccessToken'
 
 type HubCredentials = {
   enabled: boolean
@@ -73,6 +77,27 @@ type ModelCredentialsView = {
   vectorEngineHub: HubCredentials
   xibapiHub: HubCredentials
   apifoxHub: HubCredentials
+}
+
+type HermesIntegrationView = {
+  enabled: boolean
+  callbackBaseUrl: string
+  feishu: {
+    enabled: boolean
+    appId: string
+    appSecret: string
+    tenantAccessToken: string
+    receiveIdType: 'open_id' | 'user_id' | 'union_id' | 'chat_id' | 'email'
+    defaultReceiveId: string
+  }
+  wecom: {
+    enabled: boolean
+    corpId: string
+    corpSecret: string
+    accessToken: string
+    agentId: string
+    defaultToUser: string
+  }
 }
 
 function createHubDefaults(input?: Partial<HubCredentials>): HubCredentials {
@@ -141,10 +166,33 @@ function createDefaultCredentials(): ModelCredentialsView {
   }
 }
 
+function createDefaultHermesIntegration(): HermesIntegrationView {
+  return {
+    enabled: false,
+    callbackBaseUrl: '',
+    feishu: {
+      enabled: false,
+      appId: '',
+      appSecret: '',
+      tenantAccessToken: '',
+      receiveIdType: 'open_id',
+      defaultReceiveId: '',
+    },
+    wecom: {
+      enabled: false,
+      corpId: '',
+      corpSecret: '',
+      accessToken: '',
+      agentId: '',
+      defaultToUser: '',
+    },
+  }
+}
+
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
 const modelSettingsBusy = ref(false)
-const modelSettingsSection = ref<'platforms' | 'capabilities' | 'qiniu'>('platforms')
+const modelSettingsSection = ref<'platforms' | 'capabilities' | 'hermes' | 'qiniu'>('platforms')
 const { t } = useI18n()
 const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
@@ -155,12 +203,18 @@ const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   replicateApiToken: false,
   qiniuAccessKey: false,
   qiniuSecretKey: false,
+  hermesFeishuAppSecret: false,
+  hermesFeishuTenantAccessToken: false,
+  hermesWecomCorpSecret: false,
+  hermesWecomAccessToken: false,
 })
 const modelCredentials = ref<ModelCredentialsView>(createDefaultCredentials())
+const hermesIntegration = ref<HermesIntegrationView>(createDefaultHermesIntegration())
 
 const sectionMeta = [
   { key: 'platforms', labelKey: 'settings.sections.platforms.label', descKey: 'settings.sections.platforms.desc', icon: KeyRound },
   { key: 'capabilities', labelKey: 'settings.sections.capabilities.label', descKey: 'settings.sections.capabilities.desc', icon: Server },
+  { key: 'hermes', labelKey: 'settings.sections.hermes.label', descKey: 'settings.sections.hermes.desc', icon: MessagesSquare },
   { key: 'qiniu', labelKey: 'settings.sections.qiniu.label', descKey: 'settings.sections.qiniu.desc', icon: Cloud },
 ] as const
 
@@ -234,6 +288,9 @@ function applyCapabilityPlatform(
   const profileKey = capabilityProfileKey(target)
   if (platform === 'ai666' || platform === 'vectorengine' || platform === 'xibapi') {
     ;(modelCredentials.value[target] as ProviderKey | 'grsai') = 'apifox_hub'
+    if (platform === 'ai666') modelCredentials.value.ai666Hub.enabled = true
+    if (platform === 'vectorengine') modelCredentials.value.vectorEngineHub.enabled = true
+    if (platform === 'xibapi') modelCredentials.value.xibapiHub.enabled = true
     if (profileKey === 'chatApifoxHubProfile' && platform === 'xibapi') {
       modelCredentials.value.chatApifoxHubProfile = 'vectorengine'
       return
@@ -487,11 +544,32 @@ function normalizeIncomingCredentials(next: any): ModelCredentialsView {
   }
 }
 
+function normalizeIncomingHermesIntegration(next: any): HermesIntegrationView {
+  const defaults = createDefaultHermesIntegration()
+  return {
+    ...defaults,
+    ...next,
+    callbackBaseUrl: String(next?.callbackBaseUrl ?? defaults.callbackBaseUrl),
+    feishu: {
+      ...defaults.feishu,
+      ...next?.feishu,
+    },
+    wecom: {
+      ...defaults.wecom,
+      ...next?.wecom,
+    },
+  }
+}
+
 async function refreshModelSettings() {
   modelSettingsBusy.value = true
   try {
-    const next = (await window.api.clone.getModelCredentials()) as Partial<ModelCredentialsView>
+    const [next, hermesNext] = await Promise.all([
+      window.api.clone.getModelCredentials() as Promise<Partial<ModelCredentialsView>>,
+      window.api.clone.getHermesIntegrationSettings() as Promise<Partial<HermesIntegrationView>>,
+    ])
     modelCredentials.value = normalizeIncomingCredentials(next)
+    hermesIntegration.value = normalizeIncomingHermesIntegration(hermesNext)
     settingsMessage.value = t('settings.messages.loaded')
   } catch (e: any) {
     settingsMessage.value = `${t('settings.messages.loadFailed')}: ${e?.message ?? String(e)}`
@@ -517,9 +595,23 @@ async function saveModelSettings() {
         : payload.apifoxHubProfile === 'xibapi'
           ? { ...payload.xibapiHub, videoProvider: 'xibapi' }
           : { ...payload.vectorEngineHub }
-    await window.api.clone.setModelCredentials(payload)
-    const confirmed = (await window.api.clone.getModelCredentials()) as Partial<ModelCredentialsView>
+    if (payload.videoApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
+    if (payload.videoApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
+    if (payload.videoApifoxHubProfile === 'xibapi') payload.xibapiHub.enabled = true
+    if (payload.imageApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
+    if (payload.imageApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
+    if (payload.chatApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
+    if (payload.chatApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
+    await Promise.all([
+      window.api.clone.setModelCredentials(payload),
+      window.api.clone.setHermesIntegrationSettings(JSON.parse(JSON.stringify(hermesIntegration.value))),
+    ])
+    const [confirmed, confirmedHermes] = await Promise.all([
+      window.api.clone.getModelCredentials() as Promise<Partial<ModelCredentialsView>>,
+      window.api.clone.getHermesIntegrationSettings() as Promise<Partial<HermesIntegrationView>>,
+    ])
     modelCredentials.value = normalizeIncomingCredentials(confirmed)
+    hermesIntegration.value = normalizeIncomingHermesIntegration(confirmedHermes)
     settingsMessage.value = t('settings.messages.savedAndReloaded')
   } catch (e: any) {
     settingsMessage.value = `${t('settings.messages.saveFailed')}: ${e?.message ?? String(e)}`
@@ -795,6 +887,135 @@ onMounted(() => {
           </div>
         </section>
 
+        <section v-else-if="modelSettingsSection === 'hermes'" class="form-section">
+          <div class="section-head">
+            <div>
+              <h2>{{ t('settings.hermes.title') }}</h2>
+              <p>{{ t('settings.hermes.subtitle') }}</p>
+            </div>
+          </div>
+
+          <div class="capability-stack">
+            <article class="capability-card">
+              <div class="capability-card__head">
+                <div class="capability-card__icon is-green"><MessagesSquare :size="16" /></div>
+                <div>
+                  <h3>{{ t('settings.hermes.global.title') }}</h3>
+                  <p>{{ t('settings.hermes.global.desc') }}</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label class="checkbox-field">
+                  <span>{{ t('settings.hermes.global.fields.enabled') }}</span>
+                  <input v-model="hermesIntegration.enabled" type="checkbox" />
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.global.fields.callbackBaseUrl') }}</span>
+                  <input v-model="hermesIntegration.callbackBaseUrl" placeholder="https://your-host.example.com" />
+                </label>
+              </div>
+            </article>
+
+            <article class="capability-card">
+              <div class="capability-card__head">
+                <div class="capability-card__icon is-cyan"><MessagesSquare :size="16" /></div>
+                <div>
+                  <h3>Feishu</h3>
+                  <p>{{ t('settings.hermes.feishu.desc') }}</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label class="checkbox-field">
+                  <span>{{ t('settings.hermes.feishu.fields.enabled') }}</span>
+                  <input v-model="hermesIntegration.feishu.enabled" type="checkbox" />
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.feishu.fields.appId') }}</span>
+                  <input v-model="hermesIntegration.feishu.appId" placeholder="cli_xxx" />
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.feishu.fields.appSecret') }}</span>
+                  <div class="field-inline">
+                    <input v-model="hermesIntegration.feishu.appSecret" :type="modelSecretType('hermesFeishuAppSecret')" />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesFeishuAppSecret')">
+                      {{ modelVisibleSecrets.hermesFeishuAppSecret ? t('settings.common.hide') : t('settings.common.show') }}
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.feishu.fields.tenantAccessToken') }}</span>
+                  <div class="field-inline">
+                    <input v-model="hermesIntegration.feishu.tenantAccessToken" :type="modelSecretType('hermesFeishuTenantAccessToken')" />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesFeishuTenantAccessToken')">
+                      {{ modelVisibleSecrets.hermesFeishuTenantAccessToken ? t('settings.common.hide') : t('settings.common.show') }}
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.feishu.fields.receiveIdType') }}</span>
+                  <select v-model="hermesIntegration.feishu.receiveIdType">
+                    <option value="open_id">open_id</option>
+                    <option value="user_id">user_id</option>
+                    <option value="union_id">union_id</option>
+                    <option value="chat_id">chat_id</option>
+                    <option value="email">email</option>
+                  </select>
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.feishu.fields.defaultReceiveId') }}</span>
+                  <input v-model="hermesIntegration.feishu.defaultReceiveId" placeholder="ou_xxx / chat_id / user id" />
+                </label>
+              </div>
+            </article>
+
+            <article class="capability-card">
+              <div class="capability-card__head">
+                <div class="capability-card__icon is-violet"><MessagesSquare :size="16" /></div>
+                <div>
+                  <h3>{{ t('settings.hermes.wecom.title') }}</h3>
+                  <p>{{ t('settings.hermes.wecom.desc') }}</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label class="checkbox-field">
+                  <span>{{ t('settings.hermes.wecom.fields.enabled') }}</span>
+                  <input v-model="hermesIntegration.wecom.enabled" type="checkbox" />
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.wecom.fields.corpId') }}</span>
+                  <input v-model="hermesIntegration.wecom.corpId" placeholder="wwxxxxxxxx" />
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.wecom.fields.corpSecret') }}</span>
+                  <div class="field-inline">
+                    <input v-model="hermesIntegration.wecom.corpSecret" :type="modelSecretType('hermesWecomCorpSecret')" />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesWecomCorpSecret')">
+                      {{ modelVisibleSecrets.hermesWecomCorpSecret ? t('settings.common.hide') : t('settings.common.show') }}
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.wecom.fields.accessToken') }}</span>
+                  <div class="field-inline">
+                    <input v-model="hermesIntegration.wecom.accessToken" :type="modelSecretType('hermesWecomAccessToken')" />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesWecomAccessToken')">
+                      {{ modelVisibleSecrets.hermesWecomAccessToken ? t('settings.common.hide') : t('settings.common.show') }}
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.wecom.fields.agentId') }}</span>
+                  <input v-model="hermesIntegration.wecom.agentId" placeholder="1000002" />
+                </label>
+                <label>
+                  <span>{{ t('settings.hermes.wecom.fields.defaultToUser') }}</span>
+                  <input v-model="hermesIntegration.wecom.defaultToUser" placeholder="zhangsan" />
+                </label>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section v-else class="form-section">
           <div class="section-head">
             <div>
@@ -934,6 +1155,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
 }
 
 .settings-shell__actions {

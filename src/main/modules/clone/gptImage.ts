@@ -78,7 +78,10 @@ function imageProvider(credentials: ModelCredentials): ImageProviderName {
 function hasProviderCredential(credentials: ModelCredentials, provider: ImageProviderName) {
   if (provider === 'kling') return Boolean(String(credentials.klingApiKey || '').trim())
   if (provider === 'grsai') return Boolean(String(credentials.grsaiApiKey || '').trim())
-  if (provider === 'apifox_hub') return Boolean(String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey || '').trim())
+  if (provider === 'apifox_hub') {
+    const cfg = resolveApifoxHubCredentials(credentials, 'image')
+    return Boolean(cfg?.enabled && String(cfg.apiKey || '').trim())
+  }
   return Boolean(String(credentials.openaiApiKey || '').trim())
 }
 
@@ -432,7 +435,15 @@ async function postGrsImage(input: GenerateImageInput) {
     aspectRatio: inferAspectRatioFromOutputSize(input.outputSize),
     urls,
   })
-  const outputUrl = created.directUrl || (created.taskId ? (await waitGrsResult(input.credentials, created.taskId)).outputUrl : '')
+  let outputUrl = created.directUrl || ''
+  if (!outputUrl && created.taskId) {
+    try {
+      outputUrl = (await waitGrsResult(input.credentials, created.taskId)).outputUrl
+    } catch (error: any) {
+      const reason = String(error?.message ?? error ?? '').trim() || 'unknown error'
+      throw new Error(`[remote_pending] GRS.AI 图片任务已提交，等待结果查询失败。taskId=${created.taskId} reason=${reason}`)
+    }
+  }
   if (!outputUrl) throw new Error(`GRS.AI 图片任务没有返回输出 URL: ${JSON.stringify(created.raw)}`)
   const rawPath = await saveImageUrl(outputUrl, input.outDir, input.filePrefix)
   return await finalizeImageOutput({

@@ -32,16 +32,14 @@ const { visible: cloneTopbarVisible, items: cloneTopbarItems } = storeToRefs(clo
 const { enabled: designInspectorEnabled } = storeToRefs(designInspector)
 const showDesignInspectorToggle = computed(() => import.meta.env.DEV)
 const showCloneWorkflowTopbar = computed(() => route.path.includes('/clone/') && cloneTopbarVisible.value && cloneTopbarItems.value.length > 0)
-const topUserName = computed(() => webSession.user?.displayName || 'Creator')
-const topUserPlan = computed(() => webSession.subscription?.planName || '桌面版')
-const topWalletBalance = computed(() => webSession.wallet?.balanceCredits ?? 0)
-const sidebarPlanLabel = computed(() => webSession.subscription?.planName || '桌面授权版')
-const sidebarPlanDesc = computed(() =>
-  webSession.wallet ? `算力余额 ${topWalletBalance.value}` : '本地工作台模式',
-)
-const topStatusText = computed(() => (webSession.wallet ? '已连接本地工作台' : '桌面端离线模式'))
-const topGpuStatusText = computed(() => (webSession.wallet ? `可用 ${topWalletBalance.value}` : '本地待机'))
-const topApiStatusText = computed(() => (webSession.wallet ? '接口已连接' : '接口未连接'))
+const topUserName = computed(() => 'Creator')
+const topUserPlan = computed(() => 'Desktop')
+const topWalletBalance = computed(() => 0)
+const sidebarPlanLabel = computed(() => 'Desktop Workspace')
+const sidebarPlanDesc = computed(() => 'No login required')
+const topStatusText = computed(() => 'Local workspace mode')
+const topGpuStatusText = computed(() => 'Standby')
+const topApiStatusText = computed(() => 'Disconnected')
 const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPlan.value}`)
 
 const navItems = computed(() => [

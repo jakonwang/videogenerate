@@ -1292,6 +1292,31 @@ export type ModelCredentials = {
   apifoxHub?: ApifoxHubCredentials
 }
 
+export type HermesFeishuIntegrationSettings = {
+  enabled: boolean
+  appId?: string
+  appSecret?: string
+  tenantAccessToken?: string
+  receiveIdType?: 'open_id' | 'user_id' | 'union_id' | 'chat_id' | 'email'
+  defaultReceiveId?: string
+}
+
+export type HermesWecomIntegrationSettings = {
+  enabled: boolean
+  corpId?: string
+  corpSecret?: string
+  accessToken?: string
+  agentId?: string
+  defaultToUser?: string
+}
+
+export type HermesIntegrationSettings = {
+  enabled: boolean
+  callbackBaseUrl?: string
+  feishu: HermesFeishuIntegrationSettings
+  wecom: HermesWecomIntegrationSettings
+}
+
 export type ApifoxChatProvider = 'openai' | 'anthropic' | 'gemini'
 export type ApifoxImageProvider = 'openai' | 'gemini' | 'jimeng' | 'midjourney'
 export type ApifoxVideoProvider =

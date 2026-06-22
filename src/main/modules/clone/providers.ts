@@ -761,36 +761,31 @@ async function mockGenerateFromFrames(input: {
   const duration = Math.max(2, Math.min(8, Math.round(Number(input.shot.durationSec || 3))))
   const { width, height } = targetResolutionByShot(input.shot)
   const frameRate = 24
-  const zoomFrames = Math.max(frameRate, Math.round(duration * frameRate))
-  const fadeOffset = Math.max(0.4, duration - 0.6)
-  const filter = [
-    `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,zoompan=z='min(zoom+0.0008,1.05)':d=${zoomFrames}:s=${width}x${height}:fps=${frameRate}[v0]`,
-    `[1:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,zoompan=z='min(zoom+0.0008,1.05)':d=${zoomFrames}:s=${width}x${height}:fps=${frameRate}[v1]`,
-    `[v0][v1]xfade=transition=fade:duration=0.6:offset=${fadeOffset},format=yuv420p[v]`,
-  ].join(';')
+  const totalFrames = Math.max(frameRate, Math.round(duration * frameRate))
+  const sourceFramePath = existsSync(input.startFramePath) ? input.startFramePath : input.endFramePath
   await runFfmpeg({
     args: [
       '-y',
       '-loop',
       '1',
+      '-framerate',
+      `${frameRate}`,
       '-t',
       `${duration}`,
       '-i',
-      input.startFramePath,
-      '-loop',
-      '1',
-      '-t',
-      `${duration}`,
-      '-i',
-      input.endFramePath,
-      '-filter_complex',
-      filter,
-      '-map',
-      '[v]',
+      sourceFramePath,
+      '-vf',
+      `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,fps=${frameRate},format=yuv420p`,
       '-r',
       `${frameRate}`,
+      '-frames:v',
+      `${totalFrames}`,
       '-pix_fmt',
       'yuv420p',
+      '-c:v',
+      'libx264',
+      '-movflags',
+      '+faststart',
       out,
     ],
   })
@@ -957,7 +952,15 @@ export async function generateShotVideoByProviderChain(input: {
           firstFrameUrl: await publicUrlForCloudFrame(input.credentials, input.startFramePath, 'grsai-first-frame'),
           lastFrameUrl: input.endFramePath ? await publicUrlForCloudFrame(input.credentials, input.endFramePath, 'grsai-last-frame') : undefined,
         })
-        const outputUrl = created.directUrl || (created.taskId ? (await waitGrsResult(input.credentials, created.taskId)).outputUrl : '')
+        let outputUrl = created.directUrl || ''
+        if (!outputUrl && created.taskId) {
+          try {
+            outputUrl = (await waitGrsResult(input.credentials, created.taskId)).outputUrl
+          } catch (error: any) {
+            const reason = String(error?.message ?? error ?? '').trim() || 'unknown error'
+            throw new Error(`[remote_pending] GRS.AI 视频任务已提交，等待结果查询失败。taskId=${created.taskId} reason=${reason}`)
+          }
+        }
         if (!outputUrl) throw new Error(`GRS.AI 视频任务没有返回输出 URL: ${JSON.stringify(created.raw)}`)
         await downloadAtlasToFile(outputUrl, rawOut, 'GRS.AI 视频下载')
         await normalizeCloudClipForShot({ src: rawOut, out, shot: input.shot })

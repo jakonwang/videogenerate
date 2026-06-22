@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { validateStoredWebSession } from '@/lib/webApiClient'
 import MainLayout from '@/ui/MainLayout.vue'
 import HomeView from '@/ui/views/HomeView.vue'
 
@@ -29,6 +28,7 @@ const router = createRouter({
         { path: 'billing', name: 'billing', component: () => import('@/ui/views/BillingView.vue') },
         { path: 'plugins', name: 'plugins', component: () => import('@/ui/views/PluginsView.vue') },
         { path: 'plugins/geelark-publisher', name: 'plugin-geelark-publisher', component: () => import('@/ui/views/GeelarkPublisherView.vue') },
+        { path: 'plugins/live-photo-generator', name: 'plugin-live-photo-generator', component: () => import('@/ui/views/LivePhotoGeneratorView.vue') },
         { path: 'plugins/tiktok-creative-studio', name: 'plugin-tiktok-creative-studio', component: () => import('@/ui/views/TiktokCreativeStudioView.vue') },
         { path: 'plugins/tiktok-listing-helper', name: 'plugin-tiktok-listing-helper', component: () => import('@/ui/views/TiktokListingHelperView.vue') },
         {
@@ -51,10 +51,9 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach((to) => {
   if (to.meta.public) return true
-  if (await validateStoredWebSession()) return true
-  return { name: 'auth', replace: true }
+  return true
 })
 
 export { router }

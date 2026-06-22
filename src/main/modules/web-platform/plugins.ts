@@ -2,6 +2,17 @@ import type { PluginDefinition, PluginDetail, PluginRecord, PluginSummary } from
 
 export const pluginDefinitions: PluginDefinition[] = [
   {
+    id: 'live-photo-generator',
+    name: 'Live Photo Generator',
+    category: 'video_processing',
+    description: 'Create Apple-compatible Live Photo outputs from product reference images or clone shot assets, with preview and export inside a dedicated plugin workspace.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/live-photo-generator',
+    usageHint: 'Use a reference image to keep pose and scene while swapping only the product, or package clone storyboard assets as Live Photo exports.',
+    configSchema: [],
+  },
+  {
     id: 'tiktok-creative-studio',
     name: 'TikTok 创意视频助手',
     category: 'video_processing',

@@ -1,0 +1,206 @@
+import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { configureAppPathRuntime } from '../src/main/lib/paths'
+
+async function main() {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-hermes-ingress-'))
+  process.env.VIDEOGENERATE_DATA_DIR = root
+  configureAppPathRuntime({ dataDir: root, userDataDir: root })
+
+  const { productsRepo } = await import('../src/main/modules/products/repo')
+  const cloneRepoModule = await import('../src/main/modules/clone/repo')
+  const { livePhotoService } = await import('../src/main/modules/live-photo/service')
+  const { hermesPlatformFormatters } = await import('../src/main/modules/live-photo/hermesPlatformFormatters')
+  const { hermesMediaIngressService } = await import('../src/main/modules/live-photo/hermesMediaIngress')
+  const { closeLivePhotoSqlite } = await import('../src/main/modules/live-photo/sqlite')
+
+  livePhotoService.setTestDependencies({
+    runFfmpeg: async (input: { args: string[] }) => {
+      const outPath = String(input.args[input.args.length - 1] || '').trim()
+      await mkdir(path.dirname(outPath), { recursive: true })
+      await writeFile(outPath, `mock:${path.basename(outPath)}`, 'utf-8')
+    },
+    generateGptShotFrameImage: async (input: { outDir: string; filePrefix: string }) => {
+      const stillPath = path.join(input.outDir, `${input.filePrefix}.png`)
+      await mkdir(path.dirname(stillPath), { recursive: true })
+      await writeFile(stillPath, 'mock-generated-still', 'utf-8')
+      return stillPath
+    },
+    generateShotVideoByProviderChain: async (input: { outDir: string }) => {
+      const outputFilePath = path.join(input.outDir, 'mock-live-photo.mp4')
+      await mkdir(path.dirname(outputFilePath), { recursive: true })
+      await writeFile(outputFilePath, 'mock-generated-video', 'utf-8')
+      return {
+        outputFilePath,
+        taskId: `mock-task-${Date.now()}`,
+        provider: 'seedance',
+      } as any
+    },
+  })
+
+  hermesMediaIngressService.setTestDependencies({
+    fetch: (async (input: any) => {
+      const url = String(input || '')
+      if (url.includes('/auth/v3/tenant_access_token/internal')) {
+        return new Response(JSON.stringify({ tenant_access_token: 'tenant-token' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/im/v1/messages/')) {
+        return new Response(Buffer.from('feishu-image-bytes'), {
+          status: 200,
+          headers: { 'Content-Type': 'image/jpeg' },
+        })
+      }
+      if (url.includes('/cgi-bin/gettoken')) {
+        return new Response(JSON.stringify({ access_token: 'wecom-token' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/cgi-bin/media/get')) {
+        return new Response(Buffer.from('wecom-image-bytes'), {
+          status: 200,
+          headers: { 'Content-Type': 'image/jpeg' },
+        })
+      }
+      return new Response('not found', { status: 404 })
+    }) as any,
+  })
+
+  async function waitForAutoFlowIdle(timeoutMs = 15000) {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const queueState = livePhotoService.getAutoFlowQueueState()
+      if ((queueState.activeCount || 0) === 0 && (queueState.pendingCount || 0) === 0) return
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    throw new Error('Timed out waiting for live photo auto flow to become idle')
+  }
+
+  async function removeDirWithRetry(target: string, timeoutMs = 5000) {
+    const startedAt = Date.now()
+    let lastError: unknown
+    while (Date.now() - startedAt < timeoutMs) {
+      try {
+        await rm(target, { recursive: true, force: true })
+        return
+      } catch (error) {
+        lastError = error
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    }
+    throw lastError
+  }
+
+  try {
+    await cloneRepoModule.cloneRepo.setCredentials({
+      imageProviderPrimary: 'openai',
+      openaiApiKey: 'test-openai-key',
+      openaiImageModel: 'gpt-image-1',
+      videoProviderPrimary: 'seedance',
+      seedanceApiKey: 'test-seedance-key',
+      videoModelPrimary: 'seedance-20',
+    } as any)
+
+    const assetsDir = path.join(root, 'fixtures')
+    await mkdir(assetsDir, { recursive: true })
+    const productImage = path.join(assetsDir, 'product.jpg')
+    await writeFile(productImage, 'product-image', 'utf-8')
+
+    const product = await productsRepo.upsert({
+      name: 'Ingress Demo Product',
+      type: 'general',
+      images: [
+        {
+          id: 'img-1',
+          productId: 'pending',
+          filePath: productImage,
+          fileName: 'product.jpg',
+          fileSize: 12,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          isCover: true,
+        },
+      ],
+      coverImagePath: productImage,
+      analysisBoardPath: productImage,
+      analysisBoardStatus: 'done',
+      canonicalSourcePath: productImage,
+      canonicalSourceStatus: 'done',
+    } as any)
+
+    const feishuStart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      tenantAccessToken: 'tenant-token',
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-1',
+          },
+        },
+        message: {
+          message_id: 'om_xxx',
+          message_type: 'image',
+          content: JSON.stringify({
+            image_key: 'img-key-1',
+          }),
+        },
+      },
+    })
+    assert.equal(feishuStart.ok, true)
+    assert.equal(feishuStart.actions[0]?.type, 'product_options')
+    const feishuSessionId = String((feishuStart.actions[0] as any)?.sessionId || '').trim()
+    assert.ok(feishuSessionId)
+
+    const wecomStart = await hermesPlatformFormatters.handleWecomOfficialEvent({
+      accessToken: 'wecom-token',
+      FromUserName: 'wecom-user-1',
+      MsgType: 'image',
+      MediaId: 'media-id-1',
+    })
+    assert.equal(wecomStart.ok, true)
+    assert.equal(wecomStart.actions[0]?.type, 'product_options')
+
+    const ingressDir = path.join(root, 'tmp', 'hermes-live-photo-ingress')
+    const feishuFile = path.join(ingressDir, 'img-key-1.jpg')
+    const wecomFile = path.join(ingressDir, 'media-id-1.jpg')
+    assert.equal(String(await readFile(feishuFile, 'utf-8')), 'feishu-image-bytes')
+    assert.equal(String(await readFile(wecomFile, 'utf-8')), 'wecom-image-bytes')
+
+    const selectResult = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-1',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: `session=${feishuSessionId} product=${product.id}`,
+          }),
+        },
+      },
+    })
+    assert.equal(selectResult.ok, true)
+    assert.equal(selectResult.replies[0]?.msg_type, 'text')
+
+    console.log('live photo hermes media ingress smoke test passed')
+  } finally {
+    await waitForAutoFlowIdle().catch(() => undefined)
+    livePhotoService.resetTestDependencies()
+    hermesMediaIngressService.resetTestDependencies()
+    closeLivePhotoSqlite()
+    await removeDirWithRetry(root).catch(async () => {
+      await rm(root, { recursive: true, force: true })
+    })
+  }
+}
+
+void main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})

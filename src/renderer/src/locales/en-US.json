@@ -15,6 +15,147 @@
     "startGenerate": "Start Generate",
     "remove": "Remove"
   },
+  "plugins": {
+    "hero": {
+      "eyebrow": "Plugin Center",
+      "marketTitle": "Plugin Market",
+      "installedTitle": "Installed Plugins",
+      "marketDesc": "Discover tools that extend clone, production, export, and publishing workflows.",
+      "installedDesc": "Manage installed tools and jump into their workspaces."
+    },
+    "tabs": {
+      "market": "Plugin Market",
+      "installed": "Installed"
+    },
+    "searchPlaceholder": "Search plugins...",
+    "status": {
+      "notInstalled": "Not Installed",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "categories": {
+      "livePhoto": "Live Photo",
+      "creativeStudio": "Creative Studio",
+      "publishing": "Publishing",
+      "download": "Download",
+      "videoProcessing": "Video Processing"
+    },
+    "actions": {
+      "openWorkspace": "Open Workspace",
+      "install": "Install",
+      "enable": "Enable",
+      "use": "Use",
+      "installPlugin": "Install Plugin",
+      "enablePlugin": "Enable Plugin",
+      "disable": "Disable",
+      "uninstall": "Uninstall"
+    },
+    "messages": {
+      "installed": "Plugin installed.",
+      "enabled": "Plugin enabled.",
+      "disabled": "Plugin disabled.",
+      "uninstalled": "Plugin uninstalled.",
+      "markedInstalledLocal": "Plugin marked installed locally.",
+      "markedEnabledLocal": "Plugin marked enabled locally.",
+      "markedDisabledLocal": "Plugin marked disabled locally.",
+      "removedLocal": "Plugin removed from local desktop state."
+    },
+    "errors": {
+      "installFirst": "Please install the plugin first.",
+      "enableFirst": "Please enable the plugin first."
+    },
+    "empty": {
+      "title": "No installed plugins yet.",
+      "desc": "Install a plugin from the market first, then come back here to use it.",
+      "backToMarket": "Back To Market"
+    },
+    "detail": {
+      "eyebrow": "Plugin Detail"
+    }
+  },
+  "livePhoto": {
+    "hero": {
+      "back": "Back To Plugins",
+      "eyebrow": "Live Photo Plugin",
+      "title": "Generate export-ready Live Photo assets from product references or clone shots.",
+      "desc": "Use the dedicated plugin workspace to create previewable motion pairs, inspect prompt locks, export Apple-style bundles, and open local outputs.",
+      "refresh": "Refresh",
+      "completed": "Completed"
+    },
+    "tabs": {
+      "reference": "Create From Reference",
+      "clone": "Create From Clone Shots",
+      "library": "Library / Exports"
+    },
+    "reference": {
+      "title": "Reference Replace",
+      "lock": "Product-only replacement lock",
+      "referenceImage": "Reference Image",
+      "referencePlaceholder": "Select a model or real product photo",
+      "pick": "Pick",
+      "product": "Product"
+    },
+    "rules": {
+      "title": "Execution Rules",
+      "version": "V1 defaults",
+      "items": {
+        "identity": "Keep the same person identity, pose, framing, lighting, and scene layout.",
+        "replaceOnly": "Replace only the product using the selected product snapshot.",
+        "motion": "Call the AI video model first to generate the target video clip.",
+        "package": "Convert the generated video into a Live Photo, then package `.jpg + .mov + manifest` into the output bundle."
+      }
+    },
+    "clone": {
+      "title": "Clone Project",
+      "lock": "Read-only asset import",
+      "project": "Project",
+      "summaryTitle": "Project Summary",
+      "eligibleShots": "Eligible Shots",
+      "selected": "Selected"
+    },
+    "library": {
+      "title": "Library And Exports",
+      "emptyTitle": "No Live Photo items yet.",
+      "emptyDesc": "Create one from a reference image or clone shot assets first.",
+      "packagingMetadata": "Packaging Metadata",
+      "preview": "Preview",
+      "metadata": "Metadata",
+      "reveal": "Reveal",
+      "retry": "Retry",
+      "regenerate": "Regenerate",
+      "remove": "Remove"
+    },
+    "actions": {
+      "creating": "Creating...",
+      "createLivePhoto": "Create Live Photo",
+      "createFromSelectedShots": "Create From Selected Shots",
+      "exporting": "Exporting...",
+      "exportSelected": "Export Selected"
+    },
+    "status": {
+      "completed": "Completed",
+      "failed": "Failed",
+      "processing": "Processing",
+      "draft": "Draft"
+    },
+    "metadata": {
+      "videoTagged": "Video metadata tagged",
+      "videoFallback": "Video metadata fallback",
+      "pending": "Metadata pending"
+    },
+    "pickers": {
+      "referenceImageTitle": "Select reference image",
+      "imagesFilter": "Images",
+      "exportDirectoryTitle": "Select export directory"
+    },
+    "messages": {
+      "referenceCreated": "Reference Live Photo item created.",
+      "cloneCreated": "Clone shot Live Photo items created.",
+      "retried": "Live Photo item retried.",
+      "regenerated": "Live Photo item regenerated.",
+      "exportedCount": "Exported {count} item(s)."
+    }
+  },
   "auth": {
     "title": "License Activation",
     "subtitle": "Enter your license key to continue using VideoGenerate",
@@ -132,6 +273,10 @@
         "label": "Capabilities",
         "desc": "Choose video, image, and chat platforms"
       },
+      "hermes": {
+        "label": "Hermes",
+        "desc": "Feishu and WeCom Live Photo integration"
+      },
       "qiniu": {
         "label": "Qiniu",
         "desc": "Upload and asset delivery settings"
@@ -185,6 +330,41 @@
       "chat": {
         "title": "Chat",
         "desc": "Script analysis and workflow assistant settings."
+      }
+    },
+    "hermes": {
+      "title": "Hermes Integration",
+      "subtitle": "Configure Feishu and WeCom credentials for Live Photo ingress and final delivery.",
+      "global": {
+        "title": "Global",
+        "desc": "Enable the Hermes Live Photo integration and keep the webhook callback base URL here.",
+        "fields": {
+          "enabled": "Enable Hermes Live Photo integration",
+          "callbackBaseUrl": "Callback Base URL"
+        }
+      },
+      "feishu": {
+        "desc": "Used for official Feishu event image download and sending the final generated video back.",
+        "fields": {
+          "enabled": "Enable Feishu",
+          "appId": "App ID",
+          "appSecret": "App Secret",
+          "tenantAccessToken": "Tenant Access Token",
+          "receiveIdType": "Default Receive ID Type",
+          "defaultReceiveId": "Default Receive ID"
+        }
+      },
+      "wecom": {
+        "title": "WeCom",
+        "desc": "Used for official WeCom event image download and sending the final generated video back.",
+        "fields": {
+          "enabled": "Enable WeCom",
+          "corpId": "Corp ID",
+          "corpSecret": "Corp Secret",
+          "accessToken": "Access Token",
+          "agentId": "Agent ID",
+          "defaultToUser": "Default ToUser"
+        }
       }
     },
     "qiniu": {

@@ -9,6 +9,7 @@ const api = {
   pickFiles: (opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) =>
     ipcRenderer.invoke('fs:pickFiles', opts ?? {}),
   pickDir: (opts: { title?: string }) => ipcRenderer.invoke('fs:pickDir', opts),
+  pathExists: (input: { path: string }) => ipcRenderer.invoke('fs:pathExists', input) as Promise<boolean>,
   saveFileAs: (input: { sourcePath: string; defaultFileName?: string; title?: string }) =>
     ipcRenderer.invoke('fs:saveFileAs', input) as Promise<{ ok: boolean; canceled?: boolean; filePath?: string }>,
   readFileAsBase64: (input: { path: string }) => ipcRenderer.invoke('fs:readFileAsBase64', input),
@@ -484,6 +485,8 @@ const api = {
         storyboardFrameConcurrency: number
         globalStoryboardFrameConcurrency: number
       }>,
+    getHermesIntegrationSettings: () =>
+      ipcRenderer.invoke('clone:getHermesIntegrationSettings') as Promise<import('../main/modules/clone/types').HermesIntegrationSettings>,
     setModelCredentials: (payload: {
       seedanceApiKey?: string
       seedanceHost?: string
@@ -524,6 +527,13 @@ const api = {
       globalStoryboardFrameConcurrency?: number
     }) =>
       ipcRenderer.invoke('clone:setRuntimeOptions', payload),
+    setHermesIntegrationSettings: (payload: {
+      enabled?: boolean
+      callbackBaseUrl?: string
+      feishu?: import('../main/modules/clone/types').HermesFeishuIntegrationSettings
+      wecom?: import('../main/modules/clone/types').HermesWecomIntegrationSettings
+    }) =>
+      ipcRenderer.invoke('clone:setHermesIntegrationSettings', payload),
     getGrsAiCredits: () =>
       ipcRenderer.invoke('clone:getGrsAiCredits') as Promise<{ available?: number; raw: unknown }>,
     onRuntimeLog: (cb: (payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => void) => {
@@ -621,6 +631,60 @@ const api = {
     markShotCompleted: (payload: { id: string; shotId: string; resultVideoPath: string }) => ipcRenderer.invoke('plugin:tiktokCreative:markShotCompleted', payload),
     markShotFailed: (payload: { id: string; shotId: string; error: string }) => ipcRenderer.invoke('plugin:tiktokCreative:markShotFailed', payload),
     remove: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:remove', id),
+  },
+  livePhoto: {
+    list: () => ipcRenderer.invoke('plugin:livePhoto:list'),
+    listSummaries: () => ipcRenderer.invoke('plugin:livePhoto:listSummaries'),
+    get: (id: string) => ipcRenderer.invoke('plugin:livePhoto:get', id),
+    getSettings: () => ipcRenderer.invoke('plugin:livePhoto:getSettings'),
+    saveSettings: (payload: {
+      referenceMotionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
+      cloneMotionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
+      outputResolution?: '1080x1440' | '2160x2880' | '3024x4032'
+      frameRate?: '24' | '30'
+      quality?: 'medium' | 'high'
+    }) => ipcRenderer.invoke('plugin:livePhoto:saveSettings', payload),
+    enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:enqueueReference', payload),
+    startReference: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:startReference', payload),
+    enqueueClone: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:enqueueClone', payload),
+    startClone: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:startClone', payload),
+    createFromReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:createFromReference', payload),
+    createFromCloneShots: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:createFromCloneShots', payload),
+    retry: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:retry', payload),
+    exportItems: (payload: {
+      ids: string[]
+      outputDir?: string
+      settings?: {
+        referenceMotionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
+        cloneMotionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
+        outputResolution?: '1080x1440' | '2160x2880' | '3024x4032'
+        frameRate?: '24' | '30'
+        quality?: 'medium' | 'high'
+      }
+    }) => ipcRenderer.invoke('plugin:livePhoto:exportItems', payload),
+    remove: (id: string) => ipcRenderer.invoke('plugin:livePhoto:remove', id),
+    pauseAutoFlow: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:pauseAutoFlow', payload),
+    resumeAutoFlow: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:resumeAutoFlow', payload),
+  },
+  hermes: {
+    livePhoto: {
+      startReferenceSession: (payload: { channel: string; userId: string; referenceImagePaths: string[] }) =>
+        ipcRenderer.invoke('hermes:livePhoto:startReferenceSession', payload),
+      getLatestSession: (payload: { channel: string; userId: string }) =>
+        ipcRenderer.invoke('hermes:livePhoto:getLatestSession', payload),
+      listProductOptions: () => ipcRenderer.invoke('hermes:livePhoto:listProductOptions'),
+      selectProduct: (payload: { sessionId: string; productId: string }) =>
+        ipcRenderer.invoke('hermes:livePhoto:selectProduct', payload),
+      getSessionStatus: (sessionId: string) => ipcRenderer.invoke('hermes:livePhoto:getSessionStatus', sessionId),
+    },
   },
 
   templates: {

@@ -205,6 +205,18 @@ function buildQueryCandidates(input: {
   normalizedTaskId: string
   strippedTaskId: string
 }) {
+  if (input.provider === 'xibapi') {
+    const taskId = String(input.rawTaskId || input.strippedTaskId || '').trim()
+    return taskId
+      ? [
+          {
+            label: `xibapi:${taskId}`,
+            taskId,
+            url: providerQueryUrl(input.root, input.provider, taskId, input.endpointStyle || ''),
+          },
+        ]
+      : []
+  }
   const rawHasModelPrefix = input.rawTaskId.includes(':')
   const normalizedHasModelPrefix = input.normalizedTaskId.includes(':')
   const taskIds = Array.from(
