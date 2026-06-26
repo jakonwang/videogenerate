@@ -1832,6 +1832,7 @@ function videoProviderLabel(credentials: ModelCredentials) {
     const profile = resolveApifoxHubProfile(credentials, 'video')
     if (profile === 'ai666') return 'AI666'
     if (profile === 'xibapi') return 'XIBAPI'
+    if (profile === 'gaorui') return 'GaoruiAPI'
     return 'VectorEngine'
   }
   return 'Seedance'
@@ -3401,7 +3402,7 @@ function toPromptModelIdentity(pack: ModelIdentityPack | null | undefined) {
   }
 }
 
-function buildStoryboardImageNegativePrompt(base?: string) {
+export function buildStoryboardImageNegativePrompt(base?: string) {
   const fixed = [
     'text',
     'logo',

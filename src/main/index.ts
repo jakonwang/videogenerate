@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage, screen } from 'electron'
 import { join } from 'node:path'
 import { createReadStream, existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
@@ -35,6 +35,7 @@ import { registerHermesLivePhotoIpc } from './ipc/registerHermesLivePhotoIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
+import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
 
 let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
@@ -156,9 +157,22 @@ async function wireMediaProtocol() {
 
 function revealMainWindow() {
   if (!mainWindow) return
+  const bounds = mainWindow.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const workArea = display?.workArea
+  const isOffScreen =
+    !workArea ||
+    bounds.x + bounds.width < workArea.x ||
+    bounds.y + bounds.height < workArea.y ||
+    bounds.x > workArea.x + workArea.width ||
+    bounds.y > workArea.y + workArea.height
+  if (isOffScreen) {
+    mainWindow.center()
+  }
   mainWindow.setSkipTaskbar(false)
   if (mainWindow.isMinimized()) mainWindow.restore()
   if (!mainWindow.isVisible()) mainWindow.show()
+  mainWindow.moveTop()
   mainWindow.focus()
 }
 
@@ -252,6 +266,10 @@ function createWindow() {
   })
 
   mainWindow.center()
+  const revealFallbackTimer = setTimeout(() => {
+    console.warn('[window] reveal fallback triggered')
+    revealMainWindow()
+  }, 4000)
   mainWindow.once('ready-to-show', revealMainWindow)
   mainWindow.on('close', (event) => {
     if (isAppQuitting) return
@@ -259,24 +277,34 @@ function createWindow() {
     hideMainWindowToTray()
   })
   mainWindow.on('closed', () => {
+    clearTimeout(revealFallbackTimer)
     mainWindow = null
   })
-  mainWindow.webContents.on('did-finish-load', revealMainWindow)
+  mainWindow.webContents.on('did-finish-load', () => {
+    clearTimeout(revealFallbackTimer)
+    revealMainWindow()
+  })
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    clearTimeout(revealFallbackTimer)
     console.error('[window] failed to load renderer', {
       errorCode,
       errorDescription,
       validatedURL,
     })
+    revealMainWindow()
   })
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     console.log('[renderer-console]', { level, message, line, sourceId })
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    clearTimeout(revealFallbackTimer)
     console.error('[window] render-process-gone', details)
+    revealMainWindow()
   })
   mainWindow.webContents.on('unresponsive', () => {
+    clearTimeout(revealFallbackTimer)
     console.error('[window] renderer unresponsive')
+    revealMainWindow()
   })
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL
@@ -1281,23 +1309,53 @@ function wireIpc() {
         grsaiVideoModel?: string
         grsaiAnalysisModel?: string
         chatProviderPrimary?: 'apifox_hub' | 'grsai'
-        videoProviderPrimary?: 'seedance' | 'grsai' | 'apifox_hub'
-        videoProviderFallback?: 'seedance' | 'grsai' | 'apifox_hub'
+        videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
+        videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
         imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
-        apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-        videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
+        apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
+        videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
         imageApifoxHubProfile?: 'ai666' | 'vectorengine'
         chatApifoxHubProfile?: 'ai666' | 'vectorengine'
         ai666Hub?: import('./modules/clone/types').ApifoxHubCredentials
         vectorEngineHub?: import('./modules/clone/types').ApifoxHubCredentials
         xibapiHub?: import('./modules/clone/types').ApifoxHubCredentials
+        gaoruiHub?: import('./modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('./modules/clone/types').ApifoxHubCredentials
       },
     ) => {
+      const normalizedProfiles = normalizeCapabilityProfileState({
+        apifoxHubProfile: payload?.apifoxHubProfile,
+        videoApifoxHubProfile: payload?.videoApifoxHubProfile,
+        imageApifoxHubProfile: payload?.imageApifoxHubProfile,
+        chatApifoxHubProfile: payload?.chatApifoxHubProfile,
+        videoProviderPrimary: payload?.videoProviderPrimary,
+        videoProviderFallback: payload?.videoProviderFallback,
+        imageProviderPrimary: payload?.imageProviderPrimary,
+        chatProviderPrimary: payload?.chatProviderPrimary,
+      })
+      const hasLegacyVideoProfile = Boolean(extractLegacyCapabilityPlatform('video', payload?.videoProviderPrimary, payload?.videoProviderFallback))
+      const hasLegacyImageProfile = Boolean(extractLegacyCapabilityPlatform('image', payload?.imageProviderPrimary))
+      const hasLegacyChatProfile = Boolean(extractLegacyCapabilityPlatform('chat', payload?.chatProviderPrimary))
+      const normalizedVideoProviderPrimary =
+        hasLegacyVideoProfile
+          ? (mapPlatformToStoredProvider(normalizedProfiles.videoApifoxHubProfile).provider as 'grsai' | 'apifox_hub')
+          : payload?.videoProviderPrimary
+      const normalizedVideoProviderFallback =
+        hasLegacyVideoProfile
+          ? (mapPlatformToStoredProvider(normalizedProfiles.videoApifoxHubProfile).provider as 'grsai' | 'apifox_hub')
+          : payload?.videoProviderFallback
+      const normalizedImageProviderPrimary =
+        hasLegacyImageProfile
+          ? (mapPlatformToStoredProvider(normalizedProfiles.imageApifoxHubProfile).provider as 'grsai' | 'apifox_hub')
+          : payload?.imageProviderPrimary
+      const normalizedChatProviderPrimary =
+        hasLegacyChatProfile
+          ? (mapPlatformToStoredProvider(normalizedProfiles.chatApifoxHubProfile).provider as 'grsai' | 'apifox_hub')
+          : payload?.chatProviderPrimary
       return await cloneService.setModelCredentials({
         seedanceApiKey: payload?.seedanceApiKey,
         seedanceHost: payload?.seedanceHost,
@@ -1315,21 +1373,22 @@ function wireIpc() {
         videoModelFallback: payload?.videoModelFallback,
         grsaiVideoModel: payload?.grsaiVideoModel,
         grsaiAnalysisModel: payload?.grsaiAnalysisModel,
-        chatProviderPrimary: payload?.chatProviderPrimary,
-        videoProviderPrimary: payload?.videoProviderPrimary,
-        videoProviderFallback: payload?.videoProviderFallback,
+        chatProviderPrimary: normalizedChatProviderPrimary,
+        videoProviderPrimary: normalizedVideoProviderPrimary,
+        videoProviderFallback: normalizedVideoProviderFallback,
         openaiApiKey: payload?.openaiApiKey,
         openaiImageModel: payload?.openaiImageModel,
         openaiImageQuality: payload?.openaiImageQuality,
-        imageProviderPrimary: payload?.imageProviderPrimary,
+        imageProviderPrimary: normalizedImageProviderPrimary,
         grsaiImageModel: payload?.grsaiImageModel,
-        apifoxHubProfile: payload?.apifoxHubProfile,
-        videoApifoxHubProfile: payload?.videoApifoxHubProfile,
-        imageApifoxHubProfile: payload?.imageApifoxHubProfile,
-        chatApifoxHubProfile: payload?.chatApifoxHubProfile,
+        apifoxHubProfile: normalizedProfiles.apifoxHubProfile,
+        videoApifoxHubProfile: normalizedProfiles.videoApifoxHubProfile,
+        imageApifoxHubProfile: normalizedProfiles.imageApifoxHubProfile,
+        chatApifoxHubProfile: normalizedProfiles.chatApifoxHubProfile,
         ai666Hub: payload?.ai666Hub,
         vectorEngineHub: payload?.vectorEngineHub,
         xibapiHub: payload?.xibapiHub,
+        gaoruiHub: payload?.gaoruiHub,
         apifoxHub: payload?.apifoxHub,
       })
     },

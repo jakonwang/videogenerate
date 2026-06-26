@@ -14,6 +14,7 @@ async function main() {
   const { livePhotoService } = await import('../src/main/modules/live-photo/service')
   const { hermesPlatformFormatters } = await import('../src/main/modules/live-photo/hermesPlatformFormatters')
   const { closeLivePhotoSqlite } = await import('../src/main/modules/live-photo/sqlite')
+  const { closeCloneSqlite } = await import('../src/main/modules/clone/sqlite')
 
   livePhotoService.setTestDependencies({
     runFfmpeg: async (input: { args: string[] }) => {
@@ -54,9 +55,9 @@ async function main() {
       imageProviderPrimary: 'openai',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
-      videoProviderPrimary: 'seedance',
-      seedanceApiKey: 'test-seedance-key',
-      videoModelPrimary: 'seedance-20',
+      videoProviderPrimary: 'grsai',
+      grsaiApiKey: 'test-grsai-key',
+      grsaiVideoModel: 'grok-video-3',
     } as any)
 
     const assetsDir = path.join(root, 'fixtures')
@@ -201,6 +202,7 @@ async function main() {
     await waitForAutoFlowIdle().catch(() => undefined)
     livePhotoService.resetTestDependencies()
     closeLivePhotoSqlite()
+    closeCloneSqlite()
     await rm(root, { recursive: true, force: true })
   }
 }

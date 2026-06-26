@@ -42,6 +42,7 @@ type Product = {
   name: string
   type: string
   coverImagePath?: string
+  livePhotoReferenceImagePath?: string
   images?: ProductImageAsset[]
 }
 
@@ -64,7 +65,14 @@ type LivePhotoItem = {
   sourceType: 'reference_replace' | 'clone_shot'
   sourceProjectTitle?: string
   sourceShotLabel?: string
-  productSnapshot?: { id: string; name: string; type: string; coverImagePath?: string; imagePaths: string[] }
+  productSnapshot?: {
+    id: string
+    name: string
+    type: string
+    coverImagePath?: string
+    authoritativeProductReferencePath?: string
+    imagePaths: string[]
+  }
   referenceImagePath?: string
   packagingStatus: 'draft' | 'processing' | 'completed' | 'failed'
   generatedStillPath?: string
@@ -223,6 +231,10 @@ const notice = ref('')
 const errorText = ref('')
 const activeTab = ref<'reference' | 'clone' | 'library'>('reference')
 const items = ref<LivePhotoItem[]>([])
+const libraryPage = ref(1)
+const libraryPageSize = ref(24)
+const libraryTotal = ref(0)
+const libraryTotalPages = ref(1)
 const products = ref<Product[]>([])
 const cloneProjects = ref<CloneProjectSummary[]>([])
 const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused'>('all')
@@ -265,6 +277,13 @@ const qualityOptions = [
 ] as const
 
 const selectedProduct = computed(() => products.value.find((item) => item.id === selectedProductId.value) || null)
+const selectedProductAnalysisBoardRef = computed(() => String(selectedProduct.value?.analysisBoardPath || '').trim())
+const selectedProductLivePhotoRef = computed(() => {
+  const analysisBoardRef = selectedProductAnalysisBoardRef.value
+  if (analysisBoardRef) return analysisBoardRef
+  return String(selectedProduct.value?.livePhotoReferenceImagePath || '').trim()
+})
+const selectedProductReadyForLivePhoto = computed(() => Boolean(selectedProductLivePhotoRef.value))
 const primaryReferenceImage = computed(() => referenceImagePaths.value[0] || '')
 const referenceTaskRows = computed(() =>
   referenceImagePaths.value.map((path, index) => ({
@@ -307,23 +326,7 @@ const todayCreatedCount = computed(() => {
   return items.value.filter((item) => Number(item.updatedAt || 0) >= start.getTime()).length
 })
 
-const filteredLibraryItems = computed(() => {
-  if (libraryFilter.value === 'failed') {
-    return items.value.filter(
-      (item) =>
-        item.packagingStatus === 'failed' ||
-        item.autoFlowStatus?.status === 'failed_retryable' ||
-        item.autoFlowStatus?.status === 'failed_terminal',
-    )
-  }
-  if (libraryFilter.value === 'running') {
-    return items.value.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running')
-  }
-  if (libraryFilter.value === 'paused') {
-    return items.value.filter((item) => Boolean(item.autoFlowStatus?.paused))
-  }
-  return items.value
-})
+const filteredLibraryItems = computed(() => items.value)
 
 const selectedCloneRows = computed(() => cloneShotRows.value.filter((item) => selectedShotIds.value.includes(item.shotId)))
 const featuredCloneRow = computed(() => selectedCloneRows.value[0] || cloneShotRows.value[0] || null)
@@ -401,6 +404,19 @@ function fileNameOf(path?: string) {
   const normalized = value.replace(/\\/g, '/')
   const parts = normalized.split('/')
   return parts[parts.length - 1] || value
+}
+
+function livePhotoImageBaseRef(item: LivePhotoItem) {
+  return String(item.referenceImagePath || item.imagePromptPreview?.referenceImagePaths?.[0] || '').trim()
+}
+
+function livePhotoImageProductRef(item: LivePhotoItem) {
+  return String(
+    item.productSnapshot?.authoritativeProductReferencePath ||
+      item.productSnapshot?.coverImagePath ||
+      item.imagePromptPreview?.referenceImagePaths?.[1] ||
+      '',
+  ).trim()
 }
 
 function dedupePaths(paths: string[]) {
@@ -486,7 +502,13 @@ function liveTaskRetryText(item: LivePhotoItem) {
 }
 
 function liveTaskErrorSummary(item: LivePhotoItem) {
-  return String(item.error || item.autoFlowStatus?.lastError || '').trim()
+  const text = String(item.error || item.autoFlowStatus?.lastError || '').trim()
+  if (!text) return ''
+  if (text.includes('[remote_pending]')) {
+    const taskId = extractLivePhotoTaskId(item)
+    return taskId ? `已提交远端，等待结果查询。taskId=${taskId}` : '已提交远端，等待结果查询。'
+  }
+  return sanitizeVisibleText(text, '任务错误信息不可读')
 }
 
 function liveTaskAutoSummary(item: LivePhotoItem) {
@@ -528,7 +550,19 @@ function workflowStepStatusText(item: LivePhotoItem, step: (typeof livePhotoStep
 }
 
 function workflowStepErrorText(item: LivePhotoItem, step: (typeof livePhotoSteps)[number]) {
-  return String(item.workflow?.stepStatus?.[step]?.error || '').trim()
+  const text = String(item.workflow?.stepStatus?.[step]?.error || '').trim()
+  if (!text) return ''
+  if (text.includes('[remote_pending]')) {
+    const taskId = extractLivePhotoTaskId(item)
+    return taskId ? `已提交远端，等待结果查询。taskId=${taskId}` : '已提交远端，等待结果查询。'
+  }
+  return sanitizeVisibleText(text, '阶段错误信息不可读')
+}
+
+function liveTaskMetaSummary(item: LivePhotoItem) {
+  const errorText = String(item.error || '').trim()
+  if (errorText) return liveTaskErrorSummary(item)
+  return sanitizeVisibleText(item.referenceImagePath || item.sourceType, '--')
 }
 
 function extractLivePhotoTaskId(item: LivePhotoItem) {
@@ -540,7 +574,7 @@ function extractLivePhotoTaskId(item: LivePhotoItem) {
     ...(Array.isArray(item.logs) ? item.logs.map((log) => String(log.message || '').trim()) : []),
   ].filter(Boolean)
   for (const candidate of candidates) {
-    const match = candidate.match(/taskId=([^\s,]+)/i)
+    const match = candidate.match(/(?:taskId|askId)=([^\s,]+)/i)
     if (match?.[1]) return match[1]
   }
   return ''
@@ -724,11 +758,20 @@ async function refreshLibraryItems() {
   if (nowTs - lastLibraryRefreshAt < LIBRARY_REFRESH_DEDUP_WINDOW_MS) return
   try {
     lastLibraryRefreshAt = nowTs
-    const nextItems = await loadWithTimeout(window.api.livePhoto.listSummaries() as Promise<LivePhotoItem[]>, 4000)
-    const normalizedItems = Array.isArray(nextItems) ? nextItems : []
-    if (normalizedItems.length || !items.value.length) {
-      items.value = normalizedItems
-    }
+    const nextPage = await loadWithTimeout(
+      window.api.livePhoto.listSummaries({
+        page: libraryPage.value,
+        pageSize: libraryPageSize.value,
+        filter: libraryFilter.value,
+      }) as Promise<{ items: LivePhotoItem[]; filter: 'all' | 'failed' | 'running' | 'paused'; page: number; pageSize: number; total: number; totalPages: number }>,
+      4000,
+    )
+    const normalizedItems = Array.isArray(nextPage?.items) ? nextPage.items : []
+    items.value = normalizedItems
+    libraryPage.value = Math.max(1, Number(nextPage?.page || 1) || 1)
+    libraryPageSize.value = Math.max(1, Number(nextPage?.pageSize || 24) || 24)
+    libraryTotal.value = Math.max(0, Number(nextPage?.total || 0) || 0)
+    libraryTotalPages.value = Math.max(1, Number(nextPage?.totalPages || 1) || 1)
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   }
@@ -760,6 +803,18 @@ async function refreshLibraryItemsWithWarmup() {
     void refreshLibraryItems()
   }, 1200)
 }
+
+function goToLibraryPage(nextPage: number) {
+  const safePage = Math.max(1, Math.min(libraryTotalPages.value || 1, Number(nextPage || 1) || 1))
+  if (safePage === libraryPage.value) return
+  libraryPage.value = safePage
+  void refreshLibraryItems()
+}
+
+watch(libraryFilter, () => {
+  libraryPage.value = 1
+  void refreshLibraryItems()
+})
 
 async function loadAll() {
   loading.value = true
@@ -815,6 +870,11 @@ function removeReferenceImage(path: string) {
 
 async function createReferenceItem() {
   if (!referenceImagePaths.value.length || !selectedProductId.value) return
+  if (!selectedProductReadyForLivePhoto.value) {
+    errorText.value = '请先在商品详情中设置 Live Photo 主图，再创建任务。'
+    notice.value = ''
+    return
+  }
   creatingReference.value = true
   errorText.value = ''
   notice.value = ''
@@ -925,12 +985,34 @@ async function exportSelected() {
       | ((payload: { title?: string }) => Promise<string>)
       | undefined
     const pickedDir = await (pickDirOverride ?? window.api.pickDir)({ title: t('livePhoto.pickers.exportDirectoryTitle') })
+    const outputDir = String(pickedDir || '').trim()
+    if (!outputDir) {
+      notice.value = '已取消导出。'
+      return
+    }
     const result = await window.api.livePhoto.exportItems({
       ids: [...selectedLibraryIds.value],
-      outputDir: String(pickedDir || '').trim() || undefined,
-      settings: livePhotoSettings.value,
+      outputDir,
+      settings: {
+        ...livePhotoSettings.value,
+      },
     })
-    notice.value = t('livePhoto.messages.exportedCount', { count: Number(result?.exported?.length || 0) })
+    const exportedCount = Number(result?.exported?.length || 0)
+    const skipped = Array.isArray(result?.skipped) ? result.skipped : []
+    if (!exportedCount && skipped.length) {
+      const reasonText = skipped
+        .map((item: { id?: string; reason?: string }) => String(item?.reason || '').trim())
+        .filter(Boolean)
+        .slice(0, 3)
+        .join('；')
+      notice.value = reasonText ? `没有可导出的 Live Photo。${reasonText}` : '没有可导出的 Live Photo。'
+    } else {
+      notice.value = t('livePhoto.messages.exportedCount', { count: exportedCount })
+      if (skipped.length) {
+        notice.value += `，跳过 ${skipped.length} 项`
+      }
+    }
+    selectedLibraryIds.value = selectedLibraryIds.value.filter((id) => !result?.exported?.some((item: { id: string }) => item.id === id))
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -1154,8 +1236,8 @@ watch(
       </section>
     </section>
 
-    <div v-if="notice" class="banner banner-success">{{ notice }}</div>
-    <div v-if="errorText" class="banner banner-error">{{ errorText }}</div>
+    <div v-if="notice" class="banner banner-success" data-testid="live-photo-notice">{{ notice }}</div>
+    <div v-if="errorText" class="banner banner-error" data-testid="live-photo-error">{{ errorText }}</div>
 
     <section class="tab-bar">
       <button class="tab-button" data-testid="live-photo-tab-reference" :class="{ active: activeTab === 'reference' }" type="button" @click="activeTab = 'reference'">{{ uiText.tabReference }}</button>
@@ -1226,7 +1308,7 @@ watch(
                   <span>{{ item.productSnapshot?.name || '--' }}</span>
                   <span>{{ formatTime(item.updatedAt) }}</span>
                 </div>
-                <small>{{ item.error || item.referenceImagePath || item.sourceType }}</small>
+                <small>{{ liveTaskMetaSummary(item) }}</small>
               </article>
             </div>
           </div>
@@ -1247,7 +1329,24 @@ watch(
             </div>
           </label>
 
-          <button class="primary-button create-button" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId" @click="createReferenceItem">
+          <div class="field">
+            <span>Live Photo 主图</span>
+            <div v-if="selectedProductLivePhotoRef" class="live-photo-master-ref">
+              <button class="live-photo-master-ref__preview" type="button" @click="openPath(selectedProductLivePhotoRef)">
+                <img :src="previewSrc(selectedProductLivePhotoRef)" alt="live photo master reference" />
+              </button>
+              <div class="live-photo-master-ref__copy">
+                <strong>{{ fileNameOf(selectedProductLivePhotoRef) }}</strong>
+                <small>{{ selectedProductLivePhotoRef }}</small>
+              </div>
+            </div>
+            <div v-else class="live-photo-master-ref live-photo-master-ref--missing">
+              <AlertTriangle class="h-4 w-4" />
+              <span>当前商品还没有设置 Live Photo 主图，不能创建参考图替换任务。</span>
+            </div>
+          </div>
+
+          <button class="primary-button create-button" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto" @click="createReferenceItem">
             <Sparkles class="h-4 w-4" />
             {{ creatingReference ? t('livePhoto.actions.creating') : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
           </button>
@@ -1497,7 +1596,7 @@ watch(
       <div class="library-headline">
         <div class="library-title-row">
           <strong>{{ uiText.libraryTitle }}</strong>
-          <span class="library-count">{{ items.length }} {{ uiText.itemUnit }}</span>
+          <span class="library-count">{{ libraryTotal }} {{ uiText.itemUnit }}</span>
         </div>
         <div class="library-overview">
           <div class="library-overview__card">
@@ -1548,6 +1647,11 @@ watch(
             <Package class="h-4 w-4" />
             {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
           </button>
+        </div>
+        <div class="library-pagination">
+          <button class="toolbar-button" type="button" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">上一页</button>
+          <span class="library-pagination__text">第 {{ libraryPage }} / {{ libraryTotalPages }} 页</span>
+          <button class="toolbar-button" type="button" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">下一页</button>
         </div>
       </div>
 
@@ -1933,6 +2037,21 @@ watch(
               <span>{{ detailDialogItem.imagePromptPreview?.provider || '--' }} / {{ detailDialogItem.imagePromptPreview?.model || '--' }}</span>
             </div>
             <div class="live-console-row__detail-block">
+              <label>参考图绑定</label>
+              <div class="live-console-row__binding-grid">
+                <button class="live-console-row__binding-card" type="button" :disabled="!livePhotoImageBaseRef(detailDialogItem)" @click="openPath(livePhotoImageBaseRef(detailDialogItem))">
+                  <strong>Image 1</strong>
+                  <span>Base reference</span>
+                  <small>{{ fileNameOf(livePhotoImageBaseRef(detailDialogItem)) || '--' }}</small>
+                </button>
+                <button class="live-console-row__binding-card" type="button" :disabled="!livePhotoImageProductRef(detailDialogItem)" @click="openPath(livePhotoImageProductRef(detailDialogItem))">
+                  <strong>Image 2</strong>
+                  <span>Product reference</span>
+                  <small>{{ fileNameOf(livePhotoImageProductRef(detailDialogItem)) || '--' }}</small>
+                </button>
+              </div>
+            </div>
+            <div class="live-console-row__detail-block">
               <label>请求提示词</label>
               <pre>{{ detailDialogItem.imagePromptPreview?.prompt || detailDialogItem.promptPreview?.instructions?.join('\n') || '--' }}</pre>
             </div>
@@ -2044,6 +2163,17 @@ watch(
 .panel-head, .library-toolbar, .clone-thumb-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .panel-title-wrap { display: flex; align-items: center; gap: 10px; }
 .panel-title-wrap strong, .panel-head > strong { font-size: 18px; line-height: 1.2; }
+.live-photo-master-ref { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px; border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 12px; background: rgba(18, 23, 38, 0.72); }
+.live-photo-master-ref--missing { grid-template-columns: 16px minmax(0, 1fr); color: #fecaca; }
+.live-photo-master-ref__preview { width: 88px; height: 88px; padding: 0; overflow: hidden; border: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
+.live-photo-master-ref__preview img { width: 100%; height: 100%; object-fit: cover; }
+.live-photo-master-ref__copy { display: grid; gap: 4px; min-width: 0; }
+.live-photo-master-ref__copy strong { color: #eef5ff; }
+.live-photo-master-ref__copy small { color: #9fb1d8; font-size: 11px; word-break: break-all; }
+.live-console-row__binding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.live-console-row__binding-card { display: grid; gap: 4px; padding: 12px; text-align: left; border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 12px; background: rgba(18, 23, 38, 0.8); color: #eef5ff; }
+.live-console-row__binding-card span { color: rgba(197, 205, 225, 0.82); font-size: 12px; }
+.live-console-row__binding-card small { color: #9fb1d8; font-size: 11px; word-break: break-all; }
 .panel-head-note { color: #9097bd; font-size: 12px; }
 .step-badge { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(180deg, #7568e8, #5a4fd0); color: #fff; font-size: 14px; font-weight: 700; box-shadow: 0 8px 18px rgba(98, 79, 210, 0.28); }
 .field-stack, .field, .clone-shot-list, .library-layout, .library-grid-six, .export-copy, .clone-selected-grid, .settings-grid, .export-grid, .rules-compact { display: grid; gap: 10px; }
@@ -2147,6 +2277,8 @@ watch(
 .library-title-row strong { font-size: 18px; line-height: 1.1; }
 .library-count { min-height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(111, 123, 170, 0.2); background: rgba(18, 23, 38, 0.7); color: rgba(225, 231, 247, 0.8); display: inline-flex; align-items: center; font-weight: 700; font-size: 12px; }
 .library-toolbar { display: flex; align-items: center; gap: 8px; }
+.library-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.library-pagination__text { min-width: 110px; text-align: center; font-size: 12px; color: #9fb2d8; }
 .library-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .library-overview__card {
   display: grid;

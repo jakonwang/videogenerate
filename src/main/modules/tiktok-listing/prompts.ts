@@ -344,6 +344,7 @@ export function buildTiktokListingImagePrompt(input: {
   const globalRules = GLOBAL_PROMPT_RULES.join(' ')
   const detail = detailPlaceholder(input.category, input.sku, input.detailText)
   const template = preset.templates[input.index] || preset.templates[0]
+  const productOnlyHero = input.anchorMode !== 'source_plus_hero' && template.key === 'hero'
   const anchorRules =
     input.anchorMode === 'source_plus_hero'
       ? [
@@ -354,17 +355,37 @@ export function buildTiktokListingImagePrompt(input: {
           'Keep the same believable product scale as the references and do not progressively enlarge the item across later images.',
         ].join(' ')
       : 'Reference image 1 is the original product truth source and has the highest priority.'
+  const subject = productOnlyHero ? 'the exact same product from the reference image only' : preset.subject
+  const wearArea = productOnlyHero ? 'product-only close-up with no model or visible body parts' : preset.wearArea
+  const detailFocus = productOnlyHero
+    ? `${preset.detailFocus}. Keep the product isolated as the only subject with no human support context.`
+    : preset.detailFocus
+  const composition = productOnlyHero ? 'clean product-only hero shot, centered composition, premium ecommerce cover image' : template.composition
+  const focus = productOnlyHero
+    ? 'show the exact same product clearly as a standalone item with full structure, finish, and silhouette readable and no human context'
+    : template.focus
+  const styling = productOnlyHero
+    ? 'soft studio lighting, clean white or light-neutral background, premium ecommerce realism, no model styling'
+    : template.styling
+  const noHumanRules = productOnlyHero
+    ? [
+        'This shot must remain product-only and no-model.',
+        'Do not add any hands, fingers, arms, human limbs, hand gestures, or hand actions.',
+        'Do not add ear, neck, wrist, clavicle, skin, hair, face, or any other body anchor.',
+      ].join(' ')
+    : ''
   return [
     `Create a TikTok ecommerce product image for ${preset.category}.`,
     globalRules,
     anchorRules,
-    `Subject: ${preset.subject}.`,
-    `Wear area: ${preset.wearArea}.`,
-    `Detail focus: ${preset.detailFocus}.`,
+    noHumanRules,
+    `Subject: ${subject}.`,
+    `Wear area: ${wearArea}.`,
+    `Detail focus: ${detailFocus}.`,
     `Shot intent: ${template.shotTitle}.`,
-    `Composition: ${template.composition}.`,
-    `Focus: ${template.focus}.`,
-    `Styling: ${template.styling}.`,
+    `Composition: ${composition}.`,
+    `Focus: ${focus}.`,
+    `Styling: ${styling}.`,
     detail ? `Product detail placeholder: ${detail}.` : '',
   ]
     .filter(Boolean)

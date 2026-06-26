@@ -1253,6 +1253,13 @@ export type ModelTask = {
   error?: string
 }
 
+import type {
+  CapabilityStoredProviderKey,
+  ChatPlatformProfile,
+  ImagePlatformProfile,
+  PlatformProfile,
+} from '../../../shared/platformSettings'
+
 export type ModelCredentials = {
   seedanceApiKey?: string
   seedanceHost?: string
@@ -1272,7 +1279,7 @@ export type ModelCredentials = {
   videoModelFallback?: string
   grsaiVideoModel?: string
   grsaiAnalysisModel?: string
-  chatProviderPrimary?: 'apifox_hub' | 'grsai'
+  chatProviderPrimary?: CapabilityStoredProviderKey
   videoProviderPrimary?: AiProviderName
   videoProviderFallback?: AiProviderName
   openaiApiKey?: string
@@ -1282,13 +1289,14 @@ export type ModelCredentials = {
   imageProviderPrimary?: ImageProviderName
   klingImageModel?: string
   grsaiImageModel?: string
-  apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-  videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-  imageApifoxHubProfile?: 'ai666' | 'vectorengine'
-  chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+  apifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+  videoApifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+  imageApifoxHubProfile?: ImagePlatformProfile
+  chatApifoxHubProfile?: ChatPlatformProfile
   ai666Hub?: ApifoxHubCredentials
   vectorEngineHub?: ApifoxHubCredentials
   xibapiHub?: ApifoxHubCredentials
+  gaoruiHub?: ApifoxHubCredentials
   apifoxHub?: ApifoxHubCredentials
 }
 
@@ -1329,6 +1337,7 @@ export type ApifoxVideoProvider =
   | 'kling'
   | 'seedance2'
   | 'xibapi'
+  | 'gaorui'
 export type ApifoxEndpointStyle = 'openai_chat' | 'openai_images' | 'openai_video' | 'official_rest' | 'gemini_native' | 'anthropic_native' | 'midjourney_task'
 export type UnifiedCapability =
   | 'chat_completion'

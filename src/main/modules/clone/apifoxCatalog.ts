@@ -33,4 +33,7 @@ export const APIFOX_VIDEO_CATALOG: ApifoxCatalogItem[] = [
   { provider: 'seedance2', capability: 'video_reference_to_video', endpointStyle: 'official_rest' },
   { provider: 'xibapi', capability: 'video_text_to_video', endpointStyle: 'official_rest' },
   { provider: 'xibapi', capability: 'video_image_to_video', endpointStyle: 'official_rest' },
+  { provider: 'gaorui', capability: 'video_text_to_video', endpointStyle: 'official_rest' },
+  { provider: 'gaorui', capability: 'video_image_to_video', endpointStyle: 'official_rest' },
+  { provider: 'gaorui', capability: 'video_reference_to_video', endpointStyle: 'official_rest' },
 ]

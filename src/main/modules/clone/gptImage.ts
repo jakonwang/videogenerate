@@ -43,11 +43,15 @@ type GenerateImageInput = {
   prompt: string
   negativePrompt?: string
   imagePaths?: string[]
+  uploadFileNames?: string[]
+  uploadKeyPrefixes?: string[]
   outDir: string
   filePrefix: string
   normalizeOutput?: 'vertical_9_16' | 'preserve'
   outputSize?: string
 }
+
+type GenerateImageProviderScope = 'default' | 'live_photo_replace'
 
 function inferAspectRatioFromOutputSize(outputSize: string | undefined): '1:1' | '9:16' | '16:9' {
   const value = String(outputSize || '').trim().toLowerCase()
@@ -85,6 +89,23 @@ function hasProviderCredential(credentials: ModelCredentials, provider: ImagePro
   return Boolean(String(credentials.openaiApiKey || '').trim())
 }
 
+export function hasStrictImageEditProviderCredential(credentials: ModelCredentials, provider: ImageProviderName) {
+  if (provider === 'kling') return false
+  if (provider === 'grsai') return Boolean(String(credentials.grsaiApiKey || '').trim())
+  if (provider === 'apifox_hub') {
+    const cfg = resolveApifoxHubCredentials(credentials, 'image')
+    const endpointStyle = String(cfg?.imageEndpointStyle || '').trim()
+    const editModel = String(cfg?.imageEditModel || cfg?.imageModel || '').trim()
+    return Boolean(
+      cfg?.enabled &&
+        String(cfg.apiKey || '').trim() &&
+        editModel &&
+        (endpointStyle === 'openai_images' || endpointStyle === 'official_rest'),
+    )
+  }
+  return Boolean(String(credentials.openaiApiKey || '').trim())
+}
+
 function imageProviderCandidates(credentials: ModelCredentials): ImageProviderName[] {
   const preferred = imageProvider(credentials)
   const fallbackOrder: ImageProviderName[] = ['apifox_hub', 'openai', 'kling', 'grsai']
@@ -92,6 +113,18 @@ function imageProviderCandidates(credentials: ModelCredentials): ImageProviderNa
   for (const provider of [preferred, ...fallbackOrder]) {
     if (out.includes(provider)) continue
     if (!hasProviderCredential(credentials, provider)) continue
+    out.push(provider)
+  }
+  return out
+}
+
+function imageProviderCandidatesForLivePhotoReplace(credentials: ModelCredentials): ImageProviderName[] {
+  const preferred = imageProvider(credentials)
+  const strictEditPriority: ImageProviderName[] = [preferred, 'apifox_hub', 'openai', 'grsai']
+  const out: ImageProviderName[] = []
+  for (const provider of strictEditPriority) {
+    if (out.includes(provider)) continue
+    if (!hasStrictImageEditProviderCredential(credentials, provider)) continue
     out.push(provider)
   }
   return out
@@ -170,6 +203,21 @@ async function ensureGrsPublicRefs(credentials: ModelCredentials, paths: string[
   const urls: string[] = []
   for (const ref of refs.slice(0, 8)) {
     urls.push(isPublicHttpUrl(ref) ? ref : await toPublicUrlViaQiniu(credentials, ref, 'grsai-input/images'))
+  }
+  return urls
+}
+
+async function ensureGrsPublicRefsWithRoles(input: {
+  credentials: ModelCredentials
+  paths: string[] | undefined
+  uploadKeyPrefixes?: string[]
+}) {
+  const refs = (input.paths ?? []).map((x) => String(x || '').trim()).filter(Boolean)
+  const keyPrefixes = Array.isArray(input.uploadKeyPrefixes) ? input.uploadKeyPrefixes : []
+  const urls: string[] = []
+  for (const [index, ref] of refs.slice(0, 8).entries()) {
+    const keyPrefix = String(keyPrefixes[index] || '').trim() || 'grsai-input/images'
+    urls.push(isPublicHttpUrl(ref) ? ref : await toPublicUrlViaQiniu(input.credentials, ref, keyPrefix))
   }
   return urls
 }
@@ -352,9 +400,11 @@ async function postEditImage(input: GenerateImageInput) {
   form.set('prompt', input.prompt)
   form.set('quality', imageQuality(input.credentials))
   form.set('size', String(input.outputSize || '1024x1536'))
-  for (const ref of refs.slice(0, 8)) {
+  const uploadFileNames = Array.isArray(input.uploadFileNames) ? input.uploadFileNames : []
+  for (const [index, ref] of refs.slice(0, 8).entries()) {
     const buf = await readFile(ref)
-    form.append('image[]', new Blob([buf], { type: mimeByPath(ref) }), basename(ref))
+    const uploadFileName = String(uploadFileNames[index] || '').trim() || basename(ref)
+    form.append('image[]', new Blob([buf], { type: mimeByPath(ref) }), uploadFileName)
   }
   const res = await fetch(OPENAI_IMAGE_EDIT_URL, {
     method: 'POST',
@@ -427,7 +477,11 @@ async function postKlingImage(input: GenerateImageInput) {
 
 async function postGrsImage(input: GenerateImageInput) {
   requireGrsKey(input.credentials)
-  const urls = await ensureGrsPublicRefs(input.credentials, input.imagePaths)
+  const urls = await ensureGrsPublicRefsWithRoles({
+    credentials: input.credentials,
+    paths: input.imagePaths,
+    uploadKeyPrefixes: input.uploadKeyPrefixes,
+  })
   const created = await createGrsImageTask({
     credentials: input.credentials,
     prompt: input.prompt,
@@ -473,6 +527,7 @@ async function generateProviderImage(input: GenerateImageInput) {
           prompt: scopedInput.prompt,
           negativePrompt: scopedInput.negativePrompt,
           imagePaths: scopedInput.imagePaths,
+          uploadFileNames: scopedInput.uploadFileNames,
           outDir: scopedInput.outDir,
           filePrefix: scopedInput.filePrefix,
           capability: scopedInput.imagePaths?.length ? 'image_edit' : 'image_generate',
@@ -493,6 +548,61 @@ async function generateProviderImage(input: GenerateImageInput) {
   throw new Error(errors.join(' | ') || '图片生成失败')
 }
 
+async function generateProviderImageWithScope(
+  input: GenerateImageInput & { providerScope?: GenerateImageProviderScope },
+) {
+  const isLivePhotoReplace = input.providerScope === 'live_photo_replace'
+  const scopedRefs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
+  if (isLivePhotoReplace && scopedRefs.length < 2) {
+    throw new Error('Live Photo replacement requires both the base scene reference and the authoritative product reference image.')
+  }
+  const providers =
+    isLivePhotoReplace
+      ? imageProviderCandidatesForLivePhotoReplace(input.credentials)
+      : imageProviderCandidates(input.credentials)
+  if (!providers.length) {
+    if (isLivePhotoReplace) {
+      throw new Error(
+        'Live Photo replacement requires a strict image-edit provider. Configure Apifox Hub, OpenAI image edit, or GRS.AI image edit before running replacement.',
+      )
+    }
+    return await postEditImage(input)
+  }
+  const errors: string[] = []
+  for (let index = 0; index < providers.length; index += 1) {
+    const provider = providers[index]
+    const scopedInput = {
+      ...input,
+      imagePaths: isLivePhotoReplace ? scopedRefs.slice(0, 2) : input.imagePaths,
+      credentials: withImageProvider(input.credentials, provider),
+    }
+    try {
+      if (provider === 'apifox_hub') {
+        return (await generateApifoxImage({
+          credentials: scopedInput.credentials,
+          prompt: scopedInput.prompt,
+          negativePrompt: scopedInput.negativePrompt,
+          imagePaths: scopedInput.imagePaths,
+          uploadFileNames: scopedInput.uploadFileNames,
+          outDir: scopedInput.outDir,
+          filePrefix: scopedInput.filePrefix,
+          capability: isLivePhotoReplace ? 'image_edit' : scopedInput.imagePaths?.length ? 'image_edit' : 'image_generate',
+        })).outputPath
+      }
+      if (provider === 'kling') return await postKlingImage(scopedInput)
+      if (provider === 'grsai') return await postGrsImage(scopedInput)
+      return await postEditImage(scopedInput)
+    } catch (error: any) {
+      const text = String(error?.message ?? error ?? '').trim() || 'unknown error'
+      errors.push(String(provider) + ': ' + text)
+      const isLast = index >= providers.length - 1
+      if (!isRetryableImageProviderError(error) || isLast) {
+        throw new Error(errors.join(' | '))
+      }
+    }
+  }
+  throw new Error(errors.join(' | ') || 'image generation failed')
+}
 async function buildMockImageFromReference(input: GenerateImageInput) {
   await mkdir(input.outDir, { recursive: true })
   const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)
@@ -928,6 +1038,12 @@ export function buildModelIdentityLockText(pack: ModelIdentityPack) {
 
 export type StoryboardReferenceMode = 'model_presentation' | 'product_closeup'
 
+function hasExplicitNoBodyAnchorSignal(text: string) {
+  return /\bno ear\b|\bno earlobe\b|\bno face\b|\bno neck\b|\bno body\b|\bno skin\b|\bno model\b|\bno person\b|\bwithout no?\s*ear\b|\bwithout no?\s*face\b|\bwithout no?\s*neck\b|\bwithout no?\s*body\b|\bwithout model\b|\bwithout person\b|\bidentity is not visible\b/.test(
+    text,
+  )
+}
+
 function isHandheldNonWornReferenceShot(shot: ShotSpec) {
   const haystack = [
     shot.shotType,
@@ -950,9 +1066,9 @@ function isHandheldNonWornReferenceShot(shot: ShotSpec) {
   const anchoredBodyWornSignal =
     /\bear wearing\b|\bearlobe\b|\bear lobe\b|\bear area\b|\bearring area\b|\bjawline\b|\bneck\b|\bclavicle\b|\binteracting with the ear\b|\badjusting the earring\b|\bframing the ear\b|\bbracelet worn on a wrist\b|\bring worn on a finger\b|\bworn on wrist\b|\bworn on finger\b/.test(
       haystack,
-    )
+    ) && !hasExplicitNoBodyAnchorSignal(haystack)
   const handheldProductSignal =
-    /\bhand holding\b|\bholding the\b|\bheld in hand\b|\bhand-held\b|\bhand held\b|\bfingers holding\b|\bproduct in hand\b|\bproduct in the hand\b|\bholding and presenting\b|\bpresenting product naturally\b|\bholding product\b|\bhand usage\b/.test(
+    /\bhand holding\b|\bholding the\b|\bheld in hand\b|\bhand-held\b|\bhand held\b|\bfingers holding\b|\bfingers only\b|\bhand only\b|\bhands only\b|\bproduct in hand\b|\bproduct in the hand\b|\bholding and presenting\b|\bpresenting product naturally\b|\bholding product\b|\bhand usage\b|\bhand-held product display only\b|\bhand held product display only\b|\bstatic hand-held product display only\b/.test(
       haystack,
     )
   return handheldProductSignal && !anchoredBodyWornSignal
@@ -981,10 +1097,10 @@ function isProductCloseupReferenceShot(productType: CloneProductType, shot: Shot
   const anchoredBodyWornSignal =
     /\bear wearing\b|\bearlobe\b|\bear lobe\b|\bear area\b|\bearring area\b|\bjawline\b|\bneck\b|\bclavicle\b|\binteracting with the ear\b|\badjusting the earring\b|\bframing the ear\b|\bbracelet worn on a wrist\b|\bring worn on a finger\b|\bworn on wrist\b|\bworn on finger\b/.test(
       haystack,
-    )
+    ) && !hasExplicitNoBodyAnchorSignal(haystack)
   const genericWearingSignal = /\bwearing\b|\bworn\b|\btry-on\b|\btry on\b/.test(haystack)
   const handheldProductSignal =
-    /\bhand holding\b|\bholding the\b|\bheld in hand\b|\bhand-held\b|\bhand held\b|\bfingers holding\b|\bproduct in hand\b|\bproduct in the hand\b|\bholding and presenting\b|\bpresenting product naturally\b|\bholding product\b|\bhand usage\b/.test(
+    /\bhand holding\b|\bholding the\b|\bheld in hand\b|\bhand-held\b|\bhand held\b|\bfingers holding\b|\bfingers only\b|\bhand only\b|\bhands only\b|\bproduct in hand\b|\bproduct in the hand\b|\bholding and presenting\b|\bpresenting product naturally\b|\bholding product\b|\bhand usage\b|\bhand-held product display only\b|\bhand held product display only\b|\bstatic hand-held product display only\b/.test(
       haystack,
     )
   const explicitNoWearingSignal = /\bno wearing scene\b|\bwithout wearing scene\b|\bno wearing display\b/.test(haystack)
@@ -1420,7 +1536,32 @@ const STORYBOARD_IMAGE_TEMPLATES: Record<StoryboardImageTemplateType, string> = 
   lifestyle_interaction: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
 }
 
-function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode) {
+function hasNoPersonStoryboardSignal(shot?: ShotSpec) {
+  const haystack = [
+    shot?.visualPrompt,
+    shot?.visualDescription,
+    shot?.actionDescription,
+    shot?.cameraDescription,
+    shot?.productFocus,
+    shot?.materialNeed,
+    shot?.scriptText,
+    shot?.onScreenText,
+    shot?.narrationText,
+    shot?.thumbnailPath,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .join('\n')
+  if (!haystack) return false
+  const handOnlySignal =
+    /\bhand only\b|\bhands only\b|\bfingers only\b|\bclose-up of fingers\b|\bcloseup of fingers\b|\btight close-up of fingers\b|\bhand-held product display only\b|\bhand held product display only\b|\bstatic hand-held product display only\b/.test(
+      haystack,
+    ) && !/\bear\b|\bearlobe\b|\bneck\b|\bclavicle\b|\bjawline\b|\bface\b|\bmodel\b|\bperson\b|\bskin\b|\bwrist\b/.test(haystack)
+  return /\bno person\b|\bno model\b|\bproduct only\b|\bproduct-only\b|\btabletop\b|\bflat lay\b|\bflat-lay\b|\bisolated\b|\bwhite background\b|\bpure white background\b|\bpackaging only\b|\bno face\b|\bno ear\b|\bno neck\b|\bno body\b/.test(
+    haystack,
+  ) || handOnlySignal
+}
+
+function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, shot?: ShotSpec) {
   const intro =
     mode === 'product_closeup'
       ? [
@@ -1444,6 +1585,9 @@ function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode) {
       ? [
         '2. PRESENTATION STRUCTURE:',
         'Keep the product fully consistent with Image 1, including its visible structure, material, color, finish, proportions, and defining details.',
+        hasNoPersonStoryboardSignal(shot)
+          ? '- NO HUMAN ADDITIONS: If Image 1 or Image 2 is product-only, no-model, no-person, tabletop, flat-lay, isolated, or packaging-only, do NOT add any hands, fingers, arms, human limbs, or human interaction. Do NOT invent hand gestures, hand posing, or hand actions.'
+          : '- HUMAN SUPPORT RULE: Only keep human context when it is already required by the reference composition. Never add extra hands, fingers, arms, or human gestures that are not needed to preserve the original product presentation structure.',
         '- SCENE INTEGRATION: Place that same product naturally into the daily environment, composition, and atmosphere of Image 2 so the final result feels like a real-life casual capture in that scene.',
         '- BODY CONTEXT: If human context is needed, preserve only the minimum local body-part relation required by Image 2 to present the product naturally, such as hand placement or ear/neck/hand relation. Do not infer or recreate a specific person identity from Image 1.',
         '- CLOTHING: Only preserve clothing or accessory context when it is visible and necessary for the Image 2 scene composition. Ignore unrelated fashion details that do not help the product sit naturally in the scene.',
@@ -1550,7 +1694,7 @@ export function buildGptFramePrompt(input: {
           shot: input.shot,
           explicitTemplateType: input.explicitTemplateType,
         })
-  return buildStoryboardFrameTransferTemplate(referenceMode)
+  return buildStoryboardFrameTransferTemplate(referenceMode, input.shot)
 }
 export async function generateModelIdentityPackImages(input: {
   credentials: ModelCredentials
@@ -1620,6 +1764,8 @@ export async function generateGptShotFrameImage(input: {
   outDir: string
   filePrefix: string
   imagePaths: string[]
+  uploadFileNames?: string[]
+  uploadKeyPrefixes?: string[]
   normalizeOutput?: 'vertical_9_16' | 'preserve'
   outputSize?: string
 }) {
@@ -1633,4 +1779,29 @@ export async function generateGptShotFrameImage(input: {
     return await buildMockImageFromReference(input)
   }
   return await generateProviderImage(input)
+}
+
+export async function generateScopedGptShotFrameImage(input: {
+  credentials: ModelCredentials
+  prompt: string
+  negativePrompt?: string
+  outDir: string
+  filePrefix: string
+  imagePaths: string[]
+  uploadFileNames?: string[]
+  uploadKeyPrefixes?: string[]
+  normalizeOutput?: 'vertical_9_16' | 'preserve'
+  outputSize?: string
+  providerScope?: GenerateImageProviderScope
+}) {
+  if (
+    canUseMockGeneration(input.credentials) &&
+    !String(resolveApifoxHubCredentials(input.credentials, 'image')?.apiKey ?? '').trim() &&
+    !String(input.credentials.openaiApiKey ?? '').trim() &&
+    !String(input.credentials.klingApiKey ?? '').trim() &&
+    !String(input.credentials.grsaiApiKey ?? '').trim()
+  ) {
+    return await buildMockImageFromReference(input)
+  }
+  return await generateProviderImageWithScope(input)
 }

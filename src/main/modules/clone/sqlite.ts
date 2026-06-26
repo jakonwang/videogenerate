@@ -24,6 +24,11 @@ type CloneSqliteDbShape = {
   modelTasks: ModelTask[]
 }
 
+type CloneSqliteSettingsShape = {
+  payload?: string
+  updatedAt?: number
+}
+
 const schemaSql = `
 CREATE TABLE IF NOT EXISTS clone_projects (
   id TEXT PRIMARY KEY,
@@ -49,6 +54,11 @@ CREATE TABLE IF NOT EXISTS clone_model_tasks (
   id TEXT PRIMARY KEY,
   updated_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS clone_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  updated_at INTEGER NOT NULL,
   payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_clone_projects_updated_at
@@ -146,6 +156,26 @@ export function isCloneSqliteEmpty() {
     if (Number(row?.count || 0) > 0) return false
   }
   return true
+}
+
+export function readCloneSettingsFromSqlite(): CloneSqliteSettingsShape | null {
+  initializeCloneSqlite()
+  const database = getDatabase()
+  const row = database.prepare('SELECT payload, updated_at FROM clone_settings WHERE id = 1 LIMIT 1').get() as
+    | { payload?: string; updated_at?: number }
+    | undefined
+  if (!row?.payload) return null
+  return {
+    payload: String(row.payload || ''),
+    updatedAt: Number(row.updated_at || 0) || 0,
+  }
+}
+
+export function writeCloneSettingsToSqlite(payload: string, updatedAt: number) {
+  const database = initializeCloneSqlite()
+  database
+    .prepare('INSERT OR REPLACE INTO clone_settings (id, updated_at, payload) VALUES (1, ?, ?)')
+    .run(Number(updatedAt || 0), String(payload || '{}'))
 }
 
 export function readCloneDbFromSqlite(): CloneSqliteDbShape {

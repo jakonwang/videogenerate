@@ -141,6 +141,8 @@ async function main() {
     assert.equal(pendingSnapshot.packagingStatus, 'processing')
     assert.equal(pendingSnapshot.imageTaskId, remoteImageTaskId)
     assert.equal(pendingSnapshot.imageTaskProvider, 'grsai')
+    assert.equal(pendingSnapshot.autoFlowStatus?.status, 'running')
+    assert.match(String(pendingSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
     assert.match(String(pendingSnapshot.error || ''), /\[remote_pending\]/)
     assert.equal(remoteImageSubmitCount, 1)
 
@@ -160,9 +162,18 @@ async function main() {
     )
 
     assert.equal(resumedSnapshot.imageTaskId, remoteImageTaskId)
+    assert.equal(resumedSnapshot.autoFlowStatus?.status, 'running')
+    assert.match(String(resumedSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
     assert.equal(remoteImageSubmitCount, 1)
     assert.ok(queryObserved)
     assert.ok(remoteImageQueryCount >= 1)
+
+    const summaries = await livePhotoService.listSummaries({ filter: 'running' })
+    const summary = summaries.items.find((item) => item.id === created.id)
+    assert.ok(summary)
+    assert.equal(summary?.packagingStatus, 'processing')
+    assert.equal(summary?.autoFlowStatus?.status, 'running')
+    assert.match(String(summary?.error || ''), /\[remote_pending\]/)
 
     globalThis.fetch = originalFetch
     console.log('live photo remote pending smoke test passed')

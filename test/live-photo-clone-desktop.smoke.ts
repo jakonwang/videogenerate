@@ -129,7 +129,19 @@ async function main() {
     await page.waitForSelector('[data-testid="live-photo-page"]', { timeout: 30000 })
 
     await page.evaluate((dir) => {
-      ;(window as any).__VG_TEST_pickDir = async () => dir
+      ;(window as any).__VG_TEST_pickDirCalled = 0
+      ;(window as any).__VG_TEST_exportItemsCalled = 0
+      ;(window as any).__VG_TEST_lastExportPayload = null
+      ;(window as any).__VG_TEST_pickDir = async () => {
+        ;(window as any).__VG_TEST_pickDirCalled += 1
+        return dir
+      }
+      const originalExportItems = window.api.livePhoto.exportItems
+      window.api.livePhoto.exportItems = async (payload: any) => {
+        ;(window as any).__VG_TEST_exportItemsCalled += 1
+        ;(window as any).__VG_TEST_lastExportPayload = payload
+        return await originalExportItems(payload)
+      }
     }, exportDir)
 
     const openShotCount = async () =>
@@ -176,31 +188,68 @@ async function main() {
       90000,
     )
 
-    await page.click(`[data-testid="live-photo-select-${itemId}"]`)
-    await page.click('[data-testid="live-photo-export-selected"]')
-    await waitFor(() => {
-      if (!fs.existsSync(exportDir)) return false
-      const dirs = fs.readdirSync(exportDir, { withFileTypes: true }).filter((entry) => entry.isDirectory())
-      if (!dirs.length) return false
-      return dirs.some((entry) => {
-        const bundleDir = path.join(exportDir, entry.name)
-        const files = fs.readdirSync(bundleDir)
-        return files.some((item) => item.endsWith('.livephoto.json')) && files.some((item) => item.endsWith('.asset-metadata.json'))
-      })
-    }, 30000)
-    await page.waitForSelector(`[data-testid="live-photo-metadata-${itemId}"]`, { timeout: 30000 })
+    await page.locator(`[data-testid="live-photo-item-${itemId}"] .live-console-row__check span`).click()
+    await page.waitForFunction((targetId) => {
+      const input = document.querySelector(`[data-testid="live-photo-select-${targetId}"]`) as HTMLInputElement | null
+      return Boolean(input?.checked)
+    }, itemId, { timeout: 30000 })
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="live-photo-export-selected"]') as HTMLButtonElement | null
+      return Boolean(button && !button.disabled)
+    }, { timeout: 30000 })
+    await page.evaluate(() => {
+      const button = document.querySelector('[data-testid="live-photo-export-selected"]') as HTMLButtonElement | null
+      if (!button) throw new Error('Missing export selected button')
+      button.click()
+    })
+    let exportedItem = null as any
+    try {
+      exportedItem = await waitFor(
+        async () =>
+          await page.evaluate(async (targetId) => {
+            const items = await window.api.livePhoto.list()
+            return items.find((item) => item.id === targetId && item.exportBundlePath && item.packagingMetadataBridgePath) || null
+          }, itemId),
+        90000,
+      )
+    } catch (error) {
+      const exportDebug = await page.evaluate(async (targetId) => {
+        const items = await window.api.livePhoto.list()
+        const target = items.find((item) => item.id === targetId) || null
+        const notice = document.querySelector('[data-testid="live-photo-notice"]')?.textContent || ''
+        const errorText = document.querySelector('[data-testid="live-photo-error"]')?.textContent || ''
+        const selected = document.querySelector(`[data-testid="live-photo-select-${targetId}"]`) as HTMLInputElement | null
+        const button = document.querySelector('[data-testid="live-photo-export-selected"]') as HTMLButtonElement | null
+        let manualInvokeResult: any = null
+        let manualInvokeError = ''
+        try {
+        } catch (error: any) {
+          manualInvokeError = error?.message || String(error || '')
+        }
+        return {
+          notice,
+          errorText,
+          pickDirCalled: Number((window as any).__VG_TEST_pickDirCalled || 0),
+          exportItemsCalled: Number((window as any).__VG_TEST_exportItemsCalled || 0),
+          lastExportPayload: (window as any).__VG_TEST_lastExportPayload || null,
+          manualInvokeError,
+          selectedChecked: Boolean(selected?.checked),
+          exportButtonDisabled: Boolean(button?.disabled),
+          target,
+        }
+      }, itemId)
+      console.error('[live-photo-clone-desktop] export debug:', JSON.stringify(exportDebug, null, 2))
+      throw error
+    }
+    await page.waitForFunction((targetId) => {
+      const button = document.querySelector(`[data-testid="live-photo-metadata-${targetId}"]`) as HTMLButtonElement | null
+      return Boolean(button && !button.disabled)
+    }, itemId, { timeout: 30000 })
     await page.screenshot({ path: path.join(artifactDir, '03-clone-item-exported.png'), fullPage: true })
     report.steps.push({ step: 'clone-item-exported', screenshot: path.join(artifactDir, '03-clone-item-exported.png') })
 
-    const exportedDirs = fs.readdirSync(exportDir, { withFileTypes: true }).filter((entry) => entry.isDirectory())
-    assert.ok(exportedDirs.length >= 1, 'Expected exported clone-shot Live Photo bundle directory')
-    const selectedDir =
-      exportedDirs.find((entry) => {
-        const bundleDir = path.join(exportDir, entry.name)
-        const files = fs.readdirSync(bundleDir)
-        return files.some((item) => item.endsWith('.livephoto.json'))
-      }) || exportedDirs[0]!
-    const bundleDir = path.join(exportDir, selectedDir.name)
+    const bundleDir = path.dirname(String(exportedItem.exportBundlePath || ''))
+    assert.ok(fs.existsSync(bundleDir), 'Expected exported clone-shot Live Photo bundle directory')
     const bundleFiles = fs.readdirSync(bundleDir)
     if (!bundleFiles.some((item) => item.endsWith('.livephoto.json'))) {
       console.error('[live-photo-clone-desktop] bundle files snapshot:', JSON.stringify(bundleFiles, null, 2))
@@ -224,6 +273,9 @@ async function main() {
     try {
       await page.evaluate(() => {
         delete (window as any).__VG_TEST_pickDir
+        delete (window as any).__VG_TEST_pickDirCalled
+        delete (window as any).__VG_TEST_exportItemsCalled
+        delete (window as any).__VG_TEST_lastExportPayload
       })
     } catch {}
     await app.close().catch(() => {})

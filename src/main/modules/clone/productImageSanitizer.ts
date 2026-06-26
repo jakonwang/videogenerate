@@ -38,6 +38,7 @@ const PRODUCT_CANONICAL_SOURCE_PROMPT = [
   'If some structure is partially occluded, reconstruct conservatively and keep it as close as possible to the visible evidence.',
   'Place the product alone on a clean white or very light neutral background.',
   'No human, no ear, no earlobe, no skin, no face, no hair, no hand, no neck, no body, no wearing context.',
+  'Do not add any hands, fingers, arms, human limbs, hand gestures, or hand actions.',
   'No display stand, no props, no mannequin, no text, no logo, no watermark.',
   'High fidelity to the original product only.',
 ].join('\n')

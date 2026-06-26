@@ -886,19 +886,29 @@ export async function generateShotVideoByProviderChain(input: {
   const errs: string[] = []
   const startFrameDataUrl = await toDataUriOrUrl(input.startFramePath, 'image')
   const endFrameDataUrl = await toDataUriOrUrl(input.endFramePath, 'image')
-  const finalPrompt = buildFinalShotVideoPositivePrompt({
-    shot: input.shot,
-    productIdentityText: '',
-    productMode: detectProductMode(String(input.shot.productType || '').trim()),
-  })
-  const finalNegativePrompt = buildVideoNegativePrompt(input.shot, input.compiledNegativePrompt)
+  const directCompiledPrompt = String(input.compiledPrompt || input.shot.compiledPrompt || input.shot.prompt?.positive || '').trim()
+  const directCompiledNegativePrompt = String(
+    input.compiledNegativePrompt || input.shot.compiledNegativePrompt || input.shot.prompt?.negative || '',
+  ).trim()
+  const useDirectCompiledPrompt = String(input.shot.promptCompilerVersion || '').trim().toLowerCase() === 'live-photo-v1'
+  const finalPrompt = useDirectCompiledPrompt
+    ? directCompiledPrompt
+    : buildFinalShotVideoPositivePrompt({
+        shot: input.shot,
+        productIdentityText: '',
+        productMode: detectProductMode(String(input.shot.productType || '').trim()),
+      })
+  const finalNegativePrompt = useDirectCompiledPrompt
+    ? directCompiledNegativePrompt
+    : buildVideoNegativePrompt(input.shot, input.compiledNegativePrompt)
   console.log('[clone-debug] final-shot-video-prompts', {
     shotId: input.shot.id,
     providerChain: chain,
     productType: String(input.shot.productType || '').trim(),
-    compiledPrompt: String(input.compiledPrompt || input.shot.compiledPrompt || '').trim(),
+    compiledPrompt: directCompiledPrompt,
+    useDirectCompiledPrompt,
     finalPrompt,
-    compiledNegativePrompt: String(input.compiledNegativePrompt || input.shot.compiledNegativePrompt || '').trim(),
+    compiledNegativePrompt: directCompiledNegativePrompt,
     finalNegativePrompt,
     productReferenceCount: Array.isArray(input.shot.productReferenceImagePaths) ? input.shot.productReferenceImagePaths.length : 0,
     productReferenceImagePaths: (input.shot.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean),
@@ -984,6 +994,10 @@ export async function generateShotVideoByProviderChain(input: {
           image: uploadedOrderedReferenceImages[0],
           lastImage: undefined,
           referenceImages: [],
+          durationSec: Math.max(1, Math.min(10, Math.round(Number(input.shot.durationSec || 6) || 6))),
+          aspectRatio: shotAspectRatio(input.shot),
+          motionStrength: 1,
+          enhancePrompt: false,
         })
         await normalizeCloudClipForShot({ src: created.outputPath, out, shot: input.shot })
         return { provider, outputFilePath: out, remoteTaskId: created.taskId, model: created.model }

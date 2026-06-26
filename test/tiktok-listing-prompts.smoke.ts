@@ -30,14 +30,18 @@ async function main() {
       assert.match(prompt, /Cinematic styling must not override identity/i)
       assert.match(prompt, /believable real-world size/i)
       assert.match(prompt, /Do not enlarge, magnify, or exaggerate the product size/i)
-      assert.match(prompt, testCase.imageExpected)
 
       if (index === 0) {
         assert.match(prompt, /Reference image 1 is the original product truth source/i)
+        assert.match(prompt, /This shot must remain product-only and no-model/i)
+        assert.match(prompt, /Do not add any hands, fingers, arms, human limbs, hand gestures, or hand actions/i)
+        assert.match(prompt, /Do not add ear, neck, wrist, clavicle, skin, hair, face, or any other body anchor/i)
+        assert.doesNotMatch(prompt, /Subject: a model /i)
       } else {
         assert.match(prompt, /Reference image 2 is the approved hero result/i)
         assert.match(prompt, /no structural drift/i)
         assert.match(prompt, /do not progressively enlarge the item across later images/i)
+        assert.match(prompt, testCase.imageExpected)
       }
     }
 

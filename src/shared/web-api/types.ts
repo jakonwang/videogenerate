@@ -1,3 +1,5 @@
+import type { ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../platformSettings'
+
 export type WebUser = {
   id: string
   phone: string
@@ -543,7 +545,10 @@ export type CloneModelCredentialsPayload = {
   imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
   klingImageModel?: string
   grsaiImageModel?: string
-  apifoxHubProfile?: 'ai666' | 'vectorengine'
+  apifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+  videoApifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+  imageApifoxHubProfile?: ImagePlatformProfile
+  chatApifoxHubProfile?: ChatPlatformProfile
   ai666Hub?: {
     enabled?: boolean
     baseUrl?: string
@@ -555,7 +560,7 @@ export type CloneModelCredentialsPayload = {
     imageModel?: string
     imageEditModel?: string
     imageEndpointStyle?: 'openai_images' | 'official_rest' | 'midjourney_task'
-    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2'
+    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
     textToVideoModel?: string
     imageToVideoModel?: string
     startEndVideoModel?: string
@@ -575,7 +580,47 @@ export type CloneModelCredentialsPayload = {
     imageModel?: string
     imageEditModel?: string
     imageEndpointStyle?: 'openai_images' | 'official_rest' | 'midjourney_task'
-    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2'
+    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
+    textToVideoModel?: string
+    imageToVideoModel?: string
+    startEndVideoModel?: string
+    referenceVideoModel?: string
+    videoEndpointStyle?: 'openai_video' | 'official_rest'
+    defaultPollIntervalMs?: number
+    defaultTimeoutMs?: number
+  }
+  xibapiHub?: {
+    enabled?: boolean
+    baseUrl?: string
+    apiKey?: string
+    chatProvider?: 'openai' | 'anthropic' | 'gemini'
+    chatModel?: string
+    chatEndpointStyle?: 'openai_chat' | 'anthropic_native' | 'gemini_native'
+    imageProvider?: 'openai' | 'gemini' | 'jimeng' | 'midjourney'
+    imageModel?: string
+    imageEditModel?: string
+    imageEndpointStyle?: 'openai_images' | 'official_rest' | 'midjourney_task'
+    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
+    textToVideoModel?: string
+    imageToVideoModel?: string
+    startEndVideoModel?: string
+    referenceVideoModel?: string
+    videoEndpointStyle?: 'openai_video' | 'official_rest'
+    defaultPollIntervalMs?: number
+    defaultTimeoutMs?: number
+  }
+  gaoruiHub?: {
+    enabled?: boolean
+    baseUrl?: string
+    apiKey?: string
+    chatProvider?: 'openai' | 'anthropic' | 'gemini'
+    chatModel?: string
+    chatEndpointStyle?: 'openai_chat' | 'anthropic_native' | 'gemini_native'
+    imageProvider?: 'openai' | 'gemini' | 'jimeng' | 'midjourney'
+    imageModel?: string
+    imageEditModel?: string
+    imageEndpointStyle?: 'openai_images' | 'official_rest' | 'midjourney_task'
+    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
     textToVideoModel?: string
     imageToVideoModel?: string
     startEndVideoModel?: string
@@ -595,7 +640,7 @@ export type CloneModelCredentialsPayload = {
     imageModel?: string
     imageEditModel?: string
     imageEndpointStyle?: 'openai_images' | 'official_rest' | 'midjourney_task'
-    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2'
+    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
     textToVideoModel?: string
     imageToVideoModel?: string
     startEndVideoModel?: string

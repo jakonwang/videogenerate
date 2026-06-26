@@ -37,6 +37,7 @@ type HermesProductOption = {
   name: string
   type: string
   coverImagePath?: string
+  analysisBoardPath?: string
 }
 
 function dbPath() {
@@ -100,6 +101,7 @@ async function listProductOptions(limit = 12): Promise<HermesProductOption[]> {
     name: item.name,
     type: item.type,
     coverImagePath: item.coverImagePath,
+    analysisBoardPath: item.analysisBoardPath,
   }))
 }
 

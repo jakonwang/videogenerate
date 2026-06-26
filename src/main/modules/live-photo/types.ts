@@ -10,7 +10,22 @@ export type LivePhotoProductSnapshot = {
   name: string
   type: string
   coverImagePath?: string
+  authoritativeProductReferencePath?: string
   imagePaths: string[]
+  productAnalysis?: {
+    category?: string
+    summary?: string
+    coreSubject?: string
+    connectionStructure?: string
+    materialDetails?: string
+    wearingPosition?: string
+    surfaceDetails?: string
+    colorDetails?: string
+    geometryDetails?: string
+    sizeScale?: string
+    matchingRules?: string[]
+    rawDescription?: string
+  }
 }
 
 export type LivePhotoCloneShotSnapshot = {

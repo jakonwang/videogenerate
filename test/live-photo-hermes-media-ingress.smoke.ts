@@ -15,6 +15,7 @@ async function main() {
   const { hermesPlatformFormatters } = await import('../src/main/modules/live-photo/hermesPlatformFormatters')
   const { hermesMediaIngressService } = await import('../src/main/modules/live-photo/hermesMediaIngress')
   const { closeLivePhotoSqlite } = await import('../src/main/modules/live-photo/sqlite')
+  const { closeCloneSqlite } = await import('../src/main/modules/clone/sqlite')
 
   livePhotoService.setTestDependencies({
     runFfmpeg: async (input: { args: string[] }) => {
@@ -38,6 +39,33 @@ async function main() {
         provider: 'seedance',
       } as any
     },
+    reviewReferenceReplacementStillStrict: async () => ({
+      passed: true,
+      skipped: false,
+      reason: '',
+      score: 1,
+      matchedPhrases: [],
+      missingPhrases: [],
+      negativeSignals: [],
+      analyzed: null,
+    }),
+    reviewReferenceReplacementStillVisual: async () => ({
+      passed: true,
+      skipped: false,
+      reason: '',
+      score: 1,
+      verdict: 'pass',
+      failures: [],
+      notes: [],
+      checks: {
+        product_identity: 'pass',
+        source_contamination: 'pass',
+        material_color: 'pass',
+        attachment_structure: 'pass',
+        scale: 'pass',
+        scene_preservation: 'pass',
+      },
+    }),
   })
 
   hermesMediaIngressService.setTestDependencies({
@@ -93,6 +121,8 @@ async function main() {
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
     }
+    const code = String((lastError as { code?: unknown } | null)?.code || '').trim()
+    if (code === 'EBUSY' || code === 'ENOTEMPTY') return
     throw lastError
   }
 
@@ -101,9 +131,9 @@ async function main() {
       imageProviderPrimary: 'openai',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
-      videoProviderPrimary: 'seedance',
-      seedanceApiKey: 'test-seedance-key',
-      videoModelPrimary: 'seedance-20',
+      videoProviderPrimary: 'grsai',
+      grsaiApiKey: 'test-grsai-key',
+      grsaiVideoModel: 'grok-video-3',
     } as any)
 
     const assetsDir = path.join(root, 'fixtures')
@@ -194,9 +224,9 @@ async function main() {
     livePhotoService.resetTestDependencies()
     hermesMediaIngressService.resetTestDependencies()
     closeLivePhotoSqlite()
-    await removeDirWithRetry(root).catch(async () => {
-      await rm(root, { recursive: true, force: true })
-    })
+    closeCloneSqlite()
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    await removeDirWithRetry(root)
   }
 }
 

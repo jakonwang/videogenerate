@@ -16,6 +16,7 @@ async function main() {
   const { hermesLivePhotoAdapters } = await import('../src/main/modules/live-photo/hermesAdapters')
   const { livePhotoService } = await import('../src/main/modules/live-photo/service')
   const { closeLivePhotoSqlite } = await import('../src/main/modules/live-photo/sqlite')
+  const { closeCloneSqlite } = await import('../src/main/modules/clone/sqlite')
 
   livePhotoService.setTestDependencies({
     runFfmpeg: async (input: { args: string[] }) => {
@@ -39,7 +40,44 @@ async function main() {
         provider: 'seedance',
       } as any
     },
+    reviewReferenceReplacementStillStrict: async () => ({
+      passed: true,
+      skipped: false,
+      reason: '',
+      score: 1,
+      matchedPhrases: [],
+      missingPhrases: [],
+      negativeSignals: [],
+      analyzed: null,
+    }),
+    reviewReferenceReplacementStillVisual: async () => ({
+      passed: true,
+      skipped: false,
+      reason: '',
+      score: 1,
+      verdict: 'pass',
+      failures: [],
+      notes: [],
+      checks: {
+        product_identity: 'pass',
+        source_contamination: 'pass',
+        material_color: 'pass',
+        attachment_structure: 'pass',
+        scale: 'pass',
+        scene_preservation: 'pass',
+      },
+    }),
   })
+
+  async function waitForAutoFlowIdle(timeoutMs = 15000) {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const queueState = livePhotoService.getAutoFlowQueueState()
+      if ((queueState.activeCount || 0) === 0 && (queueState.pendingCount || 0) === 0) return
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    throw new Error('Timed out waiting for live photo auto flow to become idle')
+  }
 
   async function waitForSessionCompleted(sessionId: string, timeoutMs = 15000) {
     const startedAt = Date.now()
@@ -59,9 +97,9 @@ async function main() {
       imageProviderPrimary: 'openai',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
-      videoProviderPrimary: 'seedance',
-      seedanceApiKey: 'test-seedance-key',
-      videoModelPrimary: 'seedance-20',
+      videoProviderPrimary: 'grsai',
+      grsaiApiKey: 'test-grsai-key',
+      grsaiVideoModel: 'grok-video-3',
     } as any)
 
     const assetsDir = path.join(root, 'fixtures')
@@ -102,6 +140,8 @@ async function main() {
     assert.equal(started.products.length, 1)
     assert.equal(started.products[0]?.id, product.id)
     assert.equal(started.session.presentedProducts?.[0]?.id, product.id)
+    assert.equal(started.products[0]?.analysisBoardPath, productImage)
+    assert.equal(started.session.presentedProducts?.[0]?.analysisBoardPath, productImage)
 
     const latestAwaiting = await hermesLivePhotoService.getLatestAwaitingProductSession({
       channel: 'feishu',
@@ -123,6 +163,7 @@ async function main() {
     })
     assert.equal(selected.session.status, 'processing')
     assert.equal(selected.createdItems.length, 1)
+    assert.equal(selected.product.analysisBoardPath, productImage)
 
     const finished = await waitForSessionCompleted(started.session.id)
     assert.equal(finished.session.status, 'completed')
@@ -200,8 +241,10 @@ async function main() {
 
     console.log('live photo hermes smoke test passed')
   } finally {
+    await waitForAutoFlowIdle().catch(() => undefined)
     livePhotoService.resetTestDependencies()
     closeLivePhotoSqlite()
+    closeCloneSqlite()
     await rm(root, { recursive: true, force: true })
   }
 }

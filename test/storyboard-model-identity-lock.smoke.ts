@@ -446,6 +446,20 @@ const packagingOnlyShot = {
   visualDescription: 'No person. Product only display on white background.',
   scriptText: 'Packaging only close-up with no model.',
 } as ShotSpec
+const tabletopPrompt = buildGptFramePrompt({
+  shot: tabletopProductShot,
+  productType: 'general',
+  modelPack,
+  productPoints: tabletopProductShot.materialNeed,
+  which: 'start',
+})
+const packagingOnlyPrompt = buildGptFramePrompt({
+  shot: packagingOnlyShot,
+  productType: 'general',
+  modelPack,
+  productPoints: packagingOnlyShot.materialNeed,
+  which: 'start',
+})
 const forcedModelSceneLock = __test_resolveForcedModelSceneMode({ projectIdentityGridPath: 'D:/tmp/project-identity-grid.png' } as any, forcedModelSceneShot)
 const noIdentityEarringCloseupLock = __test_resolveForcedModelSceneMode(
   { projectIdentityGridPath: 'D:/tmp/project-identity-grid.png' } as any,
@@ -564,6 +578,10 @@ assert.match(packagingPrompt, /2\. PRESENTATION STRUCTURE:/i)
 assert.doesNotMatch(packagingPrompt, /Identify the model in Image 1/i)
 assert.match(explicitPackagingPrompt, /2\. PRESENTATION STRUCTURE:/i)
 assert.doesNotMatch(explicitPackagingPrompt, /Identify the model in Image 1/i)
+assert.match(tabletopPrompt, /NO HUMAN ADDITIONS: If Image 1 or Image 2 is product-only, no-model, no-person, tabletop, flat-lay, isolated, or packaging-only/i)
+assert.match(tabletopPrompt, /do NOT add any hands, fingers, arms, human limbs, or human interaction/i)
+assert.match(packagingOnlyPrompt, /NO HUMAN ADDITIONS: If Image 1 or Image 2 is product-only, no-model, no-person, tabletop, flat-lay, isolated, or packaging-only/i)
+assert.match(packagingOnlyPrompt, /Do NOT invent hand gestures, hand posing, or hand actions/i)
 assert.match(handCloseupEarringPrompt, /2\. PRESENTATION STRUCTURE:/i)
 assert.doesNotMatch(handCloseupEarringPrompt, /Identify the model in Image 1/i)
 assert.match(lockedProductCloseupPrompt, /2\. PRESENTATION STRUCTURE:/i)

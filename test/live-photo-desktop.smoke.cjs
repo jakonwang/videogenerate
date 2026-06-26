@@ -163,7 +163,19 @@ async function main() {
       window.__VG_TEST_pickFiles = async () => [testImage];
     }, TEST_IMAGE);
     await page.evaluate((dir) => {
-      window.__VG_TEST_pickDir = async () => dir;
+      window.__VG_TEST_pickDirCalled = 0;
+      window.__VG_TEST_exportItemsCalled = 0;
+      window.__VG_TEST_lastExportPayload = null;
+      window.__VG_TEST_pickDir = async () => {
+        window.__VG_TEST_pickDirCalled += 1;
+        return dir;
+      };
+      const originalExportItems = window.api.livePhoto.exportItems;
+      window.api.livePhoto.exportItems = async (payload) => {
+        window.__VG_TEST_exportItemsCalled += 1;
+        window.__VG_TEST_lastExportPayload = payload;
+        return await originalExportItems(payload);
+      };
     }, exportDir);
 
     await page.selectOption('[data-testid="live-photo-product-select"]', report.createdProductId);
@@ -197,30 +209,70 @@ async function main() {
       90000,
     );
 
-    await page.click(`[data-testid="live-photo-select-${firstItemId}"]`);
-    await page.click('[data-testid="live-photo-export-selected"]');
-    await waitFor(() => {
-      if (!fs.existsSync(exportDir)) return false;
-      const dirs = fs.readdirSync(exportDir, { withFileTypes: true }).filter((item) => item.isDirectory());
-      if (!dirs.length) return false;
-      return dirs.some((dir) => {
-        const bundleDir = path.join(exportDir, dir.name);
-        const files = fs.readdirSync(bundleDir);
-        return files.some((item) => item.endsWith('.livephoto.json')) && files.some((item) => item.endsWith('.asset-metadata.json'));
-      });
-    }, 30000);
-    await page.waitForSelector(`[data-testid="live-photo-metadata-${firstItemId}"]`, { timeout: 30000 });
+    const firstItemCheck = page.locator(`[data-testid="live-photo-item-${firstItemId}"] .live-console-row__check span`);
+    await firstItemCheck.click();
+    await page.waitForFunction((itemId) => {
+      const input = document.querySelector(`[data-testid="live-photo-select-${itemId}"]`);
+      return Boolean(input && input.checked);
+    }, firstItemId, { timeout: 30000 });
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="live-photo-export-selected"]');
+      return Boolean(button && !button.disabled);
+    }, { timeout: 30000 });
+    await page.evaluate(() => {
+      const button = document.querySelector('[data-testid="live-photo-export-selected"]');
+      if (!button) throw new Error('Missing export selected button');
+      button.click();
+    });
+    let exportedItem = null;
+    try {
+      exportedItem = await waitFor(
+        async () =>
+          await page.evaluate(async (itemId) => {
+            const items = await window.api.livePhoto.list();
+            return (
+              items.find((item) => item.id === itemId && item.exportBundlePath && item.packagingMetadataBridgePath) || null
+            );
+          }, firstItemId),
+        90000,
+      );
+    } catch (error) {
+      const exportDebug = await page.evaluate(async (itemId) => {
+        const items = await window.api.livePhoto.list();
+        const target = items.find((item) => item.id === itemId) || null;
+        const notice = document.querySelector('[data-testid="live-photo-notice"]')?.textContent || '';
+        const errorText = document.querySelector('[data-testid="live-photo-error"]')?.textContent || '';
+        const selected = document.querySelector(`[data-testid="live-photo-select-${itemId}"]`);
+        const button = document.querySelector('[data-testid="live-photo-export-selected"]');
+        let manualInvokeResult = null;
+        let manualInvokeError = '';
+        try {
+        } catch (error) {
+          manualInvokeError = error?.message || String(error || '');
+        }
+        return {
+          notice,
+          errorText,
+          pickDirCalled: Number(window.__VG_TEST_pickDirCalled || 0),
+          exportItemsCalled: Number(window.__VG_TEST_exportItemsCalled || 0),
+          lastExportPayload: window.__VG_TEST_lastExportPayload || null,
+          manualInvokeError,
+          selectedChecked: Boolean(selected && selected.checked),
+          exportButtonDisabled: Boolean(button && button.disabled),
+          target,
+        };
+      }, firstItemId);
+      console.error('[live-photo-desktop] export debug:', JSON.stringify(exportDebug, null, 2));
+      throw error;
+    }
+    await page.waitForFunction((itemId) => {
+      const button = document.querySelector(`[data-testid="live-photo-metadata-${itemId}"]`);
+      return Boolean(button && !button.disabled);
+    }, firstItemId, { timeout: 30000 });
     report.steps.push({ step: 'item-exported', screenshot: await screenshot(page, '04-item-exported') });
 
-    const exportedDirs = fs.readdirSync(exportDir, { withFileTypes: true }).filter((item) => item.isDirectory());
-    assert.ok(exportedDirs.length >= 1, 'Expected exported Live Photo bundle directory');
-    const selectedDir =
-      exportedDirs.find((item) => {
-        const bundleDir = path.join(exportDir, item.name);
-        const files = fs.readdirSync(bundleDir);
-        return files.some((entry) => entry.endsWith('.livephoto.json'));
-      }) || exportedDirs[0];
-    const firstBundleDir = path.join(exportDir, selectedDir.name);
+    const firstBundleDir = path.dirname(String(exportedItem.exportBundlePath || ''));
+    assert.ok(fs.existsSync(firstBundleDir), 'Expected exported Live Photo bundle directory');
     const bundleFiles = fs.readdirSync(firstBundleDir);
     assert.ok(bundleFiles.some((item) => item.endsWith('.livephoto.json')), 'Expected .livephoto.json bundle file');
     assert.ok(bundleFiles.some((item) => item.endsWith('.asset-metadata.json')), 'Expected metadata bridge file');
@@ -239,6 +291,9 @@ async function main() {
       await page.evaluate(() => {
         delete window.__VG_TEST_pickFiles;
         delete window.__VG_TEST_pickDir;
+        delete window.__VG_TEST_pickDirCalled;
+        delete window.__VG_TEST_exportItemsCalled;
+        delete window.__VG_TEST_lastExportPayload;
       });
     } catch {}
     await app.close().catch(() => {});

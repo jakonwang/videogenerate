@@ -11,6 +11,7 @@ function providerLabel(credentials: ModelCredentials) {
   const profile = resolveApifoxHubProfile(credentials, 'video')
   if (profile === 'ai666') return 'AI666'
   if (profile === 'xibapi') return 'XIBAPI'
+  if (profile === 'gaorui') return 'GaoruiAPI'
   return 'VectorEngine'
 }
 
@@ -51,7 +52,9 @@ function resolveHistoricalVideoHub(input: {
 
   const ai666 = input.credentials.ai666Hub ?? input.credentials.apifoxHub
   const vectorengine = input.credentials.vectorEngineHub ?? input.credentials.apifoxHub
-  const hubs = [ai666, vectorengine].filter(Boolean)
+  const xibapi = input.credentials.xibapiHub ?? input.credentials.apifoxHub
+  const gaorui = input.credentials.gaoruiHub ?? input.credentials.apifoxHub
+  const hubs = [ai666, vectorengine, xibapi, gaorui].filter(Boolean)
   if (requestedBaseUrl) {
     const matchedByBaseUrl = hubs.find(
       (hub) => String(hub?.baseUrl || '').trim().replace(/\/+$/, '') === requestedBaseUrl,
@@ -161,6 +164,7 @@ function providerQueryUrl(root: string, provider: string, taskId: string, endpoi
       : `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
   }
   if (provider === 'xibapi') return `${root}/v1/videos/${encodeURIComponent(taskId)}`
+  if (provider === 'gaorui') return `${root}/v1/videos/${encodeURIComponent(taskId)}`
   if (provider === 'vidu') return `${root}/vidu/ent/v2/task/${encodeURIComponent(taskId)}/creations`
   if (provider === 'veo') return `${root}/v1/video/query?id=${encodeURIComponent(taskId)}`
   if (provider === 'seedance2') return `${root}/v1/video/generations/${encodeURIComponent(taskId)}`
@@ -217,6 +221,18 @@ function buildQueryCandidates(input: {
         ]
       : []
   }
+  if (input.provider === 'gaorui') {
+    const taskId = String(input.rawTaskId || input.strippedTaskId || '').trim()
+    return taskId
+      ? [
+          {
+            label: `gaorui:${taskId}`,
+            taskId,
+            url: providerQueryUrl(input.root, input.provider, taskId, input.endpointStyle || ''),
+          },
+        ]
+      : []
+  }
   const rawHasModelPrefix = input.rawTaskId.includes(':')
   const normalizedHasModelPrefix = input.normalizedTaskId.includes(':')
   const taskIds = Array.from(
@@ -262,6 +278,7 @@ function buildQueryCandidates(input: {
 
 function createUrlForProvider(root: string, provider: string, capability: UnifiedCapability, endpointStyle: string) {
   if (provider === 'xibapi') return `${root}/v1/videos`
+  if (provider === 'gaorui') return `${root}/v1/videos`
   if (provider === 'veo') return `${root}/v1/video/create`
   if (provider === 'vidu') return `${root}${viduCreatePath(capability)}`
   if (provider === 'jimeng') return `${root}/v1/video/generations`
@@ -287,8 +304,26 @@ function normalizeTaskStatus(raw: any) {
       '',
   ).toLowerCase()
   if (rawStatus === 'completed' || rawStatus === 'succeeded' || rawStatus === 'success' || rawStatus === 'done' || rawStatus === 'finish' || rawStatus === 'finished') return 'succeeded'
+  if (rawStatus === 'queued' || rawStatus === 'processing') return 'running'
   if (rawStatus === 'failed' || rawStatus === 'error' || rawStatus === 'failure' || rawStatus === 'cancelled' || rawStatus === 'canceled') return 'failed'
   return 'running'
+}
+
+function gaoruiAspectRatio(aspectRatio?: '9:16' | '16:9') {
+  return aspectRatio === '9:16' ? '9:16' : '16:9'
+}
+
+function buildGaoruiImages(input: {
+  capability: UnifiedCapability
+  image?: string
+  lastImage?: string
+  referenceImages: string[]
+}) {
+  if (input.capability === 'video_text_to_video') return []
+  if (input.capability === 'video_reference_to_video') {
+    return [input.image, input.lastImage, ...input.referenceImages].filter(Boolean)
+  }
+  return [input.image, input.lastImage, ...input.referenceImages].filter(Boolean)
 }
 
 function inferSucceededFromOutputUrls(input: {
@@ -806,6 +841,9 @@ export async function syncRemoteTaskResult(input: {
     endpointStyle: input.endpointStyle,
     model: input.model,
   })
+  if (task.status === 'failed') {
+    throw new Error(task.errorMessage || `${providerName} video task failed: ${input.taskId}`)
+  }
   if (task.status !== 'succeeded' || !task.outputUrls[0]) return { task, outputPath: undefined as string | undefined, synced: false }
   await mkdir(input.outDir, { recursive: true })
   const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
@@ -836,6 +874,7 @@ export async function createVideoTask(input: {
   aspectRatio?: '9:16' | '16:9'
   xibapiSize?: XibapiVideoSize
   motionStrength?: number
+  enhancePrompt?: boolean
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const providerName = providerLabel(input.credentials)
@@ -850,6 +889,9 @@ export async function createVideoTask(input: {
 
   const referenceImages = Array.from(new Set((input.referenceImages ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
   const motionStrength = Math.max(1, Math.min(3, Math.round(Number(input.motionStrength ?? 2) || 2)))
+  const durationSec = Math.max(1, Math.min(10, Math.round(Number(input.durationSec ?? 8) || 8)))
+  const aspectRatio = input.aspectRatio === '16:9' ? '16:9' : '9:16'
+  const enhancePrompt = input.enhancePrompt !== false
   const ai666Kling = isAi666KlingVideo(input.credentials, cfg)
   const ai666Seedance2 = isAi666Seedance2Video(input.credentials, cfg)
   const url = ai666Kling
@@ -860,12 +902,12 @@ export async function createVideoTask(input: {
   let lastFailureText = ''
   let lastFailureStatus = 0
   for (const model of modelCandidates) {
-    let body: Record<string, any> = {
+      let body: Record<string, any> = {
       model,
       prompt: input.prompt,
       negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-      aspect_ratio: '9:16',
-      duration: 8,
+      aspect_ratio: aspectRatio,
+      duration: durationSec,
       resolution: '720p',
       seed: -1,
       motion_strength: motionStrength,
@@ -873,92 +915,112 @@ export async function createVideoTask(input: {
     }
 
     if (cfg.videoProvider === 'vidu') {
-      body = {
-        model,
-        prompt: input.prompt,
-        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-        aspect_ratio: '9:16',
-        duration: 8,
-        ...(input.image ? { image: input.image } : {}),
-        ...(input.lastImage ? { last_image: input.lastImage } : {}),
-        motion_strength: motionStrength,
-        weight: motionStrength,
-      }
-    } else if (cfg.videoProvider === 'veo') {
-      body = {
-        model,
-        prompt: input.prompt,
-        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-        images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-        enhance_prompt: true,
-        aspect_ratio: '9:16',
-        motion_strength: motionStrength,
-        weight: motionStrength,
-      }
-    } else if (cfg.videoProvider === 'jimeng') {
-      body = {
-        model,
-        prompt: input.prompt,
-        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-        image_url: input.image,
-        last_image_url: input.lastImage,
-        metadata: {
-          aspect_ratio: '9:16',
-          duration: 8,
+        body = {
+          model,
+          prompt: input.prompt,
+          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+          aspect_ratio: aspectRatio,
+          duration: durationSec,
+          ...(input.image ? { image: input.image } : {}),
+          ...(input.lastImage ? { last_image: input.lastImage } : {}),
           motion_strength: motionStrength,
           weight: motionStrength,
-        },
-      }
+        }
+    } else if (cfg.videoProvider === 'veo') {
+        body = {
+          model,
+          prompt: input.prompt,
+          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+          images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
+          enhance_prompt: enhancePrompt,
+          aspect_ratio: aspectRatio,
+          generate_audio: false,
+          audio_generation: 'Disabled',
+          motion_strength: motionStrength,
+          weight: motionStrength,
+        }
+    } else if (cfg.videoProvider === 'jimeng') {
+        body = {
+          model,
+          prompt: input.prompt,
+          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+          image_url: input.image,
+          last_image_url: input.lastImage,
+          metadata: {
+            aspect_ratio: aspectRatio,
+            duration: durationSec,
+            motion_strength: motionStrength,
+            weight: motionStrength,
+          },
+        }
     } else if (cfg.videoProvider === 'seedance2') {
-      body = {
-        model,
-        content: [
-          { type: 'text', text: input.prompt },
-          ...(input.negativePrompt ? [{ type: 'text', text: `Negative constraints: ${input.negativePrompt}` }] : []),
+        body = {
+          model,
+          content: [
+            { type: 'text', text: input.prompt },
+            ...(input.negativePrompt ? [{ type: 'text', text: `Negative constraints: ${input.negativePrompt}` }] : []),
           ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
           ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
           ...referenceImages.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
-        ],
-        generate_audio: false,
-        ratio: '9:16',
-        duration: 5,
-        watermark: false,
+          ],
+          generate_audio: false,
+          ratio: aspectRatio,
+          duration: durationSec,
+          watermark: false,
+          motion_strength: motionStrength,
+          weight: motionStrength,
+        }
+    } else if (cfg.videoProvider === 'kling') {
+        body = {
+          model,
+          prompt: input.prompt,
+          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+          ...(input.image ? { image: input.image } : {}),
+          ...(input.lastImage ? { last_image: input.lastImage } : {}),
+          aspect_ratio: aspectRatio,
+          duration: durationSec,
+          resolution: '720p',
+          seed: -1,
+          motion_strength: motionStrength,
+          weight: motionStrength,
+        }
+    } else if (cfg.videoProvider === 'grok') {
+        body = {
+          model,
+          prompt: input.prompt,
+          images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
+          aspect_ratio: aspectRatio,
+          size: '1080P',
+          motion_strength: motionStrength,
+          weight: motionStrength,
+        }
+    } else if (cfg.videoProvider === 'xibapi') {
+        body = {
+          model,
+          prompt: input.prompt,
+          size: xibapiSizeByAspectRatio(input.aspectRatio, input.xibapiSize),
+          images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
         motion_strength: motionStrength,
         weight: motionStrength,
       }
-    } else if (cfg.videoProvider === 'kling') {
+    } else if (cfg.videoProvider === 'gaorui') {
+      const images = buildGaoruiImages({
+        capability: input.capability,
+        image: input.image,
+        lastImage: input.lastImage,
+        referenceImages,
+      })
       body = {
         model,
         prompt: input.prompt,
         negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-        ...(input.image ? { image: input.image } : {}),
-        ...(input.lastImage ? { last_image: input.lastImage } : {}),
-        aspect_ratio: '9:16',
-        duration: 8,
+        duration: durationSec,
         resolution: '720p',
-        seed: -1,
+        aspect_ratio: gaoruiAspectRatio(aspectRatio),
+        ...(images.length ? { images } : {}),
         motion_strength: motionStrength,
         weight: motionStrength,
-      }
-    } else if (cfg.videoProvider === 'grok') {
-      body = {
-        model,
-        prompt: input.prompt,
-        images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-        aspect_ratio: '9:16',
-        size: '1080P',
-        motion_strength: motionStrength,
-        weight: motionStrength,
-      }
-    } else if (cfg.videoProvider === 'xibapi') {
-      body = {
-        model,
-        prompt: input.prompt,
-        size: xibapiSizeByAspectRatio(input.aspectRatio, input.xibapiSize),
-        images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-        motion_strength: motionStrength,
-        weight: motionStrength,
-      }
+        }
     } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora') {
       body =
         cfg.videoEndpointStyle === 'openai_video'
@@ -966,20 +1028,20 @@ export async function createVideoTask(input: {
               model,
               prompt: input.prompt,
               negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-            images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-            aspect_ratio: '9:16',
-            enhance_prompt: true,
-            motion_strength: motionStrength,
-            weight: motionStrength,
-          }
+              images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
+              aspect_ratio: aspectRatio,
+              enhance_prompt: enhancePrompt,
+              motion_strength: motionStrength,
+              weight: motionStrength,
+            }
           : {
               model,
               prompt: input.prompt,
               negative_prompt: String(input.negativePrompt || '').trim() || undefined,
               ...(input.image ? { image: input.image } : {}),
               ...(input.lastImage ? { last_image: input.lastImage } : {}),
-              aspect_ratio: '9:16',
-              duration: 8,
+              aspect_ratio: aspectRatio,
+              duration: durationSec,
               resolution: '720p',
               seed: -1,
               motion_strength: motionStrength,
@@ -995,16 +1057,16 @@ export async function createVideoTask(input: {
       body = {
         model,
         prompt: input.prompt,
-        seconds: '5',
+        seconds: String(durationSec),
         ...(images.length ? { images } : {}),
         size: '1280x720',
         motion_strength: motionStrength,
         weight: motionStrength,
         metadata: {
           output_config: {
-            duration: 5,
+            duration: durationSec,
             resolution: '720P',
-            aspect_ratio: '16:9',
+            aspect_ratio: aspectRatio,
             audio_generation: 'Enabled',
             motion_strength: motionStrength,
             weight: motionStrength,
@@ -1028,7 +1090,7 @@ export async function createVideoTask(input: {
         metadata: {
           duration,
           resolution: '720p',
-          ratio: 'adaptive',
+          ratio: aspectRatio,
           motion_strength: motionStrength,
           weight: motionStrength,
         },
@@ -1123,6 +1185,7 @@ export async function generateVideo(input: {
   aspectRatio?: '9:16' | '16:9'
   xibapiSize?: XibapiVideoSize
   motionStrength?: number
+  enhancePrompt?: boolean
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'video')!
   const providerName = providerLabel(input.credentials)
@@ -1133,6 +1196,9 @@ export async function generateVideo(input: {
 
   const referenceImages = Array.from(new Set((input.referenceImages ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
   const motionStrength = Math.max(1, Math.min(3, Math.round(Number(input.motionStrength ?? 2) || 2)))
+  const durationSec = Math.max(1, Math.min(10, Math.round(Number(input.durationSec ?? 8) || 8)))
+  const aspectRatio = input.aspectRatio === '16:9' ? '16:9' : '9:16'
+  const enhancePrompt = input.enhancePrompt !== false
   const ai666Kling = isAi666KlingVideo(input.credentials, cfg)
   const ai666Seedance2 = isAi666Seedance2Video(input.credentials, cfg)
   let url = ai666Kling
@@ -1144,8 +1210,8 @@ export async function generateVideo(input: {
     model,
     prompt: input.prompt,
     negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-    aspect_ratio: '9:16',
-    duration: 8,
+    aspect_ratio: aspectRatio,
+    duration: durationSec,
     resolution: '720p',
     seed: -1,
     motion_strength: motionStrength,
@@ -1157,8 +1223,8 @@ export async function generateVideo(input: {
       model,
       prompt: input.prompt,
       negative_prompt: String(input.negativePrompt || '').trim() || undefined,
-      aspect_ratio: '9:16',
-      duration: 8,
+      aspect_ratio: aspectRatio,
+      duration: durationSec,
       ...(input.image ? { image: input.image } : {}),
       ...(input.lastImage ? { last_image: input.lastImage } : {}),
       motion_strength: motionStrength,
@@ -1170,8 +1236,10 @@ export async function generateVideo(input: {
       prompt: input.prompt,
       negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-      enhance_prompt: true,
-      aspect_ratio: '9:16',
+      enhance_prompt: enhancePrompt,
+      aspect_ratio: aspectRatio,
+      generate_audio: false,
+      audio_generation: 'Disabled',
       motion_strength: motionStrength,
       weight: motionStrength,
     }
@@ -1183,8 +1251,8 @@ export async function generateVideo(input: {
       image_url: input.image,
       last_image_url: input.lastImage,
       metadata: {
-        aspect_ratio: '9:16',
-        duration: 8,
+        aspect_ratio: aspectRatio,
+        duration: durationSec,
         motion_strength: motionStrength,
         weight: motionStrength,
       },
@@ -1200,8 +1268,8 @@ export async function generateVideo(input: {
         ...referenceImages.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
       ],
       generate_audio: false,
-      ratio: '9:16',
-      duration: 5,
+      ratio: aspectRatio,
+      duration: clampSeedanceDuration(durationSec),
       watermark: false,
       motion_strength: motionStrength,
       weight: motionStrength,
@@ -1213,8 +1281,8 @@ export async function generateVideo(input: {
       negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       ...(input.image ? { image: input.image } : {}),
       ...(input.lastImage ? { last_image: input.lastImage } : {}),
-      aspect_ratio: '9:16',
-      duration: 8,
+      aspect_ratio: aspectRatio,
+      duration: durationSec,
       resolution: '720p',
       seed: -1,
       motion_strength: motionStrength,
@@ -1225,7 +1293,7 @@ export async function generateVideo(input: {
       model,
       prompt: input.prompt,
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-      aspect_ratio: '9:16',
+      aspect_ratio: aspectRatio,
       size: '1080P',
       motion_strength: motionStrength,
       weight: motionStrength,
@@ -1239,6 +1307,24 @@ export async function generateVideo(input: {
       motion_strength: motionStrength,
       weight: motionStrength,
     }
+  } else if (cfg.videoProvider === 'gaorui') {
+    const images = buildGaoruiImages({
+      capability: input.capability,
+      image: input.image,
+      lastImage: input.lastImage,
+      referenceImages,
+    })
+    body = {
+      model,
+      prompt: input.prompt,
+      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
+      duration: durationSec,
+      resolution: '720p',
+      aspect_ratio: gaoruiAspectRatio(aspectRatio),
+      ...(images.length ? { images } : {}),
+      motion_strength: motionStrength,
+      weight: motionStrength,
+    }
   } else if (cfg.videoProvider === 'openai_video' || cfg.videoProvider === 'sora') {
     body =
       cfg.videoEndpointStyle === 'openai_video'
@@ -1247,8 +1333,8 @@ export async function generateVideo(input: {
             prompt: input.prompt,
             negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
-            aspect_ratio: '9:16',
-            enhance_prompt: true,
+            aspect_ratio: aspectRatio,
+            enhance_prompt: enhancePrompt,
             motion_strength: motionStrength,
             weight: motionStrength,
           }
@@ -1258,13 +1344,13 @@ export async function generateVideo(input: {
             negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             ...(input.image ? { image: input.image } : {}),
             ...(input.lastImage ? { last_image: input.lastImage } : {}),
-              aspect_ratio: '9:16',
-              duration: 8,
-              resolution: '720p',
-              seed: -1,
-              motion_strength: motionStrength,
-              weight: motionStrength,
-            }
+            aspect_ratio: aspectRatio,
+            duration: durationSec,
+            resolution: '720p',
+            seed: -1,
+            motion_strength: motionStrength,
+            weight: motionStrength,
+          }
   } else {
     if (input.image) body.image = input.image
     if (input.lastImage) body.last_image = input.lastImage
@@ -1275,16 +1361,16 @@ export async function generateVideo(input: {
     body = {
       model,
       prompt: input.prompt,
-      seconds: '5',
+      seconds: String(durationSec),
       ...(images.length ? { images } : {}),
       size: '1280x720',
       motion_strength: motionStrength,
       weight: motionStrength,
       metadata: {
         output_config: {
-          duration: 5,
+          duration: durationSec,
           resolution: '720P',
-          aspect_ratio: '16:9',
+          aspect_ratio: aspectRatio,
           audio_generation: 'Enabled',
           motion_strength: motionStrength,
           weight: motionStrength,
@@ -1308,7 +1394,7 @@ export async function generateVideo(input: {
       metadata: {
         duration,
         resolution: '720p',
-        ratio: 'adaptive',
+        ratio: aspectRatio,
         motion_strength: motionStrength,
         weight: motionStrength,
       },

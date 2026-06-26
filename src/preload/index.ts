@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
 
 const api = {
   getPaths: () => ipcRenderer.invoke('app:getPaths'),
@@ -463,21 +464,22 @@ const api = {
         videoModelFallback?: string
         grsaiVideoModel?: string
         grsaiAnalysisModel?: string
-        chatProviderPrimary?: 'apifox_hub' | 'grsai'
-        videoProviderPrimary?: 'seedance' | 'grsai' | 'apifox_hub'
-        videoProviderFallback?: 'seedance' | 'grsai' | 'apifox_hub'
+        chatProviderPrimary?: CapabilityStoredProviderKey
+        videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
+        videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
         openaiApiKey?: string
         openaiImageModel?: string
         openaiImageQuality?: 'low' | 'medium' | 'high'
         imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
-        apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-        videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-        imageApifoxHubProfile?: 'ai666' | 'vectorengine'
-        chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+        apifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+        videoApifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+        imageApifoxHubProfile?: ImagePlatformProfile
+        chatApifoxHubProfile?: ChatPlatformProfile
         ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
         vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         xibapiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
+        gaoruiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       }>,
     getRuntimeOptions: () =>
@@ -504,21 +506,22 @@ const api = {
       videoModelFallback?: string
       grsaiVideoModel?: string
       grsaiAnalysisModel?: string
-      chatProviderPrimary?: 'apifox_hub' | 'grsai'
-      videoProviderPrimary?: 'seedance' | 'grsai' | 'apifox_hub'
-      videoProviderFallback?: 'seedance' | 'grsai' | 'apifox_hub'
+      chatProviderPrimary?: CapabilityStoredProviderKey
+      videoProviderPrimary?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
+      videoProviderFallback?: 'seedance' | 'kling' | 'grsai' | 'apifox_hub'
       openaiApiKey?: string
       openaiImageModel?: string
       openaiImageQuality?: 'low' | 'medium' | 'high'
       imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
       grsaiImageModel?: string
-      apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-      videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi'
-      imageApifoxHubProfile?: 'ai666' | 'vectorengine'
-      chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+      apifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+      videoApifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
+      imageApifoxHubProfile?: ImagePlatformProfile
+      chatApifoxHubProfile?: ChatPlatformProfile
       ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
       vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       xibapiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
+      gaoruiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
     }) =>
       ipcRenderer.invoke('clone:setModelCredentials', payload),
@@ -634,7 +637,7 @@ const api = {
   },
   livePhoto: {
     list: () => ipcRenderer.invoke('plugin:livePhoto:list'),
-    listSummaries: () => ipcRenderer.invoke('plugin:livePhoto:listSummaries'),
+    listSummaries: (payload?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' }) => ipcRenderer.invoke('plugin:livePhoto:listSummaries', payload),
     get: (id: string) => ipcRenderer.invoke('plugin:livePhoto:get', id),
     getSettings: () => ipcRenderer.invoke('plugin:livePhoto:getSettings'),
     saveSettings: (payload: {

@@ -22,6 +22,7 @@ export function buildProductAnalysisBoardPrompt() {
     'If the unseen side cannot be inferred safely, keep it conservative, minimal, and structurally consistent with the visible product evidence.',
     'Do not flatten the product into generic icon-like views. Preserve real volume, perspective, and thickness.',
     'No model, no face, no ear, no skin, no hand, no body, no wearing context.',
+    'Do not add any hands, fingers, arms, human limbs, hand gestures, or hand actions in any cell.',
     'Keep the exact same product identity, structure, material, proportions, and details across all cells.',
   ].join('\n')
 }

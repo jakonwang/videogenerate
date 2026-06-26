@@ -74,6 +74,16 @@ function resolveCoverImagePath(product: Product, images: ProductImageAsset[]) {
   return first || undefined
 }
 
+function resolveLivePhotoReferenceImagePath(product: Product, images: ProductImageAsset[]) {
+  const explicit = String((product as any).livePhotoReferenceImagePath || '').trim()
+  if (explicit) return explicit
+  const canonicalSourcePath = String((product as any).canonicalSourcePath || '').trim()
+  if (canonicalSourcePath) return canonicalSourcePath
+  const analysisBoardPath = String((product as any).analysisBoardPath || '').trim()
+  if (analysisBoardPath) return analysisBoardPath
+  return resolveCoverImagePath(product, images)
+}
+
 function resolveNextCoverImagePath(
   prev: Product,
   payload: Partial<Product>,
@@ -209,6 +219,7 @@ export const productsRepo = {
           : undefined
       ;(p as any).images = migrateLegacyAssetsToImages(p as Product)
       ;(p as any).coverImagePath = resolveCoverImagePath(p as Product, (p as any).images)
+      ;(p as any).livePhotoReferenceImagePath = resolveLivePhotoReferenceImagePath(p as Product, (p as any).images)
       ;(p as any).remark = typeof (p as any).remark === 'string' ? (p as any).remark : ''
     }
     return db.products
@@ -229,6 +240,10 @@ export const productsRepo = {
           assets: payload.assets ?? prev.assets,
           images: nextImages,
           coverImagePath: resolveNextCoverImagePath(prev, payload, nextImages),
+          livePhotoReferenceImagePath:
+            hasOwn('livePhotoReferenceImagePath')
+              ? payload.livePhotoReferenceImagePath
+              : resolveLivePhotoReferenceImagePath(prev, nextImages),
           remark: hasOwn('remark') ? payload.remark : prev.remark,
           analysisBoardPath:
             hasOwn('analysisBoardPath') ? payload.analysisBoardPath : prev.analysisBoardPath,
@@ -282,13 +297,28 @@ export const productsRepo = {
       }
     }
 
+    const createdImages = payload.images ?? []
     const created: Product = {
       id: randomUUID(),
       name: payload.name,
       type: payload.type,
       assets: payload.assets ?? (emptyAssets() as any),
-      images: payload.images ?? [],
+      images: createdImages,
       coverImagePath: payload.coverImagePath,
+      livePhotoReferenceImagePath:
+        payload.livePhotoReferenceImagePath ||
+        resolveLivePhotoReferenceImagePath(
+          {
+            id: '',
+            name: payload.name,
+            type: payload.type,
+            assets: payload.assets ?? (emptyAssets() as any),
+            images: createdImages,
+            createdAt: ts,
+            updatedAt: ts,
+          } as Product,
+          createdImages,
+        ),
       remark: payload.remark ?? '',
       analysisBoardPath: payload.analysisBoardPath,
       analysisBoardStatus: payload.analysisBoardStatus ?? payload.canonicalSourceStatus ?? 'idle',

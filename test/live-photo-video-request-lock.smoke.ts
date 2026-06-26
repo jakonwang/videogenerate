@@ -5,7 +5,7 @@ import path from 'node:path'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
 
 async function main() {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-remote-video-'))
+  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-video-request-lock-'))
   process.env.VIDEOGENERATE_DATA_DIR = root
   configureAppPathRuntime({ dataDir: root, userDataDir: root })
 
@@ -15,11 +15,7 @@ async function main() {
   const livePhotoSqliteModule = await import('../src/main/modules/live-photo/sqlite')
   const { livePhotoService } = await import('../src/main/modules/live-photo/service')
 
-  async function waitForItemCondition(
-    id: string,
-    predicate: (item: any) => boolean,
-    timeoutMs = 15000,
-  ) {
+  async function waitForItemCondition(id: string, predicate: (item: any) => boolean, timeoutMs = 8000) {
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
       const current = await livePhotoService.get(id)
@@ -44,22 +40,26 @@ async function main() {
     },
   })
 
+  let capturedVideoBody: any = null
+  let uploadCount = 0
   try {
     await cloneRepo.setCredentials({
       imageProviderPrimary: 'openai',
-      imageApifoxHubProfile: 'ai666',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
       videoProviderPrimary: 'apifox_hub',
-      videoApifoxHubProfile: 'vectorengine',
-      apifoxHubProfile: 'vectorengine',
-      vectorEngineHub: {
+      videoApifoxHubProfile: 'gaorui',
+      apifoxHubProfile: 'gaorui',
+      gaoruiHub: {
         enabled: true,
-        baseUrl: 'https://vector.example.com',
-        apiKey: 'test-vector-key',
-        videoProvider: 'veo',
-        videoEndpointStyle: 'official_rest',
-        imageToVideoModel: 'veo_3_1',
+        baseUrl: 'https://gaorui.cc',
+        apiKey: 'test-gaorui-key',
+        videoProvider: 'gaorui',
+        videoEndpointStyle: 'openai_video',
+        imageToVideoModel: 'veo_3_1-fl',
+        referenceVideoModel: 'veo_3_1-components',
+        defaultPollIntervalMs: 5,
+        defaultTimeoutMs: 50,
       },
       qiniuAccessKey: 'test-ak',
       qiniuSecretKey: 'test-sk',
@@ -71,13 +71,15 @@ async function main() {
     const assetsDir = path.join(root, 'fixtures')
     await mkdir(assetsDir, { recursive: true })
     const productImage = path.join(assetsDir, 'product.jpg')
+    const productBoardImage = path.join(assetsDir, 'product-board.jpg')
     const refImage = path.join(assetsDir, 'reference.jpg')
     await writeFile(productImage, 'product-image', 'utf-8')
+    await writeFile(productBoardImage, 'product-board-image', 'utf-8')
     await writeFile(refImage, 'reference-image', 'utf-8')
 
     const product = await productsRepo.upsert({
       name: 'Demo Product',
-      type: 'general',
+      type: 'earrings',
       images: [
         {
           id: 'img-1',
@@ -91,51 +93,36 @@ async function main() {
         },
       ],
       coverImagePath: productImage,
-      analysisBoardPath: productImage,
+      analysisBoardPath: productBoardImage,
       analysisBoardStatus: 'done',
       canonicalSourcePath: productImage,
       canonicalSourceStatus: 'done',
     } as any)
 
-    const remoteVideoTaskId = 'remote-video-task-1'
-    let remoteVideoSubmitCount = 0
-    let remoteVideoQueryCount = 0
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
-      if (url.includes('/v1/images/edits')) {
-        return new Response(
-          JSON.stringify({
-            data: [
-              {
-                b64_json: Buffer.from('mock-reference-replaced-image', 'utf-8').toString('base64'),
-              },
-            ],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        )
-      }
       if (url.startsWith('https://upload.qiniup.com')) {
-        return new Response(JSON.stringify({ key: 'uploaded/mock.png' }), {
+        uploadCount += 1
+        return new Response(JSON.stringify({ key: `uploaded/${uploadCount}.png` }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
       }
-      if (url.includes('/model/generateVideo') || url.includes('/v1/video/create')) {
-        remoteVideoSubmitCount += 1
+      if (url === 'https://gaorui.cc/v1/videos') {
+        capturedVideoBody = JSON.parse(String(init?.body || '{}'))
         return new Response(
           JSON.stringify({
-            id: remoteVideoTaskId,
-            status: 'submitted',
+            id: 'gaorui-live-photo-task-1',
+            status: 'queued',
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
       }
-      if (url.includes('/model/prediction/') || url.includes('/v1/video/query?id=')) {
-        remoteVideoQueryCount += 1
+      if (url === 'https://gaorui.cc/v1/videos/gaorui-live-photo-task-1') {
         return new Response(
           JSON.stringify({
-            id: remoteVideoTaskId,
+            id: 'gaorui-live-photo-task-1',
             status: 'running',
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -150,53 +137,37 @@ async function main() {
       motionTemplate: 'push_in',
     })
 
-    const pendingSnapshot = await waitForItemCondition(
-      created.id,
-      (item) => Boolean(item?.videoTaskId) || String(item?.error || '').includes('[remote_pending]'),
-      15000,
-    )
+    await waitForItemCondition(created.id, (item) => String(item?.videoTaskId || '').trim() === 'gaorui-live-photo-task-1', 8000)
 
-    assert.equal(pendingSnapshot.packagingStatus, 'processing')
-    assert.equal(pendingSnapshot.videoTaskId, remoteVideoTaskId)
-    assert.equal(pendingSnapshot.videoTaskProvider, 'apifox_hub')
-    assert.equal(pendingSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(pendingSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
-    assert.match(String(pendingSnapshot.error || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
-
-    const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.ok(resumeRemote.itemIds.includes(created.id))
-
-    const resumedSnapshot = await waitForItemCondition(
-      created.id,
-      (item) => String(item?.videoTaskId || '').trim() === remoteVideoTaskId,
-      12000,
-    )
-
-    const queryObserved = await waitForItemCondition(
-      created.id,
-      () => remoteVideoQueryCount >= 1,
-      12000,
-    )
-
-    assert.equal(resumedSnapshot.videoTaskId, remoteVideoTaskId)
-    assert.equal(resumedSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(resumedSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
-    assert.ok(queryObserved)
-    assert.ok(remoteVideoQueryCount >= 1)
-
-    const summaries = await livePhotoService.listSummaries({ filter: 'running' })
-    const summary = summaries.items.find((item) => item.id === created.id)
-    assert.ok(summary)
-    assert.equal(summary?.packagingStatus, 'processing')
-    assert.equal(summary?.autoFlowStatus?.status, 'running')
-    assert.match(String(summary?.error || ''), /\[remote_pending\]/)
+    assert.ok(capturedVideoBody, 'Expected live photo video request body to be captured')
+    assert.equal(String(capturedVideoBody?.model || ''), 'veo_3_1-fl')
+    assert.equal(Number(capturedVideoBody?.motion_strength || 0), 1)
+    assert.equal(Number(capturedVideoBody?.weight || 0), 1)
+    assert.equal(Number(capturedVideoBody?.duration || 0), 6)
+    assert.equal(Boolean(capturedVideoBody?.enhance_prompt), false)
+    assert.ok(Array.isArray(capturedVideoBody?.images), 'Expected images array in live photo video request')
+    assert.equal(capturedVideoBody.images.length, 1, 'Expected locked still image only in live photo video request')
+    assert.ok(String(capturedVideoBody.images[0] || '').includes('cdn.example.com'))
+    assert.match(String(capturedVideoBody?.prompt || ''), /STRUCTURE LOCK:/i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /NO INFERENCE RULE:/i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /SCALE LOCK:/i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /PROVIDER INPUT ROLE LOCK:/i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /The uploaded image array contains exactly 1 image\./i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /The uploaded image is the locked still scene and product anchor image\./i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /The locked still image is both the scene anchor and the product identity anchor for the video stage\./i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /partial non-identity-bearing crop only/i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /ultra slow micro push-in/i)
+    assert.match(String(capturedVideoBody?.prompt || ''), /same exact visible product instance/i)
+    assert.doesNotMatch(String(capturedVideoBody?.prompt || ''), /Image 2/i)
+    assert.doesNotMatch(String(capturedVideoBody?.prompt || ''), /Image 1/i)
+    assert.ok(String(capturedVideoBody?.negative_prompt || '').trim().length > 0, 'Expected gaorui negative prompt to be populated')
+    assert.match(String(capturedVideoBody?.negative_prompt || ''), /no duplicate product/i)
+    assert.match(String(capturedVideoBody?.negative_prompt || ''), /no redesigned product/i)
 
     globalThis.fetch = originalFetch
-    console.log('live photo remote video pending smoke test passed')
+    console.log('live photo video request lock smoke test passed')
   } finally {
-    livePhotoService.resetTestDependencies()
+    await livePhotoService.resetTestDependencies()
     livePhotoSqliteModule.closeLivePhotoSqlite()
     cloneSqliteModule.closeCloneSqlite()
     delete process.env.VIDEOGENERATE_DATA_DIR

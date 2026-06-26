@@ -61,6 +61,7 @@ export type Product = {
   assets: Record<SegmentKey, MediaAsset[]>
   images?: ProductImageAsset[]
   coverImagePath?: string
+  livePhotoReferenceImagePath?: string
   remark?: string
   analysisBoardPath?: string
   analysisBoardStatus?: ProductCanonicalSourceStatus

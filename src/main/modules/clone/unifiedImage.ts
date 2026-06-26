@@ -63,6 +63,7 @@ async function buildImageEditFormData(input: {
   negativePrompt?: string
   quality: 'low' | 'medium' | 'high'
   imagePaths?: string[]
+  uploadFileNames?: string[]
 }) {
   const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
   if (!refs.length) throw new Error(`${VECTOR_ENGINE_LABEL} 图片编辑缺少参考图`)
@@ -73,8 +74,9 @@ async function buildImageEditFormData(input: {
   form.set('quality', input.quality)
   form.set('size', '1024x1536')
   form.set('n', '1')
-  for (const ref of refs) {
-    const fileName = basename(ref) || `image_${randomUUID()}.png`
+  const uploadFileNames = Array.isArray(input.uploadFileNames) ? input.uploadFileNames : []
+  for (const [index, ref] of refs.entries()) {
+    const fileName = String(uploadFileNames[index] || '').trim() || basename(ref) || `image_${randomUUID()}.png`
     if (existsSync(ref)) {
       const buf = await readFile(ref)
       form.append('image', new Blob([buf], { type: mimeByPath(ref) }), fileName)
@@ -155,6 +157,7 @@ export async function generateImage(input: {
   filePrefix: string
   capability: Extract<UnifiedCapability, 'image_generate' | 'image_edit'>
   imagePaths?: string[]
+  uploadFileNames?: string[]
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'image')!
   const root = baseUrl(input.credentials)
@@ -244,6 +247,7 @@ export async function generateImage(input: {
       negativePrompt: input.negativePrompt,
       quality,
       imagePaths: refs,
+      uploadFileNames: input.uploadFileNames,
     })
     const res = await fetch(url, {
       method: 'POST',

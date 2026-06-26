@@ -2,19 +2,30 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Clapperboard, Cloud, Image as ImageIcon, KeyRound, MessagesSquare, Server } from 'lucide-vue-next'
+import {
+  listCapabilityPlatforms,
+  mapPlatformToStoredProvider,
+  normalizeIncomingPlatformProfile,
+  resolveCapabilityPlatform,
+  resolveCapabilityProviderLabel,
+  type CapabilityKey,
+  type ImagePlatformProfile,
+  type PlatformProfile,
+} from '../../../../shared/platformSettings'
 
 type ProviderKey = 'kling' | 'grsai' | 'apifox_hub'
-type PlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine' | 'xibapi'
-type CapabilityPlatformKey = 'kling' | 'grsai' | 'ai666' | 'vectorengine' | 'xibapi'
+type PlatformKey = 'grsai' | 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
+type CapabilityPlatformKey = 'grsai' | 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
 type ChatPlatformKey = 'grsai' | 'ai666' | 'vectorengine'
-type ApifoxProfileKey = 'ai666' | 'vectorengine' | 'xibapi'
-type ApifoxImageProfileKey = 'ai666' | 'vectorengine'
+type ApifoxProfileKey = PlatformProfile
+type ApifoxImageProfileKey = ImagePlatformProfile
 type SecretKey =
   | 'klingApiKey'
   | 'grsaiApiKey'
   | 'ai666ApiKey'
   | 'vectorEngineApiKey'
   | 'xibapiApiKey'
+  | 'gaoruiApiKey'
   | 'replicateApiToken'
   | 'qiniuAccessKey'
   | 'qiniuSecretKey'
@@ -34,7 +45,7 @@ type HubCredentials = {
   imageModel: string
   imageEditModel: string
   imageEndpointStyle: 'openai_images' | 'official_rest' | 'midjourney_task'
-  videoProvider: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi'
+  videoProvider: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
   textToVideoModel: string
   imageToVideoModel: string
   startEndVideoModel: string
@@ -60,7 +71,6 @@ type ModelCredentialsView = {
   keyframeModel: string
   videoProviderPrimary: ProviderKey
   videoModelPrimary: string
-  videoProviderFallback: ProviderKey
   videoModelFallback: string
   grsaiVideoModel: string
   imageProviderPrimary: ProviderKey
@@ -69,13 +79,14 @@ type ModelCredentialsView = {
   apifoxHubProfile: ApifoxProfileKey
   videoApifoxHubProfile: ApifoxProfileKey
   imageApifoxHubProfile: ApifoxImageProfileKey
-  chatApifoxHubProfile: Exclude<ApifoxProfileKey, 'xibapi'>
+  chatApifoxHubProfile: Exclude<ApifoxProfileKey, 'xibapi' | 'gaorui'>
   klingImageModel: string
   grsaiImageModel: string
   grsaiAnalysisModel: string
   ai666Hub: HubCredentials
   vectorEngineHub: HubCredentials
   xibapiHub: HubCredentials
+  gaoruiHub: HubCredentials
   apifoxHub: HubCredentials
 }
 
@@ -140,7 +151,6 @@ function createDefaultCredentials(): ModelCredentialsView {
     keyframeModel: '',
     videoProviderPrimary: 'grsai',
     videoModelPrimary: 'veo_3_1-lite',
-    videoProviderFallback: 'grsai',
     videoModelFallback: 'google/veo3.1-lite/image-to-video',
     grsaiVideoModel: 'grok-video-3',
     imageProviderPrimary: 'apifox_hub',
@@ -161,6 +171,13 @@ function createDefaultCredentials(): ModelCredentialsView {
       imageToVideoModel: 'veo_3_1-fast',
       startEndVideoModel: 'veo_3_1-fast',
       referenceVideoModel: 'veo_3_1-fast',
+    }),
+    gaoruiHub: createHubDefaults({
+      videoProvider: 'gaorui',
+      textToVideoModel: 'veo_3_1',
+      imageToVideoModel: 'veo_3_1-fl',
+      startEndVideoModel: 'veo_3_1-fl',
+      referenceVideoModel: 'veo_3_1-components',
     }),
     apifoxHub: createHubDefaults(),
   }
@@ -192,7 +209,7 @@ function createDefaultHermesIntegration(): HermesIntegrationView {
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
 const modelSettingsBusy = ref(false)
-const modelSettingsSection = ref<'platforms' | 'capabilities' | 'hermes' | 'qiniu'>('platforms')
+const modelSettingsSection = ref<'platforms' | 'capabilities' | 'qiniu'>('platforms')
 const { t } = useI18n()
 const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
@@ -200,6 +217,7 @@ const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   ai666ApiKey: false,
   vectorEngineApiKey: false,
   xibapiApiKey: false,
+  gaoruiApiKey: false,
   replicateApiToken: false,
   qiniuAccessKey: false,
   qiniuSecretKey: false,
@@ -214,17 +232,10 @@ const hermesIntegration = ref<HermesIntegrationView>(createDefaultHermesIntegrat
 const sectionMeta = [
   { key: 'platforms', labelKey: 'settings.sections.platforms.label', descKey: 'settings.sections.platforms.desc', icon: KeyRound },
   { key: 'capabilities', labelKey: 'settings.sections.capabilities.label', descKey: 'settings.sections.capabilities.desc', icon: Server },
-  { key: 'hermes', labelKey: 'settings.sections.hermes.label', descKey: 'settings.sections.hermes.desc', icon: MessagesSquare },
   { key: 'qiniu', labelKey: 'settings.sections.qiniu.label', descKey: 'settings.sections.qiniu.desc', icon: Cloud },
 ] as const
 
 const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; hostPlaceholder: string; keyName: SecretKey }> = {
-  kling: {
-    label: 'AtlasCloud',
-    hostLabel: 'Base URL / Host',
-    hostPlaceholder: 'https://api.atlascloud.ai',
-    keyName: 'klingApiKey',
-  },
   grsai: {
     label: 'GRS.AI',
     hostLabel: 'Base URL / Host',
@@ -249,6 +260,12 @@ const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; host
     hostPlaceholder: 'https://xibapi.com',
     keyName: 'xibapiApiKey',
   },
+  gaorui: {
+    label: 'GaoruiAPI',
+    hostLabel: 'Base URL',
+    hostPlaceholder: 'https://gaorui.cc',
+    keyName: 'gaoruiApiKey',
+  },
 }
 
 const settingsMessageTone = computed(() => {
@@ -257,69 +274,76 @@ const settingsMessageTone = computed(() => {
   return /saved|loaded|opened|started|success/.test(text) ? 'success' : 'error'
 })
 
-function capabilityProviderLabel(provider: ProviderKey | 'grsai', profile?: ApifoxProfileKey) {
-  if (provider === 'apifox_hub') {
-    if (profile === 'ai666') return 'AI666'
-    if (profile === 'xibapi') return 'XIBAPI'
-    return 'VectorEngine'
-  }
-  return provider === 'grsai' ? 'GRS.AI' : 'AtlasCloud'
+function capabilityProviderLabel(
+  capability: CapabilityKey,
+  provider: ProviderKey | 'grsai',
+  profile?: ApifoxProfileKey,
+) {
+  return resolveCapabilityProviderLabel(provider, profile, capability)
 }
 
-function capabilityProfileKey(target: 'videoProviderPrimary' | 'videoProviderFallback' | 'imageProviderPrimary' | 'chatProviderPrimary') {
+function capabilityProfileKey(target: 'videoProviderPrimary' | 'imageProviderPrimary' | 'chatProviderPrimary') {
   if (target === 'imageProviderPrimary') return 'imageApifoxHubProfile'
   if (target === 'chatProviderPrimary') return 'chatApifoxHubProfile'
   return 'videoApifoxHubProfile'
 }
 
-function toCapabilityPlatform(provider: ProviderKey | 'grsai', profile?: ApifoxProfileKey): CapabilityPlatformKey {
-  if (provider === 'apifox_hub') {
-    if (profile === 'ai666') return 'ai666'
-    if (profile === 'xibapi') return 'xibapi'
-    return 'vectorengine'
-  }
-  return provider === 'grsai' ? 'grsai' : 'kling'
+function toCapabilityPlatform(
+  capability: CapabilityKey,
+  provider: ProviderKey | 'grsai',
+  profile?: ApifoxProfileKey,
+): CapabilityPlatformKey {
+  return resolveCapabilityPlatform(provider, profile, capability) as CapabilityPlatformKey
 }
 
 function applyCapabilityPlatform(
-  target: 'videoProviderPrimary' | 'videoProviderFallback' | 'imageProviderPrimary' | 'chatProviderPrimary',
+  target: 'videoProviderPrimary' | 'imageProviderPrimary' | 'chatProviderPrimary',
   platform: CapabilityPlatformKey | ChatPlatformKey,
 ) {
   const profileKey = capabilityProfileKey(target)
-  if (platform === 'ai666' || platform === 'vectorengine' || platform === 'xibapi') {
-    ;(modelCredentials.value[target] as ProviderKey | 'grsai') = 'apifox_hub'
-    if (platform === 'ai666') modelCredentials.value.ai666Hub.enabled = true
-    if (platform === 'vectorengine') modelCredentials.value.vectorEngineHub.enabled = true
-    if (platform === 'xibapi') modelCredentials.value.xibapiHub.enabled = true
-    if (profileKey === 'chatApifoxHubProfile' && platform === 'xibapi') {
+  if (platform === 'grsai') {
+    ;(modelCredentials.value[target] as ProviderKey | 'grsai') = 'grsai'
+    return
+  }
+  const normalizedPlatform =
+    target === 'videoProviderPrimary'
+      ? normalizeIncomingPlatformProfile('video', platform)
+      : target === 'imageProviderPrimary'
+        ? normalizeIncomingPlatformProfile('image', platform, 'vectorengine')
+        : normalizeIncomingPlatformProfile('chat', platform, 'vectorengine')
+  const stored = mapPlatformToStoredProvider(normalizedPlatform)
+  ;(modelCredentials.value[target] as ProviderKey | 'grsai') = stored.provider as ProviderKey | 'grsai'
+  if (stored.profile) {
+    if (stored.profile === 'ai666') modelCredentials.value.ai666Hub.enabled = true
+    if (stored.profile === 'vectorengine') modelCredentials.value.vectorEngineHub.enabled = true
+    if (stored.profile === 'xibapi') modelCredentials.value.xibapiHub.enabled = true
+    if (stored.profile === 'gaorui') modelCredentials.value.gaoruiHub.enabled = true
+    if (profileKey === 'chatApifoxHubProfile' && (stored.profile === 'xibapi' || stored.profile === 'gaorui')) {
       modelCredentials.value.chatApifoxHubProfile = 'vectorengine'
       return
     }
-    ;(modelCredentials.value[profileKey] as ApifoxProfileKey | ApifoxImageProfileKey) = platform as ApifoxProfileKey
-    return
+    ;(modelCredentials.value[profileKey] as ApifoxProfileKey | ApifoxImageProfileKey) = stored.profile as ApifoxProfileKey
   }
-  ;(modelCredentials.value[target] as ProviderKey | 'grsai') = platform as ProviderKey | 'grsai'
 }
 
 const videoPrimaryPlatformBinding = computed({
-  get: () => toCapabilityPlatform(modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
+  get: () => toCapabilityPlatform('video', modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
   set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('videoProviderPrimary', value),
 })
 
-const videoFallbackPlatformBinding = computed({
-  get: () => toCapabilityPlatform(modelCredentials.value.videoProviderFallback, modelCredentials.value.videoApifoxHubProfile),
-  set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('videoProviderFallback', value),
-})
-
 const imagePrimaryPlatformBinding = computed({
-  get: () => toCapabilityPlatform(modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
+  get: () => toCapabilityPlatform('image', modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
   set: (value: CapabilityPlatformKey) => applyCapabilityPlatform('imageProviderPrimary', value),
 })
 
 const chatPrimaryPlatformBinding = computed({
-  get: () => (modelCredentials.value.chatProviderPrimary === 'grsai' ? 'grsai' : modelCredentials.value.chatApifoxHubProfile),
+  get: () => toCapabilityPlatform('chat', modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
   set: (value: ChatPlatformKey) => applyCapabilityPlatform('chatProviderPrimary', value),
 })
+
+const videoPlatformOptions = computed(() => listCapabilityPlatforms('video'))
+const imagePlatformOptions = computed(() => listCapabilityPlatforms('image'))
+const chatPlatformOptions = computed(() => listCapabilityPlatforms('chat'))
 
 function activeApifoxHub(capability: 'video' | 'image' | 'chat') {
   const profile =
@@ -330,6 +354,7 @@ function activeApifoxHub(capability: 'video' | 'image' | 'chat') {
         : modelCredentials.value.chatApifoxHubProfile
   if (profile === 'ai666') return modelCredentials.value.ai666Hub
   if (profile === 'xibapi') return modelCredentials.value.xibapiHub
+  if (profile === 'gaorui') return modelCredentials.value.gaoruiHub
   return modelCredentials.value.vectorEngineHub
 }
 
@@ -341,7 +366,7 @@ const videoPrimaryModelBinding = computed({
       return hub.startEndVideoModel || hub.referenceVideoModel || hub.imageToVideoModel || hub.textToVideoModel || ''
     }
     if (creds.videoProviderPrimary === 'grsai') return creds.grsaiVideoModel || ''
-    return creds.videoModelFallback || creds.videoModelPrimary || ''
+    return creds.videoModelPrimary || creds.videoModelFallback || ''
   },
   set: (value: string) => {
     const creds = modelCredentials.value
@@ -399,21 +424,21 @@ const imageQualityLabel = computed(() => String(modelCredentials.value.openaiIma
 const summaryCards = computed(() => [
   {
     title: t('settings.summary.cards.video.title'),
-    value: capabilityProviderLabel(modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
+    value: capabilityProviderLabel('video', modelCredentials.value.videoProviderPrimary, modelCredentials.value.videoApifoxHubProfile),
     meta: videoPrimaryModelBinding.value || t('settings.common.notSet'),
     tone: 'violet',
     icon: Clapperboard,
   },
   {
     title: t('settings.summary.cards.image.title'),
-    value: capabilityProviderLabel(modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
+    value: capabilityProviderLabel('image', modelCredentials.value.imageProviderPrimary, modelCredentials.value.imageApifoxHubProfile),
     meta: `${imagePrimaryModelBinding.value || t('settings.common.notSet')} / ${imageQualityLabel.value}`,
     tone: 'cyan',
     icon: ImageIcon,
   },
   {
     title: t('settings.summary.cards.chat.title'),
-    value: capabilityProviderLabel(modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
+    value: capabilityProviderLabel('chat', modelCredentials.value.chatProviderPrimary, modelCredentials.value.chatApifoxHubProfile),
     meta: chatPrimaryModelBinding.value || t('settings.common.notSet'),
     tone: 'green',
     icon: MessagesSquare,
@@ -428,12 +453,6 @@ const summaryCards = computed(() => [
 ])
 
 const platformCards = computed(() => [
-  {
-    provider: 'kling' as PlatformKey,
-    title: 'AtlasCloud',
-    desc: t('settings.platforms.cards.kling.desc'),
-    icon: Clapperboard,
-  },
   {
     provider: 'grsai' as PlatformKey,
     title: 'GRS.AI',
@@ -458,6 +477,12 @@ const platformCards = computed(() => [
     desc: t('settings.platforms.cards.xibapi.desc'),
     icon: Server,
   },
+  {
+    provider: 'gaorui' as PlatformKey,
+    title: 'GaoruiAPI',
+    desc: 'OpenAI-compatible async Veo video platform',
+    icon: Server,
+  },
 ])
 
 function toggleModelSecret(key: SecretKey) {
@@ -469,26 +494,22 @@ function modelSecretType(key: SecretKey) {
 }
 
 function providerApiKey(provider: PlatformKey) {
-  if (provider === 'kling') return modelCredentials.value.klingApiKey
   if (provider === 'grsai') return modelCredentials.value.grsaiApiKey
   if (provider === 'ai666') return modelCredentials.value.ai666Hub.apiKey
   if (provider === 'xibapi') return modelCredentials.value.xibapiHub.apiKey
+  if (provider === 'gaorui') return modelCredentials.value.gaoruiHub.apiKey
   return modelCredentials.value.vectorEngineHub.apiKey
 }
 
 function providerHost(provider: PlatformKey) {
-  if (provider === 'kling') return modelCredentials.value.klingHost
   if (provider === 'grsai') return modelCredentials.value.grsaiHost
   if (provider === 'ai666') return modelCredentials.value.ai666Hub.baseUrl
   if (provider === 'xibapi') return modelCredentials.value.xibapiHub.baseUrl
+  if (provider === 'gaorui') return modelCredentials.value.gaoruiHub.baseUrl
   return modelCredentials.value.vectorEngineHub.baseUrl
 }
 
 function assignProviderApiKey(provider: PlatformKey, value: string) {
-  if (provider === 'kling') {
-    modelCredentials.value.klingApiKey = value
-    return
-  }
   if (provider === 'grsai') {
     modelCredentials.value.grsaiApiKey = value
     return
@@ -501,14 +522,14 @@ function assignProviderApiKey(provider: PlatformKey, value: string) {
     modelCredentials.value.xibapiHub.apiKey = value
     return
   }
+  if (provider === 'gaorui') {
+    modelCredentials.value.gaoruiHub.apiKey = value
+    return
+  }
   modelCredentials.value.vectorEngineHub.apiKey = value
 }
 
 function assignProviderHost(provider: PlatformKey, value: string) {
-  if (provider === 'kling') {
-    modelCredentials.value.klingHost = value
-    return
-  }
   if (provider === 'grsai') {
     modelCredentials.value.grsaiHost = value
     return
@@ -522,14 +543,23 @@ function assignProviderHost(provider: PlatformKey, value: string) {
     modelCredentials.value.xibapiHub.videoProvider = 'xibapi'
     return
   }
+  if (provider === 'gaorui') {
+    modelCredentials.value.gaoruiHub.baseUrl = value
+    modelCredentials.value.gaoruiHub.videoProvider = 'gaorui'
+    return
+  }
   modelCredentials.value.vectorEngineHub.baseUrl = value
 }
 
 function normalizeIncomingCredentials(next: any): ModelCredentialsView {
   const defaults = createDefaultCredentials()
+  const normalizedVideoProviderPrimary = next?.videoProviderPrimary === 'kling' ? 'grsai' : next?.videoProviderPrimary
+  const normalizedImageProviderPrimary = next?.imageProviderPrimary === 'kling' ? 'grsai' : next?.imageProviderPrimary
   return {
     ...defaults,
     ...next,
+    videoProviderPrimary: normalizedVideoProviderPrimary ?? defaults.videoProviderPrimary,
+    imageProviderPrimary: normalizedImageProviderPrimary ?? defaults.imageProviderPrimary,
     ai666Hub: createHubDefaults(next?.ai666Hub),
     vectorEngineHub: createHubDefaults(next?.vectorEngineHub),
     xibapiHub: createHubDefaults({
@@ -539,6 +569,14 @@ function normalizeIncomingCredentials(next: any): ModelCredentialsView {
       imageToVideoModel: next?.xibapiHub?.imageToVideoModel || 'veo_3_1-fast',
       startEndVideoModel: next?.xibapiHub?.startEndVideoModel || 'veo_3_1-fast',
       referenceVideoModel: next?.xibapiHub?.referenceVideoModel || 'veo_3_1-fast',
+    }),
+    gaoruiHub: createHubDefaults({
+      ...next?.gaoruiHub,
+      videoProvider: next?.gaoruiHub?.videoProvider || 'gaorui',
+      textToVideoModel: next?.gaoruiHub?.textToVideoModel || 'veo_3_1',
+      imageToVideoModel: next?.gaoruiHub?.imageToVideoModel || 'veo_3_1-fl',
+      startEndVideoModel: next?.gaoruiHub?.startEndVideoModel || 'veo_3_1-fl',
+      referenceVideoModel: next?.gaoruiHub?.referenceVideoModel || 'veo_3_1-components',
     }),
     apifoxHub: createHubDefaults(next?.apifoxHub),
   }
@@ -583,29 +621,34 @@ async function saveModelSettings() {
   settingsMessage.value = ''
   try {
     const payload = JSON.parse(JSON.stringify(modelCredentials.value)) as ModelCredentialsView & Record<string, any>
+    payload.videoProviderFallback = payload.videoProviderPrimary
+    payload.videoModelFallback = payload.videoModelPrimary
     payload.apifoxHubProfile =
       payload.videoApifoxHubProfile === 'ai666'
         ? 'ai666'
         : payload.videoApifoxHubProfile === 'xibapi'
           ? 'xibapi'
+          : payload.videoApifoxHubProfile === 'gaorui'
+            ? 'gaorui'
           : 'vectorengine'
     payload.apifoxHub =
       payload.apifoxHubProfile === 'ai666'
         ? { ...payload.ai666Hub }
         : payload.apifoxHubProfile === 'xibapi'
           ? { ...payload.xibapiHub, videoProvider: 'xibapi' }
+          : payload.apifoxHubProfile === 'gaorui'
+            ? { ...payload.gaoruiHub, videoProvider: 'gaorui' }
           : { ...payload.vectorEngineHub }
     if (payload.videoApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
     if (payload.videoApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
     if (payload.videoApifoxHubProfile === 'xibapi') payload.xibapiHub.enabled = true
+    if (payload.videoApifoxHubProfile === 'gaorui') payload.gaoruiHub.enabled = true
     if (payload.imageApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
     if (payload.imageApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
     if (payload.chatApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
     if (payload.chatApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
-    await Promise.all([
-      window.api.clone.setModelCredentials(payload),
-      window.api.clone.setHermesIntegrationSettings(JSON.parse(JSON.stringify(hermesIntegration.value))),
-    ])
+    await window.api.clone.setModelCredentials(payload)
+    await window.api.clone.setHermesIntegrationSettings(JSON.parse(JSON.stringify(hermesIntegration.value)))
     const [confirmed, confirmedHermes] = await Promise.all([
       window.api.clone.getModelCredentials() as Promise<Partial<ModelCredentialsView>>,
       window.api.clone.getHermesIntegrationSettings() as Promise<Partial<HermesIntegrationView>>,
@@ -753,29 +796,6 @@ onMounted(() => {
               </div>
             </article>
 
-            <article class="platform-card">
-              <div class="platform-card__head">
-                <div class="platform-card__icon">
-                  <ImageIcon :size="16" />
-                </div>
-                <div>
-                  <h3>Replicate</h3>
-                  <p>{{ t('settings.platforms.cards.replicate.desc') }}</p>
-                </div>
-              </div>
-
-              <div class="form-grid single-column">
-                <label>
-                  <span>{{ t('settings.platforms.fields.apiToken') }}</span>
-                  <div class="field-inline">
-                    <input v-model="modelCredentials.replicateApiToken" :type="modelSecretType('replicateApiToken')" />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('replicateApiToken')">
-                      {{ modelVisibleSecrets.replicateApiToken ? t('settings.common.hide') : t('settings.common.show') }}
-                    </button>
-                  </div>
-                </label>
-              </div>
-            </article>
           </div>
         </section>
 
@@ -800,30 +820,12 @@ onMounted(() => {
                 <label>
                   <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
                   <select v-model="videoPrimaryPlatformBinding">
-                    <option value="kling">AtlasCloud</option>
-                    <option value="grsai">GRS.AI</option>
-                    <option value="ai666">AI666</option>
-                    <option value="vectorengine">VectorEngine</option>
-                    <option value="xibapi">XIBAPI</option>
+                    <option v-for="option in videoPlatformOptions" :key="`video-${option.id}`" :value="option.id">{{ option.label }}</option>
                   </select>
                 </label>
                 <label>
                   <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
                   <input v-model="videoPrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.videoPrimaryModel')" />
-                </label>
-                <label>
-                  <span>{{ t('settings.capabilities.fields.fallbackPlatform') }}</span>
-                  <select v-model="videoFallbackPlatformBinding">
-                    <option value="kling">AtlasCloud</option>
-                    <option value="grsai">GRS.AI</option>
-                    <option value="ai666">AI666</option>
-                    <option value="vectorengine">VectorEngine</option>
-                    <option value="xibapi">XIBAPI</option>
-                  </select>
-                </label>
-                <label>
-                  <span>{{ t('settings.capabilities.fields.fallbackModel') }}</span>
-                  <input v-model="modelCredentials.videoModelFallback" :placeholder="t('settings.capabilities.placeholders.videoFallbackModel')" />
                 </label>
               </div>
             </article>
@@ -840,10 +842,7 @@ onMounted(() => {
                 <label>
                   <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
                   <select v-model="imagePrimaryPlatformBinding">
-                    <option value="kling">AtlasCloud</option>
-                    <option value="grsai">GRS.AI</option>
-                    <option value="ai666">AI666</option>
-                    <option value="vectorengine">VectorEngine</option>
+                    <option v-for="option in imagePlatformOptions" :key="`image-${option.id}`" :value="option.id">{{ option.label }}</option>
                   </select>
                 </label>
                 <label>
@@ -873,143 +872,12 @@ onMounted(() => {
                 <label>
                   <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
                   <select v-model="chatPrimaryPlatformBinding">
-                    <option value="ai666">AI666</option>
-                    <option value="vectorengine">VectorEngine</option>
-                    <option value="grsai">GRS.AI</option>
+                    <option v-for="option in chatPlatformOptions" :key="`chat-${option.id}`" :value="option.id">{{ option.label }}</option>
                   </select>
                 </label>
                 <label>
                   <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
                   <input v-model="chatPrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.chatPrimaryModel')" />
-                </label>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section v-else-if="modelSettingsSection === 'hermes'" class="form-section">
-          <div class="section-head">
-            <div>
-              <h2>{{ t('settings.hermes.title') }}</h2>
-              <p>{{ t('settings.hermes.subtitle') }}</p>
-            </div>
-          </div>
-
-          <div class="capability-stack">
-            <article class="capability-card">
-              <div class="capability-card__head">
-                <div class="capability-card__icon is-green"><MessagesSquare :size="16" /></div>
-                <div>
-                  <h3>{{ t('settings.hermes.global.title') }}</h3>
-                  <p>{{ t('settings.hermes.global.desc') }}</p>
-                </div>
-              </div>
-              <div class="form-grid">
-                <label class="checkbox-field">
-                  <span>{{ t('settings.hermes.global.fields.enabled') }}</span>
-                  <input v-model="hermesIntegration.enabled" type="checkbox" />
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.global.fields.callbackBaseUrl') }}</span>
-                  <input v-model="hermesIntegration.callbackBaseUrl" placeholder="https://your-host.example.com" />
-                </label>
-              </div>
-            </article>
-
-            <article class="capability-card">
-              <div class="capability-card__head">
-                <div class="capability-card__icon is-cyan"><MessagesSquare :size="16" /></div>
-                <div>
-                  <h3>Feishu</h3>
-                  <p>{{ t('settings.hermes.feishu.desc') }}</p>
-                </div>
-              </div>
-              <div class="form-grid">
-                <label class="checkbox-field">
-                  <span>{{ t('settings.hermes.feishu.fields.enabled') }}</span>
-                  <input v-model="hermesIntegration.feishu.enabled" type="checkbox" />
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.feishu.fields.appId') }}</span>
-                  <input v-model="hermesIntegration.feishu.appId" placeholder="cli_xxx" />
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.feishu.fields.appSecret') }}</span>
-                  <div class="field-inline">
-                    <input v-model="hermesIntegration.feishu.appSecret" :type="modelSecretType('hermesFeishuAppSecret')" />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesFeishuAppSecret')">
-                      {{ modelVisibleSecrets.hermesFeishuAppSecret ? t('settings.common.hide') : t('settings.common.show') }}
-                    </button>
-                  </div>
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.feishu.fields.tenantAccessToken') }}</span>
-                  <div class="field-inline">
-                    <input v-model="hermesIntegration.feishu.tenantAccessToken" :type="modelSecretType('hermesFeishuTenantAccessToken')" />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesFeishuTenantAccessToken')">
-                      {{ modelVisibleSecrets.hermesFeishuTenantAccessToken ? t('settings.common.hide') : t('settings.common.show') }}
-                    </button>
-                  </div>
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.feishu.fields.receiveIdType') }}</span>
-                  <select v-model="hermesIntegration.feishu.receiveIdType">
-                    <option value="open_id">open_id</option>
-                    <option value="user_id">user_id</option>
-                    <option value="union_id">union_id</option>
-                    <option value="chat_id">chat_id</option>
-                    <option value="email">email</option>
-                  </select>
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.feishu.fields.defaultReceiveId') }}</span>
-                  <input v-model="hermesIntegration.feishu.defaultReceiveId" placeholder="ou_xxx / chat_id / user id" />
-                </label>
-              </div>
-            </article>
-
-            <article class="capability-card">
-              <div class="capability-card__head">
-                <div class="capability-card__icon is-violet"><MessagesSquare :size="16" /></div>
-                <div>
-                  <h3>{{ t('settings.hermes.wecom.title') }}</h3>
-                  <p>{{ t('settings.hermes.wecom.desc') }}</p>
-                </div>
-              </div>
-              <div class="form-grid">
-                <label class="checkbox-field">
-                  <span>{{ t('settings.hermes.wecom.fields.enabled') }}</span>
-                  <input v-model="hermesIntegration.wecom.enabled" type="checkbox" />
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.wecom.fields.corpId') }}</span>
-                  <input v-model="hermesIntegration.wecom.corpId" placeholder="wwxxxxxxxx" />
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.wecom.fields.corpSecret') }}</span>
-                  <div class="field-inline">
-                    <input v-model="hermesIntegration.wecom.corpSecret" :type="modelSecretType('hermesWecomCorpSecret')" />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesWecomCorpSecret')">
-                      {{ modelVisibleSecrets.hermesWecomCorpSecret ? t('settings.common.hide') : t('settings.common.show') }}
-                    </button>
-                  </div>
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.wecom.fields.accessToken') }}</span>
-                  <div class="field-inline">
-                    <input v-model="hermesIntegration.wecom.accessToken" :type="modelSecretType('hermesWecomAccessToken')" />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('hermesWecomAccessToken')">
-                      {{ modelVisibleSecrets.hermesWecomAccessToken ? t('settings.common.hide') : t('settings.common.show') }}
-                    </button>
-                  </div>
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.wecom.fields.agentId') }}</span>
-                  <input v-model="hermesIntegration.wecom.agentId" placeholder="1000002" />
-                </label>
-                <label>
-                  <span>{{ t('settings.hermes.wecom.fields.defaultToUser') }}</span>
-                  <input v-model="hermesIntegration.wecom.defaultToUser" placeholder="zhangsan" />
                 </label>
               </div>
             </article>
@@ -1056,9 +924,9 @@ onMounted(() => {
             <h3>{{ t('settings.summary.title') }}</h3>
           </div>
           <div class="side-list">
-            <div class="side-row"><span>{{ t('settings.summary.rows.video') }}</span><strong>{{ capabilityProviderLabel(modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
-            <div class="side-row"><span>{{ t('settings.summary.rows.image') }}</span><strong>{{ capabilityProviderLabel(modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || t('settings.common.notSet') }} / {{ imageQualityLabel }}</strong></div>
-            <div class="side-row"><span>{{ t('settings.summary.rows.chat') }}</span><strong>{{ capabilityProviderLabel(modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
+            <div class="side-row"><span>{{ t('settings.summary.rows.video') }}</span><strong>{{ capabilityProviderLabel('video', modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
+            <div class="side-row"><span>{{ t('settings.summary.rows.image') }}</span><strong>{{ capabilityProviderLabel('image', modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || t('settings.common.notSet') }} / {{ imageQualityLabel }}</strong></div>
+            <div class="side-row"><span>{{ t('settings.summary.rows.chat') }}</span><strong>{{ capabilityProviderLabel('chat', modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
           </div>
         </section>
 

@@ -93,6 +93,10 @@ type AnalyzeInput = {
 
 const SCRIPT_ROLES: ScriptRole[] = ['hook', 'pain_point', 'solution', 'proof', 'offer', 'cta', 'transition', 'unknown']
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function normalizeStoryboardReferenceMode(value: unknown): 'product_closeup' | 'model_presentation' | undefined {
   const text = String(value ?? '').trim().toLowerCase()
   if (text === 'product_closeup' || text === 'product closeup' || text === 'product-closeup') return 'product_closeup'
@@ -397,7 +401,7 @@ export async function analyzeProductStructureWithGrs(input: {
   }
 
   const key = String(input.credentials.grsaiApiKey || '').trim()
-  if (!key) throw new Error('未配置 GRS.AI API Key，无法分析商品结构')
+  if (!key) throw new Error('Missing GRS.AI API key for product structure analysis')
   const host = cleanHost(input.credentials.grsaiHost)
   const model = cleanText(input.credentials.grsaiAnalysisModel, 'gemini-3.1-pro')
   const content: any[] = [
@@ -422,31 +426,45 @@ export async function analyzeProductStructureWithGrs(input: {
     content.push({ type: 'image_url', image_url: { url: await imageDataUrl(filePath) } })
   }
 
-  const res = await fetch(`${host}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      stream: false,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: 'You are a strict JSON-only product-structure analyst.' },
-        { role: 'user', content },
-      ],
-    }),
+  const requestBody = JSON.stringify({
+    model,
+    stream: false,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: 'You are a strict JSON-only product-structure analyst.' },
+      { role: 'user', content },
+    ],
   })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`商品结构分析失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  let text = ''
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const res = await fetch(`${host}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+      },
+      body: requestBody,
+    })
+    text = await res.text()
+    if (res.ok) break
+    const lowered = text.toLowerCase()
+    const retryableLoadError =
+      lowered.includes('model load is too high') ||
+      lowered.includes('try again later') ||
+      lowered.includes('rix_api_error')
+    if (attempt < 2 && retryableLoadError) {
+      await sleep(1500 * (attempt + 1))
+      continue
+    }
+    throw new Error(`闁哥喎妫楅幖褏绱掗幘瀵糕偓顖炲礆閸℃鈧姤寰勬潏顐バ?HTTP ${res.status}: ${text.slice(0, 500)}`)
+  }
   const contentText = extractModelMessageContent(text)
   const jsonText = extractJsonObjectText(contentText)
   let parsed: any
   try {
     parsed = JSON.parse(jsonText)
   } catch (error: any) {
-    throw new Error(`商品结构分析解析失败。provider=grsai model=${model} response=${cleanAiText(contentText).slice(0, 320)} reason=${String(error?.message ?? error)}`)
+    throw new Error(`閸熷棗鎼х紒鎾寸€崚鍡樼€界憴锝嗙€芥径杈Е閵嗕炕rovider=grsai model=${model} response=${cleanAiText(contentText).slice(0, 320)} reason=${String(error?.message ?? error)}`)
   }
   return {
     category: cleanText(parsed?.category, cleanText(input.productCategory, 'general')),
@@ -646,7 +664,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
       prompt: buildInstruction(input),
     })
     if (!apifox.content) {
-      return fallbackAnalysisResult(input, `VectorEngine 脚本分析返回为空。provider=${apifox.provider} model=${apifox.model}`)
+      return fallbackAnalysisResult(input, `VectorEngine 閼存碍婀伴崚鍡樼€芥潻鏂挎礀娑撹櫣鈹栭妴淇籸ovider=${apifox.provider} model=${apifox.model}`)
     }
     try {
       const parsed = parseModelJsonPayload(apifox.content).parsed
@@ -654,13 +672,13 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
     } catch (e: any) {
       return fallbackAnalysisResult(
         input,
-        `VectorEngine 脚本分析解析失败。provider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 280)} reason=${String(e?.message ?? e)}`,
+        `VectorEngine 閼存碍婀伴崚鍡樼€界憴锝嗙€芥径杈Е閵嗕炕rovider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 280)} reason=${String(e?.message ?? e)}`,
       )
     }
   }
 
   const key = String(input.credentials.grsaiApiKey || '').trim()
-  if (!key) throw new Error('未配置 GRS.AI API Key，无法进行爆款脚本多模态分析')
+  if (!key) throw new Error('Missing GRS.AI API key for script analysis')
 
   const host = cleanHost(input.credentials.grsaiHost)
   const model = cleanText(input.credentials.grsaiAnalysisModel, 'gemini-3.1-pro')
@@ -693,11 +711,10 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
   })
 
   const text = await res.text()
-  if (!res.ok) throw new Error(`GRS.AI 脚本分析失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
 
   const contentText = extractModelMessageContent(text)
   if (!contentText) {
-    return fallbackAnalysisResult(input, `GRS.AI 脚本分析返回为空，已自动降级。provider=grsai model=${model}`)
+    return fallbackAnalysisResult(input, `GRS.AI 閼存碍婀伴崚鍡樼€芥潻鏂挎礀娑撹櫣鈹栭敍灞藉嚒閼奉亜濮╅梽宥囬獓閵嗕炕rovider=grsai model=${model}`)
   }
 
   try {
@@ -706,7 +723,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
   } catch (e: any) {
     return fallbackAnalysisResult(
       input,
-      `GRS.AI 脚本分析解析失败，已自动降级。provider=grsai model=${model} response=${cleanAiText(contentText).slice(0, 280)} reason=${String(e?.message ?? e)}`,
+      `GRS.AI 閼存碍婀伴崚鍡樼€界憴锝嗙€芥径杈Е閿涘苯鍑￠懛顏勫З闂勫秶楠囬妴淇籸ovider=grsai model=${model} response=${cleanAiText(contentText).slice(0, 280)} reason=${String(e?.message ?? e)}`,
     )
   }
 }

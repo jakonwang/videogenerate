@@ -5,7 +5,7 @@ import path from 'node:path'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
 
 async function main() {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-remote-video-'))
+  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-video-timeout-'))
   process.env.VIDEOGENERATE_DATA_DIR = root
   configureAppPathRuntime({ dataDir: root, userDataDir: root })
 
@@ -18,7 +18,7 @@ async function main() {
   async function waitForItemCondition(
     id: string,
     predicate: (item: any) => boolean,
-    timeoutMs = 15000,
+    timeoutMs = 8000,
   ) {
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
@@ -47,19 +47,20 @@ async function main() {
   try {
     await cloneRepo.setCredentials({
       imageProviderPrimary: 'openai',
-      imageApifoxHubProfile: 'ai666',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
       videoProviderPrimary: 'apifox_hub',
-      videoApifoxHubProfile: 'vectorengine',
-      apifoxHubProfile: 'vectorengine',
-      vectorEngineHub: {
+      videoApifoxHubProfile: 'gaorui',
+      apifoxHubProfile: 'gaorui',
+      gaoruiHub: {
         enabled: true,
-        baseUrl: 'https://vector.example.com',
-        apiKey: 'test-vector-key',
-        videoProvider: 'veo',
-        videoEndpointStyle: 'official_rest',
-        imageToVideoModel: 'veo_3_1',
+        baseUrl: 'https://gaorui.cc',
+        apiKey: 'test-gaorui-key',
+        videoProvider: 'gaorui',
+        videoEndpointStyle: 'openai_video',
+        imageToVideoModel: 'veo_3_1-fl',
+        defaultPollIntervalMs: 5,
+        defaultTimeoutMs: 50,
       },
       qiniuAccessKey: 'test-ak',
       qiniuSecretKey: 'test-sk',
@@ -97,9 +98,7 @@ async function main() {
       canonicalSourceStatus: 'done',
     } as any)
 
-    const remoteVideoTaskId = 'remote-video-task-1'
-    let remoteVideoSubmitCount = 0
-    let remoteVideoQueryCount = 0
+    const remoteVideoTaskId = 'gaorui-task-timeout-1'
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
@@ -121,18 +120,16 @@ async function main() {
           headers: { 'Content-Type': 'application/json' },
         })
       }
-      if (url.includes('/model/generateVideo') || url.includes('/v1/video/create')) {
-        remoteVideoSubmitCount += 1
+      if (url === 'https://gaorui.cc/v1/videos') {
         return new Response(
           JSON.stringify({
             id: remoteVideoTaskId,
-            status: 'submitted',
+            status: 'queued',
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
       }
-      if (url.includes('/model/prediction/') || url.includes('/v1/video/query?id=')) {
-        remoteVideoQueryCount += 1
+      if (url === `https://gaorui.cc/v1/videos/${remoteVideoTaskId}`) {
         return new Response(
           JSON.stringify({
             id: remoteVideoTaskId,
@@ -152,51 +149,21 @@ async function main() {
 
     const pendingSnapshot = await waitForItemCondition(
       created.id,
-      (item) => Boolean(item?.videoTaskId) || String(item?.error || '').includes('[remote_pending]'),
-      15000,
+      (item) => String(item?.videoTaskId || '').trim() === remoteVideoTaskId || String(item?.error || '').includes('[remote_pending]'),
+      8000,
     )
 
     assert.equal(pendingSnapshot.packagingStatus, 'processing')
     assert.equal(pendingSnapshot.videoTaskId, remoteVideoTaskId)
     assert.equal(pendingSnapshot.videoTaskProvider, 'apifox_hub')
+    assert.equal(pendingSnapshot.videoTaskModel, 'veo_3_1-fl')
     assert.equal(pendingSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(pendingSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
     assert.match(String(pendingSnapshot.error || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
 
-    const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.ok(resumeRemote.itemIds.includes(created.id))
-
-    const resumedSnapshot = await waitForItemCondition(
-      created.id,
-      (item) => String(item?.videoTaskId || '').trim() === remoteVideoTaskId,
-      12000,
-    )
-
-    const queryObserved = await waitForItemCondition(
-      created.id,
-      () => remoteVideoQueryCount >= 1,
-      12000,
-    )
-
-    assert.equal(resumedSnapshot.videoTaskId, remoteVideoTaskId)
-    assert.equal(resumedSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(resumedSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
-    assert.ok(queryObserved)
-    assert.ok(remoteVideoQueryCount >= 1)
-
-    const summaries = await livePhotoService.listSummaries({ filter: 'running' })
-    const summary = summaries.items.find((item) => item.id === created.id)
-    assert.ok(summary)
-    assert.equal(summary?.packagingStatus, 'processing')
-    assert.equal(summary?.autoFlowStatus?.status, 'running')
-    assert.match(String(summary?.error || ''), /\[remote_pending\]/)
-
+    console.log('live photo video timeout preserves remote task smoke test passed')
     globalThis.fetch = originalFetch
-    console.log('live photo remote video pending smoke test passed')
   } finally {
-    livePhotoService.resetTestDependencies()
+    await livePhotoService.resetTestDependencies()
     livePhotoSqliteModule.closeLivePhotoSqlite()
     cloneSqliteModule.closeCloneSqlite()
     delete process.env.VIDEOGENERATE_DATA_DIR

@@ -74,6 +74,7 @@ type Product = {
   type: ProductType
   images?: ProductImageAsset[]
   coverImagePath?: string
+  livePhotoReferenceImagePath?: string
   remark?: string
   analysisBoardPath?: string
   analysisBoardStatus?: 'idle' | 'processing' | 'done' | 'failed'
@@ -132,6 +133,7 @@ const productId = computed(() => String(route.params.productId || '').trim())
 const selected = computed(() => list.value.find((item) => item.id === productId.value) ?? null)
 const selectedImages = computed(() => (selected.value?.images ?? []).slice(0, 1))
 const hasImages = computed(() => selectedImages.value.length > 0)
+const livePhotoReferenceImagePath = computed(() => String(selected.value?.livePhotoReferenceImagePath || '').trim())
 const canonicalSourcePath = computed(() => String(selected.value?.canonicalSourcePath || '').trim())
 const analysisBoardPath = computed(() => String(selected.value?.analysisBoardPath || '').trim())
 const analysisBoardDiagnostics = computed(() => selected.value?.analysisBoardDiagnostics ?? selected.value?.canonicalSourceDiagnostics ?? [])
@@ -471,6 +473,7 @@ async function uploadImages() {
       ...current,
       images: merged,
       coverImagePath: resolveProductCoverPath({ ...current, images: merged }) || merged[0]?.filePath || '',
+      livePhotoReferenceImagePath: merged[0]?.filePath || '',
     })
     await refresh()
     feedbackTone.value = 'success'
@@ -497,6 +500,7 @@ async function setCover(imageId: string) {
     await saveProductPatch({
       images: nextImages,
       coverImagePath: cover?.filePath,
+      livePhotoReferenceImagePath: selected.value.livePhotoReferenceImagePath || cover?.filePath,
     })
     feedbackTone.value = 'success'
     feedback.value = '封面已更新。'
@@ -515,6 +519,7 @@ async function removeImage(imageId: string) {
     await saveProductPatch({
       images: nextImages,
       coverImagePath: '',
+      livePhotoReferenceImagePath: '',
     })
     feedbackTone.value = 'success'
     feedback.value = '标准原图已删除。'
@@ -538,6 +543,24 @@ async function saveRemark() {
     feedback.value = String(error?.message ?? error ?? '保存备注失败')
   } finally {
     savingRemark.value = false
+  }
+}
+
+async function setLivePhotoReferenceImage(imageId: string) {
+  if (!selected.value) return
+  const target = (selected.value.images ?? []).find((item) => item.id === imageId)
+  if (!target?.filePath) return
+  try {
+    feedback.value = ''
+    feedbackTone.value = 'info'
+    await saveProductPatch({
+      livePhotoReferenceImagePath: target.filePath,
+    })
+    feedbackTone.value = 'success'
+    feedback.value = 'Live Photo 产品主参考图已更新。'
+  } catch (error: any) {
+    feedbackTone.value = 'error'
+    feedback.value = String(error?.message ?? error ?? '设置 Live Photo 产品主参考图失败')
   }
 }
 
@@ -778,10 +801,20 @@ watch(productId, () => {
                 <button class="preview-card__media" type="button" @click="openPreview(image.filePath, image.fileName)">
                   <img :src="toFileUrl(image.filePath)" class="preview-card__img" />
                   <span v-if="image.isCover" class="preview-card__badge">封面</span>
+                  <span v-if="livePhotoReferenceImagePath === image.filePath" class="preview-card__badge preview-card__badge--accent">Live Photo 主图</span>
                 </button>
                 <div class="preview-card__actions">
                   <button class="preview-card__action" :disabled="image.isCover" :data-testid="`product-set-cover-${image.id}`" type="button" @click.stop="setCover(image.id)">
                     设为封面
+                  </button>
+                  <button
+                    class="preview-card__action"
+                    :disabled="livePhotoReferenceImagePath === image.filePath"
+                    :data-testid="`product-set-live-photo-ref-${image.id}`"
+                    type="button"
+                    @click.stop="setLivePhotoReferenceImage(image.id)"
+                  >
+                    设为 Live Photo 主图
                   </button>
                   <button class="preview-card__action preview-card__action--danger" :data-testid="`product-delete-image-${image.id}`" type="button" @click.stop="removeImage(image.id)">
                     删除
@@ -1526,6 +1559,12 @@ watch(productId, () => {
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
+}
+
+.preview-card__badge--accent {
+  left: auto;
+  right: 8px;
+  background: rgba(68, 174, 109, 0.9);
 }
 
 .preview-card__actions {

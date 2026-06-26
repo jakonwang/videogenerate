@@ -5,7 +5,7 @@ import path from 'node:path'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
 
 async function main() {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-remote-video-'))
+  const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-veo-audio-off-'))
   process.env.VIDEOGENERATE_DATA_DIR = root
   configureAppPathRuntime({ dataDir: root, userDataDir: root })
 
@@ -76,7 +76,7 @@ async function main() {
     await writeFile(refImage, 'reference-image', 'utf-8')
 
     const product = await productsRepo.upsert({
-      name: 'Demo Product',
+      name: 'Silent Video Product',
       type: 'general',
       images: [
         {
@@ -97,9 +97,8 @@ async function main() {
       canonicalSourceStatus: 'done',
     } as any)
 
-    const remoteVideoTaskId = 'remote-video-task-1'
-    let remoteVideoSubmitCount = 0
-    let remoteVideoQueryCount = 0
+    const remoteVideoTaskId = 'remote-video-task-audio-off'
+    let capturedBody: any = null
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
@@ -122,7 +121,7 @@ async function main() {
         })
       }
       if (url.includes('/model/generateVideo') || url.includes('/v1/video/create')) {
-        remoteVideoSubmitCount += 1
+        capturedBody = JSON.parse(String(init?.body || '{}'))
         return new Response(
           JSON.stringify({
             id: remoteVideoTaskId,
@@ -132,7 +131,6 @@ async function main() {
         )
       }
       if (url.includes('/model/prediction/') || url.includes('/v1/video/query?id=')) {
-        remoteVideoQueryCount += 1
         return new Response(
           JSON.stringify({
             id: remoteVideoTaskId,
@@ -150,53 +148,20 @@ async function main() {
       motionTemplate: 'push_in',
     })
 
-    const pendingSnapshot = await waitForItemCondition(
+    await waitForItemCondition(
       created.id,
       (item) => Boolean(item?.videoTaskId) || String(item?.error || '').includes('[remote_pending]'),
       15000,
     )
 
-    assert.equal(pendingSnapshot.packagingStatus, 'processing')
-    assert.equal(pendingSnapshot.videoTaskId, remoteVideoTaskId)
-    assert.equal(pendingSnapshot.videoTaskProvider, 'apifox_hub')
-    assert.equal(pendingSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(pendingSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
-    assert.match(String(pendingSnapshot.error || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
-
-    const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.ok(resumeRemote.itemIds.includes(created.id))
-
-    const resumedSnapshot = await waitForItemCondition(
-      created.id,
-      (item) => String(item?.videoTaskId || '').trim() === remoteVideoTaskId,
-      12000,
-    )
-
-    const queryObserved = await waitForItemCondition(
-      created.id,
-      () => remoteVideoQueryCount >= 1,
-      12000,
-    )
-
-    assert.equal(resumedSnapshot.videoTaskId, remoteVideoTaskId)
-    assert.equal(resumedSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(resumedSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
-    assert.ok(queryObserved)
-    assert.ok(remoteVideoQueryCount >= 1)
-
-    const summaries = await livePhotoService.listSummaries({ filter: 'running' })
-    const summary = summaries.items.find((item) => item.id === created.id)
-    assert.ok(summary)
-    assert.equal(summary?.packagingStatus, 'processing')
-    assert.equal(summary?.autoFlowStatus?.status, 'running')
-    assert.match(String(summary?.error || ''), /\[remote_pending\]/)
+    assert.ok(capturedBody, 'Expected Veo video request body to be captured')
+    assert.equal(capturedBody.generate_audio, false)
+    assert.equal(capturedBody.audio_generation, 'Disabled')
 
     globalThis.fetch = originalFetch
-    console.log('live photo remote video pending smoke test passed')
+    console.log('live photo veo audio disabled smoke test passed')
   } finally {
-    livePhotoService.resetTestDependencies()
+    await livePhotoService.resetTestDependencies()
     livePhotoSqliteModule.closeLivePhotoSqlite()
     cloneSqliteModule.closeCloneSqlite()
     delete process.env.VIDEOGENERATE_DATA_DIR

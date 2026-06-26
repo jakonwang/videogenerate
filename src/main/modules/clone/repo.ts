@@ -15,11 +15,13 @@ import {
   getCloneSqliteUnavailableReason,
   initializeCloneSqlite,
   isCloneSqliteEmpty,
+  readCloneSettingsFromSqlite,
   readCloneProjectByIdFromSqlite,
   readCloneProjectsFromSqlite,
   readCloneDbFromSqlite,
   removeCloneProjectFromSqlite,
   upsertCloneProjectInSqlite,
+  writeCloneSettingsToSqlite,
   writeCloneDbToSqlite,
 } from './sqlite'
 import type {
@@ -53,6 +55,12 @@ import type {
 } from './types'
 import { buildReferenceLock } from './prompt'
 import { inferStoryboardReferenceDecision } from './storyboardReference'
+import {
+  mapPlatformToStoredProvider,
+  normalizeIncomingPlatformProfile,
+  resolveCapabilityPlatform,
+  type PlatformProfile,
+} from '../../../shared/platformSettings'
 
 type CloneDbShape = {
   projects: CloneProject[]
@@ -102,6 +110,7 @@ const DEFAULT_HERMES_INTEGRATION_SETTINGS: HermesIntegrationSettings = {
 const cloneDbPath = () => join(getAppPaths().dbDir, 'clone-projects.json')
 const cloneSettingsPath = () => join(getAppPaths().dbDir, 'clone-settings.json')
 const legacyUserDataCloneDbPath = () => join(getAppPaths().userData, 'videogenerate', 'db', 'clone-projects.json')
+const legacyUserDataCloneSettingsPath = () => join(getAppPaths().userData, 'videogenerate', 'db', 'clone-settings.json')
 let cloneDbMutationQueue: Promise<unknown> = Promise.resolve()
 const removedProjectTombstones = new Map<string, number>()
 const removedModelIdentityTombstones = new Map<string, number>()
@@ -1067,11 +1076,15 @@ function normalizeQueueJobs(input: any): CloneGenerationQueueJob[] {
 }
 
 function normalizeVideoProvider(v: unknown, fallback: AiProviderName): AiProviderName {
-  return v === 'seedance' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
+  return v === 'seedance' || v === 'kling' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
 }
 
 function normalizeImageProvider(v: unknown, fallback: ImageProviderName): ImageProviderName {
   return v === 'openai' || v === 'grsai' || v === 'apifox_hub' ? v : fallback
+}
+
+function normalizeCapabilityProvider(v: unknown, fallback: 'grsai' | 'apifox_hub'): 'grsai' | 'apifox_hub' {
+  return v === 'grsai' || v === 'apifox_hub' ? v : fallback
 }
 
 function normalizeAi666VideoModel(value: unknown, fallback: string) {
@@ -1133,7 +1146,8 @@ function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
       parsed?.videoProvider === 'vidu' ||
       parsed?.videoProvider === 'kling' ||
       parsed?.videoProvider === 'seedance2' ||
-      parsed?.videoProvider === 'xibapi'
+      parsed?.videoProvider === 'xibapi' ||
+      parsed?.videoProvider === 'gaorui'
         ? parsed.videoProvider
         : 'openai_video',
     textToVideoModel: normalizeAi666VideoModel(parsed?.textToVideoModel, 'veo_3_1-lite'),
@@ -1144,6 +1158,10 @@ function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
     defaultPollIntervalMs: Math.max(1000, Number(parsed?.defaultPollIntervalMs ?? 2000) || 2000),
     defaultTimeoutMs: Math.max(30000, Number(parsed?.defaultTimeoutMs ?? 600000) || 600000),
   }
+}
+
+function hasOwnHubPayload(parsed: any, key: 'ai666Hub' | 'vectorEngineHub' | 'xibapiHub' | 'gaoruiHub') {
+  return Boolean(parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, key))
 }
 
 function normalizeDbCollection<T>(value: T[] | null | undefined) {
@@ -1351,32 +1369,58 @@ function inferAspectRatio(value: unknown, fallback: '9:16' | '16:9' = '9:16'): '
 }
 
 function normalizeCredentials(parsed: any): ModelCredentials {
-  const ai666Hub = normalizeApifoxHubCredentials(parsed?.ai666Hub ?? parsed?.apifoxHub)
-  const vectorEngineHub = normalizeApifoxHubCredentials(parsed?.vectorEngineHub ?? parsed?.apifoxHub)
-  const xibapiHub = normalizeApifoxHubCredentials(parsed?.xibapiHub ?? parsed?.apifoxHub)
-  const profile: 'ai666' | 'vectorengine' | 'xibapi' =
-    parsed?.apifoxHubProfile === 'ai666' ? 'ai666' : parsed?.apifoxHubProfile === 'xibapi' ? 'xibapi' : 'vectorengine'
-  const videoProfile: 'ai666' | 'vectorengine' | 'xibapi' =
-    parsed?.videoApifoxHubProfile === 'ai666'
-      ? 'ai666'
-      : parsed?.videoApifoxHubProfile === 'xibapi'
-        ? 'xibapi'
-        : parsed?.videoApifoxHubProfile === 'vectorengine'
-          ? 'vectorengine'
-          : profile
-  const imageProfile: 'ai666' | 'vectorengine' =
-    parsed?.imageApifoxHubProfile === 'ai666'
-      ? 'ai666'
-      : parsed?.imageApifoxHubProfile === 'vectorengine' || profile === 'xibapi'
-        ? 'vectorengine'
-        : profile
-  const chatProfile: 'ai666' | 'vectorengine' =
-    parsed?.chatApifoxHubProfile === 'ai666'
-      ? 'ai666'
-      : parsed?.chatApifoxHubProfile === 'vectorengine' || profile === 'xibapi'
-        ? 'vectorengine'
-        : profile
-  const activeHub = videoProfile === 'ai666' ? ai666Hub : videoProfile === 'xibapi' ? xibapiHub : vectorEngineHub
+  const legacySharedHub = parsed?.apifoxHub
+  const ai666Hub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'ai666Hub') ? parsed?.ai666Hub : legacySharedHub)
+  const vectorEngineHub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'vectorEngineHub') ? parsed?.vectorEngineHub : legacySharedHub)
+  const xibapiHub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'xibapiHub') ? parsed?.xibapiHub : legacySharedHub)
+  const gaoruiHub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'gaoruiHub') ? parsed?.gaoruiHub : legacySharedHub)
+  const rawVideoProviderPrimary = normalizeCapabilityProvider(parsed?.videoProviderPrimary, 'apifox_hub')
+  const rawImageProviderPrimary = normalizeImageProvider(parsed?.imageProviderPrimary, 'openai')
+  const rawChatProviderPrimary = parsed?.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub'
+  const normalizedVideoModelPrimary = normalizeAi666VideoModel(parsed?.videoModelPrimary, 'veo_3_1-lite')
+  const legacyVideoPlatform =
+    parsed?.videoProviderPrimary === 'ai666' || parsed?.videoProviderPrimary === 'vectorengine' || parsed?.videoProviderPrimary === 'xibapi' || parsed?.videoProviderPrimary === 'gaorui'
+      ? parsed.videoProviderPrimary
+      : parsed?.videoProviderFallback === 'ai666' || parsed?.videoProviderFallback === 'vectorengine' || parsed?.videoProviderFallback === 'xibapi' || parsed?.videoProviderFallback === 'gaorui'
+        ? parsed.videoProviderFallback
+        : undefined
+  const legacyImagePlatform = parsed?.imageProviderPrimary === 'ai666' || parsed?.imageProviderPrimary === 'vectorengine' ? parsed.imageProviderPrimary : undefined
+  const legacyChatPlatform = parsed?.chatProviderPrimary === 'ai666' || parsed?.chatProviderPrimary === 'vectorengine' ? parsed.chatProviderPrimary : undefined
+  const rawVideoProfile = parsed?.videoApifoxHubProfile === 'ai666' || parsed?.videoApifoxHubProfile === 'vectorengine' || parsed?.videoApifoxHubProfile === 'xibapi' || parsed?.videoApifoxHubProfile === 'gaorui'
+    ? parsed.videoApifoxHubProfile
+    : undefined
+  const rawImageProfile = parsed?.imageApifoxHubProfile === 'ai666' || parsed?.imageApifoxHubProfile === 'vectorengine'
+    ? parsed.imageApifoxHubProfile
+    : undefined
+  const rawChatProfile = parsed?.chatApifoxHubProfile === 'ai666' || parsed?.chatApifoxHubProfile === 'vectorengine'
+    ? parsed.chatApifoxHubProfile
+    : undefined
+  const sharedFallbackProfile = normalizeIncomingPlatformProfile('video', legacyVideoPlatform ?? 'vectorengine', 'vectorengine') as PlatformProfile
+  const videoPlatform = normalizeIncomingPlatformProfile('video', rawVideoProfile ?? legacyVideoPlatform ?? sharedFallbackProfile, sharedFallbackProfile) as PlatformProfile
+  const imagePlatform = normalizeIncomingPlatformProfile('image', rawImageProfile ?? legacyImagePlatform ?? sharedFallbackProfile, sharedFallbackProfile) as 'ai666' | 'vectorengine'
+  const chatPlatform = normalizeIncomingPlatformProfile('chat', rawChatProfile ?? legacyChatPlatform ?? sharedFallbackProfile, sharedFallbackProfile) as 'ai666' | 'vectorengine'
+  const normalizedVideoProviderPrimary = legacyVideoPlatform
+    ? (mapPlatformToStoredProvider(videoPlatform).provider as 'grsai' | 'apifox_hub')
+    : normalizeVideoProvider(rawVideoProviderPrimary, 'apifox_hub')
+  const normalizedImageProviderPrimary = legacyImagePlatform
+    ? (mapPlatformToStoredProvider(imagePlatform).provider as 'grsai' | 'apifox_hub')
+    : normalizeImageProvider(rawImageProviderPrimary, 'apifox_hub')
+  const normalizedChatProviderPrimary = legacyChatPlatform
+    ? (mapPlatformToStoredProvider(chatPlatform).provider as 'grsai' | 'apifox_hub')
+    : rawChatProviderPrimary
+  const persistedVideoProfile = videoPlatform as 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
+  const persistedImageProfile = imagePlatform as 'ai666' | 'vectorengine'
+  const persistedChatProfile = chatPlatform as 'ai666' | 'vectorengine'
+  const activeVideoProfile = resolveCapabilityPlatform(normalizedVideoProviderPrimary as 'grsai' | 'apifox_hub', videoPlatform, 'video') as PlatformProfile
+  const profile = persistedVideoProfile
+  const activeHub =
+    activeVideoProfile === 'ai666'
+      ? ai666Hub
+      : activeVideoProfile === 'xibapi'
+        ? xibapiHub
+        : activeVideoProfile === 'gaorui'
+          ? gaoruiHub
+          : vectorEngineHub
   return {
     seedanceApiKey: String(parsed?.seedanceApiKey ?? '').trim() || undefined,
     seedanceHost: String(parsed?.seedanceHost ?? '').trim() || 'https://ark.ap-southeast.bytepluses.com',
@@ -1390,13 +1434,13 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     qiniuPrefix: String(parsed?.qiniuPrefix ?? '').trim() || 'videogenerate/clone',
     allowMockWhenNoKey: Boolean(parsed?.allowMockWhenNoKey ?? true),
     keyframeModel: String(parsed?.keyframeModel ?? '').trim() || 'local-product-frame',
-    videoModelPrimary: normalizeAi666VideoModel(parsed?.videoModelPrimary, 'veo_3_1-lite'),
-    videoModelFallback: normalizeAi666VideoModel(parsed?.videoModelFallback, 'veo_3_1-fast'),
+    videoModelPrimary: normalizedVideoModelPrimary,
+    videoModelFallback: normalizedVideoModelPrimary,
     grsaiVideoModel: normalizeAi666VideoModel(parsed?.grsaiVideoModel, 'grok-video-3'),
     grsaiAnalysisModel: String(parsed?.grsaiAnalysisModel ?? '').trim() || 'gemini-3.1-pro',
-    chatProviderPrimary: parsed?.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub',
-    videoProviderPrimary: normalizeVideoProvider(parsed?.videoProviderPrimary, 'apifox_hub'),
-    videoProviderFallback: normalizeVideoProvider(parsed?.videoProviderFallback, 'grsai'),
+    chatProviderPrimary: normalizedChatProviderPrimary,
+    videoProviderPrimary: normalizedVideoProviderPrimary,
+    videoProviderFallback: normalizedVideoProviderPrimary,
     openaiApiKey: String(parsed?.openaiApiKey ?? '').trim() || undefined,
     openaiImageModel: String(parsed?.openaiImageModel ?? '').trim() || 'gpt-image-2',
     openaiImageQuality:
@@ -1404,15 +1448,16 @@ function normalizeCredentials(parsed: any): ModelCredentials {
         ? parsed.openaiImageQuality
         : 'high',
     replicateApiToken: String(parsed?.replicateApiToken ?? '').trim() || undefined,
-    imageProviderPrimary: normalizeImageProvider(parsed?.imageProviderPrimary, 'apifox_hub'),
+    imageProviderPrimary: normalizedImageProviderPrimary,
     grsaiImageModel: String(parsed?.grsaiImageModel ?? '').trim() || 'gpt-image-2',
     apifoxHubProfile: profile,
-    videoApifoxHubProfile: videoProfile,
-    imageApifoxHubProfile: imageProfile,
-    chatApifoxHubProfile: chatProfile,
+    videoApifoxHubProfile: persistedVideoProfile,
+    imageApifoxHubProfile: persistedImageProfile,
+    chatApifoxHubProfile: persistedChatProfile,
     ai666Hub,
     vectorEngineHub,
     xibapiHub,
+    gaoruiHub,
     apifoxHub: activeHub,
   }
 }
@@ -1540,6 +1585,74 @@ function decryptCredentials(settings: CloneSettingsShape): ModelCredentials {
     }
   }
   return normalizeCredentials(settings.plaintextCredentials ?? { allowMockWhenNoKey: true })
+}
+
+async function readLegacyCloneSettingsFileAt(filePath: string): Promise<CloneSettingsShape> {
+  return await readJsonFile<CloneSettingsShape>(filePath, {})
+}
+
+function normalizeCloneSettingsShape(input?: CloneSettingsShape | null): CloneSettingsShape {
+  const settings = input && typeof input === 'object' ? input : {}
+  return {
+    encryptedCredentials: typeof settings.encryptedCredentials === 'string' ? settings.encryptedCredentials : undefined,
+    plaintextCredentials: settings.plaintextCredentials ? normalizeCredentials(settings.plaintextCredentials) : undefined,
+    runtimeOptions: normalizeCloneRuntimeOptions(settings.runtimeOptions),
+    hermesIntegration: normalizeHermesIntegrationSettings(settings.hermesIntegration ?? DEFAULT_HERMES_INTEGRATION_SETTINGS),
+  }
+}
+
+async function ensureCloneSettingsSqliteReady() {
+  await ensureCloneSqliteReady()
+  const existing = readCloneSettingsFromSqlite()
+  if (existing?.payload) return
+
+  const legacyCandidates = [cloneSettingsPath(), legacyUserDataCloneSettingsPath()]
+    .map((item) => String(item || '').trim())
+    .filter((item, index, list) => Boolean(item) && list.indexOf(item) === index)
+
+  for (const legacyPath of legacyCandidates) {
+    if (!existsSync(legacyPath)) continue
+    const legacySettings = normalizeCloneSettingsShape(await readLegacyCloneSettingsFileAt(legacyPath))
+    writeCloneSettingsToSqlite(JSON.stringify(legacySettings), now())
+    return
+  }
+
+  const defaults = normalizeCloneSettingsShape({})
+  writeCloneSettingsToSqlite(JSON.stringify(defaults), now())
+}
+
+async function readCloneSettingsSource(): Promise<CloneSettingsShape> {
+  await ensureCloneSettingsSqliteReady()
+  const row = readCloneSettingsFromSqlite()
+  if (!row?.payload) return normalizeCloneSettingsShape({})
+  try {
+    return normalizeCloneSettingsShape(JSON.parse(String(row.payload || '{}')) as CloneSettingsShape)
+  } catch {
+    return normalizeCloneSettingsShape({})
+  }
+}
+
+async function writeCloneSettingsSource(input: CloneSettingsShape) {
+  await ensureCloneSettingsSqliteReady()
+  const normalized = normalizeCloneSettingsShape(input)
+  writeCloneSettingsToSqlite(JSON.stringify(normalized), now())
+}
+
+function readCloneSettingsSourceSync(): CloneSettingsShape {
+  try {
+    initializeCloneSqlite()
+    const row = readCloneSettingsFromSqlite()
+    if (row?.payload) {
+      return normalizeCloneSettingsShape(JSON.parse(String(row.payload || '{}')) as CloneSettingsShape)
+    }
+  } catch {
+    // Fall through to legacy compatibility read.
+  }
+  try {
+    return normalizeCloneSettingsShape(JSON.parse(readFileSync(cloneSettingsPath(), 'utf8') || '{}') as CloneSettingsShape)
+  } catch {
+    return normalizeCloneSettingsShape({})
+  }
 }
 
 function normalizeCloneRuntimeOptions(input?: Partial<CloneRuntimeOptions> | null): CloneRuntimeOptions {
@@ -3119,40 +3232,37 @@ export const cloneRepo = {
   },
 
   async getCredentials(): Promise<ModelCredentials> {
-    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const settings = await readCloneSettingsSource()
     return decryptCredentials(settings)
   },
 
   getCredentialsSync(): ModelCredentials {
-    try {
-      const raw = readFileSync(cloneSettingsPath(), 'utf8')
-      return decryptCredentials(JSON.parse(raw || '{}') as CloneSettingsShape)
-    } catch {
-      return decryptCredentials({})
-    }
+    return decryptCredentials(readCloneSettingsSourceSync())
   },
 
   async setCredentials(input: ModelCredentials): Promise<{ ok: true }> {
-    const current = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
-    await writeJsonFile(cloneSettingsPath(), {
-      ...encryptCredentials(normalizeCredentials(input)),
+    const current = await readCloneSettingsSource()
+    const normalizedCredentials = normalizeCredentials(input)
+    await writeCloneSettingsSource({
+      ...encryptCredentials(normalizedCredentials),
       runtimeOptions: normalizeCloneRuntimeOptions(current.runtimeOptions),
+      hermesIntegration: normalizeHermesIntegrationSettings(current.hermesIntegration ?? DEFAULT_HERMES_INTEGRATION_SETTINGS),
     })
     return { ok: true }
   },
 
   async getRuntimeOptions(): Promise<CloneRuntimeOptions> {
-    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const settings = await readCloneSettingsSource()
     return normalizeCloneRuntimeOptions(settings.runtimeOptions)
   },
 
   async setRuntimeOptions(input: Partial<CloneRuntimeOptions>): Promise<CloneRuntimeOptions> {
-    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const settings = await readCloneSettingsSource()
     const next = normalizeCloneRuntimeOptions({
       ...settings.runtimeOptions,
       ...input,
     })
-    await writeJsonFile(cloneSettingsPath(), {
+    await writeCloneSettingsSource({
       ...settings,
       runtimeOptions: next,
     })
@@ -3160,12 +3270,12 @@ export const cloneRepo = {
   },
 
   async getHermesIntegrationSettings(): Promise<HermesIntegrationSettings> {
-    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const settings = await readCloneSettingsSource()
     return normalizeHermesIntegrationSettings(settings.hermesIntegration ?? DEFAULT_HERMES_INTEGRATION_SETTINGS)
   },
 
   async setHermesIntegrationSettings(input: Partial<HermesIntegrationSettings>): Promise<HermesIntegrationSettings> {
-    const settings = await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    const settings = await readCloneSettingsSource()
     const current = normalizeHermesIntegrationSettings(settings.hermesIntegration ?? DEFAULT_HERMES_INTEGRATION_SETTINGS)
     const next = normalizeHermesIntegrationSettings({
       ...current,
@@ -3179,7 +3289,7 @@ export const cloneRepo = {
         ...(input.wecom ?? {}),
       },
     })
-    await writeJsonFile(cloneSettingsPath(), {
+    await writeCloneSettingsSource({
       ...settings,
       hermesIntegration: next,
     })
@@ -3189,7 +3299,7 @@ export const cloneRepo = {
 
   async ensureSeed() {
     const readyState = await ensureCloneSqliteReady()
-    await readJsonFile<CloneSettingsShape>(cloneSettingsPath(), {})
+    await ensureCloneSettingsSqliteReady()
     return readyState
   },
 }

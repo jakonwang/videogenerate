@@ -6,6 +6,7 @@ import { hermesLivePhotoService } from '../live-photo/hermes'
 import { hermesLivePhotoAdapters } from '../live-photo/hermesAdapters'
 import { hermesPlatformFormatters } from '../live-photo/hermesPlatformFormatters'
 import { hermesDeliveryService } from '../live-photo/hermesDelivery'
+import { normalizeCapabilityProfileState } from '../../../shared/platformSettings'
 
 type JsonObject = Record<string, unknown>
 
@@ -878,6 +879,16 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
                   : 600000,
             }
           : undefined
+      const normalizedProfiles = normalizeCapabilityProfileState({
+        apifoxHubProfile: body.apifoxHubProfile,
+        videoApifoxHubProfile: body.videoApifoxHubProfile,
+        imageApifoxHubProfile: body.imageApifoxHubProfile,
+        chatApifoxHubProfile: body.chatApifoxHubProfile,
+        videoProviderPrimary: body.videoProviderPrimary,
+        videoProviderFallback: body.videoProviderFallback,
+        imageProviderPrimary: body.imageProviderPrimary,
+        chatProviderPrimary: body.chatProviderPrimary,
+      })
       const result = await webPlatformService.setCloneModelCredentials(token, {
         seedanceApiKey: typeof body.seedanceApiKey === 'string' ? body.seedanceApiKey : undefined,
         seedanceHost: typeof body.seedanceHost === 'string' ? body.seedanceHost : undefined,
@@ -897,11 +908,11 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         grsaiAnalysisModel: typeof body.grsaiAnalysisModel === 'string' ? body.grsaiAnalysisModel : undefined,
         chatProviderPrimary: body.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub',
         videoProviderPrimary:
-          body.videoProviderPrimary === 'seedance' || body.videoProviderPrimary === 'grsai' || body.videoProviderPrimary === 'apifox_hub'
+          body.videoProviderPrimary === 'seedance' || body.videoProviderPrimary === 'kling' || body.videoProviderPrimary === 'grsai' || body.videoProviderPrimary === 'apifox_hub'
             ? body.videoProviderPrimary
             : undefined,
         videoProviderFallback:
-          body.videoProviderFallback === 'seedance' || body.videoProviderFallback === 'grsai' || body.videoProviderFallback === 'apifox_hub'
+          body.videoProviderFallback === 'seedance' || body.videoProviderFallback === 'kling' || body.videoProviderFallback === 'grsai' || body.videoProviderFallback === 'apifox_hub'
             ? body.videoProviderFallback
             : undefined,
         openaiApiKey: typeof body.openaiApiKey === 'string' ? body.openaiApiKey : undefined,
@@ -915,13 +926,15 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
             ? body.imageProviderPrimary
             : undefined,
         grsaiImageModel: typeof body.grsaiImageModel === 'string' ? body.grsaiImageModel : undefined,
-        apifoxHubProfile:
-          body.apifoxHubProfile === 'ai666' || body.apifoxHubProfile === 'vectorengine'
-            ? body.apifoxHubProfile
-            : undefined,
+        apifoxHubProfile: normalizedProfiles.apifoxHubProfile,
+        videoApifoxHubProfile: normalizedProfiles.videoApifoxHubProfile,
+        imageApifoxHubProfile: normalizedProfiles.imageApifoxHubProfile,
+        chatApifoxHubProfile: normalizedProfiles.chatApifoxHubProfile,
         apifoxHub: parseApifoxHubInput(body.apifoxHub),
         ai666Hub: parseApifoxHubInput(body.ai666Hub),
         vectorEngineHub: parseApifoxHubInput(body.vectorEngineHub),
+        xibapiHub: parseApifoxHubInput(body.xibapiHub),
+        gaoruiHub: parseApifoxHubInput(body.gaoruiHub),
       })
       json(res, 200, { ok: true, credentials: result })
       return
@@ -1337,3 +1350,4 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
     })
   }
 }
+import { normalizeIncomingPlatformProfile } from '../../../shared/platformSettings'
