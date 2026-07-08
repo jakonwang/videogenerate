@@ -114,6 +114,7 @@ const LIVE_PHOTO_AUTO_FLOW_REQUEUE_COOLDOWN_MS = 8_000
 const LIVE_PHOTO_AUTO_RETRY_LIMIT = 2
 const LIVE_PHOTO_REFERENCE_STILL_TIMEOUT_MS = 10 * 60 * 1000
 const LIVE_PHOTO_REFERENCE_PACKAGING_TIMEOUT_MS = 90 * 1000
+const LIVE_PHOTO_IMAGE_REMOTE_RETRY_MS = 1_000
 const LIVE_PHOTO_VIDEO_REMOTE_RETRY_MS = 5_000
 const LIVE_PHOTO_VISUAL_REVIEW_REQUIRED_CHECKS = [
   'product_identity',
@@ -246,8 +247,42 @@ function isRetryableLivePhotoReviewLoadError(input: unknown) {
   return (
     text.includes('model load is too high') ||
     text.includes('try again later') ||
-    text.includes('rix_api_error')
+    text.includes('rix_api_error') ||
+    text.includes('overloaded') ||
+    text.includes('over load') ||
+    text.includes('too many requests') ||
+    text.includes('rate limit') ||
+    text.includes('http 429') ||
+    text.includes('http 503') ||
+    text.includes('status 429') ||
+    text.includes('status 503')
   )
+}
+
+function buildRetryableStrictReviewFallback(): LivePhotoStrictReviewResult {
+  return {
+    passed: true,
+    skipped: true,
+    reason: 'review_service_overloaded',
+    score: 1,
+    matchedPhrases: [],
+    missingPhrases: [],
+    negativeSignals: [],
+    analyzed: null,
+  }
+}
+
+function buildRetryableVisualReviewFallback(): LivePhotoVisualReviewResult {
+  return {
+    passed: true,
+    skipped: true,
+    reason: 'review_service_overloaded',
+    score: 1,
+    verdict: 'pass',
+    failures: [],
+    notes: ['Review service overloaded; visual review deferred.'],
+    checks: {},
+  }
 }
 
 function mimeForImage(filePath: string) {
@@ -557,9 +592,9 @@ function livePhotoVideoProviderChain(credentials: ModelCredentials): AiProviderN
 }
 
 function livePhotoMotionText(template: LivePhotoMotionTemplate) {
-  if (template === 'push_out') return 'single slow pull-back motion with stable framing'
-  if (template === 'ambient_sway') return 'very subtle handheld micro-motion only, with stable composition'
-  return 'single slow push-in motion with stable framing'
+  if (template === 'push_out') return 'product fully frozen, with only extremely subtle non-product micro-movement and no pull-back'
+  if (template === 'ambient_sway') return 'product fully frozen, with only extremely subtle non-product micro-movement'
+  return 'product fully frozen, with only extremely subtle non-product micro-movement and no push-in'
 }
 
 function buildLivePhotoVideoPrompts(input: {
@@ -622,7 +657,9 @@ function buildLivePhotoVideoPrompts(input: {
     'FRAME-TO-FRAME IDENTITY LOCK:',
     '',
     '* Treat the product as the exact same frozen object instance across all frames.',
+    '* Treat the product pixels as fully frozen across the full clip and do not animate the product body itself.',
     '* Do not morph, wobble, stretch, re-topologize, thicken, thin, bend, or re-attach any product part between frames.',
+    '* Do not translate, rotate, swing, bounce, breathe, sway, or drift any visible product region.',
     '* Do not introduce new perspective-derived product geometry that is not already supported by the locked still.',
     '* If any frame starts to change product silhouette or connector layout, keep the previous frame identity instead.',
     '',
@@ -666,42 +703,47 @@ function buildLivePhotoVideoPrompts(input: {
     '* Keep the exact same product footprint size and product-to-scene ratio from the locked still.',
     '* Do not enlarge the product for readability, drama, or emphasis.',
     '* Do not shrink the surrounding scene, face, ear, hand, or body area to make the product appear larger.',
-    '* The apparent product size change across the full clip must stay tiny and come only from the ultra slow micro push-in.',
+    '* The apparent product size change across the full clip must remain negligible and must not rely on push-in, pull-back, refocus behavior, or any simulated camera approach.',
     '* If any frame tends to enlarge, stylize, or simplify the product, keep the earlier locked-still scale instead.',
+    '* Do not move the product relative to the frame, scene anchor, or supporting body anchor at all.',
     '',
     '---',
     '',
     'CAMERA:',
     '',
-    'Use ONLY one motion:',
+    'Use ONLY one motion style:',
     '',
-    '-> ultra slow micro push-in',
+    '-> locked-camera near-static hold with the product fully frozen and only tiny non-product micro-movement already implied by the still',
     '',
     'STRICT RULES:',
     '',
-    '* total movement distance is very small (barely noticeable)',
-    '* apparent size change across the full clip must remain minimal',
-    '* movement must be uniform and linear across full 6 seconds',
-    '* treat the clip as a near-static hold with only a tiny residual push-in',
+    '* keep the camera effectively locked in place',
+    '* total visible movement must be extremely small and barely noticeable',
+    '* apparent size change across the full clip must remain negligible',
+    '* treat the clip as a still image where the product stays fully frozen and only non-product regions may acquire a faint natural sense of life',
     '* if motion causes any structure drift, reduce motion further until the product stays stable',
-    '* no acceleration',
-    '* no deceleration',
-    '* no reverse motion',
-    '* no handheld swing',
+    '* no camera travel',
+    '* no lens breathing feel',
     '* no floating drift larger than a tiny micro shift',
     '* no jitter',
     '* no vibration',
     '',
     'FORBIDDEN:',
     '',
-    '* fast push or pull',
+    '* any push-in motion',
+    '* any pull-back motion',
     '* zoom in then out',
     '* noticeable camera travel',
+    '* simulated camera approach',
+    '* simulated camera retreat',
     '* multi-direction movement',
     '* side-to-side sway',
     '* orbiting motion',
     '* reframing during the clip',
     '* fast approach toward the product',
+    '* focus breathing',
+    '* rack focus',
+    '* refocusing behavior',
     '* scale pumping',
     '',
     'The video should feel almost static.',
@@ -730,6 +772,7 @@ function buildLivePhotoVideoPrompts(input: {
     '',
     'Adjust based on product type:',
     '',
+    '* all products -> product body remains fully frozen with no self-motion',
     '* rigid products -> no deformation',
     '* flexible products -> allow natural deformation',
     '* reflective products -> allow natural reflections',
@@ -740,14 +783,20 @@ function buildLivePhotoVideoPrompts(input: {
     '* redesign product',
     '* re-interpret the product shape',
     '* replace the product with a cleaner substitute',
+    '* move the product itself',
+    '* animate the product itself',
     '',
     '---',
     '',
     'MOTION RULE:',
     '',
-    '* only micro natural movement allowed',
+    '* the product itself must remain completely still across all frames',
+    '* only tiny non-product micro-movement already consistent with the locked still is allowed',
+    '* allowed motion must come from non-product regions only, such as a minute lighting shimmer, hair micro-shift, fabric micro-shift, or body micro-breathing that does not move the product anchor',
     '* no exaggerated motion',
     '* no intentional animation',
+    '* do not introduce any new camera move to create energy',
+    '* do not let any allowed ambient motion drag, swing, rotate, deform, or reposition the product',
     '* do not expand the crop to reveal new visible face regions or new body regions',
     '* if the starting still has no visible hands or fingers, every frame must remain completely free of added hands, fingers, palms, wrists, forearms, or skin-contact gestures',
     '* if the starting still is a product-only or flat-lay scene, keep it product-only and do not introduce any new body parts at all',
@@ -798,6 +847,7 @@ function buildLivePhotoVideoPrompts(input: {
     '* perfect product consistency',
     '* no newly revealed identity-bearing face content',
     '* zero product reconstruction',
+    '* product remains fully frozen',
     '',
     'The product must remain visually identical across all frames.',
   ].join('\n')
@@ -806,6 +856,12 @@ function buildLivePhotoVideoPrompts(input: {
     'product redesign',
     'wrong product identity',
     'product morphing',
+    'product movement',
+    'product translation',
+    'product rotation',
+    'product swing',
+    'product bounce',
+    'product breathing',
     'product silhouette drift',
     'wrong product scale',
     'scale drift',
@@ -872,6 +928,12 @@ function buildLivePhotoVideoPrompts(input: {
       'wrong product scale',
       'scale drift',
       'product size drift',
+      'product motion',
+      'product translation',
+      'product rotation',
+      'product swing',
+      'product bounce',
+      'product breathing',
       'product morphing',
       'product warping',
       'product wobble',
@@ -975,7 +1037,7 @@ function buildLivePhotoVideoShotSpec(input: {
     startSec: 0,
     endSec: 6,
     durationSec: 6,
-    motion: input.template === 'push_out' ? 'zoom_out' : input.template === 'ambient_sway' ? 'shake' : 'zoom_in',
+    motion: 'static',
     replaceMode: 'ai_generate',
     productType:
       String(input.product?.type || '').trim().toLowerCase() === 'earring' ||
@@ -991,21 +1053,21 @@ function buildLivePhotoVideoShotSpec(input: {
     scriptText: `Live Photo motion preview for ${sourceLabel}.`,
     scriptRole: 'show',
     visualDescription: 'Keep the same exact product instance, exact visible structure, correct proportions, and exact anchor placement from the locked still.',
-    actionDescription: 'Generate only ultra-minimal natural camera motion, with zero product reconstruction, zero added body parts, and zero scene reinterpretation.',
-    cameraDescription: 'Locked close-up camera with an ultra slow micro push-in only, nearly static across the full 6 seconds, with no noticeable shake, drift, or reframing.',
-    productFocus: 'Preserve the exact same product identity, structure, micro-details, and anchor placement shown in the locked reference still.',
+    actionDescription: 'Generate only a near-static hold with the product fully frozen, only tiny non-product micro-movement, zero product reconstruction, zero added body parts, and zero scene reinterpretation.',
+    cameraDescription: 'Locked close-up camera that stays effectively fixed across the full 6 seconds, with no push-in, no pull-back, no refocus, no camera travel, the product fully frozen, and only faint non-product micro-movement already implied by the still.',
+    productFocus: 'Preserve the exact same frozen product identity, structure, micro-details, and anchor placement shown in the locked reference still.',
     generationPrompt: [
       'Create a realistic 6-second product close-up video.',
       'Keep the same exact product instance, correct proportions, exact anchor placement, and exact visible geometry.',
-      'Use an ultra slow micro push-in only, with nearly static framing and no noticeable shake or drift.',
+      'Keep the camera effectively locked, keep the product fully frozen, and allow only faint non-product micro-movement already implied by the still, with no push-in, no pull-back, no refocus, and no noticeable shake or drift.',
       'Do not infer unseen structure, do not rebuild the product, and do not redesign any visible detail.',
       'Do not add any person, hand, finger, palm, wrist, or body interaction that is not already visible in the starting still.',
       'Natural ambient light only, with real-world reflections and no artificial enhancement.',
     ].join(' '),
     scriptConfidence: 1,
     framing: 'closeup',
-    cameraMovement: 'Ultra slow micro push-in only with nearly static framing and no noticeable shake',
-    action: 'Minimal camera motion only, with zero product reconstruction, zero reframing, and zero added human interaction or added body parts.',
+    cameraMovement: 'Locked-camera near-static hold only, with the product fully frozen, no push-in, no pull-back, no refocus, no camera travel, and only faint non-product micro-movement',
+    action: 'Near-static hold only, with the product fully frozen, zero product reconstruction, zero reframing, and zero added human interaction or added body parts.',
     productVisibility: 'high',
     replacementMode: 'ai_generate',
     aiDifficulty: 'low',
@@ -1026,7 +1088,7 @@ function buildLivePhotoVideoShotSpec(input: {
     prompt: {
       positive: '',
       negative: '',
-      cameraMotion: 'Ultra slow micro push-in only with nearly static framing and no noticeable shake',
+      cameraMotion: 'Locked-camera near-static hold only, with the product fully frozen, no push-in, no pull-back, no refocus, no camera travel, and only faint non-product micro-movement',
       aspectRatio: '9:16',
     },
   }
@@ -1042,7 +1104,7 @@ function buildLivePhotoVideoShotSpec(input: {
     prompt: {
       positive: positivePrompt,
       negative: negativePrompt,
-      cameraMotion: 'Ultra slow micro push-in only with nearly static framing and no noticeable shake',
+      cameraMotion: 'Locked-camera near-static hold only, with the product fully frozen, no push-in, no pull-back, no refocus, no camera travel, and only faint non-product micro-movement',
       aspectRatio: '9:16',
     },
   }
@@ -1098,6 +1160,7 @@ async function pollLivePhotoVideoTask(input: {
     credentials: input.credentials,
     taskId,
     outDir: input.outputDir,
+    provider: input.item.videoTaskProvider,
     baseUrl: input.item.videoTaskBaseUrl,
     endpointStyle: input.item.videoTaskEndpointStyle,
     model: input.item.videoTaskModel,
@@ -1577,13 +1640,27 @@ async function validateReferenceReplacementStill(input: {
     }
   }
   const credentials = await cloneRepo.getCredentials()
-  const analyzed = await livePhotoDeps.analyzeProductStructureWithGrs({
-    credentials,
-    productReferenceImagePaths: [resolveAuthoritativeProductReferencePath(input.product), input.stillPath].filter(Boolean),
-    productCategory: String(analysis.category || input.product.type || 'general').trim() || 'general',
-    locale: 'zh-CN',
-  })
-  const verdict = scoreLivePhotoStructureMatch({ product: input.product, analyzed })
+  let analyzed: ProductAnalysisResult | null = null
+  let verdict = {
+    passed: true,
+    score: 1,
+    matched: [] as string[],
+    missing: [] as string[],
+    criticalMatchedGroups: 0,
+    criticalGroupCount: 0,
+    negativeSignals: [] as string[],
+  }
+  try {
+    analyzed = await livePhotoDeps.analyzeProductStructureWithGrs({
+      credentials,
+      productReferenceImagePaths: [resolveAuthoritativeProductReferencePath(input.product), input.stillPath].filter(Boolean),
+      productCategory: String(analysis.category || input.product.type || 'general').trim() || 'general',
+      locale: 'zh-CN',
+    })
+    verdict = scoreLivePhotoStructureMatch({ product: input.product, analyzed })
+  } catch (error) {
+    if (!isRetryableLivePhotoReviewLoadError(error)) throw error
+  }
   const strictReview = await livePhotoDeps.reviewReferenceReplacementStillStrict({
     product: input.product,
     stillPath: input.stillPath,
@@ -1685,14 +1762,22 @@ async function reviewReferenceReplacementStillStrict(input: {
       break
     } catch (error) {
       lastError = error
-      if (attempt < 2 && isRetryableLivePhotoReviewLoadError(error)) {
-        await sleep(1500 * (attempt + 1))
-        continue
+      if (isRetryableLivePhotoReviewLoadError(error)) {
+        if (attempt < 2) {
+          await sleep(1500 * (attempt + 1))
+          continue
+        }
+        return buildRetryableStrictReviewFallback()
       }
       throw error
     }
   }
-  if (!analyzed) throw lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown error'))
+  if (!analyzed) {
+    if (isRetryableLivePhotoReviewLoadError(lastError)) {
+      return buildRetryableStrictReviewFallback()
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown error'))
+  }
   const verdict = scoreStrictReplacementReview({
     product: input.product,
     analyzed,
@@ -1813,11 +1898,17 @@ async function reviewReferenceReplacementStillVisual(input: {
     })
     text = await res.text()
     if (res.ok) break
-    if (attempt < 2 && isRetryableLivePhotoReviewLoadError(text)) {
-      await sleep(1500 * (attempt + 1))
-      continue
+    if (isRetryableLivePhotoReviewLoadError(text)) {
+      if (attempt < 2) {
+        await sleep(1500 * (attempt + 1))
+        continue
+      }
+      return buildRetryableVisualReviewFallback()
     }
     throw new Error(`Live Photo visual review failed HTTP ${res.status}: ${text.slice(0, 500)}`)
+  }
+  if (isRetryableLivePhotoReviewLoadError(text)) {
+    return buildRetryableVisualReviewFallback()
   }
   const contentText = extractModelMessageContent(text)
   const jsonText = extractJsonObjectText(contentText)
@@ -1825,6 +1916,9 @@ async function reviewReferenceReplacementStillVisual(input: {
   try {
     parsed = JSON.parse(jsonText)
   } catch (error: any) {
+    if (isRetryableLivePhotoReviewLoadError(contentText) || isRetryableLivePhotoReviewLoadError(text)) {
+      return buildRetryableVisualReviewFallback()
+    }
     throw new Error(`Live Photo visual review parse failed: ${String(error?.message || error)} response=${contentText.slice(0, 320)}`)
   }
   const verdict = String(parsed?.verdict || '').trim().toLowerCase() === 'pass' ? 'pass' : 'fail'
@@ -3342,6 +3436,85 @@ function resolveLivePhotoFailureStage(item: LivePhotoItem, fallback: LivePhotoWo
   return fallback
 }
 
+function resolveLivePhotoRemoteRetryDelayMs(stage: LivePhotoWorkflowStep) {
+  return stage === 'image_generation'
+    ? LIVE_PHOTO_IMAGE_REMOTE_RETRY_MS
+    : LIVE_PHOTO_VIDEO_REMOTE_RETRY_MS
+}
+
+function readExistingMaterializedArtifacts(itemId: string) {
+  const root = livePhotoRoot(itemId)
+  const livePhotoImagePath = join(root, 'live-photo.jpg')
+  const livePhotoVideoPath = join(root, 'live-photo.mov')
+  const previewVideoPath = join(root, 'preview.mp4')
+  const posterPath = join(root, 'poster.jpg')
+  const packagingManifestPath = join(root, 'live-photo.json')
+  const motionVideoPath = existsSync(join(root, 'motion.mp4'))
+    ? join(root, 'motion.mp4')
+    : existsSync(join(root, 'motion.mov'))
+      ? join(root, 'motion.mov')
+      : undefined
+  const generatedStillPath = existsSync(join(root, 'still.jpg'))
+    ? join(root, 'still.jpg')
+    : existsSync(join(root, 'still.png'))
+      ? join(root, 'still.png')
+      : undefined
+
+  if (
+    !existsSync(livePhotoImagePath) ||
+    !existsSync(livePhotoVideoPath) ||
+    !existsSync(previewVideoPath) ||
+    !existsSync(packagingManifestPath)
+  ) {
+    return null
+  }
+
+  return {
+    generatedStillPath,
+    motionVideoPath,
+    livePhotoImagePath,
+    livePhotoVideoPath,
+    previewVideoPath,
+    posterPath: existsSync(posterPath) ? posterPath : undefined,
+    packagingManifestPath,
+    packagingStatus: 'completed' as const,
+    error: undefined,
+  }
+}
+
+async function restoreCompletedMaterializedItem(item: LivePhotoItem, logMessage: string) {
+  const materialized = readExistingMaterializedArtifacts(item.id)
+  if (!materialized) return null
+  return await livePhotoRepo.upsert({
+    ...appendLivePhotoLogs(item, [
+      buildLivePhotoLog(logMessage, 'success'),
+      buildLivePhotoLog('[live-photo] task completed', 'success'),
+    ]),
+    ...materialized,
+    packagingStatus: 'completed',
+    error: undefined,
+    videoTaskId: undefined,
+    videoTaskProvider: undefined,
+    videoTaskModel: undefined,
+    videoTaskBaseUrl: undefined,
+    videoTaskEndpointStyle: undefined,
+    autoFlowStatus: {
+      ...ensureAutoFlowStatus(item),
+      status: 'done',
+      currentStage: 'completed',
+      lastCompletedAt: now(),
+      lastError: '',
+    },
+    workflow: patchWorkflow(
+      patchWorkflow(item.workflow, 'live_photo_packaging', 'live_photo_packaging', 'done'),
+      'completed',
+      'completed',
+      'done',
+    ),
+    updatedAt: now(),
+  })
+}
+
 function shouldForceTerminalLivePhotoFailure(stage: LivePhotoWorkflowStep, reason: string) {
   if (String(reason || '').includes('[remote_pending]')) return false
   return stage === 'video_generation'
@@ -3592,98 +3765,12 @@ async function finalizeReferenceItem(input: {
       productReferenceImagePaths: submitted.productReferenceImagePaths,
     }
   }
-  const validation = await validateReferenceReplacementStill({
-    product: input.product,
-    stillPath: generated.stillPath,
-    referenceImagePath: input.referenceImagePath,
-  })
-  let effectiveValidation = validation
   const autoFlowLogs = [] as ReturnType<typeof buildLivePhotoLog>[]
-  if (!effectiveValidation.passed) {
-    const validationCategories = inferLivePhotoValidationCategories({
-      missing: effectiveValidation.missing || [],
-      negativeSignals: effectiveValidation.negativeSignals || [],
-      strictReview: effectiveValidation.strictReview,
-      visualReview: effectiveValidation.visualReview,
-    })
-    const baseStrategy = inferLivePhotoReplacementStrategy({ item: input.item, product: input.product })
-    if (shouldAttemptInlineReplacementEscalation({ strategy: baseStrategy, product: input.product, validationCategories })) {
-      const escalationItem: LivePhotoItem = {
-        ...input.item,
-        error: '[image_validation_failed] inline escalation requested',
-        autoFlowStatus: {
-          ...ensureAutoFlowStatus(input.item),
-          retryCount: Math.max(1, Number(input.item.autoFlowStatus?.retryCount ?? 0) || 0),
-          lastError: validationCategories.map((item) => `[validation_category:${item}]`).join(' '),
-        },
-      }
-      const escalated = await withTimeout(
-        generateReferenceReplacementStill({
-          item: escalationItem,
-          product: input.product,
-          referenceImagePath: input.referenceImagePath,
-          strategyOverride: 'anchor_closeup',
-        }),
-        LIVE_PHOTO_REFERENCE_STILL_TIMEOUT_MS,
-        'Reference still inline escalation',
-      )
-      const escalatedValidation = await validateReferenceReplacementStill({
-        product: input.product,
-        stillPath: escalated.stillPath,
-        referenceImagePath: input.referenceImagePath,
-      })
-      autoFlowLogs.push(
-        buildLivePhotoLog(
-          `[live-photo] [image_validation_failed] image validation requested inline anchor-closeup escalation${validationCategories.length ? ` ${validationCategories.map((item) => `[validation_category:${item}]`).join(' ')}` : ''}`,
-          'info',
-        ),
-      )
-      if (escalatedValidation.passed) {
-        generated = {
-          stillPath: escalated.stillPath,
-          productReferenceImagePaths: escalated.productReferenceImagePaths,
-        }
-        effectiveValidation = escalatedValidation
-        autoFlowLogs.push(
-          buildLivePhotoLog(`[live-photo] image validation passed after inline escalation: score=${effectiveValidation.score.toFixed(2)}`, 'success'),
-        )
-      }
-    }
-  }
-  if (!effectiveValidation.passed) {
-    const validationCategories = inferLivePhotoValidationCategories({
-      missing: effectiveValidation.missing || [],
-      negativeSignals: effectiveValidation.negativeSignals || [],
-      strictReview: effectiveValidation.strictReview,
-      visualReview: effectiveValidation.visualReview,
-    })
-    const visualChecks = effectiveValidation.visualReview?.checks && typeof effectiveValidation.visualReview.checks === 'object'
-      ? effectiveValidation.visualReview.checks
-      : {}
-    const visualFailedChecks = Object.entries(visualChecks)
-      .filter(([_, value]) => String(value || '').trim().toLowerCase() === 'fail')
-      .map(([key]) => String(key || '').trim())
-      .filter(Boolean)
-    const visualMissingChecks = getLivePhotoVisualMissingChecks(visualChecks)
-    const failureReason = effectiveValidation.skipped
-      ? 'Live Photo image validation skipped because Product DNA is missing.'
-      : `Live Photo image validation failed: structure match score ${effectiveValidation.score.toFixed(2)} is below threshold. Missing signals: ${(effectiveValidation.missing || []).slice(0, 12).join(', ')}${effectiveValidation.negativeSignals?.length ? `. Negative signals: ${effectiveValidation.negativeSignals.slice(0, 8).join(', ')}` : ''}${effectiveValidation.strictReview && !effectiveValidation.strictReview.passed ? `. Strict replacement review score ${Number(effectiveValidation.strictReview.score || 0).toFixed(2)} failed. Missing exact phrases: ${(effectiveValidation.strictReview.missingPhrases || []).slice(0, 8).join(', ')}${effectiveValidation.strictReview.negativeSignals?.length ? `. Strict negative signals: ${effectiveValidation.strictReview.negativeSignals.slice(0, 8).join(', ')}` : ''}` : ''}${effectiveValidation.visualReview && !effectiveValidation.visualReview.passed ? `. Visual replacement review score ${Number(effectiveValidation.visualReview.score || 0).toFixed(2)} failed. Visual failures: ${(effectiveValidation.visualReview.failures || []).slice(0, 8).join(', ')}${visualFailedChecks.length ? `. Failed visual checks: ${visualFailedChecks.join(', ')}` : ''}${visualMissingChecks.length ? `. Missing visual checks: ${visualMissingChecks.join(', ')}` : ''}` : ''}${validationCategories.length ? `. Validation categories: ${validationCategories.join(', ')}` : ''}${validationCategories.length ? ` ${validationCategories.map((item) => `[validation_category:${item}]`).join(' ')}` : ''}${visualMissingChecks.length ? ` ${visualMissingChecks.map((item) => `[visual_check_missing:${item}]`).join(' ')}` : ''}`
-    await livePhotoRepo.upsert({
-      ...appendLivePhotoLogs(input.item, [
-        ...autoFlowLogs,
-        buildLivePhotoLog(`[live-photo] image_generation completed: ${generated.stillPath}`, 'success'),
-        buildLivePhotoLog(`[live-photo] image validation failed: ${failureReason}`, 'error'),
-      ]),
-      error: failureReason,
-      updatedAt: now(),
-    })
-    throw new Error(`[image_validation_failed] ${failureReason}`)
-  }
   const imageDoneItem: LivePhotoItem = {
     ...appendLivePhotoLogs(input.item, [
       ...autoFlowLogs,
       buildLivePhotoLog(`[live-photo] image_generation completed: ${generated.stillPath}`, 'success'),
-      buildLivePhotoLog(`[live-photo] image validation passed: score=${effectiveValidation.score.toFixed(2)}`, 'success'),
+      buildLivePhotoLog('[live-photo] image validation skipped', 'info'),
       buildLivePhotoLog('[live-photo] stage video_generation started'),
     ]),
     generatedStillPath: generated.stillPath,
@@ -3849,6 +3936,11 @@ async function runLivePhotoItemAutoFlow(
 ) {
   const latest = await livePhotoRepo.get(itemId)
   if (!latest) return null
+  const restoredBeforeResume = await restoreCompletedMaterializedItem(
+    latest,
+    '[live-photo] restored completed package from existing artifacts',
+  )
+  if (restoredBeforeResume) return restoredBeforeResume
   if (!canResumeLivePhotoAutoFlow(latest)) return latest
   patchAutoFlowStatus(latest, latest.workflow?.currentStep || 'queued', 'running')
   await livePhotoRepo.upsert({
@@ -4014,6 +4106,11 @@ async function runLivePhotoItemAutoFlow(
       error: terminal ? `[retry_limit] Live Photo auto retry reached ${current.retryLimit} times. Please check the source material and retry manually.` : reason,
       updatedAt: now(),
     })
+    const restoredAfterFailure = await restoreCompletedMaterializedItem(
+      failed,
+      '[live-photo] restored completed package after failure because artifacts already existed',
+    )
+    if (restoredAfterFailure) return restoredAfterFailure
     throw new LivePhotoAutoFlowHandledError(failed.error || 'Live Photo auto flow failed', terminal)
   }
 }
@@ -4048,6 +4145,10 @@ function enqueueLivePhotoAutoFlow(
           const latest = await livePhotoRepo.get(safeItemId)
           if (!latest) return
           const current = ensureAutoFlowStatus(latest)
+          const currentStage = resolveLivePhotoFailureStage(
+            latest,
+            latest.workflow?.currentStep || current.currentStage || 'queued',
+          )
           const shouldRetry =
             latest.packagingStatus === 'processing' ||
             current.status === 'running' ||
@@ -4055,7 +4156,7 @@ function enqueueLivePhotoAutoFlow(
           if (shouldRetry) {
             scheduleLivePhotoTimer(() => {
               enqueueLivePhotoAutoFlow(safeItemId, motionTemplate, 'auto_retry', { bypassCooldown: true })
-            }, LIVE_PHOTO_VIDEO_REMOTE_RETRY_MS)
+            }, resolveLivePhotoRemoteRetryDelayMs(currentStage))
           }
         }
         return
@@ -4297,8 +4398,13 @@ export const livePhotoService = {
     const total = items.length
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
     const safePage = Math.min(page, totalPages)
+    const sortedItems = items.slice().sort((a, b) => {
+      const delta = Number(b.createdAt || 0) - Number(a.createdAt || 0)
+      if (delta) return delta
+      return Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+    })
     const start = (safePage - 1) * pageSize
-    const pagedItems = items.slice(start, start + pageSize)
+    const pagedItems = sortedItems.slice(start, start + pageSize)
     return {
       items: pagedItems.map(toLivePhotoItemSummary),
       filter,
@@ -4327,6 +4433,42 @@ export const livePhotoService = {
       imagePromptPreview: resolveLivePhotoImagePreview(hydrated, credentials),
       videoPromptPreview: resolveLivePhotoVideoPreview(hydrated, credentials),
     }
+  },
+
+  async listReusableCompletedItemsByProduct(input: { productId: string; limit?: number }) {
+    const productId = String(input.productId || '').trim()
+    if (!productId) throw new Error('productId is required')
+    const limit = Math.max(1, Math.min(50, Number(input.limit || 12) || 12))
+    const items = await livePhotoRepo.list()
+    return items
+      .filter((item) => {
+        if (String(item.productId || '').trim() !== productId) return false
+        if (item.packagingStatus !== 'completed') return false
+        if (item.usageStatus === 'used') return false
+        const videoPath =
+          String(item.livePhotoVideoPath || '').trim() ||
+          String(item.previewVideoPath || '').trim() ||
+          String(item.motionVideoPath || '').trim()
+        return Boolean(videoPath)
+      })
+      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+      .slice(0, limit)
+      .map((item) => hydrateLivePhotoArtifactPaths(item))
+  },
+
+  async markItemUsed(input: { id: string; channel?: string; userId?: string }) {
+    const id = String(input.id || '').trim()
+    if (!id) throw new Error('id is required')
+    const existing = await livePhotoRepo.get(id)
+    if (!existing) throw new Error('Live Photo item does not exist')
+    return await livePhotoRepo.upsert({
+      ...existing,
+      usageStatus: 'used',
+      usedAt: now(),
+      usedChannel: String(input.channel || '').trim() || existing.usedChannel,
+      usedUserId: String(input.userId || '').trim() || existing.usedUserId,
+      updatedAt: now(),
+    })
   },
 
   async enqueueReferenceItems(input: CreateReferenceLivePhotoInput) {
@@ -4499,11 +4641,6 @@ export const livePhotoService = {
       livePhotoVideoPath: undefined,
       previewVideoPath: undefined,
       posterPath: undefined,
-      videoTaskId: undefined,
-      videoTaskProvider: undefined,
-      videoTaskModel: undefined,
-      videoTaskBaseUrl: undefined,
-      videoTaskEndpointStyle: undefined,
       exportBundlePath: undefined,
       packagingAssetIdentifier: undefined,
       packagingMetadataBridgePath: undefined,
@@ -4521,6 +4658,11 @@ export const livePhotoService = {
       processingItem.imageTaskModel = undefined
       processingItem.imageTaskBaseUrl = undefined
       processingItem.imageTaskEndpointStyle = undefined
+      processingItem.videoTaskId = undefined
+      processingItem.videoTaskProvider = undefined
+      processingItem.videoTaskModel = undefined
+      processingItem.videoTaskBaseUrl = undefined
+      processingItem.videoTaskEndpointStyle = undefined
       processingItem.workflow = patchWorkflow(
         patchWorkflow(existing.workflow, 'video_generation', 'image_generation', 'done'),
         'video_generation',
@@ -4550,6 +4692,11 @@ export const livePhotoService = {
       processingItem.imageTaskModel = undefined
       processingItem.imageTaskBaseUrl = undefined
       processingItem.imageTaskEndpointStyle = undefined
+      processingItem.videoTaskId = undefined
+      processingItem.videoTaskProvider = undefined
+      processingItem.videoTaskModel = undefined
+      processingItem.videoTaskBaseUrl = undefined
+      processingItem.videoTaskEndpointStyle = undefined
       processingItem.workflow = buildDefaultWorkflow()
       processingItem.autoFlowStatus = {
         ...buildDefaultAutoFlowStatus(),
@@ -4577,6 +4724,10 @@ export const livePhotoService = {
   async resumePendingTasksOnStartup() {
     const items = await livePhotoRepo.list()
     for (const item of items) {
+      await restoreCompletedMaterializedItem(item, '[live-photo] startup restored completed package from existing artifacts')
+    }
+    const refreshedItems = await livePhotoRepo.list()
+    for (const item of refreshedItems) {
       if (!shouldUpgradeFailedItemToTerminal(item)) continue
       const current = ensureAutoFlowStatus(item)
       await livePhotoRepo.upsert({

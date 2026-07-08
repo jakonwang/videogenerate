@@ -24,6 +24,17 @@ const LOCAL_PLUGIN_STATE_KEY = 'videogen-desktop-plugin-state'
 
 const fallbackPlugins: PluginSummary[] = [
   {
+    id: 'product-image-materials',
+    name: 'Product Image Materials',
+    category: 'video_processing',
+    description: 'Batch split videos into Hermes-ready product image materials with Qiniu upload and usage tracking.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/product-image-materials',
+    status: 'uninstalled',
+    enabled: false,
+  },
+  {
     id: 'live-photo-generator',
     name: 'Live Photo Generator',
     category: 'video_processing',
@@ -162,6 +173,7 @@ function pluginStatusText(plugin: PluginSummary | PluginDetail) {
 
 function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === 'live-photo-generator') return t('plugins.categories.livePhoto')
+  if (plugin.id === 'product-image-materials') return t('plugins.categories.videoProcessing')
   if (plugin.id === 'tiktok-creative-studio') return t('plugins.categories.creativeStudio')
   if (plugin.id === 'geelark-publisher') return t('plugins.categories.publishing')
   if (plugin.category === 'video_download') return t('plugins.categories.download')
@@ -169,6 +181,7 @@ function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginIconText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'product-image-materials') return 'IM'
   if (plugin.id === 'live-photo-generator') return 'LP'
   if (plugin.id === 'tiktok-creative-studio') return 'TT'
   if (plugin.id === 'geelark-publisher') return 'GK'
@@ -179,6 +192,7 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCardTone(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'product-image-materials') return 'tone-blue'
   if (plugin.id === 'live-photo-generator') return 'tone-amber'
   if (plugin.id === 'tiktok-creative-studio') return 'tone-green'
   if (plugin.id === 'geelark-publisher') return 'tone-cyan'
@@ -188,7 +202,7 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 }
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return ['geelark-publisher', 'tiktok-creative-studio', 'live-photo-generator'].includes(plugin.id)
+  return ['geelark-publisher', 'tiktok-creative-studio', 'live-photo-generator', 'product-image-materials'].includes(plugin.id)
 }
 
 function primaryActionText(plugin: PluginSummary) {
@@ -282,6 +296,10 @@ function selectPlugin(pluginId: string) {
 }
 
 function usePlugin(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'product-image-materials') {
+    void router.push('/plugins/product-image-materials')
+    return
+  }
   if (plugin.id === 'live-photo-generator') {
     void router.push('/plugins/live-photo-generator')
     return

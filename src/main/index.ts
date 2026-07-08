@@ -32,9 +32,11 @@ import { registerAppShellMediaIpc } from './ipc/registerAppShellMediaIpc'
 import { registerProductsIpc } from './ipc/registerProductsIpc'
 import { registerLivePhotoIpc } from './ipc/registerLivePhotoIpc'
 import { registerHermesLivePhotoIpc } from './ipc/registerHermesLivePhotoIpc'
+import { registerProductImageMaterialsIpc } from './ipc/registerProductImageMaterialsIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
+import { productImageMaterialsService } from './modules/product-image-materials/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
 
 let mainWindow: BrowserWindow | null = null
@@ -1430,6 +1432,7 @@ function wireIpc() {
   registerProductsIpc(ipcMain)
   registerLivePhotoIpc(ipcMain)
   registerHermesLivePhotoIpc(ipcMain)
+  registerProductImageMaterialsIpc(ipcMain)
   registerTiktokCreativeStudioIpc(ipcMain)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
@@ -1457,6 +1460,7 @@ app.whenReady().then(async () => {
         await templatesRepo.ensureSeed()
         await cloneRepo.ensureSeed()
         await webPlatformRepo.ensureSeed()
+        await productImageMaterialsService.initialize()
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
         await livePhotoService.resumePendingTasksOnStartup()

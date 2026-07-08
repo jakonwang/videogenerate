@@ -100,6 +100,7 @@ async function main() {
     const remoteVideoTaskId = 'remote-video-task-1'
     let remoteVideoSubmitCount = 0
     let remoteVideoQueryCount = 0
+    let remoteVideoDownloadCount = 0
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
@@ -133,6 +134,16 @@ async function main() {
       }
       if (url.includes('/model/prediction/') || url.includes('/v1/video/query?id=')) {
         remoteVideoQueryCount += 1
+        if (remoteVideoQueryCount >= 2) {
+          return new Response(
+            JSON.stringify({
+              id: remoteVideoTaskId,
+              status: 'succeeded',
+              outputUrl: 'https://cdn.example.com/live-photo-remote-video.mp4',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         return new Response(
           JSON.stringify({
             id: remoteVideoTaskId,
@@ -140,6 +151,13 @@ async function main() {
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
+      }
+      if (url === 'https://cdn.example.com/live-photo-remote-video.mp4') {
+        remoteVideoDownloadCount += 1
+        return new Response('mock-video-binary', {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
       }
       return await originalFetch(input, init)
     }) as typeof fetch
@@ -186,12 +204,31 @@ async function main() {
     assert.ok(queryObserved)
     assert.ok(remoteVideoQueryCount >= 1)
 
-    const summaries = await livePhotoService.listSummaries({ filter: 'running' })
+    const fastFollowupObservedAt = Date.now()
+    const secondQueryObserved = await waitForItemCondition(
+      created.id,
+      () => remoteVideoQueryCount >= 2,
+      12000,
+    )
+
+    assert.ok(secondQueryObserved)
+    assert.ok(remoteVideoQueryCount >= 2)
+
+    const completedSnapshot = await waitForItemCondition(
+      created.id,
+      (item) => item?.packagingStatus === 'completed' && Boolean(String(item?.livePhotoVideoPath || '').trim()),
+      12000,
+    )
+
+    assert.equal(completedSnapshot.packagingStatus, 'completed')
+    assert.ok(String(completedSnapshot.livePhotoVideoPath || '').trim().length > 0)
+    assert.ok(remoteVideoDownloadCount >= 1)
+    assert.ok(Date.now() - fastFollowupObservedAt < 12000)
+
+    const summaries = await livePhotoService.listSummaries({ filter: 'all' })
     const summary = summaries.items.find((item) => item.id === created.id)
     assert.ok(summary)
-    assert.equal(summary?.packagingStatus, 'processing')
-    assert.equal(summary?.autoFlowStatus?.status, 'running')
-    assert.match(String(summary?.error || ''), /\[remote_pending\]/)
+    assert.equal(summary?.packagingStatus, 'completed')
 
     globalThis.fetch = originalFetch
     console.log('live photo remote video pending smoke test passed')

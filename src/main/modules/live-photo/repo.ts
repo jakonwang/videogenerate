@@ -41,6 +41,16 @@ function defaultSettings(): LivePhotoSettings {
   }
 }
 
+function normalizeItem(item: LivePhotoItem): LivePhotoItem {
+  return {
+    ...item,
+    usageStatus: item.usageStatus === 'used' ? 'used' : 'unused',
+    usedAt: Number(item.usedAt || 0) || undefined,
+    usedChannel: String(item.usedChannel || '').trim() || undefined,
+    usedUserId: String(item.usedUserId || '').trim() || undefined,
+  }
+}
+
 let livePhotoSqliteReadyState: { migrated: boolean; source: 'sqlite' | 'json_import' | 'empty' } | null = null
 let livePhotoSqliteFallbackLogged = false
 
@@ -78,18 +88,20 @@ async function ensureLivePhotoSqliteReady() {
 export const livePhotoRepo = {
   async list(): Promise<LivePhotoItem[]> {
     await ensureLivePhotoSqliteReady()
-    return readLivePhotoItemsFromSqlite()
+    return readLivePhotoItemsFromSqlite().map(normalizeItem)
   },
 
   async get(id: string): Promise<LivePhotoItem | null> {
     await ensureLivePhotoSqliteReady()
-    return readLivePhotoItemByIdFromSqlite(String(id || '').trim())
+    const item = readLivePhotoItemByIdFromSqlite(String(id || '').trim())
+    return item ? normalizeItem(item) : null
   },
 
   async upsert(item: LivePhotoItem): Promise<LivePhotoItem> {
     await ensureLivePhotoSqliteReady()
-    upsertLivePhotoItemInSqlite(item)
-    return item
+    const normalized = normalizeItem(item)
+    upsertLivePhotoItemInSqlite(normalized)
+    return normalized
   },
 
   async remove(id: string) {

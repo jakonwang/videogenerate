@@ -81,13 +81,13 @@ async function main() {
         scriptRole: 'show',
         visualDescription: 'Locked still only.',
         actionDescription: 'Almost static motion only.',
-        cameraDescription: 'Ultra slow micro push-in only.',
+        cameraDescription: 'Extremely subtle near-static natural micro-movement only.',
         productFocus: 'Keep exact product identity.',
         generationPrompt:
-          'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion:\n-> ultra slow micro push-in\nThe video should feel almost static.',
+          'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion style:\n-> extremely subtle near-static natural micro-movement\nThe video should feel almost static.',
         scriptConfidence: 1,
         framing: 'closeup',
-        cameraMovement: 'Ultra slow micro push-in only with nearly static framing and no noticeable shake',
+        cameraMovement: 'Extremely subtle near-static natural micro-movement only, with no push-in, no pull-back, no refocus, and no noticeable shake',
         action: 'Minimal camera motion only.',
         productVisibility: 'high',
         replacementMode: 'ai_generate',
@@ -107,13 +107,13 @@ async function main() {
         consistencyMode: 'strict',
         promptCompilerVersion: 'live-photo-v1',
         compiledPrompt:
-          'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion:\n-> ultra slow micro push-in\nThe video should feel almost static.',
+          'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion style:\n-> extremely subtle near-static natural micro-movement\nThe video should feel almost static.',
         compiledNegativePrompt: 'product redesign, strong shake',
         prompt: {
           positive:
-            'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion:\n-> ultra slow micro push-in\nThe video should feel almost static.',
+            'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion style:\n-> extremely subtle near-static natural micro-movement\nThe video should feel almost static.',
           negative: 'product redesign, strong shake',
-          cameraMotion: 'Ultra slow micro push-in only with nearly static framing and no noticeable shake',
+          cameraMotion: 'Extremely subtle near-static natural micro-movement only, with no push-in, no pull-back, no refocus, and no noticeable shake',
           aspectRatio: '9:16',
         },
       } as any,
@@ -161,7 +161,7 @@ async function main() {
       } as any,
       chain: ['apifox_hub'],
       compiledPrompt:
-        'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion:\n-> ultra slow micro push-in\nThe video should feel almost static.',
+        'PROVIDER INPUT ROLE LOCK:\nFRAME-TO-FRAME IDENTITY LOCK:\nUse ONLY one motion style:\n-> extremely subtle near-static natural micro-movement\nThe video should feel almost static.',
         compiledNegativePrompt: 'product redesign, strong shake',
       })
     } catch (error) {
@@ -179,7 +179,7 @@ async function main() {
     assert.equal(capturedCreateBody.images.length, 1)
     assert.ok(String(capturedCreateBody.images[0] || '').includes('cdn.example.com'))
     assert.match(String(capturedCreateBody?.prompt || ''), /FRAME-TO-FRAME IDENTITY LOCK:/i)
-    assert.match(String(capturedCreateBody?.prompt || ''), /ultra slow micro push-in/i)
+    assert.match(String(capturedCreateBody?.prompt || ''), /extremely subtle near-static natural micro-movement/i)
     assert.match(String(capturedCreateBody?.negative_prompt || ''), /product redesign/i)
 
     const debugLog = logs.find((line) => line.includes('[clone-debug] final-shot-video-prompts'))

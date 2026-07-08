@@ -1,6 +1,6 @@
 ---
 name: feishu-live-photo
-description: "Handle Feishu Live Photo customer flow by forwarding image and text events to a local VideoGenerate desktop app, returning numbered product options, starting generation from numeric replies, polling session status, and sending the final video back to the same Feishu user."
+description: "Handle Feishu Live Photo and product material library selection flow. Trigger on phrases like 素材库, 选图, 商品选图, 未使用live photo, live photo, or Feishu Live Photo requests. Forward image and text events to a local VideoGenerate desktop app, return numbered product or material options, continue generation from the user's selection, and send the final video back to the same Feishu user."
 version: 1.1.0
 author: Hermes Agent
 license: MIT
@@ -24,6 +24,44 @@ Use this skill when Hermes needs to run the Feishu customer support flow for the
 - User replies with a number like `1`, `2`, or `3` to choose a product
 - Hermes needs to send the final generated video back to the same Feishu user
 - User says phrases like "use feishu live photo", "run live photo flow", "process this Feishu image as a live photo order", or "start the Feishu product selection flow"
+- User says Chinese trigger phrases such as `素材库`, `选图`, `商品选图`, `商品素材库`, `未使用live photo`, `未使用视频`, or `发送成品`
+
+## Chinese Trigger Phrases
+
+Treat these messages as direct requests to use this skill instead of handling them as generic chat:
+
+- `素材库`
+- `选图`
+- `商品选图`
+- `商品素材库`
+- `图片素材库`
+- `未使用live photo`
+- `未使用视频`
+- `发送成品`
+- `发送视频`
+- `live photo`
+
+## Immediate Mode Switching Rules
+
+When the inbound customer message is only a trigger phrase such as `素材库`, `选图`, `商品选图`, `商品素材库`, `图片素材库`, `未使用live photo`, `未使用视频`, `发送成品`, or `发送视频`, do not answer with a tutorial, product explanation, or general guidance.
+
+Required behavior:
+
+- Treat `素材库`, `选图`, `商品选图`, `商品素材库`, and `图片素材库` as an immediate request to enter product-material selection mode.
+- Treat `未使用live photo`, `未使用视频`, `发送成品`, and `发送视频` as an immediate request to enter unused-live-photo delivery mode.
+- Do not explain the general Feishu Live Photo workflow when the user only sent one of these trigger phrases.
+- Do not respond with documentation, examples, numbered usage instructions, or developer integration notes unless the user explicitly asks for教程, 帮助, 用法, 配置, 接入, or 开发说明.
+- For material mode, immediately start the material-selection flow and return the product-number list for the user to choose from.
+- For delivery mode, immediately start the unused-live-photo delivery flow and return the product-number list for the user to choose from.
+
+Customer-facing output policy for these direct trigger phrases:
+
+- `素材库` or equivalent:
+  reply with `请选择商品编号，我会返回对应素材图供你选择。`
+- `未使用live photo` or equivalent:
+  reply with `请选择商品编号，我会返回可发送的未使用 Live Photo 视频。`
+
+These direct trigger phrases are action requests, not help requests.
 
 ## When NOT to Use
 
@@ -82,6 +120,29 @@ Shorter trigger prompt:
 ```text
 Use feishu-live-photo to handle this Feishu Live Photo flow.
 ```
+
+## Customer-Facing Reply Policy
+
+When this skill is used in a real customer chat, do not expose internal workflow details unless the user explicitly asks for them.
+
+Required behavior:
+
+- Keep customer-facing replies short and action-oriented.
+- Reply in Chinese when the customer is using Chinese.
+- Do not explain internal implementation details such as `sessionId`, explicit endpoint names, webhook flow, synthetic events, local cache paths, polling, watchers, or script commands.
+- Do not send long "usage tutorial" style explanations by default.
+- Do not describe the full multi-step backend workflow unless the user explicitly asks how the system works.
+- Only tell the customer the next action they need to take right now.
+
+Preferred customer-facing patterns:
+
+- If no reference image is available yet: `请先发送参考图片。`
+- After a new image session is created: `请选择商品编号：` followed by the numbered options.
+- In material-selection mode: `请选择商品编号，我会返回对应素材图供你选择。`
+- After product options are shown and the user needs to choose a material: `请选择图片编号。`
+- If the customer asks how to use the flow, give a short version only, for example: `先发参考图，我会给你可选编号，你回复编号后我开始生成。`
+
+Internal rules in this skill are for Hermes decision-making only. They are not default customer-facing copy.
 
 ## Script Commands
 

@@ -1,10 +1,11 @@
 import { basename } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { cloneRepo } from '../clone/repo'
+import { livePhotoService } from './service'
 
 type HermesReplyAction =
   | { type: 'text'; text: string }
-  | { type: 'video'; text: string; videoPath: string; videoUrl?: string }
+  | { type: 'video'; text: string; videoPath: string; videoUrl?: string; livePhotoItemId?: string; channel?: string; userId?: string }
 
 type FeishuDeliveryConfig = {
   appId?: string
@@ -206,6 +207,13 @@ export const hermesDeliveryService = {
             },
           }),
         )
+        if (String(action.livePhotoItemId || '').trim()) {
+          await livePhotoService.markItemUsed({
+            id: String(action.livePhotoItemId || '').trim(),
+            channel: String(action.channel || '').trim() || 'feishu',
+            userId: String(action.userId || '').trim() || receiveId,
+          })
+        }
       }
     }
     return results
@@ -246,6 +254,13 @@ export const hermesDeliveryService = {
             },
           }),
         )
+        if (String(action.livePhotoItemId || '').trim()) {
+          await livePhotoService.markItemUsed({
+            id: String(action.livePhotoItemId || '').trim(),
+            channel: String(action.channel || '').trim() || 'wecom',
+            userId: String(action.userId || '').trim() || toUser,
+          })
+        }
       }
     }
     return results

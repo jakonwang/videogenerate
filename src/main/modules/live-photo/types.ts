@@ -90,6 +90,10 @@ export type LivePhotoAutoFlowStatus = {
 
 export type LivePhotoItem = {
   id: string
+  usageStatus?: 'unused' | 'used'
+  usedAt?: number
+  usedChannel?: string
+  usedUserId?: string
   sourceType: LivePhotoSourceType
   sourceProjectId?: string
   sourceProjectTitle?: string

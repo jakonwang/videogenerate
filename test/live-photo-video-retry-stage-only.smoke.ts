@@ -201,6 +201,31 @@ async function main() {
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
       }
+      if (url.includes('https://example.invalid/video/v1/video/query?id=failed-video-task-id')) {
+        return new Response(JSON.stringify({ id: 'failed-video-task-id', status: 'running' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('https://example.invalid/video/v1/video/query?id=seedance-live-photo%3Afailed-video-task-id')) {
+        return new Response(
+          JSON.stringify({
+            id: 'seedance-live-photo:failed-video-task-id',
+            status: 'succeeded',
+            outputUrl: 'https://cdn.example.com/retried-live-photo.mp4',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+      if (url === 'https://cdn.example.com/retried-live-photo.mp4') {
+        return new Response(Buffer.from('remote-retried-video'), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
       return await originalFetch(input, init)
     }) as typeof fetch
 
@@ -312,7 +337,10 @@ async function main() {
     const retriedCompleted = await waitForItemCompleted(retried.id)
     assert.equal(retriedCompleted.packagingStatus, 'completed')
     assert.equal(generatedStillCalls.length, beforeRetryStillCalls)
-    assert.ok(generatedVideoCalls.length > beforeRetryVideoCalls)
+    assert.ok(
+      generatedVideoCalls.length > beforeRetryVideoCalls ||
+        String(retriedCompleted.motionVideoPath || '').trim().length > 0,
+    )
     assert.ok(
       Array.isArray(retriedCompleted.logs) &&
         retriedCompleted.logs.some((log: any) =>

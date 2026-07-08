@@ -2,6 +2,32 @@ import type { PluginDefinition, PluginDetail, PluginRecord, PluginSummary } from
 
 export const pluginDefinitions: PluginDefinition[] = [
   {
+    id: 'product-image-materials',
+    name: 'Product Image Materials',
+    category: 'video_processing',
+    description: 'Batch split uploaded videos into commercial material frames, upload them to Qiniu, and feed Hermes product-to-image selection flows.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/product-image-materials',
+    usageHint: 'Choose a fixed jewelry category, upload source videos, and maintain a reusable image-material library for Hermes Live Photo selection.',
+    configSchema: [
+      {
+        key: 'segmentTimeSec',
+        label: 'Segment Time (sec)',
+        type: 'number',
+        placeholder: '3',
+        description: 'Default segment duration for frame extraction.',
+      },
+      {
+        key: 'hermesCandidateLimit',
+        label: 'Hermes Candidate Limit',
+        type: 'number',
+        placeholder: '8',
+        description: 'Maximum number of candidate images returned to Hermes per product selection.',
+      },
+    ],
+  },
+  {
     id: 'live-photo-generator',
     name: 'Live Photo Generator',
     category: 'video_processing',

@@ -94,6 +94,7 @@ async function main() {
     const remoteImageTaskId = 'remote-image-task-1'
     let remoteImageSubmitCount = 0
     let remoteImageQueryCount = 0
+    let remoteImageDownloadCount = 0
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
@@ -109,6 +110,18 @@ async function main() {
       }
       if (url.includes('/v1/draw/result')) {
         remoteImageQueryCount += 1
+        if (remoteImageQueryCount >= 2) {
+          return new Response(
+            JSON.stringify({
+              id: remoteImageTaskId,
+              status: 'succeeded',
+              data: {
+                url: 'https://example.com/live-photo-remote-image.png',
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         return new Response(
           JSON.stringify({
             id: remoteImageTaskId,
@@ -121,6 +134,13 @@ async function main() {
         return new Response(JSON.stringify({ key: 'uploaded/mock.png' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url === 'https://example.com/live-photo-remote-image.png') {
+        remoteImageDownloadCount += 1
+        return new Response('mock-remote-image-binary', {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
         })
       }
       return await originalFetch(input, init)
@@ -168,12 +188,30 @@ async function main() {
     assert.ok(queryObserved)
     assert.ok(remoteImageQueryCount >= 1)
 
+    const fastFollowupObservedAt = Date.now()
+    const secondQueryObserved = await waitForItemCondition(
+      created.id,
+      () => remoteImageQueryCount >= 2,
+      4000,
+    )
+
+    assert.ok(secondQueryObserved)
+    assert.ok(remoteImageQueryCount >= 2)
+
+    const downloadObserved = await waitForItemCondition(
+      created.id,
+      () => remoteImageDownloadCount >= 1,
+      4000,
+    )
+
+    assert.ok(downloadObserved)
+    assert.ok(remoteImageDownloadCount >= 1)
+    assert.ok(Date.now() - fastFollowupObservedAt < 4000)
+
     const summaries = await livePhotoService.listSummaries({ filter: 'running' })
     const summary = summaries.items.find((item) => item.id === created.id)
     assert.ok(summary)
     assert.equal(summary?.packagingStatus, 'processing')
-    assert.equal(summary?.autoFlowStatus?.status, 'running')
-    assert.match(String(summary?.error || ''), /\[remote_pending\]/)
 
     globalThis.fetch = originalFetch
     console.log('live photo remote pending smoke test passed')

@@ -616,6 +616,36 @@ const api = {
     ensureSegmentBucketsFromTemplates: () =>
       ipcRenderer.invoke('products:ensureSegmentBucketsFromTemplates') as Promise<{ ok: true; patched: number }>,
   },
+  productImageMaterials: {
+    listCategories: () => ipcRenderer.invoke('plugin:productImageMaterials:listCategories'),
+    createBatch: (payload: {
+      userId: string
+      category: 'necklace' | 'ring' | 'earring' | 'bracelet'
+      sourceVideoPaths: string[]
+    }) => ipcRenderer.invoke('plugin:productImageMaterials:createBatch', payload),
+    listBatches: (payload: { userId: string }) => ipcRenderer.invoke('plugin:productImageMaterials:listBatches', payload),
+    retryBatch: (payload: { userId: string; batchId: string }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:retryBatch', payload),
+    listMaterials: (payload: {
+      userId: string
+      filters?: {
+        category?: 'necklace' | 'ring' | 'earring' | 'bracelet' | 'all'
+        usageStatus?: 'unused' | 'used' | 'all'
+        boundProductId?: string
+      }
+    }) => ipcRenderer.invoke('plugin:productImageMaterials:listMaterials', payload),
+    updateUsageStatus: (payload: { userId: string; materialId: string; usageStatus: 'unused' | 'used' }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:updateUsageStatus', payload),
+    bindProduct: (payload: { userId: string; materialId: string; productId?: string }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:bindProduct', payload),
+    deleteMaterial: (payload: { userId: string; materialId: string }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:deleteMaterial', payload),
+    deleteMaterials: (payload: { userId: string; materialIds: string[] }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:deleteMaterials', payload),
+    exportMaterials: (payload: { userId: string; materialIds: string[]; outputDir: string }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:exportMaterials', payload),
+    listProducts: () => ipcRenderer.invoke('plugin:productImageMaterials:listProducts'),
+  },
   tiktokListing: {
     list: () => ipcRenderer.invoke('plugin:tiktokListing:list'),
     getExportCategoryConfigs: () => ipcRenderer.invoke('plugin:tiktokListing:getExportCategoryConfigs'),
@@ -679,13 +709,22 @@ const api = {
   },
   hermes: {
     livePhoto: {
-      startReferenceSession: (payload: { channel: string; userId: string; referenceImagePaths: string[] }) =>
+      startReferenceSession: (payload: {
+        channel: string
+        userId: string
+        referenceImagePaths?: string[]
+        selectionMode?: 'product' | 'material' | 'delivery'
+      }) =>
         ipcRenderer.invoke('hermes:livePhoto:startReferenceSession', payload),
       getLatestSession: (payload: { channel: string; userId: string }) =>
         ipcRenderer.invoke('hermes:livePhoto:getLatestSession', payload),
       listProductOptions: () => ipcRenderer.invoke('hermes:livePhoto:listProductOptions'),
       selectProduct: (payload: { sessionId: string; productId: string }) =>
         ipcRenderer.invoke('hermes:livePhoto:selectProduct', payload),
+      selectMaterial: (payload: { sessionId: string; materialId: string }) =>
+        ipcRenderer.invoke('hermes:livePhoto:selectMaterial', payload),
+      selectDeliveryCount: (payload: { sessionId: string; count: number }) =>
+        ipcRenderer.invoke('hermes:livePhoto:selectDeliveryCount', payload),
       getSessionStatus: (sessionId: string) => ipcRenderer.invoke('hermes:livePhoto:getSessionStatus', sessionId),
     },
   },

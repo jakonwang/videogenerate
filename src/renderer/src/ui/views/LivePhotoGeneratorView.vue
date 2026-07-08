@@ -46,6 +46,16 @@ type Product = {
   images?: ProductImageAsset[]
 }
 
+type ProductImageMaterialOption = {
+  id: string
+  category: 'necklace' | 'ring' | 'earring' | 'bracelet'
+  localImagePath: string
+  qiniuUrl: string
+  usageStatus: 'unused' | 'used'
+  boundProductId?: string
+  createdAt: number
+}
+
 type CloneProjectSummary = {
   id: string
   title: string
@@ -159,6 +169,14 @@ const uiText = {
   referenceUploadTitle: '\u70b9\u51fb\u4e0a\u4f20\u6216\u62d6\u62fd\u56fe\u7247\u5230\u6b64\u5904',
   referenceUploadDesc:
     '\u652f\u6301 JPG\u3001PNG\u3001WEBP\uff0c\u5efa\u8bae 2000px \u4ee5\u4e0a\uff0c\u53ef\u8fde\u7eed\u8ffd\u52a0\u591a\u5f20\u53c2\u8003\u56fe\u3002',
+  materialLibraryOption: '\u6216\u4ece\u5546\u54c1\u56fe\u7247\u7d20\u6750\u5e93\u6279\u91cf\u9009\u62e9\u672a\u7ed1\u5b9a\u5546\u54c1\u7684\u56fe\u7247',
+  materialLibrarySelect: '\u4ece\u7d20\u6750\u5e93\u9009\u56fe',
+  materialLibraryCollapse: '\u6536\u8d77\u7d20\u6750\u9009\u56fe',
+  materialLibraryEmpty: '\u5f53\u524d\u6ca1\u6709\u53ef\u7528\u7684\u672a\u7ed1\u5b9a\u5546\u54c1\u7d20\u6750\u56fe\u7247\u3002',
+  materialLibrarySelected: '\u5df2\u9009',
+  materialLibraryAddSelected: '\u52a0\u5165\u53c2\u8003\u56fe',
+  materialLibrarySelectAll: '\u5168\u9009',
+  materialLibraryClear: '\u6e05\u7a7a',
   referenceQueuedSuffix:
     '\u5f20\u56fe\u7247\u5f85\u521b\u5efa\u4efb\u52a1\uff0c\u7ee7\u7eed\u70b9\u51fb\u53ef\u8ffd\u52a0\u66f4\u591a\u53c2\u8003\u56fe\u3002',
   pendingTasks: '\u5f85\u521b\u5efa\u4efb\u52a1',
@@ -236,11 +254,16 @@ const libraryPageSize = ref(24)
 const libraryTotal = ref(0)
 const libraryTotalPages = ref(1)
 const products = ref<Product[]>([])
+const productImageMaterials = ref<ProductImageMaterialOption[]>([])
 const cloneProjects = ref<CloneProjectSummary[]>([])
 const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused'>('all')
 const selectedProductId = ref('')
 const referenceImagePaths = ref<string[]>([])
 const referenceMissingPaths = ref<string[]>([])
+const materialPickerOpen = ref(false)
+const selectedMaterialImageIds = ref<string[]>([])
+const materialPickerPage = ref(1)
+const materialPickerPageSize = ref(12)
 const selectedCloneProjectId = ref('')
 const cloneProjectDetail = ref<CloneProjectDetail | null>(null)
 const selectedShotIds = ref<string[]>([])
@@ -296,6 +319,18 @@ const referenceTaskRows = computed(() =>
 const referenceCreatedItems = computed(() =>
   items.value.filter((item) => item.sourceType === 'reference_replace').slice(0, 8),
 )
+const unboundMaterialOptions = computed(() =>
+  productImageMaterials.value.filter((item) => !String(item.boundProductId || '').trim() && String(item.localImagePath || '').trim()),
+)
+const materialPickerTotalPages = computed(() => Math.max(1, Math.ceil(unboundMaterialOptions.value.length / materialPickerPageSize.value)))
+const pagedMaterialOptions = computed(() => {
+  const start = (materialPickerPage.value - 1) * materialPickerPageSize.value
+  return unboundMaterialOptions.value.slice(start, start + materialPickerPageSize.value)
+})
+const selectedPagedMaterialCount = computed(() => pagedMaterialOptions.value.filter((item) => selectedMaterialImageIds.value.includes(item.id)).length)
+const selectedMaterialOptions = computed(() =>
+  unboundMaterialOptions.value.filter((item) => selectedMaterialImageIds.value.includes(item.id)),
+)
 
 const cloneShotRows = computed(() => {
   const project = cloneProjectDetail.value
@@ -346,7 +381,9 @@ const failedLibraryItems = computed(() =>
 )
 const pausedLibraryItems = computed(() => items.value.filter((item) => Boolean(item.autoFlowStatus?.paused)))
 const retryableFailedLibraryItems = computed(() =>
-  failedLibraryItems.value.filter((item) => item.autoFlowStatus?.status === 'failed_retryable'),
+  failedLibraryItems.value.filter(
+    (item) => item.autoFlowStatus?.status === 'failed_retryable' || item.autoFlowStatus?.status === 'failed_terminal',
+  ),
 )
 
 let libraryAutoRefreshTimer: ReturnType<typeof setInterval> | null = null
@@ -672,14 +709,14 @@ function closeTaskDetail() {
 }
 
 function referenceMotionTemplateLabel(value: LivePhotoSettings['referenceMotionTemplate']) {
-  if (value === 'push_out') return '拉远'
+  if (value === 'push_out') return '轻微移动'
   if (value === 'ambient_sway') return '轻微摆动'
-  return '推进'
+  return '轻微移动'
 }
 
 function cloneMotionTemplateLabel(value: LivePhotoSettings['cloneMotionTemplate']) {
-  if (value === 'push_in') return '推进'
-  if (value === 'push_out') return '拉远'
+  if (value === 'push_in') return '轻微移动'
+  if (value === 'push_out') return '轻微移动'
   return '轻微摆动'
 }
 
@@ -832,6 +869,20 @@ async function loadAll() {
     } catch {
       // Keep previous project summaries when the companion query is slow.
     }
+    try {
+      const nextMaterials = await loadWithTimeout(
+        window.api.productImageMaterials.listMaterials({
+          userId: 'desktop-local',
+          filters: { category: 'all', usageStatus: 'all' },
+        }) as Promise<ProductImageMaterialOption[]>,
+        4000,
+      )
+      productImageMaterials.value = Array.isArray(nextMaterials) ? nextMaterials : []
+      const validMaterialIds = new Set(productImageMaterials.value.map((item) => item.id))
+      selectedMaterialImageIds.value = selectedMaterialImageIds.value.filter((item) => validMaterialIds.has(item))
+    } catch {
+      // Keep previous material options when the companion query is slow.
+    }
     if (!selectedProductId.value && products.value[0]) selectedProductId.value = products.value[0].id
     if (!selectedCloneProjectId.value && cloneProjects.value[0]) selectedCloneProjectId.value = cloneProjects.value[0].id
   } finally {
@@ -856,6 +907,43 @@ async function pickReferenceImage() {
   const { existingPaths, missingPaths } = await splitExistingReferencePaths(mergedPaths)
   referenceImagePaths.value = mergedPaths
   referenceMissingPaths.value = missingPaths
+  if (!existingPaths.length && mergedPaths.length) {
+    notice.value = ''
+  } else if (missingPaths.length) {
+    notice.value = `已跳过 ${missingPaths.length} 张不存在的参考图。`
+  }
+}
+
+function toggleMaterialPicker() {
+  materialPickerOpen.value = !materialPickerOpen.value
+  if (materialPickerOpen.value) materialPickerPage.value = 1
+}
+
+function toggleMaterialImageSelection(materialId: string) {
+  const next = new Set(selectedMaterialImageIds.value)
+  if (next.has(materialId)) next.delete(materialId)
+  else next.add(materialId)
+  selectedMaterialImageIds.value = Array.from(next)
+}
+
+function selectAllMaterialImages() {
+  selectedMaterialImageIds.value = pagedMaterialOptions.value.map((item) => item.id)
+}
+
+function clearMaterialImageSelection() {
+  const pagedIds = new Set(pagedMaterialOptions.value.map((item) => item.id))
+  selectedMaterialImageIds.value = selectedMaterialImageIds.value.filter((item) => !pagedIds.has(item))
+}
+
+async function appendMaterialImagesAsReferences() {
+  const selectedPaths = selectedMaterialOptions.value.map((item) => String(item.localImagePath || '').trim()).filter(Boolean)
+  if (!selectedPaths.length) return
+  const mergedPaths = dedupePaths([...referenceImagePaths.value, ...selectedPaths])
+  const { existingPaths, missingPaths } = await splitExistingReferencePaths(mergedPaths)
+  referenceImagePaths.value = mergedPaths
+  referenceMissingPaths.value = missingPaths
+  selectedMaterialImageIds.value = []
+  materialPickerOpen.value = false
   if (!existingPaths.length && mergedPaths.length) {
     notice.value = ''
   } else if (missingPaths.length) {
@@ -1204,6 +1292,12 @@ watch(
   },
   { immediate: true },
 )
+
+watch([unboundMaterialOptions, materialPickerPageSize], () => {
+  if (materialPickerPage.value > materialPickerTotalPages.value) {
+    materialPickerPage.value = materialPickerTotalPages.value
+  }
+})
 </script>
 
 <template>
@@ -1278,6 +1372,67 @@ watch(
             </button>
             <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
           </label>
+
+          <div v-if="unboundMaterialOptions.length" class="field">
+            <span>{{ uiText.materialLibraryOption }}</span>
+            <div class="reference-material-bar">
+              <button class="ghost-button small" type="button" @click="toggleMaterialPicker">
+                <LayoutGrid class="h-4 w-4" />
+                {{ materialPickerOpen ? uiText.materialLibraryCollapse : uiText.materialLibrarySelect }}
+              </button>
+              <small>{{ unboundMaterialOptions.length }} {{ uiText.itemUnit }}</small>
+            </div>
+
+            <div v-if="materialPickerOpen" class="reference-material-picker">
+              <div class="reference-material-picker__hero">
+                <div class="reference-material-picker__hero-copy">
+                  <strong>{{ uiText.materialLibrarySelect }}</strong>
+                  <small>共 {{ unboundMaterialOptions.length }} 张，当前页已选 {{ selectedPagedMaterialCount }} 张</small>
+                </div>
+                <button class="primary-button small" type="button" :disabled="!selectedMaterialImageIds.length" @click="appendMaterialImagesAsReferences">
+                  <ImagePlus class="h-4 w-4" />
+                  {{ uiText.materialLibraryAddSelected }} ({{ selectedMaterialImageIds.length }})
+                </button>
+              </div>
+
+              <div class="reference-material-picker__toolbar">
+                <div class="reference-material-picker__actions">
+                  <button class="ghost-button small" type="button" @click="selectAllMaterialImages">{{ uiText.materialLibrarySelectAll }}</button>
+                  <button class="ghost-button small" type="button" @click="clearMaterialImageSelection">{{ uiText.materialLibraryClear }}</button>
+                </div>
+                <div class="reference-material-picker__pager">
+                  <button class="ghost-button small" type="button" :disabled="materialPickerPage <= 1" @click="materialPickerPage -= 1">上一页</button>
+                  <span>{{ materialPickerPage }} / {{ materialPickerTotalPages }}</span>
+                  <button class="ghost-button small" type="button" :disabled="materialPickerPage >= materialPickerTotalPages" @click="materialPickerPage += 1">下一页</button>
+                  <select v-model.number="materialPickerPageSize" class="field-select-mini">
+                    <option :value="8">8 / 页</option>
+                    <option :value="12">12 / 页</option>
+                    <option :value="16">16 / 页</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="reference-material-grid">
+                <label
+                  v-for="material in pagedMaterialOptions"
+                  :key="material.id"
+                  class="reference-material-card"
+                  :class="{ active: selectedMaterialImageIds.includes(material.id) }"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="selectedMaterialImageIds.includes(material.id)"
+                    @change="toggleMaterialImageSelection(material.id)"
+                  />
+                  <img :src="material.qiniuUrl" alt="material option" />
+                  <div class="reference-material-card__copy">
+                    <strong>{{ fileNameOf(material.localImagePath) }}</strong>
+                    <small>{{ material.usageStatus === 'used' ? '已使用' : '未使用' }}</small>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
 
           <div v-if="referenceTaskRows.length" class="field">
             <span>{{ uiText.pendingTasks }}</span>
@@ -2183,6 +2338,26 @@ watch(
 .upload-copy strong { font-size: 15px; line-height: 1.35; }
 .upload-copy small { font-size: 12px; line-height: 1.6; color: rgba(197, 205, 225, 0.76); word-break: break-all; }
 .upload-preview { width: 100%; max-height: 132px; object-fit: contain; border-radius: 10px; }
+.reference-material-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.reference-material-bar small { color: #9fb1d8; font-size: 11px; }
+.reference-material-picker { display: grid; gap: 12px; padding: 12px; border: 1px solid rgba(111, 123, 170, 0.18); border-radius: 16px; background: linear-gradient(180deg, rgba(20, 26, 43, 0.96), rgba(13, 18, 31, 0.96)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+.reference-material-picker__hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 2px 0; }
+.reference-material-picker__hero-copy { display: grid; gap: 4px; }
+.reference-material-picker__hero-copy strong { color: #f3f6ff; font-size: 14px; }
+.reference-material-picker__hero-copy small { color: #9fb1d8; font-size: 11px; }
+.reference-material-picker__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0 2px; border-top: 1px solid rgba(111, 123, 170, 0.14); }
+.reference-material-picker__actions { display: inline-flex; align-items: center; gap: 8px; }
+.reference-material-picker__pager { display: inline-flex; align-items: center; gap: 8px; color: #9fb1d8; font-size: 11px; }
+.reference-material-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-height: 420px; overflow: auto; padding-right: 2px; }
+.reference-material-card { display: grid; gap: 8px; padding: 8px; border-radius: 14px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(14, 19, 32, 0.92); cursor: pointer; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+.reference-material-card.active { border-color: rgba(124, 92, 255, 0.72); box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.38); }
+.reference-material-card:hover { transform: translateY(-1px); border-color: rgba(148, 160, 255, 0.34); }
+.reference-material-card input { margin: 0; }
+.reference-material-card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
+.reference-material-card__copy { display: grid; gap: 4px; min-width: 0; }
+.reference-material-card__copy strong { color: #eef5ff; font-size: 12px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reference-material-card__copy small { color: #9fb1d8; font-size: 10px; }
+.field-select-mini { min-height: 30px; padding: 0 10px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 10px; background: rgba(19, 24, 38, 0.92); color: #fff; font-size: 11px; }
 .product-picker { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 12px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
 .product-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; }
 .project-picker { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
@@ -2912,6 +3087,17 @@ watch(
   .live-result-grid {
     grid-template-columns: 1fr;
   }
+  .reference-material-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .reference-material-picker__hero,
+  .reference-material-picker__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .reference-material-picker__pager {
+    justify-content: space-between;
+  }
 }
 @media (max-width: 720px) {
   .live-console-row {
@@ -2934,6 +3120,13 @@ watch(
   .live-console-row__detail-card { padding: 12px; }
   .live-detail-dialog__hero-grid {
     grid-template-columns: 1fr;
+  }
+  .reference-material-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .reference-material-bar {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

@@ -108,7 +108,8 @@ async function main() {
     assert.equal(feishuStart.actions[0]?.type, 'product_options')
     assert.equal(feishuStart.replies[0]?.msg_type, 'text')
     const feishuReplyContent = JSON.parse(String(feishuStart.replies[0]?.content || '{}'))
-    assert.match(String(feishuReplyContent.text || ''), /Please choose a product/i)
+    assert.match(String(feishuReplyContent.text || ''), /使用说明/i)
+    assert.match(String(feishuReplyContent.text || ''), /请选择商品编号/i)
     assert.match(String(feishuReplyContent.text || ''), /1\.\s+/)
     const sessionId = String((feishuStart.actions[0] as any)?.sessionId || '').trim()
     assert.ok(sessionId)
@@ -131,7 +132,7 @@ async function main() {
     assert.equal(feishuSelect.ok, true)
     assert.equal(feishuSelect.replies[0]?.msg_type, 'text')
     const feishuSelectReply = JSON.parse(String(feishuSelect.replies[0]?.content || '{}'))
-    assert.match(String(feishuSelectReply.text || ''), /generation started/i)
+    assert.match(String(feishuSelectReply.text || ''), /已开始生成/i)
 
     const feishuExplicitSelect = await hermesPlatformFormatters.handleFeishuOfficialEvent({
       event: {
@@ -168,6 +169,48 @@ async function main() {
     assert.equal(explicitSelected.ok, true)
     assert.equal(explicitSelected.replies[0]?.msg_type, 'text')
 
+    const feishuMaterialStart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-material',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: '\u7d20\u6750\u5e93',
+          }),
+        },
+      },
+    })
+    assert.equal(feishuMaterialStart.ok, true)
+    assert.equal(feishuMaterialStart.actions[0]?.type, 'product_options')
+    const feishuMaterialReply = JSON.parse(String(feishuMaterialStart.replies[0]?.content || '{}'))
+    assert.match(String(feishuMaterialReply.text || ''), /使用说明/i)
+    assert.match(String(feishuMaterialReply.text || ''), /请选择商品编号/i)
+
+    const feishuDeliveryStart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-delivery',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: '\u672a\u4f7f\u7528live photo',
+          }),
+        },
+      },
+    })
+    assert.equal(feishuDeliveryStart.ok, true)
+    assert.equal(feishuDeliveryStart.actions[0]?.type, 'product_options')
+    const feishuDeliveryReply = JSON.parse(String(feishuDeliveryStart.replies[0]?.content || '{}'))
+    assert.match(String(feishuDeliveryReply.text || ''), /使用说明/i)
+    assert.match(String(feishuDeliveryReply.text || ''), /请选择商品编号/i)
+
     const noSessionReply = await hermesPlatformFormatters.handleFeishuOfficialEvent({
       event: {
         sender: {
@@ -185,7 +228,7 @@ async function main() {
     })
     assert.equal(noSessionReply.ok, true)
     const noSessionText = JSON.parse(String(noSessionReply.replies[0]?.content || '{}'))
-    assert.match(String(noSessionText.text || ''), /send a reference image first/i)
+    assert.match(String(noSessionText.text || ''), /请先发送参考图片/i)
 
     const wecomStart = await hermesPlatformFormatters.handleWecomOfficialEvent({
       FromUserName: 'wecom-user-1',
@@ -195,7 +238,7 @@ async function main() {
     assert.equal(wecomStart.ok, true)
     assert.equal(wecomStart.actions[0]?.type, 'product_options')
     assert.equal(wecomStart.replies[0]?.msgtype, 'text')
-    assert.match(String((wecomStart.replies[0] as any)?.text?.content || ''), /Please choose a product/i)
+    assert.match(String((wecomStart.replies[0] as any)?.text?.content || ''), /请选择商品编号/i)
 
     console.log('live photo hermes platform formatter smoke test passed')
   } finally {

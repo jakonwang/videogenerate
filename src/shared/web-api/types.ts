@@ -131,6 +131,48 @@ export type PluginDetail = PluginSummary & {
   config: Record<string, unknown>
 }
 
+export type ProductImageMaterialCategory = 'necklace' | 'ring' | 'earring' | 'bracelet'
+export type ProductImageMaterialUsageStatus = 'unused' | 'used'
+export type ProductImageMaterialBatchStatus = 'queued' | 'processing' | 'completed' | 'partial_failed' | 'failed'
+
+export type ProductImageMaterialProductSummary = {
+  id: string
+  name: string
+  type: string
+  coverImagePath?: string
+}
+
+export type ProductImageMaterialBatch = {
+  id: string
+  category: ProductImageMaterialCategory
+  status: ProductImageMaterialBatchStatus
+  segmentTimeSec: number
+  totalVideos: number
+  completedVideos: number
+  failedVideos: number
+  generatedImageCount: number
+  currentSourceVideoPath?: string
+  lastError?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type ProductImageMaterialItem = {
+  id: string
+  batchId: string
+  category: ProductImageMaterialCategory
+  sourceVideoPath: string
+  sourceVideoName: string
+  segmentIndex: number
+  frameTimeSec: number
+  localImagePath: string
+  qiniuUrl: string
+  usageStatus: ProductImageMaterialUsageStatus
+  boundProductId?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export type GeelarkPluginConfigPayload = {
   baseUrl?: string
   appId?: string

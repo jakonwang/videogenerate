@@ -237,13 +237,11 @@ function buildQueryCandidates(input: {
   const normalizedHasModelPrefix = input.normalizedTaskId.includes(':')
   const taskIds = Array.from(
     new Set(
-      [
-        input.rawTaskId,
-        input.normalizedTaskId,
-        rawHasModelPrefix || normalizedHasModelPrefix ? '' : input.strippedTaskId,
-      ].filter(Boolean),
+      input.provider === 'apifox_hub' && String(input.endpointStyle || '').trim() === 'official_rest'
+        ? [input.rawTaskId, input.strippedTaskId]
+        : [input.rawTaskId, input.normalizedTaskId, rawHasModelPrefix || normalizedHasModelPrefix ? '' : input.strippedTaskId],
     ),
-  )
+  ).filter(Boolean) as string[]
   const candidates: Array<{ label: string; taskId: string; url: string }> = []
   const pushCandidate = (label: string, taskId: string, url: string) => {
     if (!taskId || !url) return
@@ -251,15 +249,21 @@ function buildQueryCandidates(input: {
     candidates.push({ label, taskId, url })
   }
   const shouldPreferLegacyQueryOnly =
+    input.provider === 'seedance' ||
     input.provider === 'openai_video' ||
     input.provider === 'sora' ||
     input.provider === 'grok' ||
     input.provider === 'veo'
-  const shouldTryDualRoutes = input.provider === 'apifox_hub'
+  const shouldTryDualRoutes = input.provider === 'apifox_hub' && String(input.endpointStyle || '').trim() !== 'official_rest'
+  const shouldUseOfficialRestOnly = input.provider === 'apifox_hub' && String(input.endpointStyle || '').trim() === 'official_rest'
 
   for (const taskId of taskIds) {
     if (shouldPreferLegacyQueryOnly) {
       pushCandidate(`legacy_query:${taskId}`, taskId, `${input.root}/v1/video/query?id=${encodeURIComponent(taskId)}`)
+      continue
+    }
+    if (shouldUseOfficialRestOnly) {
+      pushCandidate(`official_rest:${taskId}`, taskId, `${officialRestBaseUrl(input.root)}/model/prediction/${encodeURIComponent(taskId)}`)
       continue
     }
     if (shouldTryDualRoutes) {
@@ -498,6 +502,8 @@ function pickOutputUrl(json: any) {
 function pickAllOutputUrls(json: any): string[] {
   const values: unknown[] = [
     pickOutputUrl(json),
+    json?.outputUrl,
+    json?.output_url,
     json?.data?.videoUrl,
     json?.data?.video_url,
     json?.data?.url,
@@ -620,6 +626,7 @@ export class Ai666TaskTimeoutError extends Error {
 export async function queryAsyncTask(input: {
   credentials: ModelCredentials
   taskId: string
+  provider?: string
   baseUrl?: string
   endpointStyle?: string
   model?: string
@@ -634,7 +641,12 @@ export async function queryAsyncTask(input: {
     modelForCapability(cfg, 'video_reference_to_video') ||
     modelForCapability(cfg, 'video_text_to_video')
   const endpointStyle = String(input.endpointStyle || cfg.videoEndpointStyle || '').trim()
-  const provider = String(cfg.videoProvider || '').trim() || 'apifox_hub'
+  const requestedProvider = String(input.provider || '').trim()
+  const historicalProvider = String(cfg.videoProvider || '').trim()
+  const provider =
+    requestedProvider === 'apifox_hub' && historicalProvider
+      ? historicalProvider
+      : requestedProvider || historicalProvider || 'apifox_hub'
   const rawTaskId = String(input.taskId || '').trim()
   const normalizedTaskId = normalizeTaskIdForQuery(primaryModel, rawTaskId)
   const strippedTaskId = stripModelPrefixTaskId(rawTaskId)
@@ -807,6 +819,7 @@ export async function queryAsyncTask(input: {
 export async function pollTask(input: {
   credentials: ModelCredentials
   taskId: string
+  provider?: string
   baseUrl?: string
   endpointStyle?: string
   model?: string
@@ -829,6 +842,7 @@ export async function syncRemoteTaskResult(input: {
   credentials: ModelCredentials
   taskId: string
   outDir: string
+  provider?: string
   baseUrl?: string
   endpointStyle?: string
   model?: string
@@ -837,6 +851,7 @@ export async function syncRemoteTaskResult(input: {
   const task = await queryAsyncTask({
     credentials: input.credentials,
     taskId: input.taskId,
+    provider: input.provider,
     baseUrl: input.baseUrl,
     endpointStyle: input.endpointStyle,
     model: input.model,

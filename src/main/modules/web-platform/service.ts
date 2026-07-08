@@ -15,6 +15,7 @@ import { webPlatformRepo } from './repo'
 import { installWebPlatformAuthRuntime } from './authRuntime'
 import { buildPluginDetail, buildPluginSummary, findPluginDefinition, pluginDefinitions } from './plugins'
 import { geelarkPublisher } from './geelark'
+import { productImageMaterialsService } from '../product-image-materials/service'
 import {
   enrichBatchSubtitleSourceItem,
   buildBatchSubtitlePublishCandidates,
@@ -978,6 +979,78 @@ export const webPlatformService = {
       },
     })
     return buildPluginDetail(definition, next)
+  },
+
+  async createProductImageMaterialsBatch(token: string, input: {
+    category: string
+    sourceVideoPaths: string[]
+    segmentTimeSec?: number
+  }) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.createBatch({
+      userId: auth.user.id,
+      category: input.category,
+      sourceVideoPaths: input.sourceVideoPaths,
+    })
+  },
+
+  async listProductImageMaterialsBatches(token: string) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.listBatches(auth.user.id)
+  },
+
+  async retryProductImageMaterialsBatch(token: string, batchId: string) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.retryBatch({
+      userId: auth.user.id,
+      batchId,
+    })
+  },
+
+  async listProductImageMaterials(token: string, filters?: {
+    category?: 'necklace' | 'ring' | 'earring' | 'bracelet' | 'all'
+    usageStatus?: 'unused' | 'used' | 'all'
+    boundProductId?: string
+  }) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.listMaterials(auth.user.id, filters)
+  },
+
+  async updateProductImageMaterialStatus(token: string, input: {
+    materialId: string
+    usageStatus: 'unused' | 'used'
+  }) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.updateMaterialUsageStatus({
+      userId: auth.user.id,
+      materialId: input.materialId,
+      usageStatus: input.usageStatus,
+    })
+  },
+
+  async bindProductImageMaterialProduct(token: string, input: {
+    materialId: string
+    productId?: string
+  }) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.bindMaterialProduct({
+      userId: auth.user.id,
+      materialId: input.materialId,
+      productId: input.productId,
+    })
+  },
+
+  async deleteProductImageMaterial(token: string, materialId: string) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.deleteMaterial({
+      userId: auth.user.id,
+      materialId,
+    })
+  },
+
+  async listProductImageMaterialBindingProducts(token: string) {
+    await this.authByToken(token)
+    return await productImageMaterialsService.listProductBindingOptions()
   },
 
   async getGeelarkPluginConfig(token: string) {

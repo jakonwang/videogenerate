@@ -6,6 +6,7 @@ import { hermesLivePhotoService } from '../live-photo/hermes'
 import { hermesLivePhotoAdapters } from '../live-photo/hermesAdapters'
 import { hermesPlatformFormatters } from '../live-photo/hermesPlatformFormatters'
 import { hermesDeliveryService } from '../live-photo/hermesDelivery'
+import { productImageMaterialsService } from '../product-image-materials/service'
 import { normalizeCapabilityProfileState } from '../../../shared/platformSettings'
 
 type JsonObject = Record<string, unknown>
@@ -165,6 +166,7 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         channel: typeof body.channel === 'string' ? body.channel : 'unknown',
         userId: typeof body.userId === 'string' ? body.userId : '',
         referenceImagePaths: Array.isArray(body.referenceImagePaths) ? body.referenceImagePaths.map(String) : [],
+        selectionMode: body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : 'product',
       })
       json(res, 200, { ok: true, ...result })
       return
@@ -175,6 +177,37 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
       const result = await hermesLivePhotoService.selectProduct({
         sessionId: typeof body.sessionId === 'string' ? body.sessionId : '',
         productId: typeof body.productId === 'string' ? body.productId : '',
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/session/select-material') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoService.selectMaterial({
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : '',
+        materialId: typeof body.materialId === 'string' ? body.materialId : '',
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/session/select-delivery-count') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoService.selectDeliveryCount({
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : '',
+        count: Number(body.count || 0),
+      })
+      json(res, 200, { ok: true, ...result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/session/delete-materials') {
+      const body = await readBodyClean(req)
+      const result = await hermesLivePhotoService.deleteMaterials({
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : '',
+        materialIds: Array.isArray(body.materialIds) ? body.materialIds.map(String) : [],
+        indexes: Array.isArray(body.indexes) ? body.indexes.map((item) => Number(item)) : [],
       })
       json(res, 200, { ok: true, ...result })
       return
@@ -194,6 +227,7 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
         text: typeof body.text === 'string' ? body.text : undefined,
         sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
+        selectionMode: body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : 'product',
       })
       json(res, 200, result as JsonObject)
       return
@@ -239,8 +273,98 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
         text: typeof body.text === 'string' ? body.text : undefined,
         sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
+        selectionMode: body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : 'product',
       })
       json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/plugins/product-image-materials/categories') {
+      json(res, 200, { ok: true, items: productImageMaterialsService.listCategories() })
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/plugins/product-image-materials/products') {
+      const result = await webPlatformService.listProductImageMaterialBindingProducts(token)
+      json(res, 200, { ok: true, items: result })
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/plugins/product-image-materials/batches') {
+      const result = await webPlatformService.listProductImageMaterialsBatches(token)
+      json(res, 200, { ok: true, items: result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/plugins/product-image-materials/batches') {
+      const body = await readBodyClean(req)
+      const result = await webPlatformService.createProductImageMaterialsBatch(token, {
+        category: typeof body.category === 'string' ? body.category : '',
+        sourceVideoPaths: Array.isArray(body.sourceVideoPaths) ? body.sourceVideoPaths.map(String) : [],
+        segmentTimeSec: typeof body.segmentTimeSec === 'number' ? Number(body.segmentTimeSec) : undefined,
+      })
+      json(res, 200, { ok: true, item: result })
+      return
+    }
+
+    const productImageMaterialsBatchRetryMatch = /^\/plugins\/product-image-materials\/batches\/([^/]+)\/retry$/.exec(pathname)
+    if (productImageMaterialsBatchRetryMatch && req.method === 'POST') {
+      const result = await webPlatformService.retryProductImageMaterialsBatch(
+        token,
+        decodeURIComponent(productImageMaterialsBatchRetryMatch[1] || ''),
+      )
+      json(res, 200, { ok: true, item: result })
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/plugins/product-image-materials/materials') {
+      const result = await webPlatformService.listProductImageMaterials(token, {
+        category:
+          url.searchParams.get('category') === 'necklace' ||
+          url.searchParams.get('category') === 'ring' ||
+          url.searchParams.get('category') === 'earring' ||
+          url.searchParams.get('category') === 'bracelet'
+            ? (url.searchParams.get('category') as any)
+            : 'all',
+        usageStatus:
+          url.searchParams.get('usageStatus') === 'unused' || url.searchParams.get('usageStatus') === 'used'
+            ? (url.searchParams.get('usageStatus') as any)
+            : 'all',
+        boundProductId: url.searchParams.get('boundProductId') || undefined,
+      })
+      json(res, 200, { ok: true, items: result })
+      return
+    }
+
+    const productImageMaterialsStatusMatch = /^\/plugins\/product-image-materials\/materials\/([^/]+)\/status$/.exec(pathname)
+    if (productImageMaterialsStatusMatch && req.method === 'POST') {
+      const body = await readBodyClean(req)
+      const result = await webPlatformService.updateProductImageMaterialStatus(token, {
+        materialId: decodeURIComponent(productImageMaterialsStatusMatch[1] || ''),
+        usageStatus: body.usageStatus === 'used' ? 'used' : 'unused',
+      })
+      json(res, 200, { ok: true, item: result })
+      return
+    }
+
+    const productImageMaterialsBindMatch = /^\/plugins\/product-image-materials\/materials\/([^/]+)\/bind-product$/.exec(pathname)
+    if (productImageMaterialsBindMatch && req.method === 'POST') {
+      const body = await readBodyClean(req)
+      const result = await webPlatformService.bindProductImageMaterialProduct(token, {
+        materialId: decodeURIComponent(productImageMaterialsBindMatch[1] || ''),
+        productId: typeof body.productId === 'string' ? body.productId : undefined,
+      })
+      json(res, 200, { ok: true, item: result })
+      return
+    }
+
+    const productImageMaterialsDeleteMatch = /^\/plugins\/product-image-materials\/materials\/([^/]+)$/.exec(pathname)
+    if (productImageMaterialsDeleteMatch && req.method === 'DELETE') {
+      const result = await webPlatformService.deleteProductImageMaterial(
+        token,
+        decodeURIComponent(productImageMaterialsDeleteMatch[1] || ''),
+      )
+      json(res, 200, result)
       return
     }
 

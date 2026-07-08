@@ -30,6 +30,10 @@ import type {
   PluginConfigPayload,
   PluginDetail,
   PluginSummary,
+  ProductImageMaterialBatch,
+  ProductImageMaterialCategory,
+  ProductImageMaterialItem,
+  ProductImageMaterialProductSummary,
   CloneModelIdentityCreateInput,
   CloneModelCredentialsPayload,
   CloneModelIdentitySummary,
@@ -275,6 +279,88 @@ export function createWebApiClient(options: WebApiClientOptions) {
         method: 'POST',
         body: JSON.stringify(input),
       })
+    },
+
+    async listProductImageMaterialCategories() {
+      const result = await request<{ items: ProductImageMaterialCategory[] }>('/plugins/product-image-materials/categories', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async listProductImageMaterialProducts() {
+      const result = await request<{ items: ProductImageMaterialProductSummary[] }>('/plugins/product-image-materials/products', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async createProductImageMaterialBatch(input: {
+      category: ProductImageMaterialCategory
+      sourceVideoPaths: string[]
+      segmentTimeSec?: number
+    }) {
+      const result = await request<{ item: ProductImageMaterialBatch }>('/plugins/product-image-materials/batches', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return result.item
+    },
+
+    async listProductImageMaterialBatches() {
+      const result = await request<{ items: ProductImageMaterialBatch[] }>('/plugins/product-image-materials/batches', {
+        method: 'GET',
+      })
+      return result.items || []
+    },
+
+    async retryProductImageMaterialBatch(batchId: string) {
+      const result = await request<{ item: ProductImageMaterialBatch }>(
+        `/plugins/product-image-materials/batches/${encodeURIComponent(batchId)}/retry`,
+        {
+          method: 'POST',
+        },
+      )
+      return result.item
+    },
+
+    async listProductImageMaterials(filters?: {
+      category?: ProductImageMaterialCategory | 'all'
+      usageStatus?: 'unused' | 'used' | 'all'
+      boundProductId?: string
+    }) {
+      const params = new URLSearchParams()
+      if (filters?.category) params.set('category', filters.category)
+      if (filters?.usageStatus) params.set('usageStatus', filters.usageStatus)
+      if (filters?.boundProductId) params.set('boundProductId', filters.boundProductId)
+      const query = params.toString()
+      const result = await request<{ items: ProductImageMaterialItem[] }>(
+        `/plugins/product-image-materials/materials${query ? `?${query}` : ''}`,
+        { method: 'GET' },
+      )
+      return result.items || []
+    },
+
+    async updateProductImageMaterialStatus(materialId: string, usageStatus: 'unused' | 'used') {
+      const result = await request<{ item: ProductImageMaterialItem }>(
+        `/plugins/product-image-materials/materials/${encodeURIComponent(materialId)}/status`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ usageStatus }),
+        },
+      )
+      return result.item
+    },
+
+    async bindProductImageMaterial(materialId: string, productId?: string) {
+      const result = await request<{ item: ProductImageMaterialItem }>(
+        `/plugins/product-image-materials/materials/${encodeURIComponent(materialId)}/bind-product`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ productId }),
+        },
+      )
+      return result.item
     },
 
     async getGeelarkPluginConfig() {

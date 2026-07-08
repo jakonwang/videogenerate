@@ -104,6 +104,39 @@ function parseSessionAndText(rawText: string) {
   }
 }
 
+function inferSelectionModeFromText(rawText: string): {
+  selectionMode?: 'material' | 'delivery'
+  consumeText: boolean
+} {
+  const text = String(rawText || '').trim()
+  if (!text) return { consumeText: false }
+  const normalized = text.toLowerCase()
+
+  const materialIntent =
+    /(^|\s)(material|materials|image material|image materials)(\s|$)/i.test(text) ||
+    /\u7d20\u6750\u5e93|\u7d20\u6750|\u9009\u56fe|\u56fe\u7247\u5e93|\u56fe\u5e93|\u5546\u54c1\u9009\u56fe/.test(text)
+  if (materialIntent) {
+    return {
+      selectionMode: 'material',
+      consumeText: true,
+    }
+  }
+
+  const deliveryIntent =
+    /live\s*photo/.test(normalized) ||
+    /unused.*live\s*photo/.test(normalized) ||
+    /\u672a\u4f7f\u7528.*live\s*photo/.test(text) ||
+    /\u672a\u4f7f\u7528\u89c6\u9891|\u672a\u4f7f\u7528\u6210\u54c1|\u53d1\u9001\u6210\u54c1|\u53d1\u9001\u89c6\u9891|\u53d1\u89c6\u9891|\u6210\u54c1\u89c6\u9891/.test(text)
+  if (deliveryIntent) {
+    return {
+      selectionMode: 'delivery',
+      consumeText: true,
+    }
+  }
+
+  return { consumeText: false }
+}
+
 function toFeishuReply(actions: Array<any>) {
   return actions.map((action) => {
     if (action.type === 'video') {
@@ -168,11 +201,16 @@ export const hermesPlatformFormatters = {
     }
     const text = extractFeishuText(input)
     const parsed = parseSessionAndText(text)
+    const startIntent = !parsed.sessionId ? inferSelectionModeFromText(parsed.text) : { consumeText: false as const }
     const adapterResult = await hermesLivePhotoAdapters.handleFeishuEvent({
       userId,
       imagePaths,
-      text: parsed.productId || (!parsed.sessionId || /^\d+$/.test(parsed.text) ? parsed.text : ''),
+      text:
+        startIntent.consumeText
+          ? ''
+          : parsed.productId || (!parsed.sessionId || /^\d+$/.test(parsed.text) ? parsed.text : ''),
       sessionId: parsed.sessionId,
+      selectionMode: startIntent.selectionMode,
     })
     return {
       ok: true as const,
@@ -200,11 +238,16 @@ export const hermesPlatformFormatters = {
     }
     const text = extractWecomText(input)
     const parsed = parseSessionAndText(text)
+    const startIntent = !parsed.sessionId ? inferSelectionModeFromText(parsed.text) : { consumeText: false as const }
     const adapterResult = await hermesLivePhotoAdapters.handleWecomEvent({
       userId,
       imagePaths,
-      text: parsed.productId || (!parsed.sessionId || /^\d+$/.test(parsed.text) ? parsed.text : ''),
+      text:
+        startIntent.consumeText
+          ? ''
+          : parsed.productId || (!parsed.sessionId || /^\d+$/.test(parsed.text) ? parsed.text : ''),
       sessionId: parsed.sessionId,
+      selectionMode: startIntent.selectionMode,
     })
     return {
       ok: true as const,

@@ -29,6 +29,7 @@ const router = createRouter({
         { path: 'plugins', name: 'plugins', component: () => import('@/ui/views/PluginsView.vue') },
         { path: 'plugins/geelark-publisher', name: 'plugin-geelark-publisher', component: () => import('@/ui/views/GeelarkPublisherView.vue') },
         { path: 'plugins/live-photo-generator', name: 'plugin-live-photo-generator', component: () => import('@/ui/views/LivePhotoGeneratorView.vue') },
+        { path: 'plugins/product-image-materials', name: 'plugin-product-image-materials', component: () => import('@/ui/views/ProductImageMaterialsView.vue') },
         { path: 'plugins/tiktok-creative-studio', name: 'plugin-tiktok-creative-studio', component: () => import('@/ui/views/TiktokCreativeStudioView.vue') },
         { path: 'plugins/tiktok-listing-helper', name: 'plugin-tiktok-listing-helper', component: () => import('@/ui/views/TiktokListingHelperView.vue') },
         {

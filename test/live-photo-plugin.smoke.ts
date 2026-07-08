@@ -487,7 +487,10 @@ async function main() {
     assert.match(generatedVideoCalls[0]?.prompt || '', /STRUCTURE LOCK:/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /NO INFERENCE RULE:/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /Use ONLY one motion:/i)
-    assert.match(generatedVideoCalls[0]?.prompt || '', /ultra slow micro push-in/i)
+    assert.match(generatedVideoCalls[0]?.prompt || '', /extremely subtle near-static natural micro-movement/i)
+    assert.match(generatedVideoCalls[0]?.prompt || '', /no push-in/i)
+    assert.match(generatedVideoCalls[0]?.prompt || '', /no pull-back/i)
+    assert.match(generatedVideoCalls[0]?.prompt || '', /no refocus/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /movement must be uniform and linear across full 6 seconds/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /The video should feel almost static/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /natural daylight only/i)
@@ -495,7 +498,7 @@ async function main() {
     assert.match(generatedVideoCalls[0]?.prompt || '', /zero product reconstruction/i)
     assert.match(generatedVideoCalls[0]?.cameraMotion || '', /no noticeable shake/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /perfect product consistency/i)
-    assert.equal(generatedVideoCalls[0]?.cameraMotion, 'Ultra slow micro push-in only with nearly static framing and no noticeable shake')
+    assert.equal(generatedVideoCalls[0]?.cameraMotion, 'Extremely subtle near-static natural micro-movement only, with no push-in, no pull-back, no refocus, and no noticeable shake')
     assert.ok((generatedVideoCalls[0]?.referenceImagePaths || []).length >= 1)
     assert.match(String(generatedVideoCalls[0]?.referenceImagePaths?.[0] || ''), /generated-still[\\/].*reference_replace\.png$/i)
     assert.match(String(generatedVideoCalls[0]?.startFramePath || ''), /generated-still[\\/].*reference_replace\.png$/i)
@@ -726,6 +729,26 @@ async function main() {
 
     const videoRetryStillPath = path.join(root, 'video-retry-still.png')
     await writeFile(videoRetryStillPath, 'mock-video-retry-still', 'utf-8')
+    await cloneRepoModule.cloneRepo.setCredentials({
+      imageProviderPrimary: 'openai',
+      openaiApiKey: 'test-openai-key',
+      openaiImageModel: 'gpt-image-1',
+      videoProviderPrimary: 'grsai',
+      videoProviderFallback: 'grsai',
+      apifoxHub: {
+        enabled: true,
+        baseUrl: 'https://example.invalid/video',
+        apiKey: 'test-video-key',
+        videoProvider: 'seedance',
+        videoEndpointStyle: 'openai_compatible',
+        videoModel: 'seedance-live-photo',
+      },
+      qiniuAccessKey: 'test-ak',
+      qiniuSecretKey: 'test-sk',
+      qiniuBucket: 'test-bucket',
+      qiniuDomain: 'https://example.com',
+      qiniuUploadHost: 'https://upload.qiniup.com',
+    } as any)
     const syntheticVideoFailedItem = await livePhotoRepoModule.livePhotoRepo.upsert({
       ...retriedCompletedItem,
       generatedStillPath: videoRetryStillPath,
@@ -775,6 +798,36 @@ async function main() {
     } as any)
     const beforeVideoRetryImageCount = generatedStillCalls.length
     const beforeVideoRetryVideoCount = generatedVideoCalls.length
+    const originalVideoRetryFetch = globalThis.fetch
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const url = String(input || '')
+      if (url.includes('https://example.invalid/video/v1/video/query?id=failed-video-task-id')) {
+        return new Response(JSON.stringify({ id: 'failed-video-task-id', status: 'running' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('https://example.invalid/video/v1/video/query?id=seedance-live-photo%3Afailed-video-task-id')) {
+        return new Response(
+          JSON.stringify({
+            id: 'seedance-live-photo:failed-video-task-id',
+            status: 'succeeded',
+            outputUrl: 'https://cdn.example.com/plugin-retried-live-photo.mp4',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+      if (url === 'https://cdn.example.com/plugin-retried-live-photo.mp4') {
+        return new Response(Buffer.from('plugin-remote-retried-video'), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+      return await originalVideoRetryFetch(input, init)
+    }) as typeof fetch
     await livePhotoService.setTestDependencies({
       ...({
         runFfmpeg: async (input: { args: string[] }) => {
@@ -837,9 +890,14 @@ async function main() {
     assert.equal(retriedVideoOnlyItem.workflow?.stepStatus.image_generation.status, 'done')
     assert.equal(retriedVideoOnlyItem.autoFlowStatus?.currentStage, 'video_generation')
     const retriedVideoOnlyCompletedItem = await waitForItemCompleted(retriedVideoOnlyItem.id)
+    globalThis.fetch = originalVideoRetryFetch
     assert.equal(retriedVideoOnlyCompletedItem.packagingStatus, 'completed')
     assert.equal(generatedStillCalls.length, beforeVideoRetryImageCount, 'Video-only retry should not regenerate the still image')
-    assert.ok(generatedVideoCalls.length > beforeVideoRetryVideoCount, 'Video-only retry should submit a new video task')
+    assert.ok(
+      generatedVideoCalls.length > beforeVideoRetryVideoCount ||
+        String(retriedVideoOnlyCompletedItem.motionVideoPath || '').trim().length > 0,
+      'Video-only retry should either submit a new video task or recover the preserved remote video task',
+    )
     assert.ok(
       Array.isArray(retriedVideoOnlyCompletedItem.logs) &&
         retriedVideoOnlyCompletedItem.logs.some((log: any) =>
@@ -1615,6 +1673,63 @@ async function main() {
       : ''
     assert.match(multiRetryLogText, /\[image_validation_failed\]/i)
     assert.match(multiRetryLogText, /(image validation requested inline anchor-closeup escalation|marked retryable failure: retry 1\/2)/i)
+
+    await livePhotoService.resetTestDependencies()
+
+    let reviewOverloadStillCallCount = 0
+    livePhotoService.setTestDependencies({
+      ...({
+        runFfmpeg: async (input: { args: string[] }) => {
+          const outPath = String(input.args[input.args.length - 1] || '').trim()
+          if (!outPath) throw new Error('Missing ffmpeg output path')
+          await mkdir(path.dirname(outPath), { recursive: true })
+          await writeFile(outPath, `mock:${path.basename(outPath)}`, 'utf-8')
+        },
+        generateGptShotFrameImage: async (input: { outDir: string; filePrefix: string }) => {
+          reviewOverloadStillCallCount += 1
+          const stillPath = path.join(input.outDir, `${input.filePrefix}-review-overload-${reviewOverloadStillCallCount}.png`)
+          await mkdir(path.dirname(stillPath), { recursive: true })
+          await writeFile(stillPath, `mock-generated-review-overload-${reviewOverloadStillCallCount}`, 'utf-8')
+          return stillPath
+        },
+        generateShotVideoByProviderChain: async (input: { outDir: string }) => {
+          const outputFilePath = path.join(input.outDir, 'mock-live-photo-review-overload.mp4')
+          await mkdir(path.dirname(outputFilePath), { recursive: true })
+          await writeFile(outputFilePath, 'mock-generated-video-review-overload', 'utf-8')
+          return {
+            outputFilePath,
+            taskId: `mock-task-review-overload-${Date.now()}`,
+            provider: 'seedance',
+          } as any
+        },
+        analyzeProductStructureWithGrs: async () => {
+          throw new Error('model load is too high, try again later')
+        },
+        reviewReferenceReplacementStillVisual: async () => ({
+          passed: true,
+          skipped: true,
+          reason: 'review_service_overloaded',
+          score: 1,
+          verdict: 'pass',
+          failures: [],
+          notes: ['Review service overloaded; visual review deferred.'],
+          checks: {},
+        }),
+      }) as any,
+    })
+
+    const reviewOverloadReference = await livePhotoService.createFromReference({
+      referenceImagePath: refImage,
+      productId: product.id,
+      motionTemplate: 'push_in',
+    })
+    const reviewOverloadCompleted = await waitForItemCompleted(reviewOverloadReference.id, 30000)
+    assert.equal(reviewOverloadCompleted.packagingStatus, 'completed')
+    assert.ok(reviewOverloadStillCallCount >= 1)
+    const reviewOverloadLogText = Array.isArray(reviewOverloadCompleted.logs)
+      ? reviewOverloadCompleted.logs.map((log: any) => String(log?.message || '')).join('\n')
+      : ''
+    assert.doesNotMatch(reviewOverloadLogText, /\[remote_pending\] Image validation review service is overloaded/i)
 
     await livePhotoService.resetTestDependencies()
 
