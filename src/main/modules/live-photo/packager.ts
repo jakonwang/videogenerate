@@ -36,10 +36,6 @@ function resolveOutputResolution(value?: LivePhotoOutputResolution) {
   return { width: 2160, height: 2880 }
 }
 
-function resolveFrameRate(value?: LivePhotoFrameRate) {
-  return value === '24' ? '24' : '30'
-}
-
 function resolveVideoCrf(value?: LivePhotoQuality) {
   return value === 'medium' ? '22' : '16'
 }
@@ -83,34 +79,57 @@ async function writeMetadataTaggedMov(input: {
   frameRate?: LivePhotoFrameRate
   quality?: LivePhotoQuality
 }) {
-  const targetResolution = resolveOutputResolution(input.outputResolution)
-  const fps = resolveFrameRate(input.frameRate)
   const qualityCrf = resolveVideoCrf(input.quality)
-  await input.deps.runFfmpeg({
-    args: [
-      '-y',
-      '-i',
-      input.sourceVideoPath,
-      '-vf',
-      `scale=${targetResolution.width}:${targetResolution.height}:force_original_aspect_ratio=decrease,pad=${targetResolution.width}:${targetResolution.height}:(ow-iw)/2:(oh-ih)/2:black,fps=${fps}`,
-      '-c:v',
-      'libx264',
-      '-crf',
-      qualityCrf,
-      '-pix_fmt',
-      'yuv420p',
-      '-movflags',
-      'use_metadata_tags+faststart',
-      '-metadata',
-      `content.identifier=${input.assetIdentifier}`,
-      '-metadata',
-      `com.apple.quicktime.content.identifier=${input.assetIdentifier}`,
-      '-metadata',
-      `live-photo.asset.identifier=${input.assetIdentifier}`,
-      '-an',
-      input.outputPath,
-    ],
-  })
+  try {
+    await input.deps.runFfmpeg({
+      args: [
+        '-y',
+        '-i',
+        input.sourceVideoPath,
+        '-map',
+        '0:v:0',
+        '-c',
+        'copy',
+        '-movflags',
+        'use_metadata_tags+faststart',
+        '-metadata',
+        `content.identifier=${input.assetIdentifier}`,
+        '-metadata',
+        `com.apple.quicktime.content.identifier=${input.assetIdentifier}`,
+        '-metadata',
+        `live-photo.asset.identifier=${input.assetIdentifier}`,
+        '-an',
+        input.outputPath,
+      ],
+    })
+    return
+  } catch {
+    await input.deps.runFfmpeg({
+      args: [
+        '-y',
+        '-i',
+        input.sourceVideoPath,
+        '-map',
+        '0:v:0',
+        '-c:v',
+        'libx264',
+        '-crf',
+        qualityCrf,
+        '-pix_fmt',
+        'yuv420p',
+        '-movflags',
+        'use_metadata_tags+faststart',
+        '-metadata',
+        `content.identifier=${input.assetIdentifier}`,
+        '-metadata',
+        `com.apple.quicktime.content.identifier=${input.assetIdentifier}`,
+        '-metadata',
+        `live-photo.asset.identifier=${input.assetIdentifier}`,
+        '-an',
+        input.outputPath,
+      ],
+    })
+  }
 }
 
 async function renderOutputJpeg(input: {

@@ -104,6 +104,7 @@ export type LivePhotoItem = {
   cloneShotSnapshot?: LivePhotoCloneShotSnapshot
   referenceImagePath?: string
   generatedStillPath?: string
+  originalMotionVideoPath?: string
   motionVideoPath?: string
   livePhotoImagePath?: string
   livePhotoVideoPath?: string

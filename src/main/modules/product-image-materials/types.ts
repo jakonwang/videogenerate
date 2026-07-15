@@ -32,6 +32,9 @@ export type ProductImageMaterialItem = {
   localImagePath: string
   thumbnailPath?: string
   qiniuUrl: string
+  materialOrigin?: 'original' | 'derived'
+  derivedFromMaterialId?: string
+  derivedVariantIndex?: number
   usageStatus: ProductImageMaterialUsageStatus
   boundProductId?: string
   createdAt: number
@@ -78,6 +81,8 @@ export type ProductImageMaterialHermesOption = {
   index: number
   category: ProductImageMaterialCategory
   thumbnailUrl: string
+  materialOrigin?: 'original' | 'derived'
   boundProductId?: string
   localImagePath: string
+  derivedFromMaterialId?: string
 }

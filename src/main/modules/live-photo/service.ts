@@ -3374,6 +3374,21 @@ function resolveLivePhotoImagePreview(item: LivePhotoItem, credentials: ModelCre
   }
 }
 
+function resolveLivePhotoReferenceImagePath(item: LivePhotoItem) {
+  const candidates = [
+    String(item.referenceImagePath || '').trim(),
+    ...(Array.isArray(item.imagePromptPreview?.referenceImagePaths) ? item.imagePromptPreview.referenceImagePaths : []),
+    ...(Array.isArray(item.videoPromptPreview?.referenceImagePaths) ? item.videoPromptPreview.referenceImagePaths : []),
+    String(item.generatedStillPath || '').trim(),
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return ''
+}
+
 function buildReferenceReplacementImagePromptPreview(input: {
   product: LivePhotoProductSnapshot
   referenceImagePath: string
@@ -3408,6 +3423,49 @@ function buildReferenceReplacementImagePromptPreview(input: {
     }),
     referenceImagePaths: payload.imagePaths,
   })
+}
+
+async function copyMotionSourceVideo(input: { sourceVideoPath: string; outputPath: string }) {
+  await copyFile(input.sourceVideoPath, input.outputPath)
+}
+
+async function writeLivePhotoVideoPreservingSource(input: { sourceVideoPath: string; outputPath: string }) {
+  try {
+    await livePhotoDeps.runFfmpeg({
+      args: [
+        '-y',
+        '-i',
+        input.sourceVideoPath,
+        '-map',
+        '0:v:0',
+        '-c',
+        'copy',
+        '-movflags',
+        'use_metadata_tags+faststart',
+        '-an',
+        input.outputPath,
+      ],
+    })
+    return
+  } catch {
+    await livePhotoDeps.runFfmpeg({
+      args: [
+        '-y',
+        '-i',
+        input.sourceVideoPath,
+        '-map',
+        '0:v:0',
+        '-c:v',
+        'libx264',
+        '-pix_fmt',
+        'yuv420p',
+        '-movflags',
+        'use_metadata_tags+faststart',
+        '-an',
+        input.outputPath,
+      ],
+    })
+  }
 }
 
 function canResumeLivePhotoAutoFlow(item: LivePhotoItem) {
@@ -3562,9 +3620,10 @@ async function materializeItem(input: {
   const manifestPath = join(root, 'live-photo.json')
   await copyFile(input.stillSourcePath, stillPath)
 
+  let originalMotionVideoPath = String(input.videoSourcePath || '').trim()
   let motionVideoPath = input.videoSourcePath ? join(root, `motion${extname(input.videoSourcePath) || '.mp4'}`) : join(root, 'motion.mp4')
   if (input.videoSourcePath) {
-    await normalizePreviewVideo({ sourceVideoPath: input.videoSourcePath, outputPath: motionVideoPath })
+    await copyMotionSourceVideo({ sourceVideoPath: input.videoSourcePath, outputPath: motionVideoPath })
   } else {
     const generatedVideoPath = await generateAiMotionVideoFromStill({
       item: input.item,
@@ -3573,12 +3632,14 @@ async function materializeItem(input: {
       outputDir: join(root, 'generated-video'),
       template: input.motionTemplate,
     })
-    await normalizePreviewVideo({ sourceVideoPath: generatedVideoPath, outputPath: motionVideoPath })
+    originalMotionVideoPath = generatedVideoPath
+    motionVideoPath = join(root, `motion${extname(generatedVideoPath) || '.mp4'}`)
+    await copyMotionSourceVideo({ sourceVideoPath: generatedVideoPath, outputPath: motionVideoPath })
   }
 
   await renderPosterFromVideo({ videoPath: motionVideoPath, posterPath })
   await copyFile(stillPath, liveImagePath)
-  await copyFile(motionVideoPath, liveVideoPath)
+  await writeLivePhotoVideoPreservingSource({ sourceVideoPath: motionVideoPath, outputPath: liveVideoPath })
   await writeFile(
     manifestPath,
     JSON.stringify(
@@ -3597,6 +3658,7 @@ async function materializeItem(input: {
 
   return {
     generatedStillPath: stillPath,
+    originalMotionVideoPath: originalMotionVideoPath || undefined,
     motionVideoPath,
     livePhotoImagePath: liveImagePath,
     livePhotoVideoPath: liveVideoPath,
@@ -3912,7 +3974,7 @@ async function finalizeCloneShotItem(input: {
   }
   return {
     ...appendLivePhotoLogs(input.item, [
-      buildLivePhotoLog('[live-photo] clone motion source normalized'),
+      buildLivePhotoLog('[live-photo] clone motion source prepared'),
       buildLivePhotoLog('[live-photo] stage live_photo_packaging started'),
     ]),
     workflow: patchWorkflow(input.item.workflow, 'live_photo_packaging', 'video_generation', 'done'),
@@ -3953,7 +4015,7 @@ async function runLivePhotoItemAutoFlow(
 
   try {
     if (latest.sourceType === 'reference_replace') {
-      const referenceImagePath = String(latest.referenceImagePath || '').trim()
+      const referenceImagePath = resolveLivePhotoReferenceImagePath(latest)
       if (!referenceImagePath || !existsSync(referenceImagePath)) {
         throw new Error('Reference image does not exist')
       }
@@ -4451,7 +4513,11 @@ export const livePhotoService = {
           String(item.motionVideoPath || '').trim()
         return Boolean(videoPath)
       })
-      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+      .sort((a, b) => {
+        const createdDelta = Number(b.createdAt || 0) - Number(a.createdAt || 0)
+        if (createdDelta !== 0) return createdDelta
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+      })
       .slice(0, limit)
       .map((item) => hydrateLivePhotoArtifactPaths(item))
   },
@@ -4534,7 +4600,14 @@ export const livePhotoService = {
         skipped.push({ id, reason: 'Item does not exist' })
         continue
       }
-      if (item.packagingStatus !== 'completed' || !item.livePhotoImagePath || !item.livePhotoVideoPath) {
+      const exportSourceVideoPath =
+        [
+          String(item.cloneShotSnapshot?.videoPath || '').trim(),
+          String(item.originalMotionVideoPath || '').trim(),
+          String(item.motionVideoPath || '').trim(),
+          String(item.livePhotoVideoPath || '').trim(),
+        ].find((candidate) => candidate && existsSync(candidate)) || ''
+      if (item.packagingStatus !== 'completed' || !item.livePhotoImagePath || !exportSourceVideoPath) {
         skipped.push({ id, reason: 'Item is not export-ready' })
         continue
       }
@@ -4548,7 +4621,7 @@ export const livePhotoService = {
         {
           itemId: item.id,
           sourceStillPath: item.livePhotoImagePath,
-          sourceVideoPath: item.livePhotoVideoPath,
+          sourceVideoPath: exportSourceVideoPath,
           exportDir: targetDir,
           baseName,
           outputResolution: effectiveSettings.outputResolution,
@@ -4609,17 +4682,18 @@ export const livePhotoService = {
       existing.productId && (existing.sourceType === 'reference_replace' || existing.sourceType === 'clone_shot')
         ? await buildProductSnapshot(existing.productId)
         : existing.productSnapshot
+    const recoveredReferenceImagePath = resolveLivePhotoReferenceImagePath(existing)
     const refreshedImagePromptPreview =
-      refreshedProductSnapshot && existing.referenceImagePath
+      refreshedProductSnapshot && recoveredReferenceImagePath
         ? buildReferenceReplacementImagePromptPreview({
             product: refreshedProductSnapshot,
-            referenceImagePath: existing.referenceImagePath,
+            referenceImagePath: recoveredReferenceImagePath,
             credentials,
             retryGuidance: buildLivePhotoRetryGuidance(existing, refreshedProductSnapshot),
           })
         : existing.imagePromptPreview
     const refreshedVideoPromptPreview =
-      refreshedProductSnapshot && existing.referenceImagePath
+      refreshedProductSnapshot && recoveredReferenceImagePath
         ? buildVideoRequestPreview({
             item: {
               ...existing,
@@ -4627,7 +4701,7 @@ export const livePhotoService = {
             },
             product: refreshedProductSnapshot,
             template: input.motionTemplate || (existing.sourceType === 'reference_replace' ? 'push_in' : 'ambient_sway'),
-            startFramePath: existing.generatedStillPath || existing.referenceImagePath,
+            startFramePath: existing.generatedStillPath || recoveredReferenceImagePath,
             credentials,
           })
         : existing.videoPromptPreview
@@ -4652,6 +4726,7 @@ export const livePhotoService = {
     }
     if (canRetryFromVideoStage) {
       processingItem.generatedStillPath = preservedStillPath
+      processingItem.originalMotionVideoPath = undefined
       processingItem.motionVideoPath = undefined
       processingItem.imageTaskId = undefined
       processingItem.imageTaskProvider = undefined
@@ -4686,6 +4761,7 @@ export const livePhotoService = {
       ].slice(-200)
     } else {
       processingItem.generatedStillPath = undefined
+      processingItem.originalMotionVideoPath = undefined
       processingItem.motionVideoPath = undefined
       processingItem.imageTaskId = undefined
       processingItem.imageTaskProvider = undefined
@@ -4710,6 +4786,9 @@ export const livePhotoService = {
         ...(Array.isArray(existing.logs) ? existing.logs : []),
         buildLivePhotoLog('[live-photo] manual retry restarted from image_generation stage'),
       ].slice(-200)
+    }
+    if (existing.sourceType === 'reference_replace' && recoveredReferenceImagePath) {
+      processingItem.referenceImagePath = recoveredReferenceImagePath
     }
     await livePhotoRepo.upsert(processingItem)
     enqueueLivePhotoAutoFlow(

@@ -4,8 +4,10 @@ import { stat } from 'node:fs/promises'
 import { webPlatformService } from './service'
 import { hermesLivePhotoService } from '../live-photo/hermes'
 import { hermesLivePhotoAdapters } from '../live-photo/hermesAdapters'
+import { hermesEventCapture } from '../live-photo/hermesEventCapture'
 import { hermesPlatformFormatters } from '../live-photo/hermesPlatformFormatters'
 import { hermesDeliveryService } from '../live-photo/hermesDelivery'
+import { livePhotoService } from '../live-photo/service'
 import { productImageMaterialsService } from '../product-image-materials/service'
 import { normalizeCapabilityProfileState } from '../../../shared/platformSettings'
 
@@ -24,6 +26,56 @@ export function json(res: http.ServerResponse, status: number, payload: JsonObje
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   })
   res.end(JSON.stringify(payload))
+}
+
+function parseCharset(contentType: string) {
+  const match = /charset=([^;]+)/i.exec(String(contentType || '').trim())
+  return String(match?.[1] || '').trim().toLowerCase()
+}
+
+function decodeRequestBodyBuffer(req: http.IncomingMessage, buffer: Buffer) {
+  if (!buffer.length) return ''
+  const contentType = String(req.headers['content-type'] || '').trim()
+  const charset = parseCharset(contentType)
+
+  if (buffer.length >= 2) {
+    if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+      return buffer.slice(2).toString('utf16le')
+    }
+    if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+      const swapped = Buffer.allocUnsafe(buffer.length - 2)
+      for (let i = 2; i + 1 < buffer.length; i += 2) {
+        swapped[i - 2] = buffer[i + 1]
+        swapped[i - 1] = buffer[i]
+      }
+      return swapped.toString('utf16le')
+    }
+  }
+
+  if (charset === 'utf-16' || charset === 'utf-16le') {
+    return buffer.toString('utf16le')
+  }
+
+  if (charset === 'utf-16be') {
+    const swapped = Buffer.allocUnsafe(buffer.length)
+    for (let i = 0; i + 1 < buffer.length; i += 2) {
+      swapped[i] = buffer[i + 1]
+      swapped[i + 1] = buffer[i]
+    }
+    return swapped.toString('utf16le')
+  }
+
+  const utf8 = buffer.toString('utf-8')
+  const replacementCount = (utf8.match(/\uFFFD/g) || []).length
+  const nulCount = (utf8.match(/\u0000/g) || []).length
+  if ((replacementCount > 0 || nulCount > 0) && buffer.length % 2 === 0) {
+    try {
+      return buffer.toString('utf16le')
+    } catch {
+      return utf8
+    }
+  }
+  return utf8
 }
 
 function mediaHeaders() {
@@ -50,7 +102,7 @@ export async function readBody(req: http.IncomingMessage) {
   for await (const chunk of req) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   }
-  const raw = Buffer.concat(chunks).toString('utf-8').trim()
+  const raw = decodeRequestBodyBuffer(req, Buffer.concat(chunks)).trim()
   if (!raw) return {}
   try {
     return JSON.parse(raw) as Record<string, unknown>
@@ -70,7 +122,7 @@ export async function readBodyClean(req: http.IncomingMessage) {
   for await (const chunk of req) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   }
-  const raw = Buffer.concat(chunks).toString('utf-8').trim()
+  const raw = decodeRequestBodyBuffer(req, Buffer.concat(chunks)).trim()
   if (!raw) return {}
   try {
     return JSON.parse(raw) as Record<string, unknown>
@@ -213,6 +265,28 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
       return
     }
 
+    if (req.method === 'POST' && pathname === '/hermes/live-photo/item/mark-used') {
+      const body = await readBodyClean(req)
+      const result = await livePhotoService.markItemUsed({
+        id: typeof body.id === 'string' ? body.id : '',
+        channel: typeof body.channel === 'string' ? body.channel : undefined,
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
+      })
+      json(res, 200, { ok: true, item: result })
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/hermes/live-photo/session/latest') {
+      const channel = typeof url.searchParams.get('channel') === 'string' ? String(url.searchParams.get('channel') || '') : ''
+      const userId = typeof url.searchParams.get('userId') === 'string' ? String(url.searchParams.get('userId') || '') : ''
+      const result = await hermesLivePhotoService.getLatestSessionStatus({
+        channel,
+        userId,
+      })
+      json(res, 200, { ok: true, result } as JsonObject)
+      return
+    }
+
     const hermesSessionMatch = /^\/hermes\/live-photo\/session\/([^/]+)$/.exec(pathname)
     if (hermesSessionMatch && req.method === 'GET') {
       const result = await hermesLivePhotoService.getSessionStatus(decodeURIComponent(hermesSessionMatch[1] || ''))
@@ -222,12 +296,26 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
 
     if (req.method === 'POST' && pathname === '/hermes/live-photo/feishu/webhook') {
       const body = await readBodyClean(req)
+      const webhookSelectionMode = body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : undefined
       const result = await hermesLivePhotoAdapters.handleFeishuEvent({
         userId: typeof body.userId === 'string' ? body.userId : '',
         imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
         text: typeof body.text === 'string' ? body.text : undefined,
         sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
-        selectionMode: body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : 'product',
+        selectionMode: webhookSelectionMode,
+      })
+      void hermesEventCapture.captureFeishuWebhookEvent({
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        text: typeof body.text === 'string' ? body.text : undefined,
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
+        selectionMode: webhookSelectionMode,
+        imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
+        actions: Array.isArray((result as any)?.actions)
+          ? (result as any).actions.map((item: any) => ({
+              type: String(item?.type || '').trim(),
+              sessionId: String(item?.sessionId || '').trim(),
+            }))
+          : [],
       })
       json(res, 200, result as JsonObject)
       return
@@ -244,10 +332,78 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
       const body = await readBodyClean(req)
       const sessionId = typeof body.sessionId === 'string' ? body.sessionId : ''
       const status = await hermesLivePhotoService.getSessionStatus(sessionId)
+      if (status.session.closedAt && status.session.closeReason === 'final_sent') {
+        void hermesEventCapture.captureFeishuSendFinal({
+          sessionId,
+          userId: typeof body.userId === 'string' ? body.userId : '',
+          receiveId: typeof body.receiveId === 'string' ? body.receiveId : '',
+          receiveIdType:
+            body.receiveIdType === 'user_id' ||
+            body.receiveIdType === 'union_id' ||
+            body.receiveIdType === 'chat_id' ||
+            body.receiveIdType === 'email'
+              ? body.receiveIdType
+              : 'open_id',
+          actionCount: 0,
+          resultCount: 0,
+          status: String(status?.session?.status || '').trim() || 'completed',
+        })
+        json(res, 200, { ok: true, session: status.session, result: [], alreadySent: true } as JsonObject)
+        return
+      }
+      if (status.session.closedAt) {
+        void hermesEventCapture.captureFeishuSendFinal({
+          sessionId,
+          userId: typeof body.userId === 'string' ? body.userId : '',
+          receiveId: typeof body.receiveId === 'string' ? body.receiveId : '',
+          receiveIdType:
+            body.receiveIdType === 'user_id' ||
+            body.receiveIdType === 'union_id' ||
+            body.receiveIdType === 'chat_id' ||
+            body.receiveIdType === 'email'
+              ? body.receiveIdType
+              : 'open_id',
+          actionCount: 0,
+          resultCount: 0,
+          status: String(status?.session?.closeReason || status?.session?.status || '').trim() || 'closed',
+        })
+        json(res, 200, { ok: true, session: status.session, result: [], skippedClosed: true } as JsonObject)
+        return
+      }
       const actions = await hermesLivePhotoAdapters.handleFeishuEvent({
         userId: typeof body.userId === 'string' ? body.userId : '',
         sessionId,
       })
+      const replyActions = Array.isArray(actions.actions) ? (actions.actions as Array<{ type?: string }>) : []
+      const hasVideoAction = replyActions.some((item) => String(item?.type || '').trim() === 'video')
+      if (!hasVideoAction) {
+        void hermesEventCapture.captureFeishuSendFinal({
+          sessionId,
+          userId: typeof body.userId === 'string' ? body.userId : '',
+          receiveId: typeof body.receiveId === 'string' ? body.receiveId : '',
+          receiveIdType:
+            body.receiveIdType === 'user_id' ||
+            body.receiveIdType === 'union_id' ||
+            body.receiveIdType === 'chat_id' ||
+            body.receiveIdType === 'email'
+              ? body.receiveIdType
+              : 'open_id',
+          actionCount: replyActions.length,
+          resultCount: 0,
+          status: 'not_ready',
+        })
+        json(
+          res,
+          409,
+          {
+            ok: false,
+            retryable: true,
+            error: 'Live Photo final assets are not ready yet',
+            session: status.session,
+          } as JsonObject,
+        )
+        return
+      }
       const result = await hermesDeliveryService.sendFinalToFeishu({
         appId: typeof body.appId === 'string' ? body.appId : undefined,
         appSecret: typeof body.appSecret === 'string' ? body.appSecret : undefined,
@@ -260,20 +416,40 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
           body.receiveIdType === 'email'
             ? body.receiveIdType
             : 'open_id',
-        actions: actions.actions as any,
+        actions: replyActions as any,
       })
-      json(res, 200, { ok: true, session: status.session, result } as JsonObject)
+      const closedSession = await hermesLivePhotoService.closeSession({
+        sessionId,
+        reason: 'final_sent',
+      })
+      void hermesEventCapture.captureFeishuSendFinal({
+        sessionId,
+        userId: typeof body.userId === 'string' ? body.userId : '',
+        receiveId: typeof body.receiveId === 'string' ? body.receiveId : '',
+        receiveIdType:
+          body.receiveIdType === 'user_id' ||
+          body.receiveIdType === 'union_id' ||
+          body.receiveIdType === 'chat_id' ||
+          body.receiveIdType === 'email'
+            ? body.receiveIdType
+            : 'open_id',
+        actionCount: replyActions.length,
+        resultCount: Array.isArray(result) ? result.length : 0,
+        status: String(closedSession?.status || status?.session?.status || '').trim(),
+      })
+      json(res, 200, { ok: true, session: closedSession, result } as JsonObject)
       return
     }
 
     if (req.method === 'POST' && pathname === '/hermes/live-photo/wecom/webhook') {
       const body = await readBodyClean(req)
+      const webhookSelectionMode = body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : undefined
       const result = await hermesLivePhotoAdapters.handleWecomEvent({
         userId: typeof body.userId === 'string' ? body.userId : '',
         imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
         text: typeof body.text === 'string' ? body.text : undefined,
         sessionId: typeof body.sessionId === 'string' ? body.sessionId : undefined,
-        selectionMode: body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : 'product',
+        selectionMode: webhookSelectionMode,
       })
       json(res, 200, result as JsonObject)
       return
@@ -304,6 +480,23 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         segmentTimeSec: typeof body.segmentTimeSec === 'number' ? Number(body.segmentTimeSec) : undefined,
       })
       json(res, 200, { ok: true, item: result })
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/plugins/product-image-materials/background-variants') {
+      const body = await readBodyClean(req)
+      const parsedVariantCount = Number(body.variantCount || 1)
+      const result = await webPlatformService.createProductImageMaterialsBackgroundVariants(token, {
+        materialIds: Array.isArray(body.materialIds) ? body.materialIds.map(String) : [],
+        variantCount: Number.isFinite(parsedVariantCount) ? Math.max(1, Math.min(6, Math.floor(parsedVariantCount))) : 1,
+      })
+      json(res, 200, {
+        ok: true,
+        count: result.count,
+        created: result.created,
+        failedCount: result.failedCount,
+        errors: result.errors,
+      })
       return
     }
 

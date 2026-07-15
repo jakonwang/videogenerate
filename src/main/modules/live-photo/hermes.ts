@@ -23,8 +23,10 @@ type HermesMaterialOption = {
   index: number
   category: string
   thumbnailUrl: string
+  materialOrigin?: 'original' | 'derived'
   boundProductId?: string
   localImagePath: string
+  derivedFromMaterialId?: string
 }
 
 type HermesLivePhotoSession = {
@@ -41,9 +43,12 @@ type HermesLivePhotoSession = {
   requestedLivePhotoCount?: number
   selectedProductId?: string
   selectedMaterialId?: string
+  selectedMaterialIds?: string[]
   livePhotoItemIds: string[]
   generatedVideoPath?: string
   error?: string
+  closedAt?: number
+  closeReason?: string
   createdAt: number
   updatedAt: number
 }
@@ -61,10 +66,10 @@ type HermesProductOption = {
 }
 
 const CATEGORY_NAME_ALIASES: Record<string, string[]> = {
-  necklace: ['necklace', 'necklaces', '项链'],
-  ring: ['ring', 'rings', '戒指'],
-  earring: ['earring', 'earrings', '耳环'],
-  bracelet: ['bracelet', 'bracelets', '手链'],
+  necklace: ['necklace', 'necklaces', '椤归摼'],
+  ring: ['ring', 'rings', '鎴掓寚'],
+  earring: ['earring', 'earrings', '鑰崇幆'],
+  bracelet: ['bracelet', 'bracelets', '鎵嬮摼'],
 }
 
 function extractPositiveIntegers(text: string) {
@@ -72,14 +77,56 @@ function extractPositiveIntegers(text: string) {
   return Array.from(new Set(matches.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0)))
 }
 
+function normalizeLookupText(text: string) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-.,，。:：/\\|()[\]{}]+/g, '')
+}
+
 function isDeleteIntent(text: string) {
   const normalized = String(text || '').trim().toLowerCase()
-  return /删除|删掉|不要|移除|去掉|delete|remove|drop/.test(normalized)
+  return /\u5220\u9664|\u5220\u6389|\u4e0d\u8981|\u79fb\u9664|\u53bb\u6389|delete|remove|drop/.test(normalized)
 }
 
 function isChooseIntent(text: string) {
   const normalized = String(text || '').trim().toLowerCase()
-  return /选择|选|用|保留|choose|pick|use|keep|select/.test(normalized)
+  return /\u9009\u62e9|\u9009\u7528|\u4fdd\u7559|choose|pick|use|keep|select/.test(normalized)
+}
+
+function resolveProductIdFromOptions(text: string, products: HermesProductOption[] | undefined) {
+  const raw = String(text || '').trim()
+  if (!raw) return ''
+  const options = Array.isArray(products) ? products : []
+  const exactIdMatch = options.find((item) => item.id === raw)
+  if (exactIdMatch) return exactIdMatch.id
+
+  const normalized = normalizeLookupText(raw)
+  if (!normalized) return ''
+
+  const exactNameMatches = options.filter((item) => normalizeLookupText(item.name) === normalized)
+  if (exactNameMatches.length === 1) return exactNameMatches[0].id
+
+  const partialNameMatches = options.filter((item) => normalizeLookupText(item.name).includes(normalized))
+  if (partialNameMatches.length === 1) return partialNameMatches[0].id
+
+  return ''
+}
+
+function resolveDeliveryCount(text: string, totalAvailable: number) {
+  const numericSelections = extractPositiveIntegers(text)
+  if (numericSelections.length > 0) return numericSelections[0]
+
+  const normalized = String(text || '').trim().toLowerCase()
+  if (
+    totalAvailable > 0 &&
+    /^(all|all please|send all|\u5168\u90e8|\u5168\u90e8\u53d1|\u90fd\u53d1|\u5168\u53d1|\u5168\u8981|\u90fd\u8981)$/.test(normalized)
+  ) {
+    return totalAvailable
+  }
+
+  const parsed = Number(normalized)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0
 }
 
 function dbPath() {
@@ -111,6 +158,15 @@ async function findLatestSession(channel: string, userId: string) {
   const db = await readDb()
   return (
     db.sessions
+      .filter((item) => item.channel === channel && item.userId === userId && !item.closedAt)
+      .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null
+  )
+}
+
+async function findLatestSessionIncludingClosed(channel: string, userId: string) {
+  const db = await readDb()
+  return (
+    db.sessions
       .filter((item) => item.channel === channel && item.userId === userId)
       .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null
   )
@@ -120,7 +176,7 @@ async function findLatestAwaitingProductSession(channel: string, userId: string)
   const db = await readDb()
   return (
     db.sessions
-      .filter((item) => item.channel === channel && item.userId === userId && item.status === 'awaiting_product')
+      .filter((item) => item.channel === channel && item.userId === userId && item.status === 'awaiting_product' && !item.closedAt)
       .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null
   )
 }
@@ -129,7 +185,33 @@ async function findLatestAwaitingMaterialSession(channel: string, userId: string
   const db = await readDb()
   return (
     db.sessions
-      .filter((item) => item.channel === channel && item.userId === userId && item.status === 'awaiting_material')
+      .filter((item) => item.channel === channel && item.userId === userId && item.status === 'awaiting_material' && !item.closedAt)
+      .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null
+  )
+}
+
+async function findLatestAwaitingDeliveryCountSession(channel: string, userId: string) {
+  const db = await readDb()
+  return (
+    db.sessions
+      .filter((item) => item.channel === channel && item.userId === userId && item.status === 'awaiting_delivery_count' && !item.closedAt)
+      .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null
+  )
+}
+
+async function findLatestPendingSelectionSession(channel: string, userId: string) {
+  const db = await readDb()
+  return (
+    db.sessions
+      .filter(
+        (item) =>
+          item.channel === channel &&
+          item.userId === userId &&
+          !item.closedAt &&
+          (item.status === 'awaiting_product' ||
+            item.status === 'awaiting_material' ||
+            item.status === 'awaiting_delivery_count'),
+      )
       .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null
   )
 }
@@ -139,6 +221,48 @@ async function getSessionOrThrow(sessionId: string) {
   const session = db.sessions.find((item) => item.id === sessionId) || null
   if (!session) throw new Error('Hermes Live Photo session does not exist')
   return session
+}
+
+async function closeSessionById(sessionId: string, reason: string) {
+  const db = await readDb()
+  const index = db.sessions.findIndex((item) => item.id === sessionId)
+  if (index < 0) throw new Error('Hermes Live Photo session does not exist')
+  const session = db.sessions[index]
+  if (session.closedAt) return session
+  const ts = now()
+  const nextSession: HermesLivePhotoSession = {
+    ...session,
+    closedAt: ts,
+    closeReason: String(reason || '').trim() || 'session_closed',
+    updatedAt: ts,
+  }
+  db.sessions[index] = nextSession
+  await writeDb(db)
+  const shouldHideGeneratedItems =
+    nextSession.closeReason !== 'final_sent' &&
+    nextSession.selectionMode !== 'delivery' &&
+    Array.isArray(nextSession.livePhotoItemIds) &&
+    nextSession.livePhotoItemIds.length > 0
+  if (shouldHideGeneratedItems) {
+    await Promise.allSettled(
+      nextSession.livePhotoItemIds.map(async (itemId) => {
+        const normalizedId = String(itemId || '').trim()
+        if (!normalizedId) return
+        await livePhotoService.markItemUsed({
+          id: normalizedId,
+          channel: nextSession.channel,
+          userId: nextSession.userId,
+        })
+      }),
+    )
+  }
+  return nextSession
+}
+
+function assertSessionOpenForMutation(session: HermesLivePhotoSession) {
+  if (session.closedAt) {
+    throw new Error('Current session has been closed')
+  }
 }
 
 async function refreshPresentedMaterials(session: HermesLivePhotoSession) {
@@ -156,8 +280,10 @@ async function refreshPresentedMaterials(session: HermesLivePhotoSession) {
           index: item.index,
           category: material.category,
           thumbnailUrl: material.qiniuUrl,
+          materialOrigin: material.materialOrigin,
           boundProductId: material.boundProductId,
           localImagePath: material.localImagePath,
+          derivedFromMaterialId: material.derivedFromMaterialId,
         } as HermesMaterialOption
       }),
     )
@@ -177,8 +303,10 @@ async function refreshPresentedMaterials(session: HermesLivePhotoSession) {
         prev.id !== item.id ||
         prev.index !== item.index ||
         prev.thumbnailUrl !== item.thumbnailUrl ||
+        prev.materialOrigin !== item.materialOrigin ||
         prev.boundProductId !== item.boundProductId ||
         prev.localImagePath !== item.localImagePath ||
+        prev.derivedFromMaterialId !== item.derivedFromMaterialId ||
         prev.category !== item.category
       )
     })
@@ -257,6 +385,65 @@ async function listProductOptions(
 }
 
 export const hermesLivePhotoService = {
+  async closeSessionsForChat(input: {
+    channel: string
+    userId: string
+    includeProcessing?: boolean
+    includeFinished?: boolean
+    reason?: string
+  }) {
+    const channel = String(input.channel || '').trim() || 'unknown'
+    const userId = String(input.userId || '').trim()
+    const includeProcessing = Boolean(input.includeProcessing)
+    const includeFinished = Boolean(input.includeFinished)
+    const reason = String(input.reason || '').trim() || 'chat_reset'
+    const db = await readDb()
+    const ts = now()
+    let changed = false
+    const hiddenItemIds: string[] = []
+    db.sessions = db.sessions.map((item) => {
+      if (item.channel !== channel || item.userId !== userId || item.closedAt) return item
+      const shouldClose =
+        item.status === 'awaiting_product' ||
+        item.status === 'awaiting_material' ||
+        item.status === 'awaiting_delivery_count' ||
+        (includeProcessing && item.status === 'processing') ||
+        (includeFinished && (item.status === 'completed' || item.status === 'failed'))
+      if (!shouldClose) return item
+      changed = true
+      if (
+        reason !== 'final_sent' &&
+        item.selectionMode !== 'delivery' &&
+        Array.isArray(item.livePhotoItemIds) &&
+        item.livePhotoItemIds.length > 0
+      ) {
+        for (const itemId of item.livePhotoItemIds) {
+          const normalizedId = String(itemId || '').trim()
+          if (normalizedId) hiddenItemIds.push(normalizedId)
+        }
+      }
+      return {
+        ...item,
+        closedAt: ts,
+        closeReason: reason,
+        updatedAt: ts,
+      }
+    })
+    if (changed) await writeDb(db)
+    if (hiddenItemIds.length > 0) {
+      await Promise.allSettled(
+        hiddenItemIds.map(async (itemId) => {
+          await livePhotoService.markItemUsed({
+            id: itemId,
+            channel,
+            userId,
+          })
+        }),
+      )
+    }
+    return { closedAt: ts }
+  },
+
   async startReferenceSession(input: {
     channel: string
     userId: string
@@ -267,6 +454,40 @@ export const hermesLivePhotoService = {
       input.selectionMode === 'material' ? 'material' : input.selectionMode === 'delivery' ? 'delivery' : 'product'
     const referenceImagePaths = normalizeImagePaths(Array.isArray(input.referenceImagePaths) ? input.referenceImagePaths : [])
     if (!referenceImagePaths.length && selectionMode === 'product') throw new Error('referenceImagePaths is required')
+    if (selectionMode === 'product' && referenceImagePaths.length) {
+      const existingAwaitingProduct = await findLatestAwaitingProductSession(
+        String(input.channel || '').trim() || 'unknown',
+        String(input.userId || '').trim(),
+      )
+      if (existingAwaitingProduct && !existingAwaitingProduct.closedAt) {
+        const mergedReferenceImagePaths = normalizeImagePaths([
+          ...(Array.isArray(existingAwaitingProduct.referenceImagePaths) ? existingAwaitingProduct.referenceImagePaths : []),
+          ...referenceImagePaths,
+        ])
+        const nextSession: HermesLivePhotoSession = {
+          ...existingAwaitingProduct,
+          referenceImagePaths: mergedReferenceImagePaths,
+          updatedAt: now(),
+        }
+        await saveSession(nextSession)
+        const nextProducts = Array.isArray(nextSession.presentedProducts) ? nextSession.presentedProducts : []
+        return {
+          session: nextSession,
+          products: nextProducts,
+          message:
+            nextProducts.length > 0
+              ? '已继续收到参考图片，请选择商品编号。'
+              : '已继续收到参考图片，但当前暂无可选商品。',
+        }
+      }
+    }
+    await this.closeSessionsForChat({
+      channel: input.channel,
+      userId: input.userId,
+      includeProcessing: true,
+      includeFinished: true,
+      reason: `switch_to_${selectionMode}`,
+    })
     const products = await listProductOptions(12, selectionMode)
     const ts = now()
     const session: HermesLivePhotoSession = {
@@ -294,6 +515,19 @@ export const hermesLivePhotoService = {
 
   async getLatestSession(input: { channel: string; userId: string }) {
     return await findLatestSession(String(input.channel || '').trim() || 'unknown', String(input.userId || '').trim())
+  },
+
+  async getLatestSessionIncludingClosed(input: { channel: string; userId: string }) {
+    return await findLatestSessionIncludingClosed(
+      String(input.channel || '').trim() || 'unknown',
+      String(input.userId || '').trim(),
+    )
+  },
+
+  async getLatestSessionStatus(input: { channel: string; userId: string }) {
+    const session = await findLatestSession(String(input.channel || '').trim() || 'unknown', String(input.userId || '').trim())
+    if (!session) return null
+    return await this.getSessionStatus(session.id)
   },
 
   async getLatestAwaitingProductSession(input: { channel: string; userId: string }) {
@@ -324,6 +558,7 @@ export const hermesLivePhotoService = {
   }): Promise<
     | { sessionId: string; selectionType: 'product'; productId: string }
     | { sessionId: string; selectionType: 'material'; materialId: string }
+    | { sessionId: string; selectionType: 'material_batch'; materialIds: string[] }
     | { sessionId: string; selectionType: 'delivery_count'; count: number }
     | null
   > {
@@ -334,22 +569,14 @@ export const hermesLivePhotoService = {
     const session = explicitSessionId
       ? await getSessionOrThrow(explicitSessionId)
       : (() => undefined)()
+    if (session?.closedAt) return null
 
     const resolvedSession =
       session ||
-      (await (async () => {
-        const materialSession = await findLatestAwaitingMaterialSession(
-          String(input.channel || '').trim() || 'unknown',
-          String(input.userId || '').trim(),
-        )
-        const productSession = await findLatestAwaitingProductSession(
-          String(input.channel || '').trim() || 'unknown',
-          String(input.userId || '').trim(),
-        )
-        if (!materialSession) return productSession
-        if (!productSession) return materialSession
-        return Number(materialSession.updatedAt || 0) >= Number(productSession.updatedAt || 0) ? materialSession : productSession
-      })())
+      (await findLatestPendingSelectionSession(
+        String(input.channel || '').trim() || 'unknown',
+        String(input.userId || '').trim(),
+      ))
 
     if (!resolvedSession) return null
 
@@ -357,8 +584,7 @@ export const hermesLivePhotoService = {
       resolvedSession.status === 'awaiting_material' ? await refreshPresentedMaterials(resolvedSession) : resolvedSession
 
     if (hydratedSession.status === 'awaiting_delivery_count') {
-      const numericSelections = extractPositiveIntegers(rawText)
-      const count = numericSelections[0] || Number(rawText)
+      const count = resolveDeliveryCount(rawText, Number(hydratedSession.availableLivePhotoCount || 0))
       if (!Number.isInteger(count) || count <= 0) return null
       return {
         sessionId: hydratedSession.id,
@@ -372,6 +598,16 @@ export const hermesLivePhotoService = {
         return null
       }
       const numericSelections = extractPositiveIntegers(rawText)
+      if (numericSelections.length > 1) {
+        const materialIds = numericSelections
+          .map((selection) => String(hydratedSession.presentedMaterials?.[selection - 1]?.id || '').trim())
+          .filter(Boolean)
+        return {
+          sessionId: hydratedSession.id,
+          selectionType: 'material_batch',
+          materialIds,
+        }
+      }
       if (/^\d+$/.test(rawText) || (numericSelections.length === 1 && isChooseIntent(rawText))) {
         const index = (numericSelections[0] || Number(rawText)) - 1
         const materialId = String(hydratedSession.presentedMaterials?.[index]?.id || '').trim()
@@ -399,6 +635,15 @@ export const hermesLivePhotoService = {
       }
     }
 
+    const matchedProductId = resolveProductIdFromOptions(rawText, hydratedSession.presentedProducts)
+    if (matchedProductId) {
+      return {
+        sessionId: hydratedSession.id,
+        selectionType: 'product',
+        productId: matchedProductId,
+      }
+    }
+
     return explicitSessionId
       ? {
           sessionId: hydratedSession.id,
@@ -410,6 +655,7 @@ export const hermesLivePhotoService = {
 
   async selectProduct(input: { sessionId: string; productId: string }) {
     const session = await getSessionOrThrow(String(input.sessionId || '').trim())
+    assertSessionOpenForMutation(session)
     if (session.status !== 'awaiting_product') {
       throw new Error(`Current session is not awaiting product selection: ${session.status}`)
     }
@@ -459,17 +705,17 @@ export const hermesLivePhotoService = {
         error: undefined,
       }
       await saveSession(nextSession)
-      return {
-        session: nextSession,
-        product: selected,
-        createdItems: [],
-        materials: [],
-        message:
-          availableItems.length > 0
-            ? `\u5df2\u9009\u62e9\u5546\u54c1\uff0c\u5f53\u524d\u6709 ${availableItems.length} \u4e2a\u672a\u4f7f\u7528\u7684 Live Photo \u89c6\u9891\u3002\u8bf7\u8f93\u5165\u4f60\u8981\u53d1\u9001\u7684\u6570\u91cf\u3002`
+        return {
+          session: nextSession,
+          product: selected,
+          createdItems: [],
+          materials: [],
+          message:
+            availableItems.length > 0
+            ? `\u5df2\u9009\u62e9\u5546\u54c1\uff0c\u5f53\u524d\u6709 ${availableItems.length} \u4e2a\u672a\u4f7f\u7528\u7684 Live Photo \u89c6\u9891\u3002\u8bf7\u8f93\u5165\u4f60\u8981\u53d1\u9001\u7684\u6570\u91cf\uff0c\u4e5f\u53ef\u4ee5\u76f4\u63a5\u56de all \u5168\u90e8\u53d1\u9001\u3002`
             : '\u5df2\u9009\u62e9\u5546\u54c1\uff0c\u4f46\u5f53\u524d\u6682\u65e0\u672a\u4f7f\u7528\u7684 Live Photo \u89c6\u9891\u3002',
+        }
       }
-    }
 
     const created = await livePhotoService.enqueueReferenceItems({
       referenceImagePaths: session.referenceImagePaths,
@@ -502,6 +748,7 @@ export const hermesLivePhotoService = {
 
   async selectDeliveryCount(input: { sessionId: string; count: number }) {
     const session = await getSessionOrThrow(String(input.sessionId || '').trim())
+    assertSessionOpenForMutation(session)
     if (session.status !== 'awaiting_delivery_count') {
       throw new Error(`Current session is not awaiting live photo quantity selection: ${session.status}`)
     }
@@ -542,6 +789,7 @@ export const hermesLivePhotoService = {
 
   async selectMaterial(input: { sessionId: string; materialId: string }) {
     const current = await getSessionOrThrow(String(input.sessionId || '').trim())
+    assertSessionOpenForMutation(current)
     const session = await refreshPresentedMaterials(current)
     if (session.status !== 'awaiting_material') {
       throw new Error(`Current session is not awaiting material selection: ${session.status}`)
@@ -585,8 +833,62 @@ export const hermesLivePhotoService = {
     }
   },
 
+  async selectMaterials(input: { sessionId: string; materialIds: string[] }) {
+    const current = await getSessionOrThrow(String(input.sessionId || '').trim())
+    assertSessionOpenForMutation(current)
+    const session = await refreshPresentedMaterials(current)
+    if (session.status !== 'awaiting_material') {
+      throw new Error(`Current session is not awaiting material selection: ${session.status}`)
+    }
+    if (!session.selectedProductId) throw new Error('Selected product is missing from current session')
+    const requestedIds = Array.isArray(input.materialIds)
+      ? Array.from(new Set(input.materialIds.map((item) => String(item || '').trim()).filter(Boolean)))
+      : []
+    if (!requestedIds.length) throw new Error('Selected materials do not exist')
+    const selectedMaterials = (session.presentedMaterials || []).filter((item) => requestedIds.includes(item.id))
+    if (!selectedMaterials.length) throw new Error('Selected materials do not exist')
+
+    const created = await livePhotoService.enqueueReferenceItems({
+      referenceImagePaths: selectedMaterials.map((item) => item.localImagePath),
+      productId: session.selectedProductId,
+      motionTemplate: 'push_in',
+    })
+    const createdItems = (Array.isArray(created) ? created : [created]).filter(Boolean)
+    await livePhotoService.startReferenceItems({
+      ids: createdItems.map((item) => item.id),
+      motionTemplate: 'push_in',
+    })
+
+    for (const selectedMaterial of selectedMaterials) {
+      try {
+        await productImageMaterialsService.markMaterialUsed(selectedMaterial.id)
+      } catch (error) {
+        const message = String((error as Error)?.message || error || '').trim()
+        if (message && message !== 'Material does not exist') throw error
+      }
+    }
+
+    const nextSession: HermesLivePhotoSession = {
+      ...session,
+      selectedMaterialId: selectedMaterials[0]?.id,
+      selectedMaterialIds: selectedMaterials.map((item) => item.id),
+      status: 'processing',
+      livePhotoItemIds: createdItems.map((item) => item.id),
+      updatedAt: now(),
+      error: undefined,
+    }
+    await saveSession(nextSession)
+    return {
+      session: nextSession,
+      materials: selectedMaterials,
+      createdItems,
+      message: `\u5df2\u9009\u62e9 ${selectedMaterials.length} \u5f20\u7d20\u6750\u56fe\u7247\uff0c\u5df2\u6279\u91cf\u5f00\u59cb\u751f\u6210 Live Photo\u3002`,
+    }
+  },
+
   async deleteMaterials(input: { sessionId: string; materialIds?: string[]; indexes?: number[] }) {
     const current = await getSessionOrThrow(String(input.sessionId || '').trim())
+    assertSessionOpenForMutation(current)
     const session = await refreshPresentedMaterials(current)
     if (session.status !== 'awaiting_material') {
       throw new Error(`Current session is not awaiting material selection: ${session.status}`)
@@ -657,21 +959,40 @@ export const hermesLivePhotoService = {
       await Promise.all(session.livePhotoItemIds.map((itemId) => livePhotoService.get(itemId)))
     ).filter(Boolean)
     const completedItems = items.filter((item) => item?.packagingStatus === 'completed')
-    const failedItem = items.find((item) => item?.packagingStatus === 'failed')
+    const failedItems = items.filter((item) => item?.packagingStatus === 'failed')
+    const activeItems = items.filter((item) => item?.packagingStatus !== 'completed' && item?.packagingStatus !== 'failed')
     const generatedVideoPath =
+      String(completedItems[0]?.livePhotoVideoPath || '').trim() ||
       String(completedItems[0]?.previewVideoPath || '').trim() ||
       String(completedItems[0]?.motionVideoPath || '').trim() ||
       undefined
 
     let nextStatus = session.status
     let nextError = session.error
-    if (failedItem) {
-      nextStatus = 'failed'
-      nextError = String(failedItem?.error || 'Live Photo generation failed').trim()
-    } else if (completedItems.length === session.livePhotoItemIds.length && completedItems.length > 0) {
+    if (activeItems.length > 0) {
+      nextStatus = 'processing'
+      nextError = undefined
+    } else if (completedItems.length > 0) {
       nextStatus = 'completed'
+      if (failedItems.length > 0) {
+        const failureReasons = Array.from(
+          new Set(
+            failedItems
+              .map((item) => String(item?.error || '').trim())
+              .filter(Boolean),
+          ),
+        )
+        const suffix = failureReasons.length ? `：${failureReasons.slice(0, 2).join('；')}` : ''
+        nextError = `${failedItems.length} 个任务生成失败${suffix}`
+      } else {
+        nextError = undefined
+      }
+    } else if (failedItems.length > 0) {
+      nextStatus = 'failed'
+      nextError = String(failedItems[0]?.error || 'Live Photo generation failed').trim()
     } else if (items.length > 0) {
       nextStatus = 'processing'
+      nextError = undefined
     }
 
     if (
@@ -713,5 +1034,9 @@ export const hermesLivePhotoService = {
       completed: result.completed,
       generatedVideoPath: result.session.generatedVideoPath,
     }
+  },
+
+  async closeSession(input: { sessionId: string; reason?: string }) {
+    return await closeSessionById(String(input.sessionId || '').trim(), String(input.reason || '').trim() || 'session_closed')
   },
 }

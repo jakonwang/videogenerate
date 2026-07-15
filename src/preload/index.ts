@@ -626,6 +626,8 @@ const api = {
     listBatches: (payload: { userId: string }) => ipcRenderer.invoke('plugin:productImageMaterials:listBatches', payload),
     retryBatch: (payload: { userId: string; batchId: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:retryBatch', payload),
+    createBackgroundVariants: (payload: { userId: string; materialIds: string[]; variantCount: number }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:createBackgroundVariants', payload),
     listMaterials: (payload: {
       userId: string
       filters?: {

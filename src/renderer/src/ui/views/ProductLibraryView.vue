@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Boxes,
@@ -71,6 +71,8 @@ const sortMode = ref<SortMode>('updated_desc')
 const typeFilter = ref<'all' | ProductType>('all')
 const statusFilter = ref<ProductStatusFilter>('all')
 const viewMode = ref<ViewMode>('grid')
+const currentPage = ref(1)
+const pageSize = ref(12)
 const creating = reactive({ name: '', type: 'phone_case' as ProductType })
 const actionMenuOpenId = ref('')
 
@@ -144,6 +146,37 @@ const filteredProducts = computed(() => {
     const bTime = Number(b.analysisBoardUpdatedAt ?? b.canonicalSourceUpdatedAt ?? b.updatedAt ?? b.createdAt ?? 0)
     return bTime - aTime
   })
+})
+
+const totalPages = computed(() => {
+  return Math.max(1, Math.ceil(filteredProducts.value.length / pageSize.value))
+})
+
+const pagedProducts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredProducts.value.slice(start, start + pageSize.value)
+})
+
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  if (total <= 5) return Array.from({ length: total }, (_, index) => index + 1)
+
+  let start = Math.max(1, currentPage.value - 2)
+  let end = Math.min(total, start + 4)
+
+  if (end - start < 4) {
+    start = Math.max(1, end - 4)
+  }
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+})
+
+watch([query, sortMode, typeFilter, statusFilter, pageSize], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, (value) => {
+  if (currentPage.value > value) currentPage.value = value
 })
 
 function toFileUrl(filePath: string) {
@@ -253,6 +286,18 @@ async function createProduct() {
 
 function openDetail(productId: string) {
   void router.push(`/products/${productId}`)
+}
+
+function setPage(page: number) {
+  currentPage.value = Math.min(Math.max(1, page), totalPages.value)
+}
+
+function prevPage() {
+  setPage(currentPage.value - 1)
+}
+
+function nextPage() {
+  setPage(currentPage.value + 1)
 }
 
 async function removeProduct(product: Product) {
@@ -454,7 +499,7 @@ onBeforeUnmount(() => {
           data-testid="product-library-grid"
         >
           <article
-            v-for="product in filteredProducts"
+            v-for="product in pagedProducts"
             :key="product.id"
             class="product-card"
             :data-testid="`product-library-item-${product.id}`"
@@ -524,17 +569,30 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <footer class="pagination-row">
+        <footer v-if="filteredProducts.length" class="pagination-row">
           <div class="pagination-nav">
-            <button class="pagination-button" type="button">上一页</button>
-            <button class="pagination-button pagination-button--active" type="button">1</button>
-            <button class="pagination-button" type="button">2</button>
-            <button class="pagination-button" type="button">下一页</button>
+            <button class="pagination-button" type="button" :disabled="currentPage <= 1" @click="prevPage">上一页</button>
+            <button
+              v-for="page in visiblePages"
+              :key="page"
+              class="pagination-button"
+              :class="{ 'pagination-button--active': currentPage === page }"
+              type="button"
+              @click="setPage(page)"
+            >
+              {{ page }}
+            </button>
+            <button class="pagination-button" type="button" :disabled="currentPage >= totalPages" @click="nextPage">下一页</button>
           </div>
-          <button class="page-size-button" type="button">
-            <span>12 条 / 页</span>
+          <label class="page-size-button">
+            <select v-model.number="pageSize" class="page-size-select">
+              <option :value="12">12</option>
+              <option :value="24">24</option>
+              <option :value="48">48</option>
+            </select>
+            <span>条 / 页</span>
             <ChevronDown class="h-4 w-4" />
-          </button>
+          </label>
         </footer>
       </section>
     </section>
@@ -1166,11 +1224,28 @@ onBeforeUnmount(() => {
   min-width: 40px;
 }
 
+.pagination-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .page-size-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 0 14px;
+}
+
+.page-size-select {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #eef2ff;
+  font-size: 13px;
+  font-weight: 700;
+  padding-right: 12px;
 }
 
 @media (max-width: 1600px) {

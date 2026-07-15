@@ -40,6 +40,60 @@ function isPublicHttpUrl(value: string) {
   return /^https?:\/\//i.test(String(value || '').trim())
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableFetchError(error: unknown) {
+  const message = String((error as any)?.message ?? error ?? '')
+  return /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network|502|503|504|bad gateway|gateway time-?out|temporarily unavailable|upstream connect error|request timeout/i.test(
+    message,
+  )
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 90_000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error(`request timeout after ${timeoutMs}ms`)), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function fetchWithRetry(input: {
+  url: string
+  init?: RequestInit
+  label: string
+  retries?: number
+  timeoutMs?: number
+  baseDelayMs?: number
+}) {
+  const retries = Math.max(0, Number(input.retries ?? 2))
+  const baseDelayMs = Math.max(300, Number(input.baseDelayMs ?? 1200))
+  let lastError: unknown
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetchWithTimeout(input.url, input.init, input.timeoutMs)
+    } catch (error) {
+      lastError = error
+      if (attempt >= retries || !isRetryableFetchError(error)) break
+      console.warn('[clone-debug] unified-image-fetch-retry', {
+        label: input.label,
+        url: input.url,
+        attempt: attempt + 1,
+        retries,
+        message: String((error as any)?.message ?? error ?? ''),
+      })
+      await sleep(baseDelayMs * (attempt + 1))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`${input.label} failed`)
+}
+
 async function ensurePublicRefs(credentials: ModelCredentials, paths: string[] | undefined) {
   const refs = (paths ?? []).map((x) => String(x || '').trim()).filter(Boolean)
   const urls: string[] = []
@@ -83,7 +137,12 @@ async function buildImageEditFormData(input: {
       continue
     }
     if (isPublicHttpUrl(ref)) {
-      const res = await fetch(ref)
+      const res = await fetchWithRetry({
+        url: ref,
+        label: 'image-edit-reference-download',
+        timeoutMs: 90_000,
+        retries: 2,
+      })
       if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 参考图下载失败 HTTP ${res.status}: ${ref}`)
       const arrayBuffer = await res.arrayBuffer()
       const contentType = String(res.headers.get('content-type') || '').trim() || mimeByPath(ref)
@@ -249,14 +308,20 @@ export async function generateImage(input: {
       imagePaths: refs,
       uploadFileNames: input.uploadFileNames,
     })
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'x-api-key': key,
-        Accept: 'application/json',
+    const res = await fetchWithRetry({
+      url,
+      label: 'vectorengine-image-edit',
+      timeoutMs: 120_000,
+      retries: 2,
+      init: {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'x-api-key': key,
+          Accept: 'application/json',
+        },
+        body: form,
       },
-      body: form,
     })
     const text = await res.text()
     let json: any = null

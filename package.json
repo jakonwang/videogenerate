@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.37",
+  "version": "5.0.44",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -89,7 +89,11 @@
     "test:live-photo-hermes-platform": "tsx test/live-photo-hermes-platform-formatters.smoke.ts",
     "test:live-photo-hermes-delivery": "tsx test/live-photo-hermes-delivery.smoke.ts",
     "test:live-photo-hermes-ingress": "tsx test/live-photo-hermes-media-ingress.smoke.ts",
+    "test:live-photo-hermes-http": "tsx test/live-photo-hermes-http-router.smoke.ts",
+    "test:live-photo-hermes-replay": "tsx test/live-photo-hermes-replay.smoke.ts",
+    "test:live-photo-hermes-skill-auto": "tsx test/live-photo-hermes-feishu-skill-auto.smoke.ts",
     "test:live-photo-hermes-e2e-sim": "tsx test/live-photo-hermes-e2e-sim.smoke.ts",
+    "test:live-photo-hermes-suite": "npm run test:live-photo-hermes && npm run test:live-photo-hermes-platform && npm run test:live-photo-hermes-ingress && npm run test:live-photo-hermes-http && npm run test:live-photo-hermes-replay && npm run test:live-photo-hermes-skill-auto && npm run test:live-photo-hermes-e2e-sim",
     "test:tiktok-listing-grs-image-aspect-ratio": "tsx test/tiktok-listing-grs-image-aspect-ratio.smoke.ts",
     "test:tiktok-listing-prompts": "tsx test/tiktok-listing-prompts.smoke.ts"
   },

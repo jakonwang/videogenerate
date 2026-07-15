@@ -6853,7 +6853,7 @@ async function normalizeShotVideoState(project: CloneProject, shot: ShotSpec) {
   const remoteRaw = (output.remoteRaw ?? {}) as Record<string, any>
   const remoteRawData =
     remoteRaw?.data && typeof remoteRaw.data === 'object' ? (remoteRaw.data as Record<string, any>) : {}
-  const resolvedVideoUrl = String(output.videoUrl || remoteRaw?.video_url || remoteRawData?.video_url || '').trim()
+  const resolvedVideoUrl = resolveShotVideoRemoteUrl(output)
   const existingManagedVideoPath = String(output.videoPath || output.localPath || shot.generatedClipPath || '').trim()
   const hasManagedCompletedArtifact =
     existingManagedVideoPath === managedSceneVideoPath || existingManagedVideoPath === managedShotVideoPath
@@ -7129,6 +7129,33 @@ function hasReachedShotVideoRetryLimit(retryCount: unknown, limit = AUTO_CLONE_V
   return Number(retryCount ?? 0) >= Math.max(0, Number(limit || 0))
 }
 
+function resolveShotVideoRemoteUrl(output: Partial<CloneShotVideoOutput> | undefined) {
+  const remoteRaw = (output?.remoteRaw ?? {}) as Record<string, any>
+  const remoteRawData =
+    remoteRaw?.data && typeof remoteRaw.data === 'object' ? (remoteRaw.data as Record<string, any>) : {}
+  const remoteResult =
+    remoteRaw?.result && typeof remoteRaw.result === 'object' ? (remoteRaw.result as Record<string, any>) : {}
+  return String(
+    output?.videoUrl ||
+      remoteRaw?.video_url ||
+      remoteRawData?.video_url ||
+      remoteRaw?.videoUrl ||
+      remoteRawData?.videoUrl ||
+      remoteRaw?.url ||
+      remoteRawData?.url ||
+      remoteRaw?.outputUrl ||
+      remoteRaw?.output_url ||
+      remoteRawData?.outputUrl ||
+      remoteRawData?.output_url ||
+      remoteRaw?.output?.url ||
+      remoteRawData?.output?.url ||
+      remoteResult?.video_url ||
+      remoteResult?.videoUrl ||
+      remoteResult?.url ||
+      '',
+  ).trim()
+}
+
 function classifyShotVideoFailure(input: {
   status?: string
   taskId?: string
@@ -7353,7 +7380,7 @@ function hasSucceededRemoteVideoResult(output: Partial<CloneShotVideoOutput> | u
   const remoteRaw = (output?.remoteRaw ?? {}) as Record<string, any>
   const remoteRawData = remoteRaw?.data && typeof remoteRaw.data === 'object' ? (remoteRaw.data as Record<string, any>) : {}
   const remoteStatus = String(output?.remoteStatus || remoteRaw?.status || remoteRawData?.status || '').trim().toLowerCase()
-  const hasVideoUrl = Boolean(String(output?.videoUrl || remoteRaw?.video_url || remoteRawData?.video_url || '').trim())
+  const hasVideoUrl = Boolean(resolveShotVideoRemoteUrl(output))
   return hasVideoUrl && ['succeeded', 'success', 'completed', 'done', 'finished'].includes(remoteStatus)
 }
 
@@ -7868,10 +7895,7 @@ async function downloadCompletedSegmentTask(input: {
     })
     return { project: latestProject, status: String(currentOutput.status || 'submitting') as 'submitting' }
   }
-  const remoteRaw = (currentOutput.remoteRaw ?? {}) as Record<string, any>
-  const remoteRawData =
-    remoteRaw?.data && typeof remoteRaw.data === 'object' ? (remoteRaw.data as Record<string, any>) : {}
-  const videoUrl = String(currentOutput.videoUrl || remoteRaw?.video_url || remoteRawData?.video_url || '').trim()
+  const videoUrl = resolveShotVideoRemoteUrl(currentOutput)
   console.log('[clone-debug] shot-video-download:begin', {
     projectId: latestProject.id,
     shotId: latestShot.id,
@@ -8055,10 +8079,7 @@ async function continueShotVideoResultFlow(input: {
     ensureCloneFlowState(latestProject)
     const latestShot = projectBlueprintShots(latestProject).find((item) => item.id === currentShot.id) || currentShot
     const latestOutput = resolveShotVideoOutput(latestProject, latestShot)
-    const recoveredVideoUrl = String(
-      latestOutput.videoUrl ||
-        ((latestOutput.remoteRaw as any)?.video_url ?? (latestOutput.remoteRaw as any)?.data?.video_url ?? ''),
-    ).trim()
+    const recoveredVideoUrl = resolveShotVideoRemoteUrl(latestOutput)
     if (recoveredVideoUrl && !String(latestOutput.videoUrl || '').trim()) {
       syncSegmentVideoOutput(latestProject, latestShot, {
         videoUrl: recoveredVideoUrl,

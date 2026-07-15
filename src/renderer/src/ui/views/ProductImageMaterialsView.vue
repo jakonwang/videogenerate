@@ -52,6 +52,9 @@ type MaterialItem = {
   frameTimeSec: number
   localImagePath: string
   qiniuUrl: string
+  materialOrigin?: 'original' | 'derived'
+  derivedFromMaterialId?: string
+  derivedVariantIndex?: number
   usageStatus: UsageStatus
   boundProductId?: string
   createdAt: number
@@ -66,7 +69,7 @@ type ProductItem = {
 const { locale } = useI18n()
 const DESKTOP_USER_ID = 'desktop-local'
 
-const activeTab = ref<'batch' | 'library'>('batch')
+const activeTab = ref<'batch' | 'background' | 'library'>('batch')
 const categories = ref<Category[]>(['necklace', 'ring', 'earring', 'bracelet'])
 const selectedCategory = ref<Category>('necklace')
 const pickedVideos = ref<string[]>([])
@@ -76,10 +79,14 @@ const products = ref<ProductItem[]>([])
 const filterCategory = ref<'all' | Category>('all')
 const filterUsageStatus = ref<'all' | UsageStatus>('all')
 const libraryPage = ref(1)
+const backgroundPage = ref(1)
 const libraryPageSize = ref(24)
 const selectedMaterialIds = ref<string[]>([])
+const backgroundMaterialCount = ref(3)
+const selectedBackgroundMaterialIds = ref<string[]>([])
 const loading = ref(false)
 const submitting = ref(false)
+const backgroundSubmitting = ref(false)
 const actionBusyId = ref('')
 const errorText = ref('')
 const notice = ref('')
@@ -260,6 +267,23 @@ const copy = computed(() => {
   }
 })
 
+const backgroundCopy = {
+  tab: '背景生成',
+  desc: '选择原始素材，批量生成相似背景图，同时保持产品主体不变。',
+  hint: '衍生图片会清晰标记，并默认从来源选择器中隐藏。',
+  materialCount: '每张生成数量',
+  generate: '生成背景变体',
+  sourceOnly: '仅看原图',
+  clearSelection: '清空选择',
+  selected: '已选',
+  totalOutput: '总输出',
+  origin: '来源',
+  original: '原始',
+  derived: '已衍生',
+  derivedFrom: '衍生自',
+  success: '背景变体已生成。',
+} as const
+
 const libraryBatchCopy = computed(() => {
   if (locale.value === 'vi-VN') {
     return {
@@ -347,13 +371,26 @@ const filteredMaterials = computed(() =>
     return true
   }),
 )
+const backgroundSourceMaterials = computed(() => materials.value.filter((item) => item.materialOrigin !== 'derived'))
 const libraryTotalPages = computed(() => Math.max(1, Math.ceil(filteredMaterials.value.length / libraryPageSize.value)))
+const backgroundTotalPages = computed(() => Math.max(1, Math.ceil(backgroundSourceMaterials.value.length / libraryPageSize.value)))
 const pagedMaterials = computed(() => {
   const start = (libraryPage.value - 1) * libraryPageSize.value
   return filteredMaterials.value.slice(start, start + libraryPageSize.value)
 })
+const pagedBackgroundMaterials = computed(() => {
+  const start = (backgroundPage.value - 1) * libraryPageSize.value
+  return backgroundSourceMaterials.value.slice(start, start + libraryPageSize.value)
+})
 const selectedVisibleCount = computed(() => pagedMaterials.value.filter((item) => selectedMaterialIds.value.includes(item.id)).length)
 const allVisibleSelected = computed(() => pagedMaterials.value.length > 0 && selectedVisibleCount.value === pagedMaterials.value.length)
+const selectedBackgroundVisibleCount = computed(() =>
+  pagedBackgroundMaterials.value.filter((item) => selectedBackgroundMaterialIds.value.includes(item.id)).length,
+)
+const allBackgroundVisibleSelected = computed(
+  () => pagedBackgroundMaterials.value.length > 0 && selectedBackgroundVisibleCount.value === pagedBackgroundMaterials.value.length,
+)
+const backgroundTotalOutput = computed(() => selectedBackgroundMaterialIds.value.length * Math.max(1, Math.floor(backgroundMaterialCount.value || 1)))
 
 const latestBatch = computed(() => batches.value[0] || null)
 
@@ -442,6 +479,18 @@ function shortMaterialId(id: string) {
   return value.length > 10 ? value.slice(0, 10) : value
 }
 
+function materialOriginLabel(value?: MaterialItem['materialOrigin']) {
+  return value === 'derived' ? backgroundCopy.derived : backgroundCopy.original
+}
+
+function backgroundMaterialTitle(item: MaterialItem) {
+  if (item.materialOrigin === 'derived') {
+    const source = shortMaterialId(item.derivedFromMaterialId || '')
+    return `${backgroundCopy.derivedFrom} ${source}`
+  }
+  return `${copy.value.segment} ${item.segmentIndex + 1}`
+}
+
 async function loadAll() {
   loading.value = true
   try {
@@ -463,6 +512,7 @@ async function loadAll() {
     products.value = nextProducts
     const validIds = new Set(nextMaterials.map((item) => item.id))
     selectedMaterialIds.value = selectedMaterialIds.value.filter((item) => validIds.has(item))
+    selectedBackgroundMaterialIds.value = selectedBackgroundMaterialIds.value.filter((item) => validIds.has(item))
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -475,6 +525,13 @@ function toggleMaterialSelection(materialId: string) {
   if (next.has(materialId)) next.delete(materialId)
   else next.add(materialId)
   selectedMaterialIds.value = Array.from(next)
+}
+
+function toggleBackgroundMaterialSelection(materialId: string) {
+  const next = new Set(selectedBackgroundMaterialIds.value)
+  if (next.has(materialId)) next.delete(materialId)
+  else next.add(materialId)
+  selectedBackgroundMaterialIds.value = Array.from(next)
 }
 
 function toggleSelectAllVisible() {
@@ -492,6 +549,21 @@ function clearSelectedMaterials() {
   selectedMaterialIds.value = []
 }
 
+function toggleSelectAllBackgroundVisible() {
+  if (allBackgroundVisibleSelected.value) {
+    const visibleIds = new Set(pagedBackgroundMaterials.value.map((item) => item.id))
+    selectedBackgroundMaterialIds.value = selectedBackgroundMaterialIds.value.filter((item) => !visibleIds.has(item))
+    return
+  }
+  const next = new Set(selectedBackgroundMaterialIds.value)
+  pagedBackgroundMaterials.value.forEach((item) => next.add(item.id))
+  selectedBackgroundMaterialIds.value = Array.from(next)
+}
+
+function clearSelectedBackgroundMaterials() {
+  selectedBackgroundMaterialIds.value = []
+}
+
 watch([filterCategory, filterUsageStatus], () => {
   libraryPage.value = 1
 })
@@ -499,6 +571,12 @@ watch([filterCategory, filterUsageStatus], () => {
 watch([filteredMaterials, libraryPageSize], () => {
   if (libraryPage.value > libraryTotalPages.value) {
     libraryPage.value = libraryTotalPages.value
+  }
+})
+
+watch([backgroundSourceMaterials, libraryPageSize], () => {
+  if (backgroundPage.value > backgroundTotalPages.value) {
+    backgroundPage.value = backgroundTotalPages.value
   }
 })
 
@@ -643,6 +721,28 @@ async function exportSelectedMaterials() {
   }
 }
 
+async function generateBackgroundVariants() {
+  const materialIds = selectedBackgroundMaterialIds.value.filter(Boolean)
+  if (!materialIds.length) return
+  backgroundSubmitting.value = true
+  errorText.value = ''
+  notice.value = ''
+  try {
+    const result = await window.api.productImageMaterials.createBackgroundVariants({
+      userId: DESKTOP_USER_ID,
+      materialIds,
+      variantCount: Math.max(1, Math.min(6, Math.floor(Number(backgroundMaterialCount.value || 1)))),
+    })
+    selectedBackgroundMaterialIds.value = []
+    notice.value = `${backgroundCopy.success} ${result.count}`
+    await loadAll()
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    backgroundSubmitting.value = false
+  }
+}
+
 function openPublicUrl(url: string) {
   if (!url) return
   window.open(url, '_blank', 'noopener,noreferrer')
@@ -704,6 +804,11 @@ onUnmounted(() => {
             <ImageIcon class="icon icon--small" />
             <span>{{ copy.libraryTab }}</span>
             <span class="tab-badge">{{ materials.length }}</span>
+          </button>
+          <button class="tab-button" :class="{ active: activeTab === 'background' }" type="button" @click="activeTab = 'background'">
+            <ImageIcon class="icon icon--small" />
+            <span>{{ backgroundCopy.tab }}</span>
+            <span class="tab-badge">{{ backgroundSourceMaterials.length }}</span>
           </button>
         </div>
       </div>
@@ -831,6 +936,124 @@ onUnmounted(() => {
         </section>
       </div>
 
+      <section v-else-if="activeTab === 'background'" class="panel panel--library">
+        <div class="section-head section-head--library">
+          <div class="section-head__lead">
+            <div class="section-head__badge section-head__badge--image">
+              <Sparkles class="icon icon--small" />
+            </div>
+            <div>
+              <h2>{{ backgroundCopy.tab }}</h2>
+              <p>{{ backgroundCopy.desc }}</p>
+            </div>
+          </div>
+          <div class="panel__hint">
+            <span>{{ backgroundCopy.hint }}</span>
+            <Info class="icon icon--tiny" />
+          </div>
+        </div>
+
+        <div class="filter-grid filter-grid--library">
+          <label>
+            <span>{{ backgroundCopy.materialCount }}</span>
+            <input v-model.number="backgroundMaterialCount" class="input" type="number" min="1" max="6" step="1" />
+          </label>
+          <label>
+            <span>{{ backgroundCopy.totalOutput }}</span>
+            <input class="input" :value="backgroundTotalOutput" disabled />
+          </label>
+        </div>
+
+        <div v-if="backgroundSourceMaterials.length" class="library-toolbar">
+          <div class="library-toolbar__selection">
+            <button class="ghost-button ghost-button--toolbar" type="button" @click="toggleSelectAllBackgroundVisible">
+              {{ allBackgroundVisibleSelected ? backgroundCopy.clearSelection : backgroundCopy.sourceOnly }}
+            </button>
+            <span class="library-toolbar__count">{{ backgroundCopy.selected }} {{ selectedBackgroundMaterialIds.length }}</span>
+          </div>
+          <div class="library-toolbar__actions">
+            <button
+              class="ghost-button library-toolbar__delete"
+              type="button"
+              :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting"
+              @click="clearSelectedBackgroundMaterials"
+            >
+              <Trash2 class="icon" />
+              {{ backgroundCopy.clearSelection }}
+            </button>
+            <button
+              class="primary-button library-toolbar__export"
+              type="button"
+              :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting"
+              @click="generateBackgroundVariants"
+            >
+              <RefreshCcw class="icon" :class="{ spin: backgroundSubmitting }" />
+              {{ backgroundCopy.generate }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!backgroundSourceMaterials.length" class="empty-copy">{{ copy.noMaterials }}</div>
+        <div v-else class="library-results">
+          <div class="album-grid">
+            <article v-for="item in pagedBackgroundMaterials" :key="item.id" class="album-card">
+              <div class="album-card__media">
+                <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+                <button
+                  class="select-checkbox"
+                  :class="{ 'select-checkbox--active': selectedBackgroundMaterialIds.includes(item.id) }"
+                  type="button"
+                  @click="toggleBackgroundMaterialSelection(item.id)"
+                >
+                  <Check v-if="selectedBackgroundMaterialIds.includes(item.id)" class="icon icon--tiny" />
+                </button>
+                <div class="album-card__overlay">
+                  <span class="status-pill" :class="item.materialOrigin === 'derived' ? 'is-warning' : 'is-success'">
+                    {{ materialOriginLabel(item.materialOrigin) }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="album-card__body">
+                <div class="album-card__topline">
+                  <strong>{{ shortMaterialId(item.id) }}</strong>
+                  <span class="album-card__category">{{ categoryLabel(item.category) }}</span>
+                </div>
+                <div class="album-card__meta">
+                  <span>{{ backgroundMaterialTitle(item) }}</span>
+                  <span v-if="item.materialOrigin === 'derived'">{{ shortMaterialId(item.derivedFromMaterialId || '') }}</span>
+                </div>
+                <div class="album-card__status-row">
+                  <span class="usage-chip usage-chip--unused">{{ materialOriginLabel(item.materialOrigin) }}</span>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div v-if="backgroundSourceMaterials.length > libraryPageSize" class="library-pagination">
+            <div class="library-pagination__nav">
+              <button class="ghost-button ghost-button--toolbar" type="button" :disabled="backgroundPage <= 1" @click="backgroundPage -= 1">
+                {{ paginationCopy.prev }}
+              </button>
+              <span class="library-pagination__text">{{ backgroundPage }} / {{ backgroundTotalPages }}</span>
+              <button class="ghost-button ghost-button--toolbar" type="button" :disabled="backgroundPage >= backgroundTotalPages" @click="backgroundPage += 1">
+                {{ paginationCopy.next }}
+              </button>
+            </div>
+            <div class="library-pagination__size">
+              <span>{{ paginationCopy.perPage }}</span>
+              <select v-model.number="libraryPageSize" class="input input--compact library-pagination__select">
+                <option :value="24">24</option>
+                <option :value="32">32</option>
+                <option :value="48">48</option>
+                <option :value="64">64</option>
+              </select>
+              <span>{{ paginationCopy.items }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section v-else class="panel panel--library">
         <div class="section-head section-head--library">
           <div class="section-head__lead">
@@ -932,10 +1155,14 @@ onUnmounted(() => {
               <div class="album-card__topline">
                 <strong>{{ shortMaterialId(item.id) }}</strong>
                 <span class="album-card__category">{{ categoryLabel(item.category) }}</span>
+                <span class="album-card__category" :class="{ 'album-card__category--derived': item.materialOrigin === 'derived' }">
+                  {{ materialOriginLabel(item.materialOrigin) }}
+                </span>
               </div>
               <div class="album-card__meta">
                 <span>{{ copy.segment }} {{ item.segmentIndex + 1 }}</span>
                 <span>{{ item.frameTimeSec.toFixed(2) }}s</span>
+                <span v-if="item.materialOrigin === 'derived'">{{ backgroundCopy.derivedFrom }} {{ shortMaterialId(item.derivedFromMaterialId || '') }}</span>
               </div>
               <div class="album-card__status-row">
                 <button
@@ -1774,6 +2001,11 @@ label span {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(232, 237, 255, 0.86);
+}
+
+.album-card__category--derived {
+  background: rgba(244, 201, 93, 0.14);
+  color: #f4c95d;
 }
 
 .album-card__status-row {

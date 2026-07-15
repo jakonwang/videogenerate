@@ -48,7 +48,7 @@ async function main() {
         videoUrl: '',
         remoteRaw: {
           status: 'succeeded',
-          video_url: downloadUrl,
+          url: downloadUrl,
         },
         updatedAt: now,
         error: '[retry_limit] waiting too long before local download',

@@ -1,0 +1,172 @@
+{
+  "name": "feishu-live-photo-replay",
+  "steps": [
+    {
+      "id": "start_raw_image",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "tenantAccessToken": "tenant-token",
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_id": "om_replay_start_1",
+            "message_type": "image",
+            "content": "{\"image_key\":\"img-key-replay-user-1\"}"
+          }
+        }
+      },
+      "expectActionType": "product_options",
+      "captureSessionAs": "start_session"
+    },
+    {
+      "id": "select_product",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"1\"}"
+          }
+        }
+      },
+      "expectReplyType": "text"
+    },
+    {
+      "id": "switch_to_materials",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"materials\"}"
+          }
+        }
+      },
+      "expectActionType": "product_options",
+      "captureSessionAs": "materials_session"
+    },
+    {
+      "id": "select_material_product",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"1\"}"
+          }
+        }
+      },
+      "expectActionType": "material_options"
+    },
+    {
+      "id": "change_product",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"change product\"}"
+          }
+        }
+      },
+      "expectActionType": "product_options"
+    },
+    {
+      "id": "switch_to_delivery",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"unused live photo\"}"
+          }
+        }
+      },
+      "expectActionType": "product_options",
+      "captureSessionAs": "delivery_session"
+    },
+    {
+      "id": "select_delivery_product",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"1\"}"
+          }
+        }
+      },
+      "expectReplyType": "text"
+    },
+    {
+      "id": "cancel_current",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"cancel\"}"
+          }
+        }
+      },
+      "expectReplyType": "text"
+    },
+    {
+      "id": "closed_session_replay",
+      "path": "/hermes/live-photo/feishu/official-event",
+      "body": {
+        "event": {
+          "sender": {
+            "sender_id": {
+              "open_id": "feishu-replay-user-1"
+            }
+          },
+          "message": {
+            "message_type": "text",
+            "content": "{\"text\":\"session={{start_session}} 1\"}"
+          }
+        }
+      },
+      "expectReplyType": "text"
+    }
+  ]
+}

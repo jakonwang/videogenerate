@@ -51,8 +51,10 @@ type ProductImageMaterialOption = {
   category: 'necklace' | 'ring' | 'earring' | 'bracelet'
   localImagePath: string
   qiniuUrl: string
+  materialOrigin?: 'original' | 'derived'
   usageStatus: 'unused' | 'used'
   boundProductId?: string
+  derivedFromMaterialId?: string
   createdAt: number
 }
 
@@ -253,6 +255,7 @@ const libraryPage = ref(1)
 const libraryPageSize = ref(24)
 const libraryTotal = ref(0)
 const libraryTotalPages = ref(1)
+const libraryViewMode = ref<'grid' | 'list'>('grid')
 const products = ref<Product[]>([])
 const productImageMaterials = ref<ProductImageMaterialOption[]>([])
 const cloneProjects = ref<CloneProjectSummary[]>([])
@@ -260,6 +263,7 @@ const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused'>('all')
 const selectedProductId = ref('')
 const referenceImagePaths = ref<string[]>([])
 const referenceMissingPaths = ref<string[]>([])
+const referenceMaterialIds = ref<string[]>([])
 const materialPickerOpen = ref(false)
 const selectedMaterialImageIds = ref<string[]>([])
 const materialPickerPage = ref(1)
@@ -368,6 +372,7 @@ const featuredCloneRow = computed(() => selectedCloneRows.value[0] || cloneShotR
 const livePhotoSteps = ['queued', 'image_generation', 'video_generation', 'live_photo_packaging', 'completed'] as const
 const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
+const pagedLibraryItems = computed(() => filteredLibraryItems.value)
 const runningLibraryItems = computed(() =>
   items.value.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running'),
 )
@@ -790,9 +795,9 @@ async function loadWithTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   }
 }
 
-async function refreshLibraryItems() {
+async function refreshLibraryItems(force = false) {
   const nowTs = Date.now()
-  if (nowTs - lastLibraryRefreshAt < LIBRARY_REFRESH_DEDUP_WINDOW_MS) return
+  if (!force && nowTs - lastLibraryRefreshAt < LIBRARY_REFRESH_DEDUP_WINDOW_MS) return
   try {
     lastLibraryRefreshAt = nowTs
     const nextPage = await loadWithTimeout(
@@ -845,7 +850,7 @@ function goToLibraryPage(nextPage: number) {
   const safePage = Math.max(1, Math.min(libraryTotalPages.value || 1, Number(nextPage || 1) || 1))
   if (safePage === libraryPage.value) return
   libraryPage.value = safePage
-  void refreshLibraryItems()
+  void refreshLibraryItems(true)
 }
 
 watch(libraryFilter, () => {
@@ -935,6 +940,13 @@ function clearMaterialImageSelection() {
   selectedMaterialImageIds.value = selectedMaterialImageIds.value.filter((item) => !pagedIds.has(item))
 }
 
+function materialIdsFromPaths(paths: string[]) {
+  const pathSet = new Set((paths || []).map((item) => String(item || '').trim()).filter(Boolean))
+  return productImageMaterials.value
+    .filter((item) => pathSet.has(String(item.localImagePath || '').trim()))
+    .map((item) => item.id)
+}
+
 async function appendMaterialImagesAsReferences() {
   const selectedPaths = selectedMaterialOptions.value.map((item) => String(item.localImagePath || '').trim()).filter(Boolean)
   if (!selectedPaths.length) return
@@ -942,6 +954,7 @@ async function appendMaterialImagesAsReferences() {
   const { existingPaths, missingPaths } = await splitExistingReferencePaths(mergedPaths)
   referenceImagePaths.value = mergedPaths
   referenceMissingPaths.value = missingPaths
+  referenceMaterialIds.value = dedupePaths([...referenceMaterialIds.value, ...selectedMaterialOptions.value.map((item) => item.id)])
   selectedMaterialImageIds.value = []
   materialPickerOpen.value = false
   if (!existingPaths.length && mergedPaths.length) {
@@ -954,6 +967,10 @@ async function appendMaterialImagesAsReferences() {
 function removeReferenceImage(path: string) {
   referenceImagePaths.value = referenceImagePaths.value.filter((item) => item !== path)
   referenceMissingPaths.value = referenceMissingPaths.value.filter((item) => item !== path)
+  const removedMaterialIds = new Set(materialIdsFromPaths([path]))
+  if (removedMaterialIds.size) {
+    referenceMaterialIds.value = referenceMaterialIds.value.filter((item) => !removedMaterialIds.has(item))
+  }
 }
 
 async function createReferenceItem() {
@@ -979,6 +996,9 @@ async function createReferenceItem() {
     activeTab.value = 'library'
     await nextTick()
     const referencePathsSnapshot = [...existingPaths]
+    const referenceMaterialIdsSnapshot = [...new Set(referenceMaterialIds.value.filter((materialId) =>
+      existingPaths.some((path) => materialIdsFromPaths([path]).includes(materialId)),
+    ))]
     const selectedProductIdSnapshot = selectedProductId.value
     notice.value =
       existingPaths.length > 1
@@ -986,8 +1006,20 @@ async function createReferenceItem() {
         : t('livePhoto.messages.referenceCreated')
     referenceImagePaths.value = []
     referenceMissingPaths.value = []
+    referenceMaterialIds.value = []
     creatingReference.value = false
     void (async () => {
+      if (referenceMaterialIdsSnapshot.length) {
+        await Promise.all(
+          referenceMaterialIdsSnapshot.map((materialId) =>
+            window.api.productImageMaterials.updateUsageStatus({
+              userId: 'desktop-local',
+              materialId,
+              usageStatus: 'used',
+            }).catch(() => null),
+          ),
+        )
+      }
       const created = await window.api.livePhoto.enqueueReference({
         referenceImagePaths: referencePathsSnapshot,
         productId: selectedProductIdSnapshot,
@@ -1427,7 +1459,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   <img :src="material.qiniuUrl" alt="material option" />
                   <div class="reference-material-card__copy">
                     <strong>{{ fileNameOf(material.localImagePath) }}</strong>
-                    <small>{{ material.usageStatus === 'used' ? '已使用' : '未使用' }}</small>
+                    <small>
+                      {{ material.usageStatus === 'used' ? '已使用' : '未使用' }}
+                      <span v-if="material.materialOrigin === 'derived'"> · Derived</span>
+                    </small>
                   </div>
                 </label>
               </div>
@@ -1792,10 +1827,24 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <LoaderCircle class="h-4 w-4" />
             暂停运行中 {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
           </button>
-          <button class="toolbar-icon active" type="button">
+          <button
+            class="toolbar-icon"
+            :class="{ active: libraryViewMode === 'grid' }"
+            type="button"
+            aria-label="网格视图"
+            :aria-pressed="libraryViewMode === 'grid'"
+            @click="libraryViewMode = 'grid'"
+          >
             <Grid2x2 class="h-4 w-4" />
           </button>
-          <button class="toolbar-icon" type="button">
+          <button
+            class="toolbar-icon"
+            :class="{ active: libraryViewMode === 'list' }"
+            type="button"
+            aria-label="列表视图"
+            :aria-pressed="libraryViewMode === 'list'"
+            @click="libraryViewMode = 'list'"
+          >
             <List class="h-4 w-4" />
           </button>
           <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
@@ -1815,23 +1864,155 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         <p>{{ t('livePhoto.library.emptyDesc') }}</p>
       </div>
 
-      <div v-else class="live-console-list">
-        <article v-for="item in filteredLibraryItems" :key="item.id" class="live-console-row" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
+      <div v-else-if="libraryViewMode === 'list'" class="live-console-list">
+        <article v-for="item in pagedLibraryItems" :key="item.id" class="live-console-row" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
           <label class="live-console-row__check">
             <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
             <span></span>
           </label>
 
-          <div class="live-console-row__preview">
+            <div class="live-console-row__preview">
+              <div class="live-console-row__thumb">
+                <img v-if="item.posterPath" :src="previewSrc(item.posterPath)" alt="poster" />
+                <div v-else class="live-console-row__thumb-empty">
+                  <FileImage class="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            <div class="live-console-row__main">
+              <div class="live-console-row__task">
+                <div class="live-console-row__titleline">
+                  <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
+                  <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? '复刻镜头' : '参考图替换' }}</span>
+                </div>
+                <div class="live-console-row__meta">
+                  <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
+                  <span class="live-console-row__dot"></span>
+                  <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
+                  <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
+                  <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || '自动流程' }}</span>
+                </div>
+                <div class="live-console-row__subtitle">
+                  <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
+                </div>
+                <div v-if="liveTaskErrorSummary(item)" class="live-console-row__error">
+                  <AlertTriangle class="h-3.5 w-3.5" />
+                  <span class="live-console-row__error-text">{{ liveTaskErrorSummary(item) }}</span>
+                </div>
+              </div>
+
+              <div class="live-console-row__side">
+                <div class="live-console-row__statuswrap">
+                  <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
+                  <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+                </div>
+                <div class="live-console-row__updated-inline">
+                  <Clock3 class="h-3.5 w-3.5" />
+                  <span>{{ formatTime(item.updatedAt) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="live-console-row__bottom">
+              <div class="live-console-row__quickrefs">
+                <span class="live-console-row__quickchip">图片参考 {{ item.imagePromptPreview?.referenceImagePaths?.length || 0 }}</span>
+                <span class="live-console-row__quickchip">视频参考 {{ item.videoPromptPreview?.referenceImagePaths?.length || 0 }}</span>
+                <span class="live-console-row__quickchip">{{ liveTaskProgressPercent(item) }}%</span>
+                <span class="live-console-row__quickchip">{{ liveTaskAutoSummary(item) }}</span>
+                <span class="live-console-row__quickchip">当前阶段 {{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+                <span v-if="extractLivePhotoTaskId(item)" class="live-console-row__quickchip">任务号 {{ extractLivePhotoTaskId(item) }}</span>
+                <span v-if="liveTaskWaitingHint(item)" class="live-console-row__quickchip live-console-row__quickchip--accent">{{ liveTaskWaitingHint(item) }}</span>
+              </div>
+
+              <div class="live-console-row__actions">
+                <button class="live-console-row__link live-console-row__link--primary" type="button" @click.stop="openTaskDetail(item)">
+                  <PanelBottomOpen class="h-4 w-4" />
+                  查看详情
+                </button>
+                <button class="live-console-row__link" type="button" @click.stop="openRuntimeLogs(item)">
+                  <Logs class="h-4 w-4" />
+                  查看日志
+                </button>
+                <button
+                  :data-testid="`live-photo-preview-${item.id}`"
+                  class="live-console-row__action live-console-row__action--play"
+                  type="button"
+                  :disabled="!item.previewVideoPath"
+                  @click.stop="openPath(item.previewVideoPath)"
+                >
+                  <Play class="h-4 w-4" />
+                </button>
+                <button
+                  :data-testid="`live-photo-metadata-${item.id}`"
+                  class="live-console-row__action"
+                  type="button"
+                  :disabled="!item.packagingMetadataBridgePath"
+                  @click.stop="openPath(item.packagingMetadataBridgePath)"
+                >
+                  <Package class="h-4 w-4" />
+                </button>
+                <button
+                  :data-testid="`live-photo-reveal-${item.id}`"
+                  class="live-console-row__action"
+                  type="button"
+                  :disabled="!item.exportBundlePath"
+                  @click.stop="showPath(item.exportBundlePath)"
+                >
+                  <FolderOpen class="h-4 w-4" />
+                </button>
+                <button
+                  :data-testid="`live-photo-retry-${item.id}`"
+                  class="live-console-row__action"
+                  type="button"
+                  :disabled="item.packagingStatus === 'processing'"
+                  @click.stop="retryItem(item)"
+                >
+                  <RefreshCcw class="h-4 w-4" />
+                </button>
+                <button
+                  class="live-console-row__action"
+                  type="button"
+                  :disabled="item.packagingStatus === 'completed'"
+                  @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
+                >
+                  <component :is="item.autoFlowStatus?.paused ? Play : LoaderCircle" class="h-4 w-4" />
+                </button>
+                <button
+                  :data-testid="`live-photo-remove-${item.id}`"
+                  class="live-console-row__action live-console-row__action--danger"
+                  type="button"
+                  @click.stop="removeItem(item.id)"
+                >
+                  <Trash2 class="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+        </article>
+      </div>
+      <div v-else class="live-console-grid">
+        <article v-for="item in pagedLibraryItems" :key="item.id" class="live-console-card" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
+          <div class="live-console-card__head">
+            <label class="live-console-row__check">
+              <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
+              <span></span>
+            </label>
+            <div class="live-console-row__statuswrap">
+              <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
+              <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+            </div>
+          </div>
+
+          <button class="live-console-card__preview" type="button" @click="openTaskDetail(item)">
             <div class="live-console-row__thumb">
               <img v-if="item.posterPath" :src="previewSrc(item.posterPath)" alt="poster" />
               <div v-else class="live-console-row__thumb-empty">
                 <FileImage class="h-5 w-5" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div class="live-console-row__main">
+          <div class="live-console-card__body">
             <div class="live-console-row__task">
               <div class="live-console-row__titleline">
                 <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
@@ -1853,44 +2034,35 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </div>
             </div>
 
-            <div class="live-console-row__side">
-              <div class="live-console-row__statuswrap">
-                <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
-                <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+            <div class="live-console-row__progress">
+              <div class="live-console-row__progress-copy">
+                <strong>{{ item.workflow?.currentStep ? workflowStepIndex(item.workflow.currentStep) + 1 : 1 }}/5</strong>
+                <span>{{ formatElapsed(item.createdAt) }}</span>
               </div>
-              <div class="live-console-row__updated-inline">
-                <Clock3 class="h-3.5 w-3.5" />
-                <span>{{ formatTime(item.updatedAt) }}</span>
+              <div class="live-console-row__progress-track">
+                <span :style="{ width: `${Math.max(16, (workflowStepIndex(item.workflow?.currentStep) + 1) * 20)}%` }"></span>
               </div>
             </div>
           </div>
 
-          <div class="live-console-row__bottom">
-            <div class="live-console-row__quickrefs">
-              <span class="live-console-row__quickchip">图片参考 {{ item.imagePromptPreview?.referenceImagePaths?.length || 0 }}</span>
-              <span class="live-console-row__quickchip">视频参考 {{ item.videoPromptPreview?.referenceImagePaths?.length || 0 }}</span>
-              <span class="live-console-row__quickchip">{{ liveTaskProgressPercent(item) }}%</span>
-              <span class="live-console-row__quickchip">{{ liveTaskAutoSummary(item) }}</span>
-              <span class="live-console-row__quickchip">当前阶段 {{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-              <span v-if="extractLivePhotoTaskId(item)" class="live-console-row__quickchip">任务号 {{ extractLivePhotoTaskId(item) }}</span>
-              <span v-if="liveTaskWaitingHint(item)" class="live-console-row__quickchip live-console-row__quickchip--accent">{{ liveTaskWaitingHint(item) }}</span>
+          <div class="live-console-card__footer">
+            <div class="live-console-row__updated-inline">
+              <Clock3 class="h-3.5 w-3.5" />
+              <span>{{ formatTime(item.updatedAt) }}</span>
             </div>
-
             <div class="live-console-row__actions">
-              <button class="live-console-row__link live-console-row__link--primary" type="button" @click="openTaskDetail(item)">
+              <button class="live-console-row__action" type="button" @click.stop="openTaskDetail(item)">
                 <PanelBottomOpen class="h-4 w-4" />
-                查看详情
               </button>
-              <button class="live-console-row__link" type="button" @click="openRuntimeLogs(item)">
+              <button class="live-console-row__action" type="button" @click.stop="openRuntimeLogs(item)">
                 <Logs class="h-4 w-4" />
-                查看日志
               </button>
               <button
                 :data-testid="`live-photo-preview-${item.id}`"
                 class="live-console-row__action live-console-row__action--play"
                 type="button"
                 :disabled="!item.previewVideoPath"
-                @click="openPath(item.previewVideoPath)"
+                @click.stop="openPath(item.previewVideoPath)"
               >
                 <Play class="h-4 w-4" />
               </button>
@@ -1899,7 +2071,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 class="live-console-row__action"
                 type="button"
                 :disabled="!item.packagingMetadataBridgePath"
-                @click="openPath(item.packagingMetadataBridgePath)"
+                @click.stop="openPath(item.packagingMetadataBridgePath)"
               >
                 <Package class="h-4 w-4" />
               </button>
@@ -1908,7 +2080,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 class="live-console-row__action"
                 type="button"
                 :disabled="!item.exportBundlePath"
-                @click="showPath(item.exportBundlePath)"
+                @click.stop="showPath(item.exportBundlePath)"
               >
                 <FolderOpen class="h-4 w-4" />
               </button>
@@ -1917,7 +2089,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 class="live-console-row__action"
                 type="button"
                 :disabled="item.packagingStatus === 'processing'"
-                @click="retryItem(item)"
+                @click.stop="retryItem(item)"
               >
                 <RefreshCcw class="h-4 w-4" />
               </button>
@@ -1925,7 +2097,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 class="live-console-row__action"
                 type="button"
                 :disabled="item.packagingStatus === 'completed'"
-                @click="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
+                @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
               >
                 <component :is="item.autoFlowStatus?.paused ? Play : LoaderCircle" class="h-4 w-4" />
               </button>
@@ -1933,7 +2105,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 :data-testid="`live-photo-remove-${item.id}`"
                 class="live-console-row__action live-console-row__action--danger"
                 type="button"
-                @click="removeItem(item.id)"
+                @click.stop="removeItem(item.id)"
               >
                 <Trash2 class="h-4 w-4" />
               </button>
@@ -2290,7 +2462,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 </template>
 
 <style scoped>
-.live-photo-page { display: grid; gap: 10px; padding: 10px; color: #f8fbff; background: radial-gradient(circle at top left, rgba(83, 58, 152, 0.12), transparent 28%), linear-gradient(180deg, #111521 0%, #171a29 42%, #111624 100%); }
+.live-photo-page {
+  display: grid;
+  gap: 10px;
+  min-height: 100vh;
+  padding: 10px;
+  box-sizing: border-box;
+  align-content: start;
+  color: #f8fbff;
+  background: radial-gradient(circle at top left, rgba(83, 58, 152, 0.12), transparent 28%), linear-gradient(180deg, #111521 0%, #171a29 42%, #111624 100%);
+}
 .hero-shell, .panel-card, .library-export-card, .tip-strip { border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 16px; background: linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
 .hero-shell { display: grid; gap: 8px; padding: 10px 12px; }
 .hero-toolbar { display: flex; justify-content: space-between; gap: 8px; }
@@ -2447,28 +2628,75 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .status-pill.status-draft { background: rgba(148, 163, 184, 0.18); color: #e2e8f0; }
 .status-pill.status-completed { background: rgba(16, 101, 78, 0.18); color: #68f0b9; }
 .library-layout { display: grid; gap: 10px; }
-.library-headline { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.library-title-row { display: flex; align-items: center; gap: 10px; }
-.library-title-row strong { font-size: 18px; line-height: 1.1; }
-.library-count { min-height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(111, 123, 170, 0.2); background: rgba(18, 23, 38, 0.7); color: rgba(225, 231, 247, 0.8); display: inline-flex; align-items: center; font-weight: 700; font-size: 12px; }
-.library-toolbar { display: flex; align-items: center; gap: 8px; }
-.library-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-.library-pagination__text { min-width: 110px; text-align: center; font-size: 12px; color: #9fb2d8; }
-.library-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.library-overview__card {
-  display: grid;
+.library-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.library-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 0 auto;
+  margin-right: 2px;
+}
+.library-title-row strong {
+  display: inline-flex;
+  align-items: center;
+  font-size: 18px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.library-count { min-height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(111, 123, 170, 0.2); background: rgba(18, 23, 38, 0.7); color: rgba(225, 231, 247, 0.8); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; line-height: 1; }
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+.library-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.library-pagination__text {
+  min-width: 110px;
+  text-align: center;
+  font-size: 12px;
+  color: #9fb2d8;
+}
+.library-overview {
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
-  min-height: 74px;
-  padding: 10px 12px;
+  flex: 1 1 360px;
+  min-width: 0;
+}
+.library-overview__card {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 10px;
   border: 1px solid rgba(111, 123, 170, 0.18);
-  border-radius: 14px;
+  border-radius: 999px;
   background: linear-gradient(180deg, rgba(18, 23, 38, 0.8), rgba(13, 18, 30, 0.88));
 }
-.library-overview__card span { font-size: 11px; color: #8ea3c9; }
-.library-overview__card strong { font-size: 24px; line-height: 1; color: #f8fbff; }
-.toolbar-button { min-width: 84px; padding: 0 14px; }
-.toolbar-icon { width: 38px; padding: 0; }
-.export-selected-button { min-width: 164px; }
+.library-overview__card span { font-size: 11px; line-height: 1; color: #8ea3c9; }
+.library-overview__card strong { display: inline-flex; align-items: center; font-size: 13px; line-height: 1; color: #f8fbff; }
+.toolbar-button {
+  min-width: 0;
+  padding: 0 9px;
+  min-height: 31px;
+  white-space: nowrap;
+}
+.toolbar-icon { width: 36px; padding: 0; }
+.export-selected-button { min-width: 132px; }
 .empty-card { min-height: 140px; place-items: center; text-align: center; }
 .metadata-card-select {
   align-content: start;
@@ -2492,6 +2720,54 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-console-list { display: grid; gap: 10px; }
 .live-console-list { display: grid; gap: 10px; }
+.live-console-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.live-console-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(111, 123, 170, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(120, 96, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98));
+  box-shadow: 0 18px 40px rgba(6, 10, 20, 0.22);
+}
+
+.live-console-card.selected {
+  border-color: rgba(126, 96, 255, 0.46);
+  box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18);
+}
+
+.live-console-card__head,
+.live-console-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.live-console-card__preview {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(111, 123, 170, 0.16);
+  background: rgba(9, 16, 28, 0.84);
+}
+
+.live-console-card__body {
+  display: grid;
+  gap: 8px;
+}
+
+.live-console-card__footer {
+  margin-top: 2px;
+}
+
 .live-console-row {
   display: grid;
   grid-template-columns: 28px 104px minmax(0, 1fr);
@@ -2506,8 +2782,22 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   box-shadow: 0 18px 40px rgba(6, 10, 20, 0.22);
 }
 .live-console-row.selected { border-color: rgba(126, 96, 255, 0.46); box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18); }
-.live-console-row__check { display: grid; place-items: center; }
-.live-console-row__check input { position: absolute; opacity: 0; pointer-events: none; }
+.live-console-row__check {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.live-console-row__check input {
+  position: absolute;
+  inset: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
 .live-console-row__check span {
   width: 16px;
   height: 16px;
@@ -2517,6 +2807,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 .live-console-row__check input:checked + span {
   background: linear-gradient(90deg, #6d5cff 0%, #9b52ff 100%);
@@ -3058,9 +3349,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   .export-grid,
   .library-grid-six,
   .hero-card { grid-template-columns: 1fr; }
-  .library-headline, .hero-toolbar, .tip-strip { flex-direction: column; align-items: stretch; }
+  .hero-toolbar, .tip-strip { flex-direction: column; align-items: stretch; }
   .library-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .library-toolbar { flex-wrap: wrap; }
+  .library-headline { overflow-x: auto; }
   .clone-thumb-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .clone-generate-button { min-width: 0; width: 100%; justify-self: stretch; }
   .live-console-row__main {

@@ -9,6 +9,7 @@ import { generateThumbnailJpg } from '../media/thumbnail'
 import { productsRepo } from '../products/repo'
 import { cloneRepo } from '../clone/repo'
 import { toPublicUrlViaQiniu } from '../clone/qiniu'
+import { generateImage as generateUnifiedImage } from '../clone/unifiedImage'
 import { getAppPaths } from '../../lib/paths'
 import { getFfmpegExecutable } from '../../lib/binariesPath'
 import { productImageMaterialsQueue } from './queue'
@@ -29,6 +30,7 @@ const BUILTIN_CATEGORIES: ProductImageMaterialCategory[] = ['necklace', 'ring', 
 const MAX_SCENE_SEGMENTS = 16
 const MAX_SCENE_SEGMENT_DURATION_SEC = 8
 const MIN_SEGMENT_DURATION_SEC = 0.5
+const MAX_BACKGROUND_VARIANT_COUNT = 6
 
 type ProductImageMaterialsServiceDeps = {
   runFfmpeg: typeof runFfmpeg
@@ -84,6 +86,18 @@ function sourceItemOf(videoPath: string): ProductImageMaterialSourceItem {
     updatedAt: now(),
   }
 }
+
+const BACKGROUND_VARIANT_SCENES = [
+  'an ordinary Southeast Asian bedroom with warm window light and a lived-in bedside table',
+  'a normal local living room with a sofa edge, soft daylight, and everyday home details',
+  'a simple bedroom dressing table with natural daylight and lightly used daily objects',
+  'a real window-side home corner with calm natural light and plain wall texture',
+  'a modest local apartment interior with realistic household surfaces and soft ambient light',
+  'a casual study corner with a simple desk, notebook, and soft side window light',
+  'a home office corner with practical clutter, natural reflections, and relaxed daily atmosphere',
+  'a balcony-side table with humid daylight, real apartment context, and ordinary local texture',
+  'a small wardrobe or entrance table area with natural indoor light and believable daily-use objects',
+] as const
 
 function updateBatchProgress(batch: ProductImageMaterialBatch): ProductImageMaterialBatch {
   const completedVideos = batch.sourceItems.filter((item) => item.status === 'completed').length
@@ -158,6 +172,92 @@ async function cleanupMaterialFiles(item: {
       }
     }),
   )
+}
+
+function buildBackgroundVariantPrompt(input: {
+  category: ProductImageMaterialCategory
+  variantIndex: number
+}) {
+  const selectedScene = BACKGROUND_VARIANT_SCENES[input.variantIndex % BACKGROUND_VARIANT_SCENES.length]
+  return [
+    'You are a realistic lifestyle product photography system.',
+    'Keep the product exactly identical to the reference image.',
+    'Create a brand-new everyday environment that feels authentic, natural, and casually photographed.',
+    'The final image should look like an ordinary person naturally taking a photo during daily life, not a commercial advertisement.',
+    'The product is the highest priority.',
+    'Keep exactly the same shape, proportions, size, material, color, surface texture, metal finish, gemstones, engravings, hanging parts, thickness, reflections, and design details.',
+    'Do not redesign, simplify, improve, beautify, generate missing details, replace materials, or change proportions.',
+    'The product must remain visually identical to the reference.',
+    'Keep the overall composition similar.',
+    'The product remains the main subject.',
+    'Keep the framing as a natural phone-camera photo with slightly imperfect composition and natural breathing space around the subject.',
+    'Do not recreate the original background.',
+    'Do not imitate the reference environment.',
+    'Do not copy the desk, laptop, furniture, lighting setup, or room from the source image.',
+    'Treat the reference background as completely replaceable.',
+    'Generate a completely new everyday environment.',
+    `Choose exactly one realistic lifestyle scene for this generation: ${selectedScene}.`,
+    'This scene must feel local, ordinary, and believable, with subtle daily-use objects only when naturally appropriate.',
+    'Everyday scene details must feel casually present, never intentionally arranged, never showroom-like, and never commercially decorated.',
+    'Use only natural lighting such as soft window light, warm afternoon light, golden hour, or gentle indoor ambient light.',
+    'Keep natural shadows, natural reflections, realistic white balance, slightly warm tones, comfortable contrast, and natural exposure.',
+    'Use shallow depth of field so the background is softly blurred while the product stays perfectly sharp.',
+    'The image should feel spontaneous, relaxed, comfortable, lived-in, warm, authentic, and human.',
+    'It should look like someone casually picked up the product and took a quick phone photo in less than five seconds.',
+    'Never make it look staged, luxury, catalog, influencer-commercial, e-commerce-studio, or AI-generated.',
+    'Avoid cinematic camera angles, ultra-wide distortion, exaggerated perspective, HDR effect, oversaturation, fake sunlight, or artificial glow.',
+    `Product category: ${input.category}.`,
+    'Do not add people, extra products, packaging, text, logos, subtitles, watermarks, or props that change the scene meaning.',
+  ].join(' ')
+}
+
+function backgroundVariantNegativePrompt() {
+  return [
+    'copy reference background',
+    'same room',
+    'same furniture',
+    'same laptop',
+    'same desk',
+    'same lighting setup',
+    'change product',
+    'different jewelry',
+    'extra accessories',
+    'extra product',
+    'text',
+    'logo',
+    'watermark',
+    'packaging',
+    'hands',
+    'person',
+    'commercial studio',
+    'premium studio',
+    'luxury showroom',
+    'advertising set',
+    'high-end display stand',
+    'overdesigned background',
+    'fake lifestyle set',
+    'product display table',
+    'catalog background',
+    'editorial backdrop',
+    'showroom',
+    'exhibition',
+    'seamless paper backdrop',
+    'floating product',
+    'glossy commercial lighting',
+    'lens flare',
+    'bloom',
+    'cgi look',
+    'rendering style',
+    'ai artifacts',
+    'excessive bokeh',
+    'fake sunlight',
+    'unrealistic reflections',
+    'unnatural fingers',
+    'exaggerated skin smoothing',
+    'deformed geometry',
+    'wrong color',
+    'duplicate object',
+  ].join(', ')
 }
 
 function fallbackCuts(duration: number): number[] {
@@ -325,6 +425,7 @@ async function processBatch(batchId: string) {
           localImagePath,
           thumbnailPath: thumbnailPath || undefined,
           qiniuUrl,
+          materialOrigin: 'original',
           usageStatus: 'unused',
           createdAt: now(),
           updatedAt: now(),
@@ -434,6 +535,99 @@ export const productImageMaterialsService = {
     const saved = await productImageMaterialsRepo.upsertBatch(updateBatchProgress(reset))
     productImageMaterialsQueue.schedule(saved.id)
     return saved
+  },
+
+  async createBackgroundVariants(input: {
+    userId: string
+    materialIds: string[]
+    variantCount: number
+  }) {
+    const userId = String(input.userId || '').trim()
+    const materialIds = Array.from(new Set((input.materialIds || []).map((item) => String(item || '').trim()).filter(Boolean)))
+    const parsedVariantCount = Number(input.variantCount || 0)
+    const variantCount = Number.isFinite(parsedVariantCount)
+      ? Math.max(1, Math.min(MAX_BACKGROUND_VARIANT_COUNT, Math.floor(parsedVariantCount)))
+      : 1
+    if (!userId) throw new Error('userId is required')
+    if (!materialIds.length) throw new Error('materialIds is required')
+    if (!variantCount) throw new Error('variantCount is required')
+
+    const materials = await productImageMaterialsRepo.listMaterials(userId)
+    const selected = materialIds
+      .map((materialId) => materials.find((item) => item.id === materialId) ?? null)
+      .filter(Boolean) as ProductImageMaterialItem[]
+    if (!selected.length) throw new Error('No materials found to generate background variants')
+
+    const credentials = await cloneRepo.getCredentials()
+    const created: ProductImageMaterialItem[] = []
+    const errors: string[] = []
+
+    for (const source of selected) {
+      const sourcePath = String(source.localImagePath || '').trim()
+      if (!sourcePath) {
+        errors.push(`${shortId(source.id)}: source image path is empty`)
+        continue
+      }
+      let generatedForSource = 0
+      for (let variantIndex = 0; variantIndex < variantCount; variantIndex += 1) {
+        try {
+          const generated = await generateUnifiedImage({
+            credentials,
+            prompt: buildBackgroundVariantPrompt({
+              category: source.category,
+              variantIndex,
+            }),
+            negativePrompt: backgroundVariantNegativePrompt(),
+            imagePaths: [sourcePath],
+            outDir: join(getAppPaths().dataDir, 'product-image-materials', 'derived', source.id, `${Date.now()}_${randomUUID()}`),
+            filePrefix: `background_variant_${shortId(source.id)}_${variantIndex + 1}`,
+            capability: 'image_edit',
+          })
+          const outputPath = String(generated?.outputPath || '').trim()
+          if (!outputPath) throw new Error('Background variant generation did not return an output path')
+          const qiniuUrl = await toPublicUrlViaQiniu(credentials, outputPath, 'product-image-materials/background-variants')
+          const item: ProductImageMaterialItem = {
+            id: randomUUID(),
+            userId,
+            batchId: source.batchId,
+            category: source.category,
+            sourceVideoPath: source.sourceVideoPath,
+            sourceVideoName: source.sourceVideoName,
+            segmentIndex: source.segmentIndex,
+            segmentPath: source.segmentPath,
+            frameTimeSec: source.frameTimeSec,
+            localImagePath: outputPath,
+            qiniuUrl,
+            materialOrigin: 'derived',
+            derivedFromMaterialId: source.id,
+            derivedVariantIndex: variantIndex + 1,
+            usageStatus: 'unused',
+            createdAt: now(),
+            updatedAt: now(),
+          }
+          await productImageMaterialsRepo.upsertMaterial(item)
+          created.push(item)
+          generatedForSource += 1
+        } catch (error: any) {
+          errors.push(`${shortId(source.id)}#${variantIndex + 1}: ${String(error?.message ?? error ?? 'Unknown error').trim()}`)
+        }
+      }
+      if (generatedForSource > 0) {
+        await productImageMaterialsRepo.setMaterialUsageStatusAny(source.id, 'used').catch(() => null)
+      }
+    }
+
+    if (!created.length) {
+      throw new Error(errors.join(' | ') || 'No background variants were generated')
+    }
+
+    return {
+      ok: true,
+      count: created.length,
+      created,
+      failedCount: errors.length,
+      errors,
+    }
   },
 
   async listMaterials(userId: string, filters?: ProductImageMaterialListFilters) {
@@ -583,8 +777,10 @@ export const productImageMaterialsService = {
         index: index + 1,
         category: item.category,
         thumbnailUrl: item.qiniuUrl,
+        materialOrigin: item.materialOrigin,
         boundProductId: item.boundProductId,
         localImagePath: item.localImagePath,
+        derivedFromMaterialId: item.derivedFromMaterialId,
       })),
     }
   },

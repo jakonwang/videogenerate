@@ -48,6 +48,8 @@ function normalizeMaterial(item: ProductImageMaterialItem): ProductImageMaterial
   return {
     ...item,
     usageStatus: item.usageStatus === 'used' ? 'used' : 'unused',
+    materialOrigin: item.materialOrigin === 'derived' ? 'derived' : 'original',
+    derivedVariantIndex: Number.isFinite(Number(item.derivedVariantIndex)) ? Number(item.derivedVariantIndex) : undefined,
     createdAt: Number(item.createdAt || now()),
     updatedAt: Number(item.updatedAt || now()),
   }

@@ -1007,6 +1007,18 @@ export const webPlatformService = {
     })
   },
 
+  async createProductImageMaterialsBackgroundVariants(token: string, input: {
+    materialIds: string[]
+    variantCount: number
+  }) {
+    const auth = await this.authByToken(token)
+    return await productImageMaterialsService.createBackgroundVariants({
+      userId: auth.user.id,
+      materialIds: input.materialIds,
+      variantCount: input.variantCount,
+    })
+  },
+
   async listProductImageMaterials(token: string, filters?: {
     category?: 'necklace' | 'ring' | 'earring' | 'bracelet' | 'all'
     usageStatus?: 'unused' | 'used' | 'all'

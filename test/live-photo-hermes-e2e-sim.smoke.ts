@@ -11,7 +11,9 @@ async function main() {
 
   const { productsRepo } = await import('../src/main/modules/products/repo')
   const cloneRepoModule = await import('../src/main/modules/clone/repo')
+  const { productImageMaterialsRepo } = await import('../src/main/modules/product-image-materials/repo')
   const { livePhotoService } = await import('../src/main/modules/live-photo/service')
+  const { livePhotoRepo } = await import('../src/main/modules/live-photo/repo')
   const { hermesPlatformFormatters } = await import('../src/main/modules/live-photo/hermesPlatformFormatters')
   const { hermesMediaIngressService } = await import('../src/main/modules/live-photo/hermesMediaIngress')
   const { hermesDeliveryService } = await import('../src/main/modules/live-photo/hermesDelivery')
@@ -174,7 +176,7 @@ async function main() {
 
     const product = await productsRepo.upsert({
       name: 'E2E Demo Product',
-      type: 'general',
+      type: 'ring',
       images: [
         {
           id: 'img-1',
@@ -192,6 +194,44 @@ async function main() {
       analysisBoardStatus: 'done',
       canonicalSourcePath: productImage,
       canonicalSourceStatus: 'done',
+    } as any)
+
+    const materialImage = path.join(assetsDir, 'material-choice.jpg')
+    await writeFile(materialImage, 'material-choice', 'utf-8')
+    await productImageMaterialsRepo.upsertMaterial({
+      id: 'e2e-material-choice',
+      userId: 'desktop-local',
+      batchId: 'e2e-batch-1',
+      category: 'ring',
+      sourceVideoPath: path.join(assetsDir, 'e2e-material-source.mp4'),
+      sourceVideoName: 'e2e-material-source.mp4',
+      segmentIndex: 0,
+      segmentPath: '',
+      frameTimeSec: 1.2,
+      localImagePath: materialImage,
+      qiniuUrl: 'https://example.com/e2e-material-choice.jpg',
+      usageStatus: 'unused',
+      boundProductId: product.id,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+
+    const reusableDeliveryItem = await livePhotoService.enqueueReferenceItems({
+      referenceImagePaths: [productImage],
+      productId: product.id,
+      motionTemplate: 'push_in',
+    })
+    const reusableDeliveryPath = path.join(assetsDir, 'e2e-delivery-live.mp4')
+    await writeFile(reusableDeliveryPath, 'e2e-delivery-live', 'utf-8')
+    await livePhotoRepo.upsert({
+      ...(reusableDeliveryItem as any),
+      packagingStatus: 'completed',
+      previewVideoPath: reusableDeliveryPath,
+      livePhotoVideoPath: reusableDeliveryPath,
+      generatedVideoPath: reusableDeliveryPath,
+      hermesDeliveryUsedAt: undefined,
+      usageStatus: 'unused',
+      updatedAt: Date.now(),
     } as any)
 
     const startResult = await hermesPlatformFormatters.handleFeishuOfficialEvent({
@@ -260,6 +300,303 @@ async function main() {
     assert.equal(Array.isArray(deliveryResult), true)
     assert.ok(deliveryCalls.some((item) => item.includes('/im/v1/files')))
     assert.ok(deliveryCalls.some((item) => item.includes('/im/v1/messages')))
+
+    const userAStart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-a',
+          },
+        },
+        message: {
+          message_type: 'image',
+          content: JSON.stringify({
+            image_paths: [productImage],
+          }),
+        },
+      },
+    })
+    const userASessionId = String((userAStart.actions[0] as any)?.sessionId || '').trim()
+    assert.ok(userASessionId)
+
+    const userBStart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-b',
+          },
+        },
+        message: {
+          message_type: 'image',
+          content: JSON.stringify({
+            image_paths: [productImage],
+          }),
+        },
+      },
+    })
+    const userBSessionId = String((userBStart.actions[0] as any)?.sessionId || '').trim()
+    assert.ok(userBSessionId)
+    assert.notEqual(userASessionId, userBSessionId)
+
+    const userARestart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-a',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: 'restart',
+          }),
+        },
+      },
+    })
+    const userARestartText = JSON.parse(String(userARestart.replies[0]?.content || '{}'))
+    assert.ok(String(userARestartText.text || '').length > 0)
+    const userAClosedSession = await hermesLivePhotoService.getSessionStatus(userASessionId)
+    assert.ok(userAClosedSession.session.closedAt)
+
+    const userAClosedExplicit = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-a',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: `session=${userASessionId} 1`,
+          }),
+        },
+      },
+    })
+    const userAClosedExplicitText = JSON.parse(String(userAClosedExplicit.replies[0]?.content || '{}'))
+    assert.ok(String(userAClosedExplicitText.text || '').length > 0)
+
+    const userBContinue = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-b',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: '1',
+          }),
+        },
+      },
+    })
+    const userBContinueText = JSON.parse(String(userBContinue.replies[0]?.content || '{}'))
+    assert.ok(String(userBContinueText.text || '').length > 0)
+    const userBLatest = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-b',
+    })
+    assert.equal(userBLatest?.id, userBSessionId)
+    assert.equal(userBLatest?.status, 'processing')
+
+    const chaosStart = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'image',
+          content: JSON.stringify({
+            image_paths: [productImage],
+          }),
+        },
+      },
+    })
+    const chaosSessionStartId = String((chaosStart.actions[0] as any)?.sessionId || '').trim()
+    assert.ok(chaosSessionStartId)
+
+    const chaosSelectProduct = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: '1',
+          }),
+        },
+      },
+    })
+    const chaosSelectProductText = JSON.parse(String(chaosSelectProduct.replies[0]?.content || '{}'))
+    assert.ok(String(chaosSelectProductText.text || '').length > 0)
+    const chaosProcessing = await hermesLivePhotoService.getSessionStatus(chaosSessionStartId)
+    assert.equal(chaosProcessing.session.status, 'processing')
+
+    const chaosToMaterials = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: 'materials',
+          }),
+        },
+      },
+    })
+    assert.equal(chaosToMaterials.actions[0]?.type, 'product_options')
+    const chaosClosedProcessing = await hermesLivePhotoService.getSessionStatus(chaosSessionStartId)
+    assert.ok(chaosClosedProcessing.session.closedAt)
+    const chaosMaterialSession = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-chaos',
+    })
+    assert.equal(chaosMaterialSession?.selectionMode, 'material')
+    assert.equal(chaosMaterialSession?.status, 'awaiting_product')
+
+    const chaosMaterialProduct = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: '1',
+          }),
+        },
+      },
+    })
+    assert.equal(chaosMaterialProduct.actions[0]?.type, 'material_options')
+    const chaosAwaitingMaterial = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-chaos',
+    })
+    assert.equal(chaosAwaitingMaterial?.status, 'awaiting_material')
+
+    const chaosChangeProduct = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: 'change product',
+          }),
+        },
+      },
+    })
+    assert.equal(chaosChangeProduct.actions[0]?.type, 'product_options')
+    const chaosReselectedMaterialSession = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-chaos',
+    })
+    assert.equal(chaosReselectedMaterialSession?.selectionMode, 'material')
+    assert.equal(chaosReselectedMaterialSession?.status, 'awaiting_product')
+    assert.notEqual(chaosReselectedMaterialSession?.id, chaosAwaitingMaterial?.id)
+
+    const chaosToDelivery = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: 'unused live photo',
+          }),
+        },
+      },
+    })
+    assert.equal(chaosToDelivery.actions[0]?.type, 'product_options')
+    const chaosDeliverySession = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-chaos',
+    })
+    assert.equal(chaosDeliverySession?.selectionMode, 'delivery')
+    assert.equal(chaosDeliverySession?.status, 'awaiting_product')
+
+    const chaosDeliveryProduct = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: '1',
+          }),
+        },
+      },
+    })
+    const chaosDeliveryProductText = JSON.parse(String(chaosDeliveryProduct.replies[0]?.content || '{}'))
+    assert.ok(String(chaosDeliveryProductText.text || '').length > 0)
+    const chaosAwaitingDelivery = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-chaos',
+    })
+    assert.equal(chaosAwaitingDelivery?.status, 'awaiting_delivery_count')
+
+    const chaosCancel = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: 'cancel',
+          }),
+        },
+      },
+    })
+    const chaosCancelText = JSON.parse(String(chaosCancel.replies[0]?.content || '{}'))
+    assert.ok(String(chaosCancelText.text || '').length > 0)
+    const chaosClosedDelivery = await hermesLivePhotoService.getSessionStatus(String(chaosDeliverySession?.id || ''))
+    assert.ok(chaosClosedDelivery.session.closedAt)
+    const chaosLatestAfterCancel = await hermesLivePhotoService.getLatestSession({
+      channel: 'feishu',
+      userId: 'feishu-user-chaos',
+    })
+    assert.equal(chaosLatestAfterCancel, null)
+
+    const chaosClosedExplicit = await hermesPlatformFormatters.handleFeishuOfficialEvent({
+      event: {
+        sender: {
+          sender_id: {
+            open_id: 'feishu-user-chaos',
+          },
+        },
+        message: {
+          message_type: 'text',
+          content: JSON.stringify({
+            text: `session=${chaosSessionStartId} 1`,
+          }),
+        },
+      },
+    })
+    const chaosClosedExplicitText = JSON.parse(String(chaosClosedExplicit.replies[0]?.content || '{}'))
+    assert.ok(String(chaosClosedExplicitText.text || '').length > 0)
 
     console.log('live photo hermes e2e sim smoke test passed')
   } finally {

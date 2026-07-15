@@ -12,6 +12,11 @@ export function registerProductImageMaterialsIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:productImageMaterials:retryBatch', async (_e, payload: { userId: string; batchId: string }) =>
     await productImageMaterialsService.retryBatch(payload),
   )
+  ipcMain.handle('plugin:productImageMaterials:createBackgroundVariants', async (_e, payload: {
+    userId: string
+    materialIds: string[]
+    variantCount: number
+  }) => await productImageMaterialsService.createBackgroundVariants(payload))
   ipcMain.handle('plugin:productImageMaterials:listMaterials', async (_e, payload: any) =>
     await productImageMaterialsService.listMaterials(payload.userId, payload.filters),
   )

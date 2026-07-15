@@ -109,6 +109,7 @@ const currentPage = ref(1)
 const pageSizeOptions = [10, 20, 50, 100] as const
 const pageSize = ref<(typeof pageSizeOptions)[number]>(10)
 const pageSizeMenuOpen = ref(false)
+const viewMode = ref<'list' | 'grid'>('list')
 const runtimeLogs = ref<RuntimeLogItem[]>([])
 const runtimeDialogOpen = ref(false)
 const videoPreviewDialogOpen = ref(false)
@@ -1348,10 +1349,22 @@ onBeforeUnmount(() => {
               <button class="clone-console-overview__icon" type="button" aria-label="全选当前页任务" @click="toggleSelectCurrentPage">
                 <span class="clone-console-overview__icon-bars"></span>
               </button>
-              <button class="clone-console-table__viewtool is-active" type="button" aria-label="列表视图">
+              <button
+                class="clone-console-table__viewtool"
+                :class="{ 'is-active': viewMode === 'list' }"
+                type="button"
+                aria-label="列表视图"
+                @click="viewMode = 'list'"
+              >
                 <span class="clone-console-table__viewtool-bars"></span>
               </button>
-              <button class="clone-console-table__viewtool" type="button" aria-label="网格视图">
+              <button
+                class="clone-console-table__viewtool"
+                :class="{ 'is-active': viewMode === 'grid' }"
+                type="button"
+                aria-label="网格视图"
+                @click="viewMode = 'grid'"
+              >
                 <span class="clone-console-table__viewtool-grid"></span>
               </button>
               <button class="clone-console-table__viewtool" type="button" aria-label="设置">
@@ -1360,7 +1373,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-if="filteredRows.length" class="clone-console-table__body">
+          <div v-if="filteredRows.length && viewMode === 'list'" class="clone-console-table__body">
             <div class="clone-console-table__head">
               <label class="clone-console-table__check" aria-label="全选当前页任务">
                 <input
@@ -1508,6 +1521,84 @@ onBeforeUnmount(() => {
             </article>
           </div>
 
+          <div v-else-if="filteredRows.length && viewMode === 'grid'" class="clone-console-grid">
+            <article v-for="item in pagedRows" :key="item.id" class="clone-console-card">
+              <div class="clone-console-card__head">
+                <label class="clone-console-row__check">
+                  <input
+                    type="checkbox"
+                    :checked="selectedSet.has(item.id)"
+                    @change="toggleSelected(item.id)"
+                  />
+                  <span></span>
+                </label>
+                <span class="clone-console-row__status" :class="statusTone(item.status)">{{ humanStatus(item.status) }}</span>
+              </div>
+
+              <button class="clone-console-card__preview" type="button" @click="openVideoPreview(item)">
+                <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" />
+                <div v-else class="clone-console-row__thumb-empty">
+                  <Video class="h-5 w-5" />
+                </div>
+              </button>
+
+              <div class="clone-console-card__body">
+                <div class="clone-console-row__titleline">
+                  <h3>{{ item.title }}</h3>
+                  <button class="clone-console-row__rename" type="button" aria-label="修改任务名称" @click="openRenameDialog(item)">
+                    <Pencil class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div class="clone-console-row__meta">
+                  <span class="clone-console-row__mode">{{ humanRunMode(item.runMode) }}</span>
+                  <span class="clone-console-row__dot"></span>
+                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || 'AI模特 003' }}</span>
+                </div>
+                <div class="clone-console-row__stage">
+                  <span class="clone-console-row__stepbadge" :class="stepTone(item.currentStep)">{{ humanStep(item.currentStep) }}</span>
+                  <span class="clone-console-row__text">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
+                </div>
+                <div class="clone-console-row__assets">
+                  <strong>{{ item.productReferenceImageCount }} 图 / {{ item.generatedVideoCount || 0 }} 视频</strong>
+                  <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
+                </div>
+                <div v-if="item.lastError" class="clone-console-row__error">
+                  <span class="clone-console-row__error-text">{{ compactError(item.lastError, 72) }}</span>
+                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">查看错误</button>
+                </div>
+              </div>
+
+              <div class="clone-console-card__footer">
+                <div class="clone-console-row__progress">
+                  <div class="clone-console-row__progress-copy">
+                    <strong>{{ item.progressPercent }}%</strong>
+                  </div>
+                  <div class="clone-console-row__progress-track">
+                    <span :style="{ width: `${item.progressPercent}%` }"></span>
+                  </div>
+                </div>
+                <div class="clone-console-row__updated">
+                  <Clock3 class="h-4 w-4" />
+                  <div class="clone-console-row__updated-copy">
+                    <span>{{ formatDateOnly(item.updatedAt) }}</span>
+                    <strong>{{ formatClockOnly(item.updatedAt) }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="clone-console-card__actions">
+                <button class="clone-console-row__action clone-console-row__action--edit" type="button" title="编辑任务" @click="openTask(item.id)">
+                  <Pencil class="h-4 w-4" />
+                </button>
+                <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openVideoPreview(item)">
+                  <Play class="h-4 w-4" />
+                </button>
+                <button class="clone-console-row__action clone-console-row__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+              </div>
+            </article>
+          </div>
           <div v-else class="clone-list-empty">
             <LoaderCircle v-if="loading" class="h-5 w-5 is-spinning" />
             <Wand2 v-else class="h-5 w-5" />
@@ -2512,6 +2603,60 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-bottom-left-radius: 28px;
   border-bottom-right-radius: 28px;
+}
+
+.clone-console-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
+  padding: 12px 14px 16px;
+}
+
+.clone-console-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(57, 73, 111, 0.24);
+  background: linear-gradient(180deg, rgba(12, 20, 34, 0.98), rgba(8, 14, 25, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.clone-console-card__head,
+.clone-console-card__footer,
+.clone-console-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clone-console-card__head,
+.clone-console-card__footer {
+  justify-content: space-between;
+}
+
+.clone-console-card__preview {
+  height: 180px;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(57, 73, 111, 0.18);
+  background: rgba(9, 16, 28, 0.84);
+}
+
+.clone-console-card__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.clone-console-card__body {
+  display: grid;
+  gap: 8px;
+}
+
+.clone-console-card__actions {
+  justify-content: flex-end;
 }
 
 .clone-console-table__head {

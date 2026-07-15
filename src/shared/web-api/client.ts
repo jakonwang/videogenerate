@@ -341,6 +341,20 @@ export function createWebApiClient(options: WebApiClientOptions) {
       return result.items || []
     },
 
+    async createProductImageMaterialBackgroundVariants(input: {
+      materialIds: string[]
+      variantCount: number
+    }) {
+      const result = await request<{ ok: true; count: number; created: ProductImageMaterialItem[]; failedCount: number; errors: string[] }>(
+        '/plugins/product-image-materials/background-variants',
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
+      )
+      return result
+    },
+
     async updateProductImageMaterialStatus(materialId: string, usageStatus: 'unused' | 'used') {
       const result = await request<{ item: ProductImageMaterialItem }>(
         `/plugins/product-image-materials/materials/${encodeURIComponent(materialId)}/status`,

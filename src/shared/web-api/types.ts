@@ -167,6 +167,9 @@ export type ProductImageMaterialItem = {
   frameTimeSec: number
   localImagePath: string
   qiniuUrl: string
+  materialOrigin?: 'original' | 'derived'
+  derivedFromMaterialId?: string
+  derivedVariantIndex?: number
   usageStatus: ProductImageMaterialUsageStatus
   boundProductId?: string
   createdAt: number
