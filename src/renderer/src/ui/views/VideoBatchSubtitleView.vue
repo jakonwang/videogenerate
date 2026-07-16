@@ -750,10 +750,7 @@ async function refreshFontOptions() {
 }
 
 async function ensurePluginReady() {
-  const plugin = await webApiClient.getPlugin('video-batch-subtitle')
-  if (plugin.status !== 'installed') await webApiClient.installPlugin('video-batch-subtitle')
-  const latest = await webApiClient.getPlugin('video-batch-subtitle')
-  if (!latest.enabled) await webApiClient.enablePlugin('video-batch-subtitle')
+  return true
 }
 
 async function loadAll() {

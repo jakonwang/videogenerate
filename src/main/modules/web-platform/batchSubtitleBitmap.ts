@@ -1,13 +1,13 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { randomUUID } from 'node:crypto'
-import { nativeImage } from 'electron'
+import { createHash, randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
 import * as fontkitModule from 'fontkit'
 import { getAppPaths } from '../../lib/paths'
-import { prepareFontsDirForSubtitles, resolveSubtitleRenderFont } from '../../lib/fontResolve'
+import { resolveSubtitleRenderFont } from '../../lib/fontResolve'
+import { probeMedia } from '../ffmpeg/probe'
 import { getMediaInfo } from '../media/info'
 import { runFfmpeg } from '../ffmpeg/runner'
-import { renderBatchSubtitleOverlayStillByRemotion } from './batchSubtitleRemotion'
 import type { BatchSubtitleSourceItem, BatchSubtitleStyleConfig, BatchSubtitleTitleConfig } from './types'
 
 const CANVAS_WIDTH = 1080
@@ -41,12 +41,14 @@ type SubtitleSceneSpec = {
   anchor: BatchSubtitleStyleConfig['position']
   alignment: BatchSubtitleStyleConfig['textAlign']
   safeMarginPx: number
+  bottomMarginPx: number
   fontFamily: string
   fontColor: string
   strokeColor: string
   strokeWidth: number
   shadowColor: string
   shadowBlur: number
+  lineGapPx: number
   lines: SubtitleSceneLine[]
 }
 
@@ -56,9 +58,12 @@ const DEFAULT_EMOJI_FONT_FALLBACK =
   "'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji','Segoe UI Symbol','Noto Sans Symbols 2',sans-serif"
 const PROJECT_EMOJI_FONT_FAMILY = 'VGEmbeddedEmoji'
 const PROJECT_TEXT_FONT_FAMILY = 'VGEmbeddedText'
+const MP4_AUDIO_COPY_CODECS = new Set(['aac', 'alac', 'mp3', 'ac3', 'eac3'])
 const EMOJI_IMAGE_BOX_RATIO = 1.12
 const EMOJI_BASELINE_SHIFT_RATIO = 0.86
 const fontkit = fontkitModule as unknown as { openSync: (path: string) => any }
+const runtimeRequire = createRequire(import.meta.url)
+const overlayGenerationLocks = new Map<string, Promise<string>>()
 
 function sanitizePathSegment(value: string, fallback: string) {
   const cleaned = String(value || '')
@@ -67,6 +72,75 @@ function sanitizePathSegment(value: string, fallback: string) {
     .replace(/\s+/g, ' ')
     .trim()
   return cleaned || fallback
+}
+
+function createOverlayCacheKey(selectedTitle: string, styleConfig: BatchSubtitleStyleConfig) {
+  const payload = JSON.stringify({
+    selectedTitle: String(selectedTitle || '').trim(),
+    styleConfig: {
+      fontName: styleConfig.fontName,
+      fontSize: styleConfig.fontSize,
+      fontColor: styleConfig.fontColor,
+      strokeColor: styleConfig.strokeColor,
+      strokeWidth: styleConfig.strokeWidth,
+      shadowColor: styleConfig.shadowColor,
+      shadowBlur: styleConfig.shadowBlur,
+      position: styleConfig.position,
+      safeMargin: styleConfig.safeMargin,
+      textAlign: styleConfig.textAlign,
+      maxLines: styleConfig.maxLines,
+      maxWidthRatio: styleConfig.maxWidthRatio,
+      lineGap: styleConfig.lineGap,
+      bottomMargin: styleConfig.bottomMargin,
+      lineMode: styleConfig.lineMode,
+    },
+  })
+  return createHash('sha1').update(payload).digest('hex')
+}
+
+function resolveVideoNormalizeFilter(sourceItem: Pick<BatchSubtitleSourceItem, 'width' | 'height'>) {
+  const width = Math.max(0, Number(sourceItem.width || 0))
+  const height = Math.max(0, Number(sourceItem.height || 0))
+  if (width === CANVAS_WIDTH && height === CANVAS_HEIGHT) {
+    return 'setsar=1'
+  }
+  return NORMALIZE_VIDEO_FILTER
+}
+
+async function ensureCachedOverlayImage(input: {
+  sourceItem: BatchSubtitleSourceItem
+  titleConfig: BatchSubtitleTitleConfig
+  styleConfig: BatchSubtitleStyleConfig
+  overlayCacheDir: string
+  cachedOverlayImagePath: string
+}) {
+  const hasCachedOverlay = await stat(input.cachedOverlayImagePath)
+    .then((fileStat) => fileStat.isFile())
+    .catch(() => false)
+  if (hasCachedOverlay) return input.cachedOverlayImagePath
+
+  const lockKey = input.cachedOverlayImagePath
+  const existingLock = overlayGenerationLocks.get(lockKey)
+  if (existingLock) {
+    return await existingLock
+  }
+
+  const lockPromise = (async () => {
+    const generated = await generateBatchSubtitleOverlayAssets({
+      sourceItem: input.sourceItem,
+      titleConfig: input.titleConfig,
+      styleConfig: input.styleConfig,
+      workDir: input.overlayCacheDir,
+    })
+    return generated.overlayImagePath
+  })()
+
+  overlayGenerationLocks.set(lockKey, lockPromise)
+  try {
+    return await lockPromise
+  } finally {
+    overlayGenerationLocks.delete(lockKey)
+  }
 }
 
 function escapeXml(input: string) {
@@ -166,6 +240,52 @@ function measureTextWidth(text: string, fontPath: string | null, fontSize: numbe
   }
 }
 
+function buildFontPathNodes(input: {
+  text: string
+  fontPath: string | null
+  fontSize: number
+  x: number
+  baselineY: number
+  fill: string
+  stroke: string
+  strokeWidth: number
+  shadowColor: string
+}) {
+  if (!input.text || !input.fontPath) return null
+  try {
+    const font = fontkit.openSync(input.fontPath)
+    const layout = font.layout(input.text)
+    const unitsPerEm = Number(font.unitsPerEm || 1000)
+    const scale = input.fontSize / Math.max(1, unitsPerEm)
+    let cursorX = 0
+    const nodes: string[] = []
+    for (let index = 0; index < layout.glyphs.length; index += 1) {
+      const glyph = layout.glyphs[index]
+      const position = layout.positions[index] || {}
+      const advanceWidth = Number(position.xAdvance ?? glyph.advanceWidth ?? 0)
+      const xOffset = Number(position.xOffset ?? 0)
+      const yOffset = Number(position.yOffset ?? 0)
+      const pathData = glyph.path?.toSVG?.()
+      if (!pathData) {
+        cursorX += advanceWidth
+        continue
+      }
+      const glyphX = input.x + (cursorX + xOffset) * scale
+      const glyphY = input.baselineY - yOffset * scale
+      const transform = `translate(${glyphX} ${glyphY}) scale(${scale} -${scale})`
+      const shadowTransform = `translate(${glyphX} ${glyphY + Math.max(2, input.strokeWidth * 0.45)}) scale(${scale} -${scale})`
+      nodes.push(
+        `<path d="${pathData}" transform="${shadowTransform}" fill="${escapeXml(input.shadowColor)}" fill-opacity="0.34" stroke="none" />`,
+        `<path d="${pathData}" transform="${transform}" fill="${escapeXml(input.fill)}" stroke="${escapeXml(input.stroke)}" stroke-width="${input.strokeWidth}" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" paint-order="stroke fill" />`,
+      )
+      cursorX += advanceWidth
+    }
+    return nodes.join('')
+  } catch {
+    return null
+  }
+}
+
 async function readFontDataUri(fontPath: string | null, mimeType: string) {
   if (!fontPath) return null
   try {
@@ -173,6 +293,35 @@ async function readFontDataUri(fontPath: string | null, mimeType: string) {
     return `data:${mimeType};base64,${buffer.toString('base64')}`
   } catch {
     return null
+  }
+}
+
+async function rasterizeSvgToPng(svgContent: string, pngPath: string) {
+  let sharpError = ''
+  try {
+    const sharpModule = runtimeRequire('sharp') as any
+    const sharpFactory = sharpModule?.default || sharpModule
+    if (typeof sharpFactory !== 'function') {
+      throw new Error('sharp factory is unavailable')
+    }
+    await sharpFactory(Buffer.from(svgContent, 'utf8')).png().toFile(pngPath)
+    return
+  } catch (error: any) {
+    sharpError = String(error?.message || error || 'unknown sharp error')
+  }
+  try {
+    const { nativeImage } = await import('electron')
+    const svgDataUrl = `data:image/svg+xml;base64,${Buffer.from(svgContent, 'utf8').toString('base64')}`
+    const img = nativeImage.createFromDataURL(svgDataUrl)
+    const pngBuffer = img.toPNG()
+    if (pngBuffer.length > 0) {
+      await writeFile(pngPath, pngBuffer)
+      return
+    }
+    throw new Error('electron nativeImage returned empty PNG buffer')
+  } catch (error: any) {
+    const nativeImageError = String(error?.message || error || 'unknown nativeImage error')
+    throw new Error(`Failed to rasterize subtitle overlay image | sharp: ${sharpError} | nativeImage: ${nativeImageError}`)
   }
 }
 
@@ -192,10 +341,32 @@ async function resolveEmbeddedFontFaces(styleConfig: BatchSubtitleStyleConfig) {
   }
 }
 
+async function resolveSubtitleAudioArgs(sourceVideoPath: string) {
+  const probe = await probeMedia(sourceVideoPath)
+  if (typeof probe.audioStreamIndex !== 'number' || !Number.isFinite(probe.audioStreamIndex)) {
+    return ['-an']
+  }
+  const audioMapArgs = ['-map', `0:${probe.audioStreamIndex}`]
+  const codec = String(probe.audioCodec || '').trim().toLowerCase()
+  if (codec && MP4_AUDIO_COPY_CODECS.has(codec)) {
+    return [...audioMapArgs, '-c:a', 'copy']
+  }
+  return [...audioMapArgs, '-c:a', 'aac', '-b:a', '128k']
+}
+
+function batchSubtitleBitmapEncodeArgs(mode: 'preview' | 'output') {
+  if (mode === 'preview') {
+    return ['-c:v', 'libx264', '-preset', 'superfast', '-crf', '26'] as string[]
+  }
+  return ['-c:v', 'libx264', '-preset', 'superfast', '-crf', '23'] as string[]
+}
+
 function buildSubtitleSceneSpec(selectedTitle: string, styleConfig: BatchSubtitleStyleConfig): SubtitleSceneSpec {
   const mainSize = Math.max(18, Math.min(160, Math.round(styleConfig.fontSize)))
   const secondarySize = Math.max(16, Math.round(mainSize * 0.68))
   const safeMarginPx = Math.max(48, Math.min(360, 180 + Math.round(styleConfig.safeMargin * 12)))
+  const bottomMarginPx = Math.max(48, Math.min(900, Math.round(styleConfig.bottomMargin || 220)))
+  const lineGapPx = Math.max(0, Math.min(40, Math.round(styleConfig.lineGap || 8)))
   const lines = splitPreviewLines(selectedTitle, styleConfig.lineMode).map((line) => {
     const fontSize = line.secondary ? secondarySize : mainSize
     const lineHeight = Math.round(fontSize * (line.secondary ? 1.12 : 1.08))
@@ -213,12 +384,14 @@ function buildSubtitleSceneSpec(selectedTitle: string, styleConfig: BatchSubtitl
     anchor: styleConfig.position,
     alignment: styleConfig.textAlign,
     safeMarginPx,
+    bottomMarginPx,
     fontFamily: styleConfig.fontName,
     fontColor: styleConfig.fontColor,
     strokeColor: styleConfig.strokeColor,
     strokeWidth: Math.max(0, Number(styleConfig.strokeWidth || 0)),
     shadowColor: styleConfig.shadowColor,
     shadowBlur: Math.max(0, Number(styleConfig.shadowBlur || 0)),
+    lineGapPx,
     lines,
   }
 }
@@ -229,19 +402,23 @@ function resolveX(textAlign: BatchSubtitleStyleConfig['textAlign'], safeMarginPx
   return CANVAS_WIDTH / 2
 }
 
-function resolveY(position: BatchSubtitleStyleConfig['position'], safeMarginPx: number, totalHeight: number) {
+function resolveY(position: BatchSubtitleStyleConfig['position'], safeMarginPx: number, bottomMarginPx: number, totalHeight: number) {
   if (position === 'center') return Math.round((CANVAS_HEIGHT - totalHeight) / 2)
-  if (position === 'bottom') return CANVAS_HEIGHT - safeMarginPx - totalHeight
+  if (position === 'bottom') return CANVAS_HEIGHT - bottomMarginPx - totalHeight
   return safeMarginPx
 }
 
-async function buildSubtitleOverlaySvg(scene: SubtitleSceneSpec, styleConfig: BatchSubtitleStyleConfig) {
-  const gap = Math.max(8, Math.round((scene.lines[0]?.fontSize || 48) * 0.06))
+async function buildSubtitleOverlaySvg(
+  scene: SubtitleSceneSpec,
+  styleConfig: BatchSubtitleStyleConfig,
+  options?: { rasterizeFriendly?: boolean },
+) {
+  const gap = scene.lineGapPx
   const totalHeight = scene.lines.reduce((sum, line) => sum + line.lineHeight, 0) + gap * Math.max(0, scene.lines.length - 1)
   const x = resolveX(scene.alignment, 72)
-  const startY = resolveY(scene.anchor, scene.safeMarginPx, totalHeight)
+  const startY = resolveY(scene.anchor, scene.safeMarginPx, scene.bottomMarginPx, totalHeight)
   const shadowId = `shadow-${randomUUID()}`
-  const embeddedFonts = await resolveEmbeddedFontFaces(styleConfig)
+  const embeddedFonts = options?.rasterizeFriendly ? null : await resolveEmbeddedFontFaces(styleConfig)
   const resolvedTextFont = resolveSubtitleRenderFont(styleConfig.fontName)
   let currentY = startY
   const textNodes: string[] = []
@@ -278,41 +455,59 @@ async function buildSubtitleOverlaySvg(scene: SubtitleSceneSpec, styleConfig: Ba
           ? x - lineWidth
           : x - lineWidth / 2
     for (const run of drawRuns) {
-      if (run.kind === 'emoji' && run.dataUri) {
-        const imageY = baselineY - run.height * EMOJI_BASELINE_SHIFT_RATIO
-        textNodes.push(
-          `<image href="${run.dataUri}" x="${cursorX}" y="${imageY}" width="${run.width}" height="${run.height}" preserveAspectRatio="xMidYMid meet" filter="url(#${shadowId})" />`,
-        )
-        cursorX += run.width
-        continue
+      if (options?.rasterizeFriendly) {
+        const pathNodes = buildFontPathNodes({
+          text: run.text,
+          fontPath: resolvedTextFont.path,
+          fontSize,
+          x: cursorX,
+          baselineY,
+          fill: scene.fontColor,
+          stroke: scene.strokeColor,
+          strokeWidth: scene.strokeWidth,
+          shadowColor: scene.shadowColor,
+        })
+        if (pathNodes) {
+          textNodes.push(pathNodes)
+          cursorX += run.width
+          continue
+        }
       }
-      const textFamily = run.kind === 'emoji' ? embeddedFonts.emojiFamilyCss : embeddedFonts.textFamilyCss
+      const textFamily =
+        options?.rasterizeFriendly || !embeddedFonts
+          ? escapeXml(resolvedTextFont.family || styleConfig.fontName || 'sans-serif')
+          : run.kind === 'emoji'
+            ? embeddedFonts.emojiFamilyCss
+            : embeddedFonts.textFamilyCss
       textNodes.push(
-        `<text x="${cursorX}" y="${baselineY}" text-anchor="start" font-family="${textFamily}" font-size="${fontSize}" font-weight="900" fill="${escapeXml(scene.fontColor)}" stroke="${escapeXml(scene.strokeColor)}" stroke-width="${scene.strokeWidth}" paint-order="stroke fill" filter="url(#${shadowId})">${escapeXml(run.text)}</text>`,
+        `<text x="${cursorX}" y="${baselineY}" text-anchor="start" font-family="${textFamily}" font-size="${fontSize}" font-weight="900" fill="${escapeXml(scene.fontColor)}" stroke="${escapeXml(scene.strokeColor)}" stroke-width="${scene.strokeWidth}" stroke-linejoin="round" stroke-linecap="round" paint-order="stroke fill"${options?.rasterizeFriendly ? '' : ` filter="url(#${shadowId})"`}>${escapeXml(run.text)}</text>`,
       )
       cursorX += run.width
     }
   }
-  const fontFaceCss = [
-    embeddedFonts.textFontDataUri
-      ? `@font-face { font-family: '${PROJECT_TEXT_FONT_FAMILY}'; src: url('${embeddedFonts.textFontDataUri}') format('${/\.otf$/i.test(String(resolveSubtitleRenderFont(styleConfig.fontName).path || '')) ? 'opentype' : 'truetype'}'); font-weight: 100 900; }`
-      : '',
-    embeddedFonts.emojiFontDataUri
-      ? `@font-face { font-family: '${PROJECT_EMOJI_FONT_FAMILY}'; src: url('${embeddedFonts.emojiFontDataUri}') format('truetype'); font-weight: 400; }`
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n')
+  const fontFaceCss =
+    options?.rasterizeFriendly || !embeddedFonts
+      ? ''
+      : [
+          embeddedFonts.textFontDataUri
+            ? `@font-face { font-family: '${PROJECT_TEXT_FONT_FAMILY}'; src: url('${embeddedFonts.textFontDataUri}') format('${/\.otf$/i.test(String(resolveSubtitleRenderFont(styleConfig.fontName).path || '')) ? 'opentype' : 'truetype'}'); font-weight: 100 900; }`
+            : '',
+          embeddedFonts.emojiFontDataUri
+            ? `@font-face { font-family: '${PROJECT_EMOJI_FONT_FAMILY}'; src: url('${embeddedFonts.emojiFontDataUri}') format('truetype'); font-weight: 400; }`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}">
-  <defs>
+  <defs>${options?.rasterizeFriendly ? '' : `
     <style><![CDATA[
 ${fontFaceCss}
     ]]></style>
     <filter id="${shadowId}" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="4" stdDeviation="${scene.shadowBlur / 2}" flood-color="${escapeXml(scene.shadowColor)}" flood-opacity="0.95" />
-    </filter>
+    </filter>`}
   </defs>
   <rect width="100%" height="100%" fill="transparent" />
   ${textNodes.join('')}
@@ -332,20 +527,9 @@ export async function generateBatchSubtitleOverlayAssets(input: {
   await mkdir(rootDir, { recursive: true })
   const svgPath = join(rootDir, 'overlay.svg')
   const pngPath = join(rootDir, 'overlay.png')
-  const svgContent = await buildSubtitleOverlaySvg(scene, input.styleConfig)
+  const svgContent = await buildSubtitleOverlaySvg(scene, input.styleConfig, { rasterizeFriendly: true })
   await writeFile(svgPath, svgContent, 'utf8')
-  const svgDataUrl = `data:image/svg+xml;base64,${Buffer.from(svgContent, 'utf8').toString('base64')}`
-  const img = nativeImage.createFromDataURL(svgDataUrl)
-  const pngBuffer = img.toPNG()
-  if (pngBuffer.length > 0) {
-    await writeFile(pngPath, pngBuffer)
-  } else {
-    await renderBatchSubtitleOverlayStillByRemotion({
-      outputPath: pngPath,
-      selectedTitle,
-      styleConfig: input.styleConfig,
-    })
-  }
+  await rasterizeSvgToPng(svgContent, pngPath)
   return {
     selectedTitle,
     scene,
@@ -380,6 +564,7 @@ export async function generateBatchSubtitlePreviewFrame(input: {
         ? 1
         : Math.max(0, Math.min(0.5, mediaInfo.durationSec / 2 || 0.2))
   const previewDuration = Math.max(1.5, Math.min(3, Math.max(0.8, Number(mediaInfo.durationSec || 2))))
+  const normalizeVideoFilter = resolveVideoNormalizeFilter(input.sourceItem)
   await runFfmpeg({
     args: [
       '-y',
@@ -392,7 +577,7 @@ export async function generateBatchSubtitlePreviewFrame(input: {
       '-frames:v',
       '1',
       '-filter_complex',
-      `[0:v]${NORMALIZE_VIDEO_FILTER}[base];[base][1:v]overlay=0:0,format=rgba[outv]`,
+      `[0:v]${normalizeVideoFilter}[base];[base][1:v]overlay=0:0,format=rgba[outv]`,
       '-map',
       '[outv]',
       previewImagePath,
@@ -410,17 +595,14 @@ export async function generateBatchSubtitlePreviewFrame(input: {
       '-i',
       overlayImagePath,
       '-filter_complex',
-      `[0:v]${NORMALIZE_VIDEO_FILTER}[base];[base][1:v]overlay=0:0,format=yuv420p[outv]`,
+      `[0:v]${normalizeVideoFilter}[base];[base][1:v]overlay=0:0,format=yuv420p[outv]`,
       '-map',
       '[outv]',
       '-map',
       '0:a?',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'veryfast',
-      '-crf',
-      '26',
+      '-threads',
+      '2',
+      ...batchSubtitleBitmapEncodeArgs('preview'),
       '-c:a',
       'aac',
       '-b:a',
@@ -443,17 +625,23 @@ export async function renderBatchSubtitleVideoWithBitmapOverlay(input: {
   titleConfig: BatchSubtitleTitleConfig
   styleConfig: BatchSubtitleStyleConfig
   outputDir: string
+  ffmpegThreads?: number
 }) {
   const itemDir = join(input.outputDir, String(input.sourceItem.id || randomUUID()).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_'))
   await mkdir(itemDir, { recursive: true })
-  const { selectedTitle, overlayImagePath } = await generateBatchSubtitleOverlayAssets({
+  const selectedTitle = normalizeSelectedTitle(input.titleConfig)
+  const overlayCacheDir = join(input.outputDir, '_overlay-cache', createOverlayCacheKey(selectedTitle, input.styleConfig))
+  const cachedOverlayImagePath = join(overlayCacheDir, 'overlay.png')
+  const overlayImagePath = await ensureCachedOverlayImage({
     sourceItem: input.sourceItem,
     titleConfig: input.titleConfig,
     styleConfig: input.styleConfig,
-    workDir: itemDir,
+    overlayCacheDir,
+    cachedOverlayImagePath,
   })
   const outputVideoPath = join(itemDir, `${basename(input.sourceItem.sourceVideoPath).replace(/\.[^.]+$/, '')}_subtitle.mp4`)
-  await prepareFontsDirForSubtitles(itemDir)
+  const normalizeVideoFilter = resolveVideoNormalizeFilter(input.sourceItem)
+  const audioArgs = await resolveSubtitleAudioArgs(input.sourceItem.sourceVideoPath)
   await runFfmpeg({
     args: [
       '-y',
@@ -462,21 +650,13 @@ export async function renderBatchSubtitleVideoWithBitmapOverlay(input: {
       '-i',
       overlayImagePath,
       '-filter_complex',
-      `[0:v]${NORMALIZE_VIDEO_FILTER}[base];[base][1:v]overlay=0:0,format=yuv420p[outv]`,
+      `[0:v]${normalizeVideoFilter}[base];[base][1:v]overlay=0:0,format=yuv420p[outv]`,
       '-map',
       '[outv]',
-      '-map',
-      '0:a?',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'medium',
-      '-crf',
-      '20',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
+      ...audioArgs,
+      '-threads',
+      `${Math.max(1, Math.floor(Number(input.ffmpegThreads || 1)))}`,
+      ...batchSubtitleBitmapEncodeArgs('output'),
       outputVideoPath,
     ],
   })

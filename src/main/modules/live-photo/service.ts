@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -24,8 +24,10 @@ import { generateImage as generateApifoxImage } from '../clone/unifiedImage'
 import { Ai666TaskTimeoutError, createVideoTask, queryAsyncTask, syncRemoteTaskResult } from '../clone/unifiedVideo'
 import { extractJsonObjectText, extractModelMessageContent } from '../clone/aiResponse'
 import { canUseMockGeneration } from '../clone/mockPolicy'
+import { generateThumbnailJpg } from '../media/thumbnail'
+import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/batchSubtitle'
+import { webPlatformRepo } from '../web-platform/repo'
 import { livePhotoRepo } from './repo'
-import { packageLivePhoto } from './packager'
 import type {
   CreateCloneShotLivePhotosInput,
   CreateReferenceLivePhotoInput,
@@ -42,7 +44,9 @@ import type {
   LivePhotoWorkflow,
   LivePhotoWorkflowStep,
   RetryLivePhotoItemInput,
+  LivePhotoSubtitleOverlay,
 } from './types'
+import type { BatchSubtitleTitleRenderMode } from '../../../shared/web-api/types'
 import type { AiProviderName, CloneProductType, ModelCredentials, ShotSpec } from '../clone/types'
 import type { Product } from '../products/types'
 
@@ -54,6 +58,8 @@ type LivePhotoServiceDependencies = {
   reviewReferenceReplacementStillStrict: typeof reviewReferenceReplacementStillStrict
   reviewReferenceReplacementStillVisual: typeof reviewReferenceReplacementStillVisual
 }
+
+const LIVE_PHOTO_SUBTITLE_USER_ID = 'desktop-live-photo'
 
 type LivePhotoVisualReviewResult = {
   passed: boolean
@@ -324,27 +330,79 @@ function hydrateLivePhotoArtifactPaths<T extends LivePhotoItem>(item: T): T {
   const fallbackLivePhotoImagePath = join(root, 'live-photo.jpg')
   const fallbackLivePhotoVideoPath = join(root, 'live-photo.mov')
   const fallbackManifestPath = join(root, 'live-photo.json')
+  const resolveArtifactPath = (currentPath: string | undefined, fallbackPath: string) => {
+    const current = String(currentPath || '').trim()
+    if (current && existsSync(current)) return current
+    return existsSync(fallbackPath) ? fallbackPath : undefined
+  }
+  const resolveFirstExistingPath = (...candidates: Array<string | undefined>) => {
+    for (const candidate of candidates) {
+      const normalized = String(candidate || '').trim()
+      if (normalized && existsSync(normalized)) return normalized
+    }
+    return undefined
+  }
+  const resolvedGeneratedStillPath = resolveArtifactPath(item.generatedStillPath, fallbackGeneratedStillPath)
+  const resolvedMotionVideoPath = resolveArtifactPath(item.motionVideoPath, fallbackMotionVideoPath)
+  const resolvedPreviewVideoPath = resolveArtifactPath(item.previewVideoPath, fallbackPreviewVideoPath)
+  const resolvedLivePhotoImagePath = resolveArtifactPath(item.livePhotoImagePath, fallbackLivePhotoImagePath)
+  const resolvedLivePhotoVideoPath = resolveArtifactPath(item.livePhotoVideoPath, fallbackLivePhotoVideoPath)
   return {
     ...item,
-    generatedStillPath:
-      String(item.generatedStillPath || '').trim() || (existsSync(fallbackGeneratedStillPath) ? fallbackGeneratedStillPath : undefined),
-    motionVideoPath:
-      String(item.motionVideoPath || '').trim() || (existsSync(fallbackMotionVideoPath) ? fallbackMotionVideoPath : undefined),
-    previewVideoPath:
-      String(item.previewVideoPath || '').trim() || (existsSync(fallbackPreviewVideoPath) ? fallbackPreviewVideoPath : undefined),
-    posterPath:
-      String(item.posterPath || '').trim() || (existsSync(fallbackPosterPath) ? fallbackPosterPath : undefined),
-    livePhotoImagePath:
-      String(item.livePhotoImagePath || '').trim() || (existsSync(fallbackLivePhotoImagePath) ? fallbackLivePhotoImagePath : undefined),
-    livePhotoVideoPath:
-      String(item.livePhotoVideoPath || '').trim() || (existsSync(fallbackLivePhotoVideoPath) ? fallbackLivePhotoVideoPath : undefined),
-    packagingManifestPath:
-      String(item.packagingManifestPath || '').trim() || (existsSync(fallbackManifestPath) ? fallbackManifestPath : undefined),
+    generatedStillPath: resolvedGeneratedStillPath,
+    motionVideoPath: resolvedMotionVideoPath,
+    previewVideoPath: resolvedPreviewVideoPath,
+    posterPath: resolveFirstExistingPath(item.posterPath, fallbackPosterPath, resolvedLivePhotoImagePath, resolvedGeneratedStillPath, item.referenceImagePath),
+    livePhotoImagePath: resolvedLivePhotoImagePath,
+    livePhotoVideoPath: resolvedLivePhotoVideoPath,
+    packagingManifestPath: resolveArtifactPath(item.packagingManifestPath, fallbackManifestPath),
   }
+}
+
+function getLivePhotoSubtitleTargetPath(item: LivePhotoItem) {
+  return (
+    [
+      String(item.livePhotoVideoPath || '').trim(),
+      String(item.previewVideoPath || '').trim(),
+      String(item.motionVideoPath || '').trim(),
+    ].find((candidate) => candidate && existsSync(candidate)) || ''
+  )
+}
+
+function getLivePhotoSubtitleOverlay(item: LivePhotoItem) {
+  const overlay = item.subtitleOverlay
+  if (!overlay || typeof overlay !== 'object') return undefined
+  const subtitleOutputPath = String(overlay.subtitleOutputPath || '').trim()
+  if (!subtitleOutputPath) return undefined
+  return {
+    active: Boolean(overlay.active),
+    originalOutputPath: String(overlay.originalOutputPath || '').trim(),
+    originalCoverImagePath: String(overlay.originalCoverImagePath || '').trim() || undefined,
+    subtitleOutputPath,
+    subtitleCoverImagePath: String(overlay.subtitleCoverImagePath || '').trim() || undefined,
+    appliedAt: Number(overlay.appliedAt || 0) || now(),
+  } satisfies LivePhotoSubtitleOverlay
+}
+
+function getLivePhotoExportSourcePath(item: LivePhotoItem) {
+  const subtitleOutputPath = String(item.subtitleOutputPath || '').trim()
+  const overlaySubtitleOutputPath = String(item.subtitleOverlay?.subtitleOutputPath || '').trim()
+  const subtitleSourcePath = subtitleOutputPath || overlaySubtitleOutputPath
+  if (subtitleSourcePath) {
+    return existsSync(subtitleSourcePath) ? subtitleSourcePath : ''
+  }
+  return (
+    [
+      String(item.livePhotoVideoPath || '').trim(),
+      String(item.previewVideoPath || '').trim(),
+      String(item.motionVideoPath || '').trim(),
+    ].find((candidate) => candidate && existsSync(candidate)) || ''
+  )
 }
 
 function toLivePhotoItemSummary(item: LivePhotoItem): LivePhotoItemSummary {
   const hydrated = hydrateLivePhotoArtifactPaths(item)
+  const overlay = getLivePhotoSubtitleOverlay(hydrated)
   const {
     logs: _logs,
     promptPreview: _promptPreview,
@@ -352,7 +410,14 @@ function toLivePhotoItemSummary(item: LivePhotoItem): LivePhotoItemSummary {
     videoPromptPreview: _videoPromptPreview,
     ...summary
   } = hydrated
-  return summary
+  return {
+    ...summary,
+    subtitleOverlayActive: Boolean(overlay?.active),
+    subtitleOriginalOutputPath: String(overlay?.originalOutputPath || '').trim() || '',
+    subtitleOutputPath: String(overlay?.subtitleOutputPath || '').trim() || '',
+    subtitleCoverImagePath: String(overlay?.subtitleCoverImagePath || '').trim() || undefined,
+    subtitleAppliedAt: Number(overlay?.appliedAt || 0) || undefined,
+  }
 }
 
 function safeName(input: string, fallback: string) {
@@ -411,6 +476,54 @@ async function downloadUrlToFile(input: { url: string; filePath: string }) {
 async function renderPosterFromVideo(input: { videoPath: string; posterPath: string }) {
   await livePhotoDeps.runFfmpeg({
     args: ['-y', '-ss', '0.3', '-i', input.videoPath, '-frames:v', '1', input.posterPath],
+  })
+}
+
+async function backfillMissingPosterArtifact(item: LivePhotoItem, logMessage: string) {
+  const root = livePhotoRoot(item.id)
+  const posterPath = join(root, 'poster.jpg')
+  if (existsSync(posterPath)) {
+    if (String(item.posterPath || '').trim() === posterPath) return item
+    return await livePhotoRepo.upsert({
+      ...item,
+      posterPath,
+      updatedAt: now(),
+    })
+  }
+
+  const hydrated = hydrateLivePhotoArtifactPaths(item)
+  const sourceVideoPath =
+    [
+      String(hydrated.livePhotoVideoPath || '').trim(),
+      String(hydrated.previewVideoPath || '').trim(),
+      String(hydrated.motionVideoPath || '').trim(),
+    ].find((candidate) => candidate && existsSync(candidate)) || ''
+  const sourceImagePath =
+    [
+      String(hydrated.livePhotoImagePath || '').trim(),
+      String(hydrated.generatedStillPath || '').trim(),
+      String(hydrated.referenceImagePath || '').trim(),
+    ].find((candidate) => candidate && existsSync(candidate) && /\.jpe?g$/i.test(candidate)) || ''
+
+  if (!sourceVideoPath && !sourceImagePath) return item
+
+  await ensureDir(root)
+  if (sourceVideoPath) {
+    await renderPosterFromVideo({ videoPath: sourceVideoPath, posterPath })
+  } else if (sourceImagePath) {
+    await copyFile(sourceImagePath, posterPath)
+  }
+
+  if (!existsSync(posterPath)) return item
+
+  return await livePhotoRepo.upsert({
+    ...item,
+    posterPath,
+    logs: [
+      ...(Array.isArray(item.logs) ? item.logs : []),
+      buildLivePhotoLog(logMessage),
+    ].slice(-200),
+    updatedAt: now(),
   })
 }
 
@@ -3425,6 +3538,12 @@ function buildReferenceReplacementImagePromptPreview(input: {
   })
 }
 
+async function ensureVideoCoverImage(videoPath?: string) {
+  const source = String(videoPath || '').trim()
+  if (!source) return undefined
+  return (await generateThumbnailJpg({ filePath: source, atSec: 1 })) || undefined
+}
+
 async function copyMotionSourceVideo(input: { sourceVideoPath: string; outputPath: string }) {
   await copyFile(input.sourceVideoPath, input.outputPath)
 }
@@ -4467,8 +4586,13 @@ export const livePhotoService = {
     })
     const start = (safePage - 1) * pageSize
     const pagedItems = sortedItems.slice(start, start + pageSize)
+    const repairedPagedItems = await Promise.all(
+      pagedItems.map((item) =>
+        backfillMissingPosterArtifact(item, '[live-photo] poster artifact backfilled during library listing'),
+      ),
+    )
     return {
-      items: pagedItems.map(toLivePhotoItemSummary),
+      items: repairedPagedItems.map(toLivePhotoItemSummary),
       filter,
       page: safePage,
       pageSize,
@@ -4488,7 +4612,8 @@ export const livePhotoService = {
   async get(id: string) {
     const item = await livePhotoRepo.get(String(id || '').trim())
     if (!item) return null
-    const hydrated = hydrateLivePhotoArtifactPaths(item)
+    const repaired = await backfillMissingPosterArtifact(item, '[live-photo] poster artifact backfilled during item open')
+    const hydrated = hydrateLivePhotoArtifactPaths(repaired)
     const credentials = await cloneRepo.getCredentials()
     return {
       ...hydrated,
@@ -4586,8 +4711,6 @@ export const livePhotoService = {
   },
 
   async exportItems(input: ExportLivePhotoItemsInput): Promise<ExportLivePhotoItemsResult> {
-    const savedSettings = await livePhotoRepo.getSettings()
-    const effectiveSettings = { ...savedSettings, ...(input.settings || {}) }
     const ids = Array.isArray(input.ids) ? input.ids.map((item) => String(item || '').trim()).filter(Boolean) : []
     if (!ids.length) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
     const outputDir = String(input.outputDir || '').trim() || join(exportRoot(), safeName(`${Date.now()}`, 'batch'))
@@ -4601,12 +4724,14 @@ export const livePhotoService = {
         continue
       }
       const exportSourceVideoPath =
+        getLivePhotoExportSourcePath(item) ||
         [
           String(item.cloneShotSnapshot?.videoPath || '').trim(),
           String(item.originalMotionVideoPath || '').trim(),
           String(item.motionVideoPath || '').trim(),
           String(item.livePhotoVideoPath || '').trim(),
-        ].find((candidate) => candidate && existsSync(candidate)) || ''
+        ].find((candidate) => candidate && existsSync(candidate)) ||
+        ''
       if (item.packagingStatus !== 'completed' || !item.livePhotoImagePath || !exportSourceVideoPath) {
         skipped.push({ id, reason: 'Item is not export-ready' })
         continue
@@ -4615,42 +4740,21 @@ export const livePhotoService = {
         [item.sourceProjectTitle, item.sourceShotLabel, item.productSnapshot?.name, item.id.slice(0, 8)].filter(Boolean).join('-'),
         item.id,
       )
-      const targetDir = join(outputDir, safeExportName(baseName, item.id.slice(0, 8)))
-      const packaged = await packageLivePhoto(
-        { runFfmpeg: livePhotoDeps.runFfmpeg },
-        {
-          itemId: item.id,
-          sourceStillPath: item.livePhotoImagePath,
-          sourceVideoPath: exportSourceVideoPath,
-          exportDir: targetDir,
-          baseName,
-          outputResolution: effectiveSettings.outputResolution,
-          frameRate: effectiveSettings.frameRate,
-          quality: effectiveSettings.quality,
-        },
-      )
+      const fileBaseName = safeExportName(`${baseName}-${item.id.slice(0, 8)}`, item.id.slice(0, 8))
+      const sourceExt = extname(exportSourceVideoPath) || '.mov'
+      const videoPath = join(outputDir, `${fileBaseName}${sourceExt}`)
+      await copyFile(exportSourceVideoPath, videoPath)
       exported.push({
         id: item.id,
-        targetDir,
-        imagePath: packaged.imagePath,
-        videoPath: packaged.videoPath,
-        bundlePath: packaged.bundlePath,
-        metadataBridgePath: packaged.metadataBridgePath,
-        assetIdentifier: packaged.assetIdentifier,
-        videoMetadataMode: packaged.videoMetadataMode,
-        imageMetadataMode: packaged.imageMetadataMode,
+        videoPath,
       })
       await livePhotoRepo.upsert({
         ...item,
-        exportBundlePath: packaged.bundlePath,
-        packagingAssetIdentifier: packaged.assetIdentifier,
-        packagingMetadataBridgePath: packaged.metadataBridgePath,
-        videoMetadataMode: packaged.videoMetadataMode,
-        imageMetadataMode: packaged.imageMetadataMode,
+        exportBundlePath: videoPath,
         logs: [
           ...(Array.isArray(item.logs) ? item.logs : []),
           buildLivePhotoLog(
-            `[live-photo] export settings used: resolution=${effectiveSettings.outputResolution} frameRate=${effectiveSettings.frameRate} quality=${effectiveSettings.quality}`,
+            `[live-photo] export video copied: ${videoPath}`,
           ),
         ],
         updatedAt: now(),
@@ -4662,6 +4766,162 @@ export const livePhotoService = {
       exported,
       skipped,
     }
+  },
+
+  async applySubtitleVideoToItem(input: {
+    id: string
+    subtitleVideoPath: string
+    subtitleCoverImagePath?: string
+  }) {
+    const id = String(input.id || '').trim()
+    if (!id) throw new Error('id is required')
+    const existing = await livePhotoRepo.get(id)
+    if (!existing) throw new Error('Live Photo item does not exist')
+    const subtitleVideoPath = String(input.subtitleVideoPath || '').trim()
+    if (!subtitleVideoPath) throw new Error('Subtitle video does not exist')
+    if (!existsSync(subtitleVideoPath)) throw new Error('Subtitle video does not exist')
+    const currentOutputPath = getLivePhotoSubtitleTargetPath(existing)
+    if (!currentOutputPath) throw new Error('Current Live Photo item has no output video to replace')
+    const currentCoverImagePath = String(existing.posterPath || '').trim() || undefined
+    const previousOverlay = getLivePhotoSubtitleOverlay(existing)
+    const originalOutputPath =
+      previousOverlay?.active && previousOverlay.originalOutputPath
+        ? String(previousOverlay.originalOutputPath || '').trim()
+        : currentOutputPath
+    const originalCoverImagePath =
+      previousOverlay?.active && previousOverlay.originalCoverImagePath
+        ? String(previousOverlay.originalCoverImagePath || '').trim() || undefined
+        : currentCoverImagePath
+    const subtitleCoverImagePath =
+      String(input.subtitleCoverImagePath || '').trim() || (await ensureVideoCoverImage(subtitleVideoPath))
+    const saved = await livePhotoRepo.upsert({
+      ...existing,
+      posterPath: subtitleCoverImagePath,
+      subtitleOverlay: {
+        active: true,
+        originalOutputPath,
+        originalCoverImagePath,
+        subtitleOutputPath: subtitleVideoPath,
+        subtitleCoverImagePath,
+        appliedAt: now(),
+      },
+      updatedAt: now(),
+    })
+    return saved
+  },
+
+  async revertSubtitleVideoFromItem(input: { id: string }) {
+    const id = String(input.id || '').trim()
+    if (!id) throw new Error('id is required')
+    const existing = await livePhotoRepo.get(id)
+    if (!existing) throw new Error('Live Photo item does not exist')
+    const overlay = getLivePhotoSubtitleOverlay(existing)
+    if (!overlay?.active) throw new Error('Current Live Photo item has no subtitle version to revert')
+    const subtitleVideoPath = String(overlay.subtitleOutputPath || '').trim()
+    const subtitleCoverImagePath = String(overlay.subtitleCoverImagePath || '').trim()
+    const originalCoverImagePath = String(overlay.originalCoverImagePath || '').trim()
+    const saved = await livePhotoRepo.upsert({
+      ...existing,
+      posterPath: originalCoverImagePath || undefined,
+      subtitleOverlay: undefined,
+      exportBundlePath: undefined,
+      updatedAt: now(),
+    })
+    if (subtitleVideoPath) {
+      await rm(subtitleVideoPath, { force: true }).catch(() => undefined)
+    }
+    if (subtitleCoverImagePath && subtitleCoverImagePath !== originalCoverImagePath) {
+      await rm(subtitleCoverImagePath, { force: true }).catch(() => undefined)
+    }
+    return saved
+  },
+
+  async generateSubtitleVideosForItems(input: {
+    name: string
+    sourceItems: Array<{
+      id: string
+      sourceType: 'upload' | 'clone_final'
+      sourceVideoPath: string
+      sourceProjectId?: string
+      sourceProjectTitle?: string
+      fileName: string
+      coverImagePath?: string
+    }>
+    subtitleMode?: 'static_title' | 'timed_caption' | 'hybrid'
+    subtitleSource?: 'whisper_compatible' | 'manual'
+    exportEngine?: 'capcut_mate' | 'ass_fallback'
+    titleRenderMode?: BatchSubtitleTitleRenderMode
+    titleConfig?: {
+      strategy?: 'single_for_all' | 'random_pool'
+      singleText?: string
+      titlePool?: string[]
+    }
+    titleItems?: Array<{ sourceItemId: string; text: string; updatedAt: number }>
+    overlayImageConfig?: {
+      canvasWidth?: number
+      canvasHeight?: number
+      fontName?: string
+      fontSize?: number
+      fontColor?: string
+      strokeColor?: string
+      strokeWidth?: number
+      shadowColor?: string
+      shadowBlur?: number
+      position?: 'top' | 'center' | 'bottom'
+      safeMargin?: number
+      textAlign?: 'left' | 'center' | 'right'
+      maxLines?: number
+      maxWidthRatio?: number
+      lineGap?: number
+      bottomMargin?: number
+    }
+    captionStyle?: {
+      fontName?: string
+      fontSize?: number
+      fontColor?: string
+      strokeColor?: string
+      strokeWidth?: number
+      shadowColor?: string
+      shadowBlur?: number
+      position?: 'top' | 'center' | 'bottom'
+      safeMargin?: number
+      textAlign?: 'left' | 'center' | 'right'
+      maxLines?: number
+      maxWidthRatio?: number
+      lineGap?: number
+      bottomMargin?: number
+    }
+    layoutPolicy?: {
+      maxLines?: number
+      maxWidthRatio?: number
+      reflowStrategy?: 'balanced' | 'punctuation'
+      avoidPosition?: 'auto' | 'top' | 'bottom'
+    }
+  }) {
+    const userId = LIVE_PHOTO_SUBTITLE_USER_ID
+    const plugin = await webPlatformRepo.ensurePluginRecord(userId, 'video-batch-subtitle')
+    if (plugin.status !== 'installed' || plugin.runtimeState !== 'enabled') {
+      await webPlatformRepo.upsertPluginRecord({
+        ...plugin,
+        status: 'installed',
+        runtimeState: 'enabled',
+      })
+    }
+    const job = await createBatchSubtitleJob({
+      userId,
+      name: input.name,
+      sourceItems: input.sourceItems,
+      subtitleMode: input.subtitleMode,
+      subtitleSource: input.subtitleSource,
+      exportEngine: input.exportEngine,
+      titleRenderMode: input.titleRenderMode,
+      titleConfig: input.titleConfig,
+      titleItems: input.titleItems,
+      overlayImageConfig: input.overlayImageConfig,
+      captionStyle: input.captionStyle,
+      layoutPolicy: input.layoutPolicy,
+    })
+    return await runBatchSubtitleJob({ userId, jobId: job.id })
   },
 
   async retry(input: RetryLivePhotoItemInput) {
@@ -4807,6 +5067,10 @@ export const livePhotoService = {
     }
     const refreshedItems = await livePhotoRepo.list()
     for (const item of refreshedItems) {
+      await backfillMissingPosterArtifact(item, '[live-photo] startup backfilled missing poster artifact')
+    }
+    const repairedItems = await livePhotoRepo.list()
+    for (const item of repairedItems) {
       if (!shouldUpgradeFailedItemToTerminal(item)) continue
       const current = ensureAutoFlowStatus(item)
       await livePhotoRepo.upsert({

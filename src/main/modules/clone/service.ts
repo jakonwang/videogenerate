@@ -39,6 +39,8 @@ import { generateThumbnailJpg } from '../media/thumbnail'
 import { createBatchTasks } from '../tasks/createBatchTasks'
 import { taskQueue } from '../tasks/queue'
 import { probeMedia } from '../ffmpeg/probe'
+import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/batchSubtitle'
+import { webPlatformRepo } from '../web-platform/repo'
 import { renderViralCloneBatch } from './renderViralCloneBatch'
 import {
   buildModelLibraryPromptPreview,
@@ -145,6 +147,8 @@ import type {
   CloneShotVideoSubmissionAuditLog,
   HermesIntegrationSettings,
 } from './types'
+
+const CLONE_SUBTITLE_USER_ID = 'desktop-clone-task-list'
 
 const sceneModelDetectionCache = new Map<string, boolean>()
 const sceneReferenceDecisionCache = new Map<string, StoryboardReferenceDecision>()
@@ -11377,6 +11381,93 @@ export const cloneService = {
       project: saved,
       summary: buildProjectSummary(saved),
     }
+  },
+
+  async generateSubtitleVideosForProjects(input: {
+    name: string
+    sourceItems: Array<{
+      id: string
+      sourceType: 'upload' | 'clone_final'
+      sourceVideoPath: string
+      sourceProjectId?: string
+      sourceProjectTitle?: string
+      fileName: string
+      coverImagePath?: string
+    }>
+    subtitleMode?: 'static_title' | 'timed_caption' | 'hybrid'
+    subtitleSource?: 'whisper_compatible' | 'manual'
+    exportEngine?: 'capcut_mate' | 'ass_fallback'
+    titleRenderMode?: 'overlay_image' | 'ass_text'
+    titleConfig?: {
+      strategy?: 'single_for_all' | 'random_pool'
+      singleText?: string
+      titlePool?: string[]
+    }
+    titleItems?: Array<{ sourceItemId: string; text: string; updatedAt: number }>
+    overlayImageConfig?: {
+      canvasWidth?: number
+      canvasHeight?: number
+      fontName?: string
+      fontSize?: number
+      fontColor?: string
+      strokeColor?: string
+      strokeWidth?: number
+      shadowColor?: string
+      shadowBlur?: number
+      position?: 'top' | 'center' | 'bottom'
+      safeMargin?: number
+      textAlign?: 'left' | 'center' | 'right'
+      maxLines?: number
+      maxWidthRatio?: number
+      lineGap?: number
+      bottomMargin?: number
+    }
+    captionStyle?: {
+      fontName?: string
+      fontSize?: number
+      fontColor?: string
+      strokeColor?: string
+      strokeWidth?: number
+      shadowColor?: string
+      shadowBlur?: number
+      position?: 'top' | 'center' | 'bottom'
+      safeMargin?: number
+      textAlign?: 'left' | 'center' | 'right'
+      maxLines?: number
+      maxWidthRatio?: number
+      lineGap?: number
+      bottomMargin?: number
+    }
+    layoutPolicy?: {
+      maxLines?: number
+      maxWidthRatio?: number
+      reflowStrategy?: 'balanced' | 'punctuation'
+      avoidPosition?: 'auto' | 'top' | 'bottom'
+    }
+  }) {
+    const plugin = await webPlatformRepo.ensurePluginRecord(CLONE_SUBTITLE_USER_ID, 'video-batch-subtitle')
+    if (plugin.status !== 'installed' || plugin.runtimeState !== 'enabled') {
+      await webPlatformRepo.upsertPluginRecord({
+        ...plugin,
+        status: 'installed',
+        runtimeState: 'enabled',
+      })
+    }
+    const job = await createBatchSubtitleJob({
+      userId: CLONE_SUBTITLE_USER_ID,
+      name: input.name,
+      sourceItems: input.sourceItems,
+      subtitleMode: input.subtitleMode,
+      subtitleSource: input.subtitleSource,
+      exportEngine: input.exportEngine,
+      titleRenderMode: input.titleRenderMode,
+      titleConfig: input.titleConfig,
+      titleItems: input.titleItems,
+      overlayImageConfig: input.overlayImageConfig,
+      captionStyle: input.captionStyle,
+      layoutPolicy: input.layoutPolicy,
+    })
+    return await runBatchSubtitleJob({ userId: CLONE_SUBTITLE_USER_ID, jobId: job.id })
   },
 
   async revertSubtitleVideoFromProject(input: { cloneProjectId: string }) {

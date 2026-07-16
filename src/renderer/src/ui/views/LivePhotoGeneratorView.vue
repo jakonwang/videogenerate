@@ -1,8 +1,9 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import { webApiClient } from '@/lib/webApiClient'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -121,6 +122,14 @@ type LivePhotoItem = {
   videoTaskModel?: string
   videoTaskBaseUrl?: string
   videoTaskEndpointStyle?: string
+  subtitleOverlay?: {
+    active: boolean
+    originalOutputPath: string
+    originalCoverImagePath?: string
+    subtitleOutputPath: string
+    subtitleCoverImagePath?: string
+    appliedAt: number
+  }
   workflow?: {
     currentStep: 'queued' | 'image_generation' | 'video_generation' | 'live_photo_packaging' | 'completed'
     stepStatus: Record<
@@ -152,6 +161,25 @@ type LivePhotoSettings = {
   frameRate: '24' | '30'
   quality: 'medium' | 'high'
   updatedAt: number
+}
+
+type SubtitlePresetId = 'viral-hook' | 'deal-punch' | 'premium-drop'
+
+type SubtitleCaptionStyle = {
+  fontName: string
+  fontSize: number
+  fontColor: string
+  strokeColor: string
+  strokeWidth: number
+  shadowColor: string
+  shadowBlur: number
+  position: 'top' | 'center' | 'bottom'
+  textAlign: 'left' | 'center' | 'right'
+  safeMargin: number
+  maxLines: number
+  maxWidthRatio: number
+  lineGap: number
+  bottomMargin: number
 }
 
 const router = useRouter()
@@ -278,6 +306,17 @@ const runtimeDialogTitle = ref('运行日志')
 const detailDialogOpen = ref(false)
 const detailDialogItem = ref<LivePhotoItem | null>(null)
 const livePhotoSettingsBusy = ref(false)
+const subtitleDialogOpen = ref(false)
+const subtitleDialogBusy = ref(false)
+const subtitleDialogMode = ref<'batch' | 'single'>('batch')
+const subtitleDialogTab = ref<'title' | 'template' | 'style'>('title')
+const subtitleTargetIds = ref<string[]>([])
+const subtitleTitleStrategy = ref<'single_for_all' | 'random_pool'>('single_for_all')
+const subtitleTitleText = ref('')
+const subtitleTitlePoolText = ref('')
+const subtitleSelectedPreset = ref<SubtitlePresetId>('viral-hook')
+const subtitleCaptionStyle = reactive<SubtitleCaptionStyle>(defaultSubtitleCaptionStyle())
+const subtitleDialogItem = ref<LivePhotoItem | null>(null)
 const livePhotoSettings = ref<LivePhotoSettings>({
   referenceMotionTemplate: 'push_in',
   cloneMotionTemplate: 'ambient_sway',
@@ -372,6 +411,8 @@ const featuredCloneRow = computed(() => selectedCloneRows.value[0] || cloneShotR
 const livePhotoSteps = ['queued', 'image_generation', 'video_generation', 'live_photo_packaging', 'completed'] as const
 const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
+const subtitleEligibleSelectedItems = computed(() => selectedLibraryItems.value.filter((item) => Boolean(livePhotoDisplayVideoPath(item))))
+const subtitleEligibleSelectedCount = computed(() => subtitleEligibleSelectedItems.value.length)
 const pagedLibraryItems = computed(() => filteredLibraryItems.value)
 const runningLibraryItems = computed(() =>
   items.value.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running'),
@@ -682,7 +723,7 @@ function taskSourceSummary(item: LivePhotoItem) {
 }
 
 function hasExportArtifacts(item: LivePhotoItem) {
-  return Boolean(item.exportBundlePath || item.packagingMetadataBridgePath || item.packagingAssetIdentifier)
+  return Boolean(item.exportBundlePath || item.packagingAssetIdentifier)
 }
 
 function hasImageResult(item: LivePhotoItem) {
@@ -700,6 +741,334 @@ function sanitizeVisibleText(value: string, fallback = '--') {
   if (/[鍙鎏鏃鐢绋璇褰鍥瀹诲竷镞冨欧锟]/.test(text)) return fallback
   return text
 }
+
+function livePhotoSubtitleOverlay(item: LivePhotoItem) {
+  const overlay = item.subtitleOverlay
+  if (!overlay || !overlay.active) return null
+  const subtitleOutputPath = String(overlay.subtitleOutputPath || '').trim()
+  if (!subtitleOutputPath) return null
+  return {
+    ...overlay,
+    subtitleOutputPath,
+  }
+}
+
+function isPlayableVideoPath(path?: string) {
+  const value = String(path || '').trim()
+  if (!value) return false
+  const normalized = value.replace(/\\/g, '/').toLowerCase()
+  return /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(normalized)
+}
+
+function livePhotoDisplayVideoPath(item: LivePhotoItem) {
+  const overlay = livePhotoSubtitleOverlay(item)
+  if (overlay && isPlayableVideoPath(overlay.subtitleOutputPath)) return overlay.subtitleOutputPath
+  return (
+    [
+      String(item.livePhotoVideoPath || '').trim(),
+      String(item.previewVideoPath || '').trim(),
+      String(item.motionVideoPath || '').trim(),
+    ].find((path) => isPlayableVideoPath(path)) || ''
+  )
+}
+
+function livePhotoThumbnailPath(item: LivePhotoItem) {
+  return (
+    [
+      String(item.posterPath || '').trim(),
+      String(item.livePhotoImagePath || '').trim(),
+      String(item.generatedStillPath || '').trim(),
+      String(item.referenceImagePath || '').trim(),
+    ].find(Boolean) || ''
+  )
+}
+
+function itemHasSubtitle(item: LivePhotoItem) {
+  return Boolean(livePhotoSubtitleOverlay(item))
+}
+
+function itemHasAppliedSubtitle(item: LivePhotoItem) {
+  return Boolean(item.subtitleOverlayActive && String(item.subtitleOutputPath || '').trim())
+}
+
+function resetSubtitleDialog() {
+  subtitleDialogOpen.value = false
+  subtitleDialogBusy.value = false
+  subtitleDialogMode.value = 'batch'
+  subtitleDialogTab.value = 'title'
+  subtitleTargetIds.value = []
+  subtitleDialogItem.value = null
+  subtitleTitleStrategy.value = 'single_for_all'
+  subtitleTitleText.value = ''
+  subtitleTitlePoolText.value = ''
+  subtitleSelectedPreset.value = 'viral-hook'
+  Object.assign(subtitleCaptionStyle, defaultSubtitleCaptionStyle())
+}
+
+function applySubtitlePreset(presetId: SubtitlePresetId) {
+  const preset = subtitlePresets.find((item) => item.id === presetId)
+  if (!preset) return
+  subtitleSelectedPreset.value = preset.id
+  Object.assign(subtitleCaptionStyle, defaultSubtitleCaptionStyle(), preset.style)
+}
+
+function defaultSubtitleTitleForItems(items: LivePhotoItem[]) {
+  return (
+    items
+      .map((item) => String(item.sourceShotLabel || item.sourceProjectTitle || item.productSnapshot?.name || item.id || '').trim())
+      .find(Boolean) || 'Live Photo'
+  )
+}
+
+function openBatchSubtitleDialog() {
+  const targets = subtitleEligibleSelectedItems.value
+  if (!targets.length) {
+    window.alert('请先选择至少一个可生成字幕的任务。')
+    return
+  }
+  applySubtitlePreset(subtitleSelectedPreset.value)
+  subtitleDialogMode.value = 'batch'
+  subtitleDialogTab.value = 'title'
+  subtitleTargetIds.value = targets.map((item) => item.id)
+  if (subtitleTitleStrategy.value === 'single_for_all' && !String(subtitleTitleText.value || '').trim()) {
+    subtitleTitleText.value = defaultSubtitleTitleForItems(targets)
+  }
+  subtitleDialogOpen.value = true
+}
+
+function openSingleSubtitleDialog(item: LivePhotoItem) {
+  if (!livePhotoDisplayVideoPath(item)) {
+    window.alert('当前任务还没有可添加字幕的视频。')
+    return
+  }
+  applySubtitlePreset(subtitleSelectedPreset.value)
+  subtitleDialogMode.value = 'single'
+  subtitleDialogTab.value = 'title'
+  subtitleTargetIds.value = [item.id]
+  subtitleDialogItem.value = item
+  if (subtitleTitleStrategy.value === 'single_for_all' && !String(subtitleTitleText.value || '').trim()) {
+    subtitleTitleText.value = defaultSubtitleTitleForItems([item])
+  }
+  subtitleDialogOpen.value = true
+}
+
+async function revertSubtitleFromItem(item: LivePhotoItem) {
+  if (!item?.id) return
+  if (!itemHasAppliedSubtitle(item)) {
+    window.alert('当前视频没有可回退的字幕版本。')
+    return
+  }
+  const ok = window.confirm('确认回退到原视频吗？字幕视频文件会被删除。')
+  if (!ok) return
+  subtitleDialogBusy.value = true
+  try {
+    await window.api.livePhoto.revertSubtitleVideoFromItem({ id: item.id })
+    await loadAll()
+    notice.value = '字幕已回退。'
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    subtitleDialogBusy.value = false
+  }
+}
+
+function closeSubtitleDialog() {
+  if (subtitleDialogBusy.value) return
+  resetSubtitleDialog()
+}
+
+function buildSubtitleTitleConfig() {
+  const pool = subtitleTitlePoolText.value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (subtitleTitleStrategy.value === 'random_pool') {
+    if (!pool.length) throw new Error('请至少输入一条随机标题。')
+    return {
+      strategy: 'random_pool' as const,
+      singleText: '',
+      titlePool: pool,
+    }
+  }
+  const singleText = String(subtitleTitleText.value || '').trim()
+  if (!singleText) throw new Error('请输入标题字幕。')
+  return {
+    strategy: 'single_for_all' as const,
+    singleText,
+    titlePool: [],
+  }
+}
+
+async function submitSubtitleDialog() {
+  if (subtitleDialogBusy.value) return
+  const targets = filteredLibraryItems.value.filter((item) => subtitleTargetIds.value.includes(item.id) && Boolean(livePhotoDisplayVideoPath(item)))
+  if (!targets.length) {
+    window.alert('未找到可添加字幕的视频。')
+    return
+  }
+  subtitleDialogBusy.value = true
+  try {
+    notice.value = '正在生成字幕，请稍候...'
+    const titleConfig = buildSubtitleTitleConfig()
+    const sourceItems = targets.map((item) => ({
+      id: `live-photo-${item.id}`,
+      sourceType: 'upload' as const,
+      sourceVideoPath: livePhotoDisplayVideoPath(item),
+      sourceProjectId: item.id,
+      sourceProjectTitle: item.sourceProjectTitle || item.productSnapshot?.name,
+      fileName: item.sourceShotLabel || item.productSnapshot?.name || item.id,
+      coverImagePath: item.posterPath || undefined,
+    }))
+    const result = await window.api.livePhoto.generateSubtitleVideosForItems({
+      name: `Live Photo 字幕 ${new Date().toLocaleString('zh-CN')}`,
+      subtitleMode: 'static_title',
+      subtitleSource: 'manual',
+      exportEngine: 'ass_fallback',
+      titleRenderMode: 'overlay_image',
+      sourceItems,
+      titleConfig,
+      titleItems: [],
+      overlayImageConfig: {
+        canvasWidth: 1080,
+        canvasHeight: 1920,
+        ...subtitleCaptionStyle,
+      },
+      captionStyle: {
+        ...subtitleCaptionStyle,
+      },
+      layoutPolicy: {
+        maxLines: subtitleCaptionStyle.maxLines,
+        maxWidthRatio: subtitleCaptionStyle.maxWidthRatio,
+        reflowStrategy: 'balanced',
+        avoidPosition: 'auto',
+      },
+    })
+    const failedOutputs = (result.outputs || []).filter((item) => item.renderStatus === 'failed')
+    const sourceById = new Map((result.sourceItems || []).map((item) => [item.id, item] as const))
+    const targetBySourceItemId = new Map(targets.map((item) => [`live-photo-${item.id}`, item.id] as const))
+    let appliedCount = 0
+    for (const output of result.outputs || []) {
+      if (output.renderStatus !== 'success' || !String(output.outputVideoPath || '').trim()) continue
+      const source = sourceById.get(output.sourceItemId)
+      const livePhotoId =
+        String(source?.sourceProjectId || '').trim() ||
+        String(targetBySourceItemId.get(String(output.sourceItemId || '').trim()) || '').trim() ||
+        String(output.sourceItemId || '')
+          .trim()
+          .replace(/^live-photo-/, '')
+      if (!livePhotoId) continue
+      await window.api.livePhoto.applySubtitleVideoToItem({
+        id: livePhotoId,
+        subtitleVideoPath: String(output.outputVideoPath || '').trim(),
+        subtitleCoverImagePath: String(output.coverImagePath || '').trim() || undefined,
+      })
+      appliedCount += 1
+    }
+    await loadAll()
+    if (!appliedCount) {
+      const firstError = String(failedOutputs[0]?.error || '').trim()
+      window.alert(firstError || '字幕任务未生成可回写的视频，请检查本次任务错误信息。')
+      return
+    }
+    resetSubtitleDialog()
+    notice.value = `已为 ${appliedCount} 个视频生成字幕。`
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+    window.alert(errorText.value)
+  } finally {
+    subtitleDialogBusy.value = false
+  }
+}
+
+function defaultSubtitleCaptionStyle(): SubtitleCaptionStyle {
+  return {
+    fontName: 'SimHei',
+    fontSize: 68,
+    fontColor: '#FFFFFF',
+    strokeColor: '#101116',
+    strokeWidth: 8,
+    shadowColor: 'rgba(0, 0, 0, 0.34)',
+    shadowBlur: 10,
+    position: 'bottom',
+    textAlign: 'center',
+    safeMargin: 10,
+    maxLines: 2,
+    maxWidthRatio: 0.8,
+    lineGap: 6,
+    bottomMargin: 188,
+  }
+}
+
+const subtitlePresets: Array<{
+  id: SubtitlePresetId
+  name: string
+  summary: string
+  style: Partial<SubtitleCaptionStyle>
+}> = [
+  {
+    id: 'viral-hook',
+    name: '爆款钩子款',
+    summary: '适合统一标题、停留感强、对比明显。',
+    style: {
+      fontName: 'SimHei',
+      fontSize: 68,
+      fontColor: '#FFFFFF',
+      strokeColor: '#101116',
+      strokeWidth: 8,
+      shadowColor: 'rgba(0, 0, 0, 0.34)',
+      shadowBlur: 10,
+      position: 'bottom',
+      textAlign: 'center',
+      safeMargin: 10,
+      maxLines: 2,
+      maxWidthRatio: 0.8,
+      lineGap: 6,
+      bottomMargin: 188,
+    },
+  },
+  {
+    id: 'deal-punch',
+    name: '促单成交款',
+    summary: '更适合卖点和利益点标题，转化感更强。',
+    style: {
+      fontName: 'Microsoft YaHei',
+      fontSize: 64,
+      fontColor: '#FFF7D6',
+      strokeColor: '#17181F',
+      strokeWidth: 6,
+      shadowColor: 'rgba(4, 6, 12, 0.42)',
+      shadowBlur: 12,
+      position: 'bottom',
+      textAlign: 'center',
+      safeMargin: 11,
+      maxLines: 2,
+      maxWidthRatio: 0.76,
+      lineGap: 6,
+      bottomMargin: 194,
+    },
+  },
+  {
+    id: 'premium-drop',
+    name: '精致种草款',
+    summary: '更克制，更适合珠宝首饰这类质感商品。',
+    style: {
+      fontName: 'Noto Sans SC',
+      fontSize: 58,
+      fontColor: '#F8FAFF',
+      strokeColor: '#12131A',
+      strokeWidth: 2,
+      shadowColor: 'rgba(5, 8, 16, 0.56)',
+      shadowBlur: 16,
+      position: 'bottom',
+      textAlign: 'center',
+      safeMargin: 14,
+      maxLines: 2,
+      maxWidthRatio: 0.68,
+      lineGap: 8,
+      bottomMargin: 212,
+    },
+  },
+]
 
 function openTaskDetail(item: LivePhotoItem) {
   void (async () => {
@@ -1851,6 +2220,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <Package class="h-4 w-4" />
             {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
           </button>
+          <button
+            v-if="subtitleEligibleSelectedCount"
+            class="toolbar-button"
+            type="button"
+            @click="openBatchSubtitleDialog"
+          >
+            <Sparkles class="h-4 w-4" />
+            批量字幕 {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
+          </button>
         </div>
         <div class="library-pagination">
           <button class="toolbar-button" type="button" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">上一页</button>
@@ -1873,7 +2251,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
             <div class="live-console-row__preview">
               <div class="live-console-row__thumb">
-                <img v-if="item.posterPath" :src="previewSrc(item.posterPath)" alt="poster" />
+                <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" />
                 <div v-else class="live-console-row__thumb-empty">
                   <FileImage class="h-5 w-5" />
                 </div>
@@ -1885,6 +2263,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <div class="live-console-row__titleline">
                   <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
                   <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? '复刻镜头' : '参考图替换' }}</span>
+                  <span v-if="itemHasSubtitle(item)" class="live-console-row__source">已加字幕</span>
                 </div>
                 <div class="live-console-row__meta">
                   <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
@@ -1935,11 +2314,29 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   查看日志
                 </button>
                 <button
+                  class="live-console-row__link"
+                  type="button"
+                  :disabled="!livePhotoDisplayVideoPath(item)"
+                  @click.stop="openSingleSubtitleDialog(item)"
+                >
+                  <Sparkles class="h-4 w-4" />
+                  字幕
+                </button>
+                <button
+                  v-if="itemHasAppliedSubtitle(item)"
+                  class="live-console-row__link"
+                  type="button"
+                  :disabled="subtitleDialogBusy"
+                  @click.stop="revertSubtitleFromItem(item)"
+                >
+                  回退字幕
+                </button>
+                <button
                   :data-testid="`live-photo-preview-${item.id}`"
                   class="live-console-row__action live-console-row__action--play"
                   type="button"
-                  :disabled="!item.previewVideoPath"
-                  @click.stop="openPath(item.previewVideoPath)"
+                  :disabled="!livePhotoDisplayVideoPath(item)"
+                  @click.stop="openPath(livePhotoDisplayVideoPath(item))"
                 >
                   <Play class="h-4 w-4" />
                 </button>
@@ -1956,8 +2353,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   :data-testid="`live-photo-reveal-${item.id}`"
                   class="live-console-row__action"
                   type="button"
-                  :disabled="!item.exportBundlePath"
-                  @click.stop="showPath(item.exportBundlePath)"
+                  :disabled="!livePhotoDisplayVideoPath(item)"
+                  @click.stop="showPath(livePhotoDisplayVideoPath(item))"
                 >
                   <FolderOpen class="h-4 w-4" />
                 </button>
@@ -2005,7 +2402,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <button class="live-console-card__preview" type="button" @click="openTaskDetail(item)">
             <div class="live-console-row__thumb">
-              <img v-if="item.posterPath" :src="previewSrc(item.posterPath)" alt="poster" />
+              <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" />
               <div v-else class="live-console-row__thumb-empty">
                 <FileImage class="h-5 w-5" />
               </div>
@@ -2017,6 +2414,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <div class="live-console-row__titleline">
                 <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
                 <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? '复刻镜头' : '参考图替换' }}</span>
+                <span v-if="itemHasSubtitle(item)" class="live-console-row__source">已加字幕</span>
               </div>
               <div class="live-console-row__meta">
                 <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
@@ -2058,11 +2456,28 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <Logs class="h-4 w-4" />
               </button>
               <button
+                class="live-console-row__action"
+                type="button"
+                :disabled="!livePhotoDisplayVideoPath(item)"
+                @click.stop="openSingleSubtitleDialog(item)"
+              >
+                <Sparkles class="h-4 w-4" />
+              </button>
+              <button
+                v-if="itemHasAppliedSubtitle(item)"
+                class="live-console-row__action"
+                type="button"
+                :disabled="subtitleDialogBusy"
+                @click.stop="revertSubtitleFromItem(item)"
+              >
+                <RefreshCcw class="h-4 w-4" />
+              </button>
+              <button
                 :data-testid="`live-photo-preview-${item.id}`"
                 class="live-console-row__action live-console-row__action--play"
                 type="button"
-                :disabled="!item.previewVideoPath"
-                @click.stop="openPath(item.previewVideoPath)"
+                :disabled="!livePhotoDisplayVideoPath(item)"
+                @click.stop="openPath(livePhotoDisplayVideoPath(item))"
               >
                 <Play class="h-4 w-4" />
               </button>
@@ -2079,8 +2494,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 :data-testid="`live-photo-reveal-${item.id}`"
                 class="live-console-row__action"
                 type="button"
-                :disabled="!item.exportBundlePath"
-                @click.stop="showPath(item.exportBundlePath)"
+                :disabled="!livePhotoDisplayVideoPath(item)"
+                @click.stop="showPath(livePhotoDisplayVideoPath(item))"
               >
                 <FolderOpen class="h-4 w-4" />
               </button>
@@ -2203,14 +2618,20 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </div>
             </div>
             <div class="live-detail-dialog__artifact-actions">
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.previewVideoPath" @click="openPath(detailDialogItem.previewVideoPath)">
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
                 打开预览视频
               </button>
               <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)">
                 打开元数据桥接文件
               </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.exportBundlePath" @click="showPath(detailDialogItem.exportBundlePath)">
-                打开导出目录
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
+                打开导出视频
+              </button>
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openSingleSubtitleDialog(detailDialogItem)">
+                添加字幕
+              </button>
+              <button v-if="itemHasAppliedSubtitle(detailDialogItem)" class="live-detail-dialog__ghost" type="button" :disabled="subtitleDialogBusy" @click="revertSubtitleFromItem(detailDialogItem)">
+                回退原视频
               </button>
             </div>
           </section>
@@ -2251,12 +2672,12 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <article class="live-result-card">
                 <div class="live-result-card__head">
                   <strong>生成视频</strong>
-                  <span>{{ detailDialogItem.motionVideoPath ? fileNameOf(detailDialogItem.motionVideoPath) : detailDialogItem.previewVideoPath ? fileNameOf(detailDialogItem.previewVideoPath) : '未生成' }}</span>
+                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : '未生成' }}</span>
                 </div>
                 <video
-                  v-if="detailDialogItem.previewVideoPath"
+                  v-if="livePhotoDisplayVideoPath(detailDialogItem)"
                   class="live-result-card__video"
-                  :src="previewSrc(detailDialogItem.previewVideoPath)"
+                  :src="previewSrc(livePhotoDisplayVideoPath(detailDialogItem))"
                   controls
                   playsinline
                   preload="metadata"
@@ -2266,13 +2687,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   <span>视频结果将在视频生成完成后显示</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.motionVideoPath" @click="openPath(detailDialogItem.motionVideoPath)">
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
                     打开视频
                   </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.previewVideoPath" @click="openPath(detailDialogItem.previewVideoPath)">
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
                     打开预览
                   </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.motionVideoPath" @click="showPath(detailDialogItem.motionVideoPath)">
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="showPath(livePhotoDisplayVideoPath(detailDialogItem))">
                     打开目录
                   </button>
                 </div>
@@ -2281,23 +2702,23 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <article class="live-result-card">
                 <div class="live-result-card__head">
                   <strong>动态照片导出</strong>
-                  <span>{{ detailDialogItem.exportBundlePath ? fileNameOf(detailDialogItem.exportBundlePath) : '未导出' }}</span>
+                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : '未导出' }}</span>
                 </div>
                 <button
-                  v-if="detailDialogItem.posterPath"
+                  v-if="livePhotoThumbnailPath(detailDialogItem)"
                   class="live-result-card__frame"
                   type="button"
-                  @click="openPath(detailDialogItem.previewVideoPath || detailDialogItem.exportBundlePath)"
+                  @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))"
                 >
-                  <img :src="previewSrc(detailDialogItem.posterPath)" alt="live photo poster" />
+                  <img :src="previewSrc(livePhotoThumbnailPath(detailDialogItem))" alt="live photo poster" />
                 </button>
                 <div v-else class="live-result-card__empty">
                   <Package class="h-5 w-5" />
                   <span>导出完成后会在这里展示最终封面</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.exportBundlePath" @click="showPath(detailDialogItem.exportBundlePath)">
-                    打开导出目录
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
+                    打开导出视频
                   </button>
                   <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)">
                     打开桥接文件
@@ -2442,6 +2863,163 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </div>
     </div>
 
+    <div v-if="subtitleDialogOpen" class="live-subtitle-dialog" @click.self="closeSubtitleDialog">
+      <div class="live-subtitle-dialog__panel">
+        <div class="live-subtitle-dialog__head">
+          <div class="live-subtitle-dialog__titleblock">
+            <strong>{{ subtitleDialogMode === 'batch' ? '批量添加字幕' : '添加字幕' }}</strong>
+            <p>为 {{ subtitleTargetIds.length }} 个视频生成标题字幕，并直接替换当前查看视频。</p>
+          </div>
+          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">关闭</button>
+        </div>
+
+        <div class="live-subtitle-dialog__summary">
+          <div class="live-subtitle-dialog__summary-item">
+            <span>处理范围</span>
+            <strong>{{ subtitleDialogMode === 'batch' ? `已选 ${subtitleTargetIds.length} 条视频` : '当前视频' }}</strong>
+          </div>
+          <div class="live-subtitle-dialog__summary-item">
+            <span>当前模板</span>
+            <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || '爆款钩子款' }}</strong>
+          </div>
+        </div>
+
+        <div class="live-subtitle-dialog__tabs">
+          <button type="button" :class="{ active: subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">标题</button>
+          <button type="button" :class="{ active: subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">模板</button>
+          <button type="button" :class="{ active: subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">样式</button>
+        </div>
+
+        <section v-if="subtitleDialogTab === 'title'" class="live-subtitle-dialog__section">
+          <div class="live-subtitle-dialog__section-head">
+            <span class="live-subtitle-dialog__kicker">Title Mode</span>
+            <strong>标题配置</strong>
+          </div>
+          <div class="live-subtitle-dialog__mode-pills">
+            <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'">
+              统一标题
+            </button>
+            <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'">
+              随机标题池
+            </button>
+          </div>
+          <label v-if="subtitleTitleStrategy === 'single_for_all'" class="live-subtitle-dialog__field">
+            <span>标题字幕</span>
+            <input v-model.trim="subtitleTitleText" type="text" maxlength="120" placeholder="请输入标题字幕" @keydown.enter.prevent="submitSubtitleDialog" />
+          </label>
+          <label v-else class="live-subtitle-dialog__field">
+            <span>随机标题池</span>
+            <textarea v-model.trim="subtitleTitlePoolText" class="live-subtitle-dialog__textarea" placeholder="每行一条标题字幕"></textarea>
+          </label>
+          <div class="live-subtitle-dialog__inline-tip">
+            {{ subtitleTitleStrategy === 'single_for_all' ? '整批视频会共用这一条标题字幕。' : '每行一条，渲染时会为每个视频随机分配。' }}
+          </div>
+        </section>
+
+        <section v-else-if="subtitleDialogTab === 'template'" class="live-subtitle-dialog__section">
+          <div class="live-subtitle-dialog__section-head">
+            <span class="live-subtitle-dialog__kicker">Template</span>
+            <strong>字幕模板</strong>
+          </div>
+          <div class="live-subtitle-dialog__preset-grid">
+            <button
+              v-for="preset in subtitlePresets"
+              :key="preset.id"
+              class="live-subtitle-dialog__preset"
+              :class="{ active: subtitleSelectedPreset === preset.id }"
+              type="button"
+              @click="applySubtitlePreset(preset.id)"
+            >
+              <strong>{{ preset.name }}</strong>
+              <span>{{ preset.summary }}</span>
+            </button>
+          </div>
+          <div class="live-subtitle-dialog__preset-note">优先选择最接近你商品风格的模板，再调整下面的细节样式。</div>
+        </section>
+
+        <section v-else class="live-subtitle-dialog__section">
+          <div class="live-subtitle-dialog__section-head">
+            <span class="live-subtitle-dialog__kicker">Style</span>
+            <strong>文字样式</strong>
+          </div>
+          <div class="live-subtitle-dialog__style-panel">
+            <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact">
+              <label class="live-subtitle-dialog__field">
+                <span>字体</span>
+                <input v-model.trim="subtitleCaptionStyle.fontName" type="text" placeholder="例如：SimHei" />
+              </label>
+              <label class="live-subtitle-dialog__field">
+                <span>字号</span>
+                <input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" />
+              </label>
+              <label class="live-subtitle-dialog__field">
+                <span>描边</span>
+                <input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" />
+              </label>
+              <label class="live-subtitle-dialog__field">
+                <span>最大行数</span>
+                <input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" />
+              </label>
+            </div>
+            <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--dual">
+              <label class="live-subtitle-dialog__field">
+                <span>文字颜色</span>
+                <div class="live-subtitle-dialog__color-field">
+                  <input v-model.trim="subtitleCaptionStyle.fontColor" type="text" />
+                  <input v-model="subtitleCaptionStyle.fontColor" type="color" />
+                </div>
+              </label>
+              <label class="live-subtitle-dialog__field">
+                <span>描边颜色</span>
+                <div class="live-subtitle-dialog__color-field">
+                  <input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" />
+                  <input v-model="subtitleCaptionStyle.strokeColor" type="color" />
+                </div>
+              </label>
+            </div>
+            <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact">
+              <label class="live-subtitle-dialog__field">
+                <span>位置</span>
+                <select v-model="subtitleCaptionStyle.position">
+                  <option value="top">顶部</option>
+                  <option value="center">中间</option>
+                  <option value="bottom">底部</option>
+                </select>
+              </label>
+              <label class="live-subtitle-dialog__field">
+                <span>对齐</span>
+                <select v-model="subtitleCaptionStyle.textAlign">
+                  <option value="left">左对齐</option>
+                  <option value="center">居中</option>
+                  <option value="right">右对齐</option>
+                </select>
+              </label>
+              <label class="live-subtitle-dialog__field">
+                <span>底部边距</span>
+                <input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <div class="live-subtitle-dialog__actions">
+          <button
+            v-if="subtitleDialogMode === 'single' && subtitleDialogItem && itemHasAppliedSubtitle(subtitleDialogItem)"
+            type="button"
+            class="ghost-button"
+            :disabled="subtitleDialogBusy"
+            @click="revertSubtitleFromItem(subtitleDialogItem)"
+          >
+            回退原视频
+          </button>
+          <button type="button" class="ghost-button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">取消</button>
+          <button type="button" class="primary-button" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">
+            {{ subtitleDialogBusy ? '处理中...' : '开始生成字幕' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <section v-if="activeTab === 'reference'" class="tip-strip">
       <div class="tip-copy">
         <div class="tip-badge">{{ uiText.tipTitle }}</div>
@@ -2539,6 +3117,130 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .reference-material-card__copy strong { color: #eef5ff; font-size: 12px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reference-material-card__copy small { color: #9fb1d8; font-size: 10px; }
 .field-select-mini { min-height: 30px; padding: 0 10px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 10px; background: rgba(19, 24, 38, 0.92); color: #fff; font-size: 11px; }
+.live-subtitle-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 8, 16, 0.72);
+  backdrop-filter: blur(8px);
+}
+.live-subtitle-dialog__panel {
+  width: min(760px, 100%);
+  max-height: min(84vh, 760px);
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(111, 123, 170, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15, 19, 31, 0.98), rgba(12, 16, 27, 0.99));
+}
+.live-subtitle-dialog__head, .live-subtitle-dialog__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.live-subtitle-dialog__titleblock { display: grid; gap: 4px; }
+.live-subtitle-dialog__head strong { font-size: 20px; line-height: 1.1; }
+.live-subtitle-dialog__head p { margin: 0; color: #9fb1d8; font-size: 12px; line-height: 1.5; }
+.live-subtitle-dialog__close { min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(111, 123, 170, 0.24); background: rgba(19, 24, 38, 0.92); color: #fff; }
+.live-subtitle-dialog__summary { display: flex; gap: 12px; }
+.live-subtitle-dialog__summary-item { flex: 1; display: grid; gap: 4px; padding: 12px; border: 1px solid rgba(111, 123, 170, 0.18); border-radius: 12px; background: rgba(18, 23, 38, 0.72); }
+.live-subtitle-dialog__summary-item span, .live-subtitle-dialog__field span { color: #9fb1d8; font-size: 12px; }
+.live-subtitle-dialog__summary-item strong { font-size: 14px; color: #eef5ff; }
+.live-subtitle-dialog__tabs {
+  display: inline-flex;
+  gap: 4px;
+  width: fit-content;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(18, 23, 38, 0.82);
+  border: 1px solid rgba(111, 123, 170, 0.14);
+}
+.live-subtitle-dialog__tabs button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #9fb1d8;
+}
+.live-subtitle-dialog__tabs button.active {
+  color: #fff;
+  background: rgba(102, 88, 232, 0.24);
+}
+.live-subtitle-dialog__section { display: grid; gap: 12px; }
+.live-subtitle-dialog__section-head { display: grid; gap: 4px; }
+.live-subtitle-dialog__kicker { color: #9fb1d8; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.live-subtitle-dialog__section-head strong { color: #eef5ff; font-size: 14px; }
+.live-subtitle-dialog__mode-pills {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.live-subtitle-dialog__mode-pills button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(111, 123, 170, 0.18);
+  background: rgba(18, 23, 38, 0.72);
+  color: #eef5ff;
+}
+.live-subtitle-dialog__mode-pills button.is-active {
+  border-color: rgba(124, 92, 255, 0.6);
+  background: rgba(65, 51, 145, 0.18);
+}
+.live-subtitle-dialog__field {
+  display: grid;
+  gap: 6px;
+}
+.live-subtitle-dialog__section textarea,
+.live-subtitle-dialog__section input,
+.live-subtitle-dialog__section select {
+  width: 100%;
+  min-height: 38px;
+  padding: 10px 12px;
+  border: 1px solid rgba(111, 123, 170, 0.22);
+  border-radius: 10px;
+  background: rgba(19, 24, 38, 0.92);
+  color: #fff;
+}
+.live-subtitle-dialog__textarea { min-height: 120px; resize: vertical; }
+.live-subtitle-dialog__inline-tip {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(18, 23, 38, 0.68);
+  color: #b8c7e8;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.live-subtitle-dialog__preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.live-subtitle-dialog__preset {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid rgba(111, 123, 170, 0.16);
+  border-radius: 12px;
+  background: rgba(18, 23, 38, 0.7);
+  color: #eef5ff;
+}
+.live-subtitle-dialog__preset.active {
+  border-color: rgba(124, 92, 255, 0.6);
+  background: rgba(65, 51, 145, 0.18);
+}
+.live-subtitle-dialog__preset span { color: #9fb1d8; font-size: 11px; line-height: 1.45; }
+.live-subtitle-dialog__preset-note { color: #9fb1d8; font-size: 11px; line-height: 1.5; }
+.live-subtitle-dialog__style-panel { display: grid; gap: 12px; }
+.live-subtitle-dialog__form-grid { display: grid; gap: 10px; }
+.live-subtitle-dialog__form-grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.live-subtitle-dialog__form-grid--dual { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.live-subtitle-dialog__color-field { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; align-items: center; }
+.live-subtitle-dialog__actions {
+  justify-content: flex-end;
+  padding-top: 6px;
+  border-top: 1px solid rgba(111, 123, 170, 0.12);
+}
+.live-subtitle-dialog__actions .ghost-button, .live-subtitle-dialog__actions .primary-button { min-width: 124px; }
 .product-picker { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 12px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
 .product-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; }
 .project-picker { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }

@@ -109,7 +109,26 @@ function buildSendCodeMessage() {
   return isLiveAuthEnv() ? '验证码已发送，请查收短信' : '开发环境验证码已生成，可直接使用'
 }
 
+const DESKTOP_LOCAL_AUTH_PHONE = '00000000000'
+
+async function ensureDesktopLocalAuth() {
+  const existing = await webPlatformRepo.getUserByPhone(DESKTOP_LOCAL_AUTH_PHONE)
+  const user =
+    existing ??
+    (await webPlatformRepo.createUser({
+      phone: DESKTOP_LOCAL_AUTH_PHONE,
+      displayName: 'Desktop Local User',
+    }))
+  return {
+    user,
+    session: null,
+    subscription: await ensureSubscription(user.id),
+    wallet: await ensureWallet(user.id),
+  }
+}
+
 async function authByTokenClean(token: string) {
+  if (!String(token || '').trim()) return await ensureDesktopLocalAuth()
   const session = await webPlatformRepo.getSession(String(token || '').trim())
   if (!session) throw new Error('登录已失效')
   if (session.expiresAt <= now()) {
@@ -662,6 +681,7 @@ export const webPlatformService = {
   },
 
   async authByToken(token: string) {
+    if (!String(token || '').trim()) return await ensureDesktopLocalAuth()
     const session = await webPlatformRepo.getSession(String(token || '').trim())
     if (!session) throw new Error('登录已失效')
     if (session.expiresAt <= now()) {

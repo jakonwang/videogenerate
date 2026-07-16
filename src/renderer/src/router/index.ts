@@ -7,14 +7,11 @@ const router = createRouter({
   routes: [
     {
       path: '/auth',
-      name: 'auth',
-      component: () => import('@/ui/views/AuthView.vue'),
-      meta: { public: true },
+      redirect: { name: 'home' },
     },
     {
       path: '/',
       component: MainLayout,
-      meta: { requiresLicense: true },
       children: [
         { path: '', redirect: { name: 'home' } },
         { path: 'home', name: 'home', component: HomeView },
@@ -50,11 +47,6 @@ const router = createRouter({
       ],
     },
   ],
-})
-
-router.beforeEach((to) => {
-  if (to.meta.public) return true
-  return true
 })
 
 export { router }

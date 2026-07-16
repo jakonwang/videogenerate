@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { availableParallelism, cpus } from 'node:os'
 import { basename, join, dirname } from 'node:path'
 import { ASS_DEFAULT_FONT_FAMILY, ASS_DEFAULT_FONT_SIZE } from '../../../shared/assDefaults'
 import { getAppPaths } from '../../lib/paths'
 import { prepareFontsDirForSubtitles, resolveAssFontFamilyForFontsDir, resolveSubtitleRenderFont } from '../../lib/fontResolve'
+import { probeMedia } from '../ffmpeg/probe'
 import { runFfmpeg } from '../ffmpeg/runner'
-import { getMediaInfo } from '../media/info'
 import { generateThumbnailJpg } from '../media/thumbnail'
 import { cloneRepo } from '../clone/repo'
 import { generateChatCompletion } from '../clone/unifiedChat'
@@ -52,6 +53,13 @@ const CANVAS_WIDTH = 1080
 const CANVAS_HEIGHT = 1920
 const NORMALIZE_VIDEO_FILTER =
   'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black'
+const MP4_AUDIO_COPY_CODECS = new Set(['aac', 'alac', 'mp3', 'ac3', 'eac3'])
+const BATCH_SUBTITLE_PROGRESS_FLUSH_INTERVAL_MS = 1500
+const BATCH_SUBTITLE_PAUSE_CHECK_INTERVAL_MS = 1200
+
+function batchSubtitleAssEncodeArgs() {
+  return ['-c:v', 'libx264', '-preset', 'superfast', '-crf', '23'] as string[]
+}
 
 function now() {
   return Date.now()
@@ -63,6 +71,15 @@ function safeFsName(input: string, fallback = 'item') {
     .replace(/\s+/g, ' ')
     .trim()
   return cleaned || fallback
+}
+
+function resolveVideoNormalizeFilter(sourceItem: Pick<BatchSubtitleSourceItem, 'width' | 'height'>) {
+  const width = Math.max(0, Number(sourceItem.width || 0))
+  const height = Math.max(0, Number(sourceItem.height || 0))
+  if (width === CANVAS_WIDTH && height === CANVAS_HEIGHT) {
+    return 'setsar=1'
+  }
+  return NORMALIZE_VIDEO_FILTER
 }
 
 function toAssColor(hex: string | undefined, fallback: string) {
@@ -571,10 +588,12 @@ async function writeAssFile(input: {
   track?: BatchSubtitleTrack | null
   workDir: string
   previewAtSec?: number
+  assFontFamily?: string
+  fontsDir?: string
 }) {
-  const fontsDir = await prepareFontsDirForSubtitles(input.workDir)
+  const fontsDir = input.fontsDir || (await prepareFontsDirForSubtitles(input.workDir))
   const requestedFont = String(input.job.captionStyle.fontName || defaultBatchSubtitleCaptionStyle().fontName || ASS_DEFAULT_FONT_FAMILY)
-  const assFontFamily = await resolveAssFontFamilyForFontsDir(fontsDir, requestedFont)
+  const assFontFamily = input.assFontFamily || (await resolveAssFontFamilyForFontsDir(fontsDir, requestedFont))
   const assPath = join(input.workDir, `${basename(input.sourceItem.sourceVideoPath).replace(/\.[^.]+$/, '')}.ass`)
   await writeFile(
     assPath,
@@ -596,15 +615,19 @@ async function writeAssFile(input: {
 }
 
 async function renderAssVideo(input: {
+  sourceItem: Pick<BatchSubtitleSourceItem, 'width' | 'height'>
   sourceVideoPath: string
   assPath: string
   outputPath: string
   fontsDir: string
   previewAtSec?: number
   clipSec?: number
+  ffmpegThreads?: number
 }) {
   const assArg = input.assPath.replace(/\\/g, '/').replace(/:/g, '\\:')
   const fontsArg = input.fontsDir.replace(/\\/g, '/').replace(/:/g, '\\:')
+  const normalizeVideoFilter = resolveVideoNormalizeFilter(input.sourceItem)
+  const audioArgs = await resolveSubtitleAudioArgs(input.sourceVideoPath)
   const args = [
     '-y',
     ...(typeof input.previewAtSec === 'number' ? ['-ss', `${input.previewAtSec}`] : []),
@@ -612,21 +635,13 @@ async function renderAssVideo(input: {
     '-i',
     input.sourceVideoPath,
     '-filter_complex',
-    `[0:v]${NORMALIZE_VIDEO_FILTER},subtitles='${assArg}':fontsdir='${fontsArg}'[outv]`,
+    `[0:v]${normalizeVideoFilter},subtitles='${assArg}':fontsdir='${fontsArg}'[outv]`,
     '-map',
     '[outv]',
-    '-map',
-    '0:a?',
-    '-c:v',
-    'libx264',
-    '-preset',
-    'medium',
-    '-crf',
-    '20',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
+    ...audioArgs,
+    '-threads',
+    `${Math.max(1, Math.floor(Number(input.ffmpegThreads || 1)))}`,
+    ...batchSubtitleAssEncodeArgs(),
     '-pix_fmt',
     'yuv420p',
     '-movflags',
@@ -636,18 +651,34 @@ async function renderAssVideo(input: {
   await runFfmpeg({ args })
 }
 
+async function resolveSubtitleAudioArgs(sourceVideoPath: string) {
+  const probe = await probeMedia(sourceVideoPath)
+  if (typeof probe.audioStreamIndex !== 'number' || !Number.isFinite(probe.audioStreamIndex)) {
+    return ['-an']
+  }
+  const audioMapArgs = ['-map', `0:${probe.audioStreamIndex}`]
+  const codec = String(probe.audioCodec || '').trim().toLowerCase()
+  if (codec && MP4_AUDIO_COPY_CODECS.has(codec)) {
+    return [...audioMapArgs, '-c:a', 'copy']
+  }
+  return [...audioMapArgs, '-c:a', 'aac', '-b:a', '128k']
+}
+
 export async function enrichBatchSubtitleSourceItem(
   input: Omit<BatchSubtitleSourceItem, 'fileName' | 'coverImagePath' | 'durationSec' | 'width' | 'height'> &
     Partial<Pick<BatchSubtitleSourceItem, 'fileName' | 'coverImagePath' | 'durationSec' | 'width' | 'height'>>,
 ): Promise<BatchSubtitleSourceItem> {
-  const info = await getMediaInfo(input.sourceVideoPath)
+  const probe = await probeMedia(input.sourceVideoPath)
+  const fallbackCoverImagePath =
+    String(input.coverImagePath || '').trim() ||
+    ((await generateThumbnailJpg({ filePath: input.sourceVideoPath, atSec: probe.durationSec >= 1 ? 1 : 0.5 })) || undefined)
   return {
     ...input,
     fileName: input.fileName || basename(input.sourceVideoPath),
-    coverImagePath: input.coverImagePath || info.thumbnailPath || undefined,
-    durationSec: input.durationSec ?? info.durationSec,
-    width: input.width ?? info.width,
-    height: input.height ?? info.height,
+    coverImagePath: fallbackCoverImagePath,
+    durationSec: input.durationSec ?? probe.durationSec,
+    width: input.width ?? probe.width,
+    height: input.height ?? probe.height,
   }
 }
 
@@ -1188,7 +1219,57 @@ function createFailedOutput(input: {
   }
 }
 
-const BATCH_SUBTITLE_RENDER_BATCH_SIZE = 8
+function machineParallelism() {
+  try {
+    return Math.max(1, Number(availableParallelism()))
+  } catch {
+    return Math.max(1, cpus().length || 1)
+  }
+}
+
+function defaultBatchSubtitleRenderBatchSize(job?: Pick<BatchSubtitleJob, 'subtitleMode' | 'titleRenderMode'>) {
+  const fromEnv = Number(process.env.VG_BATCH_SUBTITLE_CONCURRENCY || 0)
+  if (fromEnv > 0) return Math.max(1, Math.min(8, Math.floor(fromEnv)))
+  const parallelism = machineParallelism()
+  const preferBitmapOverlay = job?.subtitleMode === 'static_title' && job?.titleRenderMode !== 'ass_text'
+  if (preferBitmapOverlay) {
+    return Math.max(3, Math.min(6, Math.floor(parallelism / 2) || 3))
+  }
+  return Math.max(2, Math.min(4, Math.floor(parallelism / 3) || 2))
+}
+
+const BATCH_SUBTITLE_RENDER_BATCH_SIZE = defaultBatchSubtitleRenderBatchSize()
+
+function batchSubtitleFfmpegThreads(batchSize: number) {
+  const fromEnv = Number(process.env.VG_BATCH_SUBTITLE_FFMPEG_THREADS || 0)
+  if (fromEnv > 0) return Math.max(1, Math.min(4, Math.floor(fromEnv)))
+  const parallelism = machineParallelism()
+  return Math.max(1, Math.min(2, Math.floor(parallelism / Math.max(1, batchSize)) || 1))
+}
+
+function shouldFlushBatchSubtitleProgress(input: {
+  batchStart: number
+  batchItemsLength: number
+  totalRunnableCount: number
+  lastPersistAt: number
+  nowAt: number
+}) {
+  const isLastBatch = input.batchStart + input.batchItemsLength >= input.totalRunnableCount
+  if (isLastBatch) return true
+  return input.nowAt - input.lastPersistAt >= BATCH_SUBTITLE_PROGRESS_FLUSH_INTERVAL_MS
+}
+
+function shouldCheckBatchSubtitlePause(input: {
+  batchStart: number
+  batchItemsLength: number
+  totalRunnableCount: number
+  lastCheckedAt: number
+  nowAt: number
+}) {
+  const isLastBatch = input.batchStart + input.batchItemsLength >= input.totalRunnableCount
+  if (isLastBatch) return true
+  return input.nowAt - input.lastCheckedAt >= BATCH_SUBTITLE_PAUSE_CHECK_INTERVAL_MS
+}
 
 async function yieldBatchSubtitleLoop() {
   await new Promise((resolve) => setTimeout(resolve, 0))
@@ -1213,8 +1294,11 @@ async function renderSingleOutputAss(input: {
   sourceItem: BatchSubtitleSourceItem
   selectedTitle: string
   outputDir: string
+  ffmpegThreads: number
+  sharedFontsDir?: string
+  sharedAssFontFamily?: string
 }): Promise<BatchSubtitleOutputItem> {
-  const { job, sourceItem, selectedTitle, outputDir } = input
+  const { job, sourceItem, selectedTitle, outputDir, ffmpegThreads } = input
   const itemDir = join(outputDir, safeFsName(String(sourceItem.id || randomUUID())))
   await mkdir(itemDir, { recursive: true })
   const track = getTrackForSource(job, sourceItem.id)
@@ -1224,16 +1308,20 @@ async function renderSingleOutputAss(input: {
     selectedTitle,
     track,
     workDir: itemDir,
+    fontsDir: input.sharedFontsDir,
+    assFontFamily: input.sharedAssFontFamily,
   })
   const { assPath: assFilePath, fontsDir } = assPath
   const outputVideoPath = join(itemDir, `${basename(sourceItem.sourceVideoPath).replace(/\.[^.]+$/, '')}_subtitle.mp4`)
   await renderAssVideo({
+    sourceItem,
     sourceVideoPath: sourceItem.sourceVideoPath,
     assPath: assFilePath,
     outputPath: outputVideoPath,
     fontsDir,
+    ffmpegThreads,
   })
-  const coverImagePath = (await generateThumbnailJpg({ filePath: outputVideoPath, atSec: 1 })) || undefined
+  const coverImagePath = String(sourceItem.coverImagePath || '').trim() || undefined
   return {
     id: randomUUID(),
     jobId: job.id,
@@ -1257,8 +1345,9 @@ async function renderSingleOutputBitmap(input: {
   sourceItem: BatchSubtitleSourceItem
   selectedTitle: string
   outputDir: string
+  ffmpegThreads: number
 }) {
-  const { job, sourceItem, selectedTitle, outputDir } = input
+  const { job, sourceItem, selectedTitle, outputDir, ffmpegThreads } = input
   const result = await renderBatchSubtitleVideoWithBitmapOverlay({
     sourceItem,
     titleConfig: {
@@ -1285,8 +1374,9 @@ async function renderSingleOutputBitmap(input: {
       lineMode: 'multi',
     },
     outputDir,
+    ffmpegThreads,
   })
-  const coverImagePath = (await generateThumbnailJpg({ filePath: result.outputVideoPath, atSec: 1 })) || undefined
+  const coverImagePath = String(sourceItem.coverImagePath || '').trim() || undefined
   return {
     id: randomUUID(),
     jobId: job.id,
@@ -1455,6 +1545,16 @@ export async function runBatchSubtitleJob(input: { userId: string; jobId: string
   }
   const outputDir = join(getAppPaths().dataDir, 'batch-subtitle', input.userId, current.id)
   await mkdir(outputDir, { recursive: true })
+  const sharedAssFontsDir =
+    current.titleRenderMode === 'ass_text' || current.subtitleMode !== 'static_title'
+      ? await prepareFontsDirForSubtitles(join(outputDir, '_shared-ass'))
+      : undefined
+  const sharedAssFontFamily = sharedAssFontsDir
+    ? await resolveAssFontFamilyForFontsDir(
+        sharedAssFontsDir,
+        String(current.captionStyle.fontName || defaultBatchSubtitleCaptionStyle().fontName || ASS_DEFAULT_FONT_FAMILY),
+      )
+    : undefined
   const existingOutputs = Array.isArray(current.outputs) ? [...current.outputs] : []
   const reusableSuccessOutputs = existingOutputs.filter(
     (item) => item.renderStatus === 'success' && String(item.outputVideoPath || '').trim(),
@@ -1471,7 +1571,11 @@ export async function runBatchSubtitleJob(input: { userId: string; jobId: string
     if (!retryFailedOnly) return true
     return failedOutputMap.has(item.id)
   })
-  const batchSize = Math.max(1, Number(current.batchRuntime?.batchSize || BATCH_SUBTITLE_RENDER_BATCH_SIZE))
+  const batchSize = Math.max(
+    1,
+    Number(current.batchRuntime?.batchSize || defaultBatchSubtitleRenderBatchSize(current) || BATCH_SUBTITLE_RENDER_BATCH_SIZE),
+  )
+  const ffmpegThreads = batchSubtitleFfmpegThreads(batchSize)
   const requestedStartIndex = Math.max(0, Number(current.batchRuntime?.nextSourceIndex || 0))
   const startOffset = pendingSourceItems.length ? Math.min(requestedStartIndex, pendingSourceItems.length - 1) : 0
   const runnableSourceItems = pendingSourceItems.slice(startOffset)
@@ -1498,83 +1602,141 @@ export async function runBatchSubtitleJob(input: { userId: string; jobId: string
       lastBatchFinishedAt: current.batchRuntime?.lastBatchFinishedAt,
     },
   })
+  const sourceIndexMap = new Map(queued.sourceItems.map((item, index) => [item.id, index] as const))
+  const selectedTitleMap = new Map(
+    queued.sourceItems.map((item) => {
+      const sourceIndex = Math.max(0, Number(sourceIndexMap.get(item.id) ?? 0))
+      return [item.id, getTitleForSource(queued, item.id, sourceIndex)] as const
+    }),
+  )
   const outputs: BatchSubtitleOutputItem[] = [...reusableSuccessOutputs]
+  const outputBySourceItemId = new Map(reusableSuccessOutputs.map((item) => [item.sourceItemId, item] as const))
+  let successCount = reusableSuccessOutputs.length
   const failures: string[] = []
+  let lastProgressPersistAt = now()
+  let lastPauseCheckAt = lastProgressPersistAt
   for (let batchStart = 0; batchStart < runnableSourceItems.length; batchStart += batchSize) {
     const batchItems = runnableSourceItems.slice(batchStart, batchStart + batchSize)
-    for (const sourceItem of batchItems) {
-      const sourceIndex = queued.sourceItems.findIndex((item) => item.id === sourceItem.id)
-      const selectedTitle = getTitleForSource(queued, sourceItem.id, Math.max(0, sourceIndex))
-      try {
-        const output =
-          queued.subtitleMode === 'static_title' && queued.titleRenderMode !== 'ass_text'
-            ? await renderSingleOutputBitmap({
-                job: queued,
-                sourceItem,
-                selectedTitle,
-                outputDir,
-              })
-            : await renderSingleOutputAss({
-                job: queued,
-                sourceItem,
-                selectedTitle,
-                outputDir,
-              })
-        outputs.push(output)
-        failedOutputMap.delete(sourceItem.id)
-      } catch (error: any) {
-        const failedOutput = createFailedOutput({
-          jobId: queued.id,
-          sourceItem,
-          selectedTitle,
-          error,
-        })
-        failedOutputMap.set(sourceItem.id, failedOutput)
-        failures.push(`${sourceItem.fileName || sourceItem.id}: ${String(error?.message || error || '????????')}`)
+    const batchResults = await Promise.all(
+      batchItems.map(async (sourceItem) => {
+        const selectedTitle = selectedTitleMap.get(sourceItem.id) || ''
+        try {
+          const output =
+            queued.subtitleMode === 'static_title' && queued.titleRenderMode !== 'ass_text'
+              ? await renderSingleOutputBitmap({
+                  job: queued,
+                  sourceItem,
+                  selectedTitle,
+                  outputDir,
+                  ffmpegThreads,
+                })
+              : await renderSingleOutputAss({
+                  job: queued,
+                  sourceItem,
+                  selectedTitle,
+                  outputDir,
+                  ffmpegThreads,
+                  sharedFontsDir: sharedAssFontsDir,
+                  sharedAssFontFamily,
+                })
+          return {
+            ok: true as const,
+            sourceItem,
+            output,
+          }
+        } catch (error: any) {
+          return {
+            ok: false as const,
+            sourceItem,
+            selectedTitle,
+            error,
+          }
+        }
+      }),
+    )
+    for (const result of batchResults) {
+      if (result.ok) {
+        outputs.push(result.output)
+        outputBySourceItemId.set(result.sourceItem.id, result.output)
+        successCount += 1
+        failedOutputMap.delete(result.sourceItem.id)
+        continue
       }
-    }
-    const nextOutputs = queued.sourceItems
-      .map(
-        (item) =>
-          reusableOutputMap.get(item.id) ||
-          outputs.find((row) => row.sourceItemId === item.id) ||
-          failedOutputMap.get(item.id),
+      const failedOutput = createFailedOutput({
+        jobId: queued.id,
+        sourceItem: result.sourceItem,
+        selectedTitle: result.selectedTitle,
+        error: result.error,
+      })
+      failedOutputMap.set(result.sourceItem.id, failedOutput)
+      failures.push(
+        `${result.sourceItem.fileName || result.sourceItem.id}: ${String(result.error?.message || result.error || '????????')}`,
       )
-      .filter(Boolean) as BatchSubtitleOutputItem[]
+    }
     const processedCount = Math.min(startOffset + batchStart + batchItems.length, pendingSourceItems.length)
     const nextSourceIndex = Math.min(processedCount, pendingSourceItems.length)
-    await webPlatformRepo.upsertBatchSubtitleJob({
-      ...queued,
-      progress: Math.round(
-        ((reusableSuccessOutputs.length + processedCount) / Math.max(1, queued.sourceItems.length)) * 100,
-      ),
-      outputCount: outputs.filter((item) => item.renderStatus === 'success').length,
-      outputs: nextOutputs,
-      error: failures.length ? failures.join(' | ') : undefined,
-      batchRuntime: {
-        batchSize,
-        nextSourceIndex,
-        totalBatches,
-        completedBatches: Math.min(totalBatches, Math.ceil(nextSourceIndex / batchSize)),
-        lastBatchStartedAt:
-          batchStart + batchItems.length < runnableSourceItems.length ? now() : queued.batchRuntime?.lastBatchStartedAt,
-        lastBatchFinishedAt: now(),
-      },
-    })
-    try {
-      await ensureBatchSubtitleJobNotPaused(input.userId, input.jobId)
-    } catch (error: any) {
-      if (String(error?.message || error) === '__BATCH_SUBTITLE_PAUSED__') {
-        return await getBatchSubtitleJobOrThrow(input.userId, input.jobId)
+    const progressPersistedAt = now()
+    if (
+      shouldFlushBatchSubtitleProgress({
+        batchStart,
+        batchItemsLength: batchItems.length,
+        totalRunnableCount: runnableSourceItems.length,
+        lastPersistAt: lastProgressPersistAt,
+        nowAt: progressPersistedAt,
+      })
+    ) {
+      const nextOutputs = queued.sourceItems
+        .map(
+          (item) =>
+            reusableOutputMap.get(item.id) ||
+            outputBySourceItemId.get(item.id) ||
+            failedOutputMap.get(item.id),
+        )
+        .filter(Boolean) as BatchSubtitleOutputItem[]
+      await webPlatformRepo.upsertBatchSubtitleJob({
+        ...queued,
+        progress: Math.round(
+          ((reusableSuccessOutputs.length + processedCount) / Math.max(1, queued.sourceItems.length)) * 100,
+        ),
+        outputCount: successCount,
+        outputs: nextOutputs,
+        error: failures.length ? failures.join(' | ') : undefined,
+        batchRuntime: {
+          batchSize,
+          nextSourceIndex,
+          totalBatches,
+          completedBatches: Math.min(totalBatches, Math.ceil(nextSourceIndex / batchSize)),
+          lastBatchStartedAt:
+            batchStart + batchItems.length < runnableSourceItems.length ? progressPersistedAt : queued.batchRuntime?.lastBatchStartedAt,
+          lastBatchFinishedAt: progressPersistedAt,
+        },
+      })
+      lastProgressPersistAt = progressPersistedAt
+    }
+    if (
+      shouldCheckBatchSubtitlePause({
+        batchStart,
+        batchItemsLength: batchItems.length,
+        totalRunnableCount: runnableSourceItems.length,
+        lastCheckedAt: lastPauseCheckAt,
+        nowAt: progressPersistedAt,
+      })
+    ) {
+      try {
+        await ensureBatchSubtitleJobNotPaused(input.userId, input.jobId)
+        lastPauseCheckAt = progressPersistedAt
+      } catch (error: any) {
+        if (String(error?.message || error) === '__BATCH_SUBTITLE_PAUSED__') {
+          return await getBatchSubtitleJobOrThrow(input.userId, input.jobId)
+        }
+        throw error
       }
-      throw error
     }
     await yieldBatchSubtitleLoop()
   }
   const finalOutputs = queued.sourceItems
-    .map((item) => reusableOutputMap.get(item.id) || outputs.find((row) => row.sourceItemId === item.id) || failedOutputMap.get(item.id))
+    .map((item) => reusableOutputMap.get(item.id) || outputBySourceItemId.get(item.id) || failedOutputMap.get(item.id))
     .filter(Boolean) as BatchSubtitleOutputItem[]
-  const successCount = finalOutputs.filter((item) => item.renderStatus === 'success').length
   const failedCount = finalOutputs.filter((item) => item.renderStatus === 'failed').length
   return await webPlatformRepo.upsertBatchSubtitleJob({
     ...queued,
@@ -1754,6 +1916,7 @@ export async function previewBatchSubtitleFrame(input: {
         ? Math.max(0, track.cues[0].startMs / 1000)
         : 1
   await renderAssVideo({
+    sourceItem,
     sourceVideoPath: sourceItem.sourceVideoPath,
     assPath: assRender.assPath,
     outputPath: previewVideoPath,

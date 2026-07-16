@@ -12,6 +12,7 @@ type SqliteStatement = {
 type SqliteDatabase = {
   exec(sql: string): unknown
   prepare(sql: string): SqliteStatement
+  close?: () => unknown
 }
 
 type SqliteCtor = new (path: string) => SqliteDatabase
@@ -252,5 +253,16 @@ export function writeWebPlatformDbToSqlite(input: WebPlatformDb) {
   } catch (error) {
     database.exec('ROLLBACK;')
     throw error
+  }
+}
+
+export function closeWebPlatformSqlite() {
+  if (!db) return
+  try {
+    db.close?.()
+  } catch {
+    // ignore close errors during test/process shutdown
+  } finally {
+    db = null
   }
 }

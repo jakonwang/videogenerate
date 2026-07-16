@@ -88,6 +88,15 @@ export type LivePhotoAutoFlowStatus = {
   lastError?: string
 }
 
+export type LivePhotoSubtitleOverlay = {
+  active: boolean
+  originalOutputPath: string
+  originalCoverImagePath?: string
+  subtitleOutputPath: string
+  subtitleCoverImagePath?: string
+  appliedAt: number
+}
+
 export type LivePhotoItem = {
   id: string
   usageStatus?: 'unused' | 'used'
@@ -117,6 +126,12 @@ export type LivePhotoItem = {
   packagingMetadataBridgePath?: string
   videoMetadataMode?: 'quicktime_mdta' | 'copied_fallback'
   imageMetadataMode?: 'copied_pending_native_metadata'
+  subtitleOverlayActive?: boolean
+  subtitleOriginalOutputPath?: string
+  subtitleOutputPath?: string
+  subtitleCoverImagePath?: string
+  subtitleAppliedAt?: number
+  subtitleOverlay?: LivePhotoSubtitleOverlay
   promptPreview?: LivePhotoPromptPreview
   imagePromptPreview?: LivePhotoRequestPreview
   videoPromptPreview?: LivePhotoRequestPreview
@@ -172,14 +187,7 @@ export type ExportLivePhotoItemsResult = {
   total: number
   exported: Array<{
     id: string
-    targetDir: string
-    imagePath: string
     videoPath: string
-    bundlePath: string
-    metadataBridgePath: string
-    assetIdentifier: string
-    videoMetadataMode: 'quicktime_mdta' | 'copied_fallback'
-    imageMetadataMode: 'copied_pending_native_metadata'
   }>
   skipped: Array<{ id: string; reason: string }>
 }

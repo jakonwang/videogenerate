@@ -5,7 +5,6 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, FolderOpen, LoaderCir
 import UiCard from '../components/UiCard.vue'
 import UiButton from '../components/UiButton.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
-import { webApiClient } from '@/lib/webApiClient'
 
 type CloneProjectSummary = {
   id: string
@@ -596,15 +595,7 @@ async function refresh() {
 }
 
 async function ensureSubtitleFeatureReady() {
-  if (!localStorage.getItem('videogen-web-token')) {
-    subtitleFeatureReady.value = false
-    return false
-  }
   try {
-    const plugin = await webApiClient.getPlugin('video-batch-subtitle')
-    if (plugin.status !== 'installed') await webApiClient.installPlugin('video-batch-subtitle')
-    const latest = await webApiClient.getPlugin('video-batch-subtitle')
-    if (!latest.enabled) await webApiClient.enablePlugin('video-batch-subtitle')
     subtitleFeatureReady.value = true
     return true
   } catch {
@@ -694,7 +685,7 @@ async function submitSubtitleDialog() {
   subtitleDialogBusy.value = true
   try {
     const ready = await ensureSubtitleFeatureReady()
-    if (!ready) throw new Error('批量字幕插件未启用，或当前账号未登录。')
+    if (!ready) throw new Error('批量字幕功能当前不可用。')
     const titleConfig = buildSubtitleTitleConfig()
     const sourceItems = targets.map((item) => ({
       id: `clone-${item.id}`,
@@ -706,7 +697,7 @@ async function submitSubtitleDialog() {
       coverImagePath: item.coverAssetPath || undefined,
     }))
     pushRuntimeLog(`[clone-task-list] subtitle submit count=${targets.length}`, 'info')
-    const job = await webApiClient.createBatchSubtitleJob({
+    const result = await window.api.clone.generateSubtitleVideosForProjects({
       name: `复刻列表字幕 ${new Date().toLocaleString('zh-CN')}`,
       subtitleMode: 'static_title',
       subtitleSource: 'manual',
@@ -730,7 +721,6 @@ async function submitSubtitleDialog() {
         avoidPosition: 'auto',
       },
     })
-    const result = await webApiClient.runBatchSubtitleJob(job.id)
     const sourceById = new Map((result.sourceItems || []).map((item) => [item.id, item] as const))
     const targetBySourceItemId = new Map(targets.map((item) => [`clone-${item.id}`, item.id] as const))
     const appliedProjectIds = new Set<string>()

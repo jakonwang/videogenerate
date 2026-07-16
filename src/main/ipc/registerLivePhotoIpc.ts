@@ -18,6 +18,19 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:livePhoto:createFromReference', async (_e, payload) => await livePhotoService.createFromReference(payload))
   ipcMain.handle('plugin:livePhoto:createFromCloneShots', async (_e, payload) => await livePhotoService.createFromCloneShots(payload))
   ipcMain.handle(
+    'plugin:livePhoto:applySubtitleVideoToItem',
+    async (_e, payload: { id: string; subtitleVideoPath: string; subtitleCoverImagePath?: string }) =>
+      await livePhotoService.applySubtitleVideoToItem(payload),
+  )
+  ipcMain.handle(
+    'plugin:livePhoto:revertSubtitleVideoFromItem',
+    async (_e, payload: { id: string }) => await livePhotoService.revertSubtitleVideoFromItem(payload),
+  )
+  ipcMain.handle(
+    'plugin:livePhoto:generateSubtitleVideosForItems',
+    async (_e, payload) => await livePhotoService.generateSubtitleVideosForItems(payload),
+  )
+  ipcMain.handle(
     'plugin:livePhoto:retry',
     async (_e, payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       await livePhotoService.retry(payload),

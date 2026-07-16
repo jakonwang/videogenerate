@@ -33,7 +33,7 @@ export const useWebSessionStore = defineStore('webSession', {
     error: '',
   }),
   getters: {
-    isLoggedIn: (state) => Boolean(state.token && state.user),
+    isLoggedIn: (state) => Boolean(state.user),
     displayName: (state) => state.user?.displayName || state.user?.phone || '访客',
   },
   actions: {
@@ -43,12 +43,16 @@ export const useWebSessionStore = defineStore('webSession', {
       subscription: UserSubscription
       wallet: WalletAccount
     }) {
-      this.token = payload.token
+      this.token = String(payload.token || '').trim()
       this.user = payload.user
       this.subscription = payload.subscription
       this.wallet = payload.wallet
       this.error = ''
-      setStoredWebToken(payload.token)
+      if (this.token) {
+        setStoredWebToken(this.token)
+      } else {
+        clearStoredWebToken()
+      }
     },
 
     clearSession() {
@@ -61,10 +65,6 @@ export const useWebSessionStore = defineStore('webSession', {
     },
 
     async restoreSession() {
-      if (!getStoredWebToken()) {
-        this.clearSession()
-        return false
-      }
       this.restoring = true
       try {
         const profile = await webApiClient.getProfile()
@@ -112,7 +112,6 @@ export const useWebSessionStore = defineStore('webSession', {
     },
 
     async refreshProfile() {
-      if (!getStoredWebToken()) return false
       this.loading = true
       try {
         const profile = await webApiClient.getProfile()

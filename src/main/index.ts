@@ -8,7 +8,6 @@ import { analyzeVideoFolderAndSuggestTemplate } from './modules/style/analyzeVid
 import { normalizeAppLocale, type AppLocale } from '../shared/locale'
 import { defaultOpenDialogTitle } from './lib/dialogDefaults'
 import { registerUpdaterIpc, setupAutoUpdater } from './lib/updater'
-import { registerLicenseIpc } from './lib/license'
 import { collectVideoFilesFromDropRoots } from './lib/collectVideoFiles'
 import { listBundledLuts } from './lib/luts'
 import { importUserFonts, listUserFontFiles, userFontsDir } from './lib/userFonts'
@@ -319,7 +318,6 @@ function createWindow() {
 
 function wireIpc() {
   setupCloneDebugConsoleBridge()
-  registerLicenseIpc()
 
   ipcMain.handle('app:getPaths', async () => getAppPaths())
   ipcMain.handle('app:getWebApiInfo', async () => ({
@@ -724,6 +722,76 @@ function wireIpc() {
       payload: { cloneProjectId: string; subtitleVideoPath: string; subtitleCoverImagePath?: string },
     ) => {
       return await cloneService.applySubtitleVideoToProject(payload)
+    },
+  )
+  ipcMain.handle(
+    'clone:generateSubtitleVideosForProjects',
+    async (
+      _e,
+      payload: {
+        name: string
+        sourceItems: Array<{
+          id: string
+          sourceType: 'upload' | 'clone_final'
+          sourceVideoPath: string
+          sourceProjectId?: string
+          sourceProjectTitle?: string
+          fileName: string
+          coverImagePath?: string
+        }>
+        subtitleMode?: 'static_title' | 'timed_caption' | 'hybrid'
+        subtitleSource?: 'whisper_compatible' | 'manual'
+        exportEngine?: 'capcut_mate' | 'ass_fallback'
+        titleRenderMode?: 'overlay_image' | 'ass_text'
+        titleConfig?: {
+          strategy?: 'single_for_all' | 'random_pool'
+          singleText?: string
+          titlePool?: string[]
+        }
+        titleItems?: Array<{ sourceItemId: string; text: string; updatedAt: number }>
+        overlayImageConfig?: {
+          canvasWidth?: number
+          canvasHeight?: number
+          fontName?: string
+          fontSize?: number
+          fontColor?: string
+          strokeColor?: string
+          strokeWidth?: number
+          shadowColor?: string
+          shadowBlur?: number
+          position?: 'top' | 'center' | 'bottom'
+          safeMargin?: number
+          textAlign?: 'left' | 'center' | 'right'
+          maxLines?: number
+          maxWidthRatio?: number
+          lineGap?: number
+          bottomMargin?: number
+        }
+        captionStyle?: {
+          fontName?: string
+          fontSize?: number
+          fontColor?: string
+          strokeColor?: string
+          strokeWidth?: number
+          shadowColor?: string
+          shadowBlur?: number
+          position?: 'top' | 'center' | 'bottom'
+          safeMargin?: number
+          textAlign?: 'left' | 'center' | 'right'
+          maxLines?: number
+          maxWidthRatio?: number
+          lineGap?: number
+          bottomMargin?: number
+        }
+        layoutPolicy?: {
+          maxLines?: number
+          maxWidthRatio?: number
+          reflowStrategy?: 'balanced' | 'punctuation'
+          avoidPosition?: 'auto' | 'top' | 'bottom'
+        }
+      },
+    ) => {
+      return await cloneService.generateSubtitleVideosForProjects(payload)
     },
   )
   ipcMain.handle(
