@@ -1267,6 +1267,7 @@ export type ModelCredentials = {
   klingHost?: string
   grsaiApiKey?: string
   grsaiHost?: string
+  tikhubApiKey?: string
   qiniuAccessKey?: string
   qiniuSecretKey?: string
   qiniuBucket?: string

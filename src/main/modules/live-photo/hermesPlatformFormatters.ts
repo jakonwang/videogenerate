@@ -1,6 +1,7 @@
 import { hermesLivePhotoAdapters } from './hermesAdapters'
 import { hermesEventCapture } from './hermesEventCapture'
 import { hermesMediaIngressService } from './hermesMediaIngress'
+import { tryHandleHermesVideoParserText } from '../video-parser-download/hermes'
 
 type FeishuEventInput = {
   tenantAccessToken?: string
@@ -202,6 +203,27 @@ export const hermesPlatformFormatters = {
     }
     const text = extractFeishuText(input)
     const imageKey = extractFeishuImageKey(input)
+    const downloadIntentResult = await tryHandleHermesVideoParserText({ text })
+    if (downloadIntentResult.matched) {
+      void hermesEventCapture.captureFeishuOfficialEvent({
+        userId,
+        messageId,
+        messageType,
+        rawContent,
+        text,
+        parsedSessionId: '',
+        parsedProductText: '',
+        inferredSelectionMode: undefined,
+        imageKey,
+        imagePaths,
+        actions: downloadIntentResult.actions,
+      })
+      return {
+        ok: true as const,
+        actions: downloadIntentResult.actions,
+        replies: toFeishuReply(downloadIntentResult.actions),
+      }
+    }
     const parsed = parseSessionAndText(text)
     const startIntent = !parsed.sessionId ? inferSelectionModeFromText(parsed.text) : {}
     const adapterResult = await hermesLivePhotoAdapters.handleFeishuEvent({

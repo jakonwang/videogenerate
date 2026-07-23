@@ -23,6 +23,7 @@ import { ensureWebApiServer, getWebApiServerPort, stopWebApiServer } from './lib
 import { cloneRepo } from './modules/clone/repo'
 import { cloneService } from './modules/clone/service'
 import { livePhotoService } from './modules/live-photo/service'
+import { stopLocalLivePhotoQualityChecker } from './modules/live-photo/qualityChecker'
 import { productsRepo } from './modules/products/repo'
 import { templatesRepo } from './modules/templates/repo'
 import { webPlatformRepo } from './modules/web-platform/repo'
@@ -35,7 +36,9 @@ import { registerProductImageMaterialsIpc } from './ipc/registerProductImageMate
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
+import { registerVideoParserDownloadIpc } from './ipc/registerVideoParserDownloadIpc'
 import { productImageMaterialsService } from './modules/product-image-materials/service'
+import { videoParserDownloadService } from './modules/video-parser-download/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
 
 let mainWindow: BrowserWindow | null = null
@@ -1366,6 +1369,7 @@ function wireIpc() {
         seedanceHost?: string
         grsaiApiKey?: string
         grsaiHost?: string
+        tikhubApiKey?: string
         qiniuAccessKey?: string
         qiniuSecretKey?: string
         qiniuBucket?: string
@@ -1431,6 +1435,7 @@ function wireIpc() {
         seedanceHost: payload?.seedanceHost,
         grsaiApiKey: payload?.grsaiApiKey,
         grsaiHost: payload?.grsaiHost,
+        tikhubApiKey: payload?.tikhubApiKey,
         qiniuAccessKey: payload?.qiniuAccessKey,
         qiniuSecretKey: payload?.qiniuSecretKey,
         qiniuBucket: payload?.qiniuBucket,
@@ -1504,6 +1509,7 @@ function wireIpc() {
   registerTiktokCreativeStudioIpc(ipcMain)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
+  registerVideoParserDownloadIpc(ipcMain)
 }
 
 app.whenReady().then(async () => {
@@ -1528,6 +1534,7 @@ app.whenReady().then(async () => {
         await templatesRepo.ensureSeed()
         await cloneRepo.ensureSeed()
         await webPlatformRepo.ensureSeed()
+        await videoParserDownloadService.initialize()
         await productImageMaterialsService.initialize()
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
@@ -1551,6 +1558,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isAppQuitting = true
+  stopLocalLivePhotoQualityChecker()
   void stopPreviewHttpServer()
   void stopWebApiServer()
 })

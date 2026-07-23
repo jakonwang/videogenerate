@@ -159,16 +159,15 @@ async function main() {
     })
 
     const prompt = String((queued as any)?.imagePromptPreview?.prompt || '')
-    assert.match(prompt, /Product real-world scale from Image 2 and Product DNA/i)
-    assert.match(prompt, /When Image 1 is a model reference, keep the selected product at its own correct wearable scale\./i)
-    assert.match(prompt, /Do NOT inherit the old product size from Image 1/i)
-    assert.match(prompt, /If the scene contains a person or model, keep the product close to the body anchor and never float it outward\./i)
+    assert.match(prompt, /Replace the product in Image 1 with the exact physical product from Image 2/i)
+    assert.match(prompt, /Treat the product in Image 2 as the only source of truth/i)
+    assert.match(prompt, /Allow only natural environmental adaptation/i)
+    assert.match(prompt, /seamlessly integrated into Image 1 with no cut-and-paste artifacts/i)
 
-    assert.doesNotMatch(prompt, /Use the original product in Image 1 ONLY as a placement placeholder for:[\s\S]*- scale/i)
-    assert.doesNotMatch(prompt, /contact footprint/i)
-    assert.doesNotMatch(prompt, /SAME visual importance as the original object/i)
-    assert.doesNotMatch(prompt, /direct visual clone of Image 2 at the Image 1 anchor position and size/i)
-    assert.doesNotMatch(prompt, /slightly reduce size rather than dropping parts/i)
+    assert.doesNotMatch(prompt, /Product real-world scale from Image 2 and Product DNA/i)
+    assert.doesNotMatch(prompt, /When Image 1 is a model reference, keep the selected product at its own correct wearable scale\./i)
+    assert.doesNotMatch(prompt, /Do NOT inherit the old product size from Image 1/i)
+    assert.doesNotMatch(prompt, /If the scene contains a person or model, keep the product close to the body anchor and never float it outward\./i)
 
     console.log('live photo model scale lock smoke test passed')
   } finally {

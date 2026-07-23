@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -131,9 +131,9 @@ type LivePhotoItem = {
     appliedAt: number
   }
   workflow?: {
-    currentStep: 'queued' | 'image_generation' | 'video_generation' | 'live_photo_packaging' | 'completed'
+    currentStep: 'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed'
     stepStatus: Record<
-      'queued' | 'image_generation' | 'video_generation' | 'live_photo_packaging' | 'completed',
+      'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed',
       { status: 'idle' | 'running' | 'done' | 'failed'; updatedAt: number; error?: string }
     >
     updatedAt: number
@@ -144,11 +144,28 @@ type LivePhotoItem = {
     paused?: boolean
     retryLimit: number
     retryCount: number
-    currentStage: 'queued' | 'image_generation' | 'video_generation' | 'live_photo_packaging' | 'completed'
+    currentStage: 'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed'
     lastStartedAt?: number
     lastCompletedAt?: number
     lastError?: string
   }
+  promptVersionId?: string
+  promptVersion?: number
+  promptHash?: string
+  cacheHit?: boolean
+  checkerFallbackReason?: string
+  qualityReport?: LivePhotoQualityReport
+  generationAttempts?: Array<{
+    id: string
+    index: number
+    outputPath: string
+    provider?: string
+    model?: string
+    strategy?: string
+    cacheHit: boolean
+    quality?: LivePhotoQualityReport
+    createdAt: number
+  }>
   logs?: Array<{ id: string; level: 'info' | 'success' | 'error'; message: string; time: number }>
   error?: string
   updatedAt: number
@@ -160,7 +177,48 @@ type LivePhotoSettings = {
   outputResolution: '1080x1440' | '2160x2880' | '3024x4032'
   frameRate: '24' | '30'
   quality: 'medium' | 'high'
+  qualityCheckerEnabled?: boolean
+  qualityPassThreshold?: number
+  qualityRetryFloor?: number
   updatedAt: number
+}
+
+type LivePhotoQualityReport = {
+  checkerVersion: string
+  mode: 'local_python' | 'remote_fallback'
+  decision: 'pass' | 'retry' | 'reject'
+  score: number
+  threshold: number
+  retryFloor: number
+  components: Record<string, number>
+  hardFailures: string[]
+  notes: string[]
+  fallbackReason?: string
+  durationMs: number
+  checkedAt: number
+}
+
+type LivePhotoPromptVersion = {
+  id: string
+  name: string
+  version: number
+  prompt: string
+  promptHash: string
+  active: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+type LivePhotoQualityMetrics = {
+  totalTasks: number
+  checkedTasks: number
+  passedTasks: number
+  passRate: number
+  averageScore: number
+  retryCount: number
+  fallbackCount: number
+  cacheHitCount: number
+  checkerVersion: string
 }
 
 type SubtitlePresetId = 'viral-hook' | 'deal-punch' | 'premium-drop'
@@ -306,6 +364,12 @@ const runtimeDialogTitle = ref('运行日志')
 const detailDialogOpen = ref(false)
 const detailDialogItem = ref<LivePhotoItem | null>(null)
 const livePhotoSettingsBusy = ref(false)
+const promptVersions = ref<LivePhotoPromptVersion[]>([])
+const selectedPromptVersionId = ref('')
+const promptEditorName = ref('')
+const promptEditorText = ref('')
+const promptVersionBusy = ref(false)
+const qualityMetrics = ref<LivePhotoQualityMetrics | null>(null)
 const subtitleDialogOpen = ref(false)
 const subtitleDialogBusy = ref(false)
 const subtitleDialogMode = ref<'batch' | 'single'>('batch')
@@ -323,6 +387,9 @@ const livePhotoSettings = ref<LivePhotoSettings>({
   outputResolution: '2160x2880',
   frameRate: '30',
   quality: 'high',
+  qualityCheckerEnabled: true,
+  qualityPassThreshold: 0.88,
+  qualityRetryFloor: 0.65,
   updatedAt: 0,
 })
 
@@ -408,7 +475,7 @@ const filteredLibraryItems = computed(() => items.value)
 
 const selectedCloneRows = computed(() => cloneShotRows.value.filter((item) => selectedShotIds.value.includes(item.shotId)))
 const featuredCloneRow = computed(() => selectedCloneRows.value[0] || cloneShotRows.value[0] || null)
-const livePhotoSteps = ['queued', 'image_generation', 'video_generation', 'live_photo_packaging', 'completed'] as const
+const livePhotoSteps = ['queued', 'image_generation', 'image_validation', 'video_generation', 'live_photo_packaging', 'completed'] as const
 const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
 const subtitleEligibleSelectedItems = computed(() => selectedLibraryItems.value.filter((item) => Boolean(livePhotoDisplayVideoPath(item))))
@@ -534,6 +601,7 @@ function metadataModeLabel(item: LivePhotoItem) {
 
 function workflowStepLabel(step?: LivePhotoItem['workflow']['currentStep']) {
   if (step === 'image_generation') return '图片生成'
+  if (step === 'image_validation') return '图片质检'
   if (step === 'video_generation') return '视频生成'
   if (step === 'live_photo_packaging') return '动态照片打包'
   if (step === 'completed') return '已完成'
@@ -567,6 +635,7 @@ function liveTaskStatusTone(item: LivePhotoItem) {
 
 function liveTaskStepTone(step?: LivePhotoItem['workflow']['currentStep']) {
   if (step === 'image_generation') return 'tone-image'
+  if (step === 'image_validation') return 'tone-validation'
   if (step === 'video_generation') return 'tone-video'
   if (step === 'live_photo_packaging') return 'tone-package'
   if (step === 'completed') return 'tone-done'
@@ -1125,6 +1194,102 @@ async function saveLivePhotoSettings() {
   }
 }
 
+function formatQualityScore(value?: number) {
+  const score = Number(value || 0)
+  return `${Math.round(Math.max(0, Math.min(1, score)) * 100)}%`
+}
+
+function selectPromptVersion(id: string) {
+  selectedPromptVersionId.value = id
+  const selected = promptVersions.value.find((item) => item.id === id)
+  promptEditorName.value = selected?.name || ''
+  promptEditorText.value = selected?.prompt || ''
+}
+
+async function loadPromptManagement() {
+  const [versions, metrics] = await Promise.all([
+    window.api.livePhoto.listPromptVersions() as Promise<LivePhotoPromptVersion[]>,
+    window.api.livePhoto.getQualityMetrics() as Promise<LivePhotoQualityMetrics>,
+  ])
+  promptVersions.value = Array.isArray(versions) ? versions : []
+  qualityMetrics.value = metrics || null
+  const selected = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+    || promptVersions.value.find((item) => item.active)
+    || promptVersions.value[0]
+  if (selected) selectPromptVersion(selected.id)
+}
+
+async function createPromptVersion() {
+  promptVersionBusy.value = true
+  errorText.value = ''
+  try {
+    const created = await window.api.livePhoto.createPromptVersion({
+      name: String(promptEditorName.value || '').trim() || 'Live Photo Product Replacement',
+      prompt: promptEditorText.value,
+    }) as LivePhotoPromptVersion
+    await loadPromptManagement()
+    selectPromptVersion(created.id)
+    notice.value = `已创建提示词版本 V${created.version}。`
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptVersionBusy.value = false
+  }
+}
+
+async function updatePromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptVersionBusy.value = true
+  errorText.value = ''
+  try {
+    const updated = await window.api.livePhoto.updatePromptVersion({
+      id: selectedPromptVersionId.value,
+      name: promptEditorName.value,
+      prompt: promptEditorText.value,
+    }) as LivePhotoPromptVersion
+    await loadPromptManagement()
+    await refreshLibraryItems(true)
+    notice.value = updated.active
+      ? '提示词版本已更新。待执行任务已同步，重试任务会使用当前版本。'
+      : '提示词版本已更新。启用该版本后才会应用到任务。'
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptVersionBusy.value = false
+  }
+}
+
+async function activatePromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptVersionBusy.value = true
+  try {
+    await window.api.livePhoto.activatePromptVersion({ id: selectedPromptVersionId.value })
+    await loadPromptManagement()
+    await refreshLibraryItems(true)
+    notice.value = '当前提示词版本已启用。待执行任务已同步，重试任务会使用当前版本。'
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptVersionBusy.value = false
+  }
+}
+
+async function rollbackPromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptVersionBusy.value = true
+  try {
+    const next = await window.api.livePhoto.rollbackPromptVersion({ id: selectedPromptVersionId.value }) as LivePhotoPromptVersion
+    await loadPromptManagement()
+    await refreshLibraryItems(true)
+    selectPromptVersion(next.id)
+    notice.value = `已复制并启用回滚版本 V${next.version}。`
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptVersionBusy.value = false
+  }
+}
+
 function openRuntimeLogs(item: LivePhotoItem) {
   void (async () => {
     const detailedItem = await loadLivePhotoItemDetail(item)
@@ -1244,24 +1409,33 @@ async function loadAll() {
       // Keep previous project summaries when the companion query is slow.
     }
     try {
-      const nextMaterials = await loadWithTimeout(
-        window.api.productImageMaterials.listMaterials({
-          userId: 'desktop-local',
-          filters: { category: 'all', usageStatus: 'all' },
-        }) as Promise<ProductImageMaterialOption[]>,
-        4000,
-      )
-      productImageMaterials.value = Array.isArray(nextMaterials) ? nextMaterials : []
-      const validMaterialIds = new Set(productImageMaterials.value.map((item) => item.id))
-      selectedMaterialImageIds.value = selectedMaterialImageIds.value.filter((item) => validMaterialIds.has(item))
+      await refreshProductImageMaterials()
     } catch {
       // Keep previous material options when the companion query is slow.
     }
     if (!selectedProductId.value && products.value[0]) selectedProductId.value = products.value[0].id
     if (!selectedCloneProjectId.value && cloneProjects.value[0]) selectedCloneProjectId.value = cloneProjects.value[0].id
+    try {
+      await loadPromptManagement()
+    } catch {
+      // Prompt management is optional for older installations.
+    }
   } finally {
     loading.value = false
   }
+}
+
+async function refreshProductImageMaterials() {
+  const nextMaterials = await loadWithTimeout(
+    window.api.productImageMaterials.listMaterials({
+      userId: 'desktop-local',
+      filters: { category: 'all', usageStatus: 'all' },
+    }) as Promise<ProductImageMaterialOption[]>,
+    4000,
+  )
+  productImageMaterials.value = Array.isArray(nextMaterials) ? nextMaterials : []
+  const validMaterialIds = new Set(productImageMaterials.value.map((item) => item.id))
+  selectedMaterialImageIds.value = selectedMaterialImageIds.value.filter((item) => validMaterialIds.has(item))
 }
 
 async function pickReferenceImage() {
@@ -1405,6 +1579,7 @@ async function createReferenceItem() {
         errorText.value = error?.message ?? String(error)
       })
       .finally(() => {
+        void refreshProductImageMaterials().catch(() => null)
         void refreshLibraryItems()
       })
     return
@@ -1947,6 +2122,45 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <div class="output-note-head">{{ uiText.outputTitle }}</div>
           <p>{{ uiText.outputDesc }}</p>
         </div>
+        <div class="quality-control-card">
+          <div class="quality-control-card__head">
+            <div>
+              <strong>质量门禁与提示词版本</strong>
+              <small>待执行任务跟随当前启用版本，图片质检通过后才进入视频阶段。</small>
+            </div>
+            <ShieldCheck class="h-5 w-5" />
+          </div>
+          <div class="quality-metric-grid" v-if="qualityMetrics">
+            <div><span>通过率</span><strong>{{ formatQualityScore(qualityMetrics.passRate) }}</strong></div>
+            <div><span>平均分</span><strong>{{ formatQualityScore(qualityMetrics.averageScore) }}</strong></div>
+            <div><span>重试次数</span><strong>{{ qualityMetrics.retryCount }}</strong></div>
+            <div><span>缓存命中</span><strong>{{ qualityMetrics.cacheHitCount }}</strong></div>
+          </div>
+          <div class="prompt-version-editor">
+            <label class="field">
+              <span>提示词版本</span>
+              <select v-model="selectedPromptVersionId" @change="selectPromptVersion(selectedPromptVersionId)">
+                <option v-for="version in promptVersions" :key="version.id" :value="version.id">
+                  V{{ version.version }} · {{ version.name }}{{ version.active ? ' · 当前启用' : '' }}
+                </option>
+              </select>
+            </label>
+            <label class="field">
+              <span>版本名称</span>
+              <input v-model="promptEditorName" type="text" placeholder="Live Photo Product Replacement" />
+            </label>
+            <label class="field prompt-version-editor__prompt">
+              <span>Prompt 内容</span>
+              <textarea v-model="promptEditorText" rows="7" spellcheck="false"></textarea>
+            </label>
+            <div class="prompt-version-actions">
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">更新版本</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">复制为新版本</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">启用版本</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">回滚副本</button>
+            </div>
+          </div>
+        </div>
       </article>
     </section>
 
@@ -2434,11 +2648,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
             <div class="live-console-row__progress">
               <div class="live-console-row__progress-copy">
-                <strong>{{ item.workflow?.currentStep ? workflowStepIndex(item.workflow.currentStep) + 1 : 1 }}/5</strong>
+                <strong>{{ item.workflow?.currentStep ? workflowStepIndex(item.workflow.currentStep) + 1 : 1 }}/{{ livePhotoSteps.length }}</strong>
                 <span>{{ formatElapsed(item.createdAt) }}</span>
               </div>
               <div class="live-console-row__progress-track">
-                <span :style="{ width: `${Math.max(16, (workflowStepIndex(item.workflow?.currentStep) + 1) * 20)}%` }"></span>
+                <span :style="{ width: `${Math.max(16, ((workflowStepIndex(item.workflow?.currentStep) + 1) / livePhotoSteps.length) * 100)}%` }"></span>
               </div>
             </div>
           </div>
@@ -2566,6 +2780,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <strong>{{ extractLivePhotoTaskId(detailDialogItem) || '--' }}</strong>
             <small>{{ liveTaskRemoteStateText(detailDialogItem) }}</small>
           </div>
+          <div class="live-detail-dialog__summary-card">
+            <span>图片质量</span>
+            <strong>{{ detailDialogItem.qualityReport ? formatQualityScore(detailDialogItem.qualityReport.score) : '--' }}</strong>
+            <small>{{ detailDialogItem.qualityReport?.mode === 'local_python' ? '本地 Python 检查' : detailDialogItem.qualityReport ? '远程降级检查' : '尚未检查' }}</small>
+          </div>
         </div>
 
         <div class="live-detail-dialog__hero">
@@ -2598,6 +2817,39 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <div class="live-detail-dialog__metric">
                 <span>状态说明</span>
                 <strong>{{ liveTaskRemoteStateText(detailDialogItem) }}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="live-detail-dialog__hero-card">
+            <div class="live-detail-dialog__hero-head">
+              <strong>质量门禁</strong>
+              <span>{{ detailDialogItem.qualityReport?.checkerVersion || '--' }}</span>
+            </div>
+            <div class="live-detail-dialog__hero-grid">
+              <div class="live-detail-dialog__metric">
+                <span>决策</span>
+                <strong>{{ detailDialogItem.qualityReport?.decision || '--' }}</strong>
+              </div>
+              <div class="live-detail-dialog__metric">
+                <span>提示词版本</span>
+                <strong>{{ detailDialogItem.promptVersion ? `V${detailDialogItem.promptVersion}` : '--' }}</strong>
+              </div>
+              <div class="live-detail-dialog__metric">
+                <span>生成尝试</span>
+                <strong>{{ detailDialogItem.generationAttempts?.length || 0 }}</strong>
+              </div>
+              <div class="live-detail-dialog__metric">
+                <span>缓存</span>
+                <strong>{{ detailDialogItem.cacheHit ? '命中' : '未命中' }}</strong>
+              </div>
+              <div class="live-detail-dialog__metric">
+                <span>降级原因</span>
+                <strong>{{ detailDialogItem.checkerFallbackReason || detailDialogItem.qualityReport?.fallbackReason || '--' }}</strong>
+              </div>
+              <div class="live-detail-dialog__metric">
+                <span>硬性失败</span>
+                <strong>{{ detailDialogItem.qualityReport?.hardFailures?.join(', ') || '--' }}</strong>
               </div>
             </div>
           </section>
@@ -3050,6 +3302,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   color: #f8fbff;
   background: radial-gradient(circle at top left, rgba(83, 58, 152, 0.12), transparent 28%), linear-gradient(180deg, #111521 0%, #171a29 42%, #111624 100%);
 }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .hero-shell, .panel-card, .library-export-card, .tip-strip { border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 16px; background: linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
 .hero-shell { display: grid; gap: 8px; padding: 10px 12px; }
 .hero-toolbar { display: flex; justify-content: space-between; gap: 8px; }
@@ -3259,6 +3512,17 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .output-note { padding: 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(72, 54, 133, 0.82), rgba(58, 44, 108, 0.94)); border: 1px solid rgba(135, 102, 255, 0.24); }
 .output-note-head { margin-bottom: 8px; font-size: 15px; font-weight: 700; color: #dfd5ff; }
 .output-note p { margin: 0; font-size: 12px; line-height: 1.6; color: rgba(220, 228, 246, 0.84); }
+.quality-control-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid rgba(79, 194, 168, 0.22); background: linear-gradient(180deg, rgba(19, 61, 58, 0.36), rgba(12, 28, 35, 0.6)); }
+.quality-control-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: #8ef0c8; }
+.quality-control-card__head strong { display: block; color: #e6fff5; font-size: 14px; }
+.quality-control-card__head small { display: block; margin-top: 5px; color: #98cfc0; font-size: 11px; line-height: 1.5; }
+.quality-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.quality-metric-grid > div { display: grid; gap: 3px; padding: 9px; border-radius: 11px; background: rgba(3, 12, 20, 0.3); border: 1px solid rgba(122, 215, 185, 0.12); }
+.quality-metric-grid span { color: #8ebbb0; font-size: 10px; }
+.quality-metric-grid strong { color: #effff8; font-size: 15px; }
+.prompt-version-editor { display: grid; gap: 9px; }
+.prompt-version-editor__prompt textarea { min-height: 138px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.5; }
+.prompt-version-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .clone-layout { display: grid; gap: 10px; align-content: start; }
 .clone-top-grid, .clone-bottom-grid { display: grid; gap: 10px; }
 .clone-top-grid { grid-template-columns: minmax(360px, 0.8fr) minmax(0, 1.2fr); }
@@ -3790,6 +4054,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .live-console-row__stepbadge { border: 1px solid rgba(255, 255, 255, 0.06); background: rgba(255, 255, 255, 0.035); color: #d8e5ff; }
 .live-console-row__stepbadge.tone-queue { color: #d8e5ff; }
 .live-console-row__stepbadge.tone-image { color: #f9a8d4; }
+.live-console-row__stepbadge.tone-validation { color: #fcd34d; }
 .live-console-row__stepbadge.tone-video { color: #93c5fd; }
 .live-console-row__stepbadge.tone-package { color: #fcd34d; }
 .live-console-row__stepbadge.tone-done { color: #86efac; }
@@ -4077,6 +4342,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   .live-detail-dialog__hero {
     grid-template-columns: 1fr;
   }
+  .quality-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .live-result-grid {
     grid-template-columns: 1fr;
   }
@@ -4114,6 +4380,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   .live-detail-dialog__hero-grid {
     grid-template-columns: 1fr;
   }
+  .quality-metric-grid { grid-template-columns: 1fr 1fr; }
   .reference-material-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

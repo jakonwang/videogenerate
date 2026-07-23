@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
-import type { LivePhotoItem, LivePhotoSettings } from './types'
+import type { LivePhotoItem, LivePhotoPromptVersion, LivePhotoSettings } from './types'
 
 type SqliteStatement = {
   run(...params: unknown[]): unknown
@@ -31,6 +31,18 @@ CREATE TABLE IF NOT EXISTS live_photo_settings (
   updated_at INTEGER NOT NULL,
   payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS live_photo_prompt_versions (
+  id TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  active INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_live_photo_prompt_versions_version
+ON live_photo_prompt_versions(version);
+CREATE INDEX IF NOT EXISTS idx_live_photo_prompt_versions_active
+ON live_photo_prompt_versions(active DESC, version DESC);
 `
 
 let db: SqliteDatabase | null = null
@@ -171,6 +183,60 @@ export function writeLivePhotoSettingsToSqlite(settings: LivePhotoSettings) {
   database
     .prepare('INSERT OR REPLACE INTO live_photo_settings (id, updated_at, payload) VALUES (1, ?, ?)')
     .run(Number(settings.updatedAt || 0), JSON.stringify(settings))
+}
+
+export function readLivePhotoPromptVersionsFromSqlite(): LivePhotoPromptVersion[] {
+  const database = initializeLivePhotoSqlite()
+  const rows = database
+    .prepare('SELECT payload FROM live_photo_prompt_versions ORDER BY version DESC')
+    .all() as Array<{ payload?: string }>
+  return rows.map((row) => JSON.parse(String(row.payload || '{}')) as LivePhotoPromptVersion)
+}
+
+export function readActiveLivePhotoPromptVersionFromSqlite(): LivePhotoPromptVersion | null {
+  const database = initializeLivePhotoSqlite()
+  const row = database
+    .prepare('SELECT payload FROM live_photo_prompt_versions WHERE active = 1 ORDER BY version DESC LIMIT 1')
+    .get() as { payload?: string } | undefined
+  return row?.payload ? (JSON.parse(String(row.payload)) as LivePhotoPromptVersion) : null
+}
+
+export function upsertLivePhotoPromptVersionInSqlite(version: LivePhotoPromptVersion) {
+  const database = initializeLivePhotoSqlite()
+  database
+    .prepare(
+      'INSERT OR REPLACE INTO live_photo_prompt_versions (id, version, active, updated_at, created_at, payload) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      version.id,
+      Number(version.version || 0),
+      version.active ? 1 : 0,
+      Number(version.updatedAt || 0),
+      Number(version.createdAt || 0),
+      JSON.stringify(version),
+    )
+}
+
+export function activateLivePhotoPromptVersionInSqlite(id: string) {
+  const database = initializeLivePhotoSqlite()
+  const target = String(id || '').trim()
+  database.exec('BEGIN IMMEDIATE;')
+  try {
+    const rows = database.prepare('SELECT payload FROM live_photo_prompt_versions').all() as Array<{ payload?: string }>
+    const replace = database.prepare(
+      'INSERT OR REPLACE INTO live_photo_prompt_versions (id, version, active, updated_at, created_at, payload) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    const updatedAt = Date.now()
+    for (const row of rows) {
+      const current = JSON.parse(String(row.payload || '{}')) as LivePhotoPromptVersion
+      const next = { ...current, active: current.id === target, updatedAt: current.id === target ? updatedAt : current.updatedAt }
+      replace.run(next.id, next.version, next.active ? 1 : 0, next.updatedAt, next.createdAt, JSON.stringify(next))
+    }
+    database.exec('COMMIT;')
+  } catch (error) {
+    database.exec('ROLLBACK;')
+    throw error
+  }
 }
 
 export function closeLivePhotoSqlite() {

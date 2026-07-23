@@ -14,6 +14,7 @@ async function main() {
     const { productImageMaterialsRepo } = await import('../src/main/modules/product-image-materials/repo')
     const { productImageMaterialsService, __productImageMaterialsTestUtils } = await import('../src/main/modules/product-image-materials/service')
     const { productsRepo } = await import('../src/main/modules/products/repo')
+    const { videoParserDownloadRepo } = await import('../src/main/modules/video-parser-download/repo')
     const { closeCloneSqlite } = await import('../src/main/modules/clone/sqlite')
 
     async function waitForBatchDone(batchId: string, timeoutMs = 5000) {
@@ -69,7 +70,23 @@ async function main() {
         return thumbnailPath
       },
       toPublicUrlViaQiniu: async (_credentials: unknown, filePath: string) => `https://example.com/${path.basename(filePath)}` as any,
+      generateVariantImage: async (input: { credentials: any; imagePaths: string[]; outDir: string; filePrefix: string }) => {
+        assert.equal(input.credentials.imageProviderPrimary, 'openai')
+        assert.equal(input.credentials.openaiImageModel, 'gpt-image-1')
+        assert.deepEqual(input.imagePaths.length, 1)
+        const outputPath = path.join(input.outDir, `${input.filePrefix}.png`)
+        await mkdir(path.dirname(outputPath), { recursive: true })
+        await writeFile(outputPath, 'mock-derived-image', 'utf-8')
+        return outputPath
+      },
     })
+
+    const { cloneRepo } = await import('../src/main/modules/clone/repo')
+    await cloneRepo.setCredentials({
+      imageProviderPrimary: 'openai',
+      openaiApiKey: 'test-openai-key',
+      openaiImageModel: 'gpt-image-1',
+    } as any)
 
     const createdBatch = await productImageMaterialsService.createBatch({
       userId: 'desktop-local',
@@ -84,6 +101,33 @@ async function main() {
 
     const createdMaterials = await productImageMaterialsRepo.listMaterials('desktop-local', { category: 'ring' })
     assert.ok(createdMaterials.some((item) => existsSync(item.localImagePath)))
+
+    await videoParserDownloadRepo.upsertItem({
+      id: 'parser-video-1',
+      userId: 'desktop-local',
+      shareUrl: 'https://www.tiktok.com/@demo/video/parser-1',
+      videoId: 'parser-1',
+      platform: 'tiktok',
+      title: 'Parser video',
+      localVideoPath: sourceVideoPath,
+      thumbnailPath: `${sourceVideoPath}.jpg`,
+      status: 'completed',
+      usedStatus: 'unused',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any)
+
+    const parserBatch = await productImageMaterialsService.createBatch({
+      userId: 'desktop-local',
+      category: 'ring',
+      sourceVideoPaths: [],
+      parserVideoIds: ['parser-video-1'],
+    })
+    const finishedParserBatch = await waitForBatchDone(parserBatch.id)
+    assert.equal(finishedParserBatch.status, 'completed')
+    assert.equal(finishedParserBatch.sourceItems[0]?.parserVideoId, 'parser-video-1')
+    const parserVideoRecord = await videoParserDownloadRepo.getItem('desktop-local', 'parser-video-1')
+    assert.equal(parserVideoRecord?.usedStatus, 'used')
 
     await productImageMaterialsRepo.upsertMaterial({
       id: 'mat-1',
@@ -120,13 +164,22 @@ async function main() {
       updatedAt: Date.now() - 1000,
     })
 
+    const variantResult = await productImageMaterialsService.createBackgroundVariants({
+      userId: 'desktop-local',
+      materialIds: ['mat-2'],
+      variantCount: 1,
+    })
+    assert.equal(variantResult.count, 1)
+    const derivedMaterials = await productImageMaterialsRepo.listMaterials('desktop-local')
+    assert.ok(derivedMaterials.some((item) => item.derivedFromMaterialId === 'mat-2'))
+
     const options = await productImageMaterialsService.listHermesMaterialOptionsForProduct({
       productId: product.id,
       limit: 8,
     })
 
     assert.equal(options.category, 'ring')
-    assert.equal(options.options.length, 3)
+    assert.equal(options.options.length, 4)
     assert.equal(options.options[0]?.id, 'mat-1')
     assert.equal(options.options[0]?.index, 1)
 

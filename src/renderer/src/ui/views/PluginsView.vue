@@ -202,7 +202,7 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 }
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return ['geelark-publisher', 'tiktok-creative-studio', 'live-photo-generator', 'product-image-materials'].includes(plugin.id)
+  return ['geelark-publisher', 'tiktok-creative-studio', 'live-photo-generator', 'product-image-materials', 'video-parser-download'].includes(plugin.id)
 }
 
 function primaryActionText(plugin: PluginSummary) {
@@ -310,6 +310,10 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
   }
   if (plugin.id === 'geelark-publisher') {
     void router.push('/plugins/geelark-publisher/publish-center')
+    return
+  }
+  if (plugin.id === 'video-parser-download') {
+    void router.push('/plugins/video-parser-download')
     return
   }
   if (plugin.status !== 'installed') {

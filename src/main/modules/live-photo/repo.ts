@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile } from '../../lib/storeJson'
-import type { LivePhotoItem, LivePhotoSettings } from './types'
+import type { LivePhotoItem, LivePhotoSettings, LivePhotoWorkflow, LivePhotoWorkflowStep } from './types'
 import {
   canInitializeLivePhotoSqlite,
   getLivePhotoSqliteUnavailableReason,
@@ -37,13 +37,43 @@ function defaultSettings(): LivePhotoSettings {
     outputResolution: '2160x2880',
     frameRate: '30',
     quality: 'high',
+    qualityCheckerEnabled: true,
+    qualityPassThreshold: 0.88,
+    qualityRetryFloor: 0.65,
     updatedAt: Date.now(),
+  }
+}
+
+const workflowSteps: LivePhotoWorkflowStep[] = [
+  'queued',
+  'image_generation',
+  'image_validation',
+  'video_generation',
+  'live_photo_packaging',
+  'completed',
+]
+
+function normalizeWorkflow(workflow?: LivePhotoWorkflow): LivePhotoWorkflow | undefined {
+  if (!workflow) return undefined
+  const updatedAt = Number(workflow.updatedAt || 0) || Date.now()
+  const stepStatus = { ...workflow.stepStatus } as LivePhotoWorkflow['stepStatus']
+  for (const step of workflowSteps) {
+    if (!stepStatus[step]) stepStatus[step] = { status: 'idle', updatedAt, error: '' }
+  }
+  return {
+    ...workflow,
+    currentStep: workflow.currentStep || 'queued',
+    stepStatus,
+    updatedAt,
   }
 }
 
 function normalizeItem(item: LivePhotoItem): LivePhotoItem {
   return {
     ...item,
+    workflow: normalizeWorkflow(item.workflow),
+    generationAttempts: Array.isArray(item.generationAttempts) ? item.generationAttempts : [],
+    cacheHit: Boolean(item.cacheHit),
     usageStatus: item.usageStatus === 'used' ? 'used' : 'unused',
     usedAt: Number(item.usedAt || 0) || undefined,
     usedChannel: String(item.usedChannel || '').trim() || undefined,
@@ -132,6 +162,9 @@ export const livePhotoRepo = {
       outputResolution: allowedResolutions.has(String(input.outputResolution || '')) ? (input.outputResolution as LivePhotoSettings['outputResolution']) : current.outputResolution,
       frameRate: allowedFrameRates.has(String(input.frameRate || '')) ? (input.frameRate as LivePhotoSettings['frameRate']) : current.frameRate,
       quality: allowedQualities.has(String(input.quality || '')) ? (input.quality as LivePhotoSettings['quality']) : current.quality,
+      qualityCheckerEnabled: input.qualityCheckerEnabled !== false,
+      qualityPassThreshold: Math.max(0.5, Math.min(1, Number(input.qualityPassThreshold ?? current.qualityPassThreshold ?? 0.88))),
+      qualityRetryFloor: Math.max(0, Math.min(0.95, Number(input.qualityRetryFloor ?? current.qualityRetryFloor ?? 0.65))),
       updatedAt: Date.now(),
     }
     await ensureLivePhotoSqliteReady()

@@ -205,9 +205,10 @@ async function main() {
     })
 
     const prompt = String((retried as any)?.imagePromptPreview?.prompt || '')
-    assert.match(prompt, /If the product looks too large on the model, shrink it back to the selected product wearable ratio before changing anything else\./i)
-    assert.match(prompt, /For earrings, keep the selected product proportion relative to ear-lobe height, ear-rim span, and piercing area\./i)
-    assert.match(prompt, /If the result still looks oversized on the model, shrink the product to the correct ear-lobe, ear-rim, or body-anchor proportion without moving the anchor point\./i)
+    assert.match(prompt, /Replace the product in Image 1 with the exact physical product from Image 2/i)
+    assert.match(prompt, /Treat the product in Image 2 as the only source of truth/i)
+    assert.match(prompt, /Allow only natural environmental adaptation/i)
+    assert.match(prompt, /seamlessly integrated into Image 1 with no cut-and-paste artifacts/i)
 
     console.log('live photo model oversized regression smoke test passed')
   } finally {

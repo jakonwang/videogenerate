@@ -6,6 +6,7 @@ import {
   Boxes,
   CloudUpload,
   Download,
+  Eye,
   FolderOpen,
   Image as ImageIcon,
   Info,
@@ -17,6 +18,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-vue-next'
+import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
 type Category = 'necklace' | 'ring' | 'earring' | 'bracelet'
 type UsageStatus = 'unused' | 'used'
@@ -66,13 +68,30 @@ type ProductItem = {
   type: string
 }
 
+type ParserVideoItem = {
+  id: string
+  shareUrl: string
+  videoId: string
+  title?: string
+  author?: string
+  localVideoPath?: string
+  thumbnailPath?: string
+  status: 'processing' | 'completed' | 'failed'
+  error?: string
+  usedStatus: 'unused' | 'used'
+  updatedAt: number
+}
+
 const { locale } = useI18n()
 const DESKTOP_USER_ID = 'desktop-local'
 
 const activeTab = ref<'batch' | 'background' | 'library'>('batch')
+const batchSourceMode = ref<'upload' | 'downloaded'>('upload')
 const categories = ref<Category[]>(['necklace', 'ring', 'earring', 'bracelet'])
 const selectedCategory = ref<Category>('necklace')
 const pickedVideos = ref<string[]>([])
+const parserVideos = ref<ParserVideoItem[]>([])
+const selectedParserVideoIds = ref<string[]>([])
 const batches = ref<BatchItem[]>([])
 const materials = ref<MaterialItem[]>([])
 const products = ref<ProductItem[]>([])
@@ -80,7 +99,9 @@ const filterCategory = ref<'all' | Category>('all')
 const filterUsageStatus = ref<'all' | UsageStatus>('all')
 const libraryPage = ref(1)
 const backgroundPage = ref(1)
+const parserVideoPage = ref(1)
 const libraryPageSize = ref(24)
+const parserVideoPageSize = ref(12)
 const selectedMaterialIds = ref<string[]>([])
 const backgroundMaterialCount = ref(3)
 const selectedBackgroundMaterialIds = ref<string[]>([])
@@ -90,6 +111,9 @@ const backgroundSubmitting = ref(false)
 const actionBusyId = ref('')
 const errorText = ref('')
 const notice = ref('')
+const previewOpen = ref(false)
+const previewSrc = ref<string | null>(null)
+const previewTitle = ref('')
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const copy = computed(() => {
@@ -111,12 +135,15 @@ const copy = computed(() => {
       queue: 'Hang doi xu ly',
       queueDesc: 'Tien trinh duoc tiep tuc tu dong va lam moi sau moi 4 giay.',
       category: 'Danh muc',
+      uploadMyVideo: 'Tu tai video',
+      chooseDownloadedVideo: 'Chon video da tai',
       pickZoneTitle: 'Chon tep video',
       pickZoneDesc: 'Ho tro chon nhieu tep hoac keo tha vao khu vuc nay.',
       pickZoneFormats: 'Ho tro MP4 / MOV / AVI va cac dinh dang pho bien.',
       pickVideos: 'Chon video',
       queueBatch: 'Them vao hang doi',
       noVideosSelected: 'Chua chon video.',
+      noDownloadedVideosSelected: 'Chua chon video da tai.',
       refresh: 'Lam moi',
       loadingBatches: 'Dang tai batch...',
       noBatches: 'Chua co batch.',
@@ -136,6 +163,7 @@ const copy = computed(() => {
       used: 'Da dung',
       noMaterials: 'Khong co vat lieu nao phu hop bo loc hien tai.',
       segment: 'Canh',
+      preview: 'Xem',
       openUrl: 'Mo lien ket',
       showFile: 'Hien tep',
       bindProduct: 'Lien ket san pham',
@@ -170,12 +198,15 @@ const copy = computed(() => {
       category: '分类',
       segmentTime: '分镜时长（秒）',
       segmentHint: '建议 2-5 秒，过短增加数量，过长影响节奏。',
+      uploadMyVideo: '上传我的视频',
+      chooseDownloadedVideo: '选择已下载视频',
       pickZoneTitle: '选择视频文件',
       pickZoneDesc: '支持批量选择，或将文件拖拽到此区域',
       pickZoneFormats: '支持 MP4 / MOV / AVI 等常见格式',
       pickVideos: '选择视频',
       queueBatch: '加入队列',
       noVideosSelected: '暂未选择视频。',
+      noDownloadedVideosSelected: '暂未选择已下载视频。',
       refresh: '刷新',
       loadingBatches: '正在加载批次...',
       noBatches: '暂无批次。',
@@ -195,6 +226,7 @@ const copy = computed(() => {
       used: '已使用',
       noMaterials: '当前筛选条件下没有素材。',
       segment: '分镜',
+      preview: '查看',
       openUrl: '打开链接',
       showFile: '显示文件',
       bindProduct: '绑定商品',
@@ -228,12 +260,15 @@ const copy = computed(() => {
     category: 'Category',
     segmentTime: 'Segment Time (sec)',
     segmentHint: 'Use 2-5 seconds to balance volume and pacing.',
+    uploadMyVideo: 'Upload My Video',
+    chooseDownloadedVideo: 'Choose Downloaded Video',
     pickZoneTitle: 'Select video files',
     pickZoneDesc: 'Supports multi-select or dragging files into this area.',
     pickZoneFormats: 'Supports MP4 / MOV / AVI and common formats.',
     pickVideos: 'Pick Videos',
     queueBatch: 'Queue Batch',
     noVideosSelected: 'No videos selected.',
+    noDownloadedVideosSelected: 'No downloaded videos selected.',
     refresh: 'Refresh',
     loadingBatches: 'Loading batches...',
     noBatches: 'No batches yet.',
@@ -253,6 +288,7 @@ const copy = computed(() => {
     used: 'Used',
     noMaterials: 'No materials matched the current filters.',
     segment: 'Segment',
+    preview: 'View',
     openUrl: 'Open URL',
     showFile: 'Show File',
     bindProduct: 'Bind Product',
@@ -362,15 +398,103 @@ const paginationCopy = computed(() => {
   }
 })
 
+const libraryDisplayCopy = computed(() => {
+  if (locale.value === 'vi-VN') {
+    return {
+      tab: 'Thu vien anh phai sinh',
+      title: 'Thu vien anh phai sinh',
+      desc: 'Chi hien thi anh phai sinh de duyet, xuat va quan ly nhanh.',
+      hint: 'Chi hien thi ket qua anh phai sinh theo dang album.',
+    }
+  }
+  if (locale.value === 'zh-CN') {
+    return {
+      tab: '\u884d\u751f\u56fe\u7d20\u6750\u5e93',
+      title: '\u884d\u751f\u56fe\u7d20\u6750\u5e93',
+      desc: '\u53ea\u663e\u793a\u5df2\u884d\u751f\u51fa\u6765\u7684\u56fe\u7247\uff0c\u7528\u4e8e\u6d4f\u89c8\u3001\u5bfc\u51fa\u548c\u7ba1\u7406\u3002',
+      hint: '\u5f53\u524d\u7d20\u6750\u5e93\u4ec5\u5c55\u793a\u884d\u751f\u56fe\u7ed3\u679c\u3002',
+    }
+  }
+  return {
+    tab: 'Derived Library',
+    title: 'Derived Library',
+    desc: 'Only show derived images for browsing, export, and quick management.',
+    hint: 'This library only displays derived image results.',
+  }
+})
+
+const generationCopy = computed(() => {
+  if (locale.value === 'vi-VN') {
+    return {
+      tab: 'Tao anh',
+      desc: 'Hien thi anh nguon va anh cat tu video de tiep tuc tao anh phai sinh hang loat.',
+      hint: 'Anh duoc tao moi se vao thu vien anh phai sinh va khong tron vao danh sach anh nguon.',
+      materialCount: 'So anh tao moi moi nguon',
+      generate: 'Tao anh phai sinh',
+      sourceOnly: 'Chon tat ca anh nguon hien tai',
+      clearSelection: 'Bo chon',
+      selected: 'Da chon',
+      totalOutput: 'Tong dau ra',
+      original: 'Anh nguon',
+      derived: 'Anh phai sinh',
+      derivedFrom: 'Tu nguon',
+      success: 'Da tao anh phai sinh:',
+    }
+  }
+  if (locale.value === 'zh-CN') {
+    return {
+      tab: '\u56fe\u7247\u751f\u6210',
+      desc: '\u8fd9\u91cc\u53ea\u5c55\u793a\u539f\u56fe\u4e0e\u4ece\u89c6\u9891\u5207\u51fa\u7684\u6e90\u56fe\uff0c\u7528\u4e8e\u7ee7\u7eed\u6279\u91cf\u751f\u6210\u884d\u751f\u56fe\u3002',
+      hint: '\u65b0\u751f\u6210\u7684\u56fe\u7247\u4f1a\u8fdb\u5165\u300c\u884d\u751f\u56fe\u7d20\u6750\u5e93\u300d\uff0c\u4e0d\u518d\u4e0e\u6e90\u56fe\u6df7\u663e\u3002',
+      materialCount: '\u6bcf\u5f20\u6e90\u56fe\u751f\u6210\u6570\u91cf',
+      generate: '\u751f\u6210\u884d\u751f\u56fe',
+      sourceOnly: '\u5168\u9009\u5f53\u524d\u6e90\u56fe',
+      clearSelection: '\u6e05\u7a7a\u9009\u62e9',
+      selected: '\u5df2\u9009',
+      totalOutput: '\u603b\u8f93\u51fa',
+      original: '\u6e90\u56fe',
+      derived: '\u884d\u751f\u56fe',
+      derivedFrom: '\u884d\u751f\u81ea',
+      success: '\u884d\u751f\u56fe\u5df2\u751f\u6210\uff1a',
+    }
+  }
+  return {
+    tab: 'Image Generation',
+    desc: 'Show source images and video-cut frames here, then batch generate derived images from them.',
+    hint: 'New outputs go into the derived library and no longer mix with source images.',
+    materialCount: 'Variants per source image',
+    generate: 'Generate Derived Images',
+    sourceOnly: 'Select all visible source images',
+    clearSelection: 'Clear Selection',
+    selected: 'Selected',
+    totalOutput: 'Total Output',
+    original: 'Source Image',
+    derived: 'Derived Image',
+    derivedFrom: 'Derived From',
+    success: 'Derived images generated:',
+  }
+})
+
 const canSubmit = computed(() => pickedVideos.value.length > 0 && !submitting.value)
+const downloadableParserVideos = computed(() =>
+  parserVideos.value.filter((item) => item.status === 'completed' && item.localVideoPath),
+)
+const parserVideoTotalPages = computed(() => Math.max(1, Math.ceil(downloadableParserVideos.value.length / parserVideoPageSize.value)))
+const pagedDownloadableParserVideos = computed(() => {
+  const start = (parserVideoPage.value - 1) * parserVideoPageSize.value
+  return downloadableParserVideos.value.slice(start, start + parserVideoPageSize.value)
+})
+const canSubmitDownloadedBatch = computed(() => selectedParserVideoIds.value.length > 0 && !submitting.value)
 
 const filteredMaterials = computed(() =>
   materials.value.filter((item) => {
+    if (item.materialOrigin !== 'derived') return false
     if (filterCategory.value !== 'all' && item.category !== filterCategory.value) return false
     if (filterUsageStatus.value !== 'all' && item.usageStatus !== filterUsageStatus.value) return false
     return true
   }),
 )
+const derivedMaterialCount = computed(() => materials.value.filter((item) => item.materialOrigin === 'derived').length)
 const backgroundSourceMaterials = computed(() => materials.value.filter((item) => item.materialOrigin !== 'derived'))
 const libraryTotalPages = computed(() => Math.max(1, Math.ceil(filteredMaterials.value.length / libraryPageSize.value)))
 const backgroundTotalPages = computed(() => Math.max(1, Math.ceil(backgroundSourceMaterials.value.length / libraryPageSize.value)))
@@ -391,6 +515,9 @@ const allBackgroundVisibleSelected = computed(
   () => pagedBackgroundMaterials.value.length > 0 && selectedBackgroundVisibleCount.value === pagedBackgroundMaterials.value.length,
 )
 const backgroundTotalOutput = computed(() => selectedBackgroundMaterialIds.value.length * Math.max(1, Math.floor(backgroundMaterialCount.value || 1)))
+const selectedDownloadedVideos = computed(() =>
+  downloadableParserVideos.value.filter((item) => selectedParserVideoIds.value.includes(item.id)),
+)
 
 const latestBatch = computed(() => batches.value[0] || null)
 
@@ -480,13 +607,13 @@ function shortMaterialId(id: string) {
 }
 
 function materialOriginLabel(value?: MaterialItem['materialOrigin']) {
-  return value === 'derived' ? backgroundCopy.derived : backgroundCopy.original
+  return value === 'derived' ? generationCopy.value.derived : generationCopy.value.original
 }
 
 function backgroundMaterialTitle(item: MaterialItem) {
   if (item.materialOrigin === 'derived') {
     const source = shortMaterialId(item.derivedFromMaterialId || '')
-    return `${backgroundCopy.derivedFrom} ${source}`
+    return `${generationCopy.value.derivedFrom} ${source}`
   }
   return `${copy.value.segment} ${item.segmentIndex + 1}`
 }
@@ -494,7 +621,7 @@ function backgroundMaterialTitle(item: MaterialItem) {
 async function loadAll() {
   loading.value = true
   try {
-    const [nextCategories, nextBatches, nextMaterials, nextProducts] = await Promise.all([
+    const [nextCategories, nextBatches, nextMaterials, nextProducts, nextParserVideos] = await Promise.all([
       window.api.productImageMaterials.listCategories() as Promise<Category[]>,
       window.api.productImageMaterials.listBatches({ userId: DESKTOP_USER_ID }) as Promise<BatchItem[]>,
       window.api.productImageMaterials.listMaterials({
@@ -505,14 +632,18 @@ async function loadAll() {
         },
       }) as Promise<MaterialItem[]>,
       window.api.productImageMaterials.listProducts() as Promise<ProductItem[]>,
+      window.api.videoParserDownload.listItems({ userId: DESKTOP_USER_ID }) as Promise<ParserVideoItem[]>,
     ])
     categories.value = nextCategories
     batches.value = nextBatches
     materials.value = nextMaterials
     products.value = nextProducts
+    parserVideos.value = nextParserVideos
     const validIds = new Set(nextMaterials.map((item) => item.id))
     selectedMaterialIds.value = selectedMaterialIds.value.filter((item) => validIds.has(item))
     selectedBackgroundMaterialIds.value = selectedBackgroundMaterialIds.value.filter((item) => validIds.has(item))
+    const validParserIds = new Set(nextParserVideos.filter((item) => item.status === 'completed' && item.localVideoPath).map((item) => item.id))
+    selectedParserVideoIds.value = selectedParserVideoIds.value.filter((item) => validParserIds.has(item))
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -580,6 +711,18 @@ watch([backgroundSourceMaterials, libraryPageSize], () => {
   }
 })
 
+watch([downloadableParserVideos, parserVideoPageSize], () => {
+  if (parserVideoPage.value > parserVideoTotalPages.value) {
+    parserVideoPage.value = parserVideoTotalPages.value
+  }
+})
+
+watch(batchSourceMode, (value) => {
+  if (value === 'downloaded') {
+    parserVideoPage.value = 1
+  }
+})
+
 async function pickVideos() {
   const files = await window.api.pickFiles({
     title: copy.value.selectSourceVideos,
@@ -589,8 +732,45 @@ async function pickVideos() {
   pickedVideos.value = Array.from(new Set((files || []).map(String).filter(Boolean)))
 }
 
+function toggleParserVideoSelection(videoId: string) {
+  const next = new Set(selectedParserVideoIds.value)
+  if (next.has(videoId)) next.delete(videoId)
+  else next.add(videoId)
+  selectedParserVideoIds.value = Array.from(next)
+}
+
+function parserVideoThumb(item: ParserVideoItem) {
+  const text = String(item.thumbnailPath || '').trim()
+  return text ? `vg://file?path=${encodeURIComponent(text)}` : ''
+}
+
+function parserVideoLabel(item: ParserVideoItem) {
+  return String(item.title || item.author || item.videoId || 'Downloaded video').trim()
+}
+
+function materialPreviewSrc(item: MaterialItem) {
+  const localPath = String(item.localImagePath || '').trim()
+  if (localPath) return `vg://file?path=${encodeURIComponent(localPath)}`
+  return String(item.qiniuUrl || '').trim()
+}
+
+function openMaterialPreview(item: MaterialItem) {
+  const src = materialPreviewSrc(item)
+  if (!src) return
+  previewSrc.value = src
+  previewTitle.value = `${categoryLabel(item.category)} · ${shortMaterialId(item.id)}`
+  previewOpen.value = true
+}
+
+function closePreview() {
+  previewOpen.value = false
+  previewSrc.value = null
+  previewTitle.value = ''
+}
+
 async function submitBatch() {
-  if (!canSubmit.value) return
+  const useDownloaded = batchSourceMode.value === 'downloaded'
+  if ((useDownloaded && !canSubmitDownloadedBatch.value) || (!useDownloaded && !canSubmit.value)) return
   submitting.value = true
   errorText.value = ''
   notice.value = ''
@@ -598,9 +778,11 @@ async function submitBatch() {
     await window.api.productImageMaterials.createBatch({
       userId: DESKTOP_USER_ID,
       category: selectedCategory.value,
-      sourceVideoPaths: Array.from(pickedVideos.value),
+      sourceVideoPaths: useDownloaded ? [] : Array.from(pickedVideos.value),
+      parserVideoIds: useDownloaded ? Array.from(selectedParserVideoIds.value) : [],
     })
     pickedVideos.value = []
+    selectedParserVideoIds.value = []
     notice.value = copy.value.createdQueued
     await loadAll()
   } catch (error: any) {
@@ -734,7 +916,7 @@ async function generateBackgroundVariants() {
       variantCount: Math.max(1, Math.min(6, Math.floor(Number(backgroundMaterialCount.value || 1)))),
     })
     selectedBackgroundMaterialIds.value = []
-    notice.value = `${backgroundCopy.success} ${result.count}`
+    notice.value = `${generationCopy.value.success} ${result.count}`
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -802,12 +984,12 @@ onUnmounted(() => {
           </button>
           <button class="tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
             <ImageIcon class="icon icon--small" />
-            <span>{{ copy.libraryTab }}</span>
-            <span class="tab-badge">{{ materials.length }}</span>
+            <span>{{ libraryDisplayCopy.tab }}</span>
+            <span class="tab-badge">{{ derivedMaterialCount }}</span>
           </button>
           <button class="tab-button" :class="{ active: activeTab === 'background' }" type="button" @click="activeTab = 'background'">
             <ImageIcon class="icon icon--small" />
-            <span>{{ backgroundCopy.tab }}</span>
+            <span>{{ generationCopy.tab }}</span>
             <span class="tab-badge">{{ backgroundSourceMaterials.length }}</span>
           </button>
         </div>
@@ -833,31 +1015,111 @@ onUnmounted(() => {
             </label>
           </div>
 
-          <button class="upload-dropzone" type="button" @click="pickVideos">
-            <CloudUpload class="icon upload-dropzone__icon" />
-            <strong>{{ copy.pickZoneTitle }}</strong>
-            <span>{{ copy.pickZoneDesc }}</span>
-            <span>{{ copy.pickZoneFormats }}</span>
-          </button>
-
-          <div class="pick-row">
-            <button class="primary-button" type="button" @click="pickVideos">
-              <FolderOpen class="icon" />
-              {{ copy.pickVideos }}
+          <div class="tabs-shell tabs-shell--submode">
+            <button class="tab-button" :class="{ active: batchSourceMode === 'upload' }" type="button" @click="batchSourceMode = 'upload'">
+              <CloudUpload class="icon icon--small" />
+              <span>{{ copy.uploadMyVideo }}</span>
             </button>
-            <button class="primary-button primary-button--soft" type="button" :disabled="!canSubmit" @click="submitBatch">
-              <RefreshCcw v-if="submitting" class="icon spin" />
-              <Boxes v-else class="icon" />
-              {{ copy.queueBatch }}
+            <button class="tab-button" :class="{ active: batchSourceMode === 'downloaded' }" type="button" @click="batchSourceMode = 'downloaded'">
+              <Download class="icon icon--small" />
+              <span>{{ copy.chooseDownloadedVideo }}</span>
+              <span class="tab-badge">{{ downloadableParserVideos.length }}</span>
             </button>
           </div>
 
-          <div class="picked-list">
-            <div v-if="!pickedVideos.length" class="empty-copy">{{ copy.noVideosSelected }}</div>
-            <button v-for="item in pickedVideos" :key="item" class="path-chip" type="button" @click="showInFolder(item)">
-              {{ item }}
+          <template v-if="batchSourceMode === 'upload'">
+            <button class="upload-dropzone" type="button" @click="pickVideos">
+              <CloudUpload class="icon upload-dropzone__icon" />
+              <strong>{{ copy.pickZoneTitle }}</strong>
+              <span>{{ copy.pickZoneDesc }}</span>
+              <span>{{ copy.pickZoneFormats }}</span>
             </button>
-          </div>
+
+            <div class="pick-row">
+              <button class="primary-button" type="button" @click="pickVideos">
+                <FolderOpen class="icon" />
+                {{ copy.pickVideos }}
+              </button>
+              <button class="primary-button primary-button--soft" type="button" :disabled="!canSubmit" @click="submitBatch">
+                <RefreshCcw v-if="submitting" class="icon spin" />
+                <Boxes v-else class="icon" />
+                {{ copy.queueBatch }}
+              </button>
+            </div>
+
+            <div class="picked-list">
+              <div v-if="!pickedVideos.length" class="empty-copy">{{ copy.noVideosSelected }}</div>
+              <button v-for="item in pickedVideos" :key="item" class="path-chip" type="button" @click="showInFolder(item)">
+                {{ item }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div v-if="!downloadableParserVideos.length" class="empty-copy">
+              No completed downloaded videos yet. Use the Video Parser Download plugin first.
+            </div>
+            <div v-else class="parser-video-grid">
+              <article
+                v-for="item in pagedDownloadableParserVideos"
+                :key="item.id"
+                class="parser-video-card"
+                :class="{ 'is-selected': selectedParserVideoIds.includes(item.id) }"
+                @click="toggleParserVideoSelection(item.id)"
+              >
+                <img v-if="parserVideoThumb(item)" :src="parserVideoThumb(item)" alt="video thumbnail" class="parser-video-card__thumb" />
+                <div v-else class="parser-video-card__placeholder">VIDEO</div>
+                <div class="parser-video-card__body">
+                  <strong>{{ parserVideoLabel(item) }}</strong>
+                  <span>{{ item.author || item.videoId }}</span>
+                  <span>{{ item.usedStatus === 'used' ? 'Used' : 'Unused' }}</span>
+                </div>
+              </article>
+            </div>
+
+            <div v-if="downloadableParserVideos.length > parserVideoPageSize" class="library-pagination">
+              <div class="library-pagination__nav">
+                <button class="ghost-button ghost-button--toolbar" type="button" :disabled="parserVideoPage <= 1" @click="parserVideoPage -= 1">
+                  {{ paginationCopy.prev }}
+                </button>
+                <span class="library-pagination__text">{{ parserVideoPage }} / {{ parserVideoTotalPages }}</span>
+                <button class="ghost-button ghost-button--toolbar" type="button" :disabled="parserVideoPage >= parserVideoTotalPages" @click="parserVideoPage += 1">
+                  {{ paginationCopy.next }}
+                </button>
+              </div>
+              <div class="library-pagination__size">
+                <span>{{ paginationCopy.perPage }}</span>
+                <select v-model.number="parserVideoPageSize" class="input input--compact library-pagination__select">
+                  <option :value="8">8</option>
+                  <option :value="12">12</option>
+                  <option :value="16">16</option>
+                  <option :value="24">24</option>
+                </select>
+                <span>{{ paginationCopy.items }}</span>
+              </div>
+            </div>
+
+            <div class="pick-row">
+              <button class="primary-button primary-button--soft" type="button" :disabled="!canSubmitDownloadedBatch" @click="submitBatch">
+                <RefreshCcw v-if="submitting" class="icon spin" />
+                <Boxes v-else class="icon" />
+                {{ copy.queueBatch }}
+              </button>
+            </div>
+
+            <div class="picked-list">
+              <div v-if="!selectedDownloadedVideos.length" class="empty-copy">{{ copy.noDownloadedVideosSelected }}</div>
+              <button
+                v-for="item in selectedDownloadedVideos"
+                :key="item.id"
+                class="path-chip"
+                type="button"
+                @click.stop="showInFolder(item.localVideoPath || '')"
+              >
+                {{ item.localVideoPath || item.videoId }}
+              </button>
+            </div>
+          </template>
         </section>
 
         <section class="panel panel--queue">
@@ -943,23 +1205,23 @@ onUnmounted(() => {
               <Sparkles class="icon icon--small" />
             </div>
             <div>
-              <h2>{{ backgroundCopy.tab }}</h2>
-              <p>{{ backgroundCopy.desc }}</p>
+              <h2>{{ generationCopy.tab }}</h2>
+              <p>{{ generationCopy.desc }}</p>
             </div>
           </div>
           <div class="panel__hint">
-            <span>{{ backgroundCopy.hint }}</span>
+            <span>{{ generationCopy.hint }}</span>
             <Info class="icon icon--tiny" />
           </div>
         </div>
 
         <div class="filter-grid filter-grid--library">
           <label>
-            <span>{{ backgroundCopy.materialCount }}</span>
+            <span>{{ generationCopy.materialCount }}</span>
             <input v-model.number="backgroundMaterialCount" class="input" type="number" min="1" max="6" step="1" />
           </label>
           <label>
-            <span>{{ backgroundCopy.totalOutput }}</span>
+            <span>{{ generationCopy.totalOutput }}</span>
             <input class="input" :value="backgroundTotalOutput" disabled />
           </label>
         </div>
@@ -967,9 +1229,9 @@ onUnmounted(() => {
         <div v-if="backgroundSourceMaterials.length" class="library-toolbar">
           <div class="library-toolbar__selection">
             <button class="ghost-button ghost-button--toolbar" type="button" @click="toggleSelectAllBackgroundVisible">
-              {{ allBackgroundVisibleSelected ? backgroundCopy.clearSelection : backgroundCopy.sourceOnly }}
+              {{ allBackgroundVisibleSelected ? generationCopy.clearSelection : generationCopy.sourceOnly }}
             </button>
-            <span class="library-toolbar__count">{{ backgroundCopy.selected }} {{ selectedBackgroundMaterialIds.length }}</span>
+            <span class="library-toolbar__count">{{ generationCopy.selected }} {{ selectedBackgroundMaterialIds.length }}</span>
           </div>
           <div class="library-toolbar__actions">
             <button
@@ -979,7 +1241,7 @@ onUnmounted(() => {
               @click="clearSelectedBackgroundMaterials"
             >
               <Trash2 class="icon" />
-              {{ backgroundCopy.clearSelection }}
+              {{ generationCopy.clearSelection }}
             </button>
             <button
               class="primary-button library-toolbar__export"
@@ -988,7 +1250,7 @@ onUnmounted(() => {
               @click="generateBackgroundVariants"
             >
               <RefreshCcw class="icon" :class="{ spin: backgroundSubmitting }" />
-              {{ backgroundCopy.generate }}
+              {{ generationCopy.generate }}
             </button>
           </div>
         </div>
@@ -998,7 +1260,9 @@ onUnmounted(() => {
           <div class="album-grid">
             <article v-for="item in pagedBackgroundMaterials" :key="item.id" class="album-card">
               <div class="album-card__media">
-                <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+                <button class="album-thumb-button" type="button" @click="openMaterialPreview(item)">
+                  <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+                </button>
                 <button
                   class="select-checkbox"
                   :class="{ 'select-checkbox--active': selectedBackgroundMaterialIds.includes(item.id) }"
@@ -1011,6 +1275,14 @@ onUnmounted(() => {
                   <span class="status-pill" :class="item.materialOrigin === 'derived' ? 'is-warning' : 'is-success'">
                     {{ materialOriginLabel(item.materialOrigin) }}
                   </span>
+                  <div class="album-card__actions-top">
+                    <button class="icon-action" type="button" :title="copy.preview" @click.stop="openMaterialPreview(item)">
+                      <Eye class="icon icon--tiny" />
+                    </button>
+                    <button class="icon-action icon-action--danger" type="button" :title="copy.deleteMaterial" :disabled="actionBusyId === item.id" @click.stop="deleteMaterial(item.id)">
+                      <Trash2 class="icon icon--tiny" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1061,12 +1333,12 @@ onUnmounted(() => {
               <ImageIcon class="icon icon--small" />
             </div>
             <div>
-              <h2>{{ copy.materialLibrary }}</h2>
-              <p>{{ copy.materialLibraryDesc }}</p>
+              <h2>{{ libraryDisplayCopy.title }}</h2>
+              <p>{{ libraryDisplayCopy.desc }}</p>
             </div>
           </div>
           <div class="panel__hint">
-            <span>{{ copy.materialLibraryHint }}</span>
+            <span>{{ libraryDisplayCopy.hint }}</span>
             <Info class="icon icon--tiny" />
           </div>
         </div>
@@ -1124,7 +1396,9 @@ onUnmounted(() => {
           <div class="album-grid">
             <article v-for="item in pagedMaterials" :key="item.id" class="album-card">
             <div class="album-card__media">
-              <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+              <button class="album-thumb-button" type="button" @click="openMaterialPreview(item)">
+                <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+              </button>
               <button
                 class="select-checkbox"
                 :class="{ 'select-checkbox--active': selectedMaterialIds.includes(item.id) }"
@@ -1138,6 +1412,9 @@ onUnmounted(() => {
                   {{ item.usageStatus === 'used' ? copy.used : copy.unused }}
                 </span>
                 <div class="album-card__actions-top">
+                  <button class="icon-action" type="button" :title="copy.preview" @click.stop="openMaterialPreview(item)">
+                    <Eye class="icon icon--tiny" />
+                  </button>
                   <button class="icon-action" type="button" :title="copy.openUrl" @click="openPublicUrl(item.qiniuUrl)">
                     <Link2 class="icon icon--tiny" />
                   </button>
@@ -1162,7 +1439,7 @@ onUnmounted(() => {
               <div class="album-card__meta">
                 <span>{{ copy.segment }} {{ item.segmentIndex + 1 }}</span>
                 <span>{{ item.frameTimeSec.toFixed(2) }}s</span>
-                <span v-if="item.materialOrigin === 'derived'">{{ backgroundCopy.derivedFrom }} {{ shortMaterialId(item.derivedFromMaterialId || '') }}</span>
+                <span v-if="item.materialOrigin === 'derived'">{{ generationCopy.derivedFrom }} {{ shortMaterialId(item.derivedFromMaterialId || '') }}</span>
               </div>
               <div class="album-card__status-row">
                 <button
@@ -1225,6 +1502,8 @@ onUnmounted(() => {
       <ShieldCheck class="icon icon--small" />
       <span>{{ copy.footer }}</span>
     </footer>
+
+    <VideoPreviewModal :open="previewOpen" :src="previewSrc" :title="previewTitle" media-type="image" @close="closePreview" />
   </div>
 </template>
 
@@ -1896,6 +2175,67 @@ label span {
   grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 
+.parser-video-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.parser-video-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(20, 29, 50, 0.92), rgba(10, 17, 31, 0.92));
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.parser-video-card:hover,
+.parser-video-card.is-selected {
+  transform: translateY(-1px);
+  border-color: rgba(106, 122, 255, 0.42);
+  box-shadow: 0 14px 30px rgba(44, 72, 158, 0.22);
+}
+
+.parser-video-card__thumb,
+.parser-video-card__placeholder {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.parser-video-card__thumb {
+  object-fit: cover;
+}
+
+.parser-video-card__placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(227, 233, 255, 0.5);
+  letter-spacing: 0.18em;
+  font-size: 11px;
+}
+
+.parser-video-card__body {
+  display: grid;
+  gap: 4px;
+}
+
+.parser-video-card__body strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.parser-video-card__body span {
+  font-size: 11px;
+  color: rgba(227, 233, 255, 0.72);
+}
+
 .album-card {
   min-width: 0;
   border-radius: 18px;
@@ -1914,6 +2254,15 @@ label span {
   aspect-ratio: 0.98 / 1;
   overflow: hidden;
   border-bottom: 1px solid rgba(88, 108, 186, 0.16);
+}
+
+.album-thumb-button {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
 }
 
 .select-checkbox {

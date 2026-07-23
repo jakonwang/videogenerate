@@ -27,7 +27,21 @@ import { canUseMockGeneration } from '../clone/mockPolicy'
 import { generateThumbnailJpg } from '../media/thumbnail'
 import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/batchSubtitle'
 import { webPlatformRepo } from '../web-platform/repo'
+import { productImageMaterialsService } from '../product-image-materials/service'
 import { livePhotoRepo } from './repo'
+import { livePhotoPromptVersionService } from './promptVersions'
+import { buildLivePhotoQualityCacheKey, livePhotoQualityCache } from './qualityCache'
+import { LIVE_PHOTO_QUALITY_CHECKER_VERSION, runLocalLivePhotoQualityCheck } from './qualityChecker'
+import { submitLivePhotoImageGeneration, type LivePhotoImageProviderAdapter } from './imageGenerationAdapter'
+import { resolveAuthoritativeProductReferencePath } from './productInput'
+import { bindLivePhotoReplacementInputs, normalizeLivePhotoScenePaths } from './sceneInput'
+import { buildLivePhotoReplacementPrompt } from './promptBuilder'
+import { prepareLivePhotoProductReference, type LivePhotoProductReferenceVariant } from './productReference'
+import {
+  LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
+  LIVE_PHOTO_IMAGE_RETRY_LIMIT,
+  resolveLivePhotoRetryLimit,
+} from './retryPolicy'
 import type {
   CreateCloneShotLivePhotosInput,
   CreateReferenceLivePhotoInput,
@@ -37,10 +51,13 @@ import type {
   LivePhotoCloneShotSnapshot,
   LivePhotoItem,
   LivePhotoMotionTemplate,
+  LivePhotoPromptVersion,
   LivePhotoProductSnapshot,
   LivePhotoRequestPreview,
   LivePhotoTaskLog,
   LivePhotoAutoFlowStatus,
+  LivePhotoGenerationAttempt,
+  LivePhotoQualityReport,
   LivePhotoWorkflow,
   LivePhotoWorkflowStep,
   RetryLivePhotoItemInput,
@@ -57,6 +74,7 @@ type LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs: typeof analyzeProductStructureWithGrs
   reviewReferenceReplacementStillStrict: typeof reviewReferenceReplacementStillStrict
   reviewReferenceReplacementStillVisual: typeof reviewReferenceReplacementStillVisual
+  runLocalQualityCheck: typeof runLocalLivePhotoQualityCheck
 }
 
 const LIVE_PHOTO_SUBTITLE_USER_ID = 'desktop-live-photo'
@@ -113,11 +131,11 @@ const livePhotoDeps: LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs,
   reviewReferenceReplacementStillStrict,
   reviewReferenceReplacementStillVisual,
+  runLocalQualityCheck: runLocalLivePhotoQualityCheck,
 }
 
 const LIVE_PHOTO_AUTO_FLOW_CONCURRENCY = 2
 const LIVE_PHOTO_AUTO_FLOW_REQUEUE_COOLDOWN_MS = 8_000
-const LIVE_PHOTO_AUTO_RETRY_LIMIT = 2
 const LIVE_PHOTO_REFERENCE_STILL_TIMEOUT_MS = 10 * 60 * 1000
 const LIVE_PHOTO_REFERENCE_PACKAGING_TIMEOUT_MS = 90 * 1000
 const LIVE_PHOTO_IMAGE_REMOTE_RETRY_MS = 1_000
@@ -573,6 +591,7 @@ function buildDefaultWorkflow(): LivePhotoWorkflow {
     stepStatus: {
       queued: { status: 'running', updatedAt: now() },
       image_generation: defaultWorkflowStepStatus(),
+      image_validation: defaultWorkflowStepStatus(),
       video_generation: defaultWorkflowStepStatus(),
       live_photo_packaging: defaultWorkflowStepStatus(),
       completed: defaultWorkflowStepStatus(),
@@ -585,7 +604,7 @@ function buildDefaultAutoFlowStatus(): LivePhotoAutoFlowStatus {
   return {
     enabled: true,
     status: 'idle',
-    retryLimit: LIVE_PHOTO_AUTO_RETRY_LIMIT,
+    retryLimit: LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
     retryCount: 0,
     currentStage: 'queued',
     lastError: '',
@@ -604,7 +623,7 @@ function ensureAutoFlowStatus(item: LivePhotoItem) {
         ? current.status
         : 'idle',
     paused: Boolean(current.paused),
-    retryLimit: Number(current.retryLimit ?? LIVE_PHOTO_AUTO_RETRY_LIMIT) || LIVE_PHOTO_AUTO_RETRY_LIMIT,
+    retryLimit: Number(current.retryLimit ?? LIVE_PHOTO_DEFAULT_RETRY_LIMIT) || LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
     retryCount: Math.max(0, Number(current.retryCount ?? 0) || 0),
     currentStage: current.currentStage || 'queued',
     lastStartedAt: Number(current.lastStartedAt ?? 0) || undefined,
@@ -1104,15 +1123,6 @@ function resolveLivePhotoAuthoritativeReferencePath(product: Product, fallbackRe
   return candidates.find((item) => existsSync(item)) || ''
 }
 
-function resolveAuthoritativeProductReferencePath(product: Pick<LivePhotoProductSnapshot, 'authoritativeProductReferencePath' | 'imagePaths' | 'coverImagePath'>) {
-  const candidates = [
-    String(product.authoritativeProductReferencePath || '').trim(),
-    ...(Array.isArray(product.imagePaths) ? product.imagePaths.map((item) => String(item || '').trim()) : []),
-    String(product.coverImagePath || '').trim(),
-  ].filter(Boolean)
-  return candidates.find((item) => existsSync(item)) || ''
-}
-
 function resolveExplicitLivePhotoReferenceImagePath(product: Product) {
   const livePhotoReferenceImagePath = String((product as any).livePhotoReferenceImagePath || '').trim()
   const analysisBoardPath = String((product as any).analysisBoardPath || '').trim()
@@ -1416,39 +1426,6 @@ async function ensureLivePhotoProductAnalysis(product: Product, authoritativePro
   return normalized
 }
 
-function resolveAuthoritativeLivePhotoProductRefs(product: Pick<LivePhotoProductSnapshot, 'authoritativeProductReferencePath' | 'imagePaths' | 'coverImagePath'>) {
-  const candidates = [
-    String(product.authoritativeProductReferencePath || '').trim(),
-    ...(Array.isArray(product.imagePaths) ? product.imagePaths.map((item) => String(item || '').trim()) : []),
-    String(product.coverImagePath || '').trim(),
-  ].filter(Boolean)
-  const deduped = Array.from(new Set(candidates)).filter((item) => existsSync(item))
-  return deduped.length ? [deduped[0]] : []
-}
-
-function resolveLivePhotoReferenceImagePayload(input: {
-  referenceImagePath: string
-  product: Pick<LivePhotoProductSnapshot, 'authoritativeProductReferencePath' | 'imagePaths' | 'coverImagePath'>
-}) {
-  const referenceImagePath = String(input.referenceImagePath || '').trim()
-  if (!referenceImagePath || !existsSync(referenceImagePath)) {
-    throw new Error('Reference image does not exist')
-  }
-  const productReferenceImagePaths = resolveAuthoritativeLivePhotoProductRefs(input.product)
-  if (!productReferenceImagePaths.length) {
-    throw new Error('Selected product does not have usable reference images')
-  }
-  const imagePaths = [referenceImagePath, productReferenceImagePaths[0]].filter(Boolean)
-  if (imagePaths.length !== 2) {
-    throw new Error('Live Photo image generation requires exactly two bound reference images.')
-  }
-  return {
-    referenceImagePath,
-    productReferenceImagePaths,
-    imagePaths,
-  }
-}
-
 function normalizeLivePhotoProductAnalysis(input: LivePhotoProductSnapshot['productAnalysis']) {
   if (!input) return undefined
   return {
@@ -1533,7 +1510,7 @@ function inferLivePhotoReplacementStrategy(input: { item: LivePhotoItem; product
       analysis?.connectionStructure,
   )
   if ((isEarring || isWearableContext) && retryCount <= 0) {
-    return 'anchor_closeup'
+    return 'erase_first'
   }
   if (
     (retryCount >= 1 || failureSignals.includes('validation_category:')) &&
@@ -1543,6 +1520,7 @@ function inferLivePhotoReplacementStrategy(input: { item: LivePhotoItem; product
       failureSignals.includes('source_contamination') ||
       failureSignals.includes('attachment_drift') ||
       failureSignals.includes('missing_structure') ||
+      failureSignals.includes('product_structure_consistency') ||
       failureSignals.includes('oversized_product') ||
       failureSignals.includes('wrong scale') ||
       failureSignals.includes('visual_check_failed:scale') ||
@@ -1791,6 +1769,83 @@ async function validateReferenceReplacementStill(input: {
     strictReview,
     visualReview,
   }
+}
+
+async function validateGeneratedStillWithPipeline(input: {
+  item: LivePhotoItem
+  product: LivePhotoProductSnapshot
+  scenePath: string
+  stillPath: string
+}) {
+  const settings = await livePhotoRepo.getSettings()
+  const passThreshold = Math.max(0.5, Math.min(1, Number(settings.qualityPassThreshold ?? 0.88)))
+  const retryFloor = Math.max(0, Math.min(passThreshold, Number(settings.qualityRetryFloor ?? 0.65)))
+  const productPath = resolveAuthoritativeProductReferencePath(input.product)
+  if (settings.qualityCheckerEnabled !== false && productPath) {
+    const local = await livePhotoDeps.runLocalQualityCheck({
+      scenePath: input.scenePath,
+      productPath,
+      generatedPath: input.stillPath,
+      passThreshold,
+      retryFloor,
+    })
+    if (local.available && local.report) return local.report
+    const fallback = await validateReferenceReplacementStill({
+      product: input.product,
+      stillPath: input.stillPath,
+      referenceImagePath: input.scenePath,
+    })
+    const score = Math.max(0, Math.min(1, Number(fallback.visualReview?.score ?? fallback.score ?? 0)))
+    const decision = fallback.passed ? 'pass' : score >= retryFloor ? 'retry' : 'reject'
+    return {
+      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+      mode: 'remote_fallback',
+      decision,
+      score,
+      threshold: passThreshold,
+      retryFloor,
+      components: {
+        clip: 0,
+        dinov2: 0,
+        orb: 0,
+        ssim: 0,
+        scenePreservation: String(fallback.visualReview?.checks?.scene_preservation || '').toLowerCase() === 'fail' ? 0 : score,
+        textConsistency: score,
+      },
+      hardFailures: [
+        ...(fallback.negativeSignals || []),
+        ...(fallback.strictReview?.negativeSignals || []),
+        ...(fallback.visualReview?.failures || []),
+      ],
+      notes: [
+        `Local checker unavailable: ${local.reason || 'unknown'}`,
+        ...(fallback.visualReview?.notes || []),
+      ],
+      fallbackReason: local.reason || 'local_checker_unavailable',
+      durationMs: Number(fallback.visualReview?.score === undefined ? 0 : 1),
+      checkedAt: now(),
+    } satisfies LivePhotoQualityReport
+  }
+  const fallback = await validateReferenceReplacementStill({
+    product: input.product,
+    stillPath: input.stillPath,
+    referenceImagePath: input.scenePath,
+  })
+  const score = Math.max(0, Math.min(1, Number(fallback.visualReview?.score ?? fallback.score ?? 0)))
+  return {
+    checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+    mode: 'remote_fallback',
+    decision: fallback.passed ? 'pass' : score >= retryFloor ? 'retry' : 'reject',
+    score,
+    threshold: passThreshold,
+    retryFloor,
+    components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: score, textConsistency: score },
+    hardFailures: [...(fallback.negativeSignals || []), ...(fallback.visualReview?.failures || [])],
+    notes: fallback.visualReview?.notes || [],
+    fallbackReason: settings.qualityCheckerEnabled === false ? 'local_checker_disabled' : 'product_reference_missing',
+    durationMs: 0,
+    checkedAt: now(),
+  } satisfies LivePhotoQualityReport
 }
 
 function buildStrictReplacementReviewNeedles(product: LivePhotoProductSnapshot) {
@@ -2061,305 +2116,67 @@ async function reviewReferenceReplacementStillVisual(input: {
   }
 }
 
-function buildReferenceReplacementPrompt(input: {
+function buildReferenceReplacementPrompt(_input: {
   product: LivePhotoProductSnapshot
   productReferenceImagePaths: string[]
   referenceImagePath: string
   retryGuidance?: string[]
   strategy?: LivePhotoReplacementStrategy
+  prompt?: string
 }) {
-  const normalizedAnalysis = normalizeLivePhotoProductAnalysis(input.product.productAnalysis)
-  const strategy = input.strategy || 'default'
-  const uploadFileNames = buildLivePhotoUploadFileNames()
-  const authoritativeProductPath = String(
-    input.productReferenceImagePaths[0] ||
-      resolveAuthoritativeProductReferencePath(input.product) ||
-      input.product.coverImagePath ||
-      '',
-  ).trim()
-  return [
-    'MASTER PRODUCT REPLACEMENT SYSTEM (SOURCE-BOUND | ZERO-RECONSTRUCTION | FINAL)',
+  const basePrompt = buildLivePhotoReplacementPrompt(_input.prompt)
+  const strategy = _input.strategy || 'default'
+  const executionRules = [
+    buildLivePhotoProviderRolePrefix({
+      referenceImagePath: _input.referenceImagePath,
+      productReferenceImagePath: _input.productReferenceImagePaths[0] || '',
+      mode: 'image_replace',
+    }),
     '',
-    'ROLE:',
-    'You are a deterministic product mapping system.',
-    'You do NOT generate.',
-    'You do NOT redesign.',
-    'You do NOT interpret.',
-    'You ONLY transfer the product from Image 2 into Image 1.',
-    'The final product must be a full replacement, not a hybrid, not a blend, and not a new structure made from Image 1 plus Image 2.',
-    '',
-    'INPUT STRUCTURE (EXACTLY 2 IMAGES):',
-    '- Image 1 = Base reference (human / scene / composition / pose)',
-    '- Image 2 = Product reference (the ONLY valid product identity source)',
-    '- Image 2 can be a single multi-angle product board image',
-    '- The FIRST uploaded image is always Image 1.',
-    '- The SECOND uploaded image is always Image 2.',
-    `- Uploaded file name for Image 1 = ${uploadFileNames[0]}.`,
-    `- Uploaded file name for Image 2 = ${uploadFileNames[1]}.`,
-    '- Follow upload order exactly. Never swap, blend, average, or reinterpret the two image roles.',
-    '',
-    'INPUT BINDING LOCK (ABSOLUTE):',
-    'Image 1 defines ONLY:',
-    '- human identity when a person is actually visible',
-    '- pose and gesture when a person is actually visible',
-    '- composition and framing',
-    '- camera angle and perspective',
-    '- lighting direction',
-    '- environment and background',
-    '- spatial structure',
-    'Image 2 defines ONLY:',
-    '- product structure',
-    '- shape and geometry',
-    '- proportions',
-    '- material and texture',
-    '- all product details',
-    '',
-    'STRICT SOURCE SEPARATION:',
-    '- ALL scene information MUST come from Image 1 ONLY',
-    '- ALL product information MUST come from Image 2 ONLY',
-    '- Do NOT use product design from Image 1',
-    '- Do NOT use pose or scene information from Image 2',
-    '- Do NOT mix roles between images',
-    '',
-    'PRODUCT SOURCE OVERRIDE:',
-    'If Image 1 already contains a product, ignore its design completely.',
-    'Use the original product in Image 1 ONLY as a placement placeholder for:',
-    '- position',
-    '- orientation',
-    '- contact point',
-    '- attachment relation',
-    'Do NOT preserve any visible shape, color, material, structure, edge, stone, logo, engraving, or attachment from the Image 1 product.',
-    '',
-    'NO CROSS-CONTAMINATION:',
-    '- Do NOT blend product features between Image 1 and Image 2',
-    '- Do NOT partially keep Image 1 product identity',
-    '- Do NOT merge visible structure from Image 1 and Image 2 into a new hybrid product.',
-    '- The replacement product must be a full substitute from Image 2 only, not a blended reconstruction.',
-    '- The final visible product must be 100 percent derived from Image 2',
-    '',
-    'STRICT REPLACEMENT RULE:',
-    'Replace ONLY the product in Image 1 with the product from Image 2.',
-    'Do NOT change anything else.',
-    'This is a pure substitution task, NOT a redesign task.',
-    '',
-    'FLAT-LAY / TABLETOP REFERENCE LOCK:',
-    '- If Image 1 is a flat lay, tabletop, product-only, or no-person reference, do NOT add any hands, fingers, arms, or human interaction.',
-    '- Do NOT introduce touching, holding, lifting, pinching, gripping, or presenting gestures around the product.',
-    '- If Image 1 contains no visible human body parts, the final image must also contain no visible human body parts.',
-    '- If Image 1 contains no visible hands or fingers, the final image must contain no visible hands, fingers, nails, palms, wrists, or skin-contact presentation cues.',
-    '',
-    'GLOBAL PRIORITY ORDER:',
-    '1. Product identity from Image 2',
-    '2. Product real-world scale from Image 2 and Product DNA',
-    '3. Product placement from Image 1 anchor',
-    '4. Scene preservation from Image 1',
-    '5. Realism',
-    ...(strategy === 'erase_first'
-      ? [
-          '',
-          'ERASE-FIRST REPLACEMENT MODE:',
-          '- First mentally delete the entire original product from Image 1.',
-          '- Remove its silhouette, contour rhythm, material cue, stone layout, and attachment trace completely.',
-          '- Only after the Image 1 product has been fully erased, place the intact Image 2 product into the same anchor.',
-          '- Never blend the Image 2 product into the leftover Image 1 shape.',
-        ]
-      : []),
-    ...(strategy === 'anchor_closeup'
-      ? [
-          '',
-          'ANCHOR CLOSE-UP REPLACEMENT MODE:',
-          '- Treat this as a local close-up replacement around the wearable anchor only.',
-          '- Focus on the ear attachment zone and the exact body contact relation first.',
-          '- Keep only the minimum surrounding ear, skin, hair, and scene context needed to preserve realism.',
-          '- Prioritize a clean exact product transfer over smooth blending across the old object boundary.',
-          '- If the old object contour conflicts with Image 2, delete the old contour entirely and keep the full Image 2 structure.',
-        ]
-      : []),
-    '',
-    'PRODUCT IDENTITY LOCK (HIGHEST PRIORITY):',
-    'The final product MUST be a structurally identical instance of Image 2.',
-    'Strictly match:',
-    '- silhouette',
-    '- geometry',
-    '- proportions',
-    '- structure',
-    '- spacing between parts',
-    '- real-world size from Image 2 and Product DNA while preserving the same anchor relation in Image 1',
-    '- material response',
-    '- micro details',
-    '- all visible design elements',
-    'Forbidden:',
-    '- redesign',
-    '- simplification',
-    '- beautification',
-    '- stylization',
-    '- detail hallucination',
-    '- symmetry correction',
-    '- structural completion from imagination',
-    '- improvement, enhancement, or reinterpretation of the product',
-    '- making the replacement product larger or smaller than the selected product real-world scale from Image 2 and Product DNA',
-    '- upscaling the wearable or accessory to make it more obvious',
-    '- enlarging the product for readability',
-    '',
-    'VIEW SELECTION AND ISOLATION:',
-    'If Image 2 contains multiple angles, use Image 2 as a single product identity source only.',
-    'Image 2 may be a single product board with multiple small angle thumbnails. This is still one product reference image.',
-    'Use only the visible product identity cues needed to preserve the exact same product instance at the Image 1 anchor.',
-    'Do NOT combine different thumbnails, do NOT borrow details from multiple angles, and do NOT reconstruct a new composite view.',
-    'If the Image 1 anchor view and the Image 2 board are not perfectly aligned, keep the product identity exact and avoid inventing hidden geometry.',
-    '',
-    'ZERO-RECONSTRUCTION RULE:',
-    '- Do NOT reconstruct shapes',
-    '- Do NOT approximate geometry',
-    '- Do NOT reinterpret edges',
-    '- Do NOT infer unseen sides',
-    '- Do NOT complete hidden structure',
-    'Only transfer what is EXACTLY visible in Image 2.',
-    'If a detail is unclear in Image 2, keep it unclear and do NOT invent it.',
-    '',
-    'GEOMETRY LOCK:',
-    'The spatial relationship between the product and the surrounding body or environment in Image 1 must remain EXACTLY the same.',
-    'Including:',
-    '- position',
-    '- anchor point',
-    '- orientation',
-    '- rotation',
-    '- depth alignment',
-    '- contact points',
-    '- occlusion order',
-    'No shift is allowed.',
-    '',
-    'SCALE LOCK (CRITICAL):',
-    '- Use Image 2 and Product DNA as the source of truth for the product real-world size and product-to-body proportion.',
-    '- Do NOT inherit the old product size from Image 1 when that old size conflicts with the selected product real-world scale.',
-    '- Preserve the selected product real-world proportion relative to ear, neck, hand, wrist, body, or support area as defined by Image 2 and Product DNA size signals.',
-    '- Maintain correct body-to-product size relationship for the selected product, even if the old product in Image 1 was visibly larger or smaller.',
-    '- When Image 1 is a model reference, keep the selected product at its own correct wearable scale. Do not resize it to mimic the old product footprint from Image 1.',
-    '- If the scene contains a person or model, keep the product close to the body anchor and never float it outward.',
-    '- If uncertainty exists, preserve the selected product real-world scale from Image 2 and Product DNA instead of copying the old product size from Image 1.',
-    '',
-    'MODEL REFERENCE LOCK:',
-    '- If Image 1 is a model reference, treat the body as a strict anchor, not a layout surface.',
-    '- Keep the product at the same body contact point, but use the selected product wearable size rather than the replaced product size from Image 1.',
-    '- Do not bias the product smaller or larger when preserving identity.',
-    '- Do not upscale jewelry, accessories, or wearable products to improve readability.',
-    '- Do not downscale jewelry, accessories, or wearable products to make the model look cleaner or more spacious.',
-    '- Do not center the product in the frame or detach it from the body anchor.',
-    '- Preserve the selected product wearable proportion exactly even when the model pose is open or spacious.',
-    '- Keep the selected product-to-body dominance relationship correct for that product. Do not let the old Image 1 product size force a wrong ratio.',
-    '- If the original product is partially occluded, preserve that occlusion while still matching the selected product scale.',
-    '- If body anatomy, pose, or crop conflicts with the selected product size, adjust the human integration locally while keeping the product scale locked.',
-    '',
-    'PERSPECTIVE LOCK:',
-    '- keep original perspective from Image 1',
-    '- keep lens distortion consistent',
-    '- keep the same vanishing direction',
-    '- do NOT correct or beautify perspective',
-    '',
-    'ENVIRONMENT MATCHING:',
-    '- preserve Image 1 scene exactly',
-    '- preserve background exactly',
-    '- preserve pose exactly when a person is actually visible',
-    '- preserve framing exactly',
-    '- preserve only the human body parts that are already visible in Image 1',
-    '- if Image 1 has no visible hands or fingers, do not output any hands or fingers',
-    '- preserve lighting direction and shadow logic exactly',
-    '',
-    'LIGHTING ADAPTATION (LIMITED):',
-    'Allowed:',
-    '- slight brightness adjustment',
-    '- slight contrast adjustment',
-    '- slight color temperature matching',
-    'Not allowed:',
-    '- new highlights',
-    '- stronger reflections',
-    '- glow',
-    '- sparkle',
-    '- bloom',
-    '- material enhancement',
-    '',
-    'ANTI-OVERGENERATION:',
-    'Do NOT make the product:',
-    '- bigger',
-    '- clearer',
-    '- shinier',
-    '- more detailed',
-    '- more centered',
-    '- more prominent',
-    '- more separated from the body anchor',
-    '- more billboard-like',
-    '- more readable than the original object',
-    '- more dominant than the body anchor',
-    'It must sit naturally inside Image 1 with the correct visual importance for the selected product real-world size, while keeping 100 percent of the product identity from Image 2 with zero blending.',
-    '',
-    'FAILSAFE RULE:',
-    'If exact structure cannot be preserved, reduce detail but NEVER introduce structural deviation.',
-    'If realism conflicts with product identity, preserve product identity.',
-    'If scene blending conflicts with product structure, preserve product structure.',
-    'If identity is not perfect, the output is incorrect.',
-    '',
-    'OUTPUT:',
-    'A single photorealistic image where:',
-    '- product = Image 2',
-    '- size = selected product real-world size and Product DNA proportion',
-    '- position = Image 1 original object position',
-    '- scene = untouched',
-    '- zero structural deviation is allowed',
-    '',
-    'AUTHORITATIVE INPUT BINDING:',
-    '',
-    `Image 1 source = ${input.referenceImagePath}.`,
-    `Image 2 source = ${authoritativeProductPath}.`,
-    `Image 1 file path: ${input.referenceImagePath}.`,
-    `Image 2 file path: ${authoritativeProductPath}.`,
-    `Image 1 uploaded file name: ${uploadFileNames[0]}.`,
-    `Image 2 uploaded file name: ${uploadFileNames[1]}.`,
-    'Use Image 1 only for scene, pose, composition, contact, lighting, and framing.',
-    'Use Image 2 only for exact product identity.',
-    '',
-    `Selected product name: ${input.product.name}.`,
-    `Authoritative product reference path: ${authoritativeProductPath}.`,
-    `Reference photo path: ${input.referenceImagePath}.`,
-    ...buildLivePhotoCategorySpecificPromptRules(input.product),
-    ...(normalizedAnalysis
-      ? [
-          '',
-          'PRODUCT DNA LOCK:',
-          '',
-          normalizedAnalysis.category ? `Category: ${normalizedAnalysis.category}.` : '',
-          normalizedAnalysis.summary ? `Summary: ${normalizedAnalysis.summary}.` : '',
-          normalizedAnalysis.coreSubject ? `Core subject: ${normalizedAnalysis.coreSubject}.` : '',
-          normalizedAnalysis.connectionStructure ? `Connection structure: ${normalizedAnalysis.connectionStructure}.` : '',
-          normalizedAnalysis.materialDetails ? `Material details: ${normalizedAnalysis.materialDetails}.` : '',
-          normalizedAnalysis.surfaceDetails ? `Surface details: ${normalizedAnalysis.surfaceDetails}.` : '',
-          normalizedAnalysis.colorDetails ? `Color details: ${normalizedAnalysis.colorDetails}.` : '',
-          normalizedAnalysis.geometryDetails ? `Geometry details: ${normalizedAnalysis.geometryDetails}.` : '',
-          normalizedAnalysis.sizeScale ? `Size scale: ${normalizedAnalysis.sizeScale}.` : '',
-          normalizedAnalysis.wearingPosition ? `Wearing position: ${normalizedAnalysis.wearingPosition}.` : '',
-          ...(Array.isArray(normalizedAnalysis.matchingRules)
-            ? normalizedAnalysis.matchingRules.map((rule, index) => `Matching rule ${index + 1}: ${rule}.`)
-            : []),
-        ].filter(Boolean)
-      : []),
-    '',
-    'FINAL DECISION RULE:',
-    '',
-    'If realism conflicts with product identity, preserve product identity.',
-    'If scene blending conflicts with product structure, preserve product structure.',
-    'If any ambiguity remains, keep the result closer to Image 2 and never invent extra structure.',
-    ...(Array.isArray(input.retryGuidance) && input.retryGuidance.length
-      ? [
-          '',
-          'RETRY CORRECTION LOCK:',
-          ...input.retryGuidance.map((item) => `- ${item}`),
-        ]
-      : []),
-  ].join('\n')
+    'REPLACEMENT EXECUTION ORDER:',
+    '- First erase the entire original product from Image 1, including its silhouette, connector, closure, dangling parts, shadows, highlights, and reflections.',
+    '- Then place the product from Image 2 into the same physical anchor position.',
+    '- Do not use Image 1 to infer, complete, or reconstruct any product geometry.',
+    '- Do not blend the original product with the replacement product, even when both products are in the same category.',
+  ]
+  if (strategy === 'erase_first') {
+    executionRules.push(
+      '- This is an erase-first replacement: the old product must be fully removed before the new product is rendered.',
+      '- Preserve only the ear, skin, hair, clothing, background, and non-product lighting from Image 1.',
+    )
+  }
+  if (strategy === 'anchor_closeup') {
+    executionRules.push(
+      '- This is a local anchor replacement. Modify only the smallest area containing the original product and its contact point.',
+      '- Keep every pixel outside the product replacement area visually identical to Image 1.',
+      '- Render exactly one product instance from Image 2 at the anchor. Do not retain a second hoop, duplicate, or overlapping original product.',
+    )
+  }
+  executionRules.push(...buildLivePhotoCategorySpecificPromptRules(_input.product, 'replacement'))
+  if (_input.retryGuidance?.length) {
+    executionRules.push('', 'RETRY CORRECTION RULES:', ..._input.retryGuidance.map((item) => `- ${item}`))
+  }
+  return [basePrompt, '', ...executionRules].join('\n')
 }
 
-function buildLivePhotoCategorySpecificPromptRules(product: LivePhotoProductSnapshot, context: 'replacement' | 'video' = 'replacement') {
+export function buildLivePhotoCategorySpecificPromptRules(product: LivePhotoProductSnapshot, context: 'replacement' | 'video' = 'replacement') {
   const analysis = normalizeLivePhotoProductAnalysis(product.productAnalysis)
   const isEarring = isEarringLikeLivePhotoProduct(product)
+  const analysisText = [
+    analysis?.summary,
+    analysis?.coreSubject,
+    analysis?.connectionStructure,
+    analysis?.geometryDetails,
+    analysis?.rawDescription,
+    ...(Array.isArray(analysis?.matchingRules) ? analysis.matchingRules : []),
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join('\n')
+  const isHoop = /\b(?:huggie|hoop)\b/.test(analysisText)
+  const hasSnapClosure = /\b(?:snap closure|snaps into|u-catch|curved post|hinged closure)\b/.test(analysisText)
+  const hasBowMotif = /\bbow\b/.test(analysisText)
+  const hasStarMotif = /\b(?:star|five-pointed|five point)\b/.test(analysisText)
   const isWearableContext = Boolean(
     analysis?.wearingPosition ||
       String(analysis?.category || '').trim().toLowerCase() === 'jewelry' ||
@@ -2395,39 +2212,15 @@ function buildLivePhotoCategorySpecificPromptRules(product: LivePhotoProductSnap
     context === 'video'
       ? '- Opening or closing state is part of product identity and must remain exactly the same as in the locked still.'
       : '- Opening or closing state is part of product identity and must match Image 2 exactly.',
-    '- Treat a huggie earring as a huggie earring specifically. Do NOT reinterpret it as a generic hoop, ring, cuff, or abstract jewelry loop.',
-    '- A closed hoop earring must remain a closed hoop earring.',
-    context === 'video'
-      ? '- Keep the hoop outline and curvature exactly as shown in the locked still. Do NOT ovalize, flatten, stretch, widen, or re-arc the hoop body.'
-      : '- Keep the hoop outline and curvature exactly as shown in Image 2. Do NOT ovalize, flatten, stretch, widen, or re-arc the hoop body.',
-    '- Do NOT convert a closed hoop into an open ear cuff, ring, open band, or partial arc.',
     context === 'video'
       ? '- Preserve hinge, clasp, latch, post, connector spacing, and closure logic exactly when visible in the locked still.'
       : '- Preserve hinge, clasp, latch, post, connector spacing, and closure logic exactly when visible in Image 2.',
-    '- Do NOT replace a curved huggie snap-closure post with a straight post, rigid pin, or simplified straight attachment bar.',
     context === 'video'
-      ? '- If the locked still shows a snap closure, the final result must keep the same snap-closure logic and the same curved closure path.'
-      : '- If Image 2 shows a snap closure, the final result must keep the same snap-closure logic and the same curved closure path.',
+      ? '- Preserve the exact front ornament motif and attachment visible in the locked still. Do not substitute a different motif.'
+      : '- Preserve the exact front ornament motif and attachment from Image 2. Do not substitute a different motif.',
     context === 'video'
-      ? '- If the locked still shows a continuous closed loop, the final result must also show a continuous closed loop unless the same area remains occluded.'
-      : '- If Image 2 shows a continuous closed loop, the final result must also show a continuous closed loop unless the same area is occluded in Image 1.',
-    '- Keep the hoop body as one single hoop body only. Do NOT split it into a double band, twin rail, layered ring wall, or parallel outer-inner hoop look.',
-    '- Do NOT flatten the hoop band, compress the hoop thickness, or simplify the circular band into a flat strip or oval loop.',
-    context === 'video'
-      ? '- Preserve the exact front ornament attachment visible in the locked still. If the locked still shows a front-fixed bow mounted on the front of the hoop, keep that same front-fixed bow placement and attachment logic.'
-      : '- Preserve the exact front ornament attachment from Image 2. If Image 2 shows a front-fixed bow mounted on the front of the hoop, keep that same front-fixed bow placement and attachment logic.',
-    context === 'video'
-      ? '- Keep the exact visible stone count and dangling crystal count from the locked still. Do NOT remove, merge, or simplify any bow tail crystal.'
-      : '- Keep the exact stone count and dangling crystal count from Image 2. Do NOT remove, merge, or simplify any bow tail crystal.',
-    context === 'video'
-      ? '- If the locked still shows three baguette tail stones below the bow, the final result must also show exactly three baguette tail stones below the bow.'
-      : '- If the selected Image 2 view shows three baguette tail stones below the bow, the final result must also show exactly three baguette tail stones below the bow.',
-    context === 'video'
-      ? '- Preserve the bow front shape and stone articulation exactly. Keep the visible faceted stone geometry, transparent crystal look, and front-facing placement from the locked still.'
-      : '- Preserve the bow front shape and stone articulation exactly. Keep the visible faceted stone geometry, transparent crystal look, and front-facing placement from Image 2.',
-    context === 'video'
-      ? '- Keep the exact ear attachment relation and hanging direction visible in the locked still.'
-      : '- Keep the exact ear attachment relation and hanging direction from the selected Image 2 view.',
+      ? '- Keep the exact visible stone, charm, and dangling-element count from the locked still.'
+      : '- Keep the exact stone, charm, and dangling-element count from Image 2.',
     context === 'video'
       ? '- Do NOT preserve any open ring, open cuff, split arc, or incomplete loop trace not present in the locked still.'
       : '- Do NOT preserve any open ring, open cuff, split arc, or incomplete loop trace from Image 1.',
@@ -2435,23 +2228,61 @@ function buildLivePhotoCategorySpecificPromptRules(product: LivePhotoProductSnap
       ? '- Keep the final earring at the exact real-world size already visible in the locked still. Do NOT enlarge it or reinterpret its wearable scale.'
       : '- Keep the final earring at the exact real-world size that matches the selected earring from Image 2 and Product DNA. Do NOT inherit the replaced earring size from Image 1 when it conflicts.',
   )
+  if (analysis?.coreSubject) rules.push(`- Product identity from Product DNA: ${analysis.coreSubject}`)
+  if (analysis?.connectionStructure) rules.push(`- Product connection structure from Product DNA: ${analysis.connectionStructure}`)
+  if (analysis?.geometryDetails) rules.push(`- Product geometry from Product DNA: ${analysis.geometryDetails}`)
+  if (isHoop) {
+    rules.push(
+      '- Treat the selected hoop or huggie as a hoop earring specifically. Do NOT reinterpret it as a ring, cuff, or abstract jewelry loop.',
+      '- Keep the hoop outline and curvature exactly as defined by the authoritative product source.',
+      '- Keep the hoop body count and band structure exactly as defined by the authoritative product source.',
+    )
+  }
+  if (hasSnapClosure) {
+    rules.push('- Preserve the exact hinged snap-closure path, curved post, and catch geometry from the authoritative product source.')
+  }
+  if (hasStarMotif) {
+    rules.push('- Preserve the exact star motif and point count. Do NOT convert it into a bow, butterfly, heart, flower, or generic gemstone.')
+  }
+  if (hasBowMotif) {
+    rules.push('- Preserve the exact bow motif, loop shape, tail structure, and stone articulation. Do NOT substitute a star, butterfly, heart, or flower.')
+  }
   return rules
 }
 
-function buildReferenceReplacementNegativePrompt(input?: {
+export function buildReferenceReplacementNegativePrompt(input?: {
   product?: LivePhotoProductSnapshot
   strategy?: LivePhotoReplacementStrategy
 }) {
+  const productNegatives: string[] = []
   const negatives = [
+      'different pose',
+      'different head angle',
+      'different ear position',
+      'different hair shape',
+      'different skin area',
+      'different framing',
+      'different crop',
+      'different background',
       'different person',
       'different face',
-      'different pose',
-      'different framing',
-      'different background',
+      'newly staged scene',
+      'newly photographed scene',
       'different lighting direction',
-      'extra product',
+      'oversized product',
+      'enlarged product',
+      'wrong product scale',
+      'product larger than original anchor',
+      'product larger than original footprint',
+      'larger than the original visible product',
+      'original product retained',
+      'leftover original product',
+      'original silhouette remains',
+      'mixed product features',
+      'source contamination',
       'wrong product',
       'product redesign',
+      'extra product',
       'split panel',
       'collage',
       'deformed hand',
@@ -2464,14 +2295,6 @@ function buildReferenceReplacementNegativePrompt(input?: {
       'smeared edges',
       'out of focus jewelry',
       'foggy details',
-      'oversized product',
-      'enlarged product',
-      'wrong product scale',
-      'original product retained',
-      'leftover original product',
-      'original silhouette remains',
-      'mixed product features',
-      'source contamination',
       'same-category lookalike',
       'wrong connector layout',
       'wrong attachment structure',
@@ -2506,9 +2329,6 @@ function buildReferenceReplacementNegativePrompt(input?: {
       'human interaction',
       'touching product',
       'holding product',
-      'product larger than original anchor',
-      'product larger than original footprint',
-      'larger than the original visible product',
     ]
   const strategy = input?.strategy || 'default'
   if (strategy === 'erase_first' || strategy === 'anchor_closeup') {
@@ -2522,21 +2342,40 @@ function buildReferenceReplacementNegativePrompt(input?: {
     )
   }
   if (input?.product && isEarringLikeLivePhotoProduct(input.product)) {
-    negatives.push(
-      'double hoop',
-      'double band earring',
-      'missing hinge',
-      'missing clasp',
-      'wrong dangling stone count',
-      'wrong bow shape',
-      'open hoop when source is closed',
-      'oval hoop',
-      'flattened hoop band',
-      'straight post instead of curved snap closure',
-      'simplified attachment bar',
-    )
+    const analysis = normalizeLivePhotoProductAnalysis(input.product.productAnalysis)
+    const analysisText = [
+      analysis?.summary,
+      analysis?.coreSubject,
+      analysis?.connectionStructure,
+      analysis?.geometryDetails,
+      analysis?.rawDescription,
+      ...(Array.isArray(analysis?.matchingRules) ? analysis.matchingRules : []),
+    ]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean)
+      .join('\n')
+    const hasBowMotif = /\bbow\b/.test(analysisText)
+    const hasStarMotif = /\b(?:star|five-pointed|five point)\b/.test(analysisText)
+    productNegatives.push('wrong earring motif', 'wrong ornament attachment', 'wrong charm or stone count')
+    if (hasBowMotif) productNegatives.push('wrong bow shape', 'star ornament instead of bow ornament')
+    if (hasStarMotif) productNegatives.push('wrong star point count', 'bow ornament instead of star ornament')
   }
-  return buildStoryboardImageNegativePrompt(negatives.join(', '))
+  const priorityNegatives = [
+    'original product retained',
+    'leftover original product',
+    ...productNegatives,
+    'different pose',
+    'different head angle',
+    'different ear position',
+    'different framing',
+    'different crop',
+    'different background',
+    'newly photographed scene',
+    'oversized product',
+    'wrong product scale',
+  ]
+  const remainingNegatives = negatives.filter((item) => !priorityNegatives.includes(item))
+  return buildStoryboardImageNegativePrompt([...priorityNegatives, ...remainingNegatives].join(', '))
 }
 
 function buildLivePhotoProviderRolePrefix(input: {
@@ -2547,44 +2386,27 @@ function buildLivePhotoProviderRolePrefix(input: {
   if (input.mode === 'video_reference_lock') {
     return [
       'PROVIDER INPUT ROLE LOCK:',
-      'The uploaded image array is ordered and role-bound.',
-      'The uploaded image array contains exactly 2 images.',
-      'Array item 1 is the locked still scene anchor image.',
-      'Array item 2 is the authoritative product reference image.',
-      'Array item 1 defines the locked scene, crop, pose, and product anchor.',
-      'Array item 2 defines the only valid product identity source.',
+      'You will receive exactly 2 uploaded images.',
+      'The first uploaded image is Image 1, the locked still scene anchor image.',
+      'The second uploaded image is Image 2, the authoritative product reference image.',
+      'Image 1 defines the locked scene, crop, pose, and product anchor.',
+      'Image 2 defines the only valid product identity source.',
       'Never swap these two image roles.',
       'Never average these two images.',
-      'Never treat array item 2 as a scene, pose, crop, or composition reference.',
-      'Never treat array item 1 as a product redesign reference.',
-      'If array item 2 is a multi-angle product board, use it only as a product identity source.',
-      'Do not merge multiple thumbnails from array item 2 into a reconstructed new product view.',
-      `Array item 1 path: ${input.referenceImagePath}.`,
-      `Array item 2 path: ${input.productReferenceImagePath}.`,
+      'Never treat Image 2 as a scene, pose, crop, or composition reference.',
+      'Never treat Image 1 as a product redesign reference.',
+      'If Image 2 is a multi-angle product board, use it only as a product identity source.',
+      'Do not merge multiple thumbnails from Image 2 into a reconstructed new product view.',
+      `Image 1 path: ${input.referenceImagePath}.`,
+      `Image 2 path: ${input.productReferenceImagePath}.`,
     ].join('\n')
   }
-  const uploadFileNames = buildLivePhotoUploadFileNames()
   return [
     'PROVIDER INPUT ROLE LOCK:',
-    'The uploaded image array is ordered and role-bound.',
-    'The uploaded image array contains exactly 2 images.',
-    'Array item 1 is the base scene image.',
-    'Array item 2 is the authoritative product reference image.',
-    'Array item 1 must be treated as Image 1 only.',
-    'Array item 2 must be treated as Image 2 only.',
-    `Uploaded file name for array item 1: ${uploadFileNames[0]}.`,
-    `Uploaded file name for array item 2: ${uploadFileNames[1]}.`,
+    'You will receive exactly 2 uploaded images.',
+    'The first uploaded image is Image 1, the base scene reference.',
+    'The second uploaded image is Image 2, the product reference.',
     'Never swap these two images.',
-    'Never average these two images.',
-    'Never treat both images as equal product references.',
-    'Array item 2 may be a single multi-angle product board image.',
-    'If array item 2 is a multi-angle board, use it only as a product identity source.',
-    'Do not merge angles from array item 2.',
-    'Do not combine multiple thumbnails into a reconstructed product view.',
-    'Do not use array item 2 to introduce scene props, hands, pose, or composition.',
-    'Do not treat array item 2 as a scene or composition reference.',
-    `Array item 1 path: ${input.referenceImagePath}.`,
-    `Array item 2 path: ${input.productReferenceImagePath}.`,
   ].join('\n')
 }
 
@@ -2600,52 +2422,13 @@ function buildLivePhotoRetryEscalationGuidance(item: LivePhotoItem, product?: Li
   const retryCount = Math.max(0, Number(item.autoFlowStatus?.retryCount ?? 0) || 0)
   if (retryCount <= 0) return [] as string[]
   const guidance = new Set<string>()
-  guidance.add('Retry escalation is active. Use a stricter replacement strategy than the previous attempt.')
-  guidance.add('This is a product substitution task only. Do not generate a new product interpretation.')
-  guidance.add('Completely remove the original product identity from Image 1 before inserting Image 2.')
-  guidance.add('Match the exact same product instance from Image 2. Do not output a same-category lookalike, adjacent variant, or simplified substitute.')
-  guidance.add('The same single product instance with no replacement and no redesign.')
-  guidance.add('Keep all stable connection points, assembly relations, opening or closing structures, and component count unchanged.')
-  guidance.add('Keep silhouette, thickness, length, proportions, curvature, component count, and relative placement.')
-  guidance.add('Keep the same realistic scale relation and display proportion shown across the references.')
-  guidance.add('same single product instance, no redesign, no extra parts, no missing parts.')
-  if (retryCount >= 1) {
-    guidance.add('Force exact source separation: Image 1 contributes scene only, Image 2 contributes product only.')
-    guidance.add('Treat any leftover Image 1 product feature as an incorrect result.')
-    guidance.add('Enter zero-tolerance replacement mode: preserve Image 2 product structure exactly, even if scene blending becomes less smooth.')
-    guidance.add('Do not preserve any silhouette, edge rhythm, connector layout, color grouping, or material cue from the original product in Image 1.')
-    guidance.add('If uncertain, reduce detail instead of introducing any structural deviation from Image 2.')
-    guidance.add('Remove all original-product contamination from Image 1. Do not preserve the original silhouette, edge rhythm, or visible design language.')
-    guidance.add('Correct the product material and color response to match Image 2 exactly. Do not keep the original product color family, finish, or reflection style.')
-    guidance.add('Correct the attachment and connector layout to match Image 2 exactly. Keep hinges, clasps, links, charm joints, and mounting logic identical to Image 2.')
-    guidance.add('Keep the replacement product at the correct selected-product real-world size. Do not let the replaced Image 1 product footprint override it.')
-    guidance.add('Restore all missing structural components from Image 2 exactly, including attachments, edges, connectors, clasps, stones, and dangling parts.')
-    guidance.add('Undo all geometry drift. Keep edges, angles, spacing, thickness, and proportions identical to Image 2.')
-    guidance.add('Visual review failed on product identity. Replace the visible product with the exact same product instance from Image 2 only.')
-    guidance.add('Visual review failed on source contamination. Remove every visible design trace of the original Image 1 product before placing Image 2.')
-    guidance.add('Visual review failed on material and color. Match Image 2 metal tone, finish, stone color, and reflection response exactly.')
-    guidance.add('Visual review failed on attachment structure. Match Image 2 hinges, clasps, links, mounting points, and connector spacing exactly.')
-    guidance.add('Visual review failed on scale. Match the selected product real-world size and preserve the correct body-to-product scale relationship for that product.')
-    guidance.add('If the product looks too large on the model, shrink it back to the selected product wearable ratio before changing anything else.')
-    guidance.add('For earrings, keep the selected product proportion relative to ear-lobe height, ear-rim span, and piercing area. Do not size it by the replaced earring from Image 1.')
-    guidance.add('Remove the original product identity from Image 1 completely. The final visible product must come only from Image 2.')
-    guidance.add('Use the exact product identity from Image 2 only. Do not output a similar item, substitute design, or same-category variant.')
-  }
-  if (retryCount >= 2) {
-    guidance.add('Ultimate replacement lock: output is incorrect unless the final visible product is a direct visual clone of Image 2 at the Image 1 anchor position while preserving the selected product real-world size.')
-  }
-  if (product && isEarringLikeLivePhotoProduct(product)) {
-    guidance.add('Closed hoop identity lock: if Image 2 shows a closed hoop, the final result must remain a closed hoop with the same closure logic.')
-    guidance.add('Preserve huggie identity exactly when present in Image 2. Do not simplify it into a generic hoop, ring, cuff, or abstract loop.')
-    guidance.add('Do not convert the earring into an open cuff, open band, split arc, broken hoop, or ring-like substitute.')
-    guidance.add('Keep hinge, clasp, latch, post, connector spacing, and hanging direction identical to Image 2 when visible.')
-    guidance.add('If Image 2 shows a snap closure, preserve the exact snap-closure geometry and curved closure path.')
-    guidance.add('Do not add a second band, double rail, extra loop, or any extra dangling part.')
-    guidance.add('Do not ovalize or flatten the hoop body. Keep the same circular hoop curvature and band thickness from Image 2.')
-    guidance.add('Do not replace the curved snap-closure post with a straight post, straight pin, or simplified rigid bar.')
-    guidance.add('Keep the front ornament attachment identical to Image 2. If the ornament is a front-fixed bow mounted on the front of the hoop, preserve that exact front-mounted attachment.')
-    guidance.add('Keep the exact bow face, faceted stone geometry, transparent crystal look, and dangling stone count from Image 2.')
-  }
+  guidance.add('Retry escalation is active. Cleanly replace the product instead of reinterpreting it.')
+  guidance.add('Completely remove the original product from Image 1 before placing the product from Image 2.')
+  guidance.add('Edit only the original product area and leave all non-product content from Image 1 unchanged.')
+  guidance.add('Keep the exact same crop, pose, ear position, hair, skin, and background from Image 1.')
+  guidance.add('Use only the product from Image 2 and do not blend any product feature from Image 1.')
+  guidance.add('Keep everything except the product unchanged.')
+  if (retryCount >= 2) guidance.add('Make the replacement cleaner and more exact than the previous attempt.')
   return Array.from(guidance)
 }
 
@@ -2659,177 +2442,63 @@ function buildLivePhotoRetryGuidance(item: LivePhotoItem, product?: LivePhotoPro
     return Array.from(guidance)
   }
   guidance.add('Correct the previous failure exactly. Do not repeat the prior replacement mistake.')
-  if (reason.includes('[validation_category:original_product_retained]')) {
-    guidance.add('Delete the original product from Image 1 completely before placing Image 2. No visible product feature from Image 1 may remain.')
-  }
-  if (reason.includes('[validation_category:wrong_product_identity]')) {
-    guidance.add('Match the exact same product instance from Image 2. Do not output a same-category lookalike, adjacent variant, or simplified substitute.')
-  }
-  if (reason.includes('[validation_category:source_contamination]')) {
-    guidance.add('Remove all original-product contamination from Image 1. Do not preserve the original silhouette, edge rhythm, or visible design language.')
-  }
-  if (reason.includes('[validation_category:material_color_drift]')) {
-    guidance.add('Correct the product material and color response to match Image 2 exactly. Do not keep the original product color family, finish, or reflection style.')
-  }
-  if (reason.includes('[validation_category:attachment_drift]')) {
-    guidance.add('Correct the attachment and connector layout to match Image 2 exactly. Keep hinges, clasps, links, charm joints, and mounting logic identical to Image 2.')
-  }
-  if (reason.includes('[validation_category:oversized_product]')) {
-    guidance.add('Correct the replacement product back to the selected product real-world size. Do not let the replaced Image 1 product size remain in control.')
-    guidance.add('If the product appears oversized on the model, reduce only the product scale until the local body-anchor ratio matches the selected product from Image 2 and Product DNA.')
-    guidance.add('For earrings, match ear-lobe coverage and piercing-area proportion to the selected product. Do not keep the larger visible dominance from Image 1.')
-  }
-  if (reason.includes('[validation_category:missing_structure]')) {
-    guidance.add('Restore all missing structural components from Image 2 exactly, including attachments, edges, connectors, clasps, stones, and dangling parts.')
-  }
-  if (reason.includes('[validation_category:source_contamination]') && reason.includes('[validation_category:missing_structure]')) {
-    guidance.add('Combined failure lock: first erase the entire original Image 1 product silhouette and attachment trace, then place the full intact Image 2 product structure back at the same anchor.')
-    guidance.add('Do not blend replacement into the old shape. Replace the whole object as one complete unit from Image 2.')
-    guidance.add('The final visible product must contain every major structural part from Image 2 and zero structural residue from Image 1.')
-    guidance.add('If the original anchor in Image 1 is incompatible with the full Image 2 structure, preserve the full Image 2 structure and adjust local integration or occlusion before changing size.')
-  }
-  if (reason.includes('[validation_category:geometry_drift]')) {
-    guidance.add('Undo all geometry drift. Keep edges, angles, spacing, thickness, and proportions identical to Image 2.')
-  }
-  if (reason.includes('[validation_category:scene_drift]')) {
-    guidance.add('Restore the Image 1 scene exactly. Do not alter pose, fingers, framing, background, lighting direction, or contact geometry.')
-    guidance.add('If Image 1 is a flat lay, tabletop, product-only, or no-person reference, remove any introduced hands, fingers, arms, or human interaction completely.')
-  }
-  if (reason.includes('visual_check_failed:product_identity') || reason.includes('failed visual checks: product_identity') || reason.includes('product_identity')) {
-    guidance.add('Visual review failed on product identity. Replace the visible product with the exact same product instance from Image 2 only.')
-  }
-  if (reason.includes('visual_check_missing:product_identity')) {
-    guidance.add('Visual review could not confirm product identity. Make Image 2 product identity unmistakable and reject any ambiguous or blended result.')
-  }
-  if (reason.includes('visual_check_failed:source_contamination') || reason.includes('source_contamination')) {
-    guidance.add('Visual review failed on source contamination. Remove every visible design trace of the original Image 1 product before placing Image 2.')
-  }
-  if (reason.includes('visual_check_missing:source_contamination')) {
-    guidance.add('Visual review could not clear source contamination. Remove all original-product silhouette and design-language traces from Image 1.')
-  }
-  if (reason.includes('visual_check_failed:material_color') || reason.includes('material_color')) {
-    guidance.add('Visual review failed on material and color. Match Image 2 material response, finish, and color family exactly.')
-  }
-  if (reason.includes('visual_check_missing:material_color')) {
-    guidance.add('Visual review could not confirm material and color. Make Image 2 finish, tone, and material response explicit and exact.')
-  }
-  if (reason.includes('visual_check_failed:attachment_structure') || reason.includes('attachment_structure')) {
-    guidance.add('Visual review failed on attachment structure. Match Image 2 hinges, clasps, links, mounting points, and connector spacing exactly.')
-    guidance.add('Do not turn the hoop into a double-band or layered ring body. Keep the exact single-hoop body structure from Image 2.')
-    guidance.add('Do not drop any bow tail crystal. Keep the exact same dangling crystal count shown in Image 2.')
-    guidance.add('Do not replace the curved snap-closure post with a straight post or straight pin. Keep the exact closure geometry from Image 2.')
-    guidance.add('Restore the exact front-fixed bow attachment from Image 2. Keep the bow mounted on the front of the hoop, not floating, not side-mounted, and not reattached elsewhere.')
-  }
-  if (reason.includes('visual_check_missing:attachment_structure')) {
-    guidance.add('Visual review could not confirm attachment structure. Make hinges, clasps, links, hooks, and connector spacing match Image 2 unambiguously.')
-  }
-  if (reason.includes('visual_check_failed:scale') || reason.includes('failed visual checks: scale') || reason.includes('scale')) {
-    guidance.add('Visual review failed on scale. Restore the replacement product to the selected product real-world size and keep the correct body-to-product size relationship.')
-    guidance.add('If the result still looks oversized on the model, shrink the product to the correct ear-lobe, ear-rim, or body-anchor proportion without moving the anchor point.')
-  }
-  if (reason.includes('visual_check_missing:scale')) {
-    guidance.add('Visual review could not confirm scale. Match the replacement product to the selected product real-world proportion from Image 2 and Product DNA.')
-    guidance.add('Make the body-to-product ratio unmistakable. For earrings, keep a believable ear-lobe coverage ratio for the selected product instead of following the old earring size from Image 1.')
-  }
-  if (reason.includes('visual_check_failed:scene_preservation') || reason.includes('scene_preservation')) {
-    guidance.add('Visual review failed on scene preservation. Keep Image 1 pose, framing, fingers, lighting, and background unchanged.')
-    guidance.add('If Image 1 is a flat lay, tabletop, product-only, or no-person reference, keep the final image completely free of hands, fingers, arms, and human interaction.')
-  }
-  if (reason.includes('visual_check_missing:scene_preservation')) {
-    guidance.add('Visual review could not confirm scene preservation. Keep Image 1 pose, framing, fingers, lighting, and background unchanged and explicit.')
-    guidance.add('If Image 1 is a flat lay, tabletop, product-only, or no-person reference, make the no-human scene explicit and remove any hand-like or body-part residue.')
-  }
-  if (reason.includes('original product') || reason.includes('replacement incomplete')) {
-    guidance.add('Remove the original product identity from Image 1 completely. The final visible product must come only from Image 2.')
-  }
-  if (reason.includes('oversized') || reason.includes('too large') || reason.includes('larger than')) {
-    guidance.add('Correct product scale back to the selected product real-world size. Do not enlarge it and do not overcorrect by shrinking it.')
-  }
-  if (reason.includes('wrong product') || reason.includes('different product') || reason.includes('mismatch')) {
-    guidance.add('Use the exact product identity from Image 2 only. Do not output a similar item, substitute design, or same-category variant.')
-  }
-  if (reason.includes('missing clasp') || reason.includes('missing part') || reason.includes('missing exact phrases')) {
-    guidance.add('Preserve every key structural part from Image 2. Do not drop clasps, charms, links, stones, edges, or attachment components.')
-  }
-  if (reason.includes('two baguette stones') || reason.includes('three seen in the reference')) {
-    guidance.add('Correct the bow tail crystal count to exactly match Image 2. If Image 2 shows three tail stones, output exactly three tail stones.')
-  }
-  if (reason.includes('double band') || reason.includes('single solid band')) {
-    guidance.add('Correct the hoop body to match Image 2 exactly. Keep one single hoop body and never render a double-band or layered hoop.')
-  }
-  if (reason.includes('opening or closing structures')) {
-    guidance.add('Keep the exact opening or closing state from Image 2. Do not turn a closed structure into an open one and do not remove the closure mechanism.')
-  }
-  if (reason.includes('wrong geometry') || reason.includes('wrong proportion') || reason.includes('structural deviation')) {
-    guidance.add('Correct the product geometry and proportions to match Image 2 exactly. No reshaping, rounding, stretching, or beautifying.')
-  }
-  if (reason.includes('oval hoop') || reason.includes('oval') || reason.includes('flattened')) {
-    guidance.add('Correct the hoop outline to match Image 2 exactly. Do not ovalize, flatten, widen, or compress the circular hoop body.')
-  }
-  if (reason.includes('straight post') || reason.includes('straight attachment') || reason.includes('straight bar')) {
-    guidance.add('Correct the attachment geometry to match Image 2 exactly. Restore the curved huggie snap-closure post and remove any straight-post substitute.')
-  }
   if (
-    reason.includes('huggie') ||
-    reason.includes('snap') ||
-    reason.includes('closure') ||
-    reason.includes('fixed') ||
-    reason.includes('front')
+    reason.includes('original product') ||
+    reason.includes('replacement incomplete') ||
+    reason.includes('source_contamination')
   ) {
-    guidance.add('Restore huggie snap-closure identity exactly as shown in Image 2. Keep the closed hoop, curved snap closure, and front-fixed attachment structure unchanged.')
+    guidance.add('Remove every visible trace of the original product from Image 1 before placing the product from Image 2.')
   }
-  if (
-    reason.includes('bow') ||
-    reason.includes('stone') ||
-    reason.includes('facets') ||
-    reason.includes('faceted') ||
-    reason.includes('transparent')
-  ) {
-    guidance.add('Restore the exact bow-and-stone structure from Image 2. Keep the front-facing bow, faceted transparent stones, and exact dangling crystal arrangement unchanged.')
+  if (reason.includes('wrong product') || reason.includes('different product') || reason.includes('mismatch') || reason.includes('product_identity')) {
+    guidance.add('Match the exact product from Image 2 and do not output a similar product.')
   }
-  if (
-    reason.includes('silhouette') ||
-    reason.includes('original contour') ||
-    reason.includes('leftover contour') ||
-    reason.includes('design language')
-  ) {
-    guidance.add('Do not preserve any contour or silhouette cue from the original product in Image 1. Keep only the Image 2 shape language.')
+  if (reason.includes('scene_preservation') || reason.includes('scene drift')) {
+    guidance.add('Keep Image 1 pose, framing, lighting, background, and visible body parts unchanged.')
+    guidance.add('Keep the exact same head angle, ear position, hair shape, skin area, and crop from Image 1.')
+    guidance.add('Do not redraw or replace non-product regions from Image 1.')
   }
-  if (
-    reason.includes('wrong material') ||
-    reason.includes('wrong color') ||
-    reason.includes('color drift') ||
-    reason.includes('material drift') ||
-    reason.includes('finish mismatch')
-  ) {
-    guidance.add('Match Image 2 material and color exactly. Correct metal finish, coating, tone, gem color, and reflection behavior.')
+  if (reason.includes('scale') || reason.includes('oversized') || reason.includes('too large') || reason.includes('larger than')) {
+    guidance.add('Keep the same anchor in Image 1 but correct the product scale to look natural for the selected product.')
   }
-  if (
-    reason.includes('wrong connector') ||
-    reason.includes('wrong attachment') ||
-    reason.includes('connector drift') ||
-    reason.includes('attachment drift') ||
-    reason.includes('visual_check_failed:attachment_structure')
-  ) {
-    guidance.add('Match the exact connector and attachment logic from Image 2. Do not keep the original clasp, hinge, post, hook, or joint layout.')
+  if (reason.includes('missing part') || reason.includes('missing structure') || reason.includes('attachment')) {
+    guidance.add('Keep the product from Image 2 complete and do not drop visible product parts.')
   }
-  if (reason.includes('visual failures')) {
-    guidance.add('Prioritize a clean visual replacement result: exact product identity from Image 2, unchanged scene from Image 1, no leftover original object.')
-  }
-  const analysis = normalizeLivePhotoProductAnalysis(item.productSnapshot?.productAnalysis)
-  if (analysis?.coreSubject) {
-    guidance.add(`Keep the exact core product identity from Image 2: ${analysis.coreSubject}.`)
-  }
-  if (analysis?.connectionStructure) {
-    guidance.add(`Keep the exact connection and attachment structure from Image 2: ${analysis.connectionStructure}.`)
-  }
-  if (analysis?.geometryDetails) {
-    guidance.add(`Keep the exact geometry from Image 2: ${analysis.geometryDetails}.`)
-  }
-  if (analysis?.sizeScale) {
-    guidance.add(`Keep the selected product real-world scale from Image 2 and Product DNA: ${analysis.sizeScale}.`)
+  if (reason.includes('product_structure_consistency') || reason.includes('structure drift')) {
+    guidance.add('Match the exact single-product silhouette, hoop count, closure path, connector layout, and ornament attachment from Image 2.')
+    guidance.add('Output exactly one replacement product at the original anchor. Do not combine it with any original hoop or product contour from Image 1.')
   }
   return Array.from(guidance)
+}
+
+function resolveLivePhotoProductReferenceVariant(item: LivePhotoItem): LivePhotoProductReferenceVariant {
+  const reason = String(item.autoFlowStatus?.lastError || item.error || '').trim().toLowerCase()
+  return reason.includes('product_structure_consistency') || reason.includes('structure drift')
+    ? 'structure_retry'
+    : 'primary'
+}
+
+async function bindPreparedLivePhotoReplacementInputs(input: {
+  item: LivePhotoItem
+  product: LivePhotoProductSnapshot
+  referenceImagePath: string
+  outputDir: string
+}) {
+  const sourceProductPath = resolveAuthoritativeProductReferencePath(input.product)
+  const prepared = await prepareLivePhotoProductReference({
+    sourcePath: sourceProductPath,
+    outputDir: input.outputDir,
+    variant: resolveLivePhotoProductReferenceVariant(input.item),
+  })
+  const payload = bindLivePhotoReplacementInputs({
+    referenceImagePath: input.referenceImagePath,
+    product: {
+      ...input.product,
+      authoritativeProductReferencePath: prepared.path,
+      imagePaths: [prepared.path],
+      coverImagePath: prepared.path,
+    },
+  })
+  return { ...payload, prepared }
 }
 
 function inferLivePhotoValidationCategories(input: {
@@ -2982,17 +2651,15 @@ async function generateReferenceReplacementStill(input: {
   const stillDir = join(root, 'generated-still')
   await ensureDir(stillDir)
 
-  const payload = resolveLivePhotoReferenceImagePayload({
-    referenceImagePath: input.referenceImagePath,
+  const payload = await bindPreparedLivePhotoReplacementInputs({
+    item: input.item,
     product: input.product,
+    referenceImagePath: input.referenceImagePath,
+    outputDir: join(root, 'product-reference'),
   })
   const replacementStrategy = input.strategyOverride || inferLivePhotoReplacementStrategy({ item: input.item, product: input.product })
   const renderConfig = resolveLivePhotoReplacementRenderConfig(replacementStrategy, input.product)
   const retryGuidance = buildLivePhotoRetryGuidance(input.item, input.product)
-  const providerRolePrefix = buildLivePhotoProviderRolePrefix({
-    referenceImagePath: payload.referenceImagePath,
-    productReferenceImagePath: payload.productReferenceImagePaths[0] || '',
-  })
   const negativePrompt = buildReferenceReplacementNegativePrompt({
     product: input.product,
     strategy: replacementStrategy,
@@ -3003,13 +2670,14 @@ async function generateReferenceReplacementStill(input: {
       : livePhotoDeps.generateGptShotFrameImage
   const stillPath = await imageGenerator({
     credentials,
-    prompt: `${providerRolePrefix}\n\n${buildReferenceReplacementPrompt({
+    prompt: buildReferenceReplacementPrompt({
       product: input.product,
       productReferenceImagePaths: payload.productReferenceImagePaths,
       referenceImagePath: payload.referenceImagePath,
       retryGuidance,
       strategy: replacementStrategy,
-    })}`,
+      prompt: input.item.imagePromptPreview?.prompt,
+    }),
     negativePrompt,
     imagePaths: payload.imagePaths,
     uploadFileNames: buildLivePhotoUploadFileNames(),
@@ -3038,33 +2706,33 @@ async function submitReferenceReplacementStillTask(input: {
   const root = livePhotoRoot(input.item.id)
   const stillDir = join(root, 'generated-still')
   await ensureDir(stillDir)
-  const payload = resolveLivePhotoReferenceImagePayload({
-    referenceImagePath: input.referenceImagePath,
+  const payload = await bindPreparedLivePhotoReplacementInputs({
+    item: input.item,
     product: input.product,
+    referenceImagePath: input.referenceImagePath,
+    outputDir: join(root, 'product-reference'),
   })
   const replacementStrategy = input.strategyOverride || inferLivePhotoReplacementStrategy({ item: input.item, product: input.product })
   const renderConfig = resolveLivePhotoReplacementRenderConfig(replacementStrategy, input.product)
   const retryGuidance = buildLivePhotoRetryGuidance(input.item, input.product)
-  const providerRolePrefix = buildLivePhotoProviderRolePrefix({
-    referenceImagePath: payload.referenceImagePath,
-    productReferenceImagePath: payload.productReferenceImagePaths[0] || '',
-  })
-  const prompt = `${providerRolePrefix}\n\n${buildReferenceReplacementPrompt({
+  const prompt = buildReferenceReplacementPrompt({
     product: input.product,
     productReferenceImagePaths: payload.productReferenceImagePaths,
     referenceImagePath: payload.referenceImagePath,
     retryGuidance,
     strategy: replacementStrategy,
-  })}`
+    prompt: input.item.imagePromptPreview?.prompt,
+  })
   const negativePrompt = buildReferenceReplacementNegativePrompt({
     product: input.product,
     strategy: replacementStrategy,
   })
   const imagePaths = payload.imagePaths
   const providers = livePhotoImageProviderChain(credentials)
-  for (const provider of providers) {
-    if (provider === 'grsai') {
-      try {
+  const adapters: LivePhotoImageProviderAdapter[] = providers.map((provider) => ({
+    provider,
+    submit: async () => {
+      if (provider === 'grsai') {
         const uploadKeyPrefixes = buildLivePhotoUploadKeyPrefixes()
         const urls = await Promise.all(
           imagePaths.map(async (item, index) =>
@@ -3106,61 +2774,68 @@ async function submitReferenceReplacementStillTask(input: {
             productReferenceImagePaths: payload.productReferenceImagePaths,
           }
         }
-      } catch (error: any) {
-        const reason = String(error?.message || error || '').trim()
-        console.warn('[live-photo] grsai reference replacement failed, falling back', {
-          itemId: input.item.id,
-          provider,
-          reason,
-        })
-        if (!providers.includes('apifox_hub') || providers[providers.length - 1] === 'grsai') {
-          throw error
-        }
-        continue
+        return null
       }
-    }
-    if (provider === 'apifox_hub') {
-      const generated = await generateApifoxImage({
-        credentials: { ...credentials, imageProviderPrimary: 'apifox_hub' },
-        prompt,
-        negativePrompt,
-        imagePaths,
-        uploadFileNames: buildLivePhotoUploadFileNames(),
-        outDir: stillDir,
-        filePrefix: 'reference_replace',
-        capability: 'image_edit',
-      })
-      if (generated.taskId) {
+      if (provider === 'apifox_hub') {
+        const generated = await generateApifoxImage({
+          credentials: { ...credentials, imageProviderPrimary: 'apifox_hub' },
+          prompt,
+          negativePrompt,
+          imagePaths,
+          uploadFileNames: buildLivePhotoUploadFileNames(),
+          outDir: stillDir,
+          filePrefix: 'reference_replace',
+          capability: 'image_edit',
+        })
+        if (generated.taskId) {
+          return {
+            mode: 'remote' as const,
+            taskId: generated.taskId,
+            provider,
+            model: generated.model,
+            baseUrl: generated.baseUrl,
+            endpointStyle: generated.endpointStyle,
+            productReferenceImagePaths: payload.productReferenceImagePaths,
+          }
+        }
         return {
-          mode: 'remote' as const,
-          taskId: generated.taskId,
+          mode: 'direct' as const,
+          stillPath: generated.outputPath,
           provider,
           model: generated.model,
-          baseUrl: generated.baseUrl,
-          endpointStyle: generated.endpointStyle,
           productReferenceImagePaths: payload.productReferenceImagePaths,
         }
       }
+      return null
+    },
+  }))
+  adapters.push({
+    provider: resolveImagePreviewProvider(credentials),
+    submit: async () => {
+      const generated = await generateReferenceReplacementStill({
+        ...input,
+        strategyOverride: replacementStrategy,
+      })
       return {
         mode: 'direct' as const,
-        stillPath: generated.outputPath,
-        provider,
-        model: generated.model,
+        stillPath: generated.stillPath,
+        provider: resolveImagePreviewProvider(credentials),
+        model: resolveImagePreviewModel(credentials),
         productReferenceImagePaths: payload.productReferenceImagePaths,
       }
-    }
-  }
-  const generated = await generateReferenceReplacementStill({
-    ...input,
-    strategyOverride: replacementStrategy,
+    },
   })
-  return {
-    mode: 'direct' as const,
-    stillPath: generated.stillPath,
-    provider: resolveImagePreviewProvider(credentials),
-    model: resolveImagePreviewModel(credentials),
-    productReferenceImagePaths: payload.productReferenceImagePaths,
-  }
+  return await submitLivePhotoImageGeneration({
+    adapters,
+    onProviderError: (provider, error, hasFallback) => {
+      console.warn('[live-photo] image provider failed', {
+        itemId: input.item.id,
+        provider,
+        hasFallback,
+        reason: String(error instanceof Error ? error.message : error || '').trim(),
+      })
+    },
+  })
 }
 
 async function pollReferenceReplacementStillTask(input: {
@@ -3480,6 +3155,7 @@ function resolveLivePhotoImagePreview(item: LivePhotoItem, credentials: ModelCre
       product: productSnapshot,
       referenceImagePath,
       credentials,
+      prompt: item.imagePromptPreview?.prompt,
       retryGuidance: buildLivePhotoRetryGuidance(item, productSnapshot),
     })
   } catch {
@@ -3507,35 +3183,78 @@ function buildReferenceReplacementImagePromptPreview(input: {
   referenceImagePath: string
   credentials: ModelCredentials
   retryGuidance?: string[]
+  prompt?: string
 }) {
-  const payload = resolveLivePhotoReferenceImagePayload({
+  const payload = bindLivePhotoReplacementInputs({
     referenceImagePath: input.referenceImagePath,
     product: input.product,
   })
   const replacementStrategy: LivePhotoReplacementStrategy =
-    Array.isArray(input.retryGuidance) && input.retryGuidance.length
-      ? (isEarringLikeLivePhotoProduct(input.product) ? 'anchor_closeup' : 'erase_first')
+    isEarringLikeLivePhotoProduct(input.product) || (Array.isArray(input.retryGuidance) && input.retryGuidance.length)
+      ? 'erase_first'
       : 'default'
   const provider = resolveLivePhotoImageExecutionProvider(input.credentials)
   return buildImageRequestPreview({
     provider,
     model: resolveLivePhotoImageExecutionModel(input.credentials, provider),
-    prompt: `${buildLivePhotoProviderRolePrefix({
-      referenceImagePath: payload.referenceImagePath,
-      productReferenceImagePath: payload.productReferenceImagePaths[0] || '',
-    })}\n\n${buildReferenceReplacementPrompt({
+    prompt: buildReferenceReplacementPrompt({
       product: input.product,
       productReferenceImagePaths: payload.productReferenceImagePaths,
       referenceImagePath: payload.referenceImagePath,
       retryGuidance: input.retryGuidance,
       strategy: replacementStrategy,
-    })}`,
+      prompt: input.prompt,
+    }),
     negativePrompt: buildReferenceReplacementNegativePrompt({
       product: input.product,
       strategy: replacementStrategy,
     }),
     referenceImagePaths: payload.imagePaths,
   })
+}
+
+function canSyncLivePhotoPromptVersion(item: LivePhotoItem) {
+  if (item.sourceType !== 'reference_replace') return false
+  if (item.packagingStatus === 'completed') return false
+  if (String(item.generatedStillPath || '').trim()) return false
+  if (String(item.imageTaskId || '').trim()) return false
+  return true
+}
+
+async function syncLivePhotoPromptVersionToPendingItems(promptVersion: LivePhotoPromptVersion) {
+  const credentials = await cloneRepo.getCredentials()
+  const items = await livePhotoRepo.list()
+  let syncedCount = 0
+
+  for (const item of items) {
+    if (!canSyncLivePhotoPromptVersion(item) || !item.productSnapshot) continue
+    const referenceImagePath = resolveLivePhotoReferenceImagePath(item)
+    if (!referenceImagePath) continue
+    const imagePromptPreview = buildReferenceReplacementImagePromptPreview({
+      product: item.productSnapshot,
+      referenceImagePath,
+      credentials,
+      retryGuidance: buildLivePhotoRetryGuidance(item, item.productSnapshot),
+      prompt: promptVersion.prompt,
+    })
+    await livePhotoRepo.upsert({
+      ...item,
+      imagePromptPreview,
+      promptVersionId: promptVersion.id,
+      promptVersion: promptVersion.version,
+      promptHash: promptVersion.promptHash,
+      cacheKey: undefined,
+      cacheHit: false,
+      logs: [
+        ...(Array.isArray(item.logs) ? item.logs : []),
+        buildLivePhotoLog(`[live-photo] prompt synchronized to V${promptVersion.version}`),
+      ].slice(-200),
+      updatedAt: now(),
+    })
+    syncedCount += 1
+  }
+
+  return syncedCount
 }
 
 async function ensureVideoCoverImage(videoPath?: string) {
@@ -3897,13 +3616,105 @@ async function finalizeReferenceItem(input: {
     autoFlowStatus: patchAutoFlowStatus(input.item, 'image_generation', 'running'),
     updatedAt: now(),
   })
-  let generated: { stillPath: string; productReferenceImagePaths: string[] }
-  if (String(input.item.generatedStillPath || '').trim() && existsSync(String(input.item.generatedStillPath || '').trim())) {
+  let generated: { stillPath: string; productReferenceImagePaths: string[] } | undefined
+  let qualityReport: LivePhotoQualityReport | undefined
+  let generationAttempts = [...(input.item.generationAttempts || [])]
+  let cacheKey: string | undefined
+  let cacheHit = false
+  const autoFlowLogs = [] as ReturnType<typeof buildLivePhotoLog>[]
+  const promptVersion = livePhotoPromptVersionService.getActive()
+  const promptHash = String(input.item.promptHash || promptVersion.promptHash).trim()
+  const previewProvider = String(input.item.imagePromptPreview?.provider || '').trim()
+  const previewModel = String(input.item.imagePromptPreview?.model || '').trim()
+  const replacementStrategy = inferLivePhotoReplacementStrategy({ item: input.item, product: input.product })
+  const replacementNegativePrompt = buildReferenceReplacementNegativePrompt({
+    product: input.product,
+    strategy: replacementStrategy,
+  })
+  if (!String(input.item.generatedStillPath || '').trim() && !String(input.item.imageTaskId || '').trim()) {
+    const revalidationCandidate = [...generationAttempts]
+      .reverse()
+      .find((attempt) =>
+        String(attempt.outputPath || '').trim() &&
+        existsSync(String(attempt.outputPath || '').trim()) &&
+        String(attempt.quality?.checkerVersion || '').trim() !== LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+      )
+    if (revalidationCandidate) {
+      try {
+        const revalidated = await validateGeneratedStillWithPipeline({
+          item: input.item,
+          product: input.product,
+          scenePath: input.referenceImagePath,
+          stillPath: revalidationCandidate.outputPath,
+        })
+        generationAttempts = generationAttempts.map((attempt) =>
+          attempt.id === revalidationCandidate.id ? { ...attempt, quality: revalidated } : attempt,
+        )
+        if (revalidated.decision === 'pass') {
+          generated = {
+            stillPath: revalidationCandidate.outputPath,
+            productReferenceImagePaths: input.product.imagePaths,
+          }
+          qualityReport = revalidated
+          autoFlowLogs.push(
+            buildLivePhotoLog(
+              `[live-photo] previous image passed revalidation with ${LIVE_PHOTO_QUALITY_CHECKER_VERSION}: score=${revalidated.score}`,
+              'success',
+            ),
+          )
+        }
+      } catch (error) {
+        autoFlowLogs.push(buildLivePhotoLog(`[live-photo] previous image revalidation skipped: ${String(error)}`))
+      }
+    }
+  }
+  try {
+    if (!String(input.item.generatedStillPath || '').trim() && !String(input.item.imageTaskId || '').trim()) {
+      cacheKey = await buildLivePhotoQualityCacheKey({
+          scenePath: input.referenceImagePath,
+          productPath: resolveAuthoritativeProductReferencePath(input.product),
+          promptHash,
+          provider: previewProvider,
+          model: previewModel,
+          outputSize: (await livePhotoRepo.getSettings()).outputResolution,
+          generationParams: {
+            strategy: replacementStrategy,
+            negativePrompt: replacementNegativePrompt,
+          },
+          checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+        })
+      const cached = cacheKey ? await livePhotoQualityCache.get(cacheKey) : null
+      if (cached) {
+        const cachePath = join(stillOutputDir, `reference_replace_cache_${randomUUID()}.png`)
+        await copyFile(cached.imagePath, cachePath)
+        generated = { stillPath: cachePath, productReferenceImagePaths: input.product.imagePaths }
+        qualityReport = cached.quality
+        cacheHit = true
+        generationAttempts = [
+          ...generationAttempts,
+          {
+            id: randomUUID(),
+            index: generationAttempts.length + 1,
+            outputPath: cachePath,
+            provider: previewProvider,
+            model: previewModel,
+            strategy: 'cache',
+            cacheHit: true,
+            quality: cached.quality,
+            createdAt: now(),
+          },
+        ]
+      }
+    }
+  } catch (error) {
+    appendLivePhotoLogs(input.item, [buildLivePhotoLog(`[live-photo] quality cache lookup skipped: ${String(error)}`)])
+  }
+  if (!generated && String(input.item.generatedStillPath || '').trim() && existsSync(String(input.item.generatedStillPath || '').trim())) {
     generated = {
       stillPath: String(input.item.generatedStillPath || '').trim(),
       productReferenceImagePaths: input.product.imagePaths,
     }
-  } else if (String(input.item.imageTaskId || '').trim()) {
+  } else if (!generated && String(input.item.imageTaskId || '').trim()) {
     const polled = await pollReferenceReplacementStillTask({
       item: input.item,
       outputDir: stillOutputDir,
@@ -3915,7 +3726,7 @@ async function finalizeReferenceItem(input: {
       stillPath: polled.outputPath,
       productReferenceImagePaths: input.product.imagePaths,
     }
-  } else {
+  } else if (!generated) {
     const submitted = await withTimeout(
       submitReferenceReplacementStillTask({
         item: input.item,
@@ -3946,15 +3757,62 @@ async function finalizeReferenceItem(input: {
       productReferenceImagePaths: submitted.productReferenceImagePaths,
     }
   }
-  const autoFlowLogs = [] as ReturnType<typeof buildLivePhotoLog>[]
+  if (!generated) throw new Error('Reference still generation did not produce an output')
+  if (!qualityReport) {
+    await livePhotoRepo.upsert({
+      ...input.item,
+      generatedStillPath: generated.stillPath,
+      workflow: patchWorkflow(input.item.workflow, 'image_validation', 'image_validation', 'running'),
+      autoFlowStatus: patchAutoFlowStatus(input.item, 'image_validation', 'running'),
+      updatedAt: now(),
+    })
+    qualityReport = await validateGeneratedStillWithPipeline({
+      item: input.item,
+      product: input.product,
+      scenePath: input.referenceImagePath,
+      stillPath: generated.stillPath,
+    })
+    const attempt: LivePhotoGenerationAttempt = {
+      id: randomUUID(),
+      index: generationAttempts.length + 1,
+      outputPath: generated.stillPath,
+      provider: previewProvider,
+      model: previewModel,
+      strategy: replacementStrategy,
+      negativePrompt: replacementNegativePrompt,
+      cacheHit: false,
+      quality: qualityReport,
+      createdAt: now(),
+    }
+    generationAttempts = [...generationAttempts, attempt]
+    await livePhotoRepo.upsert({
+      ...input.item,
+      generatedStillPath: generated.stillPath,
+      qualityReport,
+      generationAttempts,
+      cacheKey,
+      cacheHit: false,
+      workflow: patchWorkflow(input.item.workflow, 'image_validation', 'image_validation', qualityReport.decision === 'pass' ? 'done' : 'failed', qualityReport.hardFailures.join(', ')),
+      updatedAt: now(),
+    })
+    if (qualityReport.decision !== 'pass') {
+      throw new Error(`[image_validation_failed] ${qualityReport.decision}: ${qualityReport.hardFailures.join(', ') || `quality score ${qualityReport.score}`}`)
+    }
+    if (cacheKey) await livePhotoQualityCache.put({ key: cacheKey, sourcePath: generated.stillPath, quality: qualityReport })
+  }
   const imageDoneItem: LivePhotoItem = {
     ...appendLivePhotoLogs(input.item, [
       ...autoFlowLogs,
       buildLivePhotoLog(`[live-photo] image_generation completed: ${generated.stillPath}`, 'success'),
-      buildLivePhotoLog('[live-photo] image validation skipped', 'info'),
+      buildLivePhotoLog(`[live-photo] image validation passed: score=${qualityReport?.score ?? 0}`, 'success'),
       buildLivePhotoLog('[live-photo] stage video_generation started'),
     ]),
     generatedStillPath: generated.stillPath,
+    qualityReport,
+    generationAttempts,
+    cacheKey,
+    cacheHit,
+    checkerFallbackReason: qualityReport?.fallbackReason,
     videoPromptPreview: buildVideoRequestPreview({
       item: {
         ...input.item,
@@ -3970,8 +3828,12 @@ async function finalizeReferenceItem(input: {
     imageTaskModel: undefined,
     imageTaskBaseUrl: undefined,
     imageTaskEndpointStyle: undefined,
-    workflow: patchWorkflow(input.item.workflow, 'video_generation', 'image_generation', 'done'),
-    autoFlowStatus: patchAutoFlowStatus(input.item, 'video_generation', 'running'),
+    workflow: patchWorkflow(patchWorkflow(input.item.workflow, 'image_validation', 'image_validation', 'done'), 'video_generation', 'image_generation', 'done'),
+    autoFlowStatus: {
+      ...patchAutoFlowStatus(input.item, 'video_generation', 'running'),
+      retryLimit: LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
+      retryCount: 0,
+    },
     updatedAt: now(),
   }
   await livePhotoRepo.upsert(imageDoneItem)
@@ -4211,10 +4073,12 @@ async function runLivePhotoItemAutoFlow(
       currentStage,
       normalizeLivePhotoFailureReasonSafe(String(error?.message || error || 'Unknown error'), currentStage),
     )
-    const nextRetryCount = Math.min(current.retryLimit, Number(current.retryCount ?? 0) + 1)
+    const retryLimit = resolveLivePhotoRetryLimit(currentStage)
+    const nextRetryCount = Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
     const terminalByStage = shouldForceTerminalLivePhotoFailure(currentStage, reason)
-    const terminal = terminalByStage || nextRetryCount >= current.retryLimit
-    const imageValidationFailure = currentStage === 'image_generation' && isLivePhotoImageValidationFailure(reason)
+    const terminal = terminalByStage || nextRetryCount >= retryLimit
+    const imageValidationFailure =
+      (currentStage === 'image_generation' || currentStage === 'image_validation') && isLivePhotoImageValidationFailure(reason)
     if (reason.includes('[remote_pending]')) {
       const remoteTaskId = extractTaskIdFromText(reason)
       const pending = await livePhotoRepo.upsert({
@@ -4258,8 +4122,8 @@ async function runLivePhotoItemAutoFlow(
           terminal
             ? terminalByStage
               ? '[live-photo] video generation failed and was marked terminal'
-              : `[live-photo] retry limit reached: ${current.retryLimit}`
-            : `[live-photo] marked retryable failure: retry ${nextRetryCount}/${current.retryLimit}`,
+              : `[live-photo] retry limit reached: ${retryLimit}`
+            : `[live-photo] marked retryable failure: retry ${nextRetryCount}/${retryLimit}`,
           terminal ? 'error' : 'info',
         ),
       ]),
@@ -4272,6 +4136,7 @@ async function runLivePhotoItemAutoFlow(
       imageTaskEndpointStyle: imageValidationFailure ? undefined : latestPersisted.imageTaskEndpointStyle,
       autoFlowStatus: {
         ...current,
+        retryLimit,
         retryCount: nextRetryCount,
         status: terminal ? 'failed_terminal' : 'failed_retryable',
         currentStage,
@@ -4284,7 +4149,7 @@ async function runLivePhotoItemAutoFlow(
         'failed',
         terminal ? `[retry_limit] ${reason}` : reason,
       ),
-      error: terminal ? `[retry_limit] Live Photo auto retry reached ${current.retryLimit} times. Please check the source material and retry manually.` : reason,
+      error: terminal ? `[retry_limit] Live Photo auto retry reached ${retryLimit} times. Please check the source material and retry manually.` : reason,
       updatedAt: now(),
     })
     const restoredAfterFailure = await restoreCompletedMaterializedItem(
@@ -4354,8 +4219,9 @@ function enqueueLivePhotoAutoFlow(
         currentStage,
         normalizeLivePhotoFailureReason(String(error?.message || error || 'Unknown error'), currentStage),
       )
-      const nextRetryCount = Math.min(current.retryLimit, Number(current.retryCount ?? 0) + 1)
-      const terminal = shouldForceTerminalLivePhotoFailure(currentStage, reason) || nextRetryCount >= current.retryLimit
+      const retryLimit = resolveLivePhotoRetryLimit(currentStage)
+      const nextRetryCount = Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
+      const terminal = shouldForceTerminalLivePhotoFailure(currentStage, reason) || nextRetryCount >= retryLimit
       await livePhotoRepo.upsert({
         ...appendLivePhotoLogs(latest, [
           buildLivePhotoLog(`[live-photo] queue-level failure: ${reason}`, 'error'),
@@ -4363,13 +4229,14 @@ function enqueueLivePhotoAutoFlow(
         packagingStatus: 'failed',
         autoFlowStatus: {
           ...current,
+          retryLimit,
           retryCount: nextRetryCount,
           status: terminal ? 'failed_terminal' : 'failed_retryable',
           currentStage,
           lastError: reason,
         },
         error: terminal
-          ? `[retry_limit] Live Photo auto retry reached ${current.retryLimit} times. Please check the source material and retry manually.`
+          ? `[retry_limit] Live Photo auto retry reached ${retryLimit} times. Please check the source material and retry manually.`
           : reason,
         updatedAt: now(),
       })
@@ -4391,21 +4258,13 @@ function enqueueLivePhotoAutoFlow(
 }
 
 async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInput) {
-  const referenceImagePaths = Array.from(
-    new Set(
-      [
-        String(input.referenceImagePath || '').trim(),
-        ...(Array.isArray(input.referenceImagePaths) ? input.referenceImagePaths.map((item) => String(item || '').trim()) : []),
-      ].filter(Boolean),
-    ),
-  )
-  if (!referenceImagePaths.length) throw new Error('Reference image does not exist')
-  const missingPath = referenceImagePaths.find((item) => !existsSync(item))
-  if (missingPath) throw new Error(`Reference image does not exist: ${missingPath}`)
+  const referenceImagePaths = normalizeLivePhotoScenePaths(input)
   const product = await buildProductSnapshot(String(input.productId || '').trim())
   const credentials = await cloneRepo.getCredentials()
+  const promptVersion = livePhotoPromptVersionService.getActive()
   ensureLivePhotoStrictImageEditProvider(credentials)
   const motionTemplate = input.motionTemplate || 'push_in'
+  await productImageMaterialsService.markMaterialsUsedByLocalImagePaths(referenceImagePaths)
   const created: LivePhotoItem[] = []
   for (const referenceImagePath of referenceImagePaths) {
     const timestamp = now()
@@ -4413,6 +4272,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
       product,
       referenceImagePath,
       credentials,
+      prompt: promptVersion.prompt,
     })
     const item: LivePhotoItem = {
       id: randomUUID(),
@@ -4423,6 +4283,9 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
       packagingStatus: 'processing',
       promptPreview: buildReferencePromptPreview({ product, referenceImagePath }),
       imagePromptPreview: imagePromptPreview,
+      promptVersionId: promptVersion.id,
+      promptVersion: promptVersion.version,
+      promptHash: promptVersion.promptHash,
       videoPromptPreview: buildVideoRequestPreview({
         item: {
           id: 'preview',
@@ -4538,6 +4401,7 @@ export const livePhotoService = {
     if (input.analyzeProductStructureWithGrs) livePhotoDeps.analyzeProductStructureWithGrs = input.analyzeProductStructureWithGrs
     if (input.reviewReferenceReplacementStillStrict) livePhotoDeps.reviewReferenceReplacementStillStrict = input.reviewReferenceReplacementStillStrict
     if (input.reviewReferenceReplacementStillVisual) livePhotoDeps.reviewReferenceReplacementStillVisual = input.reviewReferenceReplacementStillVisual
+    if (input.runLocalQualityCheck) livePhotoDeps.runLocalQualityCheck = input.runLocalQualityCheck
   },
 
   async resetTestDependencies() {
@@ -4548,6 +4412,7 @@ export const livePhotoService = {
     livePhotoDeps.analyzeProductStructureWithGrs = analyzeProductStructureWithGrs
     livePhotoDeps.reviewReferenceReplacementStillStrict = reviewReferenceReplacementStillStrict
     livePhotoDeps.reviewReferenceReplacementStillVisual = reviewReferenceReplacementStillVisual
+    livePhotoDeps.runLocalQualityCheck = runLocalLivePhotoQualityCheck
     clearLivePhotoPendingTimers()
     livePhotoAutoFlowScheduled.clear()
     livePhotoAutoFlowLastQueuedAt.clear()
@@ -4607,6 +4472,52 @@ export const livePhotoService = {
 
   async saveSettings(input: any) {
     return await livePhotoRepo.saveSettings(input || {})
+  },
+
+  async listPromptVersions() {
+    return livePhotoPromptVersionService.list()
+  },
+
+  async createPromptVersion(input: { name: string; prompt: string }) {
+    return livePhotoPromptVersionService.save(input)
+  },
+
+  async updatePromptVersion(input: { id: string; name: string; prompt: string }) {
+    const updated = livePhotoPromptVersionService.save(input)
+    if (updated.active) await syncLivePhotoPromptVersionToPendingItems(updated)
+    return updated
+  },
+
+  async activatePromptVersion(input: { id: string }) {
+    const active = livePhotoPromptVersionService.activate(String(input?.id || '').trim())
+    await syncLivePhotoPromptVersionToPendingItems(active)
+    return active
+  },
+
+  async rollbackPromptVersion(input: { id: string }) {
+    const active = livePhotoPromptVersionService.rollback(String(input?.id || '').trim())
+    await syncLivePhotoPromptVersionToPendingItems(active)
+    return active
+  },
+
+  async getQualityMetrics() {
+    const items = (await livePhotoRepo.list()).filter((item) => item.sourceType === 'reference_replace')
+    const reports = items.map((item) => item.qualityReport).filter(Boolean) as LivePhotoQualityReport[]
+    const passed = reports.filter((item) => item.decision === 'pass').length
+    const fallback = reports.filter((item) => item.mode === 'remote_fallback').length
+    const retries = items.reduce((sum, item) => sum + Math.max(0, Number(item.autoFlowStatus?.retryCount || 0)), 0)
+    const cacheHits = items.filter((item) => item.cacheHit).length
+    return {
+      totalTasks: items.length,
+      checkedTasks: reports.length,
+      passedTasks: passed,
+      passRate: reports.length ? passed / reports.length : 0,
+      averageScore: reports.length ? reports.reduce((sum, item) => sum + Number(item.score || 0), 0) / reports.length : 0,
+      retryCount: retries,
+      fallbackCount: fallback,
+      cacheHitCount: cacheHits,
+      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+    }
   },
 
   async get(id: string) {
@@ -4929,8 +4840,14 @@ export const livePhotoService = {
     if (!id) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
     const existing = await livePhotoRepo.get(id)
     if (!existing) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
+    const activePromptVersion = livePhotoPromptVersionService.getActive()
+    const promptChanged = Boolean(
+      String(existing.promptHash || '').trim() &&
+        String(existing.promptHash || '').trim() !== activePromptVersion.promptHash,
+    )
     const preservedStillPath = String(existing.generatedStillPath || '').trim()
     const canRetryFromVideoStage = Boolean(
+      !promptChanged &&
       preservedStillPath &&
         existsSync(preservedStillPath) &&
         (String(existing.videoTaskId || '').trim() ||
@@ -4950,6 +4867,7 @@ export const livePhotoService = {
             referenceImagePath: recoveredReferenceImagePath,
             credentials,
             retryGuidance: buildLivePhotoRetryGuidance(existing, refreshedProductSnapshot),
+            prompt: canRetryFromVideoStage ? existing.imagePromptPreview?.prompt : activePromptVersion.prompt,
           })
         : existing.imagePromptPreview
     const refreshedVideoPromptPreview =
@@ -4982,6 +4900,9 @@ export const livePhotoService = {
       imageMetadataMode: undefined,
       imagePromptPreview: refreshedImagePromptPreview,
       videoPromptPreview: refreshedVideoPromptPreview,
+      promptVersionId: canRetryFromVideoStage ? existing.promptVersionId : activePromptVersion.id,
+      promptVersion: canRetryFromVideoStage ? existing.promptVersion : activePromptVersion.version,
+      promptHash: canRetryFromVideoStage ? existing.promptHash : activePromptVersion.promptHash,
       updatedAt: now(),
     }
     if (canRetryFromVideoStage) {
@@ -5010,6 +4931,7 @@ export const livePhotoService = {
         status: 'idle',
         paused: false,
         retryCount: 0,
+        retryLimit: LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
         currentStage: 'video_generation',
         lastStartedAt: undefined,
         lastCompletedAt: undefined,
@@ -5033,6 +4955,9 @@ export const livePhotoService = {
       processingItem.videoTaskModel = undefined
       processingItem.videoTaskBaseUrl = undefined
       processingItem.videoTaskEndpointStyle = undefined
+      processingItem.qualityReport = undefined
+      processingItem.cacheKey = undefined
+      processingItem.cacheHit = false
       processingItem.workflow = buildDefaultWorkflow()
       processingItem.autoFlowStatus = {
         ...buildDefaultAutoFlowStatus(),
@@ -5040,6 +4965,7 @@ export const livePhotoService = {
         status: 'idle',
         paused: false,
         retryCount: 0,
+        retryLimit: LIVE_PHOTO_IMAGE_RETRY_LIMIT,
         currentStage: 'queued',
       }
       processingItem.logs = [

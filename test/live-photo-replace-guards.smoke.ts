@@ -5,6 +5,16 @@ import os from 'node:os'
 import path from 'node:path'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
 
+const EXPECTED_IMAGE_REPLACEMENT_PROMPT = [
+  'Replace the product in Image 1 with the exact physical product from Image 2 while preserving the original scene, composition, lighting, and atmosphere of Image 1.',
+  '',
+  'Treat the product in Image 2 as the only source of truth for the product. Preserve its text, colors, materials, textures, proportions, structure, and all visible details exactly as shown. Do not redesign, recreate, recolor, reshape, simplify, or modify the product in any way.',
+  '',
+  'Allow only natural environmental adaptation, including realistic ambient lighting, reflections, highlights, and stable contact shadows consistent with Image 1. These lighting effects must not alter the product\'s original appearance or identity.',
+  '',
+  'The replacement should be seamlessly integrated into Image 1 with no cut-and-paste artifacts, appearing as if the product had always been part of the original photograph.',
+].join('\n')
+
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-guards-'))
   process.env.VIDEOGENERATE_DATA_DIR = root
@@ -230,109 +240,33 @@ async function main() {
 
       assert.equal(queued.imagePromptPreview?.provider, 'openai')
       assert.equal(queued.imagePromptPreview?.model, 'gpt-image-1')
+      const imagePrompt = String(queued.imagePromptPreview?.prompt || '')
+      assert.ok(imagePrompt.startsWith(EXPECTED_IMAGE_REPLACEMENT_PROMPT))
+      assert.match(imagePrompt, /PROVIDER INPUT ROLE LOCK:/i)
+      assert.match(imagePrompt, /EARRING STRUCTURE LOCK:/i)
       assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /The final product must be a full replacement, not a hybrid, not a blend, and not a new structure made from Image 1 plus Image 2\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Use Image 2 and Product DNA as the source of truth for the product real-world size and product-to-body proportion\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Maintain correct body-to-product size relationship for the selected product, even if the old product in Image 1 was visibly larger or smaller\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /If uncertainty exists, preserve the selected product real-world scale from Image 2 and Product DNA instead of copying the old product size from Image 1\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Keep the product at the same body contact point, but use the selected product wearable size rather than the replaced product size from Image 1\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /If Image 1 is a flat lay, tabletop, product-only, or no-person reference, do NOT add any hands, fingers, arms, or human interaction\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /If Image 1 contains no visible human body parts, the final image must also contain no visible human body parts\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /If Image 1 contains no visible hands or fingers, the final image must contain no visible hands, fingers, nails, palms, wrists, or skin-contact presentation cues\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Do not combine different thumbnails, do NOT borrow details from multiple angles, and do NOT reconstruct a new composite view\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Do NOT ovalize, flatten, stretch, widen, or re-arc the hoop body\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Do NOT replace a curved huggie snap-closure post with a straight post, rigid pin, or simplified straight attachment bar\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Treat a huggie earring as a huggie earring specifically\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /If Image 2 shows a snap closure, the final result must keep the same snap-closure logic and the same curved closure path\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /If Image 2 shows a front-fixed bow mounted on the front of the hoop, keep that same front-fixed bow placement and attachment logic\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Keep the visible faceted stone geometry, transparent crystal look, and front-facing placement from Image 2\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Do NOT merge visible structure from Image 1 and Image 2 into a new hybrid product\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /The replacement product must be a full substitute from Image 2 only, not a blended reconstruction\./i,
-      )
-      assert.match(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Keep the final earring at the exact real-world size that matches the selected earring from Image 2 and Product DNA\./i,
-      )
-      assert.doesNotMatch(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /preserve hand and finger structure exactly/i,
-      )
-      assert.doesNotMatch(
-        String(queued.imagePromptPreview?.prompt || ''),
-        /Select exactly one matching visible angle from array item 2 that best fits array item 1 perspective\./i,
+        String(queued.videoPromptPreview?.prompt || ''),
+        /Create a realistic 6-second product close-up clip with extremely subtle motion/i,
       )
       assert.match(
         String(queued.videoPromptPreview?.prompt || ''),
-        /if the starting still has no visible hands or fingers, every frame must remain completely free of added hands, fingers, palms, wrists, forearms, or skin-contact gestures/i,
+        /only tiny non-product micro-movement already implied by the still/i,
       )
       assert.match(
         String(queued.videoPromptPreview?.prompt || ''),
-        /do not let any hand enter from the edge of the frame later in the clip/i,
+        /The video should feel almost static/i,
       )
       assert.match(
         String(queued.videoPromptPreview?.prompt || ''),
-        /if the starting still contains no visible person, keep every frame completely free of people/i,
+        /natural daylight only/i,
       )
       assert.match(
         String(queued.videoPromptPreview?.prompt || ''),
-        /do not introduce holding, pinching, gripping, presenting, or touching actions around the product/i,
+        /product body remains fully frozen with no self-motion/i,
       )
       assert.match(
         String(queued.videoPromptPreview?.prompt || ''),
-        /every frame must remain completely free of hands, fingers, palms, wrists, forearms, or skin-contact gestures/i,
-      )
-      assert.match(
-        String(queued.videoPromptPreview?.prompt || ''),
-        /do not add a hidden presenter, assistant, or off-screen person whose hands appear in frame/i,
+        /Use ONLY one motion(?: style)?:/i,
       )
       assert.doesNotMatch(
         String(queued.videoPromptPreview?.prompt || ''),

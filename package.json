@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.46",
+  "version": "5.0.60",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -59,8 +59,9 @@
     "test:clone-shot-video-batch-retry-old-task-does-not-restore": "tsx test/clone-shot-video-batch-retry-old-task-does-not-restore.smoke.ts",
     "test:clone-shot-video-batch-submit-manual-sync-late-old-task-guard": "tsx test/clone-shot-video-batch-submit-manual-sync-late-old-task-guard.smoke.ts",
     "test:clone-shot-video-force-regenerate-bypass-submission-lock": "tsx test/clone-shot-video-force-regenerate-bypass-submission-lock.smoke.ts",
-    "dist": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --win --dir",
+    "verify:live-photo-quality-assets": "node scripts/verify-live-photo-quality-assets.mjs",
+    "dist": "npm run verify:live-photo-quality-assets && npm run build && electron-builder --win",
+    "dist:dir": "npm run verify:live-photo-quality-assets && npm run build && electron-builder --win --dir",
     "preview": "electron-vite preview",
     "lint": "eslint .",
     "test:web-next-clone-flow": "node test/web-next-clone-flow.e2e.cjs",
@@ -85,6 +86,9 @@
     "test:tiktok-listing-plugin": "tsx test/tiktok-listing-plugin.smoke.ts",
     "test:live-photo-plugin": "tsx test/live-photo-plugin.smoke.ts",
     "test:live-photo-replace-guards": "tsx test/live-photo-replace-guards.smoke.ts",
+    "test:live-photo-quality-pipeline": "tsx test/live-photo-quality-pipeline.smoke.ts",
+    "test:live-photo-product-reference": "tsx test/live-photo-product-reference.smoke.ts",
+    "test:live-photo-retry-policy": "tsx test/live-photo-retry-policy.smoke.ts",
     "test:live-photo-hermes": "tsx test/live-photo-hermes.smoke.ts",
     "test:live-photo-hermes-platform": "tsx test/live-photo-hermes-platform-formatters.smoke.ts",
     "test:live-photo-hermes-delivery": "tsx test/live-photo-hermes-delivery.smoke.ts",
@@ -94,6 +98,8 @@
     "test:live-photo-hermes-skill-auto": "tsx test/live-photo-hermes-feishu-skill-auto.smoke.ts",
     "test:live-photo-hermes-e2e-sim": "tsx test/live-photo-hermes-e2e-sim.smoke.ts",
     "test:live-photo-hermes-suite": "npm run test:live-photo-hermes && npm run test:live-photo-hermes-platform && npm run test:live-photo-hermes-ingress && npm run test:live-photo-hermes-http && npm run test:live-photo-hermes-replay && npm run test:live-photo-hermes-skill-auto && npm run test:live-photo-hermes-e2e-sim",
+    "test:video-parser-download-hermes-http": "tsx test/video-parser-download-hermes-http.smoke.ts",
+    "test:video-parser-download-hermes-feishu-intent": "tsx test/video-parser-download-hermes-feishu-intent.smoke.ts",
     "test:batch-subtitle-bitmap": "tsx test/batch-subtitle-bitmap.smoke.ts",
     "test:batch-subtitle-ass": "tsx test/batch-subtitle-ass.smoke.ts",
     "test:tiktok-listing-grs-image-aspect-ratio": "tsx test/tiktok-listing-grs-image-aspect-ratio.smoke.ts",
@@ -128,6 +134,7 @@
     "react-dom": "^19.2.0",
     "remotion": "^4.0.462",
     "replicate": "^1.4.0",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.3.1",
     "utf-8-validate": "^6.0.6",
     "vue": "^3.5.13",
@@ -172,6 +179,10 @@
       {
         "from": "resources/icon-brand-ui-v2.png",
         "to": "icon-brand.png"
+      },
+      {
+        "from": "resources/live-photo-quality",
+        "to": "live-photo-quality"
       }
     ],
     "asarUnpack": [

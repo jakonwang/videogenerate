@@ -47,3 +47,8 @@ resources/fonts/*.ttf
 resources/fonts/*.woff2
 resources/fonts/.videogenerate-fonts-ready
 out/main/resources/fonts/
+
+# Generated Live Photo quality runtime assets
+resources/live-photo-quality/models/
+resources/live-photo-quality/python/
+resources/live-photo-quality/__pycache__/

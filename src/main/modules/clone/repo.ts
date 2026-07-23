@@ -1426,6 +1426,7 @@ function normalizeCredentials(parsed: any): ModelCredentials {
     seedanceHost: String(parsed?.seedanceHost ?? '').trim() || 'https://ark.ap-southeast.bytepluses.com',
     grsaiApiKey: String(parsed?.grsaiApiKey ?? '').trim() || undefined,
     grsaiHost: String(parsed?.grsaiHost ?? '').trim() || 'https://grsaiapi.com',
+    tikhubApiKey: String(parsed?.tikhubApiKey ?? '').trim() || undefined,
     qiniuAccessKey: String(parsed?.qiniuAccessKey ?? '').trim() || undefined,
     qiniuSecretKey: String(parsed?.qiniuSecretKey ?? '').trim() || undefined,
     qiniuBucket: String(parsed?.qiniuBucket ?? '').trim() || undefined,

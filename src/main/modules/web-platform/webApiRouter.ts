@@ -9,6 +9,8 @@ import { hermesPlatformFormatters } from '../live-photo/hermesPlatformFormatters
 import { hermesDeliveryService } from '../live-photo/hermesDelivery'
 import { livePhotoService } from '../live-photo/service'
 import { productImageMaterialsService } from '../product-image-materials/service'
+import { tryHandleHermesVideoParserText } from '../video-parser-download/hermes'
+import { videoParserDownloadService } from '../video-parser-download/service'
 import { normalizeCapabilityProfileState } from '../../../shared/platformSettings'
 
 type JsonObject = Record<string, unknown>
@@ -95,6 +97,23 @@ function mediaMimeOf(filePath: string) {
   if (value.endsWith('.jpg') || value.endsWith('.jpeg')) return 'image/jpeg'
   if (value.endsWith('.png')) return 'image/png'
   return 'application/octet-stream'
+}
+
+function normalizeVideoParserShareUrls(body: Record<string, unknown>) {
+  const fromArray = Array.isArray(body.shareUrls) ? body.shareUrls.map((item) => String(item || '').trim()) : []
+  const fromText =
+    typeof body.text === 'string'
+      ? body.text
+          .split(/\r?\n/)
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+      : []
+  return Array.from(new Set([...fromArray, ...fromText].filter(Boolean)))
+}
+
+function normalizeVideoParserUserId(body: Record<string, unknown>, fallbackUserId = 'desktop-local') {
+  const userId = typeof body.userId === 'string' ? body.userId.trim() : ''
+  return userId || fallbackUserId
 }
 
 export async function readBody(req: http.IncomingMessage) {
@@ -297,6 +316,13 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
     if (req.method === 'POST' && pathname === '/hermes/live-photo/feishu/webhook') {
       const body = await readBodyClean(req)
       const webhookSelectionMode = body.selectionMode === 'material' ? 'material' : body.selectionMode === 'delivery' ? 'delivery' : undefined
+      const downloadIntentResult = await tryHandleHermesVideoParserText({
+        text: typeof body.text === 'string' ? body.text : '',
+      })
+      if (downloadIntentResult.matched) {
+        json(res, 200, { ok: true, actions: downloadIntentResult.actions })
+        return
+      }
       const result = await hermesLivePhotoAdapters.handleFeishuEvent({
         userId: typeof body.userId === 'string' ? body.userId : '',
         imagePaths: Array.isArray(body.imagePaths) ? body.imagePaths.map(String) : [],
@@ -452,6 +478,39 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         selectionMode: webhookSelectionMode,
       })
       json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/video-parser-download/import') {
+      const body = await readBodyClean(req)
+      const shareUrls = normalizeVideoParserShareUrls(body)
+      if (!shareUrls.length) {
+        json(res, 400, {
+          ok: false,
+          error: 'shareUrls or text is required',
+        })
+        return
+      }
+      const result = await videoParserDownloadService.importShareUrls({
+        userId: normalizeVideoParserUserId(body),
+        shareUrls,
+      })
+      json(res, 200, result as JsonObject)
+      return
+    }
+
+    if (req.method === 'GET' && pathname === '/hermes/video-parser-download/items') {
+      const userId = String(url.searchParams.get('userId') || '').trim() || 'desktop-local'
+      const status = String(url.searchParams.get('status') || '').trim().toLowerCase()
+      const usedStatus = String(url.searchParams.get('usedStatus') || '').trim().toLowerCase()
+      let items = await videoParserDownloadService.listItems(userId)
+      if (status === 'processing' || status === 'completed' || status === 'failed') {
+        items = items.filter((item) => item.status === status)
+      }
+      if (usedStatus === 'used' || usedStatus === 'unused') {
+        items = items.filter((item) => item.usedStatus === usedStatus)
+      }
+      json(res, 200, { ok: true, items })
       return
     }
 

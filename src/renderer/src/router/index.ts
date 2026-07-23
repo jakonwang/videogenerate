@@ -34,7 +34,7 @@ const router = createRouter({
           name: 'plugin-geelark-publish-center',
           component: () => import('@/ui/views/GeelarkPublishCenterView.vue'),
         },
-        { path: 'plugins/video-parser-download', name: 'plugin-video-parser-download', component: () => import('@/ui/views/PluginWorkspacePlaceholderView.vue') },
+        { path: 'plugins/video-parser-download', name: 'plugin-video-parser-download', component: () => import('@/ui/views/VideoParserDownloadView.vue') },
         { path: 'plugins/video-batch-watermark', name: 'plugin-video-batch-watermark', component: () => import('@/ui/views/PluginWorkspacePlaceholderView.vue') },
         { path: 'plugins/video-batch-subtitle', name: 'plugin-video-batch-subtitle', component: () => import('@/ui/views/VideoBatchSubtitleView.vue') },
         { path: 'settings', name: 'settings', component: () => import('@/ui/views/SettingsView.vue') },

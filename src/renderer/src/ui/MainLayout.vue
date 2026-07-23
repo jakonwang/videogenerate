@@ -612,14 +612,14 @@ function requestCloneStage(key: string) {
 
 @media (max-width: 1180px) {
   .app-shell :deep(.ds-shell) {
-    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-columns: 92px minmax(0, 1fr) !important;
   }
 
   .app-shell :deep(.ds-sidebar) {
-    width: 92px;
-    min-width: 92px;
-    align-items: center;
-    padding: 16px 10px;
+    width: 92px !important;
+    min-width: 92px !important;
+    align-items: center !important;
+    padding: 16px 10px !important;
   }
 
   .app-shell :deep(.ds-sidebar__brand-copy),

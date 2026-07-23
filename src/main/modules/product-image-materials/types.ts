@@ -10,6 +10,7 @@ export type ProductImageMaterialSourceItem = {
   id: string
   sourceVideoPath: string
   sourceVideoName: string
+  parserVideoId?: string
   status: ProductImageMaterialSourceStatus
   generatedCount: number
   skippedCount: number

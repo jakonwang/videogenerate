@@ -1,0 +1,43 @@
+{
+  "status": "approved",
+  "note": "Runtime and model artifacts are pinned, checksummed, and distributed with permissive commercial-use licenses.",
+  "runtime": {
+    "name": "CPython standalone runtime",
+    "version": "3.12.13+20260508",
+    "source": "https://github.com/astral-sh/python-build-standalone",
+    "license": "Python-2.0",
+    "licenseFile": "python/LICENSE.txt",
+    "sha256": "3effc297ba6d005036c640a6762f90fc1148f4cbb7f772ec0de6b31e416a9e4f",
+    "commercialRedistributionApproved": true
+  },
+  "models": [
+    {
+      "id": "clip",
+      "name": "CLIP ViT-B-32 LAION2B",
+      "file": "clip-image-encoder.onnx",
+      "source": "https://huggingface.co/laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
+      "revision": "1a25a446712ba5ee05982a381eed697ef9b435cf",
+      "license": "MIT",
+      "licenseFile": "licenses/open-clip-MIT",
+      "sha256": "dda18bdc898319ea4ebfc203eeb1612992624439c9e822d85a1939dd1fb6405d",
+      "commercialRedistributionApproved": true
+    },
+    {
+      "id": "dinov2",
+      "name": "DINOv2 Small",
+      "file": "dinov2-image-encoder.onnx",
+      "source": "https://huggingface.co/facebook/dinov2-small",
+      "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+      "license": "Apache-2.0",
+      "licenseFile": "licenses/dinov2-Apache-2.0",
+      "sha256": "a8884fe804cdaf5a685811a03eba54ce10c7f7f711040256ebdd8b7f6b926cc2",
+      "commercialRedistributionApproved": true
+    }
+  ],
+  "dependencies": [
+    { "name": "NumPy", "version": "1.26.4", "license": "BSD-3-Clause" },
+    { "name": "OpenCV Python Headless", "version": "4.10.0.84", "license": "Apache-2.0" },
+    { "name": "ONNX Runtime", "version": "1.20.1", "license": "MIT" },
+    { "name": "Pillow", "version": "11.3.0", "license": "MIT-CMU" }
+  ]
+}

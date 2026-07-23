@@ -22,6 +22,7 @@ type ApifoxImageProfileKey = ImagePlatformProfile
 type SecretKey =
   | 'klingApiKey'
   | 'grsaiApiKey'
+  | 'tikhubApiKey'
   | 'ai666ApiKey'
   | 'vectorEngineApiKey'
   | 'xibapiApiKey'
@@ -60,6 +61,7 @@ type ModelCredentialsView = {
   klingHost: string
   grsaiApiKey: string
   grsaiHost: string
+  tikhubApiKey: string
   replicateApiToken: string
   qiniuAccessKey: string
   qiniuSecretKey: string
@@ -140,6 +142,7 @@ function createDefaultCredentials(): ModelCredentialsView {
     klingHost: '',
     grsaiApiKey: '',
     grsaiHost: '',
+    tikhubApiKey: '',
     replicateApiToken: '',
     qiniuAccessKey: '',
     qiniuSecretKey: '',
@@ -214,6 +217,7 @@ const { t } = useI18n()
 const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
   grsaiApiKey: false,
+  tikhubApiKey: false,
   ai666ApiKey: false,
   vectorEngineApiKey: false,
   xibapiApiKey: false,
@@ -579,6 +583,7 @@ function normalizeIncomingCredentials(next: any): ModelCredentialsView {
       referenceVideoModel: next?.gaoruiHub?.referenceVideoModel || 'veo_3_1-components',
     }),
     apifoxHub: createHubDefaults(next?.apifoxHub),
+    tikhubApiKey: String(next?.tikhubApiKey ?? defaults.tikhubApiKey),
   }
 }
 
@@ -759,6 +764,30 @@ onMounted(() => {
           </div>
 
           <div class="platform-grid">
+            <article class="platform-card">
+              <div class="platform-card__head">
+                <div class="platform-card__icon">
+                  <KeyRound :size="16" />
+                </div>
+                <div>
+                  <h3>TikHub</h3>
+                  <p>TikTok share-link parsing and download access token.</p>
+                </div>
+              </div>
+
+              <div class="form-grid single-column">
+                <label>
+                  <span>API Key</span>
+                  <div class="field-inline">
+                    <input v-model="modelCredentials.tikhubApiKey" :type="modelSecretType('tikhubApiKey')" placeholder="TikHub bearer token" />
+                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('tikhubApiKey')">
+                      {{ modelVisibleSecrets.tikhubApiKey ? t('settings.common.hide') : t('settings.common.show') }}
+                    </button>
+                  </div>
+                </label>
+              </div>
+            </article>
+
             <article v-for="card in platformCards" :key="card.provider" class="platform-card">
               <div class="platform-card__head">
                 <div class="platform-card__icon">

@@ -9,11 +9,12 @@ import { generateThumbnailJpg } from '../media/thumbnail'
 import { productsRepo } from '../products/repo'
 import { cloneRepo } from '../clone/repo'
 import { toPublicUrlViaQiniu } from '../clone/qiniu'
-import { generateImage as generateUnifiedImage } from '../clone/unifiedImage'
+import { generateGptShotFrameImage } from '../clone/gptImage'
 import { getAppPaths } from '../../lib/paths'
 import { getFfmpegExecutable } from '../../lib/binariesPath'
 import { productImageMaterialsQueue } from './queue'
 import { productImageMaterialsRepo } from './repo'
+import { videoParserDownloadService } from '../video-parser-download/service'
 import type {
   ProductImageMaterialBatch,
   ProductImageMaterialCategory,
@@ -38,6 +39,7 @@ type ProductImageMaterialsServiceDeps = {
   generateThumbnailJpg: typeof generateThumbnailJpg
   toPublicUrlViaQiniu: typeof toPublicUrlViaQiniu
   detectVideoSegments: typeof detectVideoSegments
+  generateVariantImage: typeof generateGptShotFrameImage
 }
 
 let deps: ProductImageMaterialsServiceDeps = {
@@ -46,6 +48,7 @@ let deps: ProductImageMaterialsServiceDeps = {
   generateThumbnailJpg,
   toPublicUrlViaQiniu,
   detectVideoSegments,
+  generateVariantImage: generateGptShotFrameImage,
 }
 
 function now() {
@@ -75,11 +78,12 @@ function dedupePaths(input: string[]) {
   return Array.from(new Set((input || []).map((item) => String(item || '').trim()).filter(Boolean)))
 }
 
-function sourceItemOf(videoPath: string): ProductImageMaterialSourceItem {
+function sourceItemOf(videoPath: string, parserVideoId?: string): ProductImageMaterialSourceItem {
   return {
     id: randomUUID(),
     sourceVideoPath: videoPath,
     sourceVideoName: basename(videoPath),
+    parserVideoId: String(parserVideoId || '').trim() || undefined,
     status: 'queued',
     generatedCount: 0,
     skippedCount: 0,
@@ -486,18 +490,34 @@ export const productImageMaterialsService = {
     userId: string
     category: string
     sourceVideoPaths: string[]
+    parserVideoIds?: string[]
   }) {
+    const userId = String(input.userId || '').trim()
     const category = ensureCategory(input.category)
-    const sourceVideoPaths = dedupePaths(input.sourceVideoPaths)
-    if (!sourceVideoPaths.length) throw new Error('sourceVideoPaths is required')
+    const parserVideoIds = Array.from(new Set((input.parserVideoIds || []).map((item) => String(item || '').trim()).filter(Boolean)))
+    const directSourceVideoPaths = dedupePaths(input.sourceVideoPaths)
+    const parserItems = parserVideoIds.length ? await videoParserDownloadService.listItems(userId) : []
+    const parserSelected = parserVideoIds.map((id) => parserItems.find((item) => item.id === id) ?? null)
+    const parserSourceItems = parserSelected.map((item, index) => {
+      if (!item) throw new Error(`Downloaded video ${parserVideoIds[index]} does not exist`)
+      if (item.status !== 'completed') throw new Error(`Downloaded video ${item.videoId} is not ready yet`)
+      const localVideoPath = String(item.localVideoPath || '').trim()
+      if (!localVideoPath) throw new Error(`Downloaded video ${item.videoId} is missing local file path`)
+      return sourceItemOf(localVideoPath, item.id)
+    })
+    const sourceItems = [
+      ...directSourceVideoPaths.map((videoPath) => sourceItemOf(videoPath)),
+      ...parserSourceItems,
+    ]
+    if (!sourceItems.length) throw new Error('sourceVideoPaths is required')
     const batch: ProductImageMaterialBatch = {
       id: randomUUID(),
-      userId: String(input.userId || '').trim(),
+      userId,
       category,
       status: 'queued',
       segmentTimeSec: MAX_SCENE_SEGMENT_DURATION_SEC,
-      sourceItems: sourceVideoPaths.map(sourceItemOf),
-      totalVideos: sourceVideoPaths.length,
+      sourceItems,
+      totalVideos: sourceItems.length,
       completedVideos: 0,
       failedVideos: 0,
       generatedImageCount: 0,
@@ -505,6 +525,12 @@ export const productImageMaterialsService = {
       updatedAt: now(),
     }
     const saved = await productImageMaterialsRepo.upsertBatch(batch)
+    if (parserVideoIds.length) {
+      await videoParserDownloadService.markItemsUsed({
+        userId,
+        ids: parserVideoIds,
+      })
+    }
     productImageMaterialsQueue.schedule(saved.id)
     return saved
   },
@@ -571,7 +597,7 @@ export const productImageMaterialsService = {
       let generatedForSource = 0
       for (let variantIndex = 0; variantIndex < variantCount; variantIndex += 1) {
         try {
-          const generated = await generateUnifiedImage({
+          const outputPath = await deps.generateVariantImage({
             credentials,
             prompt: buildBackgroundVariantPrompt({
               category: source.category,
@@ -581,11 +607,11 @@ export const productImageMaterialsService = {
             imagePaths: [sourcePath],
             outDir: join(getAppPaths().dataDir, 'product-image-materials', 'derived', source.id, `${Date.now()}_${randomUUID()}`),
             filePrefix: `background_variant_${shortId(source.id)}_${variantIndex + 1}`,
-            capability: 'image_edit',
+            normalizeOutput: 'preserve',
           })
-          const outputPath = String(generated?.outputPath || '').trim()
-          if (!outputPath) throw new Error('Background variant generation did not return an output path')
-          const qiniuUrl = await toPublicUrlViaQiniu(credentials, outputPath, 'product-image-materials/background-variants')
+          const outputPathText = String(outputPath || '').trim()
+          if (!outputPathText) throw new Error('Background variant generation did not return an output path')
+          const qiniuUrl = await deps.toPublicUrlViaQiniu(credentials, outputPathText, 'product-image-materials/background-variants')
           const item: ProductImageMaterialItem = {
             id: randomUUID(),
             userId,
@@ -596,7 +622,7 @@ export const productImageMaterialsService = {
             segmentIndex: source.segmentIndex,
             segmentPath: source.segmentPath,
             frameTimeSec: source.frameTimeSec,
-            localImagePath: outputPath,
+            localImagePath: outputPathText,
             qiniuUrl,
             materialOrigin: 'derived',
             derivedFromMaterialId: source.id,
@@ -797,6 +823,20 @@ export const productImageMaterialsService = {
     return await productImageMaterialsRepo.setMaterialUsageStatusAny(materialId, 'used')
   },
 
+  async markMaterialsUsedByLocalImagePaths(localImagePaths: string[]) {
+    const normalizedPaths = Array.from(new Set((localImagePaths || []).map((item) => String(item || '').trim()).filter(Boolean)))
+    if (!normalizedPaths.length) return []
+    const pathSet = new Set(normalizedPaths)
+    const materials = await productImageMaterialsRepo.listAllMaterials()
+    const matches = materials.filter((item) => pathSet.has(String(item.localImagePath || '').trim()))
+    if (!matches.length) return []
+    return await Promise.all(
+      matches.map((item) =>
+        item.usageStatus === 'used' ? item : productImageMaterialsRepo.setMaterialUsageStatusAny(item.id, 'used'),
+      ),
+    )
+  },
+
   setTestDependencies(overrides: Partial<ProductImageMaterialsServiceDeps>) {
     deps = {
       ...deps,
@@ -811,6 +851,7 @@ export const productImageMaterialsService = {
       generateThumbnailJpg,
       toPublicUrlViaQiniu,
       detectVideoSegments,
+      generateVariantImage: generateGptShotFrameImage,
     }
   },
 }

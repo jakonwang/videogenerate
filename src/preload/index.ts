@@ -556,6 +556,7 @@ const api = {
       seedanceHost?: string
       grsaiApiKey?: string
       grsaiHost?: string
+      tikhubApiKey?: string
       qiniuAccessKey?: string
       qiniuSecretKey?: string
       qiniuBucket?: string
@@ -684,6 +685,7 @@ const api = {
       userId: string
       category: 'necklace' | 'ring' | 'earring' | 'bracelet'
       sourceVideoPaths: string[]
+      parserVideoIds?: string[]
     }) => ipcRenderer.invoke('plugin:productImageMaterials:createBatch', payload),
     listBatches: (payload: { userId: string }) => ipcRenderer.invoke('plugin:productImageMaterials:listBatches', payload),
     retryBatch: (payload: { userId: string; batchId: string }) =>
@@ -709,6 +711,12 @@ const api = {
     exportMaterials: (payload: { userId: string; materialIds: string[]; outputDir: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:exportMaterials', payload),
     listProducts: () => ipcRenderer.invoke('plugin:productImageMaterials:listProducts'),
+  },
+  videoParserDownload: {
+    listItems: (payload: { userId: string }) => ipcRenderer.invoke('plugin:videoParserDownload:listItems', payload),
+    importShareUrls: (payload: { userId: string; shareUrls: string[] }) => ipcRenderer.invoke('plugin:videoParserDownload:importShareUrls', payload),
+    retryItem: (payload: { userId: string; id: string }) => ipcRenderer.invoke('plugin:videoParserDownload:retryItem', payload),
+    deleteItem: (payload: { userId: string; id: string }) => ipcRenderer.invoke('plugin:videoParserDownload:deleteItem', payload),
   },
   tiktokListing: {
     list: () => ipcRenderer.invoke('plugin:tiktokListing:list'),
@@ -740,7 +748,16 @@ const api = {
       outputResolution?: '1080x1440' | '2160x2880' | '3024x4032'
       frameRate?: '24' | '30'
       quality?: 'medium' | 'high'
+      qualityCheckerEnabled?: boolean
+      qualityPassThreshold?: number
+      qualityRetryFloor?: number
     }) => ipcRenderer.invoke('plugin:livePhoto:saveSettings', payload),
+    listPromptVersions: () => ipcRenderer.invoke('plugin:livePhoto:listPromptVersions'),
+    createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:livePhoto:createPromptVersion', payload),
+    updatePromptVersion: (payload: { id: string; name: string; prompt: string }) => ipcRenderer.invoke('plugin:livePhoto:updatePromptVersion', payload),
+    activatePromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:activatePromptVersion', payload),
+    rollbackPromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:rollbackPromptVersion', payload),
+    getQualityMetrics: () => ipcRenderer.invoke('plugin:livePhoto:getQualityMetrics'),
     enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:enqueueReference', payload),
     startReference: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>

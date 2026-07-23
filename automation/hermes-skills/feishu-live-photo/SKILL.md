@@ -1,7 +1,7 @@
 ---
 name: feishu-live-photo
 description: "Handle Feishu Live Photo and product material library selection flow. Trigger on phrases like 素材库, 选图, 商品选图, 未使用live photo, live photo, or Feishu Live Photo requests. Forward image and text events to a local VideoGenerate desktop app, return numbered product or material options, continue generation from the user's selection, and send the final video back to the same Feishu user."
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 platforms: [windows]
@@ -248,3 +248,20 @@ For text replies, preserve:
 4. Do not manually resolve product numbers inside Hermes if the desktop app can do it
 5. Treat `session=...` without `product=...` as a status query, not a selection
 6. Keep final delivery video-only for this workflow
+
+## TikTok Download Intent
+
+Use the same skill for TikTok video download requests that come from a Feishu text message.
+
+Required behavior:
+
+1. If the message includes phrases like `下载视频`, `下载抖音视频`, `下载TikTok视频`, or `download video`, and also includes one or more TikTok share links, treat it as a direct download request.
+2. Forward the full text message to `POST /hermes/live-photo/feishu/webhook` with body `{ "userId": "<open_id>", "text": "<message>" }`.
+3. Do not route this request into the Live Photo image, product, material, or delivery flow.
+4. Return the desktop app's short result text directly to the Feishu user.
+
+Example messages:
+
+- `下载视频 https://www.tiktok.com/@demo/video/1234567890`
+- `下载抖音视频 https://www.tiktok.com/@demo/video/1234567890`
+- `download video https://www.tiktok.com/@demo/video/1234567890`

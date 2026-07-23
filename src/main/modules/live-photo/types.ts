@@ -48,6 +48,54 @@ export type LivePhotoRequestPreview = {
   referenceImagePaths: string[]
 }
 
+export type LivePhotoPromptVersion = {
+  id: string
+  name: string
+  version: number
+  prompt: string
+  promptHash: string
+  active: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export type LivePhotoQualityDecision = 'pass' | 'retry' | 'reject'
+
+export type LivePhotoQualityReport = {
+  checkerVersion: string
+  mode: 'local_python' | 'remote_fallback'
+  decision: LivePhotoQualityDecision
+  score: number
+  threshold: number
+  retryFloor: number
+  components: {
+    clip: number
+    dinov2: number
+    orb: number
+    ssim: number
+    scenePreservation: number
+    textConsistency: number
+  }
+  hardFailures: string[]
+  notes: string[]
+  fallbackReason?: string
+  durationMs: number
+  checkedAt: number
+}
+
+export type LivePhotoGenerationAttempt = {
+  id: string
+  index: number
+  outputPath: string
+  provider?: string
+  model?: string
+  strategy?: string
+  negativePrompt?: string
+  cacheHit: boolean
+  quality?: LivePhotoQualityReport
+  createdAt: number
+}
+
 export type LivePhotoTaskLogLevel = 'info' | 'success' | 'error'
 
 export type LivePhotoTaskLog = {
@@ -60,6 +108,7 @@ export type LivePhotoTaskLog = {
 export type LivePhotoWorkflowStep =
   | 'queued'
   | 'image_generation'
+  | 'image_validation'
   | 'video_generation'
   | 'live_photo_packaging'
   | 'completed'
@@ -145,6 +194,14 @@ export type LivePhotoItem = {
   videoTaskModel?: string
   videoTaskBaseUrl?: string
   videoTaskEndpointStyle?: string
+  promptVersionId?: string
+  promptVersion?: number
+  promptHash?: string
+  qualityReport?: LivePhotoQualityReport
+  generationAttempts?: LivePhotoGenerationAttempt[]
+  cacheKey?: string
+  cacheHit?: boolean
+  checkerFallbackReason?: string
   workflow?: LivePhotoWorkflow
   autoFlowStatus?: LivePhotoAutoFlowStatus
   logs?: LivePhotoTaskLog[]
@@ -198,5 +255,14 @@ export type LivePhotoSettings = {
   outputResolution: LivePhotoOutputResolution
   frameRate: LivePhotoFrameRate
   quality: LivePhotoQuality
+  qualityCheckerEnabled?: boolean
+  qualityPassThreshold?: number
+  qualityRetryFloor?: number
   updatedAt: number
+}
+
+export type SaveLivePhotoPromptVersionInput = {
+  id?: string
+  name: string
+  prompt: string
 }
