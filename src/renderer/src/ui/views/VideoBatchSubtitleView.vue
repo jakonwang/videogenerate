@@ -1072,7 +1072,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="subtitle-workbench-page">
+  <div class="subtitle-workbench-page plugin-workspace-standard">
     <section class="hero-panel glass-panel hero-panel--compact">
       <div class="hero-copy hero-copy--compact">
         <h1>视频批量加字幕</h1>

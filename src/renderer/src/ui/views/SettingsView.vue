@@ -1,7 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Clapperboard, Cloud, Image as ImageIcon, KeyRound, MessagesSquare, Server } from 'lucide-vue-next'
+import {
+  Bot,
+  Boxes,
+  Check,
+  Clapperboard,
+  Cloud,
+  Eye,
+  EyeOff,
+  HardDrive,
+  Image as ImageIcon,
+  KeyRound,
+  MessagesSquare,
+  Palette,
+  Puzzle,
+  Radio,
+  Server,
+} from 'lucide-vue-next'
+import { useAppSettingsStore, type AppTheme } from '@/stores/appSettings'
+import HermesManagementPanel from '../components/HermesManagementPanel.vue'
+import StorageManagementPanel from '../components/StorageManagementPanel.vue'
+import { HERMES_SETTINGS_SECTIONS, type HermesSettingsSection } from '../../../../shared/hermesWorkspace'
 import {
   listCapabilityPlatforms,
   mapPlatformToStoredProvider,
@@ -212,8 +233,47 @@ function createDefaultHermesIntegration(): HermesIntegrationView {
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
 const modelSettingsBusy = ref(false)
-const modelSettingsSection = ref<'platforms' | 'capabilities' | 'qiniu'>('platforms')
+type SettingsSection =
+  | 'appearance'
+  | 'platforms'
+  | 'capabilities'
+  | 'hermes-runtime'
+  | 'hermes-skills'
+  | 'hermes-channels'
+  | 'hermes-data'
+  | 'storage-management'
+  | 'qiniu'
+
+const settingsSection = ref<SettingsSection>('appearance')
+const settingsNavPanel = ref<HTMLElement | null>(null)
 const { t } = useI18n()
+const route = useRoute()
+const appSettings = useAppSettingsStore()
+
+watch(() => route.query.section, (value) => {
+  const section = String(Array.isArray(value) ? value[0] : value || '') as HermesSettingsSection
+  if (HERMES_SETTINGS_SECTIONS.includes(section) || section === 'storage-management') settingsSection.value = section
+}, { immediate: true })
+
+function revealActiveSettingsSection() {
+  void nextTick(() => {
+    settingsNavPanel.value?.querySelector<HTMLElement>('.nav-item.active')?.scrollIntoView({
+      block: 'nearest',
+      inline: 'center',
+    })
+  })
+}
+
+watch(settingsSection, revealActiveSettingsSection)
+const accessKeyInput = ref(appSettings.accessKey)
+const accessKeyVisible = ref(false)
+const accessKeyMessage = ref('')
+const themeOptions: Array<{ value: AppTheme; labelKey: string }> = [
+  { value: 'dark-teal', labelKey: 'settings.appearance.themes.darkTeal' },
+  { value: 'soft-mint', labelKey: 'settings.appearance.themes.softMint' },
+  { value: 'warm-paper', labelKey: 'settings.appearance.themes.warmPaper' },
+  { value: 'clear-sky', labelKey: 'settings.appearance.themes.clearSky' },
+]
 const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
   grsaiApiKey: false,
@@ -233,11 +293,50 @@ const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
 const modelCredentials = ref<ModelCredentialsView>(createDefaultCredentials())
 const hermesIntegration = ref<HermesIntegrationView>(createDefaultHermesIntegration())
 
-const sectionMeta = [
-  { key: 'platforms', labelKey: 'settings.sections.platforms.label', descKey: 'settings.sections.platforms.desc', icon: KeyRound },
-  { key: 'capabilities', labelKey: 'settings.sections.capabilities.label', descKey: 'settings.sections.capabilities.desc', icon: Server },
-  { key: 'qiniu', labelKey: 'settings.sections.qiniu.label', descKey: 'settings.sections.qiniu.desc', icon: Cloud },
+const sectionGroups = [
+  {
+    key: 'general',
+    labelKey: 'settings.navigation.groups.general',
+    items: [
+      { key: 'appearance', labelKey: 'settings.sections.appearance.label', descKey: 'settings.sections.appearance.desc', icon: Palette },
+    ],
+  },
+  {
+    key: 'ai',
+    labelKey: 'settings.navigation.groups.ai',
+    items: [
+      { key: 'platforms', labelKey: 'settings.sections.platforms.label', descKey: 'settings.sections.platforms.desc', icon: KeyRound },
+      { key: 'capabilities', labelKey: 'settings.sections.capabilities.label', descKey: 'settings.sections.capabilities.desc', icon: Server },
+    ],
+  },
+  {
+    key: 'hermes',
+    labelKey: 'settings.navigation.groups.hermes',
+    items: [
+      { key: 'hermes-runtime', labelKey: 'settings.sections.hermesRuntime.label', descKey: 'settings.sections.hermesRuntime.desc', icon: Bot },
+      { key: 'hermes-skills', labelKey: 'settings.sections.hermesSkills.label', descKey: 'settings.sections.hermesSkills.desc', icon: Puzzle },
+      { key: 'hermes-channels', labelKey: 'settings.sections.hermesChannels.label', descKey: 'settings.sections.hermesChannels.desc', icon: Radio },
+      { key: 'hermes-data', labelKey: 'settings.sections.hermesData.label', descKey: 'settings.sections.hermesData.desc', icon: Boxes },
+    ],
+  },
+  {
+    key: 'storage',
+    labelKey: 'settings.navigation.groups.storage',
+    items: [
+      { key: 'storage-management', labelKey: 'settings.sections.storageManagement.label', descKey: 'settings.sections.storageManagement.desc', icon: HardDrive },
+      { key: 'qiniu', labelKey: 'settings.sections.qiniu.label', descKey: 'settings.sections.qiniu.desc', icon: Cloud },
+    ],
+  },
 ] as const
+
+const isModelSettingsSection = computed(() => ['platforms', 'capabilities', 'qiniu'].includes(settingsSection.value))
+const isHermesSettingsSection = computed(() => settingsSection.value.startsWith('hermes-'))
+const hermesTabs = computed(() => {
+  if (settingsSection.value === 'hermes-runtime') return ['runtime', 'models'] as const
+  if (settingsSection.value === 'hermes-skills') return ['skills'] as const
+  if (settingsSection.value === 'hermes-channels') return ['channels'] as const
+  return ['memory', 'backups', 'diagnostics'] as const
+})
 
 const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; hostPlaceholder: string; keyName: SecretKey }> = {
   grsai: {
@@ -697,13 +796,31 @@ async function checkUpdatesNow() {
   }
 }
 
+function selectTheme(theme: AppTheme) {
+  appSettings.setTheme(theme)
+}
+
+function saveAccessKey() {
+  appSettings.saveAccessKey(accessKeyInput.value)
+  accessKeyInput.value = appSettings.accessKey
+  accessKeyMessage.value = appSettings.accessKey
+    ? t('settings.access.savedLocally')
+    : t('settings.access.cleared')
+}
+
 onMounted(() => {
   void refreshModelSettings()
+  window.addEventListener('resize', revealActiveSettingsSection)
+  revealActiveSettingsSection()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', revealActiveSettingsSection)
 })
 </script>
 
 <template>
-  <div class="settings-console">
+  <div class="settings-console" :class="{ 'is-storage-section': settingsSection === 'storage-management' }">
     <section class="settings-shell">
       <div class="settings-shell__hero">
         <div>
@@ -715,7 +832,7 @@ onMounted(() => {
           <button class="ghost-button small" :disabled="settingsBusy" @click="checkUpdatesNow">{{ t('settings.actions.checkUpdates') }}</button>
           <button class="ghost-button small" @click="openDataDir">{{ t('settings.actions.openDataDir') }}</button>
           <button class="ghost-button small" @click="refreshModelSettings">{{ t('settings.actions.refresh') }}</button>
-          <button class="primary-button small" :disabled="modelSettingsBusy" @click="saveModelSettings">
+          <button v-if="isModelSettingsSection" class="primary-button small" :disabled="modelSettingsBusy" @click="saveModelSettings">
             {{ modelSettingsBusy ? t('settings.actions.saving') : t('settings.actions.saveSettings') }}
           </button>
         </div>
@@ -735,27 +852,93 @@ onMounted(() => {
       </div>
     </section>
 
-    <section class="settings-layout">
-      <aside class="settings-nav-panel">
-        <button
-          v-for="item in sectionMeta"
-          :key="item.key"
-          class="nav-item"
-          :class="{ active: modelSettingsSection === item.key }"
-          @click="modelSettingsSection = item.key"
-        >
-          <span class="nav-item__icon"><component :is="item.icon" :size="16" /></span>
-          <div>
-            <strong>{{ t(item.labelKey) }}</strong>
-            <small>{{ t(item.descKey) }}</small>
-          </div>
-        </button>
+    <section class="settings-layout" :class="{ 'has-side-panel': isModelSettingsSection }">
+      <aside ref="settingsNavPanel" class="settings-nav-panel">
+        <div v-for="group in sectionGroups" :key="group.key" class="nav-group">
+          <div class="nav-group__label">{{ t(group.labelKey) }}</div>
+          <button
+            v-for="item in group.items"
+            :key="item.key"
+            type="button"
+            class="nav-item"
+            :class="{ active: settingsSection === item.key }"
+            :data-settings-section="item.key"
+            @click="settingsSection = item.key"
+          >
+            <span class="nav-item__icon"><component :is="item.icon" :size="16" /></span>
+            <div>
+              <strong>{{ t(item.labelKey) }}</strong>
+              <small>{{ t(item.descKey) }}</small>
+            </div>
+          </button>
+        </div>
       </aside>
 
       <main class="settings-form-panel">
         <div v-if="settingsMessage" class="settings-message" :class="settingsMessageTone">{{ settingsMessage }}</div>
 
-        <section v-if="modelSettingsSection === 'platforms'" class="form-section">
+        <section v-if="settingsSection === 'appearance'" class="appearance-panel">
+          <div class="appearance-block">
+            <div class="appearance-heading">
+              <div>
+                <h2>{{ t('settings.appearance.title') }}</h2>
+                <p>{{ t('settings.appearance.subtitle') }}</p>
+              </div>
+            </div>
+            <div class="theme-grid">
+              <button
+                v-for="theme in themeOptions"
+                :key="theme.value"
+                type="button"
+                class="theme-option"
+                :class="[`theme-option--${theme.value}`, { active: appSettings.theme === theme.value }]"
+                @click="selectTheme(theme.value)"
+              >
+                <span class="theme-option__preview">
+                  <i class="theme-option__line"></i>
+                  <i class="theme-option__dot"></i>
+                  <i class="theme-option__field"></i>
+                </span>
+                <span class="theme-option__label">{{ t(theme.labelKey) }}</span>
+                <Check v-if="appSettings.theme === theme.value" class="theme-option__check" :size="14" />
+              </button>
+            </div>
+          </div>
+
+          <div class="appearance-block access-key-block">
+            <div class="appearance-heading">
+              <div>
+                <h2>{{ t('settings.access.title') }}</h2>
+                <p>{{ t('settings.access.subtitle') }}</p>
+              </div>
+              <span class="local-mode-badge">{{ t('settings.access.localMode') }}</span>
+            </div>
+            <label class="access-key-label">
+              <span>{{ t('settings.access.keyLabel') }}</span>
+              <div class="access-key-field">
+                <input
+                  v-model="accessKeyInput"
+                  :type="accessKeyVisible ? 'text' : 'password'"
+                  autocomplete="off"
+                  :placeholder="t('settings.access.placeholder')"
+                />
+                <button type="button" class="access-key-visibility" @click="accessKeyVisible = !accessKeyVisible">
+                  <EyeOff v-if="accessKeyVisible" :size="16" />
+                  <Eye v-else :size="16" />
+                </button>
+                <button type="button" class="primary-button access-key-save" @click="saveAccessKey">
+                  {{ t('settings.access.save') }}
+                </button>
+              </div>
+            </label>
+            <div class="access-key-footer">
+              <span>{{ accessKeyMessage || t('settings.access.futureHint') }}</span>
+              <strong>{{ appSettings.accessKey ? t('settings.access.configured') : t('settings.access.notConfigured') }}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="settingsSection === 'platforms'" class="form-section">
           <div class="section-head">
             <div>
               <h2>{{ t('settings.platforms.title') }}</h2>
@@ -828,7 +1011,7 @@ onMounted(() => {
           </div>
         </section>
 
-        <section v-else-if="modelSettingsSection === 'capabilities'" class="form-section">
+        <section v-else-if="settingsSection === 'capabilities'" class="form-section">
           <div class="section-head">
             <div>
               <h2>{{ t('settings.capabilities.title') }}</h2>
@@ -913,7 +1096,17 @@ onMounted(() => {
           </div>
         </section>
 
-        <section v-else class="form-section">
+        <HermesManagementPanel
+          v-else-if="isHermesSettingsSection"
+          :key="settingsSection"
+          embedded
+          :initial-tab="hermesTabs[0]"
+          :visible-tabs="hermesTabs"
+        />
+
+        <StorageManagementPanel v-else-if="settingsSection === 'storage-management'" />
+
+        <section v-else-if="settingsSection === 'qiniu'" class="form-section">
           <div class="section-head">
             <div>
               <h2>{{ t('settings.qiniu.title') }}</h2>
@@ -947,7 +1140,7 @@ onMounted(() => {
         </section>
       </main>
 
-      <aside class="settings-side-panel">
+      <aside v-if="isModelSettingsSection" class="settings-side-panel">
         <section class="side-card">
           <div class="side-card__head">
             <h3>{{ t('settings.summary.title') }}</h3>
@@ -981,11 +1174,8 @@ onMounted(() => {
   gap: 10px;
   min-height: 100%;
   padding: 12px;
-  background:
-    radial-gradient(circle at 16% 0, rgba(109, 93, 255, 0.12), transparent 24%),
-    radial-gradient(circle at 84% 10%, rgba(34, 211, 238, 0.08), transparent 18%),
-    linear-gradient(180deg, #060b16 0%, #08111f 100%);
-  color: #f8fafc;
+  background: var(--theme-bg, #08111f);
+  color: var(--theme-text, #f8fafc);
 }
 
 .settings-shell,
@@ -999,10 +1189,9 @@ onMounted(() => {
 .bullet-item,
 .platform-card,
 .capability-card {
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, rgba(17, 28, 49, 0.92), rgba(8, 17, 31, 0.94));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.16));
+  background: var(--theme-panel, #111c31);
 }
 
 .settings-shell {
@@ -1039,7 +1228,7 @@ onMounted(() => {
 .platform-card__head p,
 .capability-card__head p {
   margin: 0;
-  color: #94a3b8;
+  color: var(--theme-text-muted, #94a3b8);
   font-size: 12px;
 }
 
@@ -1076,6 +1265,206 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.appearance-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.appearance-block {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.16));
+  border-radius: 8px;
+  background: var(--theme-panel, linear-gradient(180deg, rgba(17, 28, 49, 0.92), rgba(8, 17, 31, 0.94)));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.appearance-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.appearance-heading h2 {
+  margin: 0;
+  color: var(--theme-text, #f8fafc);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.appearance-heading p {
+  margin: 4px 0 0;
+  color: var(--theme-text-muted, #94a3b8);
+  font-size: 11px;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-option {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
+  border-radius: 12px;
+  background: var(--theme-panel-soft, #111827);
+  color: var(--theme-text, #f8fafc);
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.theme-option:hover {
+  transform: translateY(-1px);
+}
+
+.theme-option.active {
+  border-color: var(--theme-accent, #14b8a6);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent, #14b8a6) 26%, transparent);
+}
+
+.theme-option__preview {
+  position: relative;
+  display: block;
+  height: 72px;
+  background: #0a0c14;
+}
+
+.theme-option__line,
+.theme-option__field,
+.theme-option__dot {
+  position: absolute;
+  display: block;
+}
+
+.theme-option__line {
+  left: 18px;
+  right: 10px;
+  top: 28px;
+  height: 6px;
+  border-radius: 999px;
+  background: #126d67;
+}
+
+.theme-option__dot {
+  left: 10px;
+  bottom: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #14b8a6;
+}
+
+.theme-option__field {
+  left: 30px;
+  right: 10px;
+  bottom: 10px;
+  height: 22px;
+  border-radius: 8px;
+  background: #151827;
+}
+
+.theme-option--soft-mint .theme-option__preview { background: #edf7f4; }
+.theme-option--soft-mint .theme-option__line { background: #9dcebf; }
+.theme-option--soft-mint .theme-option__dot { background: #349879; }
+.theme-option--soft-mint .theme-option__field { background: #ffffff; }
+.theme-option--warm-paper .theme-option__preview { background: #f3ead8; }
+.theme-option--warm-paper .theme-option__line { background: #d6ae7b; }
+.theme-option--warm-paper .theme-option__dot { background: #ad5b00; }
+.theme-option--warm-paper .theme-option__field { background: #fffaf0; }
+.theme-option--clear-sky .theme-option__preview { background: #eef1ff; }
+.theme-option--clear-sky .theme-option__line { background: #a9c5ff; }
+.theme-option--clear-sky .theme-option__dot { background: #3b82f6; }
+.theme-option--clear-sky .theme-option__field { background: #ffffff; }
+
+.theme-option__label {
+  padding: 8px 10px;
+  color: var(--theme-text, #f8fafc);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.theme-option__check {
+  position: absolute;
+  right: 9px;
+  bottom: 8px;
+  color: var(--theme-accent, #14b8a6);
+}
+
+.local-mode-badge {
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-accent, #14b8a6) 18%, transparent);
+  color: var(--theme-accent, #14b8a6);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.access-key-label {
+  display: grid;
+  gap: 6px;
+  color: var(--theme-text, #f8fafc);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.access-key-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px auto;
+  gap: 8px;
+}
+
+.access-key-field input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
+  border-radius: 10px;
+  background: var(--theme-input, #0a1324);
+  color: var(--theme-text, #f8fafc);
+  outline: none;
+}
+
+.access-key-field input:focus {
+  border-color: var(--theme-accent, #14b8a6);
+}
+
+.access-key-visibility {
+  display: grid;
+  width: 36px;
+  place-items: center;
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
+  border-radius: 10px;
+  background: var(--theme-panel-soft, #111827);
+  color: var(--theme-text-muted, #94a3b8);
+}
+
+.access-key-save {
+  min-width: 72px;
+}
+
+.access-key-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--theme-text-muted, #94a3b8);
+  font-size: 10px;
+}
+
+.access-key-footer strong {
+  color: var(--theme-accent, #14b8a6);
+  white-space: nowrap;
 }
 
 .summary-card {
@@ -1132,9 +1521,13 @@ onMounted(() => {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
+}
+
+.settings-layout.has-side-panel {
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
 }
 
 .settings-nav-panel,
@@ -1155,18 +1548,63 @@ onMounted(() => {
   align-content: start;
 }
 
+.settings-nav-panel {
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  max-height: calc(100vh - 24px);
+  align-self: start;
+}
+
+.nav-group {
+  display: grid;
+  gap: 5px;
+}
+
+.nav-group + .nav-group {
+  margin-top: 5px;
+  padding-top: 10px;
+  border-top: 1px solid var(--theme-border, rgba(148, 163, 184, 0.12));
+}
+
+.nav-group__label {
+  padding: 0 5px;
+  color: var(--theme-text-muted, #94a3b8);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
 .nav-item {
-  padding: 10px;
+  padding: 8px;
   text-align: left;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 8px;
-  background: rgba(10, 19, 36, 0.78);
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 7px;
+  background: transparent;
+  color: var(--theme-text, #f8fafc);
+}
+
+.nav-item .nav-item__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
 }
 
 .nav-item.active {
-  border-color: rgba(109, 93, 255, 0.42);
-  box-shadow: 0 0 0 1px rgba(109, 93, 255, 0.12);
+  border-color: color-mix(in srgb, var(--theme-accent, #14b8a6) 42%, var(--theme-border));
+  background: color-mix(in srgb, var(--theme-accent, #14b8a6) 12%, var(--theme-panel-soft));
+}
+
+.nav-item strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.nav-item small {
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .settings-message {
@@ -1229,7 +1667,7 @@ onMounted(() => {
 }
 
 .form-grid label span {
-  color: #94a3b8;
+  color: var(--theme-text-muted, #94a3b8);
   font-size: 11px;
 }
 
@@ -1237,10 +1675,10 @@ onMounted(() => {
 .form-grid select {
   height: 38px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: #0a1324;
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.16));
+  background: var(--theme-input, #0a1324);
   padding: 0 12px;
-  color: #f8fafc;
+  color: var(--theme-text, #f8fafc);
 }
 
 .field-inline input {
@@ -1264,9 +1702,9 @@ onMounted(() => {
 
 .bullet-item {
   padding: 10px 12px;
-  background: rgba(10, 19, 36, 0.78);
+  background: var(--theme-panel-soft, rgba(10, 19, 36, 0.78));
   font-size: 12px;
-  color: #cbd5e1;
+  color: var(--theme-text, #cbd5e1);
 }
 
 .primary-button,
@@ -1279,16 +1717,15 @@ onMounted(() => {
 }
 
 .primary-button {
-  background: linear-gradient(135deg, #6d5dff, #8b5cf6);
-  border: 1px solid rgba(109, 93, 255, 0.42);
+  background: var(--theme-accent, #14b8a6);
+  border: 1px solid color-mix(in srgb, var(--theme-accent, #14b8a6) 72%, #000);
   color: #fff;
-  box-shadow: 0 12px 32px rgba(109, 93, 255, 0.24);
 }
 
 .ghost-button {
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  color: #cbd5e1;
+  background: var(--theme-panel-soft, rgba(15, 23, 42, 0.72));
+  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
+  color: var(--theme-text, #cbd5e1);
 }
 
 .tiny {
@@ -1297,17 +1734,86 @@ onMounted(() => {
 }
 
 @media (max-width: 1440px) {
-  .settings-layout,
-  .settings-summary-grid {
-    grid-template-columns: 1fr;
+  .settings-layout.has-side-panel {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .settings-layout.has-side-panel .settings-side-panel {
+    grid-column: 2;
   }
 }
 
 @media (max-width: 960px) {
+  .settings-layout,
+  .settings-layout.has-side-panel,
+  .settings-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-layout.has-side-panel .settings-side-panel {
+    grid-column: auto;
+  }
+
+  .settings-nav-panel {
+    position: static;
+    overflow-y: visible;
+    max-height: none;
+  }
+
+  .nav-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nav-group__label {
+    grid-column: 1 / -1;
+  }
+
+  .theme-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-shell__hero,
   .form-grid {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .settings-console.is-storage-section .settings-summary-grid {
+    display: none;
+  }
+
+  .settings-console.is-storage-section .settings-nav-panel {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .settings-console.is-storage-section .nav-group {
+    display: contents;
+  }
+
+  .settings-console.is-storage-section .nav-group__label {
+    display: none;
+  }
+
+  .settings-console.is-storage-section .nav-item {
+    min-width: 188px;
+    flex: 0 0 188px;
+  }
+}
+
+@media (max-width: 560px) {
+  .nav-group {
+    grid-template-columns: 1fr;
+  }
+
+  .access-key-field {
+    grid-template-columns: minmax(0, 1fr) 36px;
+  }
+
+  .access-key-save {
+    grid-column: 1 / -1;
   }
 }
 </style>

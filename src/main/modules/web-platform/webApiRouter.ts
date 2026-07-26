@@ -12,6 +12,9 @@ import { productImageMaterialsService } from '../product-image-materials/service
 import { tryHandleHermesVideoParserText } from '../video-parser-download/hermes'
 import { videoParserDownloadService } from '../video-parser-download/service'
 import { normalizeCapabilityProfileState } from '../../../shared/platformSettings'
+import { agentOsService } from '../agent-os/service'
+import { hermesAgentService } from '../hermes/service'
+import { hermesRuntime } from '../hermes/runtime'
 
 type JsonObject = Record<string, unknown>
 
@@ -228,6 +231,83 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         'Content-Type': mime,
       })
       createReadStream(filePath).on('error', () => res.destroy()).pipe(res)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/agent/feishu/official-event') {
+      const body = await readBodyClean(req)
+      if (typeof body.challenge === 'string') {
+        json(res, 200, { challenge: body.challenge })
+        return
+      }
+      const runtimeStatus = hermesRuntime.getStatus()
+      if (runtimeStatus.state !== 'ready') {
+        json(res, 503, {
+          ok: false,
+          matched: true,
+          retryable: true,
+          error: 'hermes_unavailable',
+          message: runtimeStatus.error || 'Hermes is not ready.',
+        })
+        return
+      }
+      const result = await hermesAgentService.handleFeishuOfficialEvent(body)
+      json(res, 200, result as JsonObject)
+      return
+    }
+
+    const agentRunMatch = /^\/hermes\/agent\/run\/([^/]+)$/.exec(pathname)
+    if (agentRunMatch && req.method === 'GET') {
+      const result = await agentOsService.getRun(decodeURIComponent(agentRunMatch[1] || ''))
+      json(res, 200, { ok: true, ...result } as JsonObject)
+      return
+    }
+
+    if (req.method === 'POST' && pathname === '/hermes/agent/feishu/send-final') {
+      const body = await readBodyClean(req)
+      const runId = typeof body.runId === 'string' ? body.runId.trim() : ''
+      const receiveId = typeof body.receiveId === 'string' ? body.receiveId : ''
+      const claim = await agentOsService.claimFeishuFinalDelivery({ runId, receiveId })
+      if (!claim.claimed) {
+        json(res, claim.alreadySent ? 200 : 409, {
+          ok: claim.alreadySent,
+          runId,
+          alreadySent: claim.alreadySent,
+          retryable: !claim.alreadySent,
+        })
+        return
+      }
+      const actions = await agentOsService.buildFeishuFinalActions(runId)
+      const deliveryActions = actions.map((action) => {
+        const type = String(action.type || '').trim()
+        const name = String(action.name || '').trim() || 'Artifact'
+        const filePath = String(action.path || '').trim()
+        if ((type === 'video' || type === 'image') && filePath) {
+          return { type: 'video' as const, text: name, videoPath: filePath }
+        }
+        return { type: 'text' as const, text: String(action.text || name) }
+      })
+      try {
+        const result = await hermesDeliveryService.sendFinalToFeishu({
+          appId: typeof body.appId === 'string' ? body.appId : undefined,
+          appSecret: typeof body.appSecret === 'string' ? body.appSecret : undefined,
+          tenantAccessToken: typeof body.tenantAccessToken === 'string' ? body.tenantAccessToken : undefined,
+          receiveId,
+          receiveIdType:
+            body.receiveIdType === 'user_id' ||
+            body.receiveIdType === 'union_id' ||
+            body.receiveIdType === 'chat_id' ||
+            body.receiveIdType === 'email'
+              ? body.receiveIdType
+              : 'open_id',
+          actions: deliveryActions,
+        })
+        await agentOsService.completeFeishuFinalDelivery({ runId, deliveryKey: claim.deliveryKey, resultCount: result.length })
+        json(res, 200, { ok: true, runId, result } as JsonObject)
+      } catch (error) {
+        await agentOsService.failFeishuFinalDelivery({ runId, deliveryKey: claim.deliveryKey, error: String((error as Error)?.message || error) })
+        throw error
+      }
       return
     }
 

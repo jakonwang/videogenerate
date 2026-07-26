@@ -6,9 +6,18 @@ import path from 'node:path'
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-hermes-delivery-'))
   const videoPath = path.join(root, 'preview.mp4')
+  const previousProfileDir = process.env.VIDEOGENERATE_HERMES_PROFILE_DIR
+  process.env.VIDEOGENERATE_HERMES_PROFILE_DIR = root
   await writeFile(videoPath, 'mock-video', 'utf-8')
+  await writeFile(
+    path.join(root, '.env'),
+    'FEISHU_APP_ID="profile-app-id"\nFEISHU_APP_SECRET="profile-app-secret"\nFEISHU_HOME_CHANNEL="oc_profile_chat"\n',
+    'utf-8',
+  )
 
   const { hermesDeliveryService } = await import('../src/main/modules/live-photo/hermesDelivery')
+  const { livePhotoService } = await import('../src/main/modules/live-photo/service')
+  const { cloneRepo } = await import('../src/main/modules/clone/repo')
 
   const calls: Array<{ url: string; method: string; bodyText?: string }> = []
 
@@ -77,6 +86,39 @@ async function main() {
     assert.ok(calls.some((item) => item.url.includes('/im/v1/files')))
     assert.ok(calls.filter((item) => item.url.includes('/im/v1/messages')).length >= 2)
 
+    const originalGet = livePhotoService.get
+    const originalMarkItemUsed = livePhotoService.markItemUsed
+    const originalGetHermesIntegrationSettings = cloneRepo.getHermesIntegrationSettings
+    ;(livePhotoService as any).get = async (id: string) =>
+      id === 'completed-item'
+        ? {
+            id,
+            sourceType: 'reference_replace',
+            packagingStatus: 'completed',
+            livePhotoVideoPath: videoPath,
+            productSnapshot: { name: 'Demo product' },
+          }
+        : null
+    ;(livePhotoService as any).markItemUsed = async () => ({ ok: true })
+    ;(cloneRepo as any).getHermesIntegrationSettings = async () => ({
+      feishu: {},
+    })
+    try {
+      const batchResult = await hermesDeliveryService.sendLivePhotoItemsToFeishu({
+        ids: ['completed-item', 'missing-item'],
+      })
+      assert.deepEqual(batchResult.sent.map((item) => item.id), ['completed-item'])
+      assert.deepEqual(batchResult.skipped.map((item) => item.id), ['missing-item'])
+      const profileTokenRequest = calls.find((item) => item.url.includes('/auth/v3/tenant_access_token/internal') && item.bodyText?.includes('profile-app-id'))
+      assert.ok(profileTokenRequest)
+      const profileMessageRequest = calls.find((item) => item.url.includes('receive_id_type=chat_id') && item.bodyText?.includes('oc_profile_chat'))
+      assert.ok(profileMessageRequest)
+    } finally {
+      ;(livePhotoService as any).get = originalGet
+      ;(livePhotoService as any).markItemUsed = originalMarkItemUsed
+      ;(cloneRepo as any).getHermesIntegrationSettings = originalGetHermesIntegrationSettings
+    }
+
     const wecomResult = await hermesDeliveryService.sendFinalToWecom({
       corpId: 'corp-id',
       corpSecret: 'corp-secret',
@@ -95,6 +137,8 @@ async function main() {
     console.log('live photo hermes delivery smoke test passed')
   } finally {
     hermesDeliveryService.resetTestDependencies()
+    if (previousProfileDir === undefined) delete process.env.VIDEOGENERATE_HERMES_PROFILE_DIR
+    else process.env.VIDEOGENERATE_HERMES_PROFILE_DIR = previousProfileDir
     await rm(root, { recursive: true, force: true })
   }
 }

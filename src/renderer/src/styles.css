@@ -1386,6 +1386,453 @@ body,
   }
 }
 
+/* Clone topbar final specificity guard. */
+html[data-app-theme] body #app .app-shell .ds-shell__main:has(.clone-page) .ds-topbar__spacer {
+  display: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-shell__main:has(.clone-page) .ds-topbar__actions {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step,
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-done,
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-active,
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-done.is-active {
+  border: 0 !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-active {
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 -2px 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric {
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-panel) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric + .app-topbar-clone__metric {
+  border-left: 1px solid var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .panel-compose-stage {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-shell) !important;
+  box-shadow: none !important;
+}
+
+/* Theme takeover for legacy model, product, and clone controls. */
+html[data-app-theme] body #app .app-shell .models-library-page .models-tabs {
+  gap: 4px !important;
+  padding: 6px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-tab {
+  height: 34px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-tab strong {
+  color: inherit !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-tab:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-tab.active {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-detail-tabs {
+  gap: 4px !important;
+  margin-top: 12px !important;
+  padding: 6px 0 0 !important;
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-detail-tabs button {
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  text-align: center !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-detail-tabs button:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .models-library-page .models-detail-tabs button.active {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.products-create-card__input, .products-create-card__type select) {
+  min-height: 44px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.products-create-card__type span, .products-create-card__icon) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-hero__create {
+  min-height: 44px !important;
+  border: 1px solid var(--theme-accent) !important;
+  border-radius: 8px !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-hero__create:hover {
+  border-color: var(--theme-control-selected-text) !important;
+  background: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .board-card {
+  gap: 12px !important;
+  padding: 12px !important;
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field, .select-field, .sort-field, .filter-button, .view-toggle) {
+  min-height: 42px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field__input, .select-field select, .sort-field select) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field, .select-field, .sort-field):focus-within {
+  border-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field, .select-field, .sort-field, .filter-button) svg,
+html[data-app-theme] body #app .app-shell .products-page .select-field span {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .filter-button:hover {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .view-toggle {
+  padding: 3px !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .view-toggle__button {
+  width: 34px !important;
+  height: 32px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .view-toggle__button--active {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .tabs-row {
+  gap: 6px !important;
+  padding: 4px 0 10px !important;
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .tab-chip {
+  min-height: 34px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .tab-chip:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .tab-chip--active {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .tab-chip--active::after {
+  display: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .tab-chip em {
+  min-width: 20px !important;
+  height: 20px !important;
+  padding: 0 6px !important;
+  background: var(--theme-panel-soft) !important;
+  color: inherit !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.product-card__primary, .product-card__secondary, .product-card__ghost) {
+  min-height: 36px !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .product-card__primary {
+  border: 1px solid var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.product-card__secondary, .product-card__ghost) {
+  border: 1px solid var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.product-card__secondary, .product-card__ghost):hover {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__nav {
+  gap: 6px !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step {
+  min-height: 36px !important;
+  padding: 4px 10px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:is(.is-active, .is-done) {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__index {
+  width: 24px !important;
+  height: 24px !important;
+  border: 0 !important;
+  background: var(--theme-panel-soft) !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__label {
+  color: inherit !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__arrow {
+  background: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__arrow::after {
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-summary-card--highlight {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control-selected) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-hero-card {
+  grid-template-columns: 58px minmax(0, 1fr) auto !important;
+  padding: 12px !important;
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.variant-hero-card__score, .variant-score) {
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 8px !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-hero-card__score {
+  font-size: 18px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-score {
+  font-size: 17px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-card {
+  grid-template-columns: 58px minmax(0, 1fr) !important;
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-card:hover {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .variant-card--row.selected {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.variant-hero-card__copy p, .variant-hero-card__copy small, .variant-copy__head span) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-table {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-table__head {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row {
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row:hover {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control-hover) !important;
+  transform: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-panel) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row.is-working {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-cell {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-cell--index {
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-control) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-cell--index strong {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.storyboard-design-cell--index small, .storyboard-design-tags em) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-tags em {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control) !important;
+}
+
 @media (max-width: 900px) {
   .ds-workspace {
     padding: 22px 16px 42px;
@@ -1400,6 +1847,539 @@ body,
   .simple-stepper {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final clone workflow bar and compose preview geometry. */
+html[data-app-theme] body #app .app-shell .app-topbar-clone {
+  min-height: 62px !important;
+  gap: 12px !important;
+  padding: 10px 12px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__nav {
+  flex: 1 1 auto !important;
+  gap: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step,
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:is(.is-done, .is-active),
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:is(.is-done, .is-active):is(:hover, :focus-visible) {
+  flex: 1 1 0 !important;
+  justify-content: center !important;
+  min-height: 38px !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-muted) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active {
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 -2px 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__label {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__label {
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__index,
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__index {
+  width: 24px !important;
+  height: 24px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 50% !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__index {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__index {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__arrow {
+  width: 18px !important;
+  background: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__arrow::after {
+  border-color: var(--theme-border-control) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__spacer {
+  min-width: 4px !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__status {
+  gap: 6px !important;
+  padding-left: 12px !important;
+  border-left: 1px solid var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric {
+  min-height: 40px !important;
+  padding: 6px 10px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric strong {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric small {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric--account {
+  min-width: 138px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card {
+  border-radius: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card__media {
+  border-radius: 8px !important;
+  background: var(--theme-root) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card__media video {
+  border-radius: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .app-topbar-clone {
+    gap: 8px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-topbar-clone__status {
+    padding-left: 0 !important;
+    border-left: 0 !important;
+  }
+}
+
+/* Plugin market surfaces follow the compact reference layout. */
+html[data-app-theme] body #app .app-shell .plugins-page {
+  gap: 14px !important;
+  padding: 8px 12px 18px !important;
+  color: var(--theme-text) !important;
+  background: transparent !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .hero-card {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  flex-wrap: nowrap !important;
+  min-height: 92px !important;
+  padding: 8px 0 6px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .hero-card__eyebrow,
+html[data-app-theme] body #app .app-shell .plugins-page .detail-card__eyebrow {
+  color: var(--theme-accent) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.08em !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .hero-card h1 {
+  margin-top: 6px !important;
+  color: var(--theme-text) !important;
+  font-size: 27px !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .hero-card p {
+  margin-top: 6px !important;
+  color: var(--theme-text-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .hero-card__actions {
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .search-box {
+  min-width: 280px !important;
+  height: 40px !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 999px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text-muted) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .search-box input {
+  background: transparent !important;
+  color: var(--theme-text) !important;
+  font-size: 12px !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .search-box input::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page
+  :is(.ghost-button, .primary-button) {
+  min-height: 40px !important;
+  min-width: 86px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .ghost-button {
+  border: 1px solid var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page
+  :is(.ghost-button:hover, .ghost-button.active) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .primary-button {
+  min-width: 96px !important;
+  border: 1px solid var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .primary-button:hover:not(:disabled) {
+  border-color: var(--theme-control-selected-text) !important;
+  background: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .market-grid {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card {
+  display: grid !important;
+  min-height: 286px !important;
+  gap: 10px !important;
+  padding: 14px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 14px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page
+  .plugin-card:is(:hover, .selected) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control) !important;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--theme-accent) 10%, transparent) !important;
+  transform: translateY(-1px) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page
+  :is(.plugin-card__icon, .detail-card__icon) {
+  width: 44px !important;
+  height: 44px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  font-size: 14px !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__state,
+html[data-app-theme] body #app .app-shell .plugins-page .detail-card__chips span {
+  min-height: 24px !important;
+  padding: 0 8px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 999px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  font-size: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__state.installed {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__body h3 {
+  margin: 0 !important;
+  color: var(--theme-text) !important;
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__body p {
+  min-height: 58px !important;
+  margin-top: 6px !important;
+  color: var(--theme-text-secondary) !important;
+  font-size: 11px !important;
+  line-height: 1.5 !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__meta {
+  gap: 4px !important;
+  color: var(--theme-text-muted) !important;
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__action {
+  min-height: 36px !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--theme-accent) !important;
+  border-radius: 8px !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .plugin-card__action:hover:not(:disabled) {
+  border-color: var(--theme-control-selected-text) !important;
+  background: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .detail-card {
+  gap: 14px !important;
+  padding: 16px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 14px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .detail-card h2 {
+  color: var(--theme-text) !important;
+  font-size: 20px !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugins-page .detail-card p,
+html[data-app-theme] body #app .app-shell .plugins-page .empty-state p {
+  color: var(--theme-text-secondary) !important;
+}
+
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .plugins-page .market-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html[data-app-theme] body #app .app-shell .plugins-page .hero-card {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .plugins-page .hero-card__actions {
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .plugins-page .search-box {
+    min-width: 0 !important;
+    flex: 1 1 240px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .plugins-page .market-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  html[data-app-theme] body #app .app-shell .plugins-page .market-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 460px) {
+  html[data-app-theme] body #app .app-shell .plugins-page .market-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Product library create controls use one compact, theme-owned baseline. */
+html[data-app-theme] body #app .app-shell .products-page .products-create-card {
+  align-items: flex-end !important;
+  min-width: min(540px, 100%) !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-create-card__fields {
+  align-items: end !important;
+  min-width: 0 !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.products-create-card__input, .products-create-card__type select) {
+  align-self: end !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  box-sizing: border-box !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-create-card__input::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-create-card__type {
+  align-content: end !important;
+  gap: 4px !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-create-card__type span {
+  color: var(--theme-text-muted) !important;
+  font-size: 10px !important;
+  line-height: 14px !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-create-card__icon {
+  right: 14px !important;
+  bottom: 14px !important;
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-hero__create {
+  align-self: end !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  min-width: 168px !important;
+  box-sizing: border-box !important;
+  border: 1px solid var(--theme-accent) !important;
+  border-radius: 8px !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-hero__create:hover {
+  border-color: var(--theme-control-selected-text) !important;
+  background: var(--theme-control-selected-text) !important;
+}
+
+@media (max-width: 960px) {
+  html[data-app-theme] body #app .app-shell .products-page .products-create-card {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .panel-compose-stage {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-shell) !important;
+  box-shadow: none !important;
+}
+
+/* Clone topbar final specificity guard. */
+html[data-app-theme] body #app .app-shell .ds-shell__main:has(.clone-page) .ds-topbar__spacer {
+  display: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-shell__main:has(.clone-page) .ds-topbar__actions {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step,
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-done,
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-active,
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-done.is-active {
+  border: 0 !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-topbar__actions
+  .app-topbar-shell .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-active {
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 -2px 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric {
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-panel) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric + .app-topbar-clone__metric {
+  border-left: 1px solid var(--theme-divider) !important;
 }
 
 /* Reference image aligned app shell (2026-04-30) */
@@ -15263,4 +16243,5231 @@ h2 {
 .home-console-panel,
 .home-side-panel {
   backdrop-filter: none !important;
+}
+
+/* App appearance themes and compact typography. */
+:root,
+html[data-app-theme='dark-teal'] {
+  color-scheme: dark;
+  --theme-root: #070910;
+  --theme-shell: #090e18;
+  --theme-sidebar: #080c15;
+  --theme-panel: #11131e;
+  --theme-panel-soft: #151827;
+  --theme-input: #0d101b;
+  --theme-border: #1d2633;
+  --theme-border-control: #344154;
+  --theme-divider: #202a38;
+  --theme-text: #eef2f7;
+  --theme-text-secondary: #c6cfdb;
+  --theme-text-muted: #8c99ac;
+  --theme-accent: #14b8a6;
+  --theme-accent-soft: #123f3b;
+  --theme-control: #171c2a;
+  --theme-control-hover: #20283a;
+  --theme-control-selected: #123f3b;
+  --theme-control-selected-text: #5eead4;
+  --theme-danger: #ef4444;
+  --theme-danger-soft: #4a1f2a;
+  --theme-danger-text: #fecaca;
+  --theme-success-soft: #123b2a;
+  --theme-success-text: #86efac;
+  --theme-warning-soft: #493316;
+  --theme-warning-text: #fde68a;
+}
+
+html[data-app-theme='soft-mint'] {
+  color-scheme: light;
+  --theme-root: #eaf4f1;
+  --theme-shell: #f3faf8;
+  --theme-sidebar: #f8fcfb;
+  --theme-panel: #ffffff;
+  --theme-panel-soft: #edf7f4;
+  --theme-input: #f7fbfa;
+  --theme-border: #dceae6;
+  --theme-border-control: #b7d2ca;
+  --theme-divider: #d4e4df;
+  --theme-text: #18312b;
+  --theme-text-secondary: #365c52;
+  --theme-text-muted: #6d8b83;
+  --theme-accent: #2f9477;
+  --theme-accent-soft: #c7e7de;
+  --theme-control: #e4f2ee;
+  --theme-control-hover: #d7ebe5;
+  --theme-control-selected: #c7e7de;
+  --theme-control-selected-text: #1f6f59;
+  --theme-danger: #dc2626;
+  --theme-danger-soft: #fee2e2;
+  --theme-danger-text: #991b1b;
+  --theme-success-soft: #dcfce7;
+  --theme-success-text: #166534;
+  --theme-warning-soft: #fef3c7;
+  --theme-warning-text: #92400e;
+}
+
+html[data-app-theme='warm-paper'] {
+  color-scheme: light;
+  --theme-root: #efe5d1;
+  --theme-shell: #f6efdf;
+  --theme-sidebar: #fbf7ed;
+  --theme-panel: #fffaf0;
+  --theme-panel-soft: #f3e7d1;
+  --theme-input: #fffdf7;
+  --theme-border: #eadfcf;
+  --theme-border-control: #d8c3a4;
+  --theme-divider: #e4d6c2;
+  --theme-text: #3a2918;
+  --theme-text-secondary: #624a31;
+  --theme-text-muted: #8c745a;
+  --theme-accent: #ad5b00;
+  --theme-accent-soft: #efd3ad;
+  --theme-control: #f0e2ca;
+  --theme-control-hover: #e8d4b3;
+  --theme-control-selected: #efd3ad;
+  --theme-control-selected-text: #8a4700;
+  --theme-danger: #c2410c;
+  --theme-danger-soft: #ffedd5;
+  --theme-danger-text: #9a3412;
+  --theme-success-soft: #dcfce7;
+  --theme-success-text: #166534;
+  --theme-warning-soft: #fef3c7;
+  --theme-warning-text: #92400e;
+}
+
+html[data-app-theme='clear-sky'] {
+  color-scheme: light;
+  --theme-root: #eff0fb;
+  --theme-shell: #f7f7ff;
+  --theme-sidebar: #fbfbff;
+  --theme-panel: #ffffff;
+  --theme-panel-soft: #f0f2ff;
+  --theme-input: #fafaff;
+  --theme-border: #e1e6f3;
+  --theme-border-control: #c9d3ea;
+  --theme-divider: #d9e0ef;
+  --theme-text: #1d2840;
+  --theme-text-secondary: #445678;
+  --theme-text-muted: #7683a0;
+  --theme-accent: #3b82f6;
+  --theme-accent-soft: #dbe8ff;
+  --theme-control: #e8ecfa;
+  --theme-control-hover: #dce4f8;
+  --theme-control-selected: #dbe8ff;
+  --theme-control-selected-text: #1d4ed8;
+  --theme-danger: #dc2626;
+  --theme-danger-soft: #fee2e2;
+  --theme-danger-text: #991b1b;
+  --theme-success-soft: #dcfce7;
+  --theme-success-text: #166534;
+  --theme-warning-soft: #fef3c7;
+  --theme-warning-text: #92400e;
+}
+
+html {
+  font-size: 14px;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family:
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    "Noto Sans SC",
+    "Segoe UI Variable Text",
+    "Segoe UI",
+    sans-serif !important;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+body,
+#app,
+.ui-app,
+.app-shell {
+  background: var(--theme-root) !important;
+  color: var(--theme-text) !important;
+}
+
+.app-titlebar {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-sidebar) !important;
+  color: var(--theme-text) !important;
+}
+
+.app-titlebar__brand-line strong,
+.app-titlebar__window-controls button {
+  color: var(--theme-text) !important;
+}
+
+.app-titlebar__brand-line span:last-child,
+.app-titlebar__brand-copy small {
+  color: var(--theme-text-muted) !important;
+}
+
+.app-titlebar__action,
+.app-titlebar__status {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+.app-shell .ds-sidebar {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-sidebar) !important;
+}
+
+.app-shell .ds-sidebar__item,
+.app-sidebar-footer-action,
+.app-sidebar-user {
+  color: var(--theme-text-secondary) !important;
+}
+
+.app-shell .ds-sidebar__item:hover,
+.app-sidebar-footer-action:hover,
+.app-sidebar-user:hover {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+.app-shell .ds-sidebar__item.is-active {
+  border-color: color-mix(in srgb, var(--theme-accent) 28%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+.app-shell .ds-sidebar__item.is-active::before {
+  background: var(--theme-accent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme-accent) 42%, transparent) !important;
+}
+
+.app-shell .ds-sidebar__section-title,
+.app-sidebar-user__name {
+  color: var(--theme-text) !important;
+}
+
+.app-sidebar-user__meta {
+  color: var(--theme-text-muted) !important;
+}
+
+.app-shell .ds-workspace,
+.settings-console {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+.settings-console .settings-shell,
+.settings-console .settings-nav-panel,
+.settings-console .settings-form-panel,
+.settings-console .settings-side-panel,
+.settings-console .side-card,
+.settings-console .summary-card,
+.settings-console .nav-item,
+.settings-console .settings-message,
+.settings-console .bullet-item,
+.settings-console .platform-card,
+.settings-console .capability-card {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+.settings-console input,
+.settings-console select {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+.settings-console p,
+.settings-console small,
+.settings-console label span,
+.settings-console .side-row span {
+  color: var(--theme-text-muted) !important;
+}
+
+.settings-console h1,
+.settings-console h2,
+.settings-console h3,
+.settings-console strong {
+  color: var(--theme-text) !important;
+}
+
+/* Keep every workspace visually connected when a light appearance is active. */
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-shell {
+  background: var(--theme-shell) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-sidebar) !important;
+  box-shadow: none !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar__section,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell__sidebar-footer {
+  border-color: var(--theme-border) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar__section-title,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar__item {
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar__item--sub,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-sidebar-footer-action,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-sidebar-user {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar__item:hover,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-sidebar-footer-action:hover,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-sidebar-user:hover {
+  border-color: var(--theme-border) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar__item.is-active {
+  border-color: color-mix(in srgb, var(--theme-accent) 28%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-sidebar-user__name {
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-sidebar-user__meta,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar
+  label
+  span {
+  color: var(--theme-text-muted) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar
+  select,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-sidebar
+  .ui-select {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-shell__main,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .app-shell
+  .ds-workspace {
+  background: var(--theme-shell) !important;
+}
+
+/* Shared light workspace surfaces. */
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  :is(
+    .home-dashboard-refined,
+    .models-library-page,
+    .products-page,
+    .clone-task-list-page,
+    .production-home-page,
+    .live-slicer-workbench,
+    .plugins-page
+  ) {
+  color: var(--theme-text) !important;
+  background: transparent !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .home-dashboard-refined
+  :is(.hero-card, .metric-card, .quick-start-panel, .template-panel, .side-panel),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .models-library-page
+  :is(
+    .models-hero,
+    .models-panel,
+    .models-library-card,
+    .models-detail-card,
+    .models-stat-card,
+    .models-create-section,
+    .models-prompt-preview,
+    .models-upload-panel,
+    .models-dialog,
+    .models-empty-state
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .products-page
+  :is(.products-shell, .stat-card, .board-card, .product-card, .products-empty, .pagination-row),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .production-home-page
+  :is(.production-home-hero, .production-home-panel, .production-entry-card),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .live-slicer-workbench
+  :is(.live-upload-card, .live-results-card, .live-panel),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  :is(.hero-card, .detail-card, .empty-state, .plugin-card) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .home-dashboard-refined
+  :is(.quick-start-card, .operation-card, .hero-card__summary span),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .models-library-page
+  :is(
+    .models-input,
+    .models-select,
+    .models-select-menu,
+    .models-selection-pill,
+    .models-library-card__media,
+    .models-profile-summary,
+    .models-profile-chip,
+    .models-detail-section,
+    .models-upload-preview,
+    .models-prompt-preview__textarea
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .products-page
+  :is(
+    .products-create-card__input,
+    .products-create-card__type select,
+    .search-field,
+    .select-field,
+    .filter-button,
+    .sort-field,
+    .view-toggle,
+    .page-size-button,
+    .product-card__analysis,
+    .product-card__preview,
+    .product-card__secondary,
+    .product-card__ghost,
+    .product-card__menu-panel
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .production-home-page
+  :is(.production-home-stat, .production-home-task-item),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .live-slicer-workbench
+  :is(
+    .live-drop-zone,
+    .live-upload-icon,
+    .live-empty-result,
+    .live-result-item,
+    .live-mode-card,
+    .live-input,
+    .live-dir-row button,
+    .live-secondary,
+    .live-small-button,
+    .live-status
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  :is(.search-box, .plugin-card__state, .detail-card__chips span, .ghost-button) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .models-library-page
+  :is(input, textarea, select),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .products-page
+  :is(input, select),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  input {
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  :is(
+    .home-dashboard-refined,
+    .models-library-page,
+    .products-page,
+    .clone-task-list-page,
+    .production-home-page,
+    .live-slicer-workbench,
+    .plugins-page
+  )
+  :is(h1, h2, h3, strong, b) {
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  :is(
+    .home-dashboard-refined,
+    .models-library-page,
+    .products-page,
+    .clone-task-list-page,
+    .production-home-page,
+    .live-slicer-workbench,
+    .plugins-page
+  )
+  :is(p, small) {
+  color: var(--theme-text-muted) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .clone-task-list-page {
+  --clone-panel-border: var(--theme-border);
+  --clone-panel-bg: var(--theme-panel);
+  --clone-card-bg: var(--theme-panel-soft);
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .clone-task-list-page
+  :is(.clone-console-panel, .clone-console-table, .clone-console-row, .clone-list-empty) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .clone-task-list-page
+  :is(
+    .clone-console-stat,
+    .clone-console-run-mode,
+    .clone-console-table__groupbar,
+    .clone-console-table__head,
+    .clone-console-overview__tool,
+    .clone-console-overview__icon,
+    .clone-console-table__viewtool,
+    .clone-console-row__action,
+    .clone-console-row__rename,
+    .clone-console-group,
+    .clone-list-page-size,
+    .clone-list-page-size-menu
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .clone-task-list-page
+  :is(.clone-console-hero__copy p, .clone-console-stat__copy span, .clone-console-table__headcell) {
+  color: var(--theme-text-muted) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .live-slicer-workbench
+  .live-mode-card.active {
+  border-color: color-mix(in srgb, var(--theme-accent) 56%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  .banner--error {
+  color: #9f3030 !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  .banner--success {
+  color: #176b3a !important;
+}
+
+/* Scoped sidebar styles have higher specificity, so keep this final override explicit. */
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  body
+  #app
+  .app-shell
+  .ds-shell
+  .ds-sidebar
+  .ds-sidebar__item,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  body
+  #app
+  .app-shell
+  .ds-shell
+  .ds-sidebar
+  .ds-sidebar__item
+  span,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  body
+  #app
+  .app-shell
+  .ds-shell
+  .ds-sidebar
+  .ds-sidebar__item
+  svg {
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  body
+  #app
+  .app-shell
+  .ds-shell
+  .ds-sidebar
+  .ds-sidebar__item.is-active,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  body
+  #app
+  .app-shell
+  .ds-shell
+  .ds-sidebar
+  .ds-sidebar__item.is-active
+  span,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  body
+  #app
+  .app-shell
+  .ds-shell
+  .ds-sidebar
+  .ds-sidebar__item.is-active
+  svg {
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .models-library-page
+  :is(.models-input input, .models-field textarea, .models-prompt-preview__textarea),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .products-page
+  :is(
+    .products-create-card__input,
+    .products-create-card__type select,
+    .search-field__input,
+    .select-field select,
+    .sort-field select,
+    .page-size-select
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  .search-box
+  input {
+  background: transparent !important;
+  color: var(--theme-text) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  :is(.models-library-page, .products-page, .plugins-page)
+  input::placeholder,
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .models-library-page
+  textarea::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .models-library-page
+  :is(
+    .models-tab,
+    .models-tab strong,
+    .models-select-trigger__label,
+    .models-select-option,
+    .models-catalog-head__summary,
+    .models-catalog-head__summary-copy b,
+    .models-library-card__desc,
+    .models-library-card__meta-row
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .products-page
+  :is(
+    .tab-chip,
+    .tab-chip em,
+    .product-card__id,
+    .product-card__meta,
+    .product-card__analysis span,
+    .products-create-card__type span
+  ),
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .plugins-page
+  :is(.plugin-card__body p, .plugin-card__meta, .detail-card p, .empty-state p) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .clone-task-list-page
+  :is(
+    .clone-console-run-mode__option,
+    .clone-console-stat__copy span,
+    .clone-console-group__main,
+    .clone-console-overview__tool,
+    .clone-console-table__headcell,
+    .clone-console-row__mode,
+    .clone-console-row__text,
+    .clone-console-row__meta,
+    .clone-console-row__stage,
+    .clone-console-row__updated,
+    .clone-console-row__progress-copy,
+    .clone-list-pagination,
+    .clone-list-pagination__summary
+  ) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is(
+    [data-app-theme='soft-mint'],
+    [data-app-theme='warm-paper'],
+    [data-app-theme='clear-sky']
+  )
+  .live-slicer-workbench
+  :is(
+    .live-slicer-head p,
+    .live-drop-zone p,
+    .live-card-head p,
+    .live-label,
+    .live-two-cols label > span,
+    .live-dir-field > span,
+    .live-two-cols label small,
+  .live-mode-card small,
+  .live-note
+  ) {
+  color: var(--theme-text-secondary) !important;
+}
+
+/* Theme-aware controls, selection states, tags, and hover feedback. */
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .ds-button--primary,
+    .primary-button,
+    .models-top-primary,
+    .models-primary-button,
+    .products-hero__create,
+    .product-card__primary,
+    .products-empty__create,
+    .pagination-button--active,
+    .view-toggle__button--active,
+    .clone-console-hero__button--primary,
+    .clone-list-batch-action--accent,
+    .clone-subtitle-dialog__submit,
+    .live-primary,
+    .plugin-card__action
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 68%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .ds-button--primary,
+    .primary-button,
+    .models-top-primary,
+    .models-primary-button,
+    .products-hero__create,
+    .product-card__primary,
+    .products-empty__create,
+    .pagination-button--active,
+    .view-toggle__button--active,
+    .clone-console-hero__button--primary,
+    .clone-list-batch-action--accent,
+    .clone-subtitle-dialog__submit,
+    .live-primary,
+    .plugin-card__action
+  ):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 78%, #000000),
+    color-mix(in srgb, var(--theme-accent) 88%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--theme-accent) 30%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .ds-button--secondary,
+    .ds-button--ghost,
+    .ghost-button,
+    .models-ghost-button,
+    .models-secondary-button,
+    .filter-button,
+    .product-card__secondary,
+    .product-card__ghost,
+    .pagination-button,
+    .page-size-button,
+    .clone-console-hero__button:not(.clone-console-hero__button--primary),
+    .clone-console-overview__tool,
+    .clone-console-overview__icon,
+    .clone-console-table__viewtool,
+    .clone-console-row__action,
+    .clone-console-row__rename,
+    .clone-list-page-size,
+    .live-secondary,
+    .live-small-button,
+    .access-key-visibility
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .ds-button--secondary,
+    .ds-button--ghost,
+    .ghost-button,
+    .models-ghost-button,
+    .models-secondary-button,
+    .filter-button,
+    .product-card__secondary,
+    .product-card__ghost,
+    .pagination-button,
+    .page-size-button,
+    .clone-console-hero__button:not(.clone-console-hero__button--primary),
+    .clone-console-overview__tool,
+    .clone-console-overview__icon,
+    .clone-console-table__viewtool,
+    .clone-console-row__action,
+    .clone-console-row__rename,
+    .clone-list-page-size,
+    .live-secondary,
+    .live-small-button,
+    .access-key-visibility
+  ):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-accent) 38%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .models-tab.active,
+    .models-select-option.active,
+    .models-view-switch button.active,
+    .models-pagination__nav button.active,
+    .models-detail-tabs button.active,
+    .models-profile-section-tab.active,
+    .models-profile-chip.active,
+    .tab-chip--active,
+    .clone-console-run-mode__option.is-active,
+    .clone-console-stat.is-active,
+    .clone-console-group.is-active,
+    .clone-console-table__viewtool.is-active,
+    .clone-list-pagination__controls button.is-active,
+    .clone-list-page-size-menu button.is-active,
+    .live-mode-card.active,
+    .ghost-like.active,
+    .ghost-button.active,
+    .settings-console .nav-item.active
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 48%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.models-tab.active, .models-detail-tabs button.active, .tab-chip--active) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .tab-chip--active::after {
+  background: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .models-tag-row span,
+    .models-link-button,
+    .models-profile-summary__chips span,
+    .models-library-card__pro,
+    .models-library-card__more,
+    .plugin-card__state,
+    .detail-card__chips span,
+    .ds-tag
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.ds-tag--ai, .ds-tag--locked, .local-mode-badge) {
+  border-color: color-mix(in srgb, var(--theme-accent) 32%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.ds-tag--success, .models-library-card__badge.is-done, .plugin-card__state.installed) {
+  border-color: rgba(22, 163, 74, 0.24) !important;
+  background: rgba(22, 163, 74, 0.11) !important;
+  color: #176b3a !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.ds-tag--processing, .ds-tag--upload, .models-library-card__badge.is-generating) {
+  border-color: rgba(37, 99, 235, 0.24) !important;
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: #2459a6 !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.ds-tag--error, .models-library-card__badge.is-failed) {
+  border-color: rgba(220, 38, 38, 0.22) !important;
+  background: rgba(220, 38, 38, 0.1) !important;
+  color: #a62e2e !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .ds-tag--warning {
+  border-color: rgba(217, 119, 6, 0.24) !important;
+  background: rgba(217, 119, 6, 0.11) !important;
+  color: #8a5700 !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .quick-start-card,
+    .operation-card,
+    .models-library-card,
+    .models-select-option,
+    .models-action-menu__panel button,
+    .product-card,
+    .product-card__menu-panel button,
+    .clone-console-group,
+    .clone-console-row,
+    .clone-group-menu__item,
+    .clone-row-move-menu__item,
+    .plugin-card,
+    .theme-option
+  ):hover {
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, var(--theme-border)) !important;
+  background-color: color-mix(in srgb, var(--theme-accent) 8%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--theme-accent) 10%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(
+    .input,
+    .library-pagination__select,
+    .tab-button,
+    .workspace-card__hint,
+    .metric-card__label,
+    .metric-card__sub,
+    .section-head p,
+    .queue-stat__label,
+    .album-card__meta span,
+    .parser-video-card__body span
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .creative-page
+  :is(
+    .back-link,
+    .panel-side-note,
+    .task-card p,
+    .task-card__meta span,
+    .shot-card p,
+    .shot-card__meta span,
+    .project-pick-card p,
+    .project-pick-card small
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .vpd-page
+  :is(
+    .vpd-tab-button,
+    .vpd-field span,
+    .vpd-section-head p,
+    .vpd-library__intro span,
+    .vpd-album-card__meta span
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .subtitle-workbench-page
+  :is(
+    .segmented-tabs button,
+    .field-block span,
+    .clone-picker__copy small,
+    .source-list-item__copy small,
+    .result-thumb__copy small,
+    .queue-card-item__meta span
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .toolbar-button,
+    .live-console-row__text,
+    .live-console-row__updated-inline,
+    .live-console-row__detail-head span,
+    .live-console-row__timeline-item small,
+    .library-overview__card span
+  ) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.materials-workbench, .creative-page, .vpd-page, .subtitle-workbench-page, .live-photo-page)
+  :is(input, textarea, select) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.materials-workbench, .creative-page, .vpd-page, .subtitle-workbench-page, .live-photo-page)
+  :is(input, textarea)::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.materials-workbench, .creative-page, .vpd-page, .subtitle-workbench-page, .live-photo-page)
+  :is(
+    .hero-card__eyebrow,
+    .creative-hero__eyebrow,
+    .eyebrow-chip,
+    .vpd-hero__eyebrow,
+    .live-kicker,
+    .mini-kicker
+  ) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(label span, .upload-dropzone span, .field-hint) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .app-avatar {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+}
+
+/* Apply the same interaction language inside plugin workspaces. */
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .vpd-page,
+    .subtitle-workbench-page
+  ) {
+  background: transparent !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(
+    .hero-card,
+    .workspace-card,
+    .footer-card,
+    .panel,
+    .metric-card,
+    .queue-card,
+    .album-card,
+    .parser-video-card
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .creative-page
+  :is(
+    .creative-hero,
+    .panel-card,
+    .metric-card,
+    .task-card,
+    .shot-card,
+    .soft-block,
+    .status-hero,
+    .preview-card,
+    .project-pick-card,
+    .empty-showcase
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .vpd-page
+  :is(.vpd-hero, .vpd-workspace, .vpd-empty, .vpd-stat, .vpd-panel, .vpd-tip-card, .vpd-album-card),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .subtitle-workbench-page
+  :is(
+    .upload-zone,
+    .clone-picker,
+    .picker-tip,
+    .capacity-card,
+    .batch-runtime-card,
+    .preview-card,
+    .config-card,
+    .queue-card,
+    .results-card,
+    .queue-card-item,
+    .result-thumb
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .hero-shell,
+    .live-console-card,
+    .live-console-row,
+    .live-console-row__detail-card,
+    .reference-status-card,
+    .library-overview__card,
+    .live-detail-dialog__panel,
+    .live-detail-dialog__summary-card,
+    .live-detail-dialog__hero-card,
+    .live-result-card
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(.tabs-shell, .queue-file, .path-chip, .upload-dropzone, .queue-stat),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .creative-page
+  :is(.soft-block, .current-clone-hint, .empty-inline-card),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .vpd-page
+  :is(.vpd-tabs, .vpd-textarea, .vpd-tip-card),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .subtitle-workbench-page
+  :is(
+    .dark-input,
+    .dark-textarea,
+    .dark-select,
+    .clone-picker__item,
+    .source-list-item,
+    .strategy-card,
+    .template-preset,
+    .title-item-card,
+    .preview-stage,
+    .toolbar-pill
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .clone-safe-note,
+    .library-count,
+    .live-console-row__quickchip,
+    .live-console-row__detail-block pre,
+    .live-console-row__timeline-item,
+    .live-detail-dialog__metric,
+    .live-detail-dialog__log-item
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .vpd-page,
+    .subtitle-workbench-page
+  )
+  :is(h1, h2, h3, h4, strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .vpd-page,
+    .subtitle-workbench-page
+  )
+  :is(p, small, label, .field-hint, .helper-copy, .panel-copy) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(.tab-button.active, .select-checkbox--active, .parser-video-card.is-selected),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .creative-page
+  :is(.project-pick-card.active, .task-card.active, .shot-card.active),
+html[data-app-theme]:not([data-app-theme='dark-teal']) .vpd-page .vpd-tab-button.active,
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .subtitle-workbench-page
+  :is(
+    .clone-picker__item.is-selected,
+    .source-list-item.is-active,
+    .toolbar-pill.is-active,
+    .preview-thumbs__item.is-active,
+    .strategy-card.is-active,
+    .template-preset.is-active,
+    .mode-pills button.is-active,
+    .align-segment button.is-active
+  ),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .live-console-card.selected,
+    .live-console-row.selected,
+    .live-console-row__quickchip--accent,
+    .live-console-row__link--primary
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 48%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(.tab-badge, .section-head__badge, .path-chip, .queue-card__type, .ghost-chip, .usage-chip),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .creative-page
+  :is(.hero-badge, .eyebrow-chip, .panel-tag, .status-pill, .mini-kicker, .preview-card__index),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .vpd-page
+  :is(.vpd-tab-badge, .vpd-section-head__badge, .vpd-status-pill, .vpd-ghost-chip),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .subtitle-workbench-page
+  :is(.status-chip, .toolbar-pill, .result-thumb__badge),
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .status-pill,
+    .live-console-row__status,
+    .live-console-row__stepbadge,
+    .live-console-row__quickchip,
+    .live-console-row__source,
+    .library-count
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .materials-workbench
+  :is(.tab-button, .ghost-button, .ghost-chip, .icon-action, .parser-video-card, .album-card):hover,
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .creative-page
+  :is(.ghost-button, .project-pick-card, .task-card, .shot-card):hover,
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .vpd-page
+  :is(.vpd-tab-button, .vpd-ghost-button, .vpd-ghost-chip, .vpd-icon-action, .vpd-album-card):hover,
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .subtitle-workbench-page
+  :is(
+    .minor-button,
+    .clone-picker__item,
+    .source-list-item,
+    .toolbar-pill,
+    .preview-thumbs__item,
+    .strategy-card,
+    .template-preset
+  ):hover,
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.toolbar-button, .live-console-row, .live-console-row__action, .live-console-row__link):hover {
+  border-color: color-mix(in srgb, var(--theme-accent) 36%, var(--theme-border)) !important;
+  background-color: color-mix(in srgb, var(--theme-accent) 9%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--theme-accent) 10%, transparent) !important;
+}
+
+/* Complete theme coverage for every plugin workspace. */
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  ) {
+  color: var(--theme-text) !important;
+  background: transparent !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .publish-center-page {
+  --pc-border: var(--theme-border);
+  --pc-border-soft: var(--theme-border);
+  --pc-bg: var(--theme-panel);
+  --pc-bg-soft: var(--theme-panel-soft);
+  --pc-bg-elevated: var(--theme-panel-soft);
+  --pc-text: var(--theme-text);
+  --pc-text-muted: var(--theme-text-secondary);
+  --pc-text-soft: var(--theme-text-muted);
+  --pc-purple: var(--theme-accent);
+  --pc-purple-soft: var(--theme-accent-soft);
+  --pc-blue: var(--theme-accent);
+  --pc-blue-soft: var(--theme-accent-soft);
+  --pc-green: var(--theme-accent);
+  --pc-green-soft: var(--theme-accent-soft);
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .subtitle-workbench-page {
+  --bg: transparent;
+  --panel-bg: var(--theme-panel);
+  --panel-edge: var(--theme-border);
+  --panel-edge-strong: color-mix(in srgb, var(--theme-accent) 42%, var(--theme-border));
+  --panel-shadow: none;
+  --text-main: var(--theme-text);
+  --text-soft: var(--theme-text-secondary);
+  --text-faint: var(--theme-text-muted);
+  --accent: var(--theme-accent);
+  --accent-soft: var(--theme-accent-soft);
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.geelark-settings-page, .publish-center-page, .listing-page, .placeholder-page)
+  :is(
+    .hero-card,
+    .loading-card,
+    .stat-card,
+    .panel-card,
+    .workspace-card,
+    .side-card,
+    .quick-card,
+    .utility-panel,
+    .record-panel,
+    .table-card,
+    .grid-card,
+    .editor-card,
+    .preview-card,
+    .result-thumb-card,
+    .export-config-dialog,
+    .export-config-card,
+    .delete-dialog,
+    .placeholder-card,
+    .placeholder-item,
+    .empty-card,
+    .empty-state,
+    .empty-inline,
+    .hint-card
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.geelark-settings-page, .publish-center-page, .listing-page, .placeholder-page)
+  :is(
+    .account-item,
+    .candidate-item,
+    .selected-preview,
+    .mini-item,
+    .task-row,
+    .field-shell,
+    .select-shell,
+    .upload-box,
+    .table-header,
+    .product-row,
+    .table-footer,
+    .page-size,
+    .grid-card__image,
+    .upload-preview,
+    .preview-card__image,
+    .preview-card__placeholder,
+    .result-analysis-board__preview
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(h1, h2, h3, h4, strong, b) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(p, small, label, .panel-subcopy, .panel-side-note, .field-hint, .preview-meta) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(input, textarea, select) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(input, textarea)::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .primary-button,
+    .plugin-card__action,
+    .ai-button,
+    .next-step-button,
+    .hero-primary-button,
+    .vpd-primary-button,
+    .publish-button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 68%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .primary-button,
+    .plugin-card__action,
+    .ai-button,
+    .next-step-button,
+    .hero-primary-button,
+    .vpd-primary-button,
+    .publish-button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button
+  ):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 78%, #000000),
+    color-mix(in srgb, var(--theme-accent) 88%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--theme-accent) 30%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .ghost-button,
+    .hero-ghost-button,
+    .toolbar-button,
+    .icon-button,
+    .row-action,
+    .page-btn,
+    .candidate-pagination__button,
+    .shortcut-button,
+    .minor-button,
+    .vpd-ghost-button,
+    .vpd-ghost-chip,
+    .vpd-icon-action,
+    .live-console-row__action,
+    .live-detail-dialog__ghost
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .ghost-button,
+    .hero-ghost-button,
+    .toolbar-button,
+    .icon-button,
+    .row-action,
+    .page-btn,
+    .candidate-pagination__button,
+    .shortcut-button,
+    .minor-button,
+    .vpd-ghost-button,
+    .vpd-ghost-chip,
+    .vpd-icon-action,
+    .live-console-row__action,
+    .live-detail-dialog__ghost
+  ):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-accent) 40%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .plugin-card__icon,
+    .detail-card__icon,
+    .panel-icon,
+    .workspace-card__icon,
+    .hero-card__eyebrow-icon,
+    .vpd-hero__eyebrow-icon,
+    .vpd-empty__icon,
+    .upload-dropzone__icon,
+    .upload-zone__icon,
+    .step-chip__index,
+    .step-badge,
+    .placeholder-icon,
+    .official-badge
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 32%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .eyebrow,
+    .hero-card__eyebrow,
+    .creative-hero__eyebrow,
+    .eyebrow-chip,
+    .vpd-hero__eyebrow,
+    .live-kicker,
+    .mini-kicker,
+    .detail-card__eyebrow
+  ) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .tab-button.active,
+    .vpd-tab-button.active,
+    .segmented-tabs button.active,
+    .step-chip.active,
+    .candidate-item.active,
+    .product-row.selected,
+    .grid-card.selected,
+    .plugin-card.selected,
+    .toolbar-pill.is-active,
+    .source-list-item.is-active,
+    .clone-picker__item.is-selected
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 48%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .tab-button,
+    .vpd-tab-button,
+    .plugin-card,
+    .account-item,
+    .candidate-item,
+    .product-row,
+    .grid-card,
+    .project-pick-card,
+    .task-card,
+    .shot-card,
+    .source-list-item,
+    .clone-picker__item,
+    .strategy-card,
+    .template-preset
+  ):hover {
+  border-color: color-mix(in srgb, var(--theme-accent) 36%, var(--theme-border)) !important;
+  background-color: color-mix(in srgb, var(--theme-accent) 9%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--theme-accent) 10%, transparent) !important;
+}
+
+/* Keep plugin accents synchronized with the dark theme as well. */
+html[data-app-theme='dark-teal']
+  .app-shell
+  .ds-sidebar
+  .ds-sidebar__item.is-active {
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='dark-teal']
+  .app-shell
+  .ds-sidebar
+  .ds-sidebar__item:hover {
+  border-color: color-mix(in srgb, var(--theme-accent) 28%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+/* Enforce opaque and consistent theme colors for every interactive surface. */
+html[data-app-theme]
+  :is(
+    .home-page,
+    .home-dashboard,
+    .home-dashboard-v2,
+    .models-page,
+    .model-library-page,
+    .product-library-page,
+    .product-detail-page,
+    .clone-page,
+    .production-page,
+    .tasks-page,
+    .task-detail-page,
+    .templates-page,
+    .plugins-page,
+    .settings-console,
+    .live-slicer-workbench,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  ) {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] :is(h1, h2, h3, h4, h5, h6, legend) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] :is(p, label, small, time, .muted, .help-text, .hint-text, .description) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] a:not(.ds-sidebar__item) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]
+  :is(
+    button,
+    [role='button'],
+    a.ds-sidebar__item,
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    button,
+    [role='button'],
+    a.ds-sidebar__item,
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button
+  ):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    button,
+    [role='button'],
+    a.ds-sidebar__item,
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button
+  ):focus-visible {
+  border-color: var(--theme-accent) !important;
+  outline: 2px solid var(--theme-accent) !important;
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    button.active,
+    button.selected,
+    button.is-active,
+    button.is-selected,
+    [role='button'].active,
+    [role='button'].selected,
+    [role='button'].is-active,
+    [role='button'].is-selected,
+    [aria-selected='true'],
+    [aria-pressed='true'],
+    [data-state='active'],
+    a.ds-sidebar__item.is-active,
+    .tab-button.active,
+    .tab-chip--active,
+    .nav-item.active,
+    .view-toggle__button--active,
+    .runtime-filter-chip--active
+  ) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    .primary-button,
+    .ds-button--primary,
+    .hero-button--primary,
+    .name-editor__button--primary,
+    .empty-card__button,
+    .status-banner__button,
+    .remark-box__button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button,
+    .compose-export-button,
+    .analyze-primary-button,
+    .storyboard-stage-hero__button--primary,
+    .plugin-card__action,
+    .live-detail-dialog__primary,
+    button[type='submit']
+  ) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    .primary-button,
+    .ds-button--primary,
+    .hero-button--primary,
+    .name-editor__button--primary,
+    .empty-card__button,
+    .status-banner__button,
+    .remark-box__button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button,
+    .compose-export-button,
+    .analyze-primary-button,
+    .storyboard-stage-hero__button--primary,
+    .plugin-card__action,
+    .live-detail-dialog__primary,
+    button[type='submit']
+  ):hover:not(:disabled) {
+  border-color: var(--theme-control-selected-text) !important;
+  background: var(--theme-control-selected-text) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme]
+  :is(
+    .ghost-button,
+    .hero-ghost-button,
+    .secondary-action,
+    .secondary-create-button,
+    .analyze-secondary-button,
+    .compose-side-button,
+    .vpd-ghost-button,
+    .live-detail-dialog__ghost
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    .danger-button,
+    .hero-button--danger,
+    .button-danger,
+    .delete-button,
+    [class*='danger-button'],
+    [class*='delete-button']
+  ) {
+  border-color: var(--theme-danger) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] :is(button, [role='button']):disabled {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] :is(input, textarea, select, .field-control, .count-input) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] :is(input, textarea, select, .field-control, .count-input):focus {
+  border-color: var(--theme-accent) !important;
+  outline: 2px solid var(--theme-accent) !important;
+  outline-offset: 1px;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] :is(input, textarea)::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme]
+  :is(span, em, small, button)[class*='badge'],
+html[data-app-theme]
+  :is(span, em, small, button)[class*='chip'],
+html[data-app-theme]
+  :is(span, em, small, button)[class*='pill'],
+html[data-app-theme]
+  :is(span, em, small, button)[class*='tag'] {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]
+  :is(
+    .is-success,
+    .status-success,
+    .success-badge,
+    .banner--success,
+    .ds-tag--success,
+    [class*='status--success']
+  ) {
+  border-color: var(--theme-success-text) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme]
+  :is(
+    .is-warning,
+    .status-warning,
+    .warning-badge,
+    .ds-tag--warning,
+    [class*='status--warning']
+  ) {
+  border-color: var(--theme-warning-text) !important;
+  background: var(--theme-warning-soft) !important;
+  color: var(--theme-warning-text) !important;
+}
+
+html[data-app-theme]
+  :is(
+    .is-error,
+    .status-error,
+    .error-badge,
+    .banner--error,
+    .error-box,
+    .ds-tag--error,
+    [class*='status--error']
+  ) {
+  border-color: var(--theme-danger) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme='dark-teal'] .publish-center-page {
+  --pc-purple: var(--theme-accent);
+  --pc-purple-soft: var(--theme-accent-soft);
+  --pc-blue: var(--theme-accent);
+  --pc-blue-soft: var(--theme-accent-soft);
+  --pc-green: var(--theme-accent);
+  --pc-green-soft: var(--theme-accent-soft);
+}
+
+html[data-app-theme='dark-teal'] .subtitle-workbench-page {
+  --panel-edge-strong: color-mix(in srgb, var(--theme-accent) 42%, var(--theme-border));
+  --accent: var(--theme-accent);
+  --accent-soft: var(--theme-accent-soft);
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .primary-button,
+    .plugin-card__action,
+    .ai-button,
+    .next-step-button,
+    .hero-primary-button,
+    .vpd-primary-button,
+    .publish-button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 68%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .primary-button,
+    .plugin-card__action,
+    .ai-button,
+    .next-step-button,
+    .hero-primary-button,
+    .vpd-primary-button,
+    .publish-button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button
+  ):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 78%, #000000),
+    color-mix(in srgb, var(--theme-accent) 88%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--theme-accent) 30%, transparent) !important;
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .plugin-card__icon,
+    .detail-card__icon,
+    .panel-icon,
+    .workspace-card__icon,
+    .hero-card__eyebrow-icon,
+    .vpd-hero__eyebrow-icon,
+    .vpd-empty__icon,
+    .upload-dropzone__icon,
+    .upload-zone__icon,
+    .step-chip__index,
+    .step-badge,
+    .rule-icon,
+    .placeholder-icon,
+    .official-badge
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 36%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .tab-button.active,
+    .vpd-tab-button.active,
+    .segmented-tabs button.active,
+    .step-chip.active,
+    .candidate-item.active,
+    .product-row.selected,
+    .grid-card.selected,
+    .plugin-card.selected,
+    .toolbar-pill.is-active,
+    .source-list-item.is-active,
+    .clone-picker__item.is-selected,
+    .reference-material-card.active,
+    .format-card-active,
+    .live-console-row.selected,
+    .live-console-card.selected
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 52%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .eyebrow,
+    .hero-card__eyebrow,
+    .creative-hero__eyebrow,
+    .eyebrow-chip,
+    .vpd-hero__eyebrow,
+    .live-kicker,
+    .mini-kicker,
+    .detail-card__eyebrow
+  ) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme='dark-teal'] .live-photo-page .output-note {
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 18%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+/* Theme the remaining full-page workspaces instead of leaving dark islands. */
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.product-detail-page, .clone-page, .live-photo-page) {
+  color: var(--theme-text) !important;
+  background: transparent !important;
+}
+
+/* Product detail workspace. */
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(.detail-shell, .missing-card, .detail-feedback) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(
+    .summary-strip,
+    .panel-card,
+    .preview-card,
+    .upload-card,
+    .status-banner,
+    .status-meta__item,
+    .canonical-result,
+    .canonical-placeholder,
+    .diagnostic-item,
+    .rule-row,
+    .product-analysis-card__summary,
+    .product-analysis-card__rules,
+    .product-analysis-card__item,
+    .remark-box__input
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(
+    .action-banner,
+    .view-toggle,
+    .ghost-pill,
+    .preview-card__action,
+    .canonical-result__media,
+    .preview-card__media,
+    .flow-step__num,
+    .action-banner__tag
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(input, textarea, select) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(h1, h2, h3, h4, strong, b, .back-button, .panel-head strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(
+    p,
+    small,
+    .summary-item span,
+    .canonical-result__meta span,
+    .diagnostic-item__row span,
+    .status-meta__item span,
+    .log-row span,
+    .rule-row span,
+    .flow-step__copy span
+  ) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(.summary-item strong, .canonical-result__meta strong, .diagnostic-item__row strong, .status-meta__item strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  .summary-item + .summary-item {
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(
+    .name-editor__button--primary,
+    .empty-card__button,
+    .status-banner__button,
+    .remark-box__button,
+    .view-toggle__button--active,
+    .flow-step__num--active
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 62%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(.title-inline__edit, .head-icon, .summary-item__edit, .ghost-pill--accent) {
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  .hero-button:not(.hero-button--danger) {
+  border-color: color-mix(in srgb, var(--theme-accent) 42%, var(--theme-border)) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(.hero-button:not(.hero-button--danger), .ghost-pill, .preview-card__action):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-accent) 52%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .product-detail-page
+  :is(.action-banner--info, .product-analysis-card__item--hero) {
+  border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 8%, var(--theme-panel)) !important;
+}
+
+/* Clone workflow topbar and all clone stages. */
+html[data-app-theme]:not([data-app-theme='dark-teal']) .app-topbar-clone {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .app-topbar-clone
+  :is(.app-topbar-clone__step, .app-topbar-clone__label, .app-topbar-clone__metric strong) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .app-topbar-clone
+  :is(.app-topbar-clone__metric small) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .app-topbar-clone
+  :is(.app-topbar-clone__status, .app-topbar-clone__metric) {
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .app-topbar-clone__index {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .app-topbar-clone__step:is(.is-active, .is-done)
+  .app-topbar-clone__index {
+  border-color: color-mix(in srgb, var(--theme-accent) 46%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .app-topbar-clone__step.is-active
+  :is(.app-topbar-clone__index, .app-topbar-clone__label) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .app-topbar-clone__arrow {
+  background: color-mix(in srgb, var(--theme-accent) 42%, var(--theme-border)) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .app-topbar-clone__arrow::after {
+  border-color: color-mix(in srgb, var(--theme-accent) 58%, var(--theme-border)) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(
+    .panel,
+    [class$='-card'],
+    [class*='-card '],
+    [class$='-panel'],
+    [class*='-panel ']
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(
+    .analyze-results-card__section,
+    .analyze-project-info-card__section,
+    .analyze-project-field,
+    .analyze-video-meta-card,
+    .analyze-structure-card,
+    .analyze-structure-node,
+    .analyze-summary-item,
+    .analyze-script-card,
+    .analyze-global-section,
+    .analyze-reverse-prompt,
+    .analyze-script-lines p,
+    .analyze-structure-mini,
+    .analyze-structure-mini__item,
+    .analyze-structure-mini__item > span,
+    .variant-shot-line,
+    .storyboard-design-row,
+    .shot-reference-row,
+    .compose-sequence-item,
+    .prompt-preview-section,
+    .prompt-preview-block
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(h1, h2, h3, h4, strong, b, .analyze-hero-card__copy h2) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(p, small, label, .analyze-results-card__empty-copy, .analyze-video-meta-card__grid span) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(input, textarea, select, .field-control, .count-input) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(.primary-button, .storyboard-stage-hero__button--primary, .compose-export-button, .analyze-primary-button) {
+  border-color: color-mix(in srgb, var(--theme-accent) 64%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(.ghost-button, .secondary-action, .icon-button, .action-button, .compose-side-button, .analyze-secondary-button) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(
+    .analyze-results-tabs__item.is-active,
+    .analyze-structure-node.is-highlight,
+    .variant-card.selected,
+    .variant-card--row.selected,
+    .model-card-badge--selected,
+    .toggle-button.active
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 48%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(.analyze-project-pills em, .status-pill.working, .mini-pill, .panel-tag) {
+  border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .clone-page
+  :is(.ghost-button, .secondary-action, .icon-button, .action-button, .analyze-results-tabs__item):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-accent) 40%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+/* Live Photo workspace, including light-theme cards and dialogs. */
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    [class$='-card'],
+    [class*='-card '],
+    [class$='-panel'],
+    [class*='-panel '],
+    .hero-shell,
+    .rules-box,
+    .reference-material-picker,
+    .live-console-row,
+    .live-subtitle-dialog__section,
+    .replacement-region-stage
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .upload-surface,
+    .rule-row,
+    .quality-metric-grid > div,
+    .live-subtitle-dialog__summary-item,
+    .live-subtitle-dialog__tabs,
+    .live-subtitle-dialog__preset,
+    .live-subtitle-dialog__style-panel,
+    .live-console-row__detail-block pre,
+    .live-console-row__timeline-item,
+    .live-detail-dialog__metric,
+    .live-detail-dialog__log-item
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.stat-card, .output-note, .quality-control-card) {
+  border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 8%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.stat-card strong, .output-note-head, .quality-control-card__head, .quality-control-card__head strong) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .tab-button.active,
+    .toolbar-icon.active,
+    .step-badge,
+    .rule-icon,
+    .live-subtitle-dialog__tabs button.active,
+    .live-subtitle-dialog__mode-pills button.active,
+    .live-subtitle-dialog__preset.active
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 48%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.primary-button, .create-button, .clone-generate-button, .export-selected-button) {
+  border-color: color-mix(in srgb, var(--theme-accent) 64%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.ghost-button, .toolbar-button, .toolbar-icon, .secondary-create-button, .thumb-tool) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(
+    .tab-button:not(.active),
+    .product-picker,
+    .project-picker,
+    .field-select-mini,
+    .metadata-card-select,
+    .format-card,
+    .clone-shot-row,
+    .reference-status-card,
+    .reference-material-card,
+    .live-photo-master-ref,
+    .live-console-row__binding-card
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.product-picker, .project-picker)
+  select {
+  color: var(--theme-text) !important;
+}
+
+/* Prevent dark flashes and dark utility overlays in light themes. */
+html[data-app-theme]:not([data-app-theme='dark-teal']),
+html[data-app-theme]:not([data-app-theme='dark-teal']) body,
+html[data-app-theme]:not([data-app-theme='dark-teal']) #app,
+html[data-app-theme]:not([data-app-theme='dark-teal']) #app > .h-screen {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .runtime-fab {
+  border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border)) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 10%, transparent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal']) .runtime-fab strong {
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.runtime-dialog__panel, .runtime-log-board, .runtime-log-card, .runtime-empty) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.runtime-summary, .runtime-filter-chip, .runtime-log-card__badge, .runtime-dialog__close) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  :is(.runtime-filter-chip--active, .runtime-filter-chip:hover) {
+  border-color: color-mix(in srgb, var(--theme-accent) 42%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .runtime-dialog__panel
+  :is(h1, h2, h3, strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .runtime-dialog__panel
+  :is(p, small, time) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme]:not([data-app-theme='dark-teal'])
+  .live-photo-page
+  :is(.ghost-button, .toolbar-button, .toolbar-icon, .secondary-create-button, .thumb-tool):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-accent) 40%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .tab-badge,
+    .section-head__badge,
+    .count-badge,
+    .path-chip,
+    .queue-card__type,
+    .ghost-chip,
+    .usage-chip,
+    .hero-badge,
+    .eyebrow-chip,
+    .panel-tag,
+    .mini-kicker,
+    .preview-card__index,
+    .vpd-tab-badge,
+    .vpd-section-head__badge,
+    .vpd-ghost-chip,
+    .toolbar-pill,
+    .live-console-row__stepbadge,
+    .live-console-row__quickchip,
+    .live-console-row__source,
+    .library-count
+  ) {
+  border-color: color-mix(in srgb, var(--theme-accent) 32%, transparent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='dark-teal'] .live-photo-page .output-note-head {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme='dark-teal']
+  :is(
+    .plugins-page,
+    .geelark-settings-page,
+    .publish-center-page,
+    .materials-workbench,
+    .live-photo-page,
+    .creative-page,
+    .listing-page,
+    .vpd-page,
+    .subtitle-workbench-page,
+    .placeholder-page
+  )
+  :is(
+    .ghost-button,
+    .hero-ghost-button,
+    .toolbar-button,
+    .icon-button,
+    .row-action,
+    .page-btn,
+    .candidate-pagination__button,
+    .shortcut-button,
+    .minor-button,
+    .vpd-ghost-button,
+    .vpd-ghost-chip,
+    .vpd-icon-action,
+    .live-console-row__action,
+    .live-detail-dialog__ghost
+  ):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-accent) 40%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+/* Final opaque theme contract. Keep this block last. */
+html[data-app-theme] body #app .app-shell
+  :is(
+    button,
+    [role='button'],
+    a.ds-sidebar__item,
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    button,
+    [role='button'],
+    a.ds-sidebar__item,
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button
+  ):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    button.active,
+    button.selected,
+    button.is-active,
+    button.is-selected,
+    [role='button'].active,
+    [role='button'].selected,
+    [role='button'].is-active,
+    [role='button'].is-selected,
+    [aria-selected='true'],
+    [aria-pressed='true'],
+    [data-state='active'],
+    a.ds-sidebar__item.is-active,
+    .tab-button.active,
+    .tab-chip--active,
+    .nav-item.active,
+    .view-toggle__button--active,
+    .runtime-filter-chip--active,
+    .app-topbar-clone__step.is-active,
+    .app-topbar-clone__step.is-done
+  ) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    .primary-button,
+    .ds-button--primary,
+    .hero-button--primary,
+    .name-editor__button--primary,
+    .empty-card__button,
+    .status-banner__button,
+    .remark-box__button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button,
+    .compose-export-button,
+    .analyze-primary-button,
+    .storyboard-stage-hero__button--primary,
+    .plugin-card__action,
+    .live-detail-dialog__primary,
+    button[type='submit']
+  ) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    .ghost-button,
+    .hero-ghost-button,
+    .secondary-action,
+    .secondary-create-button,
+    .analyze-secondary-button,
+    .compose-side-button,
+    .vpd-ghost-button,
+    .live-detail-dialog__ghost
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    .danger-button,
+    .hero-button--danger,
+    .button-danger,
+    .delete-button,
+    [class*='danger-button'],
+    [class*='delete-button']
+  ) {
+  border-color: var(--theme-danger) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(button, [role='button']):disabled {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(input, textarea, select, .field-control, .count-input) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(input, textarea)::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(h1, h2, h3, h4, h5, h6, legend) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(p, label, small, time, .muted, .help-text, .hint-text, .description) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='badge'],
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='chip'],
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='pill'],
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='tag'] {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.is-success, .status-success, .success-badge, .banner--success, .ds-tag--success, [class*='status--success']) {
+  border-color: var(--theme-success-text) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.is-warning, .status-warning, .warning-badge, .ds-tag--warning, [class*='status--warning']) {
+  border-color: var(--theme-warning-text) !important;
+  background: var(--theme-warning-soft) !important;
+  color: var(--theme-warning-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.is-error, .status-error, .error-badge, .banner--error, .error-box, .ds-tag--error, [class*='status--error']) {
+  border-color: var(--theme-danger) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+/* Shared plugin workspace geometry. */
+html[data-app-theme] body #app .app-shell .ds-workspace:has(.plugin-workspace-standard) {
+  padding: 10px 12px 12px !important;
+  overflow: hidden !important;
+  background: var(--theme-shell) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 10px !important;
+  overflow: auto !important;
+  color: var(--theme-text) !important;
+  background: var(--theme-shell) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard
+  :is(
+    .hero-card,
+    .hero-shell,
+    .vpd-hero,
+    .creative-hero,
+    .page-top,
+    .hero-panel,
+    .workspace-card,
+    .panel,
+    .panel-card,
+    .vpd-panel,
+    .glass-panel,
+    .table-card
+  ) {
+  border-color: var(--theme-border) !important;
+  border-radius: 14px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard
+  :is(.tabs-shell, .tab-bar, .vpd-tabs, .segmented-tabs, .stepbar-panel) {
+  border-color: var(--theme-border) !important;
+  border-radius: 12px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard
+  :is(.workspace-grid, .creative-grid, .vpd-input-grid) {
+  gap: 10px !important;
+}
+
+/* Product image materials is the canonical two-column plugin workspace. */
+html[data-app-theme] body #app .app-shell .materials-workbench {
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench > .hero-card,
+html[data-app-theme] body #app .app-shell .materials-workbench > .footer-card {
+  display: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench > .workspace-card {
+  display: grid !important;
+  grid-template-rows: 88px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-shell) !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.68fr) minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  min-height: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__intro,
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head > .tabs-shell {
+  min-width: 0 !important;
+  min-height: 88px !important;
+  padding: 12px 16px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 14px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__intro {
+  align-items: flex-start !important;
+  align-content: center !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__icon {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 10px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__title {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__hint {
+  margin-top: 5px !important;
+  color: var(--theme-text-muted) !important;
+  font-size: 12px !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head > .tabs-shell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head > .tabs-shell .tab-button {
+  min-width: 132px !important;
+  min-height: 44px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-grid {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.68fr) minmax(0, 1fr) !important;
+  gap: 10px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-grid > .panel {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 16px 18px !important;
+  overflow: auto !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card > .panel--library {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 16px 18px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .section-head {
+  min-height: 40px !important;
+  margin-bottom: 12px !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .section-head__badge {
+  width: 24px !important;
+  height: 24px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .section-head h2 {
+  font-size: 16px !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .upload-dropzone {
+  min-height: 176px !important;
+  border-color: var(--theme-border) !important;
+  border-radius: 14px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .queue-card {
+  border-color: var(--theme-border) !important;
+  border-radius: 14px !important;
+  background: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .queue-card__stats {
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .queue-stat {
+  min-height: 72px !important;
+  padding: 12px 8px !important;
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .queue-stat__value {
+  font-size: 24px !important;
+}
+
+/* Sidebar and titlebar dimensions follow the workspace reference layout. */
+html[data-app-theme] body #app .app-shell .ds-shell {
+  grid-template-columns: 184px minmax(0, 1fr) !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-sidebar {
+  width: 184px !important;
+  min-width: 184px !important;
+  padding: 12px 10px 10px !important;
+  background: var(--theme-sidebar) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item {
+  min-height: 42px !important;
+  padding: 0 12px !important;
+  border-color: var(--theme-sidebar) !important;
+  border-radius: 10px !important;
+  background: var(--theme-sidebar) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item:hover {
+  border-color: var(--theme-control-hover) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-titlebar {
+  min-height: 62px !important;
+  background: var(--theme-sidebar) !important;
+}
+
+html[data-app-theme] body #app .app-titlebar__window-controls button {
+  background: var(--theme-sidebar) !important;
+  border-color: var(--theme-sidebar) !important;
+}
+
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head,
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-grid {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1fr) !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head > .tabs-shell {
+    gap: 6px !important;
+    padding: 12px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__head > .tabs-shell .tab-button {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 0 8px !important;
+    gap: 6px !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .section-head--queue {
+    display: grid !important;
+    grid-template-columns: 24px minmax(0, 1fr) auto !important;
+    gap: 8px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .section-head--queue .section-head__content {
+    display: grid !important;
+    gap: 4px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .section-head--queue h2 {
+    white-space: nowrap !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .ds-sidebar__item span,
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action span {
+    display: inline !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-sidebar-user .min-w-0 {
+    display: block !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action,
+  html[data-app-theme] body #app .app-shell .app-sidebar-user {
+    width: 100% !important;
+    min-width: 0 !important;
+    justify-content: flex-start !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action {
+    padding: 0 12px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-sidebar-user {
+    padding: 8px 10px !important;
+  }
+}
+
+/* Use filled states without duplicate accent outlines. */
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard
+  :is(.tab-button, .vpd-tab-button, .segmented-tab, .stepbar-button) {
+  border-color: var(--theme-control) !important;
+  background: var(--theme-control) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard
+  :is(.tab-button, .vpd-tab-button, .segmented-tab, .stepbar-button):hover {
+  border-color: var(--theme-control-hover) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard
+  :is(.tab-button.active, .vpd-tab-button.active, .segmented-tab.active, .stepbar-button.active) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .tabs-shell--submode {
+  border-color: var(--theme-panel) !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item:hover {
+  border-color: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item.is-active {
+  border-color: var(--theme-control-selected) !important;
+  box-shadow: none !important;
+}
+
+/* Global border hierarchy based on the desktop reference. */
+html[data-app-theme] body #app .app-shell
+  :is(
+    .card,
+    [class$='-card'],
+    [class*='__card'],
+    .panel,
+    [class$='-panel'],
+    [class*='__panel'],
+    .dialog,
+    [class$='-dialog'],
+    [class*='__dialog'],
+    .modal,
+    [class$='-modal'],
+    [class*='__modal'],
+    .table-shell,
+    .table-card,
+    .settings-section,
+    .notice,
+    .banner
+  ) {
+  border-color: var(--theme-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    button,
+    [role='button'],
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button,
+    .ghost-button,
+    .hero-ghost-button,
+    .secondary-action,
+    .secondary-create-button,
+    .analyze-secondary-button,
+    .compose-side-button,
+    .vpd-ghost-button,
+    .live-detail-dialog__ghost
+  ) {
+  border-color: var(--theme-control) !important;
+  background: var(--theme-control) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    button,
+    [role='button'],
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .toolbar-pill,
+    .page-btn,
+    .row-action,
+    .icon-button,
+    .minor-button,
+    .action-button
+  ):hover:not(:disabled) {
+  border-color: var(--theme-control-hover) !important;
+  background: var(--theme-control-hover) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    button.active,
+    button.selected,
+    button.is-active,
+    button.is-selected,
+    [role='button'].active,
+    [role='button'].selected,
+    [role='button'].is-active,
+    [role='button'].is-selected,
+    [aria-selected='true'],
+    [aria-pressed='true'],
+    [data-state='active'],
+    a.ds-sidebar__item.is-active,
+    .tab-button.active,
+    .tab-chip--active,
+    .nav-item.active,
+    .view-toggle__button--active,
+    .runtime-filter-chip--active,
+    .app-topbar-clone__step.is-active,
+    .app-topbar-clone__step.is-done
+  ) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    .primary-button,
+    .ds-button--primary,
+    .hero-button--primary,
+    .name-editor__button--primary,
+    .empty-card__button,
+    .status-banner__button,
+    .remark-box__button,
+    .create-button,
+    .clone-generate-button,
+    .export-selected-button,
+    .compose-export-button,
+    .analyze-primary-button,
+    .storyboard-stage-hero__button--primary,
+    .plugin-card__action,
+    .live-detail-dialog__primary,
+    button[type='submit']
+  ) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(button, [role='button']):disabled {
+  border-color: var(--theme-panel-soft) !important;
+  background: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(input, textarea, select, .field-control, .count-input, .input) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(input, textarea, select, .field-control, .count-input, .input):focus {
+  border-color: var(--theme-border-control) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='badge'],
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='chip'],
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='pill'],
+html[data-app-theme] body #app .app-shell
+  :is(span, em, small, button)[class*='tag'] {
+  border-color: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.is-success, .status-success, .success-badge, .banner--success, .ds-tag--success, [class*='status--success']) {
+  border-color: var(--theme-success-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.is-warning, .status-warning, .warning-badge, .ds-tag--warning, [class*='status--warning']) {
+  border-color: var(--theme-warning-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.is-error, .status-error, .error-badge, .banner--error, .error-box, .ds-tag--error, [class*='status--error']) {
+  border-color: var(--theme-danger-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(hr, .divider, .separator, [class*='__divider'], [class*='__separator']) {
+  border-color: var(--theme-divider) !important;
+  background: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(table, thead, tbody, tr, th, td) {
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item {
+  border-color: var(--theme-sidebar) !important;
+  background: var(--theme-sidebar) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item:hover {
+  border-color: var(--theme-control-hover) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item.is-active {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-titlebar__window-controls button {
+  border-color: var(--theme-sidebar) !important;
+  background: var(--theme-sidebar) !important;
+}
+
+html[data-app-theme] body #app .app-titlebar__window-controls button:hover {
+  border-color: var(--theme-control-hover) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.danger-button, .hero-button--danger, .button-danger, .delete-button, [class*='danger-button'], [class*='delete-button']) {
+  border-color: var(--theme-danger-soft) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-titlebar__window-controls .app-titlebar__close:hover {
+  border-color: var(--theme-danger-soft) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-workspace > * {
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .plugin-workspace-standard {
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .modal-panel {
+  border: 1px solid var(--theme-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-sidebar {
+  border: 0 !important;
+  border-right: 1px solid var(--theme-divider) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-sidebar-user,
+html[data-app-theme] body #app .app-shell .app-sidebar-footer-action {
+  border-color: var(--theme-control) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-titlebar {
+  border-bottom-color: var(--theme-divider) !important;
+  box-shadow: none !important;
+}
+
+/* Live Photo follows the product image materials workspace structure. */
+html[data-app-theme] body #app .app-shell .live-photo-page {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  gap: 10px !important;
+  overflow: hidden !important;
+  background: var(--theme-shell) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-head {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.68fr) minmax(0, 1fr) !important;
+  flex: 0 0 88px !important;
+  min-height: 88px !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.live-workspace-intro, .live-workspace-tabs) {
+  min-width: 0 !important;
+  min-height: 88px !important;
+  padding: 12px 16px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-intro {
+  display: grid !important;
+  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-icon {
+  width: 30px !important;
+  height: 30px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 8px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-copy {
+  min-width: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-copy h1 {
+  margin: 0 !important;
+  color: var(--theme-text) !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-copy p {
+  margin: 5px 0 0 !important;
+  overflow: hidden !important;
+  color: var(--theme-text-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-actions button {
+  min-height: 36px !important;
+  padding: 0 10px !important;
+  white-space: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-tabs {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-workspace-tabs .tab-button {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  white-space: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-tab-count {
+  min-width: 22px !important;
+  height: 20px !important;
+  padding: 0 7px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  font-size: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page > .banner {
+  flex: 0 0 auto !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page
+  > :is(.workspace-grid, .clone-layout, .library-layout) {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  align-content: start !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+}
+
+/* Compact rectangular geometry while preserving pills and circular controls. */
+html[data-app-theme] body #app .app-shell
+  :is(
+    .card,
+    [class$='-card'],
+    [class*='__card'],
+    .panel,
+    [class$='-panel'],
+    [class*='__panel'],
+    .dialog,
+    [class$='-dialog'],
+    [class*='__dialog'],
+    .modal,
+    [class$='-modal'],
+    [class*='__modal'],
+    .table-shell,
+    .table-card,
+    .settings-section,
+    .notice,
+    .banner,
+    .upload-surface,
+    .upload-dropzone
+  ) {
+  border-radius: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    button,
+    [role='button'],
+    input,
+    textarea,
+    select,
+    .field-control,
+    .count-input,
+    .input,
+    .tab-button,
+    .tab-chip,
+    .nav-item,
+    .view-toggle__button,
+    .runtime-filter-chip,
+    .page-btn,
+    .row-action,
+    .minor-button,
+    .action-button
+  ) {
+  border-radius: 8px !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    [class*='pill'],
+    [class*='badge'],
+    [class*='chip'],
+    [class*='tag'],
+    .library-count,
+    .live-tab-count,
+    .app-avatar
+  ) {
+  border-radius: 999px !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(
+    .step-badge,
+    .compact-dot,
+    .preview-play,
+    .replacement-region-handle,
+    button[aria-label='Close'],
+    button[aria-label='Refresh']
+  ) {
+  border-radius: 50% !important;
+}
+
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .live-workspace-head {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1fr) !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .live-workspace-intro,
+  html[data-app-theme] body #app .app-shell .live-workspace-tabs {
+    padding: 10px 12px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .live-workspace-actions .back-button {
+    padding: 0 8px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .live-workspace-tabs .tab-button {
+    gap: 5px !important;
+    padding: 0 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Final theme priority for interactive legacy states. */
+html[data-app-theme] body #app .app-shell .models-library-page .models-library-card__pro {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .products-shell {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-shell) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.products-hero, .stat-card, .board-card, .product-card, .products-empty, .pagination-row) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(
+    .stat-card__icon--purple,
+    .stat-card__icon--amber,
+    .stat-card__icon--green,
+    .stat-card__icon--red,
+    .stat-card__icon--blue,
+    .products-empty__icon
+  ) {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.stat-card__body span, .stat-card__body small, .products-hero__copy p, .products-empty__copy p) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.stat-card__body strong, .products-hero__copy h1, .products-empty__copy strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field__input, .select-field select, .sort-field select) {
+  background: var(--theme-input) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  .view-toggle__button--active:is(:hover, :focus-visible) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  .app-topbar-clone__step.is-done:is(:hover, :focus-visible) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active,
+html[data-app-theme] body #app .app-shell
+  .app-topbar-clone__step.is-active:is(:hover, :focus-visible) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row.is-active,
+html[data-app-theme] body #app .app-shell
+  .clone-page .storyboard-design-row.is-active:is(:hover, :focus-visible) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-panel) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app
+  .app-topbar-clone__step.is-done:is(:hover, :focus-visible) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-topbar-clone__step.is-active,
+html[data-app-theme] body #app
+  .app-topbar-clone__step.is-active:is(:hover, :focus-visible) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app
+  .products-page .view-toggle__button--active:is(:hover, :focus-visible) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(
+    .product-card__id,
+    .product-card__meta,
+    .product-card__analysis span,
+    .product-card__analysis p
+  ) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-topbar-clone .app-topbar-clone__nav
+  button.app-topbar-clone__step.is-done.is-active:hover {
+  border-color: var(--theme-accent) !important;
+  background-color: var(--theme-accent) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .products-page .toolbar-right .view-toggle
+  button.view-toggle__button--active:hover {
+  border-color: var(--theme-control-selected) !important;
+  background-color: var(--theme-control-selected) !important;
+  background-image: none !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .clone-page
+  :is(
+    .variant-summary-card__copy span,
+    .variant-product-meta span,
+    .variant-hero-card__copy small,
+    .variant-copy__head span,
+    .variant-copy small,
+    .inline-control span,
+    .prompt-param-table__head
+  ) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .clone-page
+  :is(
+    .variant-summary-card__copy p,
+    .variant-hero-card__copy p,
+    .variant-copy p,
+    .variant-shot-line span,
+    .prompt-param-table__row pre
+  ) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .clone-page
+  :is(
+    .variant-summary-card__copy strong,
+    .variant-product-meta strong,
+    .variant-hero-card__copy strong,
+    .variant-copy__head strong,
+    .variant-shot-line strong,
+    .prompt-param-table__row strong
+  ) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .clone-page
+  :is(.variant-shot-line, .prompt-param-table__row) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control) !important;
+}
+
+/* Video Parser Download follows the Live Photo workspace structure. */
+html[data-app-theme] body #app .app-shell .vpd-page {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  gap: 10px !important;
+  overflow: hidden !important;
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-head {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.68fr) minmax(0, 1fr) !important;
+  flex: 0 0 88px !important;
+  min-height: 88px !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.vpd-workspace-intro, .vpd-workspace-tabs) {
+  min-width: 0 !important;
+  min-height: 88px !important;
+  padding: 12px 16px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-intro {
+  display: grid !important;
+  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-icon {
+  width: 30px !important;
+  height: 30px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 8px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-copy {
+  min-width: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-copy h1 {
+  margin: 0 !important;
+  color: var(--theme-text) !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-copy p {
+  margin: 5px 0 0 !important;
+  overflow: hidden !important;
+  color: var(--theme-text-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-actions button {
+  min-height: 36px !important;
+  padding: 0 10px !important;
+  white-space: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-tabs {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-tabs .vpd-tab-button {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+  white-space: nowrap !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-tabs .vpd-tab-button:hover {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace-tabs .vpd-tab-button.active {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-tab-badge {
+  min-width: 22px !important;
+  height: 20px !important;
+  padding: 0 7px !important;
+  border-radius: 999px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  font-size: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-page > .vpd-notice {
+  flex: 0 0 auto !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-content-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-workspace {
+  display: block !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-shell) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-input-grid {
+  align-items: start !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.vpd-panel, .vpd-empty, .vpd-album-card) {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-empty {
+  align-content: center !important;
+  min-height: 240px !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-empty__icon {
+  border-radius: 8px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.vpd-section-head p, .vpd-empty__content p, .vpd-tip-card p, .vpd-library__intro span, .vpd-album-card__time) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.vpd-field span, .vpd-input-footer, .vpd-album-card__meta span, .vpd-empty-copy) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-section-head__badge {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-textarea {
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-textarea:focus {
+  border-color: var(--theme-accent) !important;
+  outline: 1px solid var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-tip-card {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-album-card__media {
+  border-bottom-color: var(--theme-divider) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-album-card__placeholder {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-album-card__overlay {
+  background: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.vpd-ghost-button, .vpd-ghost-chip, .vpd-icon-action) {
+  border: 1px solid var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(.vpd-ghost-button, .vpd-ghost-chip, .vpd-icon-action):hover:not(:disabled) {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-primary-button {
+  border: 1px solid var(--theme-accent) !important;
+  border-radius: 8px !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-icon-action--danger {
+  border-color: var(--theme-danger-soft) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-notice--success,
+html[data-app-theme] body #app .app-shell .vpd-status-pill.is-success {
+  border-color: var(--theme-success-soft) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-status-pill.is-warning {
+  border-color: var(--theme-warning-soft) !important;
+  background: var(--theme-warning-soft) !important;
+  color: var(--theme-warning-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-notice--danger,
+html[data-app-theme] body #app .app-shell .vpd-status-pill.is-danger {
+  border-color: var(--theme-danger-soft) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-status-pill.is-info {
+  border-color: var(--theme-accent-soft) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .vpd-album-card__error {
+  color: var(--theme-danger-text) !important;
+}
+
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .vpd-workspace-head {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1fr) !important;
+  }
+
+  html[data-app-theme] body #app .app-shell
+    :is(.vpd-workspace-intro, .vpd-workspace-tabs) {
+    padding: 10px 12px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .vpd-workspace-tabs .vpd-tab-button {
+    gap: 5px !important;
+    padding: 0 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Final Live Photo reference source and material dialog theme rules. */
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-card {
+  min-height: 150px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-card:hover {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-card__icon {
+  border-radius: 8px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-card__preview {
+  border-radius: 8px !important;
+  background: var(--theme-control) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-card__copy strong {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page
+  :is(.reference-source-card__copy small, .reference-source-card__copy span) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-dialog {
+  background: var(--theme-root) !important;
+  color: var(--theme-text) !important;
+  backdrop-filter: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-dialog__panel {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-dialog__title strong,
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-card__copy strong {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page
+  :is(
+    .reference-material-dialog__title p,
+    .reference-material-dialog__empty,
+    .reference-material-picker__pager,
+    .reference-material-card__copy small
+  ) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page
+  :is(.reference-material-picker__toolbar, .reference-material-dialog__footer) {
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-card {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-card:hover {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control-hover) !important;
+  transform: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-card.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-card img {
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-card input[type='checkbox'] {
+  accent-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-dialog .field-select-mini {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+@media (max-width: 900px) {
+  html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .live-photo-page .reference-material-dialog {
+    padding: 10px !important;
+  }
+}
+
+/* Final clone workflow bar and compose preview geometry. */
+html[data-app-theme] body #app .app-shell .app-topbar-clone {
+  min-height: 62px !important;
+  gap: 12px !important;
+  padding: 10px 12px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__nav {
+  flex: 1 1 auto !important;
+  gap: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step,
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:is(.is-done, .is-active),
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:is(.is-done, .is-active):is(:hover, :focus-visible) {
+  flex: 1 1 0 !important;
+  justify-content: center !important;
+  min-height: 38px !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-muted) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active {
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 -2px 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__label {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__label {
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__index,
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__index {
+  width: 24px !important;
+  height: 24px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 50% !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__index {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__index {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__arrow {
+  width: 18px !important;
+  background: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__arrow::after {
+  border-color: var(--theme-border-control) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__spacer {
+  min-width: 4px !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__status {
+  gap: 6px !important;
+  padding-left: 12px !important;
+  border-left: 1px solid var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric {
+  min-height: 40px !important;
+  padding: 6px 10px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric strong {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric small {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-topbar-clone__metric--account {
+  min-width: 138px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card {
+  border-radius: 10px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card__media {
+  border-radius: 8px !important;
+  background: var(--theme-root) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card__media video {
+  border-radius: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .app-topbar-clone {
+    gap: 8px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-topbar-clone__status {
+    padding-left: 0 !important;
+    border-left: 0 !important;
+  }
+}
+
+/* Final theme contract for the remaining clone, home, production, and product surfaces. */
+html[data-app-theme] body #app .app-shell
+  :is(.clone-page, .clone-task-list-page, .production-home-page, .home-dashboard-refined, .products-page) {
+  color: var(--theme-text) !important;
+}
+
+/* Clone compose/detail: keep the preview bounded and remove legacy dark islands. */
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.panel-compose-stage, .compose-canvas-panel, .compose-timeline-panel, .compose-side-card,
+      .compose-stage-card, .compose-sequence-card, .compose-score-card, .compose-shot-detail,
+      .compose-export-card, .compose-bottom-actions, .variant-hero-card, .variant-card) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.compose-canvas-panel, .compose-timeline-panel, .compose-side-card, .compose-sequence-card,
+      .compose-score-card, .compose-shot-detail, .compose-export-card, .compose-bottom-actions) {
+  padding: 14px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card__media {
+  min-height: 0 !important;
+  max-height: 560px !important;
+  aspect-ratio: 16 / 9 !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .compose-stage-card__media video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  background: var(--theme-input) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.compose-list-copy strong, .compose-sequence-item__meta strong, .compose-score-copy strong,
+      .compose-sequence-detail__copy strong, .compose-side-card__head strong, .compose-panel-head strong,
+      .variant-hero-card__copy strong, .variant-copy__head strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.compose-list-copy small, .compose-sequence-item__meta small, .compose-score-copy span,
+      .compose-sequence-detail__copy small, .compose-side-card__head small, .compose-panel-head p,
+      .variant-hero-card__copy p, .variant-hero-card__copy small) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.compose-sequence-item, .compose-sequence-item__thumb, .compose-shot-rail__item,
+      .compose-shot-detail__preview, .compose-chip, .compose-export-option) {
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.compose-sequence-item:hover, .compose-shot-rail__item:hover, .compose-export-option:hover) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.compose-sequence-item.active, .compose-shot-rail__item.is-active, .compose-export-option.is-active) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-accent) !important;
+}
+
+/* Clone task list: use solid theme surfaces for rows, chips, menus, and pagination. */
+html[data-app-theme] body #app .app-shell .clone-task-list-page {
+  --clone-panel-border: var(--theme-border) !important;
+  --clone-panel-bg: var(--theme-panel) !important;
+  --clone-card-bg: var(--theme-panel-soft) !important;
+  padding: 6px 16px 18px !important;
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-panel, .clone-console-table, .clone-console-row, .clone-list-empty,
+      .clone-list-batch-bar, .clone-console-card, .clone-side-card) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-stat, .clone-console-run-mode, .clone-console-table__groupbar,
+      .clone-console-table__head, .clone-console-overview__tool, .clone-console-overview__icon,
+      .clone-console-table__viewtool, .clone-console-row__action, .clone-console-row__rename,
+      .clone-console-group, .clone-list-page-size, .clone-list-page-size-menu,
+      .clone-console-row__mode, .clone-console-row__stepbadge, .clone-console-row__groupmove,
+      .clone-list-batch-bar__stat) {
+  border-color: var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-stat:hover, .clone-console-overview__tool:hover, .clone-console-overview__icon:hover,
+      .clone-console-table__viewtool:hover, .clone-console-row__action:hover, .clone-console-row__rename:hover,
+      .clone-console-group:hover, .clone-console-row:hover, .clone-list-page-size:hover) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-stat.is-active, .clone-console-run-mode__option.is-active,
+      .clone-console-group.is-active, .clone-console-table__viewtool.is-active,
+      .clone-list-pagination__controls button.is-active, .clone-list-page-size-menu button.is-active) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-hero__title-row h1, .clone-console-hero__copy h1, .clone-console-row__titleline h3,
+      .clone-console-row__assets strong, .clone-console-row__updated-copy strong,
+      .clone-list-batch-bar__summary strong, .clone-list-empty strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-hero__copy p, .clone-console-stat__copy span, .clone-console-row__meta,
+      .clone-console-row__text, .clone-console-row__assets span, .clone-console-row__updated-copy span,
+      .clone-list-pagination, .clone-list-pagination__summary, .clone-list-batch-bar__message,
+      .clone-list-empty, .clone-console-table__head, .clone-console-group__main) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-row__thumb, .clone-console-card__preview, .clone-console-row__progress-track,
+      .clone-console-row__progress-step, .clone-console-table__check span, .clone-console-row__check span) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-console-row__status.is-success, .clone-console-row__status.is-danger,
+      .clone-console-row__status.is-draft, .clone-console-row__status.is-running) {
+  border: 1px solid var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-group-menu__dropdown, .clone-row-action-menu__dropdown, .clone-row-move-menu__dropdown,
+      .clone-list-page-size-menu, .clone-error-dialog, .clone-video-preview-dialog) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--theme-root) 38%, transparent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-group-menu__item, .clone-row-move-menu__item, .clone-list-page-size-menu button):hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page .clone-list-pagination {
+  border-top-color: var(--theme-divider) !important;
+  background: var(--theme-panel) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page .clone-error-dialog-mask {
+  background: color-mix(in srgb, var(--theme-root) 82%, #000000) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page .clone-video-preview-dialog__player {
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-task-list-page
+  :is(.clone-video-preview-dialog__player video, .clone-video-preview-dialog__empty) {
+  background: var(--theme-input) !important;
+  color: var(--theme-text-muted) !important;
+}
+
+/* Production home: make statistics and entry icons readable in every theme. */
+html[data-app-theme] body #app .app-shell .production-home-page
+  :is(.production-home-hero, .production-home-panel, .production-entry-card) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .production-home-page .production-home-stat,
+html[data-app-theme] body #app .app-shell .production-home-page .production-home-task-item {
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .production-home-page .production-entry-card:hover,
+html[data-app-theme] body #app .app-shell .production-home-page .production-home-task-item:hover {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .production-home-page .production-entry-card__icon {
+  border-radius: 8px !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .production-home-page
+  :is(.production-home-hero__copy h1, .production-home-stat strong, .production-entry-card__copy strong,
+      .production-home-panel__head strong, .production-home-panel__list strong, .production-home-task-item strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .production-home-page
+  :is(.production-home-hero__copy p, .production-home-stat span, .production-entry-card__copy p,
+      .production-entry-card__copy span, .production-home-panel__head span, .production-home-panel__list p,
+      .production-home-panel small, .production-home-empty, .production-home-task-item span) {
+  color: var(--theme-text-muted) !important;
+}
+
+/* Home dashboard: replace pale, low-contrast legacy icons with theme-owned controls. */
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.hero-card, .metric-card, .quick-start-panel, .template-panel, .side-panel) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.metric-card, .quick-start-card, .operation-card, .template-card) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.quick-start-card:hover, .operation-card:hover, .template-card:hover, .metric-card:hover) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.metric-card__icon, .quick-start-card__icon, .operation-card__icon) {
+  border-radius: 8px !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.hero-card__eyebrow, .hero-card__summary span) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined .hero-card__visual-card {
+  background: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.hero-card__copy h1, .metric-card__copy strong, .panel-head h2, .quick-start-card__copy strong,
+      .operation-card__copy strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .home-dashboard-refined
+  :is(.hero-card__copy p, .metric-card__copy span, .metric-card__copy small, .panel-head p,
+      .quick-start-card__copy span, .operation-card__copy span) {
+  color: var(--theme-text-muted) !important;
+}
+
+/* Product library filters: solid controls and one theme-owned selected state. */
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field, .select-field, .sort-field, .filter-button, .view-toggle) {
+  min-height: 42px !important;
+  border-color: var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field__input, .select-field select, .sort-field select) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  outline: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field, .select-field, .sort-field):focus-within {
+  border-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page
+  :is(.search-field svg, .select-field__icon, .sort-field__icon, .filter-button svg) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .filter-button:hover {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .view-toggle {
+  padding: 3px !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .view-toggle__button {
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .products-page .view-toggle__button--active,
+html[data-app-theme] body #app .app-shell .products-page .view-toggle__button--active:hover {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .production-home-page .production-home-panel__head > svg {
+  color: var(--theme-accent) !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 1380px) {
+  html[data-app-theme] body #app .app-shell .clone-task-list-page .clone-console-overview__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html[data-app-theme] body #app .app-shell .clone-task-list-page .clone-console-overview__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Keep replacement correction focused on the source image, without card or box frames. */
+html[data-app-theme] body #app .app-shell .live-photo-page .replacement-region-dialog__panel {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .replacement-region-stage {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .replacement-region-box {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .live-photo-page .replacement-region-handle {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Keep Hermes artifact media rectangular across all application themes. */
+html[data-app-theme] body #app .app-shell .artifact-preview-stage {
+  border-radius: 6px !important;
+  clip-path: none !important;
+  mask: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .artifact-preview-stage > img,
+html[data-app-theme] body #app .app-shell .artifact-preview-stage > video {
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  border-radius: 0 !important;
+  clip-path: none !important;
+  mask: none !important;
+  object-fit: contain !important;
 }

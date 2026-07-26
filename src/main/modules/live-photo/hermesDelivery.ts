@@ -1,6 +1,8 @@
 import { basename } from 'node:path'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { cloneRepo } from '../clone/repo'
+import { inferFeishuReceiveIdType, readHermesProfileEnvironment } from '../hermes/profileEnvironment'
 import { livePhotoService } from './service'
 
 type HermesReplyAction =
@@ -39,9 +41,10 @@ async function ensureOk(response: Response, label: string) {
 
 async function getFeishuTenantAccessToken(input: FeishuDeliveryConfig) {
   if (String(input.tenantAccessToken || '').trim()) return String(input.tenantAccessToken || '').trim()
+  const profile = await readHermesProfileEnvironment(['FEISHU_APP_ID', 'FEISHU_APP_SECRET'])
   const integration = await cloneRepo.getHermesIntegrationSettings().catch(() => undefined)
-  const appId = String(input.appId || integration?.feishu?.appId || process.env.FEISHU_APP_ID || '').trim()
-  const appSecret = String(input.appSecret || integration?.feishu?.appSecret || process.env.FEISHU_APP_SECRET || '').trim()
+  const appId = String(input.appId || profile.FEISHU_APP_ID || integration?.feishu?.appId || process.env.FEISHU_APP_ID || '').trim()
+  const appSecret = String(input.appSecret || profile.FEISHU_APP_SECRET || integration?.feishu?.appSecret || process.env.FEISHU_APP_SECRET || '').trim()
   if (!appId || !appSecret) {
     throw new Error('Feishu app credentials are required')
   }
@@ -103,7 +106,23 @@ async function sendFeishuMessage(input: {
     },
   )
   await ensureOk(response, 'Feishu send message')
-  return await response.json()
+  const json = (await response.json()) as { code?: number; msg?: string; data?: { message_id?: string } }
+  if (typeof json.code === 'number' && json.code !== 0) {
+    throw new Error(`Feishu send message failed: ${json.msg || json.code}`)
+  }
+  return json
+}
+
+function livePhotoDeliveryVideoPath(item: Awaited<ReturnType<typeof livePhotoService.get>>) {
+  if (!item) return ''
+  const candidates = [
+    String(item.subtitleOutputPath || '').trim(),
+    String(item.subtitleOverlay?.active ? item.subtitleOverlay.subtitleOutputPath : '').trim(),
+    String(item.livePhotoVideoPath || '').trim(),
+    String(item.previewVideoPath || '').trim(),
+    String(item.motionVideoPath || '').trim(),
+  ]
+  return candidates.find((candidate) => candidate && existsSync(candidate)) || ''
 }
 
 async function getWecomAccessToken(input: WecomDeliveryConfig) {
@@ -173,10 +192,11 @@ export const hermesDeliveryService = {
   },
 
   async sendFinalToFeishu(input: FeishuDeliveryConfig & { actions: HermesReplyAction[] }) {
+    const profile = await readHermesProfileEnvironment(['FEISHU_HOME_CHANNEL'])
     const integration = await cloneRepo.getHermesIntegrationSettings().catch(() => undefined)
     const tenantAccessToken = await getFeishuTenantAccessToken(input)
-    const receiveId = String(input.receiveId || integration?.feishu?.defaultReceiveId || '').trim()
-    const receiveIdType = input.receiveIdType || integration?.feishu?.receiveIdType || 'open_id'
+    const receiveId = String(input.receiveId || profile.FEISHU_HOME_CHANNEL || integration?.feishu?.defaultReceiveId || '').trim()
+    const receiveIdType = input.receiveIdType || inferFeishuReceiveIdType(receiveId) || integration?.feishu?.receiveIdType || 'open_id'
     if (!receiveId) throw new Error('Feishu receiveId is required')
     const results: unknown[] = []
     for (const action of input.actions) {
@@ -217,6 +237,53 @@ export const hermesDeliveryService = {
       }
     }
     return results
+  },
+
+  async sendLivePhotoItemsToFeishu(input: { ids: string[] }) {
+    const ids = Array.from(
+      new Set((Array.isArray(input.ids) ? input.ids : []).map((item) => String(item || '').trim()).filter(Boolean)),
+    ).slice(0, 50)
+    if (!ids.length) throw new Error('At least one Live Photo item is required.')
+
+    const sent: Array<{ id: string; videoPath: string }> = []
+    const skipped: Array<{ id: string; reason: string }> = []
+    for (let index = 0; index < ids.length; index += 1) {
+      const id = ids[index]
+      const item = await livePhotoService.get(id)
+      if (!item) {
+        skipped.push({ id, reason: 'Live Photo item does not exist.' })
+        continue
+      }
+      if (item.packagingStatus !== 'completed') {
+        skipped.push({ id, reason: 'Live Photo item is not completed.' })
+        continue
+      }
+      const videoPath = livePhotoDeliveryVideoPath(item)
+      if (!videoPath) {
+        skipped.push({ id, reason: 'Completed video file does not exist.' })
+        continue
+      }
+
+      const label = String(item.sourceShotLabel || item.productSnapshot?.name || item.sourceProjectTitle || id).trim()
+      try {
+        await this.sendFinalToFeishu({
+          receiveId: '',
+          actions: [
+            {
+              type: 'video',
+              text: `Live Photo ${index + 1}/${ids.length}: ${label}`,
+              videoPath,
+              livePhotoItemId: id,
+              channel: 'feishu',
+            },
+          ],
+        })
+        sent.push({ id, videoPath })
+      } catch (error) {
+        skipped.push({ id, reason: String((error as Error)?.message || error || 'Feishu delivery failed.') })
+      }
+    }
+    return { sent, skipped }
   },
 
   async sendFinalToWecom(input: WecomDeliveryConfig & { actions: HermesReplyAction[] }) {

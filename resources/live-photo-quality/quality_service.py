@@ -34,6 +34,50 @@ def sparse_structure_gate_failed(dinov2_score, orb_score, sparse_profile):
     return semantic_structure_failed and local_structure_failed
 
 
+def is_ring_like_request(product_type, product_category):
+    text = "\n".join([str(product_type or "").strip().lower(), str(product_category or "").strip().lower()])
+    return "ring" in text
+
+
+def ring_structure_gate_failed(dinov2_score, orb_score, fill_ratio):
+    semantic_score = float(dinov2_score)
+    local_score = float(orb_score)
+    sparse = float(fill_ratio) < 0.5
+    if semantic_score < 0.62:
+        return True
+    if sparse and semantic_score < 0.66 and local_score < 0.08:
+        return True
+    return False
+
+
+def requested_writeback_box(region, image_shape):
+    if not isinstance(region, dict):
+        return None
+    try:
+        image_height, image_width = image_shape[:2]
+        x = max(0.0, min(1.0, float(region.get("x"))))
+        y = max(0.0, min(1.0, float(region.get("y"))))
+        width = max(0.01, min(1.0 - x, float(region.get("width"))))
+        height = max(0.01, min(1.0 - y, float(region.get("height"))))
+    except (TypeError, ValueError):
+        return None
+    target = (
+        int(math.floor(x * image_width)),
+        int(math.floor(y * image_height)),
+        max(1, int(math.ceil(width * image_width))),
+        max(1, int(math.ceil(height * image_height))),
+    )
+    center_x = target[0] + target[2] / 2.0
+    center_y = target[1] + target[3] / 2.0
+    maximum_width = max(1, int(round(image_width * 0.9)))
+    maximum_height = max(1, int(round(image_height * 0.9)))
+    expanded_width = min(maximum_width, max(1, int(round(target[2] * 1.8))))
+    expanded_height = min(maximum_height, max(1, int(round(target[3] * 1.8))))
+    left = max(0, min(image_width - expanded_width, int(round(center_x - expanded_width / 2.0))))
+    top = max(0, min(image_height - expanded_height, int(round(center_y - expanded_height / 2.0))))
+    return left, top, expanded_width, expanded_height
+
+
 def load_manifest(model_root):
     manifest_path = os.path.join(os.path.dirname(model_root), "model-manifest.json")
     if not os.path.isfile(manifest_path):
@@ -423,7 +467,7 @@ def scene_preservation_score(scene, generated, roi, cv2, np):
     generated_bgr = cv2.cvtColor(generated, cv2.COLOR_BGRA2BGR)
     absolute = cv2.absdiff(scene_bgr, generated_bgr).astype(np.float32)
     mask = np.ones(scene.shape[:2], dtype=np.uint8)
-    x, y, width, height = padded_box(roi, scene.shape, 0.2)
+    x, y, width, height = padded_box(roi, scene.shape, 0.0)
     mask[y:y + height, x:x + width] = 0
     pixels = absolute[mask > 0]
     if pixels.size == 0:
@@ -539,9 +583,18 @@ def process_line(line):
     scene = read_image(str(request.get("scenePath") or ""), cv2, np)
     product = read_image(str(request.get("productPath") or ""), cv2, np)
     generated = read_image(str(request.get("generatedPath") or ""), cv2, np)
-    scene, generated, resized, alignment_mode = align_scene_pair(scene, generated, cv2, np)
+    requested_region = request.get("replacementRegion")
+    if isinstance(requested_region, dict):
+        resized = generated.shape[:2] != scene.shape[:2]
+        if resized:
+            generated = cv2.resize(generated, (scene.shape[1], scene.shape[0]), interpolation=cv2.INTER_AREA)
+        alignment_mode = "explicit_region"
+    else:
+        scene, generated, resized, alignment_mode = align_scene_pair(scene, generated, cv2, np)
     roi, difference_mask, changed_ratio, roi_candidates = locate_replacement_roi(scene, generated, cv2, np)
     product_path = str(request.get("productPath") or "")
+    product_type = str(request.get("productType") or "")
+    product_category = str(request.get("productCategory") or "")
     force_single_product = os.path.basename(product_path).lower().startswith("single-product-")
     candidates = product_candidates(product, cv2, np, force_single=force_single_product)
     models = manifest.get("models") or {}
@@ -557,7 +610,8 @@ def process_line(line):
     )
     _, selected_index, selected, deep_scores, orb, foreground_ratio = choose_product_view(candidates, generated_roi, encoders, cv2, np)
     ssim = ssim_score(selected, generated_roi, cv2, np)
-    scene_score = scene_preservation_score(scene, generated, roi, cv2, np)
+    requested_box = requested_writeback_box(requested_region, scene.shape)
+    scene_score = scene_preservation_score(scene, generated, requested_box or roi, cv2, np)
     text_score, text_evaluated = text_shape_consistency(selected, generated_roi, orb, foreground_ratio, cv2, np)
     weights = manifest.get("weights") or {"clip": 0.4, "dinov2": 0.3, "orb": 0.2, "ssim": 0.1}
     score = clamp(
@@ -574,8 +628,11 @@ def process_line(line):
     recommended_pass_threshold = float(sparse_profile.get("passThreshold", 0.72)) if quality_profile == "sparse_wearable" else None
     recommended_retry_floor = float(sparse_profile.get("retryFloor", 0.55)) if quality_profile == "sparse_wearable" else None
     hard_failures = []
-    if scene_score < float(thresholds.get("scenePreservation", 0.94)):
-        hard_failures.append("scene_preservation")
+    if requested_box is not None and resized:
+        hard_failures.append("output_canvas_mismatch")
+    scene_threshold = 0.995 if requested_box is not None else float(thresholds.get("scenePreservation", 0.94))
+    if scene_score < scene_threshold:
+        hard_failures.append("outside_scene_drift" if requested_box is not None else "scene_preservation")
     if changed_ratio <= 0.0005:
         hard_failures.append("replacement_region_missing")
     if changed_ratio >= float(thresholds.get("maximumChangedArea", 0.45)):
@@ -583,7 +640,10 @@ def process_line(line):
     if text_evaluated and text_score < float(thresholds.get("textConsistency", 0.55)):
         hard_failures.append("product_text_consistency")
     if quality_profile == "sparse_wearable":
-        if sparse_structure_gate_failed(deep_scores["dinov2"], orb, sparse_profile):
+        if is_ring_like_request(product_type, product_category):
+            if ring_structure_gate_failed(deep_scores["dinov2"], orb, foreground_ratio):
+                hard_failures.append("ring_structure_consistency")
+        elif sparse_structure_gate_failed(deep_scores["dinov2"], orb, sparse_profile):
             hard_failures.append("product_structure_consistency")
     notes = [
         "selected_product_view:" + str(selected_index),
@@ -595,9 +655,12 @@ def process_line(line):
         "replacement_roi_semantic_score:" + format(roi_semantic_score, ".6f"),
         "text_check:" + ("evaluated" if text_evaluated else "not_applicable"),
         "scene_alignment:" + alignment_mode,
+        "replacement_region:" + ("explicit" if requested_box is not None else "detected"),
     ]
     if "product_structure_consistency" in hard_failures:
         notes.append("sparse_wearable_structure_gate:failed")
+    if "ring_structure_consistency" in hard_failures:
+        notes.append("ring_structure_gate:failed")
     if resized:
         notes.append("generated_image_resized_for_scene_comparison")
     emit({

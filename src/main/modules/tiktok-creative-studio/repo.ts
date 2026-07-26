@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import { materializeManagedAsset } from '../managed-assets/service'
 import type { TiktokCreativeShotTask, TiktokCreativeTask, TiktokCreativeTaskLog } from './types'
 
 type DbShape = {
@@ -65,6 +66,23 @@ function normalizeTask(task: TiktokCreativeTask): TiktokCreativeTask {
   }
 }
 
+async function materializeTaskAssets(task: TiktokCreativeTask): Promise<TiktokCreativeTask> {
+  return {
+    ...task,
+    shots: await Promise.all(
+      task.shots.map(async (shot) => ({
+        ...shot,
+        imagePath: await materializeManagedAsset({
+          sourcePath: shot.imagePath,
+          module: 'tiktok-creative',
+          ownerId: task.id,
+          assetId: `shot-${shot.shotId}-image`,
+        }),
+      })),
+    ),
+  }
+}
+
 export const tiktokCreativeStudioRepo = {
   async list(): Promise<TiktokCreativeTask[]> {
     const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
@@ -78,12 +96,26 @@ export const tiktokCreativeStudioRepo = {
 
   async upsert(task: TiktokCreativeTask) {
     const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
-    const normalized = normalizeTask(task)
+    const normalized = normalizeTask(await materializeTaskAssets(task))
     const index = db.tasks.findIndex((item) => item.id === normalized.id)
     if (index >= 0) db.tasks[index] = normalized
     else db.tasks.unshift(normalized)
     await writeJsonFile(dbPath(), db)
     return normalized
+  },
+
+  async migrateExternalAssets(): Promise<{ migrated: number }> {
+    const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
+    let migrated = 0
+    for (let index = 0; index < db.tasks.length; index += 1) {
+      const current = normalizeTask(db.tasks[index])
+      const next = normalizeTask(await materializeTaskAssets(current))
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      db.tasks[index] = next
+      migrated += 1
+    }
+    if (migrated) await writeJsonFile(dbPath(), db)
+    return { migrated }
   },
 
   async create(

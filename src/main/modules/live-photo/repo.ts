@@ -3,6 +3,9 @@ import { existsSync } from 'node:fs'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile } from '../../lib/storeJson'
 import type { LivePhotoItem, LivePhotoSettings, LivePhotoWorkflow, LivePhotoWorkflowStep } from './types'
+import { normalizeLivePhotoReplacementRegion } from './replacementRegion'
+import { normalizeLivePhotoSceneInteraction } from './sceneInteraction'
+import { materializeManagedAsset } from '../managed-assets/service'
 import {
   canInitializeLivePhotoSqlite,
   getLivePhotoSqliteUnavailableReason,
@@ -73,11 +76,25 @@ function normalizeItem(item: LivePhotoItem): LivePhotoItem {
     ...item,
     workflow: normalizeWorkflow(item.workflow),
     generationAttempts: Array.isArray(item.generationAttempts) ? item.generationAttempts : [],
+    replacementRegion: normalizeLivePhotoReplacementRegion(item.replacementRegion) || undefined,
+    sceneInteraction: normalizeLivePhotoSceneInteraction(item.sceneInteraction) || undefined,
     cacheHit: Boolean(item.cacheHit),
     usageStatus: item.usageStatus === 'used' ? 'used' : 'unused',
     usedAt: Number(item.usedAt || 0) || undefined,
     usedChannel: String(item.usedChannel || '').trim() || undefined,
     usedUserId: String(item.usedUserId || '').trim() || undefined,
+  }
+}
+
+async function materializeLivePhotoInputAsset(item: LivePhotoItem): Promise<LivePhotoItem> {
+  return {
+    ...item,
+    referenceImagePath: await materializeManagedAsset({
+      sourcePath: item.referenceImagePath,
+      module: 'live-photo',
+      ownerId: item.id,
+      assetId: 'reference-image',
+    }),
   }
 }
 
@@ -129,9 +146,23 @@ export const livePhotoRepo = {
 
   async upsert(item: LivePhotoItem): Promise<LivePhotoItem> {
     await ensureLivePhotoSqliteReady()
-    const normalized = normalizeItem(item)
+    const normalized = normalizeItem(await materializeLivePhotoInputAsset(item))
     upsertLivePhotoItemInSqlite(normalized)
     return normalized
+  },
+
+  async migrateExternalAssets(): Promise<{ migrated: number }> {
+    await ensureLivePhotoSqliteReady()
+    const items = readLivePhotoItemsFromSqlite()
+    let migrated = 0
+    for (const item of items) {
+      const current = normalizeItem(item)
+      const next = normalizeItem(await materializeLivePhotoInputAsset(current))
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      upsertLivePhotoItemInSqlite(next)
+      migrated += 1
+    }
+    return { migrated }
   },
 
   async remove(id: string) {

@@ -106,6 +106,11 @@
   },
   "titleBar": {
     "ready": "San sang",
+    "refreshStatus": "Lam moi trang thai",
+    "lastRefresh": "Lan lam moi cuoi",
+    "localWorkspace": "Khong gian lam viec cuc bo",
+    "taskCenter": "Trung tam tac vu",
+    "openDataDirectory": "Mo thu muc du lieu",
     "minimize": "Thu nho",
     "maximize": "Phong to",
     "close": "Dong"
@@ -116,6 +121,43 @@
       "title": "Cai Dat Nen Tang Va Nang Luc",
       "subtitle": "Cau hinh API key va base URL truoc, sau do chon nen tang va mo hinh cho tinh nang video, hinh anh va hoi thoai."
     },
+    "appearance": {
+      "title": "Giao dien",
+      "subtitle": "Thay doi duoc ap dung ngay va giu lai sau khi khoi dong lai.",
+      "themes": {
+        "darkTeal": "Toi xanh",
+        "softMint": "Bac ha diu",
+        "warmPaper": "Giay am",
+        "clearSky": "Troi trong"
+      }
+    },
+    "access": {
+      "title": "Cai dat Key cuc bo",
+      "subtitle": "Ung dung dung Key cuc bo thay cho quy trinh dang nhap.",
+      "localMode": "Che do cuc bo",
+      "keyLabel": "Access Key",
+      "placeholder": "Nhap Key",
+      "save": "Luu",
+      "configured": "Da cau hinh",
+      "notConfigured": "Chua cau hinh",
+      "savedLocally": "Key da duoc luu tren thiet bi nay.",
+      "cleared": "Key da duoc xoa.",
+      "futureHint": "Hien tai chi luu cau hinh cuc bo va de san diem ket noi xac thuc sau nay."
+    },
+    "hermesManagement": {
+      "title": "Quan ly Hermes",
+      "subtitle": "Quan ly runtime, mo hinh, ky nang, kenh, bo nho va ban sao luu trong VideoGenerate.",
+      "tabs": { "runtime": "Runtime", "models": "Mo hinh", "skills": "Ky nang", "channels": "Kenh", "memory": "Bo nho", "backups": "Sao luu", "diagnostics": "Chan doan" },
+      "states": { "missing": "Chua cai dat", "installing": "Dang cai dat", "updating": "Dang cap nhat", "repairing": "Dang sua", "update_available": "Co ban cap nhat", "stopped": "Da dung", "starting": "Dang khoi dong", "ready": "San sang", "repair_required": "Can sua", "error": "Loi" },
+      "runtime": { "installed": "Phien ban hien tai", "target": "Phien ban tuong thich", "dashboard": "Dich vu phien", "gateway": "Cong tin nhan", "install": "Cai dat", "update": "Cap nhat", "repair": "Sua", "start": "Khoi dong", "stop": "Dung", "restart": "Khoi dong lai", "startGateway": "Khoi dong cong", "stopGateway": "Dung cong" },
+      "models": { "provider": "Nha cung cap", "model": "Mo hinh", "apiKey": "API key", "keepKey": "De trong de giu key hien tai", "useApp": "Dung mo hinh cua ung dung" },
+      "skills": { "search": "Tim nguon hoac ten ky nang", "updateAll": "Cap nhat tat ca", "install": "Cai dat", "auditUnknown": "Khong ro", "confirmInstall": "Nguon: {source}\nKiem tra bao mat: {verdict}\n\nCai dat ky nang ben thu ba nay?", "confirmUninstall": "Go ky nang {name}?" },
+      "channels": { "enabled": "Bat kenh nay", "configured": "Da cau hinh; de trong de giu lai", "scan": "Ghep doi QR", "qr": "Ma QR ghep doi", "pairingHint": "Quet bang ung dung tuong ung. Trang thai tu dong cap nhat.", "pairing": { "waiting": "Cho quet", "scanned": "Da quet; cho xac nhan", "connected": "Ghep doi hoan tat", "expired": "Ma QR da het han" } },
+      "memory": { "description": "Hien thi trang thai bo nho cua ho so rieng. Cap nhat runtime khong ghi de du lieu nay." },
+      "backups": { "description": "Ban sao luu chi chua du lieu ho so va khong thay ma runtime.", "create": "Tao sao luu", "empty": "Chua co sao luu" },
+      "diagnostics": { "description": "Ket qua chan doan da an khoa, token va bien moi truong day du." },
+      "running": "Dang chay", "stopped": "Da dung", "save": "Luu", "test": "Kiem tra", "search": "Tim", "refresh": "Lam moi", "connect": "Ket noi", "disconnect": "Ngat ket noi", "enable": "Bat", "disable": "Tat", "uninstall": "Go", "cancel": "Huy ghep doi", "actionComplete": "Thao tac hoan tat.", "unknownError": "Thao tac that bai. Thu lai.", "restartRequired": "Dich vu may tinh chua duoc cap nhat. Hay thoat hoan toan va khoi dong lai VideoGenerate."
+    },
     "actions": {
       "checkUpdates": "Kiem tra cap nhat",
       "openDataDir": "Mo thu muc du lieu",
@@ -123,14 +165,46 @@
       "saveSettings": "Luu cai dat",
       "saving": "Dang luu"
     },
+    "navigation": {
+      "groups": {
+        "general": "Chung",
+        "ai": "Tri tue nhan tao",
+        "hermes": "Hermes",
+        "storage": "Luu tru va phan phoi"
+      }
+    },
     "sections": {
+      "appearance": {
+        "label": "Giao dien va key cuc bo",
+        "desc": "Giao dien, chu de va key truy cap cuc bo"
+      },
       "platforms": {
-        "label": "Nen tang",
-        "desc": "Cau hinh API key va base URL"
+        "label": "Key nen tang",
+        "desc": "Quan ly API key va dia chi dich vu"
       },
       "capabilities": {
-        "label": "Nang luc",
-        "desc": "Chon nen tang video, hinh anh va hoi thoai"
+        "label": "Nang luc va mo hinh",
+        "desc": "Chon mo hinh video, hinh anh va hoi thoai"
+      },
+      "hermesRuntime": {
+        "label": "Runtime va mo hinh",
+        "desc": "Cai dat, khoi dong, sua va cap quyen mo hinh"
+      },
+      "hermesSkills": {
+        "label": "Ky nang",
+        "desc": "Tim, cai dat, kiem tra va bat ky nang"
+      },
+      "hermesChannels": {
+        "label": "Kenh tin nhan",
+        "desc": "Feishu, WeCom va WeChat ca nhan"
+      },
+      "hermesData": {
+        "label": "Bo nho va bao tri",
+        "desc": "Bo nho, sao luu va chan doan"
+      },
+      "storageManagement": {
+        "label": "Quan ly luu tru",
+        "desc": "Kiem tra va don dep bo nho dem, ket qua va runtime"
       },
       "hermes": {
         "label": "Hermes",
@@ -139,6 +213,98 @@
       "qiniu": {
         "label": "Qiniu",
         "desc": "Cai dat tai len va phan phoi tai nguyen"
+      }
+    },
+    "storageManagement": {
+      "kicker": "Luu tru cuc bo",
+      "title": "Quan ly luu tru",
+      "subtitle": "Xem dung luong theo nhom va giai phong bo nho bang quy trinh duoc bao ve.",
+      "total": "Du lieu dang quan ly",
+      "scannedAt": "Quet luc {time}",
+      "scanning": "Dang quet bo nho",
+      "fileCount": "{count} tep",
+      "itemCount": "{count} du an da hoan thanh",
+      "clean": "Don dep",
+      "protected": "Duoc bao ve",
+      "cancel": "Huy",
+      "confirmTitle": "Xac nhan don dep",
+      "confirmClean": "Don dep ngay",
+      "typedConfirmationLabel": "Nhap noi dung xac nhan ben duoi de tiep tuc.",
+      "backupRequired": "Ban sao luu phai hoan tat truoc khi bat dau don dep.",
+      "risks": {
+        "safe": "An toan",
+        "caution": "Can xac nhan",
+        "destructive": "Vinh vien",
+        "protected": "Duoc bao ve"
+      },
+      "groups": {
+        "reclaimable": {
+          "label": "Du lieu co the don dep",
+          "desc": "Bo nho dem, tep tam, ban xem truoc va nhat ky cu"
+        },
+        "advanced": {
+          "label": "Don dep nang cao",
+          "desc": "Tep dau ra lon va du lieu runtime can xac nhan manh hon"
+        },
+        "protected": {
+          "label": "Du lieu duoc bao ve",
+          "desc": "Tai nguyen goc, ban ghi nghiep vu va thong tin xac thuc khong the xoa tai day"
+        }
+      },
+      "categories": {
+        "safe_cache": {
+          "label": "Bo nho dem an toan",
+          "desc": "Bo nho dem trinh duyet, hinh thu nho, kiem tra chat luong va Hermes co the tao lai."
+        },
+        "temporary_files": {
+          "label": "Tep tam",
+          "desc": "Tep tam cua tac vu khong thay doi trong hon hai muoi bon gio."
+        },
+        "preview_files": {
+          "label": "Tep xem truoc",
+          "desc": "Tep xem truoc phu de va media co the tao lai khi can."
+        },
+        "diagnostic_logs": {
+          "label": "Nhat ky chan doan cu",
+          "desc": "Nhat ky ung dung, loi va Hermes cu hon bay ngay. Nhat ky gan day duoc giu lai."
+        },
+        "completed_project_artifacts": {
+          "label": "Ket qua du an da hoan thanh",
+          "desc": "Tep Live Photo, nhan ban video, phu de va xuat ban. Lich su du an va tai nguyen goc duoc giu lai."
+        },
+        "hermes_runtime": {
+          "label": "Hermes runtime",
+          "desc": "Chuong trinh Hermes va phu thuoc cuc bo. Can cai lai sau khi don dep."
+        },
+        "hermes_sessions_memory": {
+          "label": "Phien va bo nho",
+          "desc": "Tep phien va bo nho Hermes. Trang thai cot loi, su kien, key, ky nang va kenh duoc giu lai."
+        },
+        "managed_source_assets": {
+          "label": "Tai nguyen goc duoc quan ly",
+          "desc": "Hinh anh, video, am thanh va tai lieu san pham dang duoc du an su dung."
+        },
+        "business_records": {
+          "label": "Ban ghi nghiep vu",
+          "desc": "Du an, tac vu, phe duyet, san pham, lich su su kien va co so du lieu cot loi Hermes."
+        },
+        "configuration_credentials": {
+          "label": "Cau hinh va thong tin xac thuc",
+          "desc": "Key mo hinh, thong tin kenh, cai dat ung dung va tep cau hinh Hermes."
+        }
+      },
+      "confirmations": {
+        "safe_cache": "Xac nhan xoa bo nho dem co the tao lai.",
+        "temporary_files": "Xac nhan xoa tep tam.",
+        "preview_files": "Toi hieu tep xem truoc se duoc tao lai khi can.",
+        "diagnostic_logs": "Toi hieu nhat ky chan doan cu hon bay ngay se bi xoa.",
+        "completed_project_artifacts": "Toi hieu tep dau ra da hoan thanh se bi xoa, con ban ghi du an va tai nguyen goc duoc bao ve.",
+        "hermes_runtime": "Toi hieu Hermes phai duoc cai lai truoc khi tiep tuc su dung nhan vien thong minh.",
+        "hermes_sessions_memory": "Toi hieu tep phien va bo nho Hermes se bi xoa sau khi tao ban sao luu."
+      },
+      "messages": {
+        "cleaned": "Da giai phong {size} va xoa {files} tep.",
+        "backupCreated": "Da tao ban sao luu truoc khi don dep."
       }
     },
     "platforms": {
@@ -406,5 +572,43 @@
     "detail": {
       "eyebrow": "Chi tiet plugin"
     }
+  },
+  "agentOs": {
+    "businessCommandCatalog": { "scopeLabel": "Nhom lenh", "scopes": { "recommended": "De xuat", "business": "Chuc nang", "skill": "Ky nang", "workspace": "Trang", "management": "Cai dat" }, "categories": { "product": "Quan ly san pham", "material": "Tai nguyen san pham", "sourceVideo": "Video nguon", "clone": "Sao chep video", "livePhoto": "Live Photo", "subtitle": "Phu de va cat video", "listing": "Dang san pham", "creative": "Creative Studio", "modelIdentity": "Ho so nguoi mau", "template": "Mau san xuat", "production": "Tac vu san xuat", "publishing": "Dang video", "artifact": "Ket qua" }, "descriptions": { "read": "Doc du lieu va trang thai hien tai trong ung dung", "write": "Tao hoac cap nhat du lieu nghiep vu trong ung dung", "dangerous": "Thao tac nay thay doi, xoa hoac dang du lieu va can xac nhan" }, "prompts": { "read": "Hay thuc hien \"{action}\". Doc du lieu hien tai trong ung dung truoc va hoi toi neu chua ro doi tuong.", "write": "Hay thuc hien \"{action}\". Kiem tra du lieu va tham so can thiet, hien thi ke hoach va hoi toi neu thieu thong tin.", "dangerous": "Hay chuan bi thuc hien \"{action}\". Kiem tra doi tuong, anh huong va trang thai hien tai, liet ke thay doi cu the va cho toi xac nhan ro rang truoc khi tao anh huong khong the dao nguoc hoac ben ngoai." } },
+    "hermesUx": { "searchSessions": "Tim phien", "noSessionMatches": "Khong co phien phu hop", "queueTitle": "Tin nhan dang cho", "queueCount": "{count} tin dang cho", "queueAttachmentCount": "{count} tep dinh kem", "queuePlaceholder": "Them tin nhan de gui sau khi tac vu hien tai hoan tat", "queueHint": "Nut gui them vao hang doi; nut ben canh huong dan tac vu hien tai", "addToQueue": "Them vao hang doi", "dropFiles": "Tha tep de dinh kem", "attachmentOnly": "Da them {count} tep dinh kem", "attachmentLimit": "Co the dinh kem toi da {count} tep", "attachmentRejected": "Mot so tep khong ton tai, khong hop le, hoac lon hon 2 GB va da bi bo qua", "activeSubagents": "{count} nhan vien phu dang chay", "stopSubagent": "Dung nhan vien phu", "pauseDelegation": "Tam dung tao nhan vien phu moi", "resumeDelegation": "Cho phep tao nhan vien phu moi", "backgroundTask": "Tac vu nen", "backgroundRunning": "Dang chay nen", "backgroundCompleted": "Tac vu nen da hoan tat", "backgroundFailed": "Tac vu nen that bai", "stopBackground": "Dung tac vu nen", "browserActivity": "Hoat dong trinh duyet", "browserConnected": "Trinh duyet da ket noi", "browserDisconnected": "Trinh duyet chua ket noi", "connectBrowser": "Ket noi trinh duyet", "disconnectBrowser": "Ngat ket noi trinh duyet", "needsInput": "Dang cho ban nhap thong tin" },
+    "common": { "loading": "Dang tai", "remove": "Xoa", "close": "Dong", "cancel": "Huy", "save": "Luu", "dismiss": "Bo qua", "unknownError": "Thao tac that bai. Hay thu lai." },
+    "conversations": { "title": "Phien lam viec", "subtitle": "Cong viec va lich su", "new": "Tao phien lam viec", "empty": "Chua co phien lam viec" },
+    "idle": { "title": "Hom nay ban muon nhan vien hoan thanh viec gi?", "subtitle": "Mo ta ket qua va them tep tham chieu. Nhan vien tong quan se lap ke hoach, dieu phoi chuyen gia va xin phe duyet truoc khi chay." },
+    "composer": { "placeholder": "Mo ta ket qua day du, vi du kiem tra san pham, tao ba video va them phu de...", "followup": "Bo sung thong tin hoac tao lan chay moi...", "attach": "Them anh, video hoac tep", "send": "Gui", "hint": "Enter de gui, Shift + Enter de xuong dong", "mediaFiles": "Tep cong viec" },
+    "shortcuts": { "video": "Tao video san pham", "material": "Chuan bi tai nguyen", "publish": "Chuan bi dang", "videoPrompt": "Kiem tra san pham va video tham chieu, tao ba video san pham va them phu de.", "materialPrompt": "Kiem tra san pham va chuan bi cac video dinh kem thanh tai nguyen co the tai su dung.", "publishPrompt": "Kiem tra cac video hoan chinh va chuan bi ke hoach dang da duoc phe duyet." },
+    "message": { "you": "Ban", "thinking": "Dang hieu muc tieu va kiem tra nang luc co san...", "planReady": "Ke hoach da san sang. Phe duyet de bat dau lan chay #{run}.", "completed": "Lan chay #{run} da hoan thanh voi {count} ket qua.", "failed": "Lan chay #{run} that bai: {error}" },
+    "reply": { "greeting": "Xin chao. Hay cho toi biet ban muon tao, kiem tra, dang hay tim noi dung nao.", "capabilities": "Toi co the kiem tra san pham, chuan bi tai nguyen, tao video va Live Photo, tao phu de, dang video da duyet va tim ket qua hien co.", "thanks": "Khong co gi. Hay gui muc tieu tiep theo khi ban san sang.", "assistant_unavailable": "Tro ly thong minh tam thoi khong kha dung. Toi khong tao quy trinh tu yeu cau hoi thoai nay. Vui long thu lai.", "artifact_results": "Toi da tim thay {count} video Live Photo gan day. Ban co the mo ket qua ben duoi.", "artifact_empty": "Khong tim thay video Live Photo da hoan thanh tren thiet bi nay.", "existing_results": "Toi da tim thay {count} ket qua trong phien nay.", "existing_empty": "Phien nay chua co ket qua nao.", "output_directory": "Ban muon xuat ket qua vao thu muc nao?", "publish_account": "Ban muon dung tai khoan dang bai da duyet nao?", "source_video": "Hay dinh kem hoac chon video nguon truoc khi tao ke hoach.", "source_artifact": "Hay dinh kem ket qua hoac yeu cau tim ket qua hien co truoc khi xuat." },
+    "run": { "workspace": "Khong gian nhan vien", "approve": "Phe duyet", "reject": "Tu choi", "pause": "Tam dung", "resume": "Tiep tuc", "cancel": "Huy" },
+    "runHistory": { "title": "Lich su lan chay", "subtitle": "{count} lan chay nghiep vu trong phien nay", "button": "Lan chay", "open": "Xem lich su lan chay", "close": "Dong lich su lan chay", "filterLabel": "Loc trang thai lan chay", "filters": { "all": "Tat ca", "active": "Dang xu ly", "completed": "Hoan thanh", "failed": "Can xu ly" }, "noSummary": "Chua co tom tat ke hoach", "artifacts": "{count} ket qua", "warnings": "{count} canh bao", "empty": "Khong co lan chay phu hop bo loc" },
+    "plan": { "title": "Ke hoach thuc thi", "version": "Phien ban {version}" },
+    "timeline": { "title": "Dong su kien", "subtitle": "Lich su co the khoi phuc", "empty": "Dang cho su kien", "showAll": "Xem tat ca {count}", "showRecent": "Chi xem gan day" },
+    "artifacts": { "title": "Ket qua", "count": "{count} ket qua", "empty": "Ket qua se xuat hien tai day", "productReportName": "Kiem tra san pham: {name}" },
+    "artifactActions": { "preview": "Xem truoc ket qua", "open": "Mo ket qua", "reveal": "Hien trong thu muc", "saveAs": "Luu ket qua thanh" },
+    "artifactKind": { "image": "Anh", "video": "Video", "subtitle": "Phu de", "thumbnail": "Anh bia", "report": "Bao cao", "publish_receipt": "Bien nhan dang", "manifest": "Danh sach", "project": "Du an" },
+    "employees": { "title": "Nhan vien", "active": "{count} dang hoat dong", "create": "Tao nhan vien rieng", "namePlaceholder": "Ten nhan vien", "builtIn": "Co san", "custom": "Tuy chinh", "enable": "Bat nhan vien", "disable": "Tat nhan vien", "duplicate": "Nhan ban", "details": "Xem va cau hinh nhan vien", "archive": "Luu tru" },
+    "employeeEditor": { "createTitle": "Tao nhan vien rieng", "editTitle": "Cau hinh nhan vien", "subtitle": "Cau hinh trach nhiem va quy tac nghiep vu", "template": "Mau nhan vien", "name": "Ten nhan vien", "color": "Mau nhan dien", "description": "Mo ta vai tro", "capabilities": "Nang luc nghiep vu duoc phep", "plannerPolicy": "Quy tac lap ke hoach", "reviewerPolicy": "Quy tac kiem tra", "defaultContext": "Ngu canh mac dinh", "contextHint": "Dung doi tuong JSON cho du an, so luong, ngan sach va cac gia tri mac dinh.", "contextObjectError": "Ngu canh mac dinh phai la doi tuong JSON", "builtInHint": "Danh tinh co san la co dinh. Co the dieu chinh nang luc va quy tac." },
+    "hermes": { "sessions": "Phien Hermes", "untitled": "Phien chua dat ten", "noMessages": "Chua co tin nhan", "fullCapability": "Ky nang, bo nho, cong cu, nhan vien phu va quy trinh", "defaultModel": "Mo hinh mac dinh", "fork": "Tao nhanh phien", "branch": "Nhanh phien", "stop": "Dung", "repair": "Sua va khoi dong lai", "diagnostics": "Chan doan he thong", "runtimeHint": "Khong gian lam viec can Hermes de hoat dong.", "idleTitle": "Nhan vien AI can xu ly cong viec gi?", "idleSubtitle": "Dat cau hoi hoac giao mot quy trinh day du. Hermes co the suy luan, dung ky nang va bo nho, giao viec va goi cac nang luc duoc phep.", "sessionUnavailable": "Khong the tao phien Hermes.", "generationFailed": "Hermes khong the hoan thanh phan hoi.", "modelAuthenticationRequired": "Hermes dang chay, nhung xac thuc mo hinh khong hop le hoac chua duoc cau hinh. Hay cap nhat trong cai dat mo hinh cua khong gian nay.", "modelSettings": { "title": "Cai dat mo hinh", "subtitle": "Cau hinh Hermes ngay trong VideoGenerate", "provider": "Nha cung cap", "customProvider": "Diem cuoi tuong thich tuy chinh", "endpoint": "Dia chi dich vu", "model": "Mo hinh", "apiKey": "Khoa API", "authenticated": "Da cau hinh xac thuc", "authenticationRequired": "Can cau hinh xac thuc", "localSecret": "Thong tin xac thuc chi duoc luu trong ho so Hermes cuc bo.", "enterKey": "Nhap khoa API", "keepExistingKey": "De trong de giu khoa hien tai", "keyRequired": "Can nhap khoa API truoc khi luu.", "oauthUnavailable": "Dich vu nay can quy trinh OAuth tuong tac. Hay chon dich vu dung khoa API hoac diem cuoi tuy chinh.", "save": "Luu va ap dung", "saved": "Da luu va ap dung cai dat mo hinh.", "test": "Kiem tra ket noi", "testing": "Dang kiem tra", "testPassed": "Hermes da hoan thanh kiem tra ket noi.", "disconnect": "Ngat xac thuc", "disconnected": "Da xoa thong tin xac thuc." }, "reasoning": "Qua trinh suy luan", "regenerate": "Tao lai phan hoi", "steerPlaceholder": "Huong dan nhan vien dang chay ma khong ngat tac vu", "steerHint": "Tin nhan nay huong dan tac vu hien tai", "clarificationTitle": "Can them thong tin", "approvalTitle": "Can phe duyet thao tac", "approvalDetail": "Kiem tra thao tac nay truoc khi tiep tuc.", "sudoTitle": "Can quyen quan tri", "sudoDetail": "Nhap thong tin quan tri de tiep tuc.", "secretTitle": "Can thong tin bi mat", "secretDetail": "Nhap thong tin duoc yeu cau. Noi dung nay khong duoc luu trong lich su.", "deny": "Tu choi", "allowOnce": "Cho phep mot lan", "allowSession": "Cho phep trong phien", "respond": "Gui", "activity": "Hoat dong truc tiep", "activityHint": "Cong cu, tac vu nen va nhan vien phu", "toolRunning": "Cong cu dang chay", "toolComplete": "Cong cu da hoan thanh", "subagent": "Hoat dong nhan vien phu", "backgroundComplete": "Tac vu nen da hoan thanh", "statusUpdate": "Cap nhat trang thai", "runtime": { "stopped": "Hermes da dung", "starting": "Dang khoi dong Hermes", "ready": "Hermes da san sang", "error": "Hermes can xu ly" } },
+    "sessionActions": { "manage": "Quan ly phien", "rename": "Doi ten", "delete": "Xoa", "renameTitle": "Doi ten phien", "deleteTitle": "Xoa phien", "name": "Ten phien", "deleteConfirm": "Thao tac nay se xoa vinh vien phien va lich su tro chuyen. Khong the hoan tac." },
+    "review": { "title": "Ket qua kiem tra", "subtitle": "Nghiem thu xac dinh va ket qua thuc thi", "passed": "Tat ca kiem tra da dat", "pending": "Dang cho thuc thi va kiem tra", "needsAttention": "Can xu ly thu cong", "deterministic": "He thong kiem tra trang thai, ket qua, canh bao va ly do that bai." },
+    "execution": { "status": "Trang thai", "duration": "Thoi gian", "attempts": "Lan thuc thi", "artifacts": "Ket qua", "warnings": "Canh bao", "cost": "Chi phi", "noCost": "Khong co chi phi do luong", "pendingDuration": "Chua bat dau", "seconds": "{count} giay", "minutes": "{count} phut", "minutesSeconds": "{minutes} phut {seconds} giay", "repairs": "Tu sua {count} lan", "attemptCount": "{count} lan thuc thi", "attemptVersion": "Lan {attempt}, phien ban nang luc {version}", "approved": "Da phe duyet", "rejected": "Da tu choi", "approvalMeta": "Phien ban {version} / {channel} / {time}" },
+    "recovery": { "action": "Yeu cau Hermes chan doan va khoi phuc", "hint": "Doi chieu tac vu ben ngoai truoc khi tiep tuc hoac tao lan chay moi.", "prompt": "Chan doan va khoi phuc an toan lan chay #{shortId}, ma lan chay {runId}. Truoc tien dung nang luc chi doc de kiem tra lan chay, cac lan thuc thi, ket qua va trang thai tac vu ben ngoai. Khong tu dong gui lai thao tac dang, tao, ghi de hoac xoa. Uu tien tai su dung ket qua va tac vu hien co. Neu can tao lan chay moi hoac thao tac co tac dung phu, hay giai thich va yeu cau phe duyet truoc." },
+    "employee": { "supervisor": "Nhan vien tong quan", "material": "Nhan vien tai nguyen", "video": "Nhan vien video", "package": "Nhan vien dong goi", "publish": "Nhan vien dang bai", "unknown": "Nhan vien AI" },
+    "employeeDescription": { "supervisor": "Lap ke hoach, dieu phoi chuyen gia va tong hop ket qua.", "material": "Kiem tra san pham va chuan bi tai nguyen tai su dung.", "video": "Tao video va live photo tu tai lieu da duyet.", "package": "Tao phu de va chuan bi ket qua ban giao.", "publish": "Gui tac vu dang bai den tai khoan da duyet." },
+    "intent": { "ProductInspect": "Kiem tra san pham", "MaterialPrepare": "Chuan bi tai nguyen", "CommerceVideoCreate": "Tao video san pham", "LivePhotoCreate": "Tao live photo", "SubtitleGenerate": "Tao goi phu de", "VideoPublish": "Dang video", "ArtifactInspect": "Xem ket qua hien co", "ArtifactExport": "Xuat ket qua" },
+    "status": { "draft": "Ban nhap", "planning": "Dang lap ke hoach", "waiting_approval": "Cho phe duyet", "running": "Dang chay", "paused": "Da tam dung", "reviewing": "Dang kiem tra", "completed": "Hoan thanh", "failed": "That bai", "cancelled": "Da huy", "pending": "Dang cho", "ready": "San sang", "blocked": "Bi chan", "skipped": "Da bo qua" },
+    "event": { "run_planning": "Bat dau lap ke hoach", "run_waiting_approval": "Ke hoach cho phe duyet", "run_approved": "Da phe duyet", "run_rejected": "Da tu choi", "run_resumed": "Da tiep tuc", "run_paused": "Da tam dung", "run_reviewing": "Bat dau kiem tra", "run_completed": "Da hoan thanh", "run_failed": "Lan chay that bai", "run_cancelled": "Da huy", "run_recovery_blocked": "Da tam dung de khoi phuc", "step_started": "Nhan vien bat dau buoc", "step_reviewing": "Bat dau kiem tra buoc", "step_completed": "Buoc da hoan thanh", "step_failed": "Buoc that bai", "artifact_created": "Da ghi nhan ket qua" }
+    ,"hermesTools": { "artifact_export": "Xuat ket qua", "artifact_list": "Xem ket qua", "clone_final_compose": "Ghep video cuoi", "clone_final_export": "Xuat video cuoi", "clone_project_delete": "Xoa du an sao chep", "clone_project_list": "Xem du an sao chep", "clone_project_sync": "Dong bo du an sao chep", "clone_project_update": "Cap nhat du an sao chep", "clone_queue_pause": "Tam dung hang doi sao chep", "clone_queue_resume": "Tiep tuc hang doi sao chep", "clone_shot_download": "Tai canh sao chep", "clone_shot_retry": "Thu lai canh sao chep", "clone_subtitle_generate": "Them phu de sao chep", "clone_subtitle_revert": "Go phu de sao chep", "clone_template_convert": "Chuyen mau san xuat", "clone_template_save": "Luu mau sao chep", "listing_delete": "Xoa danh sach san pham", "listing_export": "Xuat san pham", "listing_export_config_get": "Xem cau hinh xuat san pham", "listing_export_config_save": "Luu cau hinh xuat san pham", "listing_generate": "Tao noi dung san pham", "listing_list": "Xem danh sach san pham", "listing_save": "Luu danh sach san pham", "live_photo_create": "Tao Live Photo", "live_photo_delete": "Xoa Live Photo", "live_photo_export": "Xuat Live Photo", "live_photo_list": "Xem Live Photo", "live_photo_pause": "Tam dung Live Photo", "live_photo_resume": "Tiep tuc Live Photo", "live_photo_retry": "Thu lai Live Photo", "live_photo_subtitle_generate": "Them tieu de Live Photo", "live_photo_subtitle_revert": "Go tieu de Live Photo", "material_batch_retry": "Thu lai lo tai nguyen", "material_bind_product": "Gan tai nguyen vao san pham", "material_delete": "Xoa tai nguyen", "material_export": "Xuat tai nguyen", "material_list": "Xem tai nguyen", "material_prepare": "Chuan bi tai nguyen", "material_usage_update": "Cap nhat trang thai tai nguyen", "material_variants_create": "Tao bien the tai nguyen", "model_identity_assign": "Gan ho so nguoi mau", "model_identity_delete": "Xoa ho so nguoi mau", "model_identity_generate": "Tao ho so nguoi mau", "model_identity_list": "Xem ho so nguoi mau", "model_identity_rename": "Doi ten ho so nguoi mau", "product_analyze": "Phan tich lai san pham", "product_delete": "Xoa san pham", "product_inspect": "Kiem tra san pham", "product_list": "Xem san pham", "product_save": "Luu san pham", "production_batch_create": "Tao lo san xuat", "production_queue_control": "Dieu khien hang doi san xuat", "production_task_list": "Xem tac vu san xuat", "publisher_list": "Xem tai khoan va tac vu dang", "run_get": "Xem trang thai lan chay", "source_video_delete": "Xoa video nguon", "source_video_import": "Nhap video nguon", "source_video_list": "Xem video nguon", "source_video_retry": "Thu lai video nguon", "subtitle_generate": "Tao video phu de", "template_delete": "Xoa mau san xuat", "template_duplicate": "Sao chep mau san xuat", "template_list": "Xem mau san xuat", "template_save": "Luu mau san xuat", "tiktok_creative_create": "Tao tac vu sang tao TikTok", "tiktok_creative_delete": "Xoa tac vu sang tao TikTok", "tiktok_creative_list": "Xem tac vu sang tao TikTok", "tiktok_creative_next_start": "Bat dau canh sang tao TikTok tiep theo", "tiktok_creative_shot_complete": "Hoan tat canh sang tao TikTok", "tiktok_creative_shot_fail": "Ghi nhan loi sang tao TikTok", "tiktok_creative_shot_start": "Bat dau canh sang tao TikTok", "video_clone": "Tao video san pham", "video_publish": "Dang video", "workspace_catalog": "Xem khu vuc ung dung", "workspace_open": "Mo khu vuc ung dung" }
+    ,"hermesPublisherTools": { "publisher_account_delete": "Xoa tai khoan dang", "publisher_account_save": "Luu tai khoan dang", "publisher_candidate_list": "Xem video san sang dang", "publisher_cloud_phone_list": "Xem dien thoai dam may", "publisher_config_get": "Xem trang thai ket noi dang", "publisher_music_delete": "Xoa mau nhac dang", "publisher_music_list": "Xem mau nhac dang", "publisher_music_save": "Luu mau nhac dang", "publisher_task_get": "Xem tac vu dang", "publisher_task_sync": "Dong bo tac vu dang", "video_slice": "Cat video dai" }
+    ,"hermesTaskTools": { "production_task_cancel": "Huy tac vu san xuat", "production_task_remove": "Xoa tac vu san xuat", "production_task_retry": "Thu lai tac vu san xuat" }
+    ,"hermesActivityActions": { "details": "Xem chi tiet thuc thi", "input": "Dau vao", "output": "Ket qua", "changes": "Thay doi tep" }
+    ,"hermesMessageActions": { "copyMessage": "Sao chep tin nhan", "copyCode": "Sao chep ma", "copied": "Da sao chep", "openLink": "Mo lien ket trong trinh duyet", "openAttachment": "Mo tep dinh kem", "editMessage": "Chinh sua tin nhan", "editingTitle": "Dang chinh sua tin nhan truoc", "editingHint": "Gui se thay the tin nhan nay va tao lai noi dung phia sau", "editingSubmitHint": "Gui de thay the tin nhan va tiep tuc tu day", "cancelEdit": "Huy chinh sua" }
+    ,"commandCatalog": { "search": "Tim quy trinh, quan ly Hermes, ky nang va chuc nang ung dung", "managementGroup": "Hermes va cai dat ung dung", "management": { "runtime": "Quan ly Hermes va mo hinh", "skills": "Quan ly ky nang Hermes", "channels": "Quan ly kenh tin nhan", "data": "Quan ly bo nho, sao luu va chan doan", "platforms": "Cau hinh API va khoa", "capabilities": "Cau hinh nang luc mac dinh", "appearance": "Doi giao dien ung dung" }, "managementDescriptions": { "runtime": "Cai dat, khoi dong, sua Hermes va chon mo hinh mac dinh", "skills": "Tim, cai dat, cap nhat, bat tat va kiem tra ky nang", "channels": "Cau hinh ket noi Feishu, WeCom va Weixin", "data": "Xem bo nho, tao sao luu va chan doan loi", "platforms": "Quan ly ket noi API video, hinh anh va tro chuyen", "capabilities": "Chon trien khai mac dinh cho video, hinh anh va tro chuyen", "appearance": "Chon giao dien toi, sang va tu dong" }, "workspaces": { "models": { "label": "Thu vien nguoi mau", "description": "Quan ly danh tinh va tai nguyen tham chieu" }, "products": { "label": "Thu vien san pham", "description": "Quan ly san pham va tai nguyen tham chieu" }, "clone-projects": { "label": "Du an sao chep", "description": "Xem va quan ly du an video thuong mai" }, "production": { "label": "Trung tam san xuat", "description": "Tao lo tac vu va xem tong quan san xuat" }, "production-tasks": { "label": "Tac vu san xuat", "description": "Xem tien do, loi va ket qua" }, "templates": { "label": "Thu vien mau", "description": "Quan ly mau san xuat, am thanh, hinh anh va phu de" }, "live-slicer": { "label": "Cat video dai", "description": "Cat va xu ly nguon video dai" }, "plugins": { "label": "Trung tam plugin", "description": "Xem plugin da cai va co san" }, "live-photo": { "label": "Live Photo", "description": "Tao, kiem tra va xuat Live Photo" }, "product-materials": { "label": "Tai nguyen anh san pham", "description": "Chuan bi va quan ly tai nguyen co the tai su dung" }, "tiktok-creative": { "label": "TikTok Creative Studio", "description": "Tao canh video sang tao TikTok" }, "tiktok-listing": { "label": "Tro ly dang TikTok", "description": "Tao va xuat noi dung dang san pham" }, "video-downloads": { "label": "Tai video", "description": "Tai va quan ly video nguon" }, "video-subtitles": { "label": "Phu de video", "description": "Tao, kiem tra va dong goi phu de" }, "publisher": { "label": "Tai khoan dang", "description": "Quan ly tai khoan va diem dang" }, "publish-center": { "label": "Trung tam dang", "description": "Chuan bi va gui tac vu da duyet" }, "settings": { "label": "Tat ca cai dat", "description": "Quan ly giao dien, API, Hermes va luu tru" } } }
+    ,"commandCenter": { "title": "Trung tam lenh", "search": "Tim quy trinh, ky nang va trang ung dung", "loadingSkills": "Dang tai ky nang Hermes", "empty": "Khong co lenh phu hop", "navigate": "Di chuyen", "select": "Chon", "skillDescription": "Ky nang Hermes da cai dat", "skillPrompt": "Dung ky nang {name} cho tac vu nay: ", "groups": { "workflow": "Quy trinh", "skill": "Ky nang Hermes", "workspace": "Trang ung dung" }, "commands": { "video": "Tao video thuong mai", "material": "Chuan bi tai nguyen san pham", "livePhoto": "Tao Live Photo", "subtitle": "Tao phu de", "publish": "Dang video da duyet", "production": "Kiem tra san xuat", "research": "Nghien cuu tren web", "delegate": "Giao tac vu phuc tap", "products": "Mo thu vien san pham", "clone": "Mo du an sao chep", "productionCenter": "Mo trung tam san xuat", "settings": "Mo cai dat" }, "descriptions": { "video": "Lap ke hoach va tao video san pham", "material": "Kiem tra san pham va chuan bi tai nguyen hinh anh", "livePhoto": "Tao chuyen dong tu anh tham chieu san pham", "subtitle": "Tao va dong goi phu de cho video cuc bo", "publish": "Chuan bi quy trinh dang bai can phe duyet", "production": "Tom tat tac vu dang chay, loi va hoan tat", "research": "Dung trinh duyet da ket noi de so sanh thong tin moi", "delegate": "Chia tac vu cho cac nhan vien phu Hermes", "products": "Xem san pham va tai nguyen tham chieu", "clone": "Xem va quan ly du an video", "productionCenter": "Xem tac vu san xuat va ket qua", "settings": "Quan ly Hermes, mo hinh, ky nang, kenh va giao dien" }, "prompts": { "livePhoto": "Tao Live Photo tu anh tham chieu san pham da chon. Xac nhan so luong va chuyen dong truoc khi chay.", "subtitle": "Tao phu de cho video dinh kem hoac da chon, kiem tra thoi gian va chuan bi ket qua xuat.", "production": "Kiem tra hang doi san xuat va tom tat tac vu dang chay, loi, diem chan va ket qua hoan tat.", "research": "Nghien cuu chu de nay bang trinh duyet da ket noi, so sanh nguon dang tin cay va cung cap trich dan: ", "delegate": "Chia tac vu nay thanh cac phan co the chay song song, giao cho nhan vien phu khi phu hop, kiem tra ket qua va tra ve mot cau tra loi thong nhat: " } }
+    ,"hermesModelActions": { "useApplicationModel": "Dung mo hinh hien tai cua ung dung", "applicationModelApplied": "Mo hinh da xac minh cua ung dung dang duoc Hermes su dung.", "fixNow": "Sua ngay" }
   }
 }

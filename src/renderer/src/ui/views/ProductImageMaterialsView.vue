@@ -948,7 +948,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="materials-workbench">
+  <div class="materials-workbench plugin-workspace-standard">
     <header class="hero-card">
       <div class="hero-card__content">
         <div class="hero-card__eyebrow">

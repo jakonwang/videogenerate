@@ -397,7 +397,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="creative-page">
+  <div class="creative-page plugin-workspace-standard">
     <section class="creative-shell">
       <header class="creative-hero">
         <div class="creative-hero__topline">

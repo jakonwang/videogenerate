@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import { materializeManagedAsset } from '../managed-assets/service'
 import type {
   ProductImageMaterialBatch,
   ProductImageMaterialDb,
@@ -82,8 +83,20 @@ export const productImageMaterialsRepo = {
 
   async upsertBatch(input: ProductImageMaterialBatch) {
     const db = await this.readDb()
+    const sourceItems = await Promise.all(
+      input.sourceItems.map(async (item) => ({
+        ...item,
+        sourceVideoPath: await materializeManagedAsset({
+          sourcePath: item.sourceVideoPath,
+          module: 'product-materials',
+          ownerId: input.id,
+          assetId: item.id,
+        }),
+      })),
+    )
     const next = normalizeBatch({
       ...input,
+      sourceItems,
       updatedAt: now(),
     })
     const index = db.batches.findIndex((item) => item.userId === next.userId && item.id === next.id)
@@ -136,6 +149,12 @@ export const productImageMaterialsRepo = {
     const db = await this.readDb()
     const next = normalizeMaterial({
       ...input,
+      sourceVideoPath: await materializeManagedAsset({
+        sourcePath: input.sourceVideoPath,
+        module: 'product-materials',
+        ownerId: input.batchId,
+        assetId: `material-${input.id}-source-video`,
+      }),
       updatedAt: now(),
     })
     const index = db.materials.findIndex((item) => item.userId === next.userId && item.id === next.id)
@@ -143,6 +162,46 @@ export const productImageMaterialsRepo = {
     else db.materials.unshift(next)
     await this.writeDb(db)
     return next
+  },
+
+  async migrateExternalAssets(): Promise<{ migrated: number }> {
+    const db = await this.readDb()
+    let migrated = 0
+    for (let batchIndex = 0; batchIndex < db.batches.length; batchIndex += 1) {
+      const current = db.batches[batchIndex]
+      const sourceItems = await Promise.all(
+        current.sourceItems.map(async (item) => ({
+          ...item,
+          sourceVideoPath: await materializeManagedAsset({
+            sourcePath: item.sourceVideoPath,
+            module: 'product-materials',
+            ownerId: current.id,
+            assetId: item.id,
+          }),
+        })),
+      )
+      const next = normalizeBatch({ ...current, sourceItems })
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      db.batches[batchIndex] = next
+      migrated += 1
+    }
+    for (let materialIndex = 0; materialIndex < db.materials.length; materialIndex += 1) {
+      const current = db.materials[materialIndex]
+      const next = normalizeMaterial({
+        ...current,
+        sourceVideoPath: await materializeManagedAsset({
+          sourcePath: current.sourceVideoPath,
+          module: 'product-materials',
+          ownerId: current.batchId,
+          assetId: `material-${current.id}-source-video`,
+        }),
+      })
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      db.materials[materialIndex] = next
+      migrated += 1
+    }
+    if (migrated) await this.writeDb(db)
+    return { migrated }
   },
 
   async setMaterialUsageStatus(userId: string, materialId: string, usageStatus: ProductImageMaterialUsageStatus) {

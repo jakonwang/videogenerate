@@ -1,5 +1,6 @@
 import type { IpcMain } from 'electron'
 import { livePhotoService } from '../modules/live-photo/service'
+import { hermesDeliveryService } from '../modules/live-photo/hermesDelivery'
 
 export function registerLivePhotoIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:livePhoto:list', async () => await livePhotoService.list())
@@ -38,7 +39,11 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
   )
   ipcMain.handle(
     'plugin:livePhoto:retry',
-    async (_e, payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    async (_e, payload: {
+      id: string
+      motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
+      replacementRegion?: { x: number; y: number; width: number; height: number }
+    }) =>
       await livePhotoService.retry(payload),
   )
   ipcMain.handle(
@@ -57,6 +62,10 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
         }
       },
     ) => await livePhotoService.exportItems(payload),
+  )
+  ipcMain.handle(
+    'plugin:livePhoto:sendItemsToFeishu',
+    async (_e, payload: { ids: string[] }) => await hermesDeliveryService.sendLivePhotoItemsToFeishu(payload),
   )
   ipcMain.handle('plugin:livePhoto:remove', async (_e, id: string) => await livePhotoService.remove(id))
   ipcMain.handle('plugin:livePhoto:pauseAutoFlow', async (_e, payload: { id: string }) => await livePhotoService.pauseAutoFlow(payload))

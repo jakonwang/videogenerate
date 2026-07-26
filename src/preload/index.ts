@@ -1,16 +1,78 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
+import type { HermesWorkspaceAction } from '../shared/hermesWorkspace'
+import { storageCleanupConfirmation, type StorageCategoryId } from '../shared/storageManagement'
+
+function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) {
+  return {
+    ...(typeof opts?.title === 'string' ? { title: opts.title } : {}),
+    ...(typeof opts?.multiple === 'boolean' ? { multiple: opts.multiple } : {}),
+    ...(Array.isArray(opts?.filters) ? {
+      filters: opts.filters.map((filter) => ({
+        name: String(filter?.name || ''),
+        extensions: Array.isArray(filter?.extensions) ? filter.extensions.map((extension) => String(extension)) : [],
+      })),
+    } : {}),
+  }
+}
+
+function normalizeHermesPromptPayload(payload: any) {
+  const attachments = Array.isArray(payload?.attachments)
+    ? payload.attachments.map((attachment: any) => ({
+      path: String(attachment?.path || ''),
+      ...(attachment?.name ? { name: String(attachment.name) } : {}),
+      ...(attachment?.mediaType === 'image' || attachment?.mediaType === 'video' || attachment?.mediaType === 'file'
+        ? { mediaType: attachment.mediaType }
+        : {}),
+    })).filter((attachment: { path: string }) => attachment.path)
+    : []
+  return {
+    sessionId: String(payload?.sessionId || ''),
+    text: String(payload?.text || ''),
+    ...(attachments.length ? { attachments } : {}),
+    ...(Number.isInteger(payload?.regenerateUserOrdinal)
+      ? { regenerateUserOrdinal: Number(payload.regenerateUserOrdinal) }
+      : {}),
+  }
+}
 
 const api = {
   getPaths: () => ipcRenderer.invoke('app:getPaths'),
   getWebApiInfo: () => ipcRenderer.invoke('app:getWebApiInfo'),
   setUiLocale: (locale: string) => ipcRenderer.invoke('app:setUiLocale', locale),
   getUiLocale: () => ipcRenderer.invoke('app:getUiLocale'),
+  storage: {
+    getOverview: () => ipcRenderer.invoke('storage:getOverview'),
+    getCategory: (categoryId: StorageCategoryId, force = false) => ipcRenderer.invoke('storage:getCategory', {
+      categoryId,
+      force: Boolean(force),
+    }),
+    cleanup: (categoryId: StorageCategoryId, challenge = '') => ipcRenderer.invoke('storage:cleanup', {
+      categoryId,
+      confirmation: storageCleanupConfirmation(categoryId),
+      challenge: String(challenge || ''),
+    }),
+  },
 
   pickFiles: (opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) =>
-    ipcRenderer.invoke('fs:pickFiles', opts ?? {}),
+    ipcRenderer.invoke('fs:pickFiles', normalizeFilePickerOptions(opts)),
   pickDir: (opts: { title?: string }) => ipcRenderer.invoke('fs:pickDir', opts),
   pathExists: (input: { path: string }) => ipcRenderer.invoke('fs:pathExists', input) as Promise<boolean>,
+  describeFiles: (paths: string[]) => ipcRenderer.invoke(
+    'fs:describeFiles',
+    Array.isArray(paths) ? paths.map((path) => String(path)) : [],
+  ) as Promise<Array<{
+    path: string
+    exists: boolean
+    isFile: boolean
+    size: number
+    modifiedAt: number
+  }>>,
+  stageAttachment: (input: { name: string; base64: string }) => ipcRenderer.invoke('fs:stageAttachment', {
+    name: String(input?.name || 'attachment.bin'),
+    base64: String(input?.base64 || ''),
+  }) as Promise<{ path: string; name: string; size: number }>,
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   saveFileAs: (input: { sourcePath: string; defaultFileName?: string; title?: string }) =>
     ipcRenderer.invoke('fs:saveFileAs', input) as Promise<{ ok: boolean; canceled?: boolean; filePath?: string }>,
   readFileAsBase64: (input: { path: string }) => ipcRenderer.invoke('fs:readFileAsBase64', input),
@@ -660,6 +722,7 @@ const api = {
   shell: {
     showItemInFolder: (fullPath: string) => ipcRenderer.invoke('shell:showItemInFolder', fullPath),
     openPath: (fullPath: string) => ipcRenderer.invoke('shell:openPath', fullPath),
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   },
 
   preview: {
@@ -835,7 +898,11 @@ const api = {
         avoidPosition?: 'auto' | 'top' | 'bottom'
       }
     }) => ipcRenderer.invoke('plugin:livePhoto:generateSubtitleVideosForItems', payload),
-    retry: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    retry: (payload: {
+      id: string
+      motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
+      replacementRegion?: { x: number; y: number; width: number; height: number }
+    }) =>
       ipcRenderer.invoke('plugin:livePhoto:retry', payload),
     exportItems: (payload: {
       ids: string[]
@@ -848,6 +915,7 @@ const api = {
         quality?: 'medium' | 'high'
       }
     }) => ipcRenderer.invoke('plugin:livePhoto:exportItems', payload),
+    sendItemsToFeishu: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:livePhoto:sendItemsToFeishu', payload),
     remove: (id: string) => ipcRenderer.invoke('plugin:livePhoto:remove', id),
     pauseAutoFlow: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:pauseAutoFlow', payload),
     resumeAutoFlow: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
@@ -860,8 +928,7 @@ const api = {
         userId: string
         referenceImagePaths?: string[]
         selectionMode?: 'product' | 'material' | 'delivery'
-      }) =>
-        ipcRenderer.invoke('hermes:livePhoto:startReferenceSession', payload),
+      }) => ipcRenderer.invoke('hermes:livePhoto:startReferenceSession', payload),
       getLatestSession: (payload: { channel: string; userId: string }) =>
         ipcRenderer.invoke('hermes:livePhoto:getLatestSession', payload),
       listProductOptions: () => ipcRenderer.invoke('hermes:livePhoto:listProductOptions'),
@@ -872,6 +939,153 @@ const api = {
       selectDeliveryCount: (payload: { sessionId: string; count: number }) =>
         ipcRenderer.invoke('hermes:livePhoto:selectDeliveryCount', payload),
       getSessionStatus: (sessionId: string) => ipcRenderer.invoke('hermes:livePhoto:getSessionStatus', sessionId),
+    },
+    getRuntimeStatus: () => ipcRenderer.invoke('hermes:getRuntimeStatus'),
+    getInstallationStatus: () => ipcRenderer.invoke('hermes:getInstallationStatus'),
+    installRuntime: () => ipcRenderer.invoke('hermes:installRuntime'),
+    updateRuntime: () => ipcRenderer.invoke('hermes:updateRuntime'),
+    repairRuntime: () => ipcRenderer.invoke('hermes:repairRuntime'),
+    startRuntime: () => ipcRenderer.invoke('hermes:startRuntime'),
+    stopRuntime: () => ipcRenderer.invoke('hermes:stopRuntime'),
+    restartRuntime: () => ipcRenderer.invoke('hermes:restartRuntime'),
+    getGatewayStatus: () => ipcRenderer.invoke('hermes:getGatewayStatus'),
+    startGateway: () => ipcRenderer.invoke('hermes:startGateway'),
+    stopGateway: () => ipcRenderer.invoke('hermes:stopGateway'),
+    restartGateway: () => ipcRenderer.invoke('hermes:restartGateway'),
+    approvePairing: (payload: { platform: string; code: string }) => ipcRenderer.invoke('hermes:approvePairing', payload),
+    listSkills: () => ipcRenderer.invoke('hermes:listSkills'),
+    searchSkills: (payload: { query: string; source?: string; limit?: number }) => ipcRenderer.invoke('hermes:searchSkills', payload),
+    inspectSkill: (identifier: string) => ipcRenderer.invoke('hermes:inspectSkill', identifier),
+    auditSkill: (identifier: string) => ipcRenderer.invoke('hermes:auditSkill', identifier),
+    installSkill: (identifier: string) => ipcRenderer.invoke('hermes:installSkill', identifier),
+    updateSkills: () => ipcRenderer.invoke('hermes:updateSkills'),
+    uninstallSkill: (name: string) => ipcRenderer.invoke('hermes:uninstallSkill', name),
+    setSkillEnabled: (payload: { name: string; enabled: boolean }) => ipcRenderer.invoke('hermes:setSkillEnabled', payload),
+    listChannels: () => ipcRenderer.invoke('hermes:listChannels'),
+    getChannel: (id: string) => ipcRenderer.invoke('hermes:getChannel', id),
+    saveChannel: (payload: { id: string; enabled?: boolean; values?: Record<string, string>; clear?: string[] }) => ipcRenderer.invoke('hermes:saveChannel', payload),
+    connectChannel: (id: string) => ipcRenderer.invoke('hermes:connectChannel', id),
+    disconnectChannel: (id: string) => ipcRenderer.invoke('hermes:disconnectChannel', id),
+    testChannel: (id: string) => ipcRenderer.invoke('hermes:testChannel', id),
+    startChannelPairing: (id: string) => ipcRenderer.invoke('hermes:startChannelPairing', id),
+    pollChannelPairing: (pairingId: string) => ipcRenderer.invoke('hermes:pollChannelPairing', pairingId),
+    cancelChannelPairing: (pairingId: string) => ipcRenderer.invoke('hermes:cancelChannelPairing', pairingId),
+    createBackup: () => ipcRenderer.invoke('hermes:createBackup'),
+    listBackups: () => ipcRenderer.invoke('hermes:listBackups'),
+    getMemoryStatus: () => ipcRenderer.invoke('hermes:getMemoryStatus'),
+    getDiagnostics: () => ipcRenderer.invoke('hermes:getDiagnostics'),
+    openWorkspace: (payload: { workspaceId: string; entityId?: string; settingsSection?: string }) => ipcRenderer.invoke('hermes:openWorkspace', {
+      workspaceId: String(payload?.workspaceId || ''),
+      ...(payload?.entityId ? { entityId: String(payload.entityId) } : {}),
+      ...(payload?.settingsSection ? { settingsSection: String(payload.settingsSection) } : {}),
+    }),
+    listSessions: (limit?: number) => ipcRenderer.invoke('hermes:listSessions', limit),
+    getModelOptions: (sessionId?: string) => ipcRenderer.invoke('hermes:getModelOptions', sessionId),
+    saveProviderKey: (payload: { provider: string; apiKey: string; sessionId?: string }) => ipcRenderer.invoke('hermes:saveProviderKey', payload),
+    selectModel: (payload: { provider: string; model: string; sessionId?: string }) => ipcRenderer.invoke('hermes:selectModel', payload),
+    disconnectModelProvider: (payload: { provider: string; sessionId?: string }) => ipcRenderer.invoke('hermes:disconnectModelProvider', payload),
+    saveCustomModel: (payload: { model: string; baseUrl: string; apiKey?: string }) => ipcRenderer.invoke('hermes:saveCustomModel', payload),
+    useApplicationModel: () => ipcRenderer.invoke('hermes:useApplicationModel'),
+    testModelConnection: () => ipcRenderer.invoke('hermes:testModelConnection'),
+    createSession: (payload: any) => ipcRenderer.invoke('hermes:createSession', payload),
+    resumeSession: (storedSessionId: string) => ipcRenderer.invoke('hermes:resumeSession', storedSessionId),
+    forkSession: (payload: { sessionId: string; name?: string }) => ipcRenderer.invoke('hermes:forkSession', payload),
+    closeSession: (sessionId: string) => ipcRenderer.invoke('hermes:closeSession', sessionId),
+    renameSession: (payload: { sessionId: string; title: string }) => ipcRenderer.invoke('hermes:renameSession', payload),
+    deleteSession: (sessionId: string) => ipcRenderer.invoke('hermes:deleteSession', sessionId),
+    getHistory: (sessionId: string) => ipcRenderer.invoke('hermes:getHistory', sessionId),
+    sendPrompt: (payload: any) => ipcRenderer.invoke('hermes:sendPrompt', normalizeHermesPromptPayload(payload)),
+    interruptSession: (sessionId: string) => ipcRenderer.invoke('hermes:interruptSession', sessionId),
+    steerSession: (payload: { sessionId: string; text: string }) => ipcRenderer.invoke('hermes:steerSession', payload),
+    respondClarification: (payload: any) => ipcRenderer.invoke('hermes:respondClarification', payload),
+    respondApproval: (payload: any) => ipcRenderer.invoke('hermes:respondApproval', payload),
+    respondSudo: (payload: any) => ipcRenderer.invoke('hermes:respondSudo', payload),
+    respondSecret: (payload: any) => ipcRenderer.invoke('hermes:respondSecret', payload),
+    getDelegationStatus: () => ipcRenderer.invoke('hermes:getDelegationStatus'),
+    setDelegationPaused: (paused: boolean) => ipcRenderer.invoke('hermes:setDelegationPaused', Boolean(paused)),
+    interruptSubagent: (subagentId: string) => ipcRenderer.invoke('hermes:interruptSubagent', subagentId),
+    listBackgroundProcesses: (sessionId: string) => ipcRenderer.invoke('hermes:listBackgroundProcesses', String(sessionId || '')),
+    stopBackgroundProcess: (payload: { sessionId: string; processId: string }) => ipcRenderer.invoke('hermes:stopBackgroundProcess', {
+      sessionId: String(payload?.sessionId || ''),
+      processId: String(payload?.processId || ''),
+    }),
+    manageBrowser: (payload: { action: 'status' | 'connect' | 'disconnect'; sessionId?: string; url?: string }) =>
+      ipcRenderer.invoke('hermes:manageBrowser', {
+        action: payload?.action,
+        ...(payload?.sessionId ? { sessionId: String(payload.sessionId) } : {}),
+        ...(payload?.url ? { url: String(payload.url) } : {}),
+      }),
+    listSessionEvents: (payload: { sessionId?: string; storedSessionId?: string; limit?: number }) =>
+      ipcRenderer.invoke('hermes:listSessionEvents', {
+        ...(payload?.sessionId ? { sessionId: String(payload.sessionId) } : {}),
+        ...(payload?.storedSessionId ? { storedSessionId: String(payload.storedSessionId) } : {}),
+        ...(Number.isInteger(payload?.limit) ? { limit: Number(payload.limit) } : {}),
+      }),
+    listPendingInputs: () => ipcRenderer.invoke('hermes:listPendingInputs'),
+    subscribeEvents: (afterSequence: number, callback: (events: any[]) => void) => {
+      let lastSequence = Math.max(0, Number(afterSequence || 0))
+      const forward = (events: any[]) => {
+        const fresh = (Array.isArray(events) ? events : [])
+          .filter((event) => Number(event?.sequence || 0) > lastSequence)
+          .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0))
+        if (!fresh.length) return
+        lastSequence = Number(fresh[fresh.length - 1].sequence || lastSequence)
+        callback(fresh)
+      }
+      const handler = (_event: unknown, events: any[]) => forward(events)
+      ipcRenderer.on('hermes:event', handler)
+      void ipcRenderer.invoke('hermes:listEvents', lastSequence).then(forward)
+      return () => ipcRenderer.off('hermes:event', handler)
+    },
+    subscribeRuntimeStatus: (callback: (status: any) => void) => {
+      const handler = (_event: unknown, status: any) => callback(status)
+      ipcRenderer.on('hermes:runtimeStatus', handler)
+      return () => ipcRenderer.off('hermes:runtimeStatus', handler)
+    },
+    subscribeManagementEvents: (callback: (status: any) => void) => {
+      const handler = (_event: unknown, status: any) => callback(status)
+      ipcRenderer.on('hermes:managementStatus', handler)
+      return () => ipcRenderer.off('hermes:managementStatus', handler)
+    },
+    subscribeWorkspaceActions: (callback: (action: HermesWorkspaceAction) => void) => {
+      const handler = (_event: unknown, action: HermesWorkspaceAction) => callback(action)
+      ipcRenderer.on('hermes:workspaceAction', handler)
+      return () => ipcRenderer.off('hermes:workspaceAction', handler)
+    },
+  },
+
+  agentOs: {
+    listEmployees: () => ipcRenderer.invoke('agentOs:listEmployees'),
+    createEmployee: (payload: any) => ipcRenderer.invoke('agentOs:createEmployee', payload),
+    updateEmployee: (payload: any) => ipcRenderer.invoke('agentOs:updateEmployee', payload),
+    duplicateEmployee: (payload: { id: string; name?: string }) => ipcRenderer.invoke('agentOs:duplicateEmployee', payload),
+    archiveEmployee: (id: string) => ipcRenderer.invoke('agentOs:archiveEmployee', id),
+    createConversation: (payload?: any) => ipcRenderer.invoke('agentOs:createConversation', payload),
+    listConversations: (limit?: number) => ipcRenderer.invoke('agentOs:listConversations', limit),
+    getConversation: (id: string) => ipcRenderer.invoke('agentOs:getConversation', id),
+    sendMessage: (payload: any) => ipcRenderer.invoke('agentOs:sendMessage', payload),
+    getRun: (runId: string) => ipcRenderer.invoke('agentOs:getRun', runId),
+    approveRun: (payload: { runId: string; revision: number; planHash: string }) => ipcRenderer.invoke('agentOs:approveRun', payload),
+    rejectRun: (payload: { runId: string; revision: number; planHash: string }) => ipcRenderer.invoke('agentOs:rejectRun', payload),
+    pauseRun: (runId: string) => ipcRenderer.invoke('agentOs:pauseRun', runId),
+    resumeRun: (runId: string) => ipcRenderer.invoke('agentOs:resumeRun', runId),
+    cancelRun: (runId: string) => ipcRenderer.invoke('agentOs:cancelRun', runId),
+    listArtifacts: (payload?: { runId?: string; conversationId?: string }) => ipcRenderer.invoke('agentOs:listArtifacts', payload),
+    openArtifact: (id: string) => ipcRenderer.invoke('agentOs:openArtifact', id),
+    subscribeEvents: (afterSequence: number, callback: (events: any[]) => void) => {
+      let lastSequence = Math.max(0, Number(afterSequence || 0))
+      const forward = (events: any[]) => {
+        const fresh = (Array.isArray(events) ? events : [])
+          .filter((event) => Number(event?.sequence || 0) > lastSequence)
+          .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0))
+        if (!fresh.length) return
+        lastSequence = Number(fresh[fresh.length - 1].sequence || lastSequence)
+        callback(fresh)
+      }
+      const handler = (_event: unknown, events: any[]) => forward(events)
+      ipcRenderer.on('agentOs:event', handler)
+      void ipcRenderer.invoke('agentOs:listEvents', { afterSequence: lastSequence, limit: 1000 }).then(forward)
+      return () => ipcRenderer.off('agentOs:event', handler)
     },
   },
 
@@ -884,6 +1098,9 @@ const api = {
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     stats: () => ipcRenderer.invoke('tasks:stats'),
+    retry: (id: string) => ipcRenderer.invoke('tasks:retry', String(id || '')),
+    cancel: (id: string) => ipcRenderer.invoke('tasks:cancel', String(id || '')),
+    remove: (id: string) => ipcRenderer.invoke('tasks:remove', String(id || '')),
     enqueueBatch: (payload: { productId: string; templateId: string; count: number; outDir: string }) =>
       ipcRenderer.invoke('tasks:enqueueBatch', payload),
     pause: () => ipcRenderer.invoke('tasks:pause'),

@@ -48,6 +48,7 @@ class TaskQueue {
   private lastEmitByTask = new Map<string, number>()
   private controllers = new Map<string, AbortController>()
   private scheduled = new Set<string>()
+  private cancelledTasks = new Set<string>()
 
   onEvent(fn: Listener) {
     this.listeners.push(fn)
@@ -66,6 +67,51 @@ class TaskQueue {
 
   getTask(id: string) {
     return this.tasks.find((t) => t.id === id)
+  }
+
+  retryTask(id: string) {
+    const task = this.getTask(id)
+    if (!task) throw new Error('Production task does not exist')
+    if (this.scheduled.has(id)) throw new Error('Production task is still stopping')
+    if (!['error', 'cancelled', 'skipped'].includes(task.status)) {
+      throw new Error('Only failed, cancelled, or skipped production tasks can be retried')
+    }
+    this.cancelledTasks.delete(id)
+    task.status = 'queued'
+    task.progress = 0
+    task.error = undefined
+    task.renderMs = undefined
+    task.reportPath = undefined
+    task.logs = [`Retry queued at ${new Date().toISOString()}`, ...task.logs].slice(0, 200)
+    this.emitTaskUpdate(task, true)
+    this.scheduleRun(task)
+    return task
+  }
+
+  cancelTask(id: string) {
+    const task = this.getTask(id)
+    if (!task) throw new Error('Production task does not exist')
+    if (!['queued', 'running', 'paused'].includes(task.status)) return task
+    this.cancelledTasks.add(id)
+    this.controllers.get(id)?.abort()
+    task.status = 'cancelled'
+    task.progress = 0
+    task.error = undefined
+    this.emitTaskUpdate(task, true)
+    return task
+  }
+
+  removeTask(id: string) {
+    const task = this.getTask(id)
+    if (!task) throw new Error('Production task does not exist')
+    if (this.scheduled.has(id) || ['queued', 'running', 'paused'].includes(task.status)) {
+      throw new Error('Stop the production task before removing its record')
+    }
+    this.cancelledTasks.delete(id)
+    this.lastEmitByTask.delete(id)
+    this.tasks = this.tasks.filter((item) => item.id !== id)
+    this.emit({ type: 'queue:stats', stats: { size: this.tasks.length, pending: this.q.size, paused: this.paused, concurrency: this.q.concurrency } })
+    return { ok: true as const, task, outputFilesPreserved: true as const }
   }
 
   stats() {
@@ -128,6 +174,12 @@ class TaskQueue {
   }
 
   private async runTask(t: VideoTask) {
+    if (this.cancelledTasks.has(t.id)) {
+      t.status = 'cancelled'
+      t.progress = 0
+      this.emitTaskUpdate(t, true)
+      return
+    }
     if (this.cancelled) {
       t.status = 'cancelled'
       t.progress = 0
@@ -394,7 +446,7 @@ class TaskQueue {
     this.q.clear()
     for (const c of this.controllers.values()) c.abort()
     for (const t of this.tasks) {
-      if (t.status === 'queued' || t.status === 'running') {
+      if (t.status === 'queued' || t.status === 'running' || t.status === 'paused') {
         t.status = 'cancelled'
         t.progress = 0
         this.emitTaskUpdate(t, true)

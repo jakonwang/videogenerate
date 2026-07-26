@@ -15,6 +15,9 @@ export function registerTemplatesTasksIpc(
 
   ipcMain.handle('tasks:list', async () => taskQueue.list())
   ipcMain.handle('tasks:stats', async () => taskQueue.stats())
+  ipcMain.handle('tasks:retry', async (_e, id: string) => taskQueue.retryTask(String(id || '').trim()))
+  ipcMain.handle('tasks:cancel', async (_e, id: string) => taskQueue.cancelTask(String(id || '').trim()))
+  ipcMain.handle('tasks:remove', async (_e, id: string) => taskQueue.removeTask(String(id || '').trim()))
   ipcMain.handle('tasks:enqueueBatch', async (_e, payload: { productId: string; templateId: string; count: number; outDir: string }) => {
     const res = await createBatchTasks(payload)
     for (const t of res.tasks) taskQueue.enqueue(t)

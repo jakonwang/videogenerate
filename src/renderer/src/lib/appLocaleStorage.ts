@@ -4,6 +4,7 @@ export const APP_SETTINGS_STORAGE_KEY = 'videogenerate-app-settings'
 
 export type StoredAppSettings = {
   locale: AppLocale
+  theme?: string
 }
 
 export function readStoredLocale(): AppLocale | null {
@@ -25,6 +26,12 @@ export function getInitialAppLocale(): AppLocale {
 }
 
 export function persistAppLocale(locale: AppLocale) {
-  const payload: StoredAppSettings = { locale }
+  let current: Partial<StoredAppSettings> = {}
+  try {
+    current = JSON.parse(localStorage.getItem(APP_SETTINGS_STORAGE_KEY) || '{}') as Partial<StoredAppSettings>
+  } catch {
+    current = {}
+  }
+  const payload: StoredAppSettings = { ...current, locale }
   localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(payload))
 }

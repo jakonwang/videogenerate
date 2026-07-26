@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Clock3,
   FileImage,
   Filter,
@@ -25,6 +26,8 @@ import {
   Package,
   Play,
   RefreshCcw,
+  ScanLine,
+  Send,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -155,6 +158,16 @@ type LivePhotoItem = {
   cacheHit?: boolean
   checkerFallbackReason?: string
   qualityReport?: LivePhotoQualityReport
+  replacementRegion?: {
+    x: number
+    y: number
+    width: number
+    height: number
+    source: 'auto' | 'manual'
+    confidence?: number
+    revision: number
+    updatedAt: number
+  }
   generationAttempts?: Array<{
     id: string
     index: number
@@ -244,6 +257,8 @@ const router = useRouter()
 const { t } = useI18n()
 
 const uiText = {
+  workspaceTitle: '\u5de5\u4f5c\u533a',
+  workspaceHint: '\u5728\u53c2\u8003\u56fe\u4efb\u52a1\u3001\u590d\u523b\u955c\u5934\u4e0e\u7d20\u6750\u5e93\u4e4b\u95f4\u5feb\u901f\u5207\u6362',
   heroTitle: '\u4ece\u5546\u54c1\u53c2\u8003\u56fe\u6216\u590d\u523b\u955c\u5934\u751f\u6210\u53ef\u76f4\u63a5\u5bfc\u51fa\u7684\u52a8\u6001\u7167\u7247\u7d20\u6750',
   heroDesc:
     '\u652f\u6301\u53c2\u8003\u56fe\u6279\u91cf\u5efa\u4efb\u52a1\u3001\u81ea\u52a8\u53d6\u6570\u3001\u81ea\u52a8\u751f\u6210\u89c6\u9891\u5e76\u7ee7\u7eed\u5199\u51fa\u52a8\u6001\u7167\u7247\u7d20\u6750\uff0c\u5c06\u53c2\u8003\u56fe\u3001\u590d\u523b\u955c\u5934\u4e0e\u5e93\u5bfc\u51fa\u96c6\u4e2d\u5728\u4e00\u4e2a\u9875\u9762\u5b8c\u6210\u3002',
@@ -259,12 +274,16 @@ const uiText = {
     '\u652f\u6301 JPG\u3001PNG\u3001WEBP\uff0c\u5efa\u8bae 2000px \u4ee5\u4e0a\uff0c\u53ef\u8fde\u7eed\u8ffd\u52a0\u591a\u5f20\u53c2\u8003\u56fe\u3002',
   materialLibraryOption: '\u6216\u4ece\u5546\u54c1\u56fe\u7247\u7d20\u6750\u5e93\u6279\u91cf\u9009\u62e9\u672a\u7ed1\u5b9a\u5546\u54c1\u7684\u56fe\u7247',
   materialLibrarySelect: '\u4ece\u7d20\u6750\u5e93\u9009\u56fe',
-  materialLibraryCollapse: '\u6536\u8d77\u7d20\u6750\u9009\u56fe',
+  materialLibraryDesc: '\u6253\u5f00\u5546\u54c1\u56fe\u7247\u7d20\u6750\u5e93\uff0c\u53ef\u6279\u91cf\u9009\u62e9\u672a\u7ed1\u5b9a\u5546\u54c1\u7684\u56fe\u7247\u3002',
+  materialLibraryClose: '\u5173\u95ed',
   materialLibraryEmpty: '\u5f53\u524d\u6ca1\u6709\u53ef\u7528\u7684\u672a\u7ed1\u5b9a\u5546\u54c1\u7d20\u6750\u56fe\u7247\u3002',
   materialLibrarySelected: '\u5df2\u9009',
   materialLibraryAddSelected: '\u52a0\u5165\u53c2\u8003\u56fe',
   materialLibrarySelectAll: '\u5168\u9009',
   materialLibraryClear: '\u6e05\u7a7a',
+  previousPage: '\u4e0a\u4e00\u9875',
+  nextPage: '\u4e0b\u4e00\u9875',
+  perPage: '\u6bcf\u9875',
   referenceQueuedSuffix:
     '\u5f20\u56fe\u7247\u5f85\u521b\u5efa\u4efb\u52a1\uff0c\u7ee7\u7eed\u70b9\u51fb\u53ef\u8ffd\u52a0\u66f4\u591a\u53c2\u8003\u56fe\u3002',
   pendingTasks: '\u5f85\u521b\u5efa\u4efb\u52a1',
@@ -320,10 +339,6 @@ const uiText = {
   metadata: '\u5143\u6570\u636e',
   reveal: '\u6253\u5f00\u76ee\u5f55',
   regenerate: '\u91cd\u65b0\u751f\u6210',
-  tipTitle: '\u5c0f\u8d34\u58eb',
-  tipDesc:
-    '\u53c2\u8003\u56fe\u53ef\u4ee5\u8fde\u7eed\u8ffd\u52a0\uff0c\u7cfb\u7edf\u4f1a\u81ea\u52a8\u4e3a\u6bcf\u5f20\u56fe\u521b\u5efa\u4efb\u52a1\uff0c\u5e76\u5728\u89c6\u9891\u751f\u6210\u5b8c\u6210\u540e\u7ee7\u7eed\u81ea\u52a8\u4ea7\u51fa\u52a8\u56fe\u8d44\u6e90\u3002',
-  guide: '\u67e5\u770b\u4f7f\u7528\u6307\u5357',
   referenceCreatedPrefix: '\u5df2\u521b\u5efa',
   referenceCreatedSuffix: '\u4e2a\u53c2\u8003\u56fe\u4efb\u52a1\u3002',
   runtimeLogTitlePrefix: '\u8fd0\u884c\u65e5\u5fd7',
@@ -358,11 +373,25 @@ const selectedCloneProjectId = ref('')
 const cloneProjectDetail = ref<CloneProjectDetail | null>(null)
 const selectedShotIds = ref<string[]>([])
 const selectedLibraryIds = ref<string[]>([])
+const sendingToFeishu = ref(false)
 const runtimeDialogOpen = ref(false)
 const runtimeLogs = ref<Array<{ id: string; level: 'info' | 'success' | 'error'; message: string; time: number }>>([])
 const runtimeDialogTitle = ref('运行日志')
 const detailDialogOpen = ref(false)
 const detailDialogItem = ref<LivePhotoItem | null>(null)
+const replacementRegionDialogOpen = ref(false)
+const replacementRegionDialogItem = ref<LivePhotoItem | null>(null)
+const replacementRegionStage = ref<HTMLElement | null>(null)
+const replacementRegionBusy = ref(false)
+const replacementRegionDraft = reactive({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 })
+const replacementRegionCorners = ['nw', 'ne', 'sw', 'se'] as const
+const replacementRegionInteraction = ref<{
+  mode: 'draw' | 'move' | 'resize'
+  corner?: 'nw' | 'ne' | 'sw' | 'se'
+  startX: number
+  startY: number
+  initial: { x: number; y: number; width: number; height: number }
+} | null>(null)
 const livePhotoSettingsBusy = ref(false)
 const promptVersions = ref<LivePhotoPromptVersion[]>([])
 const selectedPromptVersionId = ref('')
@@ -480,6 +509,12 @@ const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
 const subtitleEligibleSelectedItems = computed(() => selectedLibraryItems.value.filter((item) => Boolean(livePhotoDisplayVideoPath(item))))
 const subtitleEligibleSelectedCount = computed(() => subtitleEligibleSelectedItems.value.length)
+const feishuEligibleSelectedItems = computed(() =>
+  selectedLibraryItems.value.filter((item) => item.packagingStatus === 'completed' && Boolean(livePhotoDisplayVideoPath(item))),
+)
+const feishuEligibleSelectedCount = computed(() => feishuEligibleSelectedItems.value.length)
+const feishuBatchLabel = '\u6279\u91cf\u53d1\u9001\u98de\u4e66'
+const feishuSendingLabel = '\u6b63\u5728\u53d1\u9001'
 const pagedLibraryItems = computed(() => filteredLibraryItems.value)
 const runningLibraryItems = computed(() =>
   items.value.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running'),
@@ -1462,9 +1497,13 @@ async function pickReferenceImage() {
   }
 }
 
-function toggleMaterialPicker() {
-  materialPickerOpen.value = !materialPickerOpen.value
-  if (materialPickerOpen.value) materialPickerPage.value = 1
+function openMaterialPicker() {
+  materialPickerPage.value = 1
+  materialPickerOpen.value = true
+}
+
+function closeMaterialPicker() {
+  materialPickerOpen.value = false
 }
 
 function toggleMaterialImageSelection(materialId: string) {
@@ -1499,7 +1538,7 @@ async function appendMaterialImagesAsReferences() {
   referenceMissingPaths.value = missingPaths
   referenceMaterialIds.value = dedupePaths([...referenceMaterialIds.value, ...selectedMaterialOptions.value.map((item) => item.id)])
   selectedMaterialImageIds.value = []
-  materialPickerOpen.value = false
+  closeMaterialPicker()
   if (!existingPaths.length && mergedPaths.length) {
     notice.value = ''
   } else if (missingPaths.length) {
@@ -1703,6 +1742,168 @@ async function removeItem(id: string) {
   await loadAll()
 }
 
+async function sendSelectedToFeishu() {
+  if (!feishuEligibleSelectedCount.value || sendingToFeishu.value) return
+  sendingToFeishu.value = true
+  errorText.value = ''
+  notice.value = ''
+  try {
+    const result = await window.api.livePhoto.sendItemsToFeishu({
+      ids: feishuEligibleSelectedItems.value.map((item) => item.id),
+    })
+    const sent = Array.isArray(result?.sent) ? result.sent : []
+    const skipped = Array.isArray(result?.skipped) ? result.skipped : []
+    if (sent.length) {
+      notice.value = `\u5df2\u6210\u529f\u53d1\u9001 ${sent.length} \u4e2a Live Photo \u89c6\u9891\u5230\u98de\u4e66\u3002`
+      selectedLibraryIds.value = selectedLibraryIds.value.filter(
+        (id) => !sent.some((item: { id?: string }) => String(item?.id || '') === id),
+      )
+    }
+    if (skipped.length) {
+      const reason = skipped
+        .map((item: { reason?: string }) => String(item?.reason || '').trim())
+        .filter(Boolean)
+        .slice(0, 2)
+        .join('; ')
+      const detail = `\u6709 ${skipped.length} \u4e2a\u89c6\u9891\u672a\u53d1\u9001${reason ? `: ${reason}` : '\u3002'}`
+      if (sent.length) notice.value = `${notice.value} ${detail}`
+      else errorText.value = detail
+    }
+    await refreshLibraryItems()
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    sendingToFeishu.value = false
+  }
+}
+
+function clampRegionValue(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value))
+}
+
+function canCorrectReplacementRegion(item: LivePhotoItem) {
+  return item.sourceType === 'reference_replace' && Boolean(String(item.referenceImagePath || '').trim()) && item.packagingStatus !== 'processing'
+}
+
+function replacementRegionStyle() {
+  return {
+    left: `${replacementRegionDraft.x * 100}%`,
+    top: `${replacementRegionDraft.y * 100}%`,
+    width: `${replacementRegionDraft.width * 100}%`,
+    height: `${replacementRegionDraft.height * 100}%`,
+  }
+}
+
+async function openReplacementRegionEditor(item: LivePhotoItem) {
+  const detail = await loadLivePhotoItemDetail(item)
+  const region = detail.replacementRegion
+  replacementRegionDraft.x = Number(region?.x ?? 0.25)
+  replacementRegionDraft.y = Number(region?.y ?? 0.25)
+  replacementRegionDraft.width = Number(region?.width ?? 0.5)
+  replacementRegionDraft.height = Number(region?.height ?? 0.5)
+  replacementRegionDialogItem.value = detail
+  replacementRegionDialogOpen.value = true
+}
+
+function closeReplacementRegionEditor() {
+  if (replacementRegionBusy.value) return
+  replacementRegionInteraction.value = null
+  replacementRegionDialogOpen.value = false
+  replacementRegionDialogItem.value = null
+}
+
+function normalizedRegionPointer(event: PointerEvent) {
+  const stage = replacementRegionStage.value
+  if (!stage) return { x: 0, y: 0 }
+  const bounds = stage.getBoundingClientRect()
+  return {
+    x: clampRegionValue((event.clientX - bounds.left) / Math.max(1, bounds.width), 0, 1),
+    y: clampRegionValue((event.clientY - bounds.top) / Math.max(1, bounds.height), 0, 1),
+  }
+}
+
+function beginReplacementRegionInteraction(event: PointerEvent, mode: 'draw' | 'move' | 'resize', corner?: 'nw' | 'ne' | 'sw' | 'se') {
+  const point = normalizedRegionPointer(event)
+  replacementRegionStage.value?.setPointerCapture(event.pointerId)
+  const initial = { ...replacementRegionDraft }
+  if (mode === 'draw') {
+    replacementRegionDraft.x = point.x
+    replacementRegionDraft.y = point.y
+    replacementRegionDraft.width = 0.02
+    replacementRegionDraft.height = 0.02
+  }
+  replacementRegionInteraction.value = {
+    mode,
+    corner,
+    startX: point.x,
+    startY: point.y,
+    initial: mode === 'draw' ? { x: point.x, y: point.y, width: 0, height: 0 } : initial,
+  }
+}
+
+function updateReplacementRegionInteraction(event: PointerEvent) {
+  const interaction = replacementRegionInteraction.value
+  if (!interaction) return
+  const point = normalizedRegionPointer(event)
+  const dx = point.x - interaction.startX
+  const dy = point.y - interaction.startY
+  const initial = interaction.initial
+  if (interaction.mode === 'draw') {
+    replacementRegionDraft.x = Math.min(initial.x, point.x)
+    replacementRegionDraft.y = Math.min(initial.y, point.y)
+    replacementRegionDraft.width = Math.max(0.02, Math.abs(point.x - initial.x))
+    replacementRegionDraft.height = Math.max(0.02, Math.abs(point.y - initial.y))
+    return
+  }
+  if (interaction.mode === 'move') {
+    replacementRegionDraft.x = clampRegionValue(initial.x + dx, 0, 1 - initial.width)
+    replacementRegionDraft.y = clampRegionValue(initial.y + dy, 0, 1 - initial.height)
+    return
+  }
+  let left = initial.x
+  let top = initial.y
+  let right = initial.x + initial.width
+  let bottom = initial.y + initial.height
+  if (interaction.corner?.includes('w')) left = clampRegionValue(initial.x + dx, 0, right - 0.02)
+  if (interaction.corner?.includes('e')) right = clampRegionValue(initial.x + initial.width + dx, left + 0.02, 1)
+  if (interaction.corner?.includes('n')) top = clampRegionValue(initial.y + dy, 0, bottom - 0.02)
+  if (interaction.corner?.includes('s')) bottom = clampRegionValue(initial.y + initial.height + dy, top + 0.02, 1)
+  replacementRegionDraft.x = left
+  replacementRegionDraft.y = top
+  replacementRegionDraft.width = right - left
+  replacementRegionDraft.height = bottom - top
+}
+
+function endReplacementRegionInteraction(event: PointerEvent) {
+  replacementRegionInteraction.value = null
+  if (replacementRegionStage.value?.hasPointerCapture(event.pointerId)) {
+    replacementRegionStage.value.releasePointerCapture(event.pointerId)
+  }
+}
+
+async function saveReplacementRegionAndRetry() {
+  const item = replacementRegionDialogItem.value
+  if (!item?.id) return
+  replacementRegionBusy.value = true
+  errorText.value = ''
+  try {
+    await window.api.livePhoto.retry({
+      id: item.id,
+      motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+      replacementRegion: { ...replacementRegionDraft },
+    })
+    notice.value = '替换区域已更新，任务已重新开始。'
+    replacementRegionBusy.value = false
+    closeReplacementRegionEditor()
+    closeTaskDetail()
+    await refreshLibraryItemsWithWarmup()
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    replacementRegionBusy.value = false
+  }
+}
+
 async function retryItem(item: LivePhotoItem) {
   if (!item?.id) return
   errorText.value = ''
@@ -1877,43 +2078,47 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 </script>
 
 <template>
-  <div class="live-photo-page" data-testid="live-photo-page">
-    <section class="hero-shell">
-      <div class="hero-toolbar">
-        <button class="ghost-button back-button" data-testid="live-photo-back" type="button" @click="router.push('/plugins?tab=installed&plugin=live-photo-generator')">
-          <ChevronLeft class="h-4 w-4" />
-          {{ t('livePhoto.hero.back') }}
-        </button>
-        <button class="ghost-button refresh-button" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
-          <RefreshCcw class="h-4 w-4" />
-          {{ t('livePhoto.hero.refresh') }}
-        </button>
+  <div class="live-photo-page plugin-workspace-standard" data-testid="live-photo-page">
+    <section class="live-workspace-head">
+      <div class="live-workspace-intro">
+        <div class="live-workspace-icon">
+          <Sparkles class="h-5 w-5" />
+        </div>
+        <div class="live-workspace-copy">
+          <h1>{{ uiText.workspaceTitle }}</h1>
+          <p>{{ uiText.workspaceHint }}</p>
+        </div>
+        <div class="live-workspace-actions">
+          <button class="ghost-button back-button" data-testid="live-photo-back" type="button" @click="router.push('/plugins?tab=installed&plugin=live-photo-generator')">
+            <ChevronLeft class="h-4 w-4" />
+            {{ t('livePhoto.hero.back') }}
+          </button>
+          <button class="ghost-button refresh-button" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
+            <RefreshCcw class="h-4 w-4" />
+            {{ t('livePhoto.hero.refresh') }}
+          </button>
+        </div>
       </div>
 
-      <section class="hero-card">
-        <div class="hero-copy">
-          <div class="hero-headline">
-            <h1>{{ uiText.heroTitle }}</h1>
-            <p class="hero-desc">{{ uiText.heroDesc }}</p>
-          </div>
-        </div>
-        <div class="hero-stats">
-          <div class="stat-card">
-            <span>{{ uiText.completed }}</span>
-            <strong>{{ todayCreatedCount }}</strong>
-          </div>
-        </div>
+      <section class="tab-bar live-workspace-tabs">
+        <button class="tab-button" data-testid="live-photo-tab-reference" :class="{ active: activeTab === 'reference' }" type="button" @click="activeTab = 'reference'">
+          <ImagePlus class="h-4 w-4" />
+          <span>{{ uiText.tabReference }}</span>
+        </button>
+        <button class="tab-button" data-testid="live-photo-tab-clone" :class="{ active: activeTab === 'clone' }" type="button" @click="activeTab = 'clone'">
+          <Play class="h-4 w-4" />
+          <span>{{ uiText.tabClone }}</span>
+        </button>
+        <button class="tab-button" data-testid="live-photo-tab-library" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
+          <FolderOpen class="h-4 w-4" />
+          <span>{{ uiText.tabLibrary }}</span>
+          <span class="live-tab-count">{{ todayCreatedCount }}</span>
+        </button>
       </section>
     </section>
 
     <div v-if="notice" class="banner banner-success" data-testid="live-photo-notice">{{ notice }}</div>
     <div v-if="errorText" class="banner banner-error" data-testid="live-photo-error">{{ errorText }}</div>
-
-    <section class="tab-bar">
-      <button class="tab-button" data-testid="live-photo-tab-reference" :class="{ active: activeTab === 'reference' }" type="button" @click="activeTab = 'reference'">{{ uiText.tabReference }}</button>
-      <button class="tab-button" data-testid="live-photo-tab-clone" :class="{ active: activeTab === 'clone' }" type="button" @click="activeTab = 'clone'">{{ uiText.tabClone }}</button>
-      <button class="tab-button" data-testid="live-photo-tab-library" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">{{ uiText.tabLibrary }}</button>
-    </section>
 
     <section v-if="activeTab === 'reference'" class="workspace-grid">
       <article class="panel-card reference-card">
@@ -1926,91 +2131,41 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         </div>
 
         <div class="field-stack">
-          <label class="field">
+          <div class="field">
             <span>{{ uiText.referenceImage }}</span>
-            <button class="upload-surface" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
-              <template v-if="primaryReferenceImage">
-                <img class="upload-preview" :src="previewSrc(primaryReferenceImage)" alt="reference preview" />
-                <div class="upload-copy">
-                  <strong>{{ fileNameOf(primaryReferenceImage) }}</strong>
-                  <small>{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</small>
-                </div>
-              </template>
-              <template v-else>
-                <div class="upload-icon">
-                  <ImagePlus class="h-8 w-8" />
-                </div>
-                <div class="upload-copy">
-                  <strong>{{ uiText.referenceUploadTitle }}</strong>
-                  <small>{{ uiText.referenceUploadDesc }}</small>
-                </div>
-              </template>
-            </button>
-            <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
-          </label>
-
-          <div v-if="unboundMaterialOptions.length" class="field">
-            <span>{{ uiText.materialLibraryOption }}</span>
-            <div class="reference-material-bar">
-              <button class="ghost-button small" type="button" @click="toggleMaterialPicker">
-                <LayoutGrid class="h-4 w-4" />
-                {{ materialPickerOpen ? uiText.materialLibraryCollapse : uiText.materialLibrarySelect }}
-              </button>
-              <small>{{ unboundMaterialOptions.length }} {{ uiText.itemUnit }}</small>
-            </div>
-
-            <div v-if="materialPickerOpen" class="reference-material-picker">
-              <div class="reference-material-picker__hero">
-                <div class="reference-material-picker__hero-copy">
-                  <strong>{{ uiText.materialLibrarySelect }}</strong>
-                  <small>共 {{ unboundMaterialOptions.length }} 张，当前页已选 {{ selectedPagedMaterialCount }} 张</small>
-                </div>
-                <button class="primary-button small" type="button" :disabled="!selectedMaterialImageIds.length" @click="appendMaterialImagesAsReferences">
-                  <ImagePlus class="h-4 w-4" />
-                  {{ uiText.materialLibraryAddSelected }} ({{ selectedMaterialImageIds.length }})
-                </button>
-              </div>
-
-              <div class="reference-material-picker__toolbar">
-                <div class="reference-material-picker__actions">
-                  <button class="ghost-button small" type="button" @click="selectAllMaterialImages">{{ uiText.materialLibrarySelectAll }}</button>
-                  <button class="ghost-button small" type="button" @click="clearMaterialImageSelection">{{ uiText.materialLibraryClear }}</button>
-                </div>
-                <div class="reference-material-picker__pager">
-                  <button class="ghost-button small" type="button" :disabled="materialPickerPage <= 1" @click="materialPickerPage -= 1">上一页</button>
-                  <span>{{ materialPickerPage }} / {{ materialPickerTotalPages }}</span>
-                  <button class="ghost-button small" type="button" :disabled="materialPickerPage >= materialPickerTotalPages" @click="materialPickerPage += 1">下一页</button>
-                  <select v-model.number="materialPickerPageSize" class="field-select-mini">
-                    <option :value="8">8 / 页</option>
-                    <option :value="12">12 / 页</option>
-                    <option :value="16">16 / 页</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="reference-material-grid">
-                <label
-                  v-for="material in pagedMaterialOptions"
-                  :key="material.id"
-                  class="reference-material-card"
-                  :class="{ active: selectedMaterialImageIds.includes(material.id) }"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="selectedMaterialImageIds.includes(material.id)"
-                    @change="toggleMaterialImageSelection(material.id)"
-                  />
-                  <img :src="material.qiniuUrl" alt="material option" />
-                  <div class="reference-material-card__copy">
-                    <strong>{{ fileNameOf(material.localImagePath) }}</strong>
-                    <small>
-                      {{ material.usageStatus === 'used' ? '已使用' : '未使用' }}
-                      <span v-if="material.materialOrigin === 'derived'"> · Derived</span>
-                    </small>
+            <div class="reference-source-grid">
+              <button class="reference-source-card" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
+                <template v-if="primaryReferenceImage">
+                  <img class="reference-source-card__preview" :src="previewSrc(primaryReferenceImage)" alt="reference preview" />
+                  <div class="reference-source-card__copy">
+                    <strong>{{ uiText.referenceUploadTitle }}</strong>
+                    <small>{{ fileNameOf(primaryReferenceImage) }}</small>
+                    <span>{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</span>
                   </div>
-                </label>
-              </div>
+                </template>
+                <template v-else>
+                  <div class="reference-source-card__icon">
+                    <ImagePlus class="h-7 w-7" />
+                  </div>
+                  <div class="reference-source-card__copy">
+                    <strong>{{ uiText.referenceUploadTitle }}</strong>
+                    <small>{{ uiText.referenceUploadDesc }}</small>
+                  </div>
+                </template>
+              </button>
+
+              <button class="reference-source-card" data-testid="live-photo-open-material-picker" type="button" @click="openMaterialPicker">
+                <div class="reference-source-card__icon">
+                  <LayoutGrid class="h-7 w-7" />
+                </div>
+                <div class="reference-source-card__copy">
+                  <strong>{{ uiText.materialLibrarySelect }}</strong>
+                  <small>{{ uiText.materialLibraryDesc }}</small>
+                  <span>{{ unboundMaterialOptions.length }} {{ uiText.itemUnit }}</span>
+                </div>
+              </button>
             </div>
+            <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
           </div>
 
           <div v-if="referenceTaskRows.length" class="field">
@@ -2367,87 +2522,117 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
     <section v-else class="library-layout">
       <div class="library-headline">
-        <div class="library-title-row">
-          <strong>{{ uiText.libraryTitle }}</strong>
-          <span class="library-count">{{ libraryTotal }} {{ uiText.itemUnit }}</span>
-        </div>
-        <div class="library-overview">
-          <div class="library-overview__card">
-            <span>运行中</span>
-            <strong>{{ runningLibraryItems.length }}</strong>
+        <div class="library-summary-row">
+          <div class="library-heading-cluster">
+            <div class="library-title-row">
+              <strong>{{ uiText.libraryTitle }}</strong>
+              <span class="library-count">{{ libraryTotal }} {{ uiText.itemUnit }}</span>
+            </div>
+            <div class="library-overview">
+              <div class="library-overview__card is-running">
+                <span>运行中</span>
+                <strong>{{ runningLibraryItems.length }}</strong>
+              </div>
+              <div class="library-overview__card is-failed">
+                <span>失败</span>
+                <strong>{{ failedLibraryItems.length }}</strong>
+              </div>
+              <div class="library-overview__card is-paused">
+                <span>暂停</span>
+                <strong>{{ pausedLibraryItems.length }}</strong>
+              </div>
+              <div class="library-overview__card is-selected">
+                <span>已选</span>
+                <strong>{{ selectedLibraryItems.length }}</strong>
+              </div>
+            </div>
           </div>
-          <div class="library-overview__card">
-            <span>失败</span>
-            <strong>{{ failedLibraryItems.length }}</strong>
-          </div>
-          <div class="library-overview__card">
-            <span>暂停</span>
-            <strong>{{ pausedLibraryItems.length }}</strong>
-          </div>
-          <div class="library-overview__card">
-            <span>已选</span>
-            <strong>{{ selectedLibraryItems.length }}</strong>
+          <div class="library-head-tools">
+            <div class="library-view-toggle" aria-label="视图切换">
+              <button
+                class="toolbar-icon"
+                :class="{ active: libraryViewMode === 'grid' }"
+                type="button"
+                aria-label="网格视图"
+                :aria-pressed="libraryViewMode === 'grid'"
+                @click="libraryViewMode = 'grid'"
+              >
+                <Grid2x2 class="h-4 w-4" />
+              </button>
+              <button
+                class="toolbar-icon"
+                :class="{ active: libraryViewMode === 'list' }"
+                type="button"
+                aria-label="列表视图"
+                :aria-pressed="libraryViewMode === 'list'"
+                @click="libraryViewMode = 'list'"
+              >
+                <List class="h-4 w-4" />
+              </button>
+            </div>
+            <div class="library-pagination">
+              <button class="library-page-button" type="button" aria-label="上一页" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">
+                <ChevronLeft class="h-4 w-4" />
+              </button>
+              <span class="library-pagination__text">{{ libraryPage }} / {{ libraryTotalPages }}</span>
+              <button class="library-page-button" type="button" aria-label="下一页" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
         <div class="library-toolbar">
-          <button class="toolbar-button" type="button" @click="libraryFilter = libraryFilter === 'all' ? 'failed' : libraryFilter === 'failed' ? 'running' : libraryFilter === 'running' ? 'paused' : 'all'">
-            <Filter class="h-4 w-4" />
-            {{ uiText.filter }} {{ libraryFilter === 'all' ? '全部' : libraryFilter === 'failed' ? '失败' : libraryFilter === 'running' ? '运行中' : '暂停' }}
-          </button>
-          <button class="toolbar-button" type="button" :disabled="!filteredLibraryItems.length" @click="toggleSelectAllFiltered">
-            <CheckCircle2 class="h-4 w-4" />
-            {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? '取消当前筛选' : '选择当前筛选' }}
-          </button>
-          <button class="toolbar-button" type="button" :disabled="!retryableFailedLibraryItems.length" @click="retryFailedItems">
-            <RefreshCcw class="h-4 w-4" />
-            重试失败任务 {{ retryableFailedLibraryItems.length ? `(${retryableFailedLibraryItems.length})` : '' }}
-          </button>
-          <button class="toolbar-button" type="button" :disabled="!pausedLibraryItems.length" @click="resumePausedItems">
-            <Play class="h-4 w-4" />
-            恢复暂停 {{ pausedLibraryItems.length ? `(${pausedLibraryItems.length})` : '' }}
-          </button>
-          <button class="toolbar-button" type="button" :disabled="!runningLibraryItems.length" @click="pauseRunningItems">
-            <LoaderCircle class="h-4 w-4" />
-            暂停运行中 {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
-          </button>
-          <button
-            class="toolbar-icon"
-            :class="{ active: libraryViewMode === 'grid' }"
-            type="button"
-            aria-label="网格视图"
-            :aria-pressed="libraryViewMode === 'grid'"
-            @click="libraryViewMode = 'grid'"
-          >
-            <Grid2x2 class="h-4 w-4" />
-          </button>
-          <button
-            class="toolbar-icon"
-            :class="{ active: libraryViewMode === 'list' }"
-            type="button"
-            aria-label="列表视图"
-            :aria-pressed="libraryViewMode === 'list'"
-            @click="libraryViewMode = 'list'"
-          >
-            <List class="h-4 w-4" />
-          </button>
-          <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
-            <Package class="h-4 w-4" />
-            {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
-          </button>
-          <button
-            v-if="subtitleEligibleSelectedCount"
-            class="toolbar-button"
-            type="button"
-            @click="openBatchSubtitleDialog"
-          >
-            <Sparkles class="h-4 w-4" />
-            批量字幕 {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
-          </button>
-        </div>
-        <div class="library-pagination">
-          <button class="toolbar-button" type="button" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">上一页</button>
-          <span class="library-pagination__text">第 {{ libraryPage }} / {{ libraryTotalPages }} 页</span>
-          <button class="toolbar-button" type="button" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">下一页</button>
+          <div class="library-action-group">
+            <button class="toolbar-button" type="button" @click="libraryFilter = libraryFilter === 'all' ? 'failed' : libraryFilter === 'failed' ? 'running' : libraryFilter === 'running' ? 'paused' : 'all'">
+              <Filter class="h-4 w-4" />
+              {{ uiText.filter }} {{ libraryFilter === 'all' ? '全部' : libraryFilter === 'failed' ? '失败' : libraryFilter === 'running' ? '运行中' : '暂停' }}
+            </button>
+            <button class="toolbar-button" type="button" :disabled="!filteredLibraryItems.length" @click="toggleSelectAllFiltered">
+              <CheckCircle2 class="h-4 w-4" />
+              {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? '取消当前筛选' : '选择当前筛选' }}
+            </button>
+          </div>
+          <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-divider"></div>
+          <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-group library-task-actions">
+            <button v-if="retryableFailedLibraryItems.length" class="toolbar-button" type="button" @click="retryFailedItems">
+              <RefreshCcw class="h-4 w-4" />
+              重试失败 {{ retryableFailedLibraryItems.length ? `(${retryableFailedLibraryItems.length})` : '' }}
+            </button>
+            <button v-if="pausedLibraryItems.length" class="toolbar-button" type="button" @click="resumePausedItems">
+              <Play class="h-4 w-4" />
+              恢复暂停 {{ pausedLibraryItems.length ? `(${pausedLibraryItems.length})` : '' }}
+            </button>
+            <button v-if="runningLibraryItems.length" class="toolbar-button" type="button" @click="pauseRunningItems">
+              <LoaderCircle class="h-4 w-4" />
+              暂停运行 {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
+            </button>
+          </div>
+          <div class="library-output-actions">
+            <button
+              v-if="subtitleEligibleSelectedCount"
+              class="toolbar-button"
+              type="button"
+              @click="openBatchSubtitleDialog"
+            >
+              <Sparkles class="h-4 w-4" />
+              批量字幕 {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
+            </button>
+            <button
+              class="toolbar-button feishu-send-button"
+              data-testid="live-photo-send-feishu"
+              type="button"
+              :disabled="sendingToFeishu || !feishuEligibleSelectedCount"
+              @click="sendSelectedToFeishu"
+            >
+              <LoaderCircle v-if="sendingToFeishu" class="h-4 w-4 animate-spin" />
+              <Send v-else class="h-4 w-4" />
+              {{ sendingToFeishu ? feishuSendingLabel : `${feishuBatchLabel} (${feishuEligibleSelectedCount})` }}
+            </button>
+            <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
+              <Package class="h-4 w-4" />
+              {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2571,6 +2756,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   @click.stop="showPath(livePhotoDisplayVideoPath(item))"
                 >
                   <FolderOpen class="h-4 w-4" />
+                </button>
+                <button
+                  v-if="canCorrectReplacementRegion(item)"
+                  :data-testid="`live-photo-region-${item.id}`"
+                  class="live-console-row__action"
+                  type="button"
+                  title="校正替换区域"
+                  @click.stop="openReplacementRegionEditor(item)"
+                >
+                  <ScanLine class="h-4 w-4" />
                 </button>
                 <button
                   :data-testid="`live-photo-retry-${item.id}`"
@@ -2714,6 +2909,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <FolderOpen class="h-4 w-4" />
               </button>
               <button
+                v-if="canCorrectReplacementRegion(item)"
+                :data-testid="`live-photo-region-${item.id}`"
+                class="live-console-row__action"
+                type="button"
+                title="校正替换区域"
+                @click.stop="openReplacementRegionEditor(item)"
+              >
+                <ScanLine class="h-4 w-4" />
+              </button>
+              <button
                 :data-testid="`live-photo-retry-${item.id}`"
                 class="live-console-row__action"
                 type="button"
@@ -2743,6 +2948,89 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         </article>
       </div>
     </section>
+
+    <div
+      v-if="materialPickerOpen"
+      class="reference-material-dialog"
+      data-testid="live-photo-material-picker-dialog"
+      role="dialog"
+      aria-modal="true"
+      @click.self="closeMaterialPicker"
+    >
+      <div class="reference-material-dialog__panel">
+        <div class="reference-material-dialog__head">
+          <div class="reference-material-dialog__title">
+            <strong>{{ uiText.materialLibrarySelect }}</strong>
+            <p>
+              {{ unboundMaterialOptions.length }} {{ uiText.itemUnit }}
+              · {{ uiText.materialLibrarySelected }} {{ selectedMaterialImageIds.length }}
+            </p>
+          </div>
+          <button class="ghost-button small" data-testid="live-photo-close-material-picker" type="button" @click="closeMaterialPicker">
+            {{ uiText.materialLibraryClose }}
+          </button>
+        </div>
+
+        <div class="reference-material-picker__toolbar">
+          <div class="reference-material-picker__actions">
+            <button class="ghost-button small" type="button" @click="selectAllMaterialImages">{{ uiText.materialLibrarySelectAll }}</button>
+            <button class="ghost-button small" type="button" @click="clearMaterialImageSelection">{{ uiText.materialLibraryClear }}</button>
+          </div>
+          <div class="reference-material-picker__pager">
+            <button class="ghost-button small" type="button" :disabled="materialPickerPage <= 1" @click="materialPickerPage -= 1">
+              {{ uiText.previousPage }}
+            </button>
+            <span>{{ materialPickerPage }} / {{ materialPickerTotalPages }}</span>
+            <button class="ghost-button small" type="button" :disabled="materialPickerPage >= materialPickerTotalPages" @click="materialPickerPage += 1">
+              {{ uiText.nextPage }}
+            </button>
+            <select v-model.number="materialPickerPageSize" class="field-select-mini">
+              <option :value="8">8 / {{ uiText.perPage }}</option>
+              <option :value="12">12 / {{ uiText.perPage }}</option>
+              <option :value="16">16 / {{ uiText.perPage }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="unboundMaterialOptions.length" class="reference-material-grid">
+          <label
+            v-for="material in pagedMaterialOptions"
+            :key="material.id"
+            class="reference-material-card"
+            :class="{ active: selectedMaterialImageIds.includes(material.id) }"
+          >
+            <input
+              type="checkbox"
+              :checked="selectedMaterialImageIds.includes(material.id)"
+              @change="toggleMaterialImageSelection(material.id)"
+            />
+            <img :src="material.qiniuUrl" alt="material option" />
+            <div class="reference-material-card__copy">
+              <strong>{{ fileNameOf(material.localImagePath) }}</strong>
+              <small>
+                {{ material.usageStatus === 'used' ? 'Used' : 'Unused' }}
+                <span v-if="material.materialOrigin === 'derived'"> · Derived</span>
+              </small>
+            </div>
+          </label>
+        </div>
+        <div v-else class="reference-material-dialog__empty">{{ uiText.materialLibraryEmpty }}</div>
+
+        <div class="reference-material-dialog__footer">
+          <button class="ghost-button" type="button" @click="closeMaterialPicker">{{ uiText.materialLibraryClose }}</button>
+          <button
+            class="primary-button"
+            data-testid="live-photo-confirm-material-picker"
+            type="button"
+            :disabled="!selectedMaterialImageIds.length"
+            @click="appendMaterialImagesAsReferences"
+          >
+            <ImagePlus class="h-4 w-4" />
+            {{ uiText.materialLibraryAddSelected }} ({{ selectedMaterialImageIds.length }})
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="detailDialogOpen && detailDialogItem" class="live-detail-dialog" @click.self="closeTaskDetail">
       <div class="live-detail-dialog__panel">
@@ -2870,6 +3158,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </div>
             </div>
             <div class="live-detail-dialog__artifact-actions">
+              <button
+                v-if="canCorrectReplacementRegion(detailDialogItem)"
+                class="live-detail-dialog__ghost"
+                type="button"
+                @click="openReplacementRegionEditor(detailDialogItem)"
+              >
+                <ScanLine class="h-4 w-4" />
+                校正替换区域
+              </button>
               <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
                 打开预览视频
               </button>
@@ -3272,13 +3569,51 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </div>
     </div>
 
-    <section v-if="activeTab === 'reference'" class="tip-strip">
-      <div class="tip-copy">
-        <div class="tip-badge">{{ uiText.tipTitle }}</div>
-        <p>{{ uiText.tipDesc }}</p>
+    <div v-if="replacementRegionDialogOpen && replacementRegionDialogItem" class="replacement-region-dialog" @click.self="closeReplacementRegionEditor">
+      <div class="replacement-region-dialog__panel">
+        <div class="replacement-region-dialog__head">
+          <div>
+            <strong>校正替换区域</strong>
+            <span>{{ replacementRegionDialogItem.productSnapshot?.name || replacementRegionDialogItem.id }}</span>
+          </div>
+          <button type="button" :disabled="replacementRegionBusy" @click="closeReplacementRegionEditor">关闭</button>
+        </div>
+        <div
+          ref="replacementRegionStage"
+          class="replacement-region-stage"
+          @pointerdown.self="beginReplacementRegionInteraction($event, 'draw')"
+          @pointermove="updateReplacementRegionInteraction"
+          @pointerup="endReplacementRegionInteraction"
+          @pointercancel="endReplacementRegionInteraction"
+        >
+          <img :src="previewSrc(replacementRegionDialogItem.referenceImagePath)" alt="replacement region source" draggable="false" />
+          <div
+            class="replacement-region-box"
+            :style="replacementRegionStyle()"
+            @pointerdown.stop="beginReplacementRegionInteraction($event, 'move')"
+          >
+            <span
+              v-for="corner in replacementRegionCorners"
+              :key="corner"
+              class="replacement-region-handle"
+              :class="`is-${corner}`"
+              @pointerdown.stop="beginReplacementRegionInteraction($event, 'resize', corner)"
+            ></span>
+          </div>
+        </div>
+        <div class="replacement-region-dialog__meta">
+          <span>区域版本 {{ replacementRegionDialogItem.replacementRegion?.revision || 0 }}</span>
+          <span>{{ Math.round(replacementRegionDraft.width * 100) }}% x {{ Math.round(replacementRegionDraft.height * 100) }}%</span>
+        </div>
+        <div class="replacement-region-dialog__actions">
+          <button type="button" class="ghost-button" :disabled="replacementRegionBusy" @click="closeReplacementRegionEditor">取消</button>
+          <button type="button" class="primary-button" :disabled="replacementRegionBusy" @click="saveReplacementRegionAndRetry">
+            <ScanLine class="h-4 w-4" />
+            {{ replacementRegionBusy ? '保存中...' : '保存并重试' }}
+          </button>
+        </div>
       </div>
-      <button class="guide-link" type="button">{{ uiText.guide }}</button>
-    </section>
+    </div>
 
     <RuntimeLogDialog
       v-model="runtimeDialogOpen"
@@ -3303,7 +3638,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   background: radial-gradient(circle at top left, rgba(83, 58, 152, 0.12), transparent 28%), linear-gradient(180deg, #111521 0%, #171a29 42%, #111624 100%);
 }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
-.hero-shell, .panel-card, .library-export-card, .tip-strip { border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 16px; background: linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.hero-shell, .panel-card, .library-export-card { border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 16px; background: linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
 .hero-shell { display: grid; gap: 8px; padding: 10px 12px; }
 .hero-toolbar { display: flex; justify-content: space-between; gap: 8px; }
 .hero-card { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 12px; padding-top: 10px; border-top: 1px solid rgba(111, 123, 170, 0.12); }
@@ -3350,9 +3685,25 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .upload-copy strong { font-size: 15px; line-height: 1.35; }
 .upload-copy small { font-size: 12px; line-height: 1.6; color: rgba(197, 205, 225, 0.76); word-break: break-all; }
 .upload-preview { width: 100%; max-height: 132px; object-fit: contain; border-radius: 10px; }
+.reference-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.reference-source-card { min-width: 0; min-height: 164px; display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 12px; background: rgba(18, 23, 38, 0.82); color: #eef5ff; text-align: left; cursor: pointer; }
+.reference-source-card__icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: rgba(85, 68, 167, 0.48); color: #d9d4ff; }
+.reference-source-card__preview { width: 64px; height: 96px; object-fit: cover; border-radius: 8px; }
+.reference-source-card__copy { min-width: 0; display: grid; gap: 6px; }
+.reference-source-card__copy strong { font-size: 15px; line-height: 1.35; }
+.reference-source-card__copy small { color: #9fb1d8; font-size: 11px; line-height: 1.55; }
+.reference-source-card__copy span { color: #c8d2e8; font-size: 11px; }
 .reference-material-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .reference-material-bar small { color: #9fb1d8; font-size: 11px; }
 .reference-material-picker { display: grid; gap: 12px; padding: 12px; border: 1px solid rgba(111, 123, 170, 0.18); border-radius: 16px; background: linear-gradient(180deg, rgba(20, 26, 43, 0.96), rgba(13, 18, 31, 0.96)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+.reference-material-dialog { position: fixed; inset: var(--app-titlebar-height, 62px) 0 0; z-index: 90; display: grid; place-items: center; padding: 18px; background: #080b13; }
+.reference-material-dialog__panel { width: min(980px, 100%); max-height: min(calc(100vh - var(--app-titlebar-height, 62px) - 36px), 820px); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; overflow: hidden; padding: 16px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 12px; background: #0f131f; }
+.reference-material-dialog__head, .reference-material-dialog__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.reference-material-dialog__title { display: grid; gap: 4px; }
+.reference-material-dialog__title strong { font-size: 18px; }
+.reference-material-dialog__title p { margin: 0; color: #9fb1d8; font-size: 12px; }
+.reference-material-dialog__empty { min-height: 260px; display: grid; place-items: center; color: #9fb1d8; font-size: 13px; }
+.reference-material-dialog__footer { padding-top: 12px; border-top: 1px solid rgba(111, 123, 170, 0.18); }
 .reference-material-picker__hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 2px 0; }
 .reference-material-picker__hero-copy { display: grid; gap: 4px; }
 .reference-material-picker__hero-copy strong { color: #f3f6ff; font-size: 14px; }
@@ -3372,7 +3723,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .field-select-mini { min-height: 30px; padding: 0 10px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 10px; background: rgba(19, 24, 38, 0.92); color: #fff; font-size: 11px; }
 .live-subtitle-dialog {
   position: fixed;
-  inset: 0;
+  inset: var(--app-titlebar-height, 62px) 0 0;
   z-index: 80;
   display: grid;
   place-items: center;
@@ -3382,7 +3733,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-subtitle-dialog__panel {
   width: min(760px, 100%);
-  max-height: min(84vh, 760px);
+  max-height: min(calc(100vh - var(--app-titlebar-height, 62px) - 32px), 760px);
   overflow: auto;
   display: grid;
   gap: 14px;
@@ -3593,76 +3944,158 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .status-pill.status-failed { background: rgba(239, 68, 68, 0.18); color: #fecaca; }
 .status-pill.status-draft { background: rgba(148, 163, 184, 0.18); color: #e2e8f0; }
 .status-pill.status-completed { background: rgba(16, 101, 78, 0.18); color: #68f0b9; }
-.library-layout { display: grid; gap: 10px; }
+.library-layout { display: grid; gap: 14px; }
 .library-headline {
+  display: grid;
+  gap: 18px;
+  padding: 8px 0 16px;
+  border-bottom: 1px solid rgba(111, 123, 170, 0.14);
+}
+.library-summary-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 0;
+}
+.library-heading-cluster {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
 }
 .library-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   flex: 0 0 auto;
-  margin-right: 2px;
 }
 .library-title-row strong {
   display: inline-flex;
   align-items: center;
   font-size: 18px;
-  line-height: 1;
+  line-height: 1.2;
   white-space: nowrap;
 }
-.library-count { min-height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(111, 123, 170, 0.2); background: rgba(18, 23, 38, 0.7); color: rgba(225, 231, 247, 0.8); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; line-height: 1; }
+.library-count {
+  min-height: 27px;
+  padding: 0 10px;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  border-radius: 999px;
+  background: rgba(13, 148, 136, 0.14);
+  color: #70e2d0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+}
 .library-toolbar {
   display: flex;
   align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.library-action-group,
+.library-output-actions,
+.library-head-tools,
+.library-view-toggle {
+  display: flex;
+  align-items: center;
   gap: 6px;
+}
+.library-output-actions {
+  margin-left: auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.library-action-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(111, 123, 170, 0.14);
+}
+.library-head-tools {
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+  margin-left: auto;
+}
+.library-view-toggle {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(111, 123, 170, 0.08);
 }
 .library-pagination {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  gap: 2px;
   flex: 0 0 auto;
+  min-height: 32px;
+  padding: 2px;
 }
 .library-pagination__text {
-  min-width: 110px;
+  min-width: 58px;
   text-align: center;
-  font-size: 12px;
-  color: #9fb2d8;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b7c6e4;
+  font-variant-numeric: tabular-nums;
+}
+.library-page-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #aebede;
+}
+.library-page-button:hover:not(:disabled) {
+  background: rgba(111, 123, 170, 0.14);
+  color: #f8fbff;
+}
+.library-page-button:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
 }
 .library-overview {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  flex: 1 1 360px;
+  gap: 18px;
   min-width: 0;
 }
 .library-overview__card {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(18, 23, 38, 0.8), rgba(13, 18, 30, 0.88));
+  gap: 5px;
+  min-height: 24px;
+  padding: 0;
 }
-.library-overview__card span { font-size: 11px; line-height: 1; color: #8ea3c9; }
-.library-overview__card strong { display: inline-flex; align-items: center; font-size: 13px; line-height: 1; color: #f8fbff; }
+.library-overview__card span { font-size: 12px; line-height: 1; color: #7f91b2; }
+.library-overview__card strong { display: inline-flex; align-items: center; font-size: 12px; line-height: 1; color: #f8fbff; font-variant-numeric: tabular-nums; }
+.library-overview__card.is-running strong { color: #7dd3fc; }
+.library-overview__card.is-failed strong { color: #fca5a5; }
+.library-overview__card.is-paused strong { color: #fde68a; }
+.library-overview__card.is-selected strong { color: #70e2d0; }
 .toolbar-button {
   min-width: 0;
-  padding: 0 9px;
-  min-height: 31px;
+  padding: 0 11px;
+  min-height: 34px;
   white-space: nowrap;
+  border-color: rgba(111, 123, 170, 0.14);
+  background: rgba(111, 123, 170, 0.07);
 }
-.toolbar-icon { width: 36px; padding: 0; }
-.export-selected-button { min-width: 132px; }
+.library-toolbar .toolbar-button:disabled,
+.library-toolbar .primary-button:disabled {
+  opacity: 0.38;
+}
+.toolbar-icon { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; }
+.toolbar-icon:hover { background: rgba(111, 123, 170, 0.12); }
+.toolbar-icon.active { background: rgba(13, 148, 136, 0.2); color: #70e2d0; }
+.feishu-send-button:not(:disabled) { border-color: rgba(96, 165, 250, 0.2); color: #bfdbfe; background: rgba(59, 130, 246, 0.08); }
+.export-selected-button { min-width: 132px; min-height: 36px; }
 .empty-card { min-height: 140px; place-items: center; text-align: center; }
 .metadata-card-select {
   align-content: start;
@@ -4073,9 +4506,127 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-console-row__action--play { background: rgba(109, 92, 255, 0.14); }
 .live-console-row__action--danger { color: #fca5a5; }
+.replacement-region-dialog {
+  position: fixed;
+  inset: var(--app-titlebar-height, 62px) 0 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 8, 16, 0.78);
+  backdrop-filter: blur(10px);
+}
+.replacement-region-dialog__panel {
+  width: min(980px, 100%);
+  max-height: calc(100vh - var(--app-titlebar-height, 62px) - 48px);
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.replacement-region-dialog__head,
+.replacement-region-dialog__actions,
+.replacement-region-dialog__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.replacement-region-dialog__head > div { display: grid; gap: 4px; }
+.replacement-region-dialog__head strong { color: #f8fbff; font-size: 18px; }
+.replacement-region-dialog__head span,
+.replacement-region-dialog__meta { color: #92a5ca; font-size: 12px; }
+.replacement-region-dialog__head button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(111, 123, 170, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef5ff;
+}
+.replacement-region-stage {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+  user-select: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.replacement-region-stage img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(68vh, 720px);
+  pointer-events: none;
+}
+.replacement-region-box {
+  position: absolute;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: move;
+}
+.replacement-region-handle {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.replacement-region-handle::before,
+.replacement-region-handle::after {
+  content: '';
+  position: absolute;
+  display: block;
+  background: #36d399;
+  box-shadow: 0 0 0 1px rgba(7, 18, 14, 0.72);
+}
+.replacement-region-handle::before {
+  width: 2px;
+  height: 14px;
+}
+.replacement-region-handle::after {
+  width: 14px;
+  height: 2px;
+}
+.replacement-region-handle.is-nw::before { left: 0; top: 0; }
+.replacement-region-handle.is-nw::after { left: 0; top: 0; }
+.replacement-region-handle.is-ne::before { right: 0; top: 0; }
+.replacement-region-handle.is-ne::after { right: 0; top: 0; }
+.replacement-region-handle.is-sw::before { left: 0; bottom: 0; }
+.replacement-region-handle.is-sw::after { left: 0; bottom: 0; }
+.replacement-region-handle.is-se::before { right: 0; bottom: 0; }
+.replacement-region-handle.is-se::after { right: 0; bottom: 0; }
+.replacement-region-handle.is-nw,
+.replacement-region-handle.is-ne,
+.replacement-region-handle.is-sw,
+.replacement-region-handle.is-se {
+  border-radius: 0;
+}
+.replacement-region-handle.is-nw { left: -9px; top: -9px; cursor: nwse-resize; }
+.replacement-region-handle.is-ne { right: -9px; top: -9px; cursor: nesw-resize; }
+.replacement-region-handle.is-sw { left: -9px; bottom: -9px; cursor: nesw-resize; }
+.replacement-region-handle.is-se { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.replacement-region-dialog__actions { justify-content: flex-end; }
+.replacement-region-dialog__actions .primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .live-detail-dialog {
   position: fixed;
-  inset: 0;
+  inset: var(--app-titlebar-height, 62px) 0 0;
   z-index: 70;
   display: grid;
   place-items: center;
@@ -4084,14 +4635,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .live-detail-dialog::before {
   content: '';
   position: fixed;
-  inset: 0;
+  inset: var(--app-titlebar-height, 62px) 0 0;
   background: rgba(4, 8, 16, 0.72);
   backdrop-filter: blur(12px);
   z-index: -1;
 }
 .live-detail-dialog__panel {
   width: min(1380px, 100%);
-  max-height: calc(100vh - 56px);
+  max-height: calc(100vh - var(--app-titlebar-height, 62px) - 56px);
   overflow: auto;
   border-radius: 24px;
   border: 1px solid rgba(111, 123, 170, 0.22);
@@ -4316,9 +4867,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   .export-grid,
   .library-grid-six,
   .hero-card { grid-template-columns: 1fr; }
-  .hero-toolbar, .tip-strip { flex-direction: column; align-items: stretch; }
-  .library-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .library-headline { overflow-x: auto; }
+  .hero-toolbar { flex-direction: column; align-items: stretch; }
+  .library-summary-row { flex-wrap: nowrap; }
+  .library-heading-cluster { flex-wrap: wrap; row-gap: 8px; }
+  .library-head-tools { margin-left: auto; }
+  .library-output-actions { width: auto; }
   .clone-thumb-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .clone-generate-button { min-width: 0; width: 100%; justify-self: stretch; }
   .live-console-row__main {
@@ -4359,6 +4912,19 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   }
 }
 @media (max-width: 720px) {
+  .library-headline { padding: 6px 0 14px; }
+  .library-summary-row { align-items: flex-start; flex-wrap: wrap; }
+  .library-heading-cluster { width: 100%; }
+  .library-title-row { width: 100%; }
+  .library-head-tools { width: 100%; margin-left: 0; justify-content: space-between; }
+  .library-toolbar { align-items: stretch; }
+  .library-action-group,
+  .library-task-actions,
+  .library-output-actions { width: 100%; }
+  .library-action-group { flex-wrap: wrap; }
+  .library-action-divider { display: none; }
+  .library-output-actions { margin-left: 0; justify-content: flex-start; }
+  .reference-source-grid { grid-template-columns: 1fr; }
   .live-console-row {
     grid-template-columns: 26px minmax(0, 1fr);
   }

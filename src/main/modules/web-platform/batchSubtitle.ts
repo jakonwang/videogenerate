@@ -48,6 +48,7 @@ import type {
 } from './types'
 import { webPlatformRepo } from './repo'
 import { isWhisperCompatibleConfigured, transcribeWithWhisperCompatible } from './whisperCompatible'
+import { materializeManagedAsset } from '../managed-assets/service'
 
 const CANVAS_WIDTH = 1080
 const CANVAS_HEIGHT = 1920
@@ -682,6 +683,26 @@ export async function enrichBatchSubtitleSourceItem(
   }
 }
 
+async function materializeBatchSubtitleSourceItem(item: BatchSubtitleSourceItem, ownerId: string) {
+  const sourceVideoPath = await materializeManagedAsset({
+    sourcePath: item.sourceVideoPath,
+    module: 'subtitle',
+    ownerId,
+    assetId: `${item.id}-video`,
+  })
+  const coverImagePath = await materializeManagedAsset({
+    sourcePath: item.coverImagePath,
+    module: 'subtitle',
+    ownerId,
+    assetId: `${item.id}-cover`,
+  })
+  return {
+    ...item,
+    sourceVideoPath,
+    coverImagePath,
+  }
+}
+
 export function normalizeBatchSubtitleJob(input: BatchSubtitleJob): BatchSubtitleJob {
   const style = normalizeStyleConfig(input.styleConfig)
   const captionStyle = normalizeCaptionStyle((input as any).captionStyle || input.styleConfig)
@@ -759,20 +780,24 @@ export async function createBatchSubtitleJob(input: {
     ...(input.titleConfig || {}),
   }
   const captionStyle = normalizeCaptionStyle(input.captionStyle)
+  const jobId = randomUUID()
+  const sourceItems = await Promise.all(
+    input.sourceItems.map((item) => materializeBatchSubtitleSourceItem(item, jobId)),
+  )
   const job: BatchSubtitleJob = {
-    id: randomUUID(),
+    id: jobId,
     userId: input.userId,
     name: String(input.name || '').trim() || `批量字幕任务 ${new Date().toLocaleString('zh-CN')}`,
-    sourceItems: input.sourceItems,
+    sourceItems,
     subtitleMode: normalizeMode(input.subtitleMode),
     subtitleSource: normalizeSubtitleSource(input.subtitleSource),
     exportEngine: normalizeExportEngine(input.exportEngine),
     titleRenderMode: normalizeTitleRenderMode(input.titleRenderMode),
     titleConfig,
-    titleItems: normalizeTitleItems(input.sourceItems, titleConfig, input.titleItems),
+    titleItems: normalizeTitleItems(sourceItems, titleConfig, input.titleItems),
     titleStyleMode: normalizeTitleStyleMode(input.titleStyleMode),
     viralTitleConfig: normalizeViralTitleConfig(input.viralTitleConfig),
-    titleAnalysisItems: normalizeTitleAnalysisItems(input.sourceItems, input.titleAnalysisItems),
+    titleAnalysisItems: normalizeTitleAnalysisItems(sourceItems, input.titleAnalysisItems),
     overlayImageConfig: normalizeOverlayImageConfig(input.overlayImageConfig, captionStyle),
     styleConfig: normalizeStyleConfig(input.styleConfig),
     captionStyle,
@@ -831,11 +856,14 @@ export async function updateBatchSubtitleDraft(input: {
         }),
       )
     : current.sourceItems
+  const materializedSourceItems = input.patch.sourceItems
+    ? await Promise.all(nextSourceItems.map((item) => materializeBatchSubtitleSourceItem(item, input.jobId)))
+    : nextSourceItems
   const currentSourceSignature = JSON.stringify(
     current.sourceItems.map((item) => [item.id, item.sourceVideoPath, item.sourceType, item.sourceProjectId || '']),
   )
   const nextSourceSignature = JSON.stringify(
-    nextSourceItems.map((item) => [item.id, item.sourceVideoPath, item.sourceType, item.sourceProjectId || '']),
+    materializedSourceItems.map((item) => [item.id, item.sourceVideoPath, item.sourceType, item.sourceProjectId || '']),
   )
   const sourceItemsChanged = currentSourceSignature !== nextSourceSignature
   const nextTitleConfig = {
@@ -850,7 +878,7 @@ export async function updateBatchSubtitleDraft(input: {
   const next: BatchSubtitleJob = {
     ...current,
     ...('name' in input.patch ? { name: String(input.patch.name || current.name).trim() || current.name } : {}),
-    sourceItems: nextSourceItems,
+    sourceItems: materializedSourceItems,
     subtitleMode: input.patch.subtitleMode ? normalizeMode(input.patch.subtitleMode) : current.subtitleMode,
     subtitleSource: input.patch.subtitleSource ? normalizeSubtitleSource(input.patch.subtitleSource) : current.subtitleSource,
     exportEngine: input.patch.exportEngine ? normalizeExportEngine(input.patch.exportEngine) : current.exportEngine,

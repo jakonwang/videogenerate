@@ -1,8 +1,10 @@
 import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage, screen } from 'electron'
-import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { basename, join } from 'node:path'
 import { createReadStream, existsSync } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
+import { performance } from 'node:perf_hooks'
 import { ensureAppDirs, getAppPaths } from './lib/paths'
 import { analyzeVideoFolderAndSuggestTemplate } from './modules/style/analyzeVideos'
 import { normalizeAppLocale, type AppLocale } from '../shared/locale'
@@ -37,7 +39,17 @@ import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStu
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 import { registerVideoParserDownloadIpc } from './ipc/registerVideoParserDownloadIpc'
+import { registerAgentOsIpc } from './ipc/registerAgentOsIpc'
+import { registerHermesAgentIpc } from './ipc/registerHermesAgentIpc'
+import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
+import { agentOsService } from './modules/agent-os/service'
+import { hermesRuntime } from './modules/hermes/runtime'
+import { hermesManagement } from './modules/hermes/management'
 import { productImageMaterialsService } from './modules/product-image-materials/service'
+import { productImageMaterialsRepo } from './modules/product-image-materials/repo'
+import { tiktokListingRepo } from './modules/tiktok-listing/repo'
+import { tiktokCreativeStudioRepo } from './modules/tiktok-creative-studio/repo'
+import { livePhotoRepo } from './modules/live-photo/repo'
 import { videoParserDownloadService } from './modules/video-parser-download/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
 
@@ -45,6 +57,15 @@ let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
 let appTray: Tray | null = null
 let isAppQuitting = false
+const appStartupStartedAt = performance.now()
+
+function markStartupStage(stage: string, details: Record<string, unknown> = {}) {
+  console.log('[startup-performance]', {
+    stage,
+    elapsedMs: Math.round(performance.now() - appStartupStartedAt),
+    ...details,
+  })
+}
 
 function createTrayIcon() {
   const candidates = [
@@ -72,6 +93,9 @@ function ignoreBrokenPipeOnStdStreams() {
 
 configureWindowsStorageRoot()
 ignoreBrokenPipeOnStdStreams()
+const { cacheDir: electronCacheDir } = getAppPaths()
+app.commandLine.appendSwitch('disk-cache-dir', electronCacheDir)
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 
 /** 与渲染进程语言同步，供未传 title 的系统对话框默认文案；`app.whenReady` 后再对齐系统 locale */
 let mainUiLocale: AppLocale = 'zh-CN'
@@ -272,9 +296,13 @@ function createWindow() {
   mainWindow.center()
   const revealFallbackTimer = setTimeout(() => {
     console.warn('[window] reveal fallback triggered')
+    markStartupStage('window-reveal-fallback')
     revealMainWindow()
   }, 4000)
-  mainWindow.once('ready-to-show', revealMainWindow)
+  mainWindow.once('ready-to-show', () => {
+    markStartupStage('window-ready-to-show')
+    revealMainWindow()
+  })
   mainWindow.on('close', (event) => {
     if (isAppQuitting) return
     event.preventDefault()
@@ -286,6 +314,7 @@ function createWindow() {
   })
   mainWindow.webContents.on('did-finish-load', () => {
     clearTimeout(revealFallbackTimer)
+    markStartupStage('renderer-loaded')
     revealMainWindow()
   })
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
@@ -317,6 +346,7 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(getAppPaths().rendererDist, 'index.html'))
   }
+  markStartupStage('window-created')
 }
 
 function wireIpc() {
@@ -378,6 +408,41 @@ function wireIpc() {
     const targetPath = String(input?.path || '').trim()
     if (!targetPath) return false
     return existsSync(targetPath)
+  })
+
+  ipcMain.handle('fs:describeFiles', async (_e, paths: string[]) => {
+    const uniquePaths = Array.from(new Set((Array.isArray(paths) ? paths : []).map((item) => String(item || '').trim()).filter(Boolean)))
+    return await Promise.all(uniquePaths.map(async (targetPath) => {
+      try {
+        const details = await stat(targetPath)
+        return {
+          path: targetPath,
+          exists: true,
+          isFile: details.isFile(),
+          size: details.size,
+          modifiedAt: details.mtimeMs,
+        }
+      } catch {
+        return { path: targetPath, exists: false, isFile: false, size: 0, modifiedAt: 0 }
+      }
+    }))
+  })
+
+  ipcMain.handle('fs:stageAttachment', async (_e, input: { name?: string; base64?: string }) => {
+    const encoded = String(input?.base64 || '').trim()
+    const maxBytes = 64 * 1024 * 1024
+    if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error('The attachment data is invalid.')
+    if (encoded.length > Math.ceil(maxBytes / 3) * 4) throw new Error('The attachment exceeds the 64 MB clipboard limit.')
+    const buffer = Buffer.from(encoded, 'base64')
+    if (!buffer.length) throw new Error('The attachment is empty.')
+    if (buffer.length > maxBytes) throw new Error('The attachment exceeds the 64 MB clipboard limit.')
+    const requestedName = basename(String(input?.name || 'attachment.bin'))
+    const safeName = requestedName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 160) || 'attachment.bin'
+    const targetDir = join(getAppPaths().dataDir, 'hermes', 'attachment-inbox')
+    await mkdir(targetDir, { recursive: true })
+    const targetPath = join(targetDir, `${Date.now()}-${randomUUID()}-${safeName}`)
+    await writeFile(targetPath, buffer)
+    return { path: targetPath, name: safeName, size: buffer.length }
   })
 
   ipcMain.handle('fs:collectVideoFilesFromDrop', async (_e, roots: string[]) => {
@@ -1510,46 +1575,81 @@ function wireIpc() {
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
   registerVideoParserDownloadIpc(ipcMain)
+  registerAgentOsIpc(ipcMain, () => mainWindow)
+  registerHermesAgentIpc(ipcMain, () => mainWindow)
+  registerStorageManagementIpc(ipcMain)
 }
 
 app.whenReady().then(async () => {
+  markStartupStage('app-ready')
   mainUiLocale = normalizeAppLocale(app.getLocale())
   await migrateLegacyWindowsUserData()
+  markStartupStage('legacy-storage-migrated')
   await ensureAppDirs()
-  await cleanupLegacyWindowsStorage()
-  // 避免 Windows 某些环境下 GPU cache 目录权限问题
-  const { cacheDir } = getAppPaths()
-  app.commandLine.appendSwitch('disk-cache-dir', cacheDir)
-  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
-
+  // Keep startup paths ready before renderer IPC requests begin.
   wireIpc()
   await wireMediaProtocol()
   createWindow()
   registerUpdaterIpc(() => mainWindow)
   setupAutoUpdater(() => mainWindow)
 
-  void (async () => {
+  setTimeout(() => {
+    void (async () => {
+      markStartupStage('background-initialization-start')
       try {
+        await cleanupLegacyWindowsStorage()
+        await agentOsService.initialize()
+        void hermesRuntime.start()
+          .then(async () => {
+            await hermesManagement.migrateLegacyIntegrationSettings()
+            const channels = await hermesManagement.listChannels()
+            if (channels.some((channel) => channel.enabled)) await hermesManagement.startGateway().catch(() => undefined)
+            markStartupStage('hermes-ready')
+          })
+          .catch((error) => {
+            console.error('[hermes-runtime] startup failed', String((error as Error)?.message || error))
+          })
         await productsRepo.ensureSeed()
+        const productImageMigration = await productsRepo.migrateExternalImages()
+        if (productImageMigration.migrated || productImageMigration.missing) {
+          console.log('[products] external-image-migration', productImageMigration)
+        }
         await templatesRepo.ensureSeed()
         await cloneRepo.ensureSeed()
         await webPlatformRepo.ensureSeed()
+        const managedAssetMigrations = await Promise.all([
+          templatesRepo.migrateExternalAssets(),
+          cloneRepo.migrateExternalAssets(),
+          webPlatformRepo.migrateBatchSubtitleExternalAssets(),
+          productImageMaterialsRepo.migrateExternalAssets(),
+          tiktokListingRepo.migrateExternalAssets(),
+          tiktokCreativeStudioRepo.migrateExternalAssets(),
+          livePhotoRepo.migrateExternalAssets(),
+        ])
+        const migratedManagedAssets = managedAssetMigrations.reduce((total, item) => total + item.migrated, 0)
+        if (migratedManagedAssets) {
+          console.log('[managed-assets] external-asset-migration', { migrated: migratedManagedAssets })
+        }
         await videoParserDownloadService.initialize()
         await productImageMaterialsService.initialize()
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
         await livePhotoService.resumePendingTasksOnStartup()
-    } catch (error: any) {
-      console.error('[app-startup] bootstrap-failed', {
-        message: String(error?.message ?? error ?? 'unknown error'),
-        stack: String(error?.stack ?? ''),
-      })
-      dialog.showErrorBox(
-        'VideoGenerate Startup Failed',
-        String(error?.message ?? error ?? 'Unknown startup error'),
-      )
-    }
-  })()
+        markStartupStage('background-initialization-complete')
+      } catch (error: any) {
+        console.error('[app-startup] bootstrap-failed', {
+          message: String(error?.message ?? error ?? 'unknown error'),
+          stack: String(error?.stack ?? ''),
+        })
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          dialog.showErrorBox(
+            'VideoGenerate Startup Failed',
+            String(error?.message ?? error ?? 'Unknown startup error'),
+          )
+        }
+      }
+    })()
+  }, 150)
 })
 
 app.on('window-all-closed', () => {
@@ -1561,4 +1661,5 @@ app.on('before-quit', () => {
   stopLocalLivePhotoQualityChecker()
   void stopPreviewHttpServer()
   void stopWebApiServer()
+  void hermesRuntime.stop()
 })

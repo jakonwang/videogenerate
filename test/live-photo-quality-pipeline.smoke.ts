@@ -73,14 +73,14 @@ async function main() {
             'module = importlib.util.module_from_spec(spec)',
             'spec.loader.exec_module(module)',
             'profile = {"minimumDinoV2": 0.72, "minimumOrb": 0.42}',
-            'print(json.dumps([module.sparse_structure_gate_failed(0.80, 0.0, profile), module.sparse_structure_gate_failed(0.60, 0.60, profile), module.sparse_structure_gate_failed(0.60, 0.20, profile)]))',
+            'print(json.dumps([module.sparse_structure_gate_failed(0.80, 0.0, profile), module.sparse_structure_gate_failed(0.60, 0.60, profile), module.sparse_structure_gate_failed(0.60, 0.20, profile), module.ring_structure_gate_failed(0.83, 0.51, 0.30), module.ring_structure_gate_failed(0.86, 0.45, 0.61), module.ring_structure_gate_failed(0.58, 0.40, 0.30), module.ring_structure_gate_failed(0.648, 0.30, 0.45), module.ring_structure_gate_failed(0.65, 0.0, 0.45)]))',
           ].join('\n'),
           qualityServicePath,
         ],
         { encoding: 'utf8' },
       ),
     )
-    assert.deepEqual(structureGateResults, [false, false, true])
+    assert.deepEqual(structureGateResults, [false, false, true, false, false, true, false, true])
 
     const seeded = livePhotoPromptVersionService.list()
     assert.equal(seeded.length, 1)
@@ -143,7 +143,7 @@ async function main() {
       model: 'gpt-image-1',
       outputSize: '1024x1536',
       generationParams: { strategy: 'default' },
-      checkerVersion: 'live-photo-quality-v6',
+      checkerVersion: 'live-photo-quality-v8',
     })
     const changedPromptKey = await buildLivePhotoQualityCacheKey({
       scenePath,
@@ -153,7 +153,7 @@ async function main() {
       model: 'gpt-image-1',
       outputSize: '1024x1536',
       generationParams: { strategy: 'default' },
-      checkerVersion: 'live-photo-quality-v6',
+      checkerVersion: 'live-photo-quality-v8',
     })
     assert.notEqual(changedPromptKey, key)
     const changedParamsKey = await buildLivePhotoQualityCacheKey({
@@ -164,7 +164,7 @@ async function main() {
       model: 'gpt-image-1',
       outputSize: '1024x1536',
       generationParams: { strategy: 'erase_first' },
-      checkerVersion: 'live-photo-quality-v6',
+      checkerVersion: 'live-photo-quality-v8',
     })
     assert.notEqual(changedParamsKey, key)
     await writeFile(productPath, 'product-changed', 'utf8')
@@ -176,12 +176,12 @@ async function main() {
       model: 'gpt-image-1',
       outputSize: '1024x1536',
       generationParams: { strategy: 'default' },
-      checkerVersion: 'live-photo-quality-v6',
+      checkerVersion: 'live-photo-quality-v8',
     })
     assert.notEqual(changedProductKey, key)
     await writeFile(productPath, productBytes)
     const passReport = {
-      checkerVersion: 'live-photo-quality-v6',
+      checkerVersion: 'live-photo-quality-v8',
       mode: 'remote_fallback' as const,
       decision: 'pass' as const,
       score: 0.9,
@@ -282,6 +282,8 @@ async function main() {
       passThreshold: 0.88,
       retryFloor: 0.65,
       timeoutMs: 30_000,
+      productType: 'ring',
+      productCategory: 'rings',
     })
     assert.equal(alignedLocal.available, true)
     assert.ok(
@@ -293,6 +295,34 @@ async function main() {
     const roiNote = alignedLocal.report?.notes.find((note) => note.startsWith('replacement_roi:')) || ''
     const [roiWidth = 0, roiHeight = 0] = roiNote.split(':')[1]?.split(',').slice(2).map(Number) || []
     assert.ok(roiWidth * roiHeight < sceneWidth * sceneHeight * 0.1)
+
+    const explicitRegionLocal = await runLocalLivePhotoQualityCheck({
+      scenePath: alignedScenePath,
+      productPath: alignedProductPath,
+      generatedPath: alignedGeneratedPath,
+      passThreshold: 0.88,
+      retryFloor: 0.65,
+      timeoutMs: 30_000,
+      productType: 'ring',
+      productCategory: 'rings',
+      replacementRegion: {
+        x: 0.25,
+        y: 0.25,
+        width: 0.5,
+        height: 0.5,
+        source: 'auto',
+        confidence: 0,
+        revision: 1,
+        updatedAt: Date.now(),
+      },
+    })
+    assert.equal(explicitRegionLocal.available, true)
+    assert.ok(
+      (explicitRegionLocal.report?.components.scenePreservation || 0) >= 0.995,
+      JSON.stringify(explicitRegionLocal.report),
+    )
+    assert.equal(explicitRegionLocal.report?.hardFailures.includes('outside_scene_drift'), false)
+    assert.equal(explicitRegionLocal.report?.hardFailures.includes('product_structure_consistency'), false)
 
     const pythonLauncher = path.join(String(process.env.WINDIR || 'C:\\Windows'), 'py.exe')
     if (existsSync(pythonLauncher)) {
@@ -318,6 +348,8 @@ async function main() {
         passThreshold: 0.88,
         retryFloor: 0.65,
         timeoutMs: 5_000,
+        productType: 'ring',
+        productCategory: 'rings',
       })
       assert.equal(success.available, true)
       assert.equal(success.report?.decision, 'pass')

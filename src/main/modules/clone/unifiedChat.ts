@@ -72,6 +72,7 @@ export async function generateChatCompletion(input: {
   system?: string
   prompt: string
   model?: string
+  timeoutMs?: number
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'chat')!
   const root = baseUrl(input.credentials)
@@ -119,12 +120,29 @@ export async function generateChatCompletion(input: {
       }
     }
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    })
-    const text = await res.text()
+    const timeoutMs = Math.max(0, Number(input.timeoutMs || 0))
+    const controller = timeoutMs ? new AbortController() : undefined
+    const timer = controller
+      ? setTimeout(() => controller.abort(new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)), timeoutMs)
+      : undefined
+    let res: Response
+    let text: string
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller?.signal,
+      })
+      text = await res.text()
+    } catch (error) {
+      if (controller?.signal.aborted) {
+        throw new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)
+      }
+      throw error
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
     if (!res.ok) {
       lastFailureStatus = res.status
       lastFailureText = text

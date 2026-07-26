@@ -61,6 +61,28 @@ export type LivePhotoPromptVersion = {
 
 export type LivePhotoQualityDecision = 'pass' | 'retry' | 'reject'
 
+export type LivePhotoReplacementRegion = {
+  x: number
+  y: number
+  width: number
+  height: number
+  source: 'auto' | 'manual'
+  confidence?: number
+  revision: number
+  updatedAt: number
+}
+
+export type LivePhotoSceneInteractionMode = 'worn' | 'held' | 'placed' | 'hanging' | 'attached' | 'none' | 'unknown'
+
+export type LivePhotoSceneInteraction = {
+  mode: LivePhotoSceneInteractionMode
+  confidence: number
+  support?: string
+  occlusion?: string
+  revision: number
+  updatedAt: number
+}
+
 export type LivePhotoQualityReport = {
   checkerVersion: string
   mode: 'local_python' | 'remote_fallback'
@@ -93,6 +115,7 @@ export type LivePhotoGenerationAttempt = {
   negativePrompt?: string
   cacheHit: boolean
   quality?: LivePhotoQualityReport
+  regionRevision?: number
   createdAt: number
 }
 
@@ -198,6 +221,8 @@ export type LivePhotoItem = {
   promptVersion?: number
   promptHash?: string
   qualityReport?: LivePhotoQualityReport
+  replacementRegion?: LivePhotoReplacementRegion
+  sceneInteraction?: LivePhotoSceneInteraction
   generationAttempts?: LivePhotoGenerationAttempt[]
   cacheKey?: string
   cacheHit?: boolean
@@ -237,6 +262,7 @@ export type ExportLivePhotoItemsInput = {
 export type RetryLivePhotoItemInput = {
   id: string
   motionTemplate?: LivePhotoMotionTemplate
+  replacementRegion?: Pick<LivePhotoReplacementRegion, 'x' | 'y' | 'width' | 'height'>
 }
 
 export type ExportLivePhotoItemsResult = {

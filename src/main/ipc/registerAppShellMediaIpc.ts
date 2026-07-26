@@ -44,8 +44,25 @@ export function registerAppShellMediaIpc(
   })
 
   ipcMain.handle('shell:openPath', async (_e, fullPath: string) => {
-    const p = String(fullPath ?? '')
-    await shell.openPath(p)
+    const p = String(fullPath ?? '').trim()
+    if (!p) throw new Error('A file path is required.')
+    const error = await shell.openPath(p)
+    if (error) throw new Error(error)
+    return { ok: true }
+  })
+
+  ipcMain.handle('shell:openExternal', async (_e, value: string) => {
+    const raw = String(value ?? '').trim()
+    let url: URL
+    try {
+      url = new URL(raw)
+    } catch {
+      throw new Error('The external URL is invalid.')
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('Only HTTP and HTTPS links can be opened.')
+    }
+    await shell.openExternal(url.toString())
     return { ok: true }
   })
 

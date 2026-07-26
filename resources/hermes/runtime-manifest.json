@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "version": "0.17.0",
+  "commit": "15852722d47b2b50d6815b3831891663076b5865",
+  "branch": "main",
+  "installScriptUrl": "https://raw.githubusercontent.com/NousResearch/hermes-agent/15852722d47b2b50d6815b3831891663076b5865/scripts/install.ps1",
+  "installScriptSha256": "C35FA215946381E6A843A4DDE314336A713E7444832435C9D3F1BD9A85320198",
+  "minimumInstallerProtocol": 1,
+  "requiredFiles": [
+    "venv/Scripts/hermes.exe",
+    "venv/Scripts/python.exe"
+  ]
+}

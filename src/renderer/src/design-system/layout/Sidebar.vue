@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import sidebarBrandIconAsset from '../../../../../resources/icon-brand-ui-v2.png'
 
 const router = useRouter()
 
@@ -27,20 +25,10 @@ function navigate(to: string) {
   void router.push(to)
 }
 
-const sidebarBrandIconSrc = computed(() => sidebarBrandIconAsset)
 </script>
 
 <template>
   <aside class="ds-sidebar">
-    <div class="ds-sidebar__brand sidebar-brand-v2">
-      <div class="sidebar-brand-v2__icon" aria-hidden="true">
-        <img :src="sidebarBrandIconSrc" alt="CreateCut" class="sidebar-brand-v2__icon-image" />
-      </div>
-      <div class="sidebar-brand-v2__copy">
-        <div class="sidebar-brand-v2__title">CreateCut</div>
-        <div class="sidebar-brand-v2__subtitle">AI Editing Suite</div>
-      </div>
-    </div>
     <nav class="ds-sidebar__nav">
       <button
         v-for="item in items"

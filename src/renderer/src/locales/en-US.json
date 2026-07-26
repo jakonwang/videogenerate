@@ -247,6 +247,11 @@
   },
   "titleBar": {
     "ready": "Ready",
+    "refreshStatus": "Refresh Status",
+    "lastRefresh": "Last Refresh",
+    "localWorkspace": "Local Workspace",
+    "taskCenter": "Task Center",
+    "openDataDirectory": "Open Data Directory",
     "minimize": "Minimize",
     "maximize": "Maximize",
     "close": "Close"
@@ -257,6 +262,43 @@
       "title": "Platform And Capability Settings",
       "subtitle": "Configure API keys and base URLs first, then choose the platform and model for video, image, and chat features."
     },
+    "appearance": {
+      "title": "Appearance",
+      "subtitle": "Theme changes apply immediately and persist after restart.",
+      "themes": {
+        "darkTeal": "Dark Teal",
+        "softMint": "Soft Mint",
+        "warmPaper": "Warm Paper",
+        "clearSky": "Clear Sky"
+      }
+    },
+    "access": {
+      "title": "Local Key Settings",
+      "subtitle": "The desktop app uses local Key access instead of a login flow.",
+      "localMode": "Local Mode",
+      "keyLabel": "Access Key",
+      "placeholder": "Enter Key",
+      "save": "Save",
+      "configured": "Configured",
+      "notConfigured": "Not Configured",
+      "savedLocally": "Key saved on this device.",
+      "cleared": "Key cleared.",
+      "futureHint": "This currently stores local configuration and reserves a future validation endpoint."
+    },
+    "hermesManagement": {
+      "title": "Hermes Management",
+      "subtitle": "Manage the runtime, models, skills, channels, memory, and backups without leaving VideoGenerate.",
+      "tabs": { "runtime": "Runtime", "models": "Models", "skills": "Skills", "channels": "Channels", "memory": "Memory", "backups": "Backups", "diagnostics": "Diagnostics" },
+      "states": { "missing": "Not installed", "installing": "Installing", "updating": "Updating", "repairing": "Repairing", "update_available": "Update available", "stopped": "Stopped", "starting": "Starting", "ready": "Ready", "repair_required": "Repair required", "error": "Error" },
+      "runtime": { "installed": "Installed version", "target": "Compatible version", "dashboard": "Session service", "gateway": "Messaging gateway", "install": "Install", "update": "Update", "repair": "Repair", "start": "Start", "stop": "Stop", "restart": "Restart", "startGateway": "Start gateway", "stopGateway": "Stop gateway" },
+      "models": { "provider": "Provider", "model": "Model", "apiKey": "API key", "keepKey": "Leave blank to retain the existing key", "useApp": "Use application model" },
+      "skills": { "search": "Search skill sources or names", "updateAll": "Update all", "install": "Install", "auditUnknown": "Unknown", "confirmInstall": "Source: {source}\nSecurity audit: {verdict}\n\nInstall this third-party skill?", "confirmUninstall": "Uninstall {name}?" },
+      "channels": { "enabled": "Enable this channel", "configured": "Configured; leave blank to retain", "scan": "Pair with QR", "qr": "Pairing QR code", "pairingHint": "Scan with the corresponding client. Pairing status updates automatically.", "pairing": { "waiting": "Waiting for scan", "scanned": "Scanned; waiting for confirmation", "connected": "Pairing complete", "expired": "QR code expired" } },
+      "memory": { "description": "This shows memory service status for the dedicated profile. Runtime upgrades preserve this data." },
+      "backups": { "description": "Backups contain dedicated profile data and do not replace runtime code.", "create": "Create backup", "empty": "No backups yet" },
+      "diagnostics": { "description": "Diagnostics are redacted and exclude keys, tokens, and full environment variables." },
+      "running": "Running", "stopped": "Stopped", "save": "Save", "test": "Test connection", "search": "Search", "refresh": "Refresh", "connect": "Connect", "disconnect": "Disconnect", "enable": "Enable", "disable": "Disable", "uninstall": "Uninstall", "cancel": "Cancel pairing", "actionComplete": "Action completed.", "unknownError": "The operation failed. Try again.", "restartRequired": "The desktop service is out of date. Fully quit and restart VideoGenerate."
+    },
     "actions": {
       "checkUpdates": "Check Updates",
       "openDataDir": "Open Data Directory",
@@ -264,22 +306,146 @@
       "saveSettings": "Save Settings",
       "saving": "Saving"
     },
+    "navigation": {
+      "groups": {
+        "general": "General",
+        "ai": "Artificial Intelligence",
+        "hermes": "Hermes",
+        "storage": "Storage And Delivery"
+      }
+    },
     "sections": {
+      "appearance": {
+        "label": "Appearance And Local Key",
+        "desc": "Theme, skin and local access key"
+      },
       "platforms": {
-        "label": "Platforms",
-        "desc": "Configure API keys and base URLs"
+        "label": "Platform Keys",
+        "desc": "Manage API keys and service endpoints"
       },
       "capabilities": {
-        "label": "Capabilities",
-        "desc": "Choose video, image, and chat platforms"
+        "label": "Capabilities And Models",
+        "desc": "Choose video, image and chat models"
+      },
+      "hermesRuntime": {
+        "label": "Runtime And Models",
+        "desc": "Install, start, repair and authorize models"
+      },
+      "hermesSkills": {
+        "label": "Skills",
+        "desc": "Search, install, audit and enable skills"
+      },
+      "hermesChannels": {
+        "label": "Message Channels",
+        "desc": "Feishu, WeCom and personal WeChat"
+      },
+      "hermesData": {
+        "label": "Memory And Maintenance",
+        "desc": "Memory, backups and diagnostics"
+      },
+      "storageManagement": {
+        "label": "Storage Management",
+        "desc": "Inspect and clean caches, artifacts, and runtime data"
       },
       "hermes": {
         "label": "Hermes",
         "desc": "Feishu and WeCom Live Photo integration"
       },
       "qiniu": {
-        "label": "Qiniu",
+        "label": "Qiniu Storage",
         "desc": "Upload and asset delivery settings"
+      }
+    },
+    "storageManagement": {
+      "kicker": "Local Storage",
+      "title": "Storage Management",
+      "subtitle": "Review application storage by category and reclaim space through protected cleanup flows.",
+      "total": "Managed Data",
+      "scannedAt": "Scanned at {time}",
+      "scanning": "Scanning storage",
+      "fileCount": "{count} files",
+      "itemCount": "{count} completed projects",
+      "clean": "Clean",
+      "protected": "Protected",
+      "cancel": "Cancel",
+      "confirmTitle": "Confirm Cleanup",
+      "confirmClean": "Clean Now",
+      "typedConfirmationLabel": "Type the confirmation text below to continue.",
+      "backupRequired": "A backup must complete successfully before cleanup starts.",
+      "risks": {
+        "safe": "Safe",
+        "caution": "Confirm",
+        "destructive": "Permanent",
+        "protected": "Protected"
+      },
+      "groups": {
+        "reclaimable": {
+          "label": "Reclaimable Data",
+          "desc": "Caches, temporary files, previews, and old diagnostic logs"
+        },
+        "advanced": {
+          "label": "Advanced Cleanup",
+          "desc": "Large outputs and runtime data that require stronger confirmation"
+        },
+        "protected": {
+          "label": "Protected Data",
+          "desc": "Source assets, business records, and credentials cannot be deleted here"
+        }
+      },
+      "categories": {
+        "safe_cache": {
+          "label": "Safe Cache",
+          "desc": "Rebuildable browser, thumbnail, quality inspection, and Hermes caches."
+        },
+        "temporary_files": {
+          "label": "Temporary Files",
+          "desc": "Temporary task files that have not changed for more than twenty-four hours."
+        },
+        "preview_files": {
+          "label": "Preview Files",
+          "desc": "Subtitle and media previews that can be generated again when needed."
+        },
+        "diagnostic_logs": {
+          "label": "Old Diagnostic Logs",
+          "desc": "Application, crash, and Hermes log files older than seven days. Recent logs are preserved."
+        },
+        "completed_project_artifacts": {
+          "label": "Completed Project Artifacts",
+          "desc": "Completed Live Photo, clone, subtitle, and exported files. Project history and source assets are preserved."
+        },
+        "hermes_runtime": {
+          "label": "Hermes Runtime",
+          "desc": "The local Hermes program and dependencies. Reinstallation is required after cleanup."
+        },
+        "hermes_sessions_memory": {
+          "label": "Sessions And Memory",
+          "desc": "Hermes session and memory files. Core state, activity events, keys, skills, and channels are preserved."
+        },
+        "managed_source_assets": {
+          "label": "Managed Source Assets",
+          "desc": "Imported images, videos, audio, and product references used by existing projects."
+        },
+        "business_records": {
+          "label": "Business Records",
+          "desc": "Projects, tasks, approvals, artifacts, event history, and Hermes core state databases."
+        },
+        "configuration_credentials": {
+          "label": "Configuration And Credentials",
+          "desc": "Model keys, channel credentials, application settings, and Hermes configuration files."
+        }
+      },
+      "confirmations": {
+        "safe_cache": "Confirm removal of rebuildable cache data.",
+        "temporary_files": "Confirm removal of temporary files.",
+        "preview_files": "I understand previews will be generated again when needed.",
+        "diagnostic_logs": "I understand diagnostic logs older than seven days will be deleted.",
+        "completed_project_artifacts": "I understand completed local outputs will be deleted while project records and source assets remain protected.",
+        "hermes_runtime": "I understand Hermes must be reinstalled before intelligent employees can be used again.",
+        "hermes_sessions_memory": "I understand Hermes session and memory files will be deleted after a backup is created."
+      },
+      "messages": {
+        "cleaned": "Reclaimed {size} and removed {files} files.",
+        "backupCreated": "A backup was created before cleanup."
       }
     },
     "platforms": {
@@ -471,5 +637,43 @@
       "modelLabel": "Model",
       "taskIdLabel": "Task ID"
     }
+  },
+  "agentOs": {
+    "businessCommandCatalog": { "scopeLabel": "Command categories", "scopes": { "recommended": "Recommended", "business": "App actions", "skill": "Skills", "workspace": "Pages", "management": "Settings" }, "categories": { "product": "Product management", "material": "Product materials", "sourceVideo": "Source videos", "clone": "Video cloning", "livePhoto": "Live Photo", "subtitle": "Subtitles and slicing", "listing": "Product listings", "creative": "Creative studio", "modelIdentity": "Model identities", "template": "Production templates", "production": "Production tasks", "publishing": "Video publishing", "artifact": "Artifacts" }, "descriptions": { "read": "Read current application data and status", "write": "Create or update business data through the application", "dangerous": "This action changes, deletes, or publishes data and requires confirmation" }, "prompts": { "read": "Please perform \"{action}\". Read the current application data first and ask me when the target is unclear.", "write": "Please perform \"{action}\". Check current data and required parameters, show the execution plan, and ask me for missing information.", "dangerous": "Prepare to perform \"{action}\". Verify the target, impact, and current state, list the exact changes, and wait for my explicit confirmation before causing irreversible or external effects." } },
+    "hermesUx": { "searchSessions": "Search sessions", "noSessionMatches": "No matching sessions", "queueTitle": "Queued messages", "queueCount": "{count} queued", "queueAttachmentCount": "{count} attachments", "queuePlaceholder": "Add another message to send after the current task", "queueHint": "Send queues the message; the adjacent button guides the current task", "addToQueue": "Add to send queue", "dropFiles": "Drop files to attach", "attachmentOnly": "Added {count} attachments", "attachmentLimit": "You can attach up to {count} files", "attachmentRejected": "Some files were missing, unsupported, or larger than 2 GB and were skipped", "activeSubagents": "{count} subagents active", "stopSubagent": "Stop subagent", "pauseDelegation": "Pause new subagents", "resumeDelegation": "Allow new subagents", "backgroundTask": "Background task", "backgroundRunning": "Running in background", "backgroundCompleted": "Background task completed", "backgroundFailed": "Background task failed", "stopBackground": "Stop background task", "browserActivity": "Browser activity", "browserConnected": "Browser connected", "browserDisconnected": "Browser disconnected", "connectBrowser": "Connect browser", "disconnectBrowser": "Disconnect browser", "needsInput": "Waiting for your input" },
+    "common": { "loading": "Loading", "remove": "Remove", "close": "Close", "cancel": "Cancel", "save": "Save", "dismiss": "Dismiss", "unknownError": "The operation failed. Try again." },
+    "conversations": { "title": "Work sessions", "subtitle": "Ongoing tasks and history", "new": "New work session", "empty": "No work sessions yet" },
+    "idle": { "title": "What should your team complete today?", "subtitle": "Describe the outcome and add reference files. The supervisor will prepare a plan, coordinate specialists, and ask for approval before execution." },
+    "composer": { "placeholder": "Describe a complete outcome, such as inspecting a product, creating three videos, and adding subtitles...", "followup": "Add context or create another run...", "attach": "Add images, videos, or files", "send": "Send", "hint": "Enter to send, Shift + Enter for a new line", "mediaFiles": "Work files" },
+    "shortcuts": { "video": "Create product videos", "material": "Prepare materials", "publish": "Prepare publishing", "videoPrompt": "Inspect the current product and reference video, create three product videos, and add subtitles.", "materialPrompt": "Inspect the product and prepare the attached videos as reusable materials.", "publishPrompt": "Inspect existing final videos and prepare an approved publishing plan." },
+    "message": { "you": "You", "thinking": "Understanding the request and checking available capabilities...", "planReady": "The execution plan is ready. Approve it to start run #{run}.", "completed": "Run #{run} completed with {count} registered artifacts.", "failed": "Run #{run} failed: {error}" },
+    "reply": { "greeting": "Hello. Tell me what you want to create, inspect, publish, or retrieve.", "capabilities": "I can inspect products, prepare materials, create videos and Live Photos, generate subtitles, publish approved videos, and retrieve existing results.", "thanks": "You are welcome. Send the next objective when you are ready.", "assistant_unavailable": "The intelligent assistant is temporarily unavailable. I did not create a workflow from this conversational request. Please try again.", "artifact_results": "I found {count} recent Live Photo videos. Open any result below.", "artifact_empty": "I could not find a completed Live Photo video on this device.", "existing_results": "I found {count} existing results in this conversation.", "existing_empty": "There are no existing results in this conversation yet.", "output_directory": "Which output directory should I use for the export?", "publish_account": "Which approved publishing account should I use?", "source_video": "Please attach or select the source video before I create this workflow.", "source_artifact": "Please attach a result or ask me to show existing results before exporting." },
+    "run": { "workspace": "Agent workspace", "approve": "Approve run", "reject": "Reject", "pause": "Pause", "resume": "Resume", "cancel": "Cancel run" },
+    "runHistory": { "title": "Run history", "subtitle": "{count} business runs in this session", "button": "Runs", "open": "View run history", "close": "Close run history", "filterLabel": "Filter run status", "filters": { "all": "All", "active": "Active", "completed": "Completed", "failed": "Attention" }, "noSummary": "No plan summary", "artifacts": "{count} artifacts", "warnings": "{count} warnings", "empty": "No runs match this filter" },
+    "plan": { "title": "Execution plan", "version": "Version {version}" },
+    "timeline": { "title": "Event timeline", "subtitle": "Recoverable run history", "empty": "Waiting for run events", "showAll": "Show all {count}", "showRecent": "Show recent" },
+    "artifacts": { "title": "Artifacts", "count": "{count} results", "empty": "Artifacts will be registered here", "productReportName": "Product inspection: {name}" },
+    "artifactActions": { "preview": "Preview artifact", "open": "Open artifact", "reveal": "Show in folder", "saveAs": "Save artifact as" },
+    "artifactKind": { "image": "Image", "video": "Video", "subtitle": "Subtitle", "thumbnail": "Thumbnail", "report": "Report", "publish_receipt": "Publishing receipt", "manifest": "Manifest", "project": "Project" },
+    "employees": { "title": "Employees", "active": "{count} active", "create": "Create custom employee", "namePlaceholder": "Employee name", "builtIn": "Built in", "custom": "Custom", "enable": "Enable employee", "disable": "Disable employee", "duplicate": "Duplicate employee", "details": "View and configure employee", "archive": "Archive employee" },
+    "employeeEditor": { "createTitle": "Create custom employee", "editTitle": "Employee settings", "subtitle": "Configure business responsibilities and policies without exposing implementation details", "template": "Employee template", "name": "Employee name", "color": "Identity color", "description": "Role description", "capabilities": "Allowed business capabilities", "plannerPolicy": "Planning policy", "reviewerPolicy": "Review policy", "defaultContext": "Default context", "contextHint": "Use a JSON object for project, quantity, budget, and other defaults. Secrets are excluded from run snapshots.", "contextObjectError": "Default context must be a JSON object", "builtInHint": "Built-in identities are fixed. Their capabilities and work policies can be adjusted." },
+    "hermes": { "sessions": "Hermes sessions", "untitled": "Untitled session", "noMessages": "No messages yet", "fullCapability": "Skills, memory, tools, subagents, and business workflows", "defaultModel": "Default model", "fork": "Fork session", "branch": "Session branch", "stop": "Stop", "repair": "Repair and restart", "diagnostics": "Runtime diagnostics", "runtimeHint": "Hermes is required for the home workspace.", "idleTitle": "What should your AI employees handle?", "idleSubtitle": "Ask a question or assign a complete workflow. Hermes can reason, use skills and memory, delegate work, and call approved VideoGenerate capabilities.", "sessionUnavailable": "The Hermes session could not be created.", "generationFailed": "Hermes could not complete this response.", "modelAuthenticationRequired": "Hermes is running, but its model authentication is invalid or missing. Open the model settings in this workspace to update it.", "modelSettings": { "title": "Model settings", "subtitle": "Configure Hermes inference without leaving VideoGenerate", "provider": "Provider", "customProvider": "Custom compatible endpoint", "endpoint": "Endpoint URL", "model": "Model", "apiKey": "API key", "authenticated": "Authentication configured", "authenticationRequired": "Authentication required", "localSecret": "Credentials stay in the local videogenerate Hermes profile.", "enterKey": "Enter API key", "keepExistingKey": "Leave blank to keep the current key", "keyRequired": "Enter an API key before saving this provider.", "oauthUnavailable": "This provider requires an interactive OAuth flow. Select an API key provider or a custom compatible endpoint in this version.", "save": "Save and apply", "saved": "Model settings saved and applied.", "test": "Test connection", "testing": "Testing", "testPassed": "Hermes completed the connection test.", "disconnect": "Disconnect", "disconnected": "Provider credentials removed." }, "reasoning": "Reasoning", "regenerate": "Regenerate response", "steerPlaceholder": "Guide the running employee without interrupting it", "steerHint": "This message guides the current run", "clarificationTitle": "More information is required", "approvalTitle": "Action approval required", "approvalDetail": "Review this action before Hermes continues.", "sudoTitle": "Administrator approval required", "sudoDetail": "Enter the administrator credential to continue.", "secretTitle": "Secret required", "secretDetail": "Enter the requested secret. It will not be stored in chat history.", "deny": "Deny", "allowOnce": "Allow once", "allowSession": "Allow this session", "respond": "Respond", "activity": "Live activity", "activityHint": "Tools, background work, and subagents", "toolRunning": "Tool running", "toolComplete": "Tool completed", "subagent": "Subagent activity", "backgroundComplete": "Background task completed", "statusUpdate": "Status update", "runtime": { "stopped": "Hermes is stopped", "starting": "Starting Hermes", "ready": "Hermes is ready", "error": "Hermes needs attention" } },
+    "sessionActions": { "manage": "Manage session", "rename": "Rename", "delete": "Delete", "renameTitle": "Rename session", "deleteTitle": "Delete session", "name": "Session name", "deleteConfirm": "This permanently deletes the session and its chat history. This action cannot be undone." },
+    "review": { "title": "Review result", "subtitle": "Deterministic acceptance and execution outcome", "passed": "All checks passed", "pending": "Waiting for execution and review", "needsAttention": "Manual attention required", "deterministic": "The system checks step status, artifact count, warnings, and failure reasons." },
+    "execution": { "status": "Run status", "duration": "Duration", "attempts": "Attempts", "artifacts": "Artifacts", "warnings": "Warnings", "cost": "Cost", "noCost": "No metered cost", "pendingDuration": "Not started", "seconds": "{count} sec", "minutes": "{count} min", "minutesSeconds": "{minutes} min {seconds} sec", "repairs": "{count} automatic repairs", "attemptCount": "{count} attempts", "attemptVersion": "Attempt {attempt}, capability version {version}", "approved": "Approved", "rejected": "Rejected", "approvalMeta": "Version {version} / {channel} / {time}" },
+    "recovery": { "action": "Ask Hermes to diagnose and recover", "hint": "Reconcile external task state before continuing or creating a new run.", "prompt": "Diagnose and safely recover business run #{shortId}, run ID {runId}. First use read-only capabilities to inspect the current run, execution attempts, artifacts, and external task state. Do not blindly resubmit publishing, generation, overwrite, or deletion operations. Reuse existing artifacts and external tasks whenever possible. If a new run or another side-effecting operation is required, explain why and request approval first." },
+    "employee": { "supervisor": "Supervisor", "material": "Material Specialist", "video": "Video Specialist", "package": "Packaging Specialist", "publish": "Publishing Specialist", "unknown": "AI Employee" },
+    "employeeDescription": { "supervisor": "Plans goals, coordinates specialists, and delivers results.", "material": "Inspects product data and prepares reusable materials.", "video": "Creates commerce videos and live photos from approved references.", "package": "Creates subtitles and prepares delivery artifacts.", "publish": "Submits publishing tasks to approved accounts." },
+    "intent": { "ProductInspect": "Inspect product data", "MaterialPrepare": "Prepare production materials", "CommerceVideoCreate": "Create commerce video", "LivePhotoCreate": "Create live photo", "SubtitleGenerate": "Create subtitle package", "VideoPublish": "Publish video", "ArtifactInspect": "Inspect existing results", "ArtifactExport": "Export deliverables" },
+    "status": { "draft": "Draft", "planning": "Planning", "waiting_approval": "Waiting for approval", "running": "Running", "paused": "Paused", "reviewing": "Reviewing", "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled", "pending": "Pending", "ready": "Ready", "blocked": "Blocked", "skipped": "Skipped" },
+    "event": { "run_planning": "Planning started", "run_waiting_approval": "Plan waiting for approval", "run_approved": "Run approved", "run_rejected": "Run rejected", "run_resumed": "Run resumed", "run_paused": "Run paused", "run_reviewing": "Review started", "run_completed": "Run completed", "run_failed": "Run failed", "run_cancelled": "Run cancelled", "run_recovery_blocked": "Run paused for recovery", "step_started": "Employee started a step", "step_reviewing": "Step review started", "step_completed": "Step completed", "step_failed": "Step failed", "artifact_created": "Artifact registered" }
+    ,"hermesTools": { "artifact_export": "Export artifacts", "artifact_list": "List artifacts", "clone_final_compose": "Compose clone final video", "clone_final_export": "Export clone final video", "clone_project_delete": "Delete clone project", "clone_project_list": "List clone projects", "clone_project_sync": "Sync clone project", "clone_project_update": "Update clone project", "clone_queue_pause": "Pause clone queue", "clone_queue_resume": "Resume clone queue", "clone_shot_download": "Download clone shot", "clone_shot_retry": "Retry clone shot", "clone_subtitle_generate": "Add clone subtitles", "clone_subtitle_revert": "Remove clone subtitles", "clone_template_convert": "Convert production template", "clone_template_save": "Save clone template", "listing_delete": "Delete listing", "listing_export": "Export listings", "listing_export_config_get": "Read listing export settings", "listing_export_config_save": "Save listing export settings", "listing_generate": "Generate listing", "listing_list": "List listings", "listing_save": "Save listing", "live_photo_create": "Create Live Photo", "live_photo_delete": "Delete Live Photos", "live_photo_export": "Export Live Photos", "live_photo_list": "List Live Photos", "live_photo_pause": "Pause Live Photos", "live_photo_resume": "Resume Live Photos", "live_photo_retry": "Retry Live Photos", "live_photo_subtitle_generate": "Add Live Photo titles", "live_photo_subtitle_revert": "Remove Live Photo titles", "material_batch_retry": "Retry material batch", "material_bind_product": "Bind material to product", "material_delete": "Delete materials", "material_export": "Export materials", "material_list": "List materials", "material_prepare": "Prepare materials", "material_usage_update": "Update material status", "material_variants_create": "Create material variants", "model_identity_assign": "Assign model identity", "model_identity_delete": "Delete model identity", "model_identity_generate": "Generate model identity", "model_identity_list": "List model identities", "model_identity_rename": "Rename model identity", "product_analyze": "Refresh product analysis", "product_delete": "Delete product", "product_inspect": "Inspect product", "product_list": "List products", "product_save": "Save product", "production_batch_create": "Create production batch", "production_queue_control": "Control production queue", "production_task_list": "List production tasks", "publisher_list": "List publishing accounts and tasks", "run_get": "Read run status", "source_video_delete": "Delete source video", "source_video_import": "Import source videos", "source_video_list": "List source videos", "source_video_retry": "Retry source video", "subtitle_generate": "Generate subtitle video", "template_delete": "Delete production template", "template_duplicate": "Duplicate production template", "template_list": "List production templates", "template_save": "Save production template", "tiktok_creative_create": "Create TikTok creative tasks", "tiktok_creative_delete": "Delete TikTok creative task", "tiktok_creative_list": "List TikTok creative tasks", "tiktok_creative_next_start": "Start next TikTok creative shot", "tiktok_creative_shot_complete": "Complete TikTok creative shot", "tiktok_creative_shot_fail": "Record TikTok creative failure", "tiktok_creative_shot_start": "Start TikTok creative shot", "video_clone": "Create commerce video", "video_publish": "Publish video", "workspace_catalog": "List application workspaces", "workspace_open": "Open application workspace" }
+    ,"hermesPublisherTools": { "publisher_account_delete": "Delete publishing account", "publisher_account_save": "Save publishing account", "publisher_candidate_list": "List publishing candidates", "publisher_cloud_phone_list": "List publishing cloud phones", "publisher_config_get": "Read publishing connection status", "publisher_music_delete": "Delete publishing music preset", "publisher_music_list": "List publishing music presets", "publisher_music_save": "Save publishing music preset", "publisher_task_get": "Read publishing task", "publisher_task_sync": "Synchronize publishing task", "video_slice": "Split long video" }
+    ,"hermesTaskTools": { "production_task_cancel": "Cancel production task", "production_task_remove": "Remove production task", "production_task_retry": "Retry production task" }
+    ,"hermesActivityActions": { "details": "View execution details", "input": "Input", "output": "Result", "changes": "File changes" }
+    ,"hermesMessageActions": { "copyMessage": "Copy message", "copyCode": "Copy code", "copied": "Copied", "openLink": "Open link in browser", "openAttachment": "Open attachment", "editMessage": "Edit message", "editingTitle": "Editing an earlier message", "editingHint": "Sending will replace this message and regenerate everything after it", "editingSubmitHint": "Send to replace this message and continue from here", "cancelEdit": "Cancel editing" }
+    ,"commandCatalog": { "search": "Search workflows, Hermes management, skills, and app capabilities", "managementGroup": "Hermes and application settings", "management": { "runtime": "Manage Hermes runtime and models", "skills": "Manage Hermes skills", "channels": "Manage messaging channels", "data": "Manage memory, backups, and diagnostics", "platforms": "Configure APIs and keys", "capabilities": "Configure default capabilities", "appearance": "Change application theme" }, "managementDescriptions": { "runtime": "Install, start, repair, and select the default Hermes model", "skills": "Search, install, update, enable, and audit skills", "channels": "Configure Feishu, WeCom, and Weixin connections", "data": "Inspect memory, create backups, and diagnose runtime issues", "platforms": "Manage connection details for video, image, and chat APIs", "capabilities": "Select default implementations for video, image, and chat", "appearance": "Choose dark, light, and automatic themes" }, "workspaces": { "models": { "label": "Model library", "description": "Manage model identities and reference assets" }, "products": { "label": "Product library", "description": "Manage products and product reference assets" }, "clone-projects": { "label": "Clone projects", "description": "Review and manage commerce video clone projects" }, "production": { "label": "Production center", "description": "Create batch tasks and review production status" }, "production-tasks": { "label": "Production tasks", "description": "Review progress, failures, and outputs" }, "templates": { "label": "Template library", "description": "Manage production, audio, visual, and subtitle templates" }, "live-slicer": { "label": "Long video slicer", "description": "Split and process long video sources" }, "plugins": { "label": "Plugin center", "description": "Browse installed and available application plugins" }, "live-photo": { "label": "Live Photo", "description": "Create, review, and export Live Photo outputs" }, "product-materials": { "label": "Product image materials", "description": "Prepare and manage reusable product materials" }, "tiktok-creative": { "label": "TikTok Creative Studio", "description": "Create TikTok creative video shots" }, "tiktok-listing": { "label": "TikTok listing helper", "description": "Generate and export product listing content" }, "video-downloads": { "label": "Video downloads", "description": "Download and manage source videos" }, "video-subtitles": { "label": "Video subtitles", "description": "Generate, review, and package video subtitles" }, "publisher": { "label": "Publishing accounts", "description": "Manage publishing accounts and entry points" }, "publish-center": { "label": "Publish center", "description": "Prepare and submit approved publishing jobs" }, "settings": { "label": "All settings", "description": "Manage themes, APIs, Hermes, and storage" } } }
+    ,"commandCenter": { "title": "Command center", "search": "Search workflows, skills, and application pages", "loadingSkills": "Loading installed Hermes skills", "empty": "No matching commands", "navigate": "Navigate", "select": "Select", "skillDescription": "Installed Hermes skill", "skillPrompt": "Use the {name} skill for this task: ", "groups": { "workflow": "Workflows", "skill": "Hermes skills", "workspace": "Application pages" }, "commands": { "video": "Create commerce videos", "material": "Prepare product materials", "livePhoto": "Create Live Photos", "subtitle": "Generate subtitles", "publish": "Publish approved videos", "production": "Check production status", "research": "Research on the web", "delegate": "Delegate a complex task", "products": "Open product library", "clone": "Open clone projects", "productionCenter": "Open production center", "settings": "Open settings" }, "descriptions": { "video": "Plan and create product video outputs", "material": "Inspect products and prepare reusable visual materials", "livePhoto": "Create motion outputs from product references", "subtitle": "Generate and package subtitles for local videos", "publish": "Prepare an approved publishing workflow", "production": "Summarize active, failed, and completed production tasks", "research": "Use the connected browser to gather and compare current information", "delegate": "Split a complex request across Hermes subagents", "products": "Browse products and reference assets", "clone": "Review and manage commerce video projects", "productionCenter": "Open production tasks and results", "settings": "Manage Hermes, models, skills, channels, and themes" }, "prompts": { "livePhoto": "Create Live Photos from the selected product references. Confirm quantity and motion requirements before execution.", "subtitle": "Generate subtitles for the attached or selected videos, review timing, and prepare exportable results.", "production": "Review the current production queue and summarize active tasks, failures, blockers, and completed outputs.", "research": "Research this topic using the connected browser. Compare reliable sources and provide citations: ", "delegate": "Break this task into parallel subtasks, delegate where useful, review the results, and return one consolidated answer: " } }
+    ,"hermesModelActions": { "useApplicationModel": "Use current app model", "applicationModelApplied": "The verified application model is now active in Hermes.", "fixNow": "Fix now" }
   }
 }

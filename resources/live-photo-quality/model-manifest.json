@@ -1,5 +1,5 @@
 {
-  "version": "live-photo-quality-v6",
+  "version": "live-photo-quality-v8",
   "models": {
     "clip": {
       "file": "clip-image-encoder.onnx",

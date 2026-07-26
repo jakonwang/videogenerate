@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import { materializeManagedAsset, materializeManagedAssets } from '../managed-assets/service'
 import type { TiktokListingExportCategoryConfig, TiktokListingItem } from './types'
 
 type DbShape = {
@@ -14,6 +15,11 @@ function normalizeReferenceImagePaths(sourceImagePath: string, referenceImagePat
     .map((item) => String(item || '').trim())
     .filter(Boolean)
   return Array.from(new Set(ordered))
+}
+
+function remapSourceReferencePaths(originalSourcePath: string, managedSourcePath: string, referenceImagePaths?: string[]) {
+  return normalizeReferenceImagePaths(originalSourcePath, referenceImagePaths)
+    .map((item) => item === originalSourcePath ? managedSourcePath : item)
 }
 
 function normalizeItem(item: TiktokListingItem): TiktokListingItem {
@@ -63,10 +69,26 @@ export const tiktokListingRepo = {
       const idx = db.items.findIndex((item) => item.id === payload.id)
       if (idx >= 0) {
         const prev = db.items[idx]
+        const ownerId = String(payload.id)
+        const sourceImagePath = await materializeManagedAsset({
+          sourcePath: payload.sourceImagePath,
+          module: 'tiktok-listing',
+          ownerId,
+          assetId: 'source-image',
+        })
+        const referenceImages = await materializeManagedAssets(
+          remapSourceReferencePaths(
+            payload.sourceImagePath,
+            sourceImagePath,
+            payload.referenceImagePaths ?? prev.referenceImagePaths,
+          ),
+          { module: 'tiktok-listing', ownerId, assetPrefix: 'reference-image' },
+        )
         const next: TiktokListingItem = {
           ...prev,
           ...payload,
-          referenceImagePaths: normalizeReferenceImagePaths(payload.sourceImagePath, payload.referenceImagePaths ?? prev.referenceImagePaths),
+          sourceImagePath,
+          referenceImagePaths: referenceImages.paths,
           analysisBoardImage: payload.analysisBoardImage ?? prev.analysisBoardImage,
           listingImages: payload.listingImages ?? prev.listingImages ?? [],
           updatedAt: ts,
@@ -77,10 +99,21 @@ export const tiktokListingRepo = {
       }
     }
 
+    const id = randomUUID()
+    const sourceImagePath = await materializeManagedAsset({
+      sourcePath: payload.sourceImagePath,
+      module: 'tiktok-listing',
+      ownerId: id,
+      assetId: 'source-image',
+    })
+    const referenceImages = await materializeManagedAssets(
+      remapSourceReferencePaths(payload.sourceImagePath, sourceImagePath, payload.referenceImagePaths),
+      { module: 'tiktok-listing', ownerId: id, assetPrefix: 'reference-image' },
+    )
     const created: TiktokListingItem = {
-      id: randomUUID(),
-      sourceImagePath: payload.sourceImagePath,
-      referenceImagePaths: normalizeReferenceImagePaths(payload.sourceImagePath, payload.referenceImagePaths),
+      id,
+      sourceImagePath,
+      referenceImagePaths: referenceImages.paths,
       category: payload.category,
       sku: payload.sku,
       localDisplayPrice: payload.localDisplayPrice,
@@ -105,6 +138,34 @@ export const tiktokListingRepo = {
     db.items = db.items.filter((item) => item.id !== id)
     await writeJsonFile(dbPath(), db)
     return { ok: true as const }
+  },
+
+  async migrateExternalAssets(): Promise<{ migrated: number }> {
+    const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
+    let migrated = 0
+    for (let index = 0; index < db.items.length; index += 1) {
+      const current = normalizeItem(db.items[index])
+      const sourceImagePath = await materializeManagedAsset({
+        sourcePath: current.sourceImagePath,
+        module: 'tiktok-listing',
+        ownerId: current.id,
+        assetId: 'source-image',
+      })
+      const referenceImages = await materializeManagedAssets(
+        remapSourceReferencePaths(current.sourceImagePath, sourceImagePath, current.referenceImagePaths),
+        { module: 'tiktok-listing', ownerId: current.id, assetPrefix: 'reference-image' },
+      )
+      const next = normalizeItem({
+        ...current,
+        sourceImagePath,
+        referenceImagePaths: referenceImages.paths,
+      })
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      db.items[index] = next
+      migrated += 1
+    }
+    if (migrated) await writeJsonFile(dbPath(), db)
+    return { migrated }
   },
 
   async getExportCategoryConfigs(): Promise<TiktokListingExportCategoryConfig[]> {

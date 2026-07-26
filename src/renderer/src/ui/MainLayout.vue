@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -19,6 +19,7 @@ import DsMainLayout from '../design-system/layout/MainLayout.vue'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { useDesignInspectorStore } from '@/stores/designInspector'
 import { useWebSessionStore } from '@/stores/webSession'
+import type { HermesWorkspaceAction } from '../../../shared/hermesWorkspace'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,8 +33,8 @@ const { visible: cloneTopbarVisible, items: cloneTopbarItems } = storeToRefs(clo
 const { enabled: designInspectorEnabled } = storeToRefs(designInspector)
 const showDesignInspectorToggle = computed(() => import.meta.env.DEV)
 const showCloneWorkflowTopbar = computed(() => route.path.includes('/clone/') && cloneTopbarVisible.value && cloneTopbarItems.value.length > 0)
-const topUserName = computed(() => 'Creator')
-const topUserPlan = computed(() => 'Desktop')
+const topUserName = computed(() => 'Key Access')
+const topUserPlan = computed(() => 'Local Mode')
 const topWalletBalance = computed(() => 0)
 const sidebarPlanLabel = computed(() => 'Desktop Workspace')
 const sidebarPlanDesc = computed(() => 'No login required')
@@ -41,6 +42,7 @@ const topStatusText = computed(() => 'Local workspace mode')
 const topGpuStatusText = computed(() => 'Standby')
 const topApiStatusText = computed(() => 'Disconnected')
 const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPlan.value}`)
+let unsubscribeHermesWorkspaceActions: (() => void) | null = null
 
 const navItems = computed(() => [
   { to: '/home', icon: House, label: '首页', active: route.path.includes('/home') },
@@ -110,6 +112,27 @@ function onTopMenuClick(key: string) {
 function requestCloneStage(key: string) {
   cloneTopbar.requestStage(key)
 }
+
+async function handleHermesWorkspaceAction(action: HermesWorkspaceAction) {
+  const routeName = String(action?.route?.name || '').trim()
+  if (!routeName) return
+  await router.push({
+    name: routeName,
+    ...(action.route.params ? { params: action.route.params } : {}),
+    ...(action.route.query ? { query: action.route.query } : {}),
+  }).catch(() => undefined)
+}
+
+onMounted(() => {
+  unsubscribeHermesWorkspaceActions = window.api.hermes.subscribeWorkspaceActions((action) => {
+    void handleHermesWorkspaceAction(action)
+  })
+})
+
+onUnmounted(() => {
+  unsubscribeHermesWorkspaceActions?.()
+  unsubscribeHermesWorkspaceActions = null
+})
 </script>
 
 <template>
@@ -211,8 +234,11 @@ function requestCloneStage(key: string) {
 
 <style scoped>
 .app-shell {
+  --app-titlebar-height: 62px;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
   background:
     radial-gradient(circle at 20% 0, rgba(111, 88, 255, 0.12), transparent 24%),
     linear-gradient(180deg, #070d18 0%, #09111c 100%);
@@ -226,7 +252,7 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-shell) {
-  grid-template-columns: 248px minmax(0, 1fr) !important;
+  grid-template-columns: 184px minmax(0, 1fr) !important;
   background: transparent;
 }
 
@@ -241,11 +267,11 @@ function requestCloneStage(key: string) {
   z-index: 30 !important;
   pointer-events: auto !important;
   height: 100% !important;
-  width: 248px !important;
-  min-width: 248px !important;
+  width: 184px !important;
+  min-width: 184px !important;
   min-height: 0 !important;
-  padding: 10px 12px !important;
-  gap: 10px !important;
+  padding: 12px 10px 10px !important;
+  gap: 8px !important;
   align-items: stretch !important;
   overflow: hidden !important;
   border-right: 1px solid rgba(148, 163, 184, 0.08) !important;
@@ -258,7 +284,7 @@ function requestCloneStage(key: string) {
   flex: 1 1 0 !important;
   min-height: 0 !important;
   width: 100% !important;
-  gap: 6px !important;
+  gap: 4px !important;
   justify-content: stretch !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
@@ -268,14 +294,14 @@ function requestCloneStage(key: string) {
 .app-shell :deep(.ds-sidebar__section) {
   display: grid !important;
   gap: 6px !important;
-  margin-top: 6px !important;
-  padding-top: 8px !important;
+  margin-top: 8px !important;
+  padding-top: 10px !important;
   border-top: 1px solid rgba(148, 163, 184, 0.08) !important;
 }
 
 .app-shell :deep(.ds-sidebar__section-title) {
   display: block !important;
-  padding: 0 6px !important;
+  padding: 0 10px 2px !important;
   color: rgba(241, 245, 249, 0.94) !important;
   font-size: 12px !important;
   font-weight: 700 !important;
@@ -293,11 +319,11 @@ function requestCloneStage(key: string) {
   pointer-events: auto !important;
   display: flex !important;
   width: 100% !important;
-  min-height: 40px !important;
+  min-height: 42px !important;
   justify-content: flex-start !important;
   gap: 10px !important;
   padding: 0 12px !important;
-  border-radius: 12px !important;
+  border-radius: 10px !important;
   border: 1px solid transparent !important;
   background: transparent !important;
   color: #e1e7f4 !important;
@@ -307,7 +333,7 @@ function requestCloneStage(key: string) {
 }
 
 .app-shell :deep(.ds-sidebar__item--sub) {
-  min-height: 36px !important;
+  min-height: 40px !important;
   padding: 0 12px !important;
   border-radius: 10px !important;
   background: rgba(255, 255, 255, 0.02) !important;
@@ -327,10 +353,22 @@ function requestCloneStage(key: string) {
 
 .app-shell :deep(.ds-sidebar__item.is-active) {
   background:
-    linear-gradient(135deg, rgba(108, 85, 255, 0.96), rgba(92, 70, 238, 0.92)) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+    linear-gradient(90deg, rgba(76, 57, 142, 0.82), rgba(82, 61, 143, 0.7)) !important;
+  border-color: rgba(139, 92, 246, 0.16) !important;
   color: #ffffff !important;
-  box-shadow: 0 10px 20px rgba(109, 93, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.app-shell :deep(.ds-sidebar__item.is-active::before) {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #2dd4bf;
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.42);
 }
 
 .app-shell :deep(.ds-sidebar__item svg) {
@@ -363,9 +401,9 @@ function requestCloneStage(key: string) {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 14px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.1);
   background: rgba(13, 23, 41, 0.28);
   color: #e2e8f0;
@@ -379,8 +417,9 @@ function requestCloneStage(key: string) {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 12px;
-  border-radius: 14px;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.1);
   background: rgba(13, 23, 41, 0.28);
   box-shadow: none;
@@ -390,8 +429,8 @@ function requestCloneStage(key: string) {
 .app-avatar {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
   background: linear-gradient(135deg, #6d5dff, #8b5cf6);
   color: #fff;

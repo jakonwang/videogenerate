@@ -590,7 +590,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="listing-page">
+  <div class="listing-page plugin-workspace-standard">
     <section class="listing-shell">
       <div class="page-top">
         <div class="crumb-row">

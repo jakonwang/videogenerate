@@ -5,6 +5,7 @@ import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { defaultPluginRecord } from './plugins'
 import { buildDefaultPlans, buildDefaultWebUser } from './repoRuntime'
+import { materializeManagedAsset } from '../managed-assets/service'
 import {
   canInitializeWebPlatformSqlite,
   getWebPlatformSqliteUnavailableReason,
@@ -33,6 +34,29 @@ const webPlatformDbPath = () => join(getAppPaths().dbDir, 'web-platform.json')
 
 function now() {
   return Date.now()
+}
+
+async function materializeBatchSubtitleJobAssets(input: BatchSubtitleJob): Promise<BatchSubtitleJob> {
+  return {
+    ...input,
+    sourceItems: await Promise.all(
+      input.sourceItems.map(async (item) => ({
+        ...item,
+        sourceVideoPath: await materializeManagedAsset({
+          sourcePath: item.sourceVideoPath,
+          module: 'subtitle',
+          ownerId: input.id,
+          assetId: `${item.id}-video`,
+        }),
+        coverImagePath: await materializeManagedAsset({
+          sourcePath: item.coverImagePath,
+          module: 'subtitle',
+          ownerId: input.id,
+          assetId: `${item.id}-cover`,
+        }),
+      })),
+    ),
+  }
 }
 
 let sqliteFallbackLogged = false
@@ -377,7 +401,7 @@ export const webPlatformRepo = {
     const list = Array.isArray(db.batchSubtitleJobs) ? db.batchSubtitleJobs : []
     const idx = list.findIndex((item) => item.userId === input.userId && item.id === input.id)
     const next: BatchSubtitleJob = {
-      ...input,
+      ...(await materializeBatchSubtitleJobAssets(input)),
       updatedAt: now(),
     }
     if (idx >= 0) list[idx] = next
@@ -385,6 +409,24 @@ export const webPlatformRepo = {
     db.batchSubtitleJobs = list
     await this.writeDb(db)
     return next
+  },
+
+  async migrateBatchSubtitleExternalAssets(): Promise<{ migrated: number }> {
+    const db = (await this.readDb()) as WebPlatformDb & { batchSubtitleJobs?: BatchSubtitleJob[] }
+    const list = Array.isArray(db.batchSubtitleJobs) ? db.batchSubtitleJobs : []
+    let migrated = 0
+    for (let index = 0; index < list.length; index += 1) {
+      const current = list[index]
+      const next = await materializeBatchSubtitleJobAssets(current)
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      list[index] = next
+      migrated += 1
+    }
+    if (migrated) {
+      db.batchSubtitleJobs = list
+      await this.writeDb(db)
+    }
+    return { migrated }
   },
 }
 

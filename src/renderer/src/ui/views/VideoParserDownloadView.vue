@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Check,
+  ChevronLeft,
   Download,
   FolderOpen,
   KeyRound,
@@ -41,6 +42,7 @@ const copy = {
   failed: '失败',
   inputTab: '输入链接',
   libraryTab: '已下载视频',
+  back: '返回',
   refresh: '刷新',
   linksTitle: '批量导入分享链接',
   linksHint: '每行一条 TikTok 分享链接，系统会逐条解析、下载并自动去重。',
@@ -92,9 +94,6 @@ const previewTitle = ref('')
 const brokenPosterIds = ref<string[]>([])
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
-const completedItems = computed(() => items.value.filter((item) => item.status === 'completed'))
-const failedItems = computed(() => items.value.filter((item) => item.status === 'failed'))
-const usedItems = computed(() => items.value.filter((item) => item.usedStatus === 'used'))
 const lines = computed(() => Array.from(new Set(shareInput.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))))
 
 function mediaUrl(filePath?: string) {
@@ -260,39 +259,45 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="vpd-page">
-    <header class="vpd-hero">
-      <div class="vpd-hero__content">
-        <div class="vpd-hero__eyebrow">
-          <div class="vpd-hero__eyebrow-icon">
-            <Download class="icon icon--small" />
-          </div>
-          <span>{{ copy.kicker }}</span>
+  <div class="vpd-page plugin-workspace-standard">
+    <section class="vpd-workspace-head">
+      <div class="vpd-workspace-intro">
+        <div class="vpd-workspace-icon">
+          <Download class="icon" />
         </div>
-        <h1>{{ copy.title }}</h1>
-        <p>{{ copy.subtitle }}</p>
+        <div class="vpd-workspace-copy">
+          <h1>{{ copy.kicker }}</h1>
+          <p>{{ copy.subtitle }}</p>
+        </div>
+        <div class="vpd-workspace-actions">
+          <button class="vpd-ghost-button" type="button" @click="router.push('/plugins?tab=installed&plugin=video-parser-download')">
+            <ChevronLeft class="icon" />
+            {{ copy.back }}
+          </button>
+          <button class="vpd-ghost-button" type="button" :disabled="loading" @click="loadAll">
+            <RefreshCcw class="icon" :class="{ spin: loading }" />
+            {{ copy.refresh }}
+          </button>
+        </div>
       </div>
 
-      <div class="vpd-hero__stats">
-        <article class="vpd-stat">
-          <strong>{{ completedItems.length }}</strong>
-          <span>{{ copy.completed }}</span>
-        </article>
-        <article class="vpd-stat">
-          <strong>{{ usedItems.length }}</strong>
-          <span>{{ copy.used }}</span>
-        </article>
-        <article class="vpd-stat">
-          <strong>{{ failedItems.length }}</strong>
-          <span>{{ copy.failed }}</span>
-        </article>
-      </div>
-    </header>
+      <section class="vpd-tabs vpd-workspace-tabs">
+        <button class="vpd-tab-button" :class="{ active: activeTab === 'input' }" type="button" @click="activeTab = 'input'">
+          <Link2 class="icon icon--small" />
+          <span>{{ copy.inputTab }}</span>
+        </button>
+        <button class="vpd-tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
+          <Video class="icon icon--small" />
+          <span>{{ copy.libraryTab }}</span>
+          <span class="vpd-tab-badge">{{ items.length }}</span>
+        </button>
+      </section>
+    </section>
 
     <div v-if="notice" class="vpd-notice vpd-notice--success">{{ notice }}</div>
     <div v-if="errorText" class="vpd-notice vpd-notice--danger">{{ errorText }}</div>
 
-    <section v-if="!hasTikHubKey" class="vpd-empty">
+    <section v-if="!hasTikHubKey" class="vpd-empty vpd-content-scroll">
       <div class="vpd-empty__icon">
         <KeyRound class="icon" />
       </div>
@@ -306,26 +311,7 @@ onUnmounted(() => {
       </button>
     </section>
 
-    <section v-else class="vpd-workspace">
-      <div class="vpd-workspace__head">
-        <div class="vpd-tabs">
-          <button class="vpd-tab-button" :class="{ active: activeTab === 'input' }" type="button" @click="activeTab = 'input'">
-            <Link2 class="icon icon--small" />
-            <span>{{ copy.inputTab }}</span>
-          </button>
-          <button class="vpd-tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
-            <Video class="icon icon--small" />
-            <span>{{ copy.libraryTab }}</span>
-            <span class="vpd-tab-badge">{{ items.length }}</span>
-          </button>
-        </div>
-
-        <button class="vpd-ghost-button" type="button" @click="loadAll">
-          <RefreshCcw class="icon" :class="{ spin: loading }" />
-          {{ copy.refresh }}
-        </button>
-      </div>
-
+    <section v-else class="vpd-workspace vpd-content-scroll">
       <section v-if="activeTab === 'input'" class="vpd-input-grid">
         <section class="vpd-panel vpd-panel--main">
           <div class="vpd-section-head">

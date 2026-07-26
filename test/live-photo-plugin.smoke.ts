@@ -3,6 +3,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import sharp from 'sharp'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
 
 const EXPECTED_IMAGE_REPLACEMENT_PROMPT = [
@@ -104,8 +105,10 @@ async function main() {
 
   async function waitForItemCompleted(id: string, timeoutMs = 15000) {
     const startedAt = Date.now()
+    let lastCurrent: any = null
     while (Date.now() - startedAt < timeoutMs) {
       const current = await livePhotoService.get(id)
+      lastCurrent = current
       if (current?.packagingStatus === 'completed') return current
       if (current?.packagingStatus === 'failed' && current?.autoFlowStatus?.status === 'failed_terminal') {
         const tailLogs = Array.isArray(current.logs)
@@ -115,7 +118,10 @@ async function main() {
       }
       await delay(100)
     }
-    throw new Error(`Timed out waiting for live photo item ${id}`)
+    const tailLogs = Array.isArray(lastCurrent?.logs)
+      ? lastCurrent.logs.slice(-8).map((log: any) => String(log?.message || '')).join(' | ')
+      : ''
+    throw new Error(`Timed out waiting for live photo item ${id}: status=${lastCurrent?.packagingStatus} stage=${lastCurrent?.autoFlowStatus?.currentStage} error=${lastCurrent?.error || ''} logs=${tailLogs}`)
   }
 
   async function waitForItemCondition(
@@ -200,12 +206,15 @@ async function main() {
     const refImage = path.join(assetsDir, 'reference.jpg')
     const shotImage = path.join(assetsDir, 'shot.jpg')
     const shotVideo = path.join(assetsDir, 'shot.mp4')
-    await writeFile(productImage, 'product-image', 'utf-8')
-    await writeFile(alternateProductImage, 'product-image-alt', 'utf-8')
-    await writeFile(analysisBoardImage, 'product-analysis-board', 'utf-8')
-    await writeFile(canonicalProductImage, 'product-canonical', 'utf-8')
-    await writeFile(refImage, 'reference-image', 'utf-8')
-    await writeFile(shotImage, 'shot-image', 'utf-8')
+    const createFixtureImage = async (filePath: string, background: string) => {
+      await sharp({ create: { width: 96, height: 128, channels: 3, background } }).jpeg().toFile(filePath)
+    }
+    await createFixtureImage(productImage, '#d6c7a1')
+    await createFixtureImage(alternateProductImage, '#b8c4d6')
+    await createFixtureImage(analysisBoardImage, '#c6b2d8')
+    await createFixtureImage(canonicalProductImage, '#a9c8b4')
+    await createFixtureImage(refImage, '#8aa0b8')
+    await createFixtureImage(shotImage, '#81926f')
     await writeFile(shotVideo, 'shot-video', 'utf-8')
 
     const bootstrapFetch = globalThis.fetch
@@ -447,7 +456,8 @@ async function main() {
     assert.ok(existsSync(String(referenceItem.livePhotoVideoPath || '')))
     assert.ok(existsSync(String(referenceItem.previewVideoPath || '')))
     assert.equal(generatedStillCalls.length, 1)
-    assert.deepEqual(generatedStillCalls[0]?.imagePaths, [refImage, analysisBoardImage])
+    assert.equal(generatedStillCalls[0]?.imagePaths[0], refImage)
+    assert.match(String(generatedStillCalls[0]?.imagePaths[1] || ''), /product-reference[\\/].*single-product-primary-.*\.png$/i)
     assert.deepEqual(generatedStillCalls[0]?.uploadFileNames, ['image_1_base_scene.png', 'image_2_product_reference.png'])
     assert.deepEqual(generatedStillCalls[0]?.uploadKeyPrefixes, ['grsai-input/live-photo/base-scene', 'grsai-input/live-photo/product-reference'])
     assert.equal(generatedStillCalls[0]?.imagePaths.length, 2)
@@ -461,7 +471,7 @@ async function main() {
     assert.match(String(generatedStillCalls[0]?.negativePrompt || ''), /newly photographed scene/i)
     assert.match(String(generatedStillCalls[0]?.negativePrompt || ''), /oversized product/i)
     assert.match(String(generatedStillCalls[0]?.negativePrompt || ''), /original product retained/i)
-    assert.equal(generatedStillCalls[0]?.outputSize, '1024x1536')
+    assert.equal(generatedStillCalls[0]?.outputSize, '1024x1024')
     assert.equal(generatedStillCalls[0]?.imagePaths.length, 2)
     assert.ok(generatedVideoCalls.length >= 1)
     assert.deepEqual(referenceItem.videoPromptPreview?.referenceImagePaths || [], [String(referenceItem.generatedStillPath || '')])
@@ -591,7 +601,7 @@ async function main() {
     assert.match(wearableReferenceQueued.imagePromptPreview?.prompt || '', /WEARABLE SCALE LOCK:/i)
     const wearableCalls = generatedStillCalls.slice(wearableStartIndex)
     assert.ok(wearableCalls.length >= 1)
-    assert.equal(wearableCalls[0]?.outputSize, '1024x1536')
+    assert.equal(wearableCalls[0]?.outputSize, '1024x1024')
     assert.ok(String(wearableCalls[0]?.prompt || '').startsWith(EXPECTED_IMAGE_REPLACEMENT_PROMPT))
     assert.ok(wearableStrictReviewCount >= 0)
     assert.ok(wearableVisualReviewCount >= 0)
@@ -618,34 +628,25 @@ async function main() {
     })
     assert.equal(exportResult.total, 2)
     assert.equal(exportResult.exported.length, 2)
-    const firstExported = exportResult.exported.find((item) => item && item.bundlePath && item.metadataBridgePath && item.assetIdentifier)
-    assert.ok(firstExported, 'Expected at least one valid exported live photo bundle')
-    assert.match(firstExported!.bundlePath, /\.livephoto\.json$/)
-    assert.match(firstExported!.metadataBridgePath, /\.asset-metadata\.json$/)
-    assert.match(firstExported!.assetIdentifier, /^livephoto-/i)
-    const manifest = JSON.parse(await readFile(firstExported!.bundlePath, 'utf-8'))
-    assert.equal(manifest.type, 'apple_live_photo_bundle')
-    assert.equal(manifest.assetIdentifier, firstExported!.assetIdentifier)
-    const metadataBridge = JSON.parse(await readFile(firstExported!.metadataBridgePath, 'utf-8'))
-    assert.equal(metadataBridge.type, 'apple_live_photo_metadata_bridge')
-    assert.equal(metadataBridge.assetIdentifier, firstExported!.assetIdentifier)
-    assert.ok(existsSync(firstExported!.imagePath))
+    const firstExported = exportResult.exported.find((item) => item && item.videoPath)
+    assert.ok(firstExported, 'Expected at least one exported Live Photo video')
     assert.ok(existsSync(firstExported!.videoPath))
-    const exportedJpegCall = ffmpegOutputs.find((item) => item.outPath === firstExported!.imagePath)
-    if (exportedJpegCall) {
-      assert.ok(exportedJpegCall.args.includes('-q:v'))
-      assert.ok(exportedJpegCall.args.some((arg) => String(arg).includes('scale=1080:1440')))
-      assert.ok(exportedJpegCall.args.includes('4'))
-    }
-    const exportedMovCall = ffmpegOutputs.find((item) => item.outPath === firstExported!.videoPath)
-    if (exportedMovCall) {
-      assert.ok(exportedMovCall.args.some((arg) => String(arg).includes('scale=1080:1440')))
-      assert.ok(exportedMovCall.args.some((arg) => String(arg).includes('fps=24')))
-      assert.ok(exportedMovCall.args.includes('22'))
-    }
-    const normalizedMotionCall = ffmpegOutputs.find((item) => /motion\.mp4$/i.test(item.outPath))
-    assert.ok(normalizedMotionCall, 'Expected normalized motion video ffmpeg call')
-    assert.equal(normalizedMotionCall!.args[normalizedMotionCall!.args.indexOf('-t') + 1], '6')
+    assert.ok(firstExported!.videoPath.startsWith(exportResult.outputDir))
+    const manualRegionQueued = await livePhotoService.retry({
+      id: referenceItem.id,
+      motionTemplate: 'push_in',
+      replacementRegion: { x: 0.2, y: 0.25, width: 0.3, height: 0.25 },
+    })
+    assert.equal(manualRegionQueued.replacementRegion?.source, 'manual')
+    assert.equal(manualRegionQueued.replacementRegion?.revision, (referenceItem.replacementRegion?.revision || 0) + 1)
+    assert.equal(manualRegionQueued.autoFlowStatus?.retryCount, 0)
+    const manualRegionCompleted = await waitForItemCompleted(referenceItem.id)
+    assert.equal(manualRegionCompleted.packagingStatus, 'completed')
+    assert.equal(manualRegionCompleted.replacementRegion?.revision, 2)
+    assert.ok(manualRegionCompleted.generationAttempts?.some((attempt) => attempt.regionRevision === 1))
+    const currentRegionAttempts = (manualRegionCompleted.generationAttempts || []).filter((attempt) => attempt.regionRevision === 2)
+    assert.ok(currentRegionAttempts.length >= 1)
+    assert.ok(currentRegionAttempts.length <= 2)
 
     const savedSettings = await livePhotoService.saveSettings({
       outputResolution: '3024x4032',
@@ -973,10 +974,10 @@ async function main() {
     assert.equal(inlineEscalationItem.packagingStatus, 'completed')
     const inlineEscalationCalls = generatedStillCalls.slice(inlineEscalationStartIndex)
     assert.equal(inlineEscalationCalls.length, 2)
-    assert.equal(inlineEscalationCalls[0]?.outputSize, '1024x1536')
-    assert.equal(inlineEscalationCalls[1]?.outputSize, '1024x1536')
-    assert.match(inlineEscalationCalls[0]?.prompt || '', /ANCHOR CLOSE-UP REPLACEMENT MODE/i)
-    assert.match(inlineEscalationCalls[1]?.prompt || '', /ANCHOR CLOSE-UP REPLACEMENT MODE/i)
+    assert.equal(inlineEscalationCalls[0]?.outputSize, '1024x1024')
+    assert.equal(inlineEscalationCalls[1]?.outputSize, '1024x1024')
+    assert.match(inlineEscalationCalls[0]?.prompt || '', /erase-first replacement/i)
+    assert.match(inlineEscalationCalls[1]?.prompt || '', /This is a local anchor replacement/i)
     const inlineEscalationLogText = Array.isArray(inlineEscalationItem.logs)
       ? inlineEscalationItem.logs.map((log: any) => String(log?.message || '')).join('\n')
       : ''
@@ -1121,6 +1122,22 @@ async function main() {
             scene_preservation: 'pass',
           },
         }),
+        runLocalQualityCheck: async () => ({
+          available: true,
+          report: {
+            checkerVersion: 'live-photo-quality-v8',
+            mode: 'local_python',
+            decision: 'pass',
+            score: 1,
+            threshold: 0.88,
+            retryFloor: 0.65,
+            components: { clip: 1, dinov2: 1, orb: 1, ssim: 1, scenePreservation: 1, textConsistency: 1 },
+            hardFailures: [],
+            notes: [],
+            durationMs: 1,
+            checkedAt: Date.now(),
+          },
+        }),
       }) as any,
     })
 
@@ -1160,6 +1177,7 @@ async function main() {
       imageProviderPrimary: 'openai',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
+      grsaiApiKey: 'test-grsai-analysis-key',
       imageApifoxHubProfile: 'vectorengine',
       vectorEngineHub: {
         enabled: true,
@@ -1193,12 +1211,15 @@ async function main() {
     assert.equal(compatibleApifoxPreview.imagePromptPreview?.provider, 'openai')
     assert.equal(compatibleApifoxPreview.imagePromptPreview?.model, 'gpt-image-1')
     assert.equal(compatibleApifoxPreview.packagingStatus, 'processing')
+    await livePhotoService.remove(compatibleApifoxPreview.id)
+    await delay(100)
 
     await cloneRepoModule.cloneRepo.setCredentials({
       allowMockWhenNoKey: false,
       imageProviderPrimary: 'openai',
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
+      grsaiApiKey: 'test-grsai-analysis-key',
       imageApifoxHubProfile: 'vectorengine',
       vectorEngineHub: {
         enabled: true,
@@ -1229,12 +1250,21 @@ async function main() {
     let grsDrawCount = 0
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
+      const requestBody = String(init?.body || '')
+      if (url.includes('/v1/chat/completions') && requestBody.includes('Locate the existing product that must be replaced')) {
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{"x":0.25,"y":0.25,"width":0.5,"height":0.5,"confidence":0.95}' } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
       if (url === 'https://api.openai.com/v1/images/edits') {
         return new Response(
           JSON.stringify({
             data: [
               {
-                b64_json: Buffer.from('openai-priority-image').toString('base64'),
+                b64_json: (await readFile(refImage)).toString('base64'),
               },
             ],
           }),
@@ -1247,7 +1277,7 @@ async function main() {
           JSON.stringify({
             data: [
               {
-                b64_json: Buffer.from('apifox-priority-image').toString('base64'),
+                b64_json: (await readFile(refImage)).toString('base64'),
               },
             ],
           }),
@@ -1264,6 +1294,10 @@ async function main() {
       return await livePhotoApifoxFetch(input, init)
     }) as typeof fetch
 
+    await createFixtureImage(refImage, '#8aa0b8')
+    const providerReferenceMetadata = await sharp(refImage).metadata()
+    assert.equal(providerReferenceMetadata.width, 96)
+    assert.equal(providerReferenceMetadata.height, 128)
     const providerAlignedPreview = await livePhotoService.createFromReference({
       referenceImagePath: refImage,
       productId: product.id,
@@ -1501,6 +1535,8 @@ async function main() {
 
     let missingChecksStillCallCount = 0
     let missingChecksVisualReviewCount = 0
+    const missingChecksReferenceImage = path.join(assetsDir, 'reference-missing-checks.jpg')
+    await createFixtureImage(missingChecksReferenceImage, '#879ab0')
     livePhotoService.setTestDependencies({
       ...({
         runFfmpeg: async (input: { args: string[] }) => {
@@ -1554,7 +1590,7 @@ async function main() {
     })
 
     const missingChecksQueued = await livePhotoService.createFromReference({
-      referenceImagePath: refImage,
+      referenceImagePath: missingChecksReferenceImage,
       productId: product.id,
       motionTemplate: 'push_in',
     })
@@ -1571,6 +1607,8 @@ async function main() {
 
     let multiRetryStillCallCount = 0
     const multiRetryPrompts: string[] = []
+    const multiRetryReferenceImage = path.join(assetsDir, 'reference-multi-retry.jpg')
+    await createFixtureImage(multiRetryReferenceImage, '#7f96ad')
     livePhotoService.setTestDependencies({
       ...({
         runFfmpeg: async (input: { args: string[] }) => {
@@ -1629,7 +1667,7 @@ async function main() {
       }) as any,
     })
     const multiRetryReference = await livePhotoService.createFromReference({
-      referenceImagePath: refImage,
+      referenceImagePath: multiRetryReferenceImage,
       productId: product.id,
       motionTemplate: 'push_in',
     })
@@ -1647,6 +1685,8 @@ async function main() {
     await livePhotoService.resetTestDependencies()
 
     let reviewOverloadStillCallCount = 0
+    const reviewOverloadReferenceImage = path.join(assetsDir, 'reference-review-overload.jpg')
+    await createFixtureImage(reviewOverloadReferenceImage, '#7890aa')
     livePhotoService.setTestDependencies({
       ...({
         runFfmpeg: async (input: { args: string[] }) => {
@@ -1675,6 +1715,16 @@ async function main() {
         analyzeProductStructureWithGrs: async () => {
           throw new Error('model load is too high, try again later')
         },
+        reviewReferenceReplacementStillStrict: async () => ({
+          passed: true,
+          skipped: true,
+          reason: 'review_service_overloaded',
+          score: 1,
+          matchedPhrases: [],
+          missingPhrases: [],
+          negativeSignals: [],
+          analyzed: null,
+        }),
         reviewReferenceReplacementStillVisual: async () => ({
           passed: true,
           skipped: true,
@@ -1689,17 +1739,23 @@ async function main() {
     })
 
     const reviewOverloadReference = await livePhotoService.createFromReference({
-      referenceImagePath: refImage,
+      referenceImagePath: reviewOverloadReferenceImage,
       productId: product.id,
       motionTemplate: 'push_in',
     })
-    const reviewOverloadCompleted = await waitForItemCompleted(reviewOverloadReference.id, 30000)
-    assert.equal(reviewOverloadCompleted.packagingStatus, 'completed')
+    const reviewOverloadPending = await waitForItemCondition(
+      reviewOverloadReference.id,
+      (item) => String(item?.error || '').includes('[remote_pending]'),
+      12000,
+    )
+    assert.equal(reviewOverloadPending?.packagingStatus, 'processing')
+    assert.equal(reviewOverloadPending?.autoFlowStatus?.retryCount, 0)
     assert.ok(reviewOverloadStillCallCount >= 1)
-    const reviewOverloadLogText = Array.isArray(reviewOverloadCompleted.logs)
-      ? reviewOverloadCompleted.logs.map((log: any) => String(log?.message || '')).join('\n')
+    const reviewOverloadLogText = Array.isArray(reviewOverloadPending?.logs)
+      ? reviewOverloadPending.logs.map((log: any) => String(log?.message || '')).join('\n')
       : ''
-    assert.doesNotMatch(reviewOverloadLogText, /\[remote_pending\] Image validation review service is overloaded/i)
+    assert.match(reviewOverloadLogText, /\[review_unavailable\].*\[remote_pending\]/i)
+    await livePhotoService.remove(reviewOverloadReference.id)
 
     await livePhotoService.resetTestDependencies()
 

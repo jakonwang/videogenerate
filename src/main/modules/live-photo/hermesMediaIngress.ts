@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { cloneRepo } from '../clone/repo'
+import { readHermesProfileEnvironment } from '../hermes/profileEnvironment'
 
 type HermesMediaIngressDeps = {
   fetch: typeof fetch
@@ -49,9 +50,10 @@ function safeFileName(input: string, fallbackExt = '.bin') {
 
 async function getFeishuTenantAccessToken(input: FeishuMediaConfig) {
   if (String(input.tenantAccessToken || '').trim()) return String(input.tenantAccessToken || '').trim()
+  const profile = await readHermesProfileEnvironment(['FEISHU_APP_ID', 'FEISHU_APP_SECRET'])
   const integration = await cloneRepo.getHermesIntegrationSettings().catch(() => undefined)
-  const appId = String(input.appId || integration?.feishu?.appId || process.env.FEISHU_APP_ID || '').trim()
-  const appSecret = String(input.appSecret || integration?.feishu?.appSecret || process.env.FEISHU_APP_SECRET || '').trim()
+  const appId = String(input.appId || profile.FEISHU_APP_ID || integration?.feishu?.appId || process.env.FEISHU_APP_ID || '').trim()
+  const appSecret = String(input.appSecret || profile.FEISHU_APP_SECRET || integration?.feishu?.appSecret || process.env.FEISHU_APP_SECRET || '').trim()
   if (!appId || !appSecret) throw new Error('Feishu app credentials are required')
   const response = await hermesMediaIngressDeps.fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
     method: 'POST',

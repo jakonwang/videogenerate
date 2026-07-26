@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { copyFile, mkdir, stat } from 'node:fs/promises'
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { templatesRepo } from '../templates/repo'
@@ -8,6 +9,7 @@ import type { MediaAsset, Product, ProductImageAsset, ProductType, SegmentKey } 
 type DbShape = { products: Product[] }
 
 const filePath = () => join(getAppPaths().dbDir, 'products.json')
+const managedImagesRoot = () => join(getAppPaths().dataDir, 'product-library', 'images')
 
 function now() {
   return Date.now()
@@ -27,6 +29,78 @@ function cleanSegKeyForBuckets(s: string) {
 
 function isImagePath(filePath: string) {
   return /\.(png|jpe?g|webp|bmp|gif)$/i.test(String(filePath || '').trim())
+}
+
+function isPathInside(rootPath: string, candidatePath: string) {
+  const suffix = relative(resolve(rootPath), resolve(candidatePath))
+  return suffix === '' || (!suffix.startsWith('..') && !isAbsolute(suffix))
+}
+
+function safeFileKey(value: string) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_') || randomUUID()
+}
+
+async function copyManagedProductImage(productId: string, sourcePath: string, fileKey: string) {
+  const source = String(sourcePath || '').trim()
+  if (!source) return source
+  const root = managedImagesRoot()
+  if (isPathInside(root, source)) return source
+
+  const sourceStat = await stat(source).catch(() => null)
+  if (!sourceStat?.isFile()) return source
+
+  const extension = extname(source).toLowerCase() || extname(basename(source)).toLowerCase()
+  const productDir = join(root, safeFileKey(productId))
+  const target = join(productDir, `${safeFileKey(fileKey)}${extension}`)
+  await mkdir(productDir, { recursive: true })
+  await copyFile(source, target)
+  return target
+}
+
+async function materializeProductImages(productId: string, images: ProductImageAsset[]) {
+  const pathMap = new Map<string, string>()
+  let changed = false
+  const nextImages: ProductImageAsset[] = []
+
+  for (const image of images) {
+    const sourcePath = String(image.filePath || '').trim()
+    const managedPath = await copyManagedProductImage(productId, sourcePath, image.id || randomUUID())
+    if (sourcePath && managedPath !== sourcePath) {
+      pathMap.set(sourcePath, managedPath)
+      changed = true
+    }
+    const thumbnailPath = String(image.thumbnailPath || '').trim()
+    const nextThumbnailPath = !thumbnailPath || thumbnailPath === sourcePath
+      ? managedPath
+      : (pathMap.get(thumbnailPath) || thumbnailPath)
+    nextImages.push({
+      ...image,
+      productId,
+      filePath: managedPath,
+      fileName: image.fileName || basename(managedPath || sourcePath),
+      thumbnailPath: nextThumbnailPath || null,
+      updatedAt: Number(image.updatedAt ?? image.createdAt ?? now()),
+    })
+  }
+
+  return { images: nextImages, pathMap, changed }
+}
+
+async function materializeReferencedPath(
+  productId: string,
+  sourcePath: string | undefined,
+  fileKey: string,
+  pathMap: Map<string, string>,
+) {
+  const source = String(sourcePath || '').trim()
+  if (!source) return sourcePath
+  const mapped = pathMap.get(source)
+  if (mapped) return mapped
+  const managed = await copyManagedProductImage(productId, source, fileKey)
+  if (managed !== source) pathMap.set(source, managed)
+  return managed
 }
 
 function migrateLegacyAssetsToImages(product: Product): ProductImageAsset[] {
@@ -233,17 +307,30 @@ export const productsRepo = {
       if (idx >= 0) {
         const prev = db.products[idx]
         const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(payload, key)
-        const nextImages = payload.images ?? prev.images ?? migrateLegacyAssetsToImages(prev)
+        const rawImages = payload.images ?? prev.images ?? migrateLegacyAssetsToImages(prev)
+        const preparedImages = await materializeProductImages(prev.id, rawImages)
+        const nextImages = preparedImages.images
+        const nextCoverImagePath = await materializeReferencedPath(
+          prev.id,
+          resolveNextCoverImagePath(prev, payload, nextImages),
+          'cover',
+          preparedImages.pathMap,
+        )
+        const nextLivePhotoReferenceImagePath = await materializeReferencedPath(
+          prev.id,
+          hasOwn('livePhotoReferenceImagePath')
+            ? payload.livePhotoReferenceImagePath
+            : resolveLivePhotoReferenceImagePath(prev, nextImages),
+          'live-photo-reference',
+          preparedImages.pathMap,
+        )
         const next: Product = {
           ...prev,
           ...payload,
           assets: payload.assets ?? prev.assets,
           images: nextImages,
-          coverImagePath: resolveNextCoverImagePath(prev, payload, nextImages),
-          livePhotoReferenceImagePath:
-            hasOwn('livePhotoReferenceImagePath')
-              ? payload.livePhotoReferenceImagePath
-              : resolveLivePhotoReferenceImagePath(prev, nextImages),
+          coverImagePath: nextCoverImagePath,
+          livePhotoReferenceImagePath: nextLivePhotoReferenceImagePath,
           remark: hasOwn('remark') ? payload.remark : prev.remark,
           analysisBoardPath:
             hasOwn('analysisBoardPath') ? payload.analysisBoardPath : prev.analysisBoardPath,
@@ -297,28 +384,29 @@ export const productsRepo = {
       }
     }
 
-    const createdImages = payload.images ?? []
+    const createdId = randomUUID()
+    const preparedImages = await materializeProductImages(createdId, payload.images ?? [])
+    const createdImages = preparedImages.images
+    const createdCoverImagePath = await materializeReferencedPath(
+      createdId,
+      payload.coverImagePath || resolveCoverImagePath({ ...payload, id: createdId } as Product, createdImages),
+      'cover',
+      preparedImages.pathMap,
+    )
+    const createdLivePhotoReferenceImagePath = await materializeReferencedPath(
+      createdId,
+      payload.livePhotoReferenceImagePath || createdCoverImagePath,
+      'live-photo-reference',
+      preparedImages.pathMap,
+    )
     const created: Product = {
-      id: randomUUID(),
+      id: createdId,
       name: payload.name,
       type: payload.type,
       assets: payload.assets ?? (emptyAssets() as any),
       images: createdImages,
-      coverImagePath: payload.coverImagePath,
-      livePhotoReferenceImagePath:
-        payload.livePhotoReferenceImagePath ||
-        resolveLivePhotoReferenceImagePath(
-          {
-            id: '',
-            name: payload.name,
-            type: payload.type,
-            assets: payload.assets ?? (emptyAssets() as any),
-            images: createdImages,
-            createdAt: ts,
-            updatedAt: ts,
-          } as Product,
-          createdImages,
-        ),
+      coverImagePath: createdCoverImagePath,
+      livePhotoReferenceImagePath: createdLivePhotoReferenceImagePath,
       remark: payload.remark ?? '',
       analysisBoardPath: payload.analysisBoardPath,
       analysisBoardStatus: payload.analysisBoardStatus ?? payload.canonicalSourceStatus ?? 'idle',
@@ -340,6 +428,55 @@ export const productsRepo = {
     db.products.unshift(created)
     await writeJsonFile(filePath(), db)
     return created
+  },
+
+  async migrateExternalImages(): Promise<{ migrated: number; missing: number }> {
+    const db = await readJsonFile<DbShape>(filePath(), { products: [] })
+    let migrated = 0
+    let missing = 0
+    let changed = false
+
+    for (const product of db.products) {
+      const rawImages = product.images ?? migrateLegacyAssetsToImages(product)
+      const preparedImages = await materializeProductImages(product.id, rawImages)
+      const nextCoverImagePath = await materializeReferencedPath(
+        product.id,
+        resolveCoverImagePath(product, preparedImages.images),
+        'cover',
+        preparedImages.pathMap,
+      )
+      const nextLivePhotoReferenceImagePath = await materializeReferencedPath(
+        product.id,
+        resolveLivePhotoReferenceImagePath(product, preparedImages.images),
+        'live-photo-reference',
+        preparedImages.pathMap,
+      )
+      let missingImages = 0
+      for (const image of preparedImages.images) {
+        const imagePath = String(image.filePath || '').trim()
+        if (!imagePath) continue
+        const imageStat = await stat(imagePath).catch(() => null)
+        if (!imageStat?.isFile()) missingImages++
+      }
+      if (missingImages) missing += missingImages
+
+      const productChanged =
+        preparedImages.changed ||
+        JSON.stringify(product.images ?? []) !== JSON.stringify(preparedImages.images) ||
+        product.coverImagePath !== nextCoverImagePath ||
+        product.livePhotoReferenceImagePath !== nextLivePhotoReferenceImagePath
+      if (!productChanged) continue
+
+      product.images = preparedImages.images
+      product.coverImagePath = nextCoverImagePath
+      product.livePhotoReferenceImagePath = nextLivePhotoReferenceImagePath
+      product.updatedAt = now()
+      migrated += preparedImages.changed ? 1 : 0
+      changed = true
+    }
+
+    if (changed) await writeJsonFile(filePath(), db)
+    return { migrated, missing }
   },
 
   async remove(id: string): Promise<{ ok: true }> {

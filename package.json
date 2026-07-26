@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.60",
+  "version": "5.0.65",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -100,12 +100,30 @@
     "test:live-photo-hermes-suite": "npm run test:live-photo-hermes && npm run test:live-photo-hermes-platform && npm run test:live-photo-hermes-ingress && npm run test:live-photo-hermes-http && npm run test:live-photo-hermes-replay && npm run test:live-photo-hermes-skill-auto && npm run test:live-photo-hermes-e2e-sim",
     "test:video-parser-download-hermes-http": "tsx test/video-parser-download-hermes-http.smoke.ts",
     "test:video-parser-download-hermes-feishu-intent": "tsx test/video-parser-download-hermes-feishu-intent.smoke.ts",
+    "test:agent-os-core": "tsx test/agent-os-core.smoke.ts",
+    "test:agent-os-business-capabilities": "tsx test/agent-os-business-capabilities.smoke.ts",
+    "test:agent-os-feishu-http": "tsx test/agent-os-feishu-http.smoke.ts",
+    "test:agent-os": "npm run test:agent-os-core && npm run test:agent-os-feishu-http",
+    "test:videogenerate-mcp": "tsx test/videogenerate-mcp.smoke.ts",
+    "test:hermes-agent-runtime": "tsx test/hermes-agent-runtime.smoke.ts",
+    "test:hermes-event-store": "tsx test/hermes-event-store.smoke.ts",
+    "test:hermes-event-recovery": "node test/hermes-event-recovery.e2e.cjs",
+    "test:hermes-prompt-attachments": "tsx test/hermes-prompt-attachments.smoke.ts",
+    "test:hermes-installation": "tsx test/hermes-installation.smoke.ts",
+    "test:hermes-home-electron": "node test/hermes-home-electron.e2e.cjs",
+    "test:hermes-session-management": "node test/hermes-session-management.e2e.cjs",
+    "test:hermes-home-model-settings": "node test/hermes-home-model-settings.e2e.cjs",
+    "test:hermes-management-settings": "node test/hermes-management-settings.e2e.cjs",
+    "test:hermes-business-command-catalog": "tsx test/hermes-business-command-catalog.smoke.ts",
+    "test:storage-management": "tsx test/storage-management.smoke.ts",
+    "test:storage-management-ui": "node test/storage-management.e2e.cjs",
     "test:batch-subtitle-bitmap": "tsx test/batch-subtitle-bitmap.smoke.ts",
     "test:batch-subtitle-ass": "tsx test/batch-subtitle-ass.smoke.ts",
     "test:tiktok-listing-grs-image-aspect-ratio": "tsx test/tiktok-listing-grs-image-aspect-ratio.smoke.ts",
     "test:tiktok-listing-prompts": "tsx test/tiktok-listing-prompts.smoke.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
@@ -140,7 +158,10 @@
     "vue": "^3.5.13",
     "vue-i18n": "^9.14.5",
     "vue-router": "^4.6.4",
+    "ws": "^8.21.1",
     "xlsx": "^0.18.5",
+    "yaml": "^2.9.0",
+    "zod": "^4.3.6",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
@@ -150,6 +171,7 @@
     "@types/node": "^22.13.10",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-vue": "^5.2.1",
     "chromium-bidi": "^7.3.1",
     "electron": "^34.2.0",
@@ -173,8 +195,20 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/next/**/*",
+      "!node_modules/@next/**/*",
+      "!node_modules/@rspack/**/*",
+      "!node_modules/**/*.map",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/better-sqlite3/deps/**/*",
+      "!node_modules/better-sqlite3/src/**/*",
+      "!node_modules/better-sqlite3/test/**/*",
+      "!node_modules/ffprobe-static/bin/darwin/**/*",
+      "!node_modules/ffprobe-static/bin/linux/**/*",
+      "!node_modules/ffprobe-static/bin/win32/ia32/**/*"
     ],
+    "afterPack": "scripts/after-pack-prune.cjs",
     "extraResources": [
       {
         "from": "resources/icon-brand-ui-v2.png",
@@ -183,12 +217,16 @@
       {
         "from": "resources/live-photo-quality",
         "to": "live-photo-quality"
+      },
+      {
+        "from": "resources/hermes",
+        "to": "hermes"
       }
     ],
     "asarUnpack": [
-      "node_modules/better-sqlite3/**",
+      "node_modules/better-sqlite3/build/Release/*.node",
       "node_modules/ffmpeg-static/**",
-      "node_modules/ffprobe-static/**"
+      "node_modules/ffprobe-static/bin/win32/x64/**"
     ],
     "win": {
       "icon": "resources/icon-brand-ui-v2.png",
@@ -203,6 +241,7 @@
       "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "nsis": {
+      "include": "resources/installer.nsh",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,

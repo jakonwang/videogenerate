@@ -622,7 +622,7 @@ onBeforeUnmount(() => {
 
 .products-hero {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
@@ -651,13 +651,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  min-width: 520px;
+  min-width: min(540px, 100%);
   -webkit-app-region: no-drag;
 }
 
 .products-create-card__fields {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 148px;
+  align-items: end;
   gap: 10px;
   flex: 1 1 auto;
   -webkit-app-region: no-drag;
@@ -666,7 +667,9 @@ onBeforeUnmount(() => {
 .products-create-card__input,
 .products-create-card__type select {
   width: 100%;
-  min-height: 42px;
+  height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
   border: 1px solid rgba(123, 142, 201, 0.16);
   border-radius: 14px;
   background: rgba(18, 25, 45, 0.94);
@@ -677,6 +680,10 @@ onBeforeUnmount(() => {
   -webkit-app-region: no-drag;
 }
 
+.products-create-card__input {
+  align-self: end;
+}
+
 .products-create-card__input::placeholder {
   color: #7f93bf;
 }
@@ -685,6 +692,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   gap: 4px;
+  align-content: end;
   -webkit-app-region: no-drag;
 }
 
@@ -692,6 +700,7 @@ onBeforeUnmount(() => {
   color: #9cb0da;
   font-size: 10px;
   font-weight: 700;
+  line-height: 14px;
 }
 
 .products-create-card__type select {
@@ -702,7 +711,7 @@ onBeforeUnmount(() => {
 .products-create-card__icon {
   position: absolute;
   right: 14px;
-  bottom: 11px;
+  bottom: 14px;
   color: #8ea4d7;
   pointer-events: none;
 }
@@ -713,7 +722,9 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 10px;
   min-width: 168px;
-  min-height: 42px;
+  height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
   padding: 0 18px;
   border: 0;
   border-radius: 14px;
@@ -1281,6 +1292,11 @@ onBeforeUnmount(() => {
 
   .product-card {
     grid-template-columns: 1fr;
+  }
+
+  .products-create-card {
+    width: 100%;
+    min-width: 0;
   }
 
   .product-card__preview {

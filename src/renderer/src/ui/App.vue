@@ -15,8 +15,9 @@ const showDesignInspectorOverlay = computed(() => import.meta.env.DEV && !route.
 let offUpdaterDownloaded: (() => void) | null = null
 
 onMounted(async () => {
-  await window.api.getPaths()
+  appSettings.applyTheme()
   i18n.global.locale.value = appSettings.locale
+  await window.api.getPaths()
   await appSettings.syncLocaleToMain()
 
   offUpdaterDownloaded = window.api.updater.onUpdateDownloaded((p) => {

@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { LivePhotoQualityReport } from './types'
+import type { LivePhotoQualityReport, LivePhotoReplacementRegion } from './types'
 
-export const LIVE_PHOTO_QUALITY_CHECKER_VERSION = 'live-photo-quality-v6'
+export const LIVE_PHOTO_QUALITY_CHECKER_VERSION = 'live-photo-quality-v8'
 
 type PythonQualityResponse = {
   requestId?: string
@@ -167,6 +167,9 @@ export async function runLocalLivePhotoQualityCheck(input: {
   passThreshold: number
   retryFloor: number
   timeoutMs?: number
+  productType?: string
+  productCategory?: string
+  replacementRegion?: LivePhotoReplacementRegion
 }): Promise<{ available: boolean; reason?: string; report?: LivePhotoQualityReport }> {
   const startedAt = Date.now()
   const root = qualityResourceRoot()
@@ -184,6 +187,9 @@ export async function runLocalLivePhotoQualityCheck(input: {
       scenePath: input.scenePath,
       productPath: input.productPath,
       generatedPath: input.generatedPath,
+      productType: String(input.productType || '').trim() || undefined,
+      productCategory: String(input.productCategory || '').trim() || undefined,
+      replacementRegion: input.replacementRegion,
       modelRoot: join(root, 'models'),
     },
     Number(input.timeoutMs || 120_000),

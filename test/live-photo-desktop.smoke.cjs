@@ -219,6 +219,10 @@ async function main() {
       const button = document.querySelector('[data-testid="live-photo-export-selected"]');
       return Boolean(button && !button.disabled);
     }, { timeout: 30000 });
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="live-photo-send-feishu"]');
+      return Boolean(button && !button.disabled);
+    }, { timeout: 30000 });
     await page.evaluate(() => {
       const button = document.querySelector('[data-testid="live-photo-export-selected"]');
       if (!button) throw new Error('Missing export selected button');

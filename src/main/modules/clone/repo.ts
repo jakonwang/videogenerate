@@ -61,6 +61,7 @@ import {
   resolveCapabilityPlatform,
   type PlatformProfile,
 } from '../../../shared/platformSettings'
+import { materializeManagedAsset, materializeManagedAssets } from '../managed-assets/service'
 
 type CloneDbShape = {
   projects: CloneProject[]
@@ -124,6 +125,124 @@ export type CloneSqliteReadyState = {
 
 function now() {
   return Date.now()
+}
+
+async function materializeCloneAssetPath(projectId: string, sourcePath: string | undefined, assetId: string) {
+  return await materializeManagedAsset({
+    sourcePath,
+    module: 'clone',
+    ownerId: projectId,
+    assetId,
+  })
+}
+
+async function materializeCloneAssetPaths(projectId: string, sourcePaths: string[] | undefined, assetPrefix: string) {
+  if (!Array.isArray(sourcePaths)) return sourcePaths
+  const materialized = await materializeManagedAssets(sourcePaths, {
+    module: 'clone',
+    ownerId: projectId,
+    assetPrefix,
+  })
+  return materialized.paths
+}
+
+async function materializeCloneBlueprintAssets(
+  projectId: string,
+  blueprint: CloneProject['blueprint'] | CloneProject['baseBlueprint'],
+  scope: string,
+) {
+  if (!blueprint) return blueprint
+  return {
+    ...blueprint,
+    shots: await Promise.all(
+      blueprint.shots.map(async (shot) => ({
+        ...shot,
+        uploadedAssetPath: await materializeCloneAssetPath(
+          projectId,
+          shot.uploadedAssetPath,
+          `${scope}-${shot.id}-uploaded-asset`,
+        ),
+        uploadedImagePath: await materializeCloneAssetPath(
+          projectId,
+          shot.uploadedImagePath,
+          `${scope}-${shot.id}-uploaded-image`,
+        ),
+      })),
+    ),
+  }
+}
+
+async function materializeCloneExecutionBlueprintAssets(
+  projectId: string,
+  blueprint: CloneProject['executionBlueprint'],
+) {
+  if (!blueprint) return blueprint
+  return {
+    ...blueprint,
+    shots: await Promise.all(
+      blueprint.shots.map(async (shot) => ({
+        ...shot,
+        uploadedAssetPath: await materializeCloneAssetPath(
+          projectId,
+          shot.uploadedAssetPath,
+          `execution-${shot.id}-uploaded-asset`,
+        ),
+        uploadedImagePath: await materializeCloneAssetPath(
+          projectId,
+          shot.uploadedImagePath,
+          `execution-${shot.id}-uploaded-image`,
+        ),
+      })),
+    ),
+  }
+}
+
+async function materializeCloneProjectAssets(input: CloneProject): Promise<CloneProject> {
+  const projectId = String(input.id || '').trim()
+  const shotVideoOutputs = Array.isArray(input.shotVideoOutputs)
+    ? await Promise.all(
+        input.shotVideoOutputs.map(async (output) => {
+          if (output.source !== 'uploaded_replacement') return output
+          return {
+            ...output,
+            videoPath: await materializeCloneAssetPath(
+              projectId,
+              output.videoPath,
+              `shot-${output.shotId}-uploaded-video`,
+            ),
+            localPath: await materializeCloneAssetPath(
+              projectId,
+              output.localPath,
+              `shot-${output.shotId}-uploaded-local-video`,
+            ),
+          }
+        }),
+      )
+    : input.shotVideoOutputs
+
+  return {
+    ...input,
+    referenceVideoPath: await materializeCloneAssetPath(projectId, input.referenceVideoPath, 'reference-video'),
+    originalProductReferenceImagePaths: await materializeCloneAssetPaths(
+      projectId,
+      input.originalProductReferenceImagePaths,
+      'original-product-reference',
+    ),
+    sanitizedProductReferenceImagePaths: await materializeCloneAssetPaths(
+      projectId,
+      input.sanitizedProductReferenceImagePaths,
+      'sanitized-product-reference',
+    ),
+    productReferenceImagePaths: await materializeCloneAssetPaths(
+      projectId,
+      input.productReferenceImagePaths,
+      'product-reference',
+    ),
+    baseBlueprint: await materializeCloneBlueprintAssets(projectId, input.baseBlueprint, 'base'),
+    blueprint: await materializeCloneBlueprintAssets(projectId, input.blueprint, 'blueprint'),
+    executionBlueprint: await materializeCloneExecutionBlueprintAssets(projectId, input.executionBlueprint),
+    shotVideoOutputs,
+  }
 }
 
 function pruneRemovedProjectTombstones(currentTime = now()) {
@@ -2996,8 +3115,9 @@ export const cloneRepo = {
     description?: string
   }): Promise<CloneProject> {
     return await queueCloneDbMutation(async () => {
+      const projectId = randomUUID()
       const item: CloneProject = {
-        id: randomUUID(),
+        id: projectId,
         createdAt: now(),
         updatedAt: now(),
         title: String(input.title ?? '').trim() || defaultCloneProjectTitle(now()),
@@ -3008,7 +3128,7 @@ export const cloneRepo = {
         runMode: inferNormalizedRunMode(input),
         locale: input.locale,
         strength: input.strength,
-        referenceVideoPath: input.referenceVideoPath,
+        referenceVideoPath: await materializeCloneAssetPath(projectId, input.referenceVideoPath, 'reference-video'),
         referenceVideoName: input.referenceVideoName,
         baseBlueprint: null,
         blueprint: null,
@@ -3022,7 +3142,7 @@ export const cloneRepo = {
         },
         policy: defaultPolicy(),
       }
-      const next = normalizeProject(item)
+      const next = normalizeProject(await materializeCloneProjectAssets(item))
       upsertCloneProjectInSqlite(next)
       return next
     })
@@ -3050,7 +3170,7 @@ export const cloneRepo = {
               shotVideoOutputs: mergeShotVideoOutputsForPersistence(normalizedCurrent.shotVideoOutputs, input.shotVideoOutputs),
             }
           : input
-      const next = normalizeProject({ ...mergedInput, updatedAt: now() })
+      const next = normalizeProject(await materializeCloneProjectAssets({ ...mergedInput, updatedAt: now() }))
       const debugOutputs = Array.isArray(next.shotVideoOutputs)
         ? next.shotVideoOutputs
             .filter((item) => ['shot_1', 'shot_2', 'shot_3'].includes(String(item?.shotId ?? '')))
@@ -3069,6 +3189,21 @@ export const cloneRepo = {
       })
       upsertCloneProjectInSqlite(next)
       return next
+    })
+  },
+
+  async migrateExternalAssets(): Promise<{ migrated: number }> {
+    return await queueCloneDbMutation(async () => {
+      const projects = readCloneProjectsFromSqlite()
+      let migrated = 0
+      for (const project of projects) {
+        const normalized = normalizeProject(project)
+        const materialized = normalizeProject(await materializeCloneProjectAssets(normalized))
+        if (JSON.stringify(materialized) === JSON.stringify(normalized)) continue
+        upsertCloneProjectInSqlite(materialized)
+        migrated += 1
+      }
+      return { migrated }
     })
   },
 

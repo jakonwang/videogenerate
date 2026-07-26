@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { resolveStickerByRefOrFileName, toStickerRef } from '../../lib/stickers'
-import type { Template } from './types'
+import { materializeManagedAssets } from '../managed-assets/service'
+import type { BgmConfig, Template } from './types'
 import {
   ASS_DEFAULT_FONT_FAMILY,
   ASS_DEFAULT_FONT_SIZE,
@@ -17,6 +18,19 @@ const filePath = () => join(getAppPaths().dbDir, 'templates.json')
 
 function now() {
   return Date.now()
+}
+
+async function materializeTemplateBgm(templateId: string, bgm: BgmConfig | null | undefined) {
+  if (!bgm || !Array.isArray(bgm.filePaths)) return bgm
+  const materialized = await materializeManagedAssets(bgm.filePaths, {
+    module: 'templates',
+    ownerId: templateId,
+    assetPrefix: 'bgm',
+  })
+  return {
+    ...bgm,
+    filePaths: materialized.paths,
+  }
 }
 
 function normalizeSegmentSyncMode(input: unknown): 'follow_product' | 'fixed' {
@@ -198,6 +212,7 @@ export const templatesRepo = {
       if (idx >= 0) {
         const prev = db.templates[idx]
         const mergedForUpdate = normalizeTransition({ prev: (prev as any).transition, incoming: (payload as any).transition })
+        const bgm = await materializeTemplateBgm(prev.id, payload.bgm ?? prev.bgm)
 
         const next: Template = {
           ...prev,
@@ -211,7 +226,7 @@ export const templatesRepo = {
           segmentDurationSec: payload.segmentDurationSec ?? prev.segmentDurationSec,
           segmentFx: payload.segmentFx ?? prev.segmentFx,
           randomizeOrder: payload.randomizeOrder ?? prev.randomizeOrder,
-          bgm: payload.bgm ?? prev.bgm,
+          bgm,
           subtitle: payload.subtitle ?? prev.subtitle,
           titleOverlay: (payload as any).titleOverlay ?? (prev as any).titleOverlay,
           tts: (payload as any).tts ?? (prev as any).tts,
@@ -231,8 +246,9 @@ export const templatesRepo = {
       }
     }
 
+    const createdId = randomUUID()
     const created: Template = {
-      id: randomUUID(),
+      id: createdId,
       name: payload.name,
       meta: (payload as any).meta ?? undefined,
       structure: payload.structure,
@@ -253,7 +269,7 @@ export const templatesRepo = {
           detail: { zoom: { min: 1.0, max: 1.05 }, move: { x: { min: -0.03, max: 0.03 }, y: { min: -0.025, max: 0.025 } } },
         },
       randomizeOrder: payload.randomizeOrder ?? { mode: 'partial', keepFirstCount: 1 },
-      bgm: payload.bgm ?? null,
+      bgm: await materializeTemplateBgm(createdId, payload.bgm ?? null),
       // 旧字段保留但默认关闭（drawtext 已废弃）
       subtitle: payload.subtitle ?? { enabled: false, pool: [], x: '(w-text_w)/2', y: '(h-text_h)/4', fontSize: 62 },
       titleOverlay: (payload as any).titleOverlay ?? null,
@@ -307,6 +323,23 @@ export const templatesRepo = {
     db.templates.unshift(normalizeTemplate(created))
     await writeJsonFile(filePath(), db)
     return db.templates[0]
+  },
+
+  async migrateExternalAssets(): Promise<{ migrated: number }> {
+    const db = await readJsonFile<DbShape>(filePath(), { templates: [] })
+    let migrated = 0
+    for (let index = 0; index < db.templates.length; index += 1) {
+      const current = normalizeTemplate(db.templates[index])
+      const next = normalizeTemplate({
+        ...current,
+        bgm: await materializeTemplateBgm(current.id, current.bgm),
+      })
+      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      db.templates[index] = next
+      migrated += 1
+    }
+    if (migrated) await writeJsonFile(filePath(), db)
+    return { migrated }
   },
 
   async remove(id: string): Promise<{ ok: true }> {

@@ -50,4 +50,31 @@ const bowNegativePrompt = buildReferenceReplacementNegativePrompt({ product: bow
 assert.match(bowNegativePrompt, /wrong bow shape/i)
 assert.doesNotMatch(bowNegativePrompt, /wrong star point count/i)
 
+const haloRing = {
+  type: 'ring',
+  productAnalysis: {
+    category: 'rings',
+    summary: 'White gold halo ring with a floral center cluster.',
+    coreSubject: 'Finger ring with a complete round band and raised floral halo head.',
+    connectionStructure: 'Continuous ring band with cathedral shoulders and prong-set center cluster.',
+    geometryDetails: 'Closed circular shank, halo outline, six visible prongs, and a surrounding stone row.',
+    wearingPosition: 'finger',
+    sizeScale: 'Fine jewelry ring proportion relative to finger width.',
+    matchingRules: ['Complete band', 'Halo outline', 'Six prongs', 'Finger scale'],
+    rawDescription: 'White gold halo ring with a full shank and floral cluster head.',
+  },
+} as any
+
+const ringPrompt = buildLivePhotoCategorySpecificPromptRules(haloRing).join('\n')
+assert.match(ringPrompt, /RING STRUCTURE LOCK:/i)
+assert.match(ringPrompt, /complete ring silhouette/i)
+assert.match(ringPrompt, /Do NOT replace the ring with only the top ornament/i)
+assert.match(ringPrompt, /exact metal tone and material finish/i)
+
+const ringNegativePrompt = buildReferenceReplacementNegativePrompt({ product: haloRing })
+assert.match(ringNegativePrompt, /missing ring band/i)
+assert.match(ringNegativePrompt, /ring head only/i)
+assert.match(ringNegativePrompt, /wrong ring metal color/i)
+assert.match(ringNegativePrompt, /missing halo stones/i)
+
 console.log('live photo earring prompt DNA smoke test passed')

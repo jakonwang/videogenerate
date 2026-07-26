@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import sharp from 'sharp'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
 
 async function main() {
@@ -66,8 +67,9 @@ async function main() {
     await mkdir(assetsDir, { recursive: true })
     const productImage = path.join(assetsDir, 'product.jpg')
     const refImage = path.join(assetsDir, 'reference.jpg')
-    await writeFile(productImage, 'product-image', 'utf-8')
-    await writeFile(refImage, 'reference-image', 'utf-8')
+    await sharp({ create: { width: 96, height: 128, channels: 3, background: '#c8b89f' } }).jpeg().toFile(productImage)
+    await sharp({ create: { width: 96, height: 128, channels: 3, background: '#829ab3' } }).jpeg().toFile(refImage)
+    const remoteImageBuffer = await sharp({ create: { width: 96, height: 96, channels: 3, background: '#738fa8' } }).png().toBuffer()
 
     const product = await productsRepo.upsert({
       name: 'Demo Product',
@@ -98,6 +100,13 @@ async function main() {
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
+      const requestBody = String(init?.body || '')
+      if (url.includes('/v1/chat/completions') && requestBody.includes('Locate the existing product that must be replaced')) {
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"x":0.3,"y":0.3,"width":0.3,"height":0.25,"confidence":0.95}' } }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
       if (url.includes('/v1/draw/completions')) {
         remoteImageSubmitCount += 1
         return new Response(
@@ -138,7 +147,7 @@ async function main() {
       }
       if (url === 'https://example.com/live-photo-remote-image.png') {
         remoteImageDownloadCount += 1
-        return new Response('mock-remote-image-binary', {
+        return new Response(remoteImageBuffer, {
           status: 200,
           headers: { 'Content-Type': 'image/png' },
         })
@@ -216,7 +225,7 @@ async function main() {
     globalThis.fetch = originalFetch
     console.log('live photo remote pending smoke test passed')
   } finally {
-    livePhotoService.resetTestDependencies()
+    await livePhotoService.resetTestDependencies()
     livePhotoSqliteModule.closeLivePhotoSqlite()
     cloneSqliteModule.closeCloneSqlite()
     delete process.env.VIDEOGENERATE_DATA_DIR

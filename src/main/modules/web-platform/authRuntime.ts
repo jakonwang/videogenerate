@@ -26,6 +26,30 @@ type AuthByTokenResult = {
   wallet: WalletAccount
 }
 
+const DESKTOP_LOCAL_AUTH_PHONE = '00000000000'
+
+async function ensureDesktopLocalAuth(deps: AuthRuntimeDeps): Promise<AuthByTokenResult> {
+  const existing = await webPlatformRepo.getUserByPhone(DESKTOP_LOCAL_AUTH_PHONE)
+  const user =
+    existing ??
+    (await webPlatformRepo.createUser({
+      phone: DESKTOP_LOCAL_AUTH_PHONE,
+      displayName: 'Desktop Local User',
+    }))
+  return {
+    user,
+    session: {
+      token: '',
+      userId: user.id,
+      createdAt: 0,
+      updatedAt: 0,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    },
+    subscription: await deps.ensureSubscription(user.id),
+    wallet: await deps.ensureWallet(user.id),
+  }
+}
+
 function assertPhonePresent(phone: string) {
   if (!phone) throw new Error('手机号不能为空')
 }
@@ -56,14 +80,17 @@ function buildSendCodeMessage(deps: AuthRuntimeDeps) {
 }
 
 async function authByToken(token: string, deps: AuthRuntimeDeps): Promise<AuthByTokenResult> {
-  const session = await webPlatformRepo.getSession(String(token || '').trim())
-  if (!session) throw new Error('登录已失效')
+  const normalizedToken = String(token || '').trim()
+  if (!normalizedToken) return await ensureDesktopLocalAuth(deps)
+
+  const session = await webPlatformRepo.getSession(normalizedToken)
+  if (!session) return await ensureDesktopLocalAuth(deps)
   if (session.expiresAt <= deps.now()) {
     await webPlatformRepo.removeSession(session.token)
-    throw new Error('登录已过期')
+    return await ensureDesktopLocalAuth(deps)
   }
   const user = await webPlatformRepo.getUserById(session.userId)
-  if (!user || user.status !== 'active') throw new Error('账号不可用')
+  if (!user || user.status !== 'active') return await ensureDesktopLocalAuth(deps)
   return {
     user,
     session,

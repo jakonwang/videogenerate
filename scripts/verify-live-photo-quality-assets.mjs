@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-const root = resolve(process.cwd(), 'resources', 'live-photo-quality')
+const root = resolve(process.argv[2] || join(process.cwd(), 'resources', 'live-photo-quality'))
 const manifestPath = join(root, 'model-manifest.json')
 const licensesPath = join(root, 'licenses.json')
 
