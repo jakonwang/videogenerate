@@ -49,6 +49,8 @@ $lockStream = $null
 $failed = $false
 $tempRoot = $null
 $alreadyCompatible = $false
+$currentRuntimeOperational = $false
+$runtimePromotedForInstall = $false
 
 try {
     New-Item -ItemType Directory -Force -Path $statusRoot | Out-Null
@@ -69,9 +71,24 @@ try {
     Assert-ManagedPath -Path $previousDir -Root $runtimeRoot
 
     $currentMarker = Join-Path $currentDir $markerName
-    if ((Test-Path -LiteralPath $currentMarker) -and (Test-Path -LiteralPath (Join-Path $currentDir "venv\Scripts\hermes.exe"))) {
+    $currentHermes = Join-Path $currentDir "venv\Scripts\hermes.exe"
+    if (Test-Path -LiteralPath $currentHermes) {
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            $currentVersionOutput = (& $currentHermes --version 2>&1 | Out-String)
+            $currentVersionExitCode = $LASTEXITCODE
+        } catch {
+            $currentVersionOutput = ""
+            $currentVersionExitCode = 1
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        $currentRuntimeOperational = $currentVersionExitCode -eq 0
+    }
+    if ((Test-Path -LiteralPath $currentMarker) -and $currentRuntimeOperational) {
         $installed = Get-Content -LiteralPath $currentMarker -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ([string]$installed.commit -eq $statusCommit) {
+        if (([string]$installed.commit -eq $statusCommit) -and ($currentVersionOutput -match [Regex]::Escape($statusVersion))) {
             Write-InstallStatus -State "ready" -Message "Hermes is already at the compatible version." -Version $statusVersion -Commit $statusCommit
             $alreadyCompatible = $true
         }
@@ -131,9 +148,8 @@ try {
         }
     }
 
-    $currentHermes = Join-Path $currentDir "venv\Scripts\hermes.exe"
     $profileDir = Join-Path $env:USERPROFILE ".hermes\profiles\videogenerate"
-    if ((Test-Path -LiteralPath $currentHermes) -and (Test-Path -LiteralPath $profileDir)) {
+    if ($currentRuntimeOperational -and (Test-Path -LiteralPath $profileDir)) {
         $backupDir = Join-Path $statusRoot "hermes-backups"
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
         $backupPath = Join-Path $backupDir ("pre-install-" + [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss") + ".zip")
@@ -154,6 +170,7 @@ try {
     }
 
     Write-InstallStatus -State "installing" -Message "Installing the compatible Hermes runtime." -Version $statusVersion -Commit $statusCommit
+    $stageInstallDir = $stagingDir
     foreach ($installerStage in $installerStages) {
         $stageName = [string]$installerStage.name
         if ([bool]$installerStage.needs_user_input -or $stageName -eq "path") {
@@ -189,7 +206,7 @@ try {
                 -Branch ([string]$manifest.branch) `
                 -Commit $statusCommit `
                 -HermesHome $runtimeRoot `
-                -InstallDir $stagingDir `
+                -InstallDir $stageInstallDir `
                 -SkipSetup `
                 -NonInteractive `
                 -Json `
@@ -204,15 +221,33 @@ try {
         if ($installerStageExitCode -ne 0) {
             throw "Hermes installer stage '$stageName' exited with code $installerStageExitCode."
         }
+        if ($stageName -eq "repository") {
+            if (Test-Path -LiteralPath $previousDir) {
+                Remove-Item -LiteralPath $previousDir -Recurse -Force
+            }
+            if (Test-Path -LiteralPath $currentDir) {
+                Move-Item -LiteralPath $currentDir -Destination $previousDir
+            }
+            try {
+                Move-Item -LiteralPath $stagingDir -Destination $currentDir
+                $runtimePromotedForInstall = $true
+                $stageInstallDir = $currentDir
+            } catch {
+                if ((-not (Test-Path -LiteralPath $currentDir)) -and (Test-Path -LiteralPath $previousDir)) {
+                    Move-Item -LiteralPath $previousDir -Destination $currentDir
+                }
+                throw
+            }
+        }
     }
 
     foreach ($relativePath in $manifest.requiredFiles) {
-        if (-not (Test-Path -LiteralPath (Join-Path $stagingDir ([string]$relativePath)))) {
+        if (-not (Test-Path -LiteralPath (Join-Path $currentDir ([string]$relativePath)))) {
             throw "Hermes runtime validation failed: $relativePath is missing."
         }
     }
 
-    $hermesExe = Join-Path $stagingDir "venv\Scripts\hermes.exe"
+    $hermesExe = Join-Path $currentDir "venv\Scripts\hermes.exe"
     $reportedVersion = (& $hermesExe --version 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0 -or $reportedVersion -notmatch [Regex]::Escape($statusVersion)) {
         throw "Hermes runtime version validation failed."
@@ -224,28 +259,30 @@ try {
         commit = $statusCommit
         installedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     } | ConvertTo-Json -Compress
-    [IO.File]::WriteAllText((Join-Path $stagingDir $markerName), $markerJson, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $currentDir $markerName), $markerJson, [Text.UTF8Encoding]::new($false))
 
     if (Test-Path -LiteralPath $previousDir) {
         Remove-Item -LiteralPath $previousDir -Recurse -Force
-    }
-    if (Test-Path -LiteralPath $currentDir) {
-        Move-Item -LiteralPath $currentDir -Destination $previousDir
-    }
-    try {
-        Move-Item -LiteralPath $stagingDir -Destination $currentDir
-    } catch {
-        if ((-not (Test-Path -LiteralPath $currentDir)) -and (Test-Path -LiteralPath $previousDir)) {
-            Move-Item -LiteralPath $previousDir -Destination $currentDir
-        }
-        throw
     }
 
     Write-InstallStatus -State "ready" -Message "Hermes runtime installation completed." -Version $statusVersion -Commit $statusCommit
     }
 } catch {
-    Write-InstallStatus -State "error" -Message $_.Exception.Message -Version $statusVersion -Commit $statusCommit
-    Write-Error $_.Exception.Message
+    $failureMessage = $_.Exception.Message
+    if ($runtimePromotedForInstall) {
+        try {
+            if (Test-Path -LiteralPath $currentDir) {
+                Remove-Item -LiteralPath $currentDir -Recurse -Force
+            }
+            if (Test-Path -LiteralPath $previousDir) {
+                Move-Item -LiteralPath $previousDir -Destination $currentDir
+            }
+        } catch {
+            $failureMessage += " Runtime rollback failed: $($_.Exception.Message)"
+        }
+    }
+    Write-InstallStatus -State "error" -Message $failureMessage -Version $statusVersion -Commit $statusCommit
+    Write-Error $failureMessage
     $failed = $true
 } finally {
     if ($null -ne $tempRoot -and (Test-Path -LiteralPath $tempRoot)) {

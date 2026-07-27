@@ -66,11 +66,13 @@ if ($Stage -eq "path" -or $Stage -eq "configure") { throw "Skipped stage was inv
 if ($Stage -eq "repository") {
     $autoCrlf = (& git config --global --get core.autocrlf 2>$null | Out-String).Trim()
     if ($autoCrlf -ne "false") { throw "Repository stage did not receive core.autocrlf=false." }
+    if ($InstallDir -notmatch "videogenerate-staging$") { throw "Repository stage did not use the staging directory." }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 } elseif ($env:GIT_CONFIG_GLOBAL) {
     throw "Repository Git configuration leaked into stage: $Stage"
 }
 if ($Stage -eq "venv") {
+    if ((Split-Path $InstallDir -Leaf) -ne "hermes-agent") { throw "Virtual environment was not created in the final runtime directory." }
     $scripts = Join-Path $InstallDir "venv\\Scripts"
     New-Item -ItemType Directory -Force -Path $scripts | Out-Null
     Copy-Item -LiteralPath $env:VIDEOGENERATE_TEST_NODE_EXE -Destination (Join-Path $scripts "hermes.exe")
@@ -125,6 +127,46 @@ exit 0
       assert.match(stagedInstall.stdout, /"stage":"venv"/)
       assert.equal(existsSync(executable), true)
       assert.equal(existsSync(path.join(localAppData, 'hermes', 'hermes-agent.videogenerate-staging')), false)
+      const compatibleInstall = await execFileAsync(powershell, [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', path.join(process.cwd(), 'resources', 'hermes', 'bootstrap.ps1'),
+        '-ManifestPath', fakeManifestPath,
+      ], {
+        env: {
+          ...process.env,
+          LOCALAPPDATA: localAppData,
+          USERPROFILE: path.join(root, 'user'),
+          VIDEOGENERATE_TEST_NODE_EXE: process.execPath,
+        },
+        windowsHide: true,
+        timeout: 30_000,
+      })
+      assert.doesNotMatch(compatibleInstall.stdout, /"stage":"venv"/)
+      const handoff = JSON.parse(await readFile(path.join(localAppData, 'VideoGenerate', 'hermes-install-status.json'), 'utf8'))
+      assert.equal(handoff.state, 'ready')
+      assert.equal(existsSync(path.join(localAppData, 'VideoGenerate', 'hermes-install.lock')), false)
+
+      await mkdir(path.join(root, 'user', '.hermes', 'profiles', 'videogenerate'), { recursive: true })
+      await writeFile(executable, '', 'utf8')
+      const repairedInstall = await execFileAsync(powershell, [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', path.join(process.cwd(), 'resources', 'hermes', 'bootstrap.ps1'),
+        '-ManifestPath', fakeManifestPath,
+      ], {
+        env: {
+          ...process.env,
+          LOCALAPPDATA: localAppData,
+          USERPROFILE: path.join(root, 'user'),
+          VIDEOGENERATE_TEST_NODE_EXE: process.execPath,
+        },
+        windowsHide: true,
+        timeout: 30_000,
+      })
+      assert.match(repairedInstall.stdout, /"stage":"venv"/)
+      const repairedVersion = await execFileAsync(executable, ['--version'], { windowsHide: true })
+      assert.match(repairedVersion.stdout, new RegExp(process.version.slice(1).replace(/\./g, '\\.')))
     } finally {
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
     }
@@ -149,21 +191,6 @@ exit 0
     const ready = await hermesInstallation.inspect()
     assert.equal(ready.state, 'ready')
     assert.equal(ready.installedVersion, '0.17.0')
-
-    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-    await execFileAsync(powershell, [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', path.join(process.cwd(), 'resources', 'hermes', 'bootstrap.ps1'),
-      '-ManifestPath', path.join(process.cwd(), 'resources', 'hermes', 'runtime-manifest.json'),
-    ], {
-      env: { ...process.env, LOCALAPPDATA: localAppData, USERPROFILE: path.join(root, 'user') },
-      windowsHide: true,
-      timeout: 30_000,
-    })
-    const handoff = JSON.parse(await readFile(path.join(localAppData, 'VideoGenerate', 'hermes-install-status.json'), 'utf8'))
-    assert.equal(handoff.state, 'ready')
-    assert.equal(existsSync(path.join(localAppData, 'VideoGenerate', 'hermes-install.lock')), false)
 
     await writeFile(marker, JSON.stringify({
       schemaVersion: 1,
