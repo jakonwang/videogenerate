@@ -160,6 +160,26 @@ try {
             continue
         }
         Write-InstallStatus -State "installing" -Message "Installing Hermes stage: $stageName." -Version $statusVersion -Commit $statusCommit
+        $stageGitConfigActive = $false
+        $previousGitConfigGlobal = $null
+        if ($stageName -eq "repository") {
+            $previousGitConfigGlobal = $env:GIT_CONFIG_GLOBAL
+            $userGitConfig = if ($previousGitConfigGlobal) {
+                $previousGitConfigGlobal
+            } else {
+                Join-Path $env:USERPROFILE ".gitconfig"
+            }
+            $installerGitConfig = Join-Path $tempRoot "installer.gitconfig"
+            $gitConfigSource = ""
+            if ((Test-Path -LiteralPath $userGitConfig) -and ([IO.Path]::GetFullPath($userGitConfig) -ne [IO.Path]::GetFullPath($installerGitConfig))) {
+                $normalizedGitConfig = [IO.Path]::GetFullPath($userGitConfig).Replace('\', '/')
+                $gitConfigSource = "[include]`n`tpath = `"$normalizedGitConfig`"`n"
+            }
+            $gitConfigSource += "[core]`n`tautocrlf = false`n"
+            [IO.File]::WriteAllText($installerGitConfig, $gitConfigSource, [Text.UTF8Encoding]::new($false))
+            $env:GIT_CONFIG_GLOBAL = $installerGitConfig
+            $stageGitConfigActive = $true
+        }
         try {
             $ErrorActionPreference = "Continue"
             & $powershellPath `
@@ -177,6 +197,9 @@ try {
             $installerStageExitCode = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $previousErrorActionPreference
+            if ($stageGitConfigActive) {
+                $env:GIT_CONFIG_GLOBAL = $previousGitConfigGlobal
+            }
         }
         if ($installerStageExitCode -ne 0) {
             throw "Hermes installer stage '$stageName' exited with code $installerStageExitCode."

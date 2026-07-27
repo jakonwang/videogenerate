@@ -63,7 +63,13 @@ if ($ProtocolVersion) { Write-Output "1"; exit 0 }
 if ($Manifest) { @{ protocol_version = 1; stages = $stages } | ConvertTo-Json -Depth 4 -Compress; exit 0 }
 if (-not $Stage) { throw "Full installation must not be used by the bootstrap test." }
 if ($Stage -eq "path" -or $Stage -eq "configure") { throw "Skipped stage was invoked: $Stage" }
-if ($Stage -eq "repository") { New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null }
+if ($Stage -eq "repository") {
+    $autoCrlf = (& git config --global --get core.autocrlf 2>$null | Out-String).Trim()
+    if ($autoCrlf -ne "false") { throw "Repository stage did not receive core.autocrlf=false." }
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+} elseif ($env:GIT_CONFIG_GLOBAL) {
+    throw "Repository Git configuration leaked into stage: $Stage"
+}
 if ($Stage -eq "venv") {
     $scripts = Join-Path $InstallDir "venv\\Scripts"
     New-Item -ItemType Directory -Force -Path $scripts | Out-Null
