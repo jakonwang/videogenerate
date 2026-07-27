@@ -109,6 +109,28 @@ try {
         throw "Hermes installer protocol is incompatible."
     }
 
+    try {
+        $ErrorActionPreference = "Continue"
+        $installerManifestOutput = (& $powershellPath `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $installerPath `
+            -Manifest 2>&1 | Out-String).Trim()
+        $installerManifestExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($installerManifestExitCode -ne 0) {
+        throw "Hermes installer manifest exited with code $installerManifestExitCode."
+    }
+    $installerManifest = $installerManifestOutput | ConvertFrom-Json
+    $installerStages = @($installerManifest.stages)
+    foreach ($requiredStage in @("uv", "python", "git", "repository", "venv", "dependencies")) {
+        if ($requiredStage -notin @($installerStages | ForEach-Object { [string]$_.name })) {
+            throw "Hermes installer manifest is missing the required stage: $requiredStage."
+        }
+    }
+
     $currentHermes = Join-Path $currentDir "venv\Scripts\hermes.exe"
     $profileDir = Join-Path $env:USERPROFILE ".hermes\profiles\videogenerate"
     if ((Test-Path -LiteralPath $currentHermes) -and (Test-Path -LiteralPath $profileDir)) {
@@ -132,25 +154,33 @@ try {
     }
 
     Write-InstallStatus -State "installing" -Message "Installing the compatible Hermes runtime." -Version $statusVersion -Commit $statusCommit
-    try {
-        $ErrorActionPreference = "Continue"
-        & $powershellPath `
-            -NoProfile `
-            -ExecutionPolicy Bypass `
-            -File $installerPath `
-            -Branch ([string]$manifest.branch) `
-            -Commit $statusCommit `
-            -HermesHome $runtimeRoot `
-            -InstallDir $stagingDir `
-            -SkipSetup `
-            -NonInteractive `
-            -Json 2>&1 | ForEach-Object { Write-Output $_ }
-        $installerExitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    if ($installerExitCode -ne 0) {
-        throw "Hermes installer exited with code $installerExitCode."
+    foreach ($installerStage in $installerStages) {
+        $stageName = [string]$installerStage.name
+        if ([bool]$installerStage.needs_user_input -or $stageName -eq "path") {
+            continue
+        }
+        Write-InstallStatus -State "installing" -Message "Installing Hermes stage: $stageName." -Version $statusVersion -Commit $statusCommit
+        try {
+            $ErrorActionPreference = "Continue"
+            & $powershellPath `
+                -NoProfile `
+                -ExecutionPolicy Bypass `
+                -File $installerPath `
+                -Branch ([string]$manifest.branch) `
+                -Commit $statusCommit `
+                -HermesHome $runtimeRoot `
+                -InstallDir $stagingDir `
+                -SkipSetup `
+                -NonInteractive `
+                -Json `
+                -Stage $stageName 2>&1 | ForEach-Object { Write-Output ([string]$_) }
+            $installerStageExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($installerStageExitCode -ne 0) {
+            throw "Hermes installer stage '$stageName' exited with code $installerStageExitCode."
+        }
     }
 
     foreach ($relativePath in $manifest.requiredFiles) {
