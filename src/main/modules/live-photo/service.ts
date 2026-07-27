@@ -29,10 +29,15 @@ import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/bat
 import { webPlatformRepo } from '../web-platform/repo'
 import { productImageMaterialsService } from '../product-image-materials/service'
 import { livePhotoRepo } from './repo'
-import { livePhotoPromptVersionService } from './promptVersions'
+import {
+  DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT,
+  hashLivePhotoPrompt,
+  livePhotoPromptVersionService,
+} from './promptVersions'
 import { buildLivePhotoQualityCacheKey, livePhotoQualityCache } from './qualityCache'
 import { LIVE_PHOTO_QUALITY_CHECKER_VERSION, runLocalLivePhotoQualityCheck } from './qualityChecker'
 import { submitLivePhotoImageGeneration, type LivePhotoImageProviderAdapter } from './imageGenerationAdapter'
+import { normalizeLivePhotoGeneratedImageAspect } from './imageAspect'
 import { resolveAuthoritativeProductReferencePath } from './productInput'
 import { bindLivePhotoReplacementInputs, normalizeLivePhotoScenePaths } from './sceneInput'
 import { buildLivePhotoReplacementPrompt } from './promptBuilder'
@@ -1980,15 +1985,21 @@ async function validateGeneratedStillWithPipeline(input: {
   product: LivePhotoProductSnapshot
   scenePath: string
   stillPath: string
+  outputRoot?: string
+  qualitySettings?: {
+    qualityCheckerEnabled: boolean
+    qualityPassThreshold: number
+    qualityRetryFloor: number
+  }
 }): Promise<LivePhotoQualityReport> {
-  const settings = await livePhotoRepo.getSettings()
+  const settings = input.qualitySettings || await livePhotoRepo.getSettings()
   const passThreshold = Math.max(0.5, Math.min(1, Number(settings.qualityPassThreshold ?? 0.88)))
   const retryFloor = Math.max(0, Math.min(passThreshold, Number(settings.qualityRetryFloor ?? 0.65)))
   const rawProductPath = resolveAuthoritativeProductReferencePath(input.product)
   const preparedProduct = rawProductPath
     ? await prepareLivePhotoProductReference({
         sourcePath: rawProductPath,
-        outputDir: join(livePhotoRoot(input.item.id), 'product-reference'),
+        outputDir: join(input.outputRoot || livePhotoRoot(input.item.id), 'product-reference'),
         variant: resolveLivePhotoProductReferenceVariant(input.item),
         hint: { type: input.product.type, category: input.product.productAnalysis?.category },
       })
@@ -2845,12 +2856,13 @@ async function finalizeGeneratedLivePhotoReplacement(input: {
   item: LivePhotoItem
   scenePath: string
   generatedCropPath: string
+  outputRoot?: string
 }) {
   if (livePhotoDeps.generateGptShotFrameImage !== generateGptShotFrameImage) return input.generatedCropPath
   if (basename(input.generatedCropPath).startsWith('localized-replacement-')) return input.generatedCropPath
   const region = normalizeLivePhotoReplacementRegion(input.item.replacementRegion)
   if (!region) throw new Error('[replacement_region_required] Select the replacement region before image generation.')
-  const root = livePhotoRoot(input.item.id)
+  const root = input.outputRoot || livePhotoRoot(input.item.id)
   const context = await prepareLivePhotoReplacementCrop({
     scenePath: input.scenePath,
     outputPath: join(root, 'product-reference', `scene-crop-r${region.revision}.png`),
@@ -3021,9 +3033,10 @@ async function generateReferenceReplacementStill(input: {
   product: LivePhotoProductSnapshot
   referenceImagePath: string
   strategyOverride?: LivePhotoReplacementStrategy
+  outputRoot?: string
 }) {
   const credentials = await cloneRepo.getCredentials()
-  const root = livePhotoRoot(input.item.id)
+  const root = input.outputRoot || livePhotoRoot(input.item.id)
   const stillDir = join(
     root,
     livePhotoDeps.generateGptShotFrameImage === generateGptShotFrameImage ? 'generated-crops' : 'generated-still',
@@ -3082,9 +3095,10 @@ async function submitReferenceReplacementStillTask(input: {
   product: LivePhotoProductSnapshot
   referenceImagePath: string
   strategyOverride?: LivePhotoReplacementStrategy
+  outputRoot?: string
 }) {
   const credentials = await cloneRepo.getCredentials()
-  const root = livePhotoRoot(input.item.id)
+  const root = input.outputRoot || livePhotoRoot(input.item.id)
   const stillDir = join(
     root,
     livePhotoDeps.generateGptShotFrameImage === generateGptShotFrameImage ? 'generated-crops' : 'generated-still',
@@ -3227,6 +3241,7 @@ async function submitReferenceReplacementStillTask(input: {
 async function pollReferenceReplacementStillTask(input: {
   item: LivePhotoItem
   outputDir: string
+  outputRoot?: string
 }) {
   const credentials = await cloneRepo.getCredentials()
   const taskId = String(input.item.imageTaskId || '').trim()
@@ -3250,7 +3265,7 @@ async function pollReferenceReplacementStillTask(input: {
           item: input.item,
           product,
           referenceImagePath: scenePath,
-          outputDir: join(livePhotoRoot(input.item.id), 'product-reference'),
+          outputDir: join(input.outputRoot || livePhotoRoot(input.item.id), 'product-reference'),
         })
       : null
     const generated = await generateApifoxImage({
@@ -4300,6 +4315,24 @@ async function finalizeReferenceItem(input: {
     }
     if (cacheKey) await livePhotoQualityCache.put({ key: cacheKey, sourcePath: generated.stillPath, quality: qualityReport })
   }
+  if (livePhotoDeps.generateGptShotFrameImage === generateGptShotFrameImage) {
+    const aspectResult = await normalizeLivePhotoGeneratedImageAspect(
+      generated.stillPath,
+      join(livePhotoRoot(input.item.id), 'generated-still'),
+    )
+    generated = {
+      ...generated,
+      stillPath: aspectResult.path,
+    }
+    if (aspectResult.normalized) {
+      autoFlowLogs.push(
+        buildLivePhotoLog(
+          `[live-photo] image aspect normalized: ${aspectResult.sourceWidth}x${aspectResult.sourceHeight} -> ${aspectResult.width}x${aspectResult.height} (9:16)`,
+          'success',
+        ),
+      )
+    }
+  }
   const imageDoneItem: LivePhotoItem = {
     ...appendLivePhotoLogs(input.item, [
       ...autoFlowLogs,
@@ -4821,6 +4854,192 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
     created.push(await livePhotoRepo.upsert(item))
   }
   return { created, product, referenceImagePaths, motionTemplate }
+}
+
+export type ExternalReferenceImagePreparationState = {
+  productSnapshot?: LivePhotoProductSnapshot
+  imagePromptPreview?: LivePhotoRequestPreview
+  promptVersionId?: string
+  promptVersion?: number
+  promptHash?: string
+  replacementPrompt?: string
+  replacementRegion?: LivePhotoReplacementRegion
+  sceneInteraction?: LivePhotoSceneInteraction
+  generationAttempts?: LivePhotoGenerationAttempt[]
+  qualityReport?: LivePhotoQualityReport
+  generatedStillPath?: string
+  imageTaskId?: string
+  imageTaskProvider?: string
+  imageTaskModel?: string
+  imageTaskBaseUrl?: string
+  imageTaskEndpointStyle?: string
+}
+
+export async function prepareReferenceImageForExternalWorkflow(input: {
+  workflowId: string
+  referenceImagePath: string
+  productId: string
+  outputRoot: string
+  state?: ExternalReferenceImagePreparationState
+  promptVersion?: {
+    id: string
+    version: number
+    prompt: string
+    promptHash: string
+  }
+}) {
+  const timestamp = now()
+  const product = input.state?.productSnapshot || await buildProductSnapshot(String(input.productId || '').trim())
+  const credentials = await cloneRepo.getCredentials()
+  ensureLivePhotoStrictImageEditProvider(credentials)
+  const externalPrompt = String(input.state?.replacementPrompt || input.promptVersion?.prompt || DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT).trim()
+  const externalPromptHash = input.promptVersion?.promptHash || hashLivePhotoPrompt(externalPrompt)
+  const imagePromptPreview = input.state?.imagePromptPreview || buildReferenceReplacementImagePromptPreview({
+    product,
+    referenceImagePath: input.referenceImagePath,
+    credentials,
+    prompt: externalPrompt,
+  })
+  let item: LivePhotoItem = {
+    id: String(input.workflowId || '').trim(),
+    sourceType: 'reference_replace',
+    productId: product.id,
+    productSnapshot: product,
+    referenceImagePath: input.referenceImagePath,
+    packagingStatus: 'processing',
+    imagePromptPreview,
+    promptVersionId: input.state?.promptVersionId || input.promptVersion?.id || 'shared-reference-replacement-default',
+    promptVersion: input.state?.promptVersion || input.promptVersion?.version || 1,
+    promptHash: input.state?.promptHash || externalPromptHash,
+    replacementRegion: input.state?.replacementRegion,
+    sceneInteraction: input.state?.sceneInteraction,
+    generationAttempts: input.state?.generationAttempts || [],
+    qualityReport: input.state?.qualityReport,
+    generatedStillPath: input.state?.generatedStillPath,
+    imageTaskId: input.state?.imageTaskId,
+    imageTaskProvider: input.state?.imageTaskProvider,
+    imageTaskModel: input.state?.imageTaskModel,
+    imageTaskBaseUrl: input.state?.imageTaskBaseUrl,
+    imageTaskEndpointStyle: input.state?.imageTaskEndpointStyle,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+  const toState = (current: LivePhotoItem): ExternalReferenceImagePreparationState => ({
+    productSnapshot: product,
+    imagePromptPreview,
+    promptVersionId: current.promptVersionId,
+    promptVersion: current.promptVersion,
+    promptHash: current.promptHash,
+    replacementPrompt: externalPrompt,
+    replacementRegion: current.replacementRegion,
+    sceneInteraction: current.sceneInteraction,
+    generationAttempts: current.generationAttempts,
+    qualityReport: current.qualityReport,
+    generatedStillPath: current.generatedStillPath,
+    imageTaskId: current.imageTaskId,
+    imageTaskProvider: current.imageTaskProvider,
+    imageTaskModel: current.imageTaskModel,
+    imageTaskBaseUrl: current.imageTaskBaseUrl,
+    imageTaskEndpointStyle: current.imageTaskEndpointStyle,
+  })
+  if (item.generatedStillPath && existsSync(item.generatedStillPath) && item.qualityReport?.decision === 'pass') {
+    return { pending: false, preparedImagePath: item.generatedStillPath, state: toState(item) }
+  }
+  if (!item.replacementRegion || !item.sceneInteraction) {
+    const located = await locateLivePhotoReplacementRegion({ item, product, scenePath: input.referenceImagePath })
+    item = { ...item, replacementRegion: located.region, sceneInteraction: located.sceneInteraction, updatedAt: now() }
+  }
+  let generatedPath = ''
+  if (item.imageTaskId) {
+    const polled = await pollReferenceReplacementStillTask({
+      item,
+      outputDir: join(input.outputRoot, 'generated-crops'),
+      outputRoot: input.outputRoot,
+    })
+    if (!polled.synced || !polled.outputPath) {
+      return { pending: true, preparedImagePath: '', state: toState(item) }
+    }
+    generatedPath = polled.outputPath
+    item = {
+      ...item,
+      imageTaskId: undefined,
+      imageTaskProvider: undefined,
+      imageTaskModel: undefined,
+      imageTaskBaseUrl: undefined,
+      imageTaskEndpointStyle: undefined,
+    }
+  } else {
+    const submitted = await withTimeout(
+      submitReferenceReplacementStillTask({
+        item,
+        product,
+        referenceImagePath: input.referenceImagePath,
+        outputRoot: input.outputRoot,
+      }),
+      LIVE_PHOTO_REFERENCE_STILL_TIMEOUT_MS,
+      'Reference still generation',
+    )
+    if (submitted.mode === 'remote') {
+      item = {
+        ...item,
+        imageTaskId: submitted.taskId,
+        imageTaskProvider: submitted.provider,
+        imageTaskModel: submitted.model,
+        imageTaskBaseUrl: submitted.baseUrl,
+        imageTaskEndpointStyle: submitted.endpointStyle,
+        updatedAt: now(),
+      }
+      return { pending: true, preparedImagePath: '', state: toState(item) }
+    }
+    generatedPath = submitted.stillPath
+  }
+  const preparedImagePath = await finalizeGeneratedLivePhotoReplacement({
+    item,
+    scenePath: input.referenceImagePath,
+    generatedCropPath: generatedPath,
+    outputRoot: input.outputRoot,
+  })
+  const qualityReport = await validateGeneratedStillWithPipeline({
+    item,
+    product,
+    scenePath: input.referenceImagePath,
+    stillPath: preparedImagePath,
+    outputRoot: input.outputRoot,
+    qualitySettings: {
+      qualityCheckerEnabled: true,
+      qualityPassThreshold: 0.88,
+      qualityRetryFloor: 0.65,
+    },
+  })
+  const attempt: LivePhotoGenerationAttempt = {
+    id: randomUUID(),
+    index: (item.generationAttempts || []).length + 1,
+    outputPath: preparedImagePath,
+    provider: imagePromptPreview.provider,
+    model: imagePromptPreview.model,
+    strategy: inferLivePhotoReplacementStrategy({ item, product }),
+    negativePrompt: buildReferenceReplacementNegativePrompt({ product, sceneInteraction: item.sceneInteraction }),
+    cacheHit: false,
+    quality: qualityReport,
+    regionRevision: item.replacementRegion?.revision,
+    createdAt: now(),
+  }
+  item = {
+    ...item,
+    generatedStillPath: preparedImagePath,
+    qualityReport,
+    generationAttempts: [...(item.generationAttempts || []), attempt],
+    updatedAt: now(),
+  }
+  return {
+    pending: false,
+    preparedImagePath,
+    failed: qualityReport.decision !== 'pass',
+    error: qualityReport.decision === 'pass'
+      ? undefined
+      : `[image_validation_failed] ${qualityReport.decision}: ${qualityReport.hardFailures.join(', ') || `quality score ${qualityReport.score}`}`,
+    state: toState(item),
+  }
 }
 
 function startReferenceCompletionBatch(input: {
@@ -5544,11 +5763,12 @@ export const livePhotoService = {
       })
     }
     const normalizedItems = await livePhotoRepo.list()
-    const resumable = normalizedItems.filter((item) => canResumeLivePhotoAutoFlow(item))
+    const resumable: LivePhotoItem[] = []
     console.log('[live-photo-debug] startup-resume-scan', {
       totalItemCount: normalizedItems.length,
       resumableCount: resumable.length,
       itemIds: resumable.map((item) => item.id),
+      autoResumeDisabled: true,
     })
     resumable.forEach((item, index) => {
       const delayMs = Math.min(index, 6) * 900

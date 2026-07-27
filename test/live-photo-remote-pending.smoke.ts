@@ -176,11 +176,11 @@ async function main() {
     assert.equal(remoteImageSubmitCount, 1)
 
     const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.ok(resumeRemote.itemIds.includes(created.id))
+    assert.equal(resumeRemote.itemIds.includes(created.id), false)
 
     const resumedSnapshot = await waitForItemCondition(
       created.id,
-      (item) => String(item?.imageTaskId || '').trim() === remoteImageTaskId,
+      (item) => String(item?.imageTaskId || '').trim() === remoteImageTaskId && item?.autoFlowStatus?.status === 'running',
       12000,
     )
 

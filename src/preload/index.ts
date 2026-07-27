@@ -792,12 +792,26 @@ const api = {
   },
   tiktokCreative: {
     list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),
-    createDraftsFromCloneProjects: (payload: { cloneProjectIds: string[] }) => ipcRenderer.invoke('plugin:tiktokCreative:createDraftsFromCloneProjects', payload),
-    createDraftFromCloneProject: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createDraftFromCloneProject', payload),
-    startShot: (payload: { id: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:startShot', payload),
-    startNextPendingShot: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokCreative:startNextPendingShot', payload),
-    markShotCompleted: (payload: { id: string; shotId: string; resultVideoPath: string }) => ipcRenderer.invoke('plugin:tiktokCreative:markShotCompleted', payload),
-    markShotFailed: (payload: { id: string; shotId: string; error: string }) => ipcRenderer.invoke('plugin:tiktokCreative:markShotFailed', payload),
+    listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreative:listAccounts'),
+    listPromptVersions: () => ipcRenderer.invoke('plugin:tiktokCreative:listPromptVersions'),
+    createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createPromptVersion', payload),
+    updatePromptVersion: (payload: { id: string; name: string; prompt: string }) => ipcRenderer.invoke('plugin:tiktokCreative:updatePromptVersion', payload),
+    activatePromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokCreative:activatePromptVersion', payload),
+    rollbackPromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokCreative:rollbackPromptVersion', payload),
+    importAccount: (payload: { id?: string; name: string; cookieJson: string }) => ipcRenderer.invoke('plugin:tiktokCreative:importAccount', payload),
+    updateAccount: (payload: { id: string; name?: string; enabled?: boolean; priority?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:updateAccount', payload),
+    testAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:testAccount', id),
+    removeAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:removeAccount', id),
+    createFromReference: (payload: { referenceImagePaths: string[]; productId: string; prompt?: string; durationSec?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:createFromReference', payload),
+    retryShot: (payload: {
+      id: string
+      shotId: string
+      replacementRegion?: { x: number; y: number; width: number; height: number }
+    }) => ipcRenderer.invoke('plugin:tiktokCreative:retryShot', payload),
+    exportItems: (payload: { taskId: string; shotIds: string[]; outputDir: string }) => ipcRenderer.invoke('plugin:tiktokCreative:exportItems', payload),
+    removeShot: (payload: { taskId: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:removeShot', payload),
+    generateSubtitles: (payload: { items: Array<{ taskId: string; shotId: string }>; titleText?: string; titleConfig?: { strategy?: 'single_for_all' | 'random_pool'; singleText?: string; titlePool?: string[] }; captionStyle?: Record<string, unknown>; overlayImageConfig?: Record<string, unknown>; layoutPolicy?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreative:generateSubtitles', payload),
+    revertSubtitles: (payload: { taskId: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:revertSubtitles', payload),
     remove: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:remove', id),
   },
   livePhoto: {

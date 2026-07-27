@@ -2,10 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
+import ProductSelectDialog from '../components/ProductSelectDialog.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import { webApiClient } from '@/lib/webApiClient'
 import {
   AlertTriangle,
+  Captions,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -32,6 +35,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-vue-next'
 
 type ProductImageAsset = {
@@ -257,7 +261,7 @@ const router = useRouter()
 const { t } = useI18n()
 
 const uiText = {
-  workspaceTitle: '\u5de5\u4f5c\u533a',
+  workspaceTitle: 'Live Photo',
   workspaceHint: '\u5728\u53c2\u8003\u56fe\u4efb\u52a1\u3001\u590d\u523b\u955c\u5934\u4e0e\u7d20\u6750\u5e93\u4e4b\u95f4\u5feb\u901f\u5207\u6362',
   heroTitle: '\u4ece\u5546\u54c1\u53c2\u8003\u56fe\u6216\u590d\u523b\u955c\u5934\u751f\u6210\u53ef\u76f4\u63a5\u5bfc\u51fa\u7684\u52a8\u6001\u7167\u7247\u7d20\u6750',
   heroDesc:
@@ -362,6 +366,7 @@ const productImageMaterials = ref<ProductImageMaterialOption[]>([])
 const cloneProjects = ref<CloneProjectSummary[]>([])
 const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused'>('all')
 const selectedProductId = ref('')
+const productPickerOpen = ref(false)
 const referenceImagePaths = ref<string[]>([])
 const referenceMissingPaths = ref<string[]>([])
 const referenceMaterialIds = ref<string[]>([])
@@ -373,6 +378,8 @@ const selectedCloneProjectId = ref('')
 const cloneProjectDetail = ref<CloneProjectDetail | null>(null)
 const selectedShotIds = ref<string[]>([])
 const selectedLibraryIds = ref<string[]>([])
+const batchDeleteOpen = ref(false)
+const batchDeleteBusy = ref(false)
 const sendingToFeishu = ref(false)
 const runtimeDialogOpen = ref(false)
 const runtimeLogs = ref<Array<{ id: string; level: 'info' | 'success' | 'error'; message: string; time: number }>>([])
@@ -410,6 +417,7 @@ const subtitleTitlePoolText = ref('')
 const subtitleSelectedPreset = ref<SubtitlePresetId>('viral-hook')
 const subtitleCaptionStyle = reactive<SubtitleCaptionStyle>(defaultSubtitleCaptionStyle())
 const subtitleDialogItem = ref<LivePhotoItem | null>(null)
+const videoDialogItemId = ref('')
 const livePhotoSettings = ref<LivePhotoSettings>({
   referenceMotionTemplate: 'push_in',
   cloneMotionTemplate: 'ambient_sway',
@@ -509,6 +517,7 @@ const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
 const subtitleEligibleSelectedItems = computed(() => selectedLibraryItems.value.filter((item) => Boolean(livePhotoDisplayVideoPath(item))))
 const subtitleEligibleSelectedCount = computed(() => subtitleEligibleSelectedItems.value.length)
+const videoDialogItem = computed(() => items.value.find((item) => item.id === videoDialogItemId.value) || null)
 const feishuEligibleSelectedItems = computed(() =>
   selectedLibraryItems.value.filter((item) => item.packagingStatus === 'completed' && Boolean(livePhotoDisplayVideoPath(item))),
 )
@@ -1181,6 +1190,16 @@ function openTaskDetail(item: LivePhotoItem) {
   })()
 }
 
+function openVideoDialog(item: LivePhotoItem) {
+  if (!livePhotoDisplayVideoPath(item)) return
+  videoDialogItemId.value = item.id
+}
+
+function closeVideoDialog() {
+  if (subtitleDialogBusy.value) return
+  videoDialogItemId.value = ''
+}
+
 function closeTaskDetail() {
   detailDialogOpen.value = false
   detailDialogItem.value = null
@@ -1742,6 +1761,37 @@ async function removeItem(id: string) {
   await loadAll()
 }
 
+function openBatchDelete() {
+  if (selectedLibraryIds.value.length) batchDeleteOpen.value = true
+}
+
+async function confirmBatchDelete() {
+  if (!selectedLibraryIds.value.length || batchDeleteBusy.value) return
+  batchDeleteBusy.value = true
+  errorText.value = ''
+  notice.value = ''
+  const ids = [...selectedLibraryIds.value]
+  const failedIds: string[] = []
+  let deletedCount = 0
+  try {
+    for (const id of ids) {
+      try {
+        await window.api.livePhoto.remove(id)
+        deletedCount += 1
+      } catch {
+        failedIds.push(id)
+      }
+    }
+    selectedLibraryIds.value = failedIds
+    batchDeleteOpen.value = false
+    await loadAll()
+    if (deletedCount) notice.value = `\u5df2\u6279\u91cf\u5220\u9664 ${deletedCount} \u4e2a Live Photo \u4efb\u52a1`
+    if (failedIds.length) errorText.value = `${failedIds.length} \u4e2a\u4efb\u52a1\u5220\u9664\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5`
+  } finally {
+    batchDeleteBusy.value = false
+  }
+}
+
 async function sendSelectedToFeishu() {
   if (!feishuEligibleSelectedCount.value || sendingToFeishu.value) return
   sendingToFeishu.value = true
@@ -2204,18 +2254,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <label class="field">
             <span>{{ uiText.product }}</span>
-            <div class="product-picker">
+            <button class="product-picker product-picker-button" data-testid="live-photo-product-select" type="button" @click="productPickerOpen = true">
               <div v-if="selectedProduct?.coverImagePath" class="product-thumb">
                 <img :src="previewSrc(selectedProduct.coverImagePath)" alt="product cover" />
               </div>
               <div v-else class="product-thumb product-thumb-fallback">
                 <Package class="h-4 w-4" />
               </div>
-              <select v-model="selectedProductId" data-testid="live-photo-product-select">
-                <option v-for="product in products" :key="product.id" :value="product.id">{{ product.name }}</option>
-              </select>
+              <span class="product-picker-name">{{ selectedProduct?.name || '\u9009\u62e9\u5546\u54c1' }}</span>
               <ChevronDown class="picker-arrow h-4 w-4" />
-            </div>
+            </button>
           </label>
 
           <div class="field">
@@ -2609,6 +2657,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           </div>
           <div class="library-output-actions">
             <button
+              class="toolbar-button batch-delete-button"
+              type="button"
+              :disabled="!selectedLibraryIds.length"
+              @click="openBatchDelete"
+            >
+              <Trash2 class="h-4 w-4" />
+              {{ '\u6279\u91cf\u5220\u9664' }} ({{ selectedLibraryIds.length }})
+            </button>
+            <button
               v-if="subtitleEligibleSelectedCount"
               class="toolbar-button"
               type="button"
@@ -2654,6 +2711,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <div v-else class="live-console-row__thumb-empty">
                   <FileImage class="h-5 w-5" />
                 </div>
+                <button
+                  v-if="livePhotoDisplayVideoPath(item)"
+                  class="preview-play"
+                  type="button"
+                  :aria-label="`播放 ${item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo'} 视频`"
+                  @click.stop="openVideoDialog(item)"
+                >
+                  <Play class="h-4 w-4" />
+                </button>
               </div>
             </div>
 
@@ -2735,7 +2801,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   class="live-console-row__action live-console-row__action--play"
                   type="button"
                   :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="openPath(livePhotoDisplayVideoPath(item))"
+                  @click.stop="openVideoDialog(item)"
                 >
                   <Play class="h-4 w-4" />
                 </button>
@@ -2809,12 +2875,20 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </div>
           </div>
 
-          <button class="live-console-card__preview" type="button" @click="openTaskDetail(item)">
+          <button
+            class="live-console-card__preview"
+            type="button"
+            :aria-label="livePhotoDisplayVideoPath(item) ? `播放 ${item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo'} 视频` : '查看任务详情'"
+            @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
+          >
             <div class="live-console-row__thumb">
               <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" />
               <div v-else class="live-console-row__thumb-empty">
                 <FileImage class="h-5 w-5" />
               </div>
+              <span v-if="livePhotoDisplayVideoPath(item)" class="preview-play" aria-hidden="true">
+                <Play class="h-4 w-4" />
+              </span>
             </div>
           </button>
 
@@ -2886,7 +2960,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 class="live-console-row__action live-console-row__action--play"
                 type="button"
                 :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="openPath(livePhotoDisplayVideoPath(item))"
+                @click.stop="openVideoDialog(item)"
               >
                 <Play class="h-4 w-4" />
               </button>
@@ -3167,13 +3241,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <ScanLine class="h-4 w-4" />
                 校正替换区域
               </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
                 打开预览视频
               </button>
               <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)">
                 打开元数据桥接文件
               </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
                 打开导出视频
               </button>
               <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openSingleSubtitleDialog(detailDialogItem)">
@@ -3236,10 +3310,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   <span>视频结果将在视频生成完成后显示</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
-                    打开视频
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
+                    播放视频
                   </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
                     打开预览
                   </button>
                   <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="showPath(livePhotoDisplayVideoPath(detailDialogItem))">
@@ -3257,7 +3331,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   v-if="livePhotoThumbnailPath(detailDialogItem)"
                   class="live-result-card__frame"
                   type="button"
-                  @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))"
+                  @click="openVideoDialog(detailDialogItem)"
                 >
                   <img :src="previewSrc(livePhotoThumbnailPath(detailDialogItem))" alt="live photo poster" />
                 </button>
@@ -3266,7 +3340,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   <span>导出完成后会在这里展示最终封面</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openPath(livePhotoDisplayVideoPath(detailDialogItem))">
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
                     打开导出视频
                   </button>
                   <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)">
@@ -3408,6 +3482,49 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </ul>
             </div>
           </section>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="videoDialogItem" class="live-subtitle-dialog" @click.self="closeVideoDialog">
+      <div class="live-subtitle-dialog__panel live-photo-video-dialog" role="dialog" aria-modal="true" aria-label="Live Photo 视频预览">
+        <div class="live-subtitle-dialog__head">
+          <div class="live-subtitle-dialog__titleblock">
+            <strong>{{ videoDialogItem.sourceShotLabel || videoDialogItem.productSnapshot?.name || 'Live Photo 视频' }}</strong>
+            <p>{{ itemHasAppliedSubtitle(videoDialogItem) ? '当前播放：字幕版本' : '当前播放：原始视频' }} · {{ formatTime(videoDialogItem.createdAt) }}</p>
+          </div>
+          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" aria-label="关闭视频预览" @click="closeVideoDialog">
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <video
+          class="live-photo-video-dialog__player"
+          controls
+          autoplay
+          playsinline
+          preload="metadata"
+          :src="previewSrc(livePhotoDisplayVideoPath(videoDialogItem))"
+        ></video>
+        <div class="live-photo-video-dialog__meta">
+          <span>{{ fileNameOf(livePhotoDisplayVideoPath(videoDialogItem)) }}</span>
+          <span>{{ liveTaskStatusLabel(videoDialogItem) }}</span>
+        </div>
+        <div class="live-subtitle-dialog__actions">
+          <button class="ghost-button" type="button" :disabled="subtitleDialogBusy" @click="openSingleSubtitleDialog(videoDialogItem)">
+            <Captions class="h-4 w-4" />
+            生成字幕
+          </button>
+          <button
+            v-if="itemHasAppliedSubtitle(videoDialogItem)"
+            class="ghost-button"
+            type="button"
+            :disabled="subtitleDialogBusy"
+            @click="revertSubtitleFromItem(videoDialogItem)"
+          >
+            <RefreshCcw class="h-4 w-4" />
+            回退字幕
+          </button>
+          <button class="primary-button" type="button" :disabled="subtitleDialogBusy" @click="closeVideoDialog">关闭</button>
         </div>
       </div>
     </div>
@@ -3615,6 +3732,22 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </div>
     </div>
 
+    <BatchDeleteDialog
+      :open="batchDeleteOpen"
+      :count="selectedLibraryIds.length"
+      :busy="batchDeleteBusy"
+      @close="batchDeleteOpen = false"
+      @confirm="confirmBatchDelete"
+    />
+
+    <ProductSelectDialog
+      :open="productPickerOpen"
+      :products="products"
+      :selected-id="selectedProductId"
+      @close="productPickerOpen = false"
+      @select="selectedProductId = $event"
+    />
+
     <RuntimeLogDialog
       v-model="runtimeDialogOpen"
       :logs="runtimeLogs"
@@ -3741,6 +3874,30 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   border: 1px solid rgba(111, 123, 170, 0.24);
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(15, 19, 31, 0.98), rgba(12, 16, 27, 0.99));
+}
+
+.live-photo-video-dialog {
+  width: min(900px, 100%);
+}
+
+.live-photo-video-dialog__player {
+  display: block;
+  width: 100%;
+  min-height: 280px;
+  max-height: 68vh;
+  border-radius: 12px;
+  background: #050810;
+  object-fit: contain;
+}
+
+.live-photo-video-dialog__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgba(194, 204, 229, 0.78);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .live-subtitle-dialog__head, .live-subtitle-dialog__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .live-subtitle-dialog__titleblock { display: grid; gap: 4px; }
@@ -4955,4 +5112,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
     align-items: stretch;
   }
 }
+.product-picker-button { width: 100%; color: #fff; text-align: left; cursor: pointer; }
+.product-picker-button:hover { border-color: rgba(85, 223, 202, 0.44); }
+.product-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.batch-delete-button { color: #fecaca; border-color: rgba(239, 68, 68, 0.24); }
 </style>

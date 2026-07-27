@@ -636,7 +636,7 @@ const shotVideoOutputs = computed<ShotVideoOutput[]>(() =>
         source: existing?.source || 'generated',
         videoPath: resolvedVideoPath || undefined,
         localPath: String(existing?.localPath || existing?.videoPath || (!isReplacementRun ? shot.generatedClipPath : '') || '').trim() || undefined,
-        videoUrl: existing?.videoUrl,
+        videoUrl: resolveShotRemoteVideoUrl(existing),
         taskId:
           existing?.taskId && !String(existing.taskId).trim().toLowerCase().startsWith('gpt_frame_') && !String(existing.taskId).trim().toLowerCase().startsWith('mj_')
             ? existing.taskId
@@ -687,6 +687,43 @@ const shotVideoOutputIndexMap = computed<Record<string, number>>(() =>
 )
 function resolveShotOutputVideoPath(item?: ShotVideoOutput | null) {
   return String(item?.videoPath || item?.localPath || '').trim()
+}
+
+function resolveShotRemoteVideoUrl(item?: Partial<ShotVideoOutput> | null) {
+  const raw = item?.remoteRaw && typeof item.remoteRaw === 'object' ? (item.remoteRaw as Record<string, any>) : {}
+  const data = raw.data && typeof raw.data === 'object' ? raw.data : {}
+  const result = raw.result && typeof raw.result === 'object' ? raw.result : {}
+  const output = raw.output && typeof raw.output === 'object' ? raw.output : {}
+  const candidates = [
+    item?.videoUrl,
+    raw.video_url,
+    raw.videoUrl,
+    raw.url,
+    raw.output_url,
+    raw.outputUrl,
+    raw.metadata?.video_url,
+    raw.metadata?.videoUrl,
+    raw.metadata?.url,
+    data.video_url,
+    data.videoUrl,
+    data.url,
+    data.metadata?.video_url,
+    data.metadata?.videoUrl,
+    data.metadata?.url,
+    result.video_url,
+    result.videoUrl,
+    result.url,
+    result.metadata?.video_url,
+    result.metadata?.videoUrl,
+    result.metadata?.url,
+    output.video_url,
+    output.videoUrl,
+    output.url,
+    output.metadata?.video_url,
+    output.metadata?.videoUrl,
+    output.metadata?.url,
+  ]
+  return candidates.map((value) => String(value || '').trim()).find((value) => /^https?:\/\//i.test(value)) || ''
 }
 
 function hasReadyShotOutputVideo(item?: ShotVideoOutput | null) {
@@ -1909,6 +1946,7 @@ function describeShotSyncState(item?: ShotVideoOutput | null) {
   const remoteStatus = String(item.remoteStatus || '').toLowerCase()
   const errorText = safeText(item.error, '')
   const hasVideo = hasReadyShotOutputVideo(item)
+  const resolvedVideoUrl = resolveShotRemoteVideoUrl(item)
   const isActiveRemoteTask =
     status === 'submitting' ||
     status === 'remote_pending' ||
@@ -1959,6 +1997,13 @@ function describeShotSyncState(item?: ShotVideoOutput | null) {
         : waitText
           ? `云端已返回，已等待 ${waitText}`
           : '云端已返回，正在下载',
+      tone: 'warning' as const,
+    }
+  }
+  if (resolvedVideoUrl && remoteStatus === 'succeeded' && (status === 'failed_retryable' || status === 'failed_terminal' || errorText === 'succeeded')) {
+    return {
+      title: '结果下载中',
+      detail: shotTaskId ? `云端已完成，等待本地回写，taskId=${shotTaskId}` : '云端已完成，等待本地回写',
       tone: 'warning' as const,
     }
   }
@@ -2798,8 +2843,10 @@ function canForceDownloadShot(item?: ShotVideoOutput | null) {
   if (!item) return false
   if (hasReadyShotOutputVideo(item)) return false
   const status = String(item.status || '').toLowerCase()
-  if (status !== 'downloading' && status !== 'remote_succeeded_pending_download') return false
-  return Boolean(String(item.videoUrl || '').trim())
+  const remoteStatus = String(item.remoteStatus || '').toLowerCase()
+  const hasRemoteUrl = Boolean(resolveShotRemoteVideoUrl(item))
+  if (status !== 'downloading' && status !== 'remote_succeeded_pending_download' && !(hasRemoteUrl && remoteStatus === 'succeeded')) return false
+  return hasRemoteUrl
 }
 
 function canRepairShotTaskId(item?: ShotVideoOutput | null) {
@@ -5501,10 +5548,7 @@ onUnmounted(() => {
 .clone-page {
   min-height: 100%;
   padding: 4px 12px 72px;
-  background:
-    radial-gradient(circle at top left, rgba(85, 99, 198, 0.12), transparent 22%),
-    radial-gradient(circle at top right, rgba(28, 155, 138, 0.08), transparent 18%),
-    linear-gradient(180deg, #0d1528 0%, #09101e 100%);
+  background: linear-gradient(180deg, #0d1528 0%, #09101e 100%);
   color: #eef3ff;
 }
 

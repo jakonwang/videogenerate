@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
   Check,
   Boxes,
+  ChevronLeft,
   CloudUpload,
   Download,
   Eye,
@@ -83,7 +85,9 @@ type ParserVideoItem = {
 }
 
 const { locale } = useI18n()
+const router = useRouter()
 const DESKTOP_USER_ID = 'desktop-local'
+const PLUGIN_NAME = 'Product Image Materials'
 
 const activeTab = ref<'batch' | 'background' | 'library'>('batch')
 const batchSourceMode = ref<'upload' | 'downloaded'>('upload')
@@ -144,6 +148,7 @@ const copy = computed(() => {
       queueBatch: 'Them vao hang doi',
       noVideosSelected: 'Chua chon video.',
       noDownloadedVideosSelected: 'Chua chon video da tai.',
+      backPlugin: 'Quay lai plugin',
       refresh: 'Lam moi',
       loadingBatches: 'Dang tai batch...',
       noBatches: 'Chua co batch.',
@@ -207,6 +212,7 @@ const copy = computed(() => {
       queueBatch: '加入队列',
       noVideosSelected: '暂未选择视频。',
       noDownloadedVideosSelected: '暂未选择已下载视频。',
+      backPlugin: '返回插件',
       refresh: '刷新',
       loadingBatches: '正在加载批次...',
       noBatches: '暂无批次。',
@@ -269,6 +275,7 @@ const copy = computed(() => {
     queueBatch: 'Queue Batch',
     noVideosSelected: 'No videos selected.',
     noDownloadedVideosSelected: 'No downloaded videos selected.',
+    backPlugin: 'Back to Plugins',
     refresh: 'Refresh',
     loadingBatches: 'Loading batches...',
     noBatches: 'No batches yet.',
@@ -903,6 +910,29 @@ async function exportSelectedMaterials() {
   }
 }
 
+async function exportSelectedBackgroundMaterials() {
+  const materialIds = selectedBackgroundMaterialIds.value.filter(Boolean)
+  if (!materialIds.length) return
+  const outputDir = await window.api.pickDir({ title: libraryBatchCopy.value.exportPickDir })
+  if (!outputDir) return
+  actionBusyId.value = 'export-background-materials'
+  errorText.value = ''
+  notice.value = ''
+  try {
+    await window.api.productImageMaterials.exportMaterials({
+      userId: DESKTOP_USER_ID,
+      materialIds,
+      outputDir,
+    })
+    notice.value = libraryBatchCopy.value.exportSuccess
+    selectedBackgroundMaterialIds.value = []
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    actionBusyId.value = ''
+  }
+}
+
 async function generateBackgroundVariants() {
   const materialIds = selectedBackgroundMaterialIds.value.filter(Boolean)
   if (!materialIds.length) return
@@ -971,9 +1001,19 @@ onUnmounted(() => {
           <div class="workspace-card__icon">
             <Sparkles class="icon" />
           </div>
-          <div>
-            <div class="workspace-card__title">{{ copy.workspace }}</div>
+          <div class="workspace-card__copy">
+            <div class="workspace-card__title">{{ PLUGIN_NAME }}</div>
             <div class="workspace-card__hint">{{ copy.workspaceHint }}</div>
+          </div>
+          <div class="workspace-card__actions">
+            <button class="ghost-button workspace-action-button" data-testid="product-image-materials-back" type="button" @click="router.push('/plugins?tab=installed&plugin=product-image-materials')">
+              <ChevronLeft class="icon icon--small" />
+              {{ copy.backPlugin }}
+            </button>
+            <button class="ghost-button workspace-action-button" data-testid="product-image-materials-refresh" type="button" :disabled="loading" @click="loadAll">
+              <RefreshCcw class="icon icon--small" />
+              {{ copy.refresh }}
+            </button>
           </div>
         </div>
 
@@ -1251,6 +1291,15 @@ onUnmounted(() => {
             >
               <RefreshCcw class="icon" :class="{ spin: backgroundSubmitting }" />
               {{ generationCopy.generate }}
+            </button>
+            <button
+              class="ghost-button library-toolbar__export"
+              type="button"
+              :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting || actionBusyId === 'export-background-materials'"
+              @click="exportSelectedBackgroundMaterials"
+            >
+              <Download class="icon" />
+              {{ libraryBatchCopy.exportSelected }}
             </button>
           </div>
         </div>
@@ -1645,6 +1694,24 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.workspace-card__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.workspace-action-button {
+  min-height: 38px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .workspace-card__title {

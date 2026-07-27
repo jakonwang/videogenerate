@@ -183,21 +183,18 @@ async function main() {
     assert.equal(remoteVideoSubmitCount, 1)
 
     const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.ok(resumeRemote.itemIds.includes(created.id))
+    assert.equal(resumeRemote.itemIds.includes(created.id), false)
 
-    const resumedSnapshot = await waitForItemCondition(
-      created.id,
-      (item) => String(item?.videoTaskId || '').trim() === remoteVideoTaskId,
-      12000,
-    )
-
-    const queryObserved = await waitForItemCondition(
+    await waitForItemCondition(
       created.id,
       () => remoteVideoQueryCount >= 1,
       12000,
     )
+    const resumedSnapshot = await livePhotoService.get(created.id)
+    const queryObserved = remoteVideoQueryCount >= 1
 
-    assert.equal(resumedSnapshot.videoTaskId, remoteVideoTaskId)
+    assert.ok(resumedSnapshot)
+    assert.equal(resumedSnapshot?.videoTaskId, remoteVideoTaskId)
     assert.equal(resumedSnapshot.autoFlowStatus?.status, 'running')
     assert.match(String(resumedSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
     assert.equal(remoteVideoSubmitCount, 1)

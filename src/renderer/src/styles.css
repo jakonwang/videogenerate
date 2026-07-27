@@ -19598,8 +19598,48 @@ html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__
 }
 
 html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__intro {
-  align-items: flex-start !important;
+  align-items: center !important;
   align-content: center !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__copy {
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-left: auto !important;
+}
+
+html[data-app-theme] body #app .app-shell .materials-workbench .workspace-action-button {
+  min-height: 38px !important;
+  padding: 0 12px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 1280px) {
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__hint {
+    display: none !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__title {
+    max-width: 142px !important;
+    font-size: 14px !important;
+    line-height: 1.18 !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__actions {
+    gap: 4px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .materials-workbench .workspace-action-button {
+    min-height: 34px !important;
+    padding: 0 8px !important;
+    font-size: 11px !important;
+  }
 }
 
 html[data-app-theme] body #app .app-shell .materials-workbench .workspace-card__icon {
@@ -21470,4 +21510,224 @@ html[data-app-theme] body #app .app-shell .artifact-preview-stage > video {
   clip-path: none !important;
   mask: none !important;
   object-fit: contain !important;
+}
+
+/* Keep TikTok Creative Studio aligned with the selected application theme. */
+html[data-app-theme] body #app .app-shell .tiktok-page {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(
+    .live-workspace-head,
+    .panel-card,
+    .library-export-card,
+    .live-console-card,
+    .live-console-row,
+    .live-subtitle-dialog__panel,
+    .account-row,
+    .account-form,
+    .detail-shot,
+    .subtitle-summary > div
+  ) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.reference-source-card, .rules-box, .clone-shot-row, .detail-grid > div) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(
+    .tab-button,
+    .ghost-button,
+    .toolbar-button,
+    .toolbar-icon,
+    .library-page-button,
+    .live-console-row__link,
+    .live-console-row__action,
+    .live-subtitle-dialog__close,
+    .detail-tabs button
+  ) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(
+    .tab-button:hover,
+    .ghost-button:hover,
+    .toolbar-button:hover,
+    .toolbar-icon:hover,
+    .library-page-button:hover,
+    .live-console-row__link:hover,
+    .live-console-row__action:hover,
+    .live-subtitle-dialog__close:hover,
+    .detail-tabs button:hover
+  ) {
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.tab-button.active, .toolbar-icon.active, .detail-tabs button.active) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .primary-button {
+  border-color: color-mix(in srgb, var(--theme-accent) 64%, transparent) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--theme-accent) 88%, #000000),
+    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .step-badge {
+  border-color: color-mix(in srgb, var(--theme-accent) 48%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.live-workspace-icon, .reference-source-card__icon, .rule-icon) {
+  border-color: color-mix(in srgb, var(--theme-accent) 42%, var(--theme-border)) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.live-tab-count, .library-count, .live-console-row__source, .live-console-row__quickchip, .request-parameter-head span) {
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.live-console-card.selected, .live-console-row.selected, .account-row.editing) {
+  border-color: var(--theme-accent) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.product-picker, .field input, .field select, .field textarea, .account-form input, .account-form textarea) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.product-picker:hover, .field input:focus, .field select:focus, .field textarea:focus, .account-form input:focus, .account-form textarea:focus) {
+  border-color: var(--theme-accent) !important;
+  outline-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.output-note, .quality-control-card) {
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, var(--theme-border)) !important;
+  background: color-mix(in srgb, var(--theme-accent) 9%, var(--theme-panel)) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.output-note-head, .quality-control-card__head, .quality-control-card__head strong) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(
+    .live-workspace-copy p,
+    .panel-head-note,
+    .reference-source-card__copy small,
+    .reference-source-card__copy span,
+    .safe-note,
+    .rule-row p,
+    .output-note p,
+    .quality-control-card__head small,
+    .library-subtitle,
+    .library-pagination,
+    .live-console-row__meta,
+    .live-console-row__subtitle,
+    .live-console-row__updated-inline,
+    .empty-card,
+    .live-subtitle-dialog__titleblock p,
+    .account-main small,
+    .account-form label,
+    .account-form-hint,
+    .detail-shot p,
+    .detail-grid span,
+    .request-parameter-head p,
+    .subtitle-summary span,
+    .delete-dialog__body p
+  ) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .rule-row {
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .library-headline,
+html[data-app-theme] body #app .app-shell .tiktok-page .live-console-row__bottom {
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .library-view-toggle,
+html[data-app-theme] body #app .app-shell .tiktok-page .detail-tabs {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .live-console-card__preview,
+html[data-app-theme] body #app .app-shell .tiktok-page .live-console-row__thumb,
+html[data-app-theme] body #app .app-shell .tiktok-page .detail-shot > img {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .request-parameter-panel pre {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .material-grid button {
+  border-color: transparent !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .material-grid button.active {
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page :is(.status-completed, .account-state, .banner-success) {
+  border-color: var(--theme-success-text) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page
+  :is(.status-failed, .status-paused, .account-state.expired, .account-state.insufficient_credit, .account-state.error, .banner-error) {
+  border-color: var(--theme-danger) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .tiktok-page .status-processing {
+  background: var(--theme-warning-soft) !important;
+  color: var(--theme-warning-text) !important;
 }

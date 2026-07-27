@@ -1,1391 +1,348 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import {
-  CheckCircle2,
-  ChevronLeft,
-  ExternalLink,
-  FolderOpen,
-  Play,
-  RefreshCcw,
-  Sparkles,
-  Trash2,
-  Wand2,
-  XCircle,
-} from 'lucide-vue-next'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
+import ProductSelectDialog from '../components/ProductSelectDialog.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import { AlertTriangle, Captions, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, Code2, Download, FileImage, Filter, FolderOpen, Grid2x2, ImagePlus, KeyRound, LayoutGrid, List, LoaderCircle, Logs, Package, PanelBottomOpen, Pencil, Play, RefreshCcw, ScanLine, ShieldCheck, Sparkles, Trash2, X } from 'lucide-vue-next'
 
-type TaskStatus = 'draft' | 'running' | 'requires_manual' | 'completed' | 'failed'
-type TaskLog = { id: string; level: 'info' | 'success' | 'error'; message: string; time: number }
-type ShotTask = {
-  id: string
-  shotId: string
-  shotIndex: number
-  scriptText?: string
-  imagePath: string
-  prompt: string
-  durationSec: number
-  status: TaskStatus
-  downloadDir?: string
-  resultVideoPath?: string
-  lastError?: string
-  logs: TaskLog[]
-  createdAt: number
-  updatedAt: number
-}
-type TaskItem = {
-  id: string
-  sourceCloneProjectId?: string
-  sourceCloneProjectTitle?: string
-  status: TaskStatus
-  totalShots: number
-  completedShots: number
-  failedShots: number
-  waitingShots: number
-  shots: ShotTask[]
-  lastError?: string
-  logs: TaskLog[]
-  createdAt: number
-  updatedAt: number
-}
-type CloneProjectSummary = {
-  id: string
-  title: string
-  status: string
-  updatedAt: number
-  shotCount: number
-}
+type Account = { id: string; name: string; priority: number; enabled: boolean; state: string; credit?: number; cookieCount: number; lastError?: string; updatedAt: number }
+type Product = { id: string; name: string; coverImagePath?: string; livePhotoReferenceImagePath?: string }
+type Material = { id: string; localImagePath: string; boundProductId?: string; usageStatus: string }
+type PromptVersion = { id: string; name: string; version: number; prompt: string; promptHash: string; active: boolean; createdAt: number; updatedAt: number }
+type LogItem = { id: string; level: 'info' | 'success' | 'error'; message: string; time: number }
+type RequestTrace = { stage: 'upload' | 'create' | 'check'; method: string; url: string; headers: Record<string, string>; body?: unknown; capturedAt: number }
+type ReplacementRegion = { x: number; y: number; width: number; height: number; source?: 'auto' | 'manual'; revision?: number; updatedAt?: number }
+type QualityReport = { score?: number; decision?: string; hardFailures?: string[] }
+type SubtitlePresetId = 'viral-hook' | 'deal-punch' | 'premium-drop'
+type SubtitleCaptionStyle = { fontName: string; fontSize: number; fontColor: string; strokeColor: string; strokeWidth: number; shadowColor: string; shadowBlur: number; position: 'top' | 'center' | 'bottom'; textAlign: 'left' | 'center' | 'right'; safeMargin: number; maxLines: number; maxWidthRatio: number; lineGap: number; bottomMargin: number }
+type Shot = { shotId: string; shotIndex: number; imagePath: string; referenceImagePath?: string; preparedImagePath?: string; imagePreparation?: { promptVersion?: number; promptVersionId?: string; promptHash?: string; imagePromptPreview?: unknown; replacementRegion?: ReplacementRegion; generationAttempts?: unknown[]; qualityReport?: QualityReport }; imageRetryCount?: number; imageRetryLimit?: number; accountId?: string; officialTaskId?: string; officialVideoId?: string; remoteStatus?: string; status: string; resultVideoPath?: string; posterPath?: string; lastError?: string; logs: LogItem[]; requestTrace?: RequestTrace[]; subtitleVideoPath?: string; subtitleCoverImagePath?: string; subtitleJobId?: string; subtitleAppliedAt?: number; createdAt: number; updatedAt: number }
+type Task = { id: string; productId?: string; productName?: string; status: string; totalShots: number; completedShots: number; failedShots: number; waitingShots: number; shots: Shot[]; logs: LogItem[]; updatedAt: number }
 
-const route = useRoute()
 const router = useRouter()
-
+const activeTab = ref<'reference' | 'library'>('reference')
 const loading = ref(false)
-const importing = ref(false)
-const runningShotId = ref('')
-const runningQueue = ref(false)
+const creating = ref(false)
 const notice = ref('')
 const errorText = ref('')
-const projectLoadError = ref('')
-const tasks = ref<TaskItem[]>([])
-const cloneProjects = ref<CloneProjectSummary[]>([])
-const selectedImportProjectIds = ref<string[]>([])
-const selectedTaskId = ref('')
-const selectedShotId = ref('')
-const runtimeDialogOpen = ref(false)
-const runtimeLogs = ref<TaskLog[]>([])
-const cloneProjectIdInput = ref('')
-const cloneProjectPage = ref(1)
-const cloneProjectPageSize = 8
-
-const currentCloneProjectId = computed(() => safeText(route.query.cloneProjectId, ''))
-const selectedTask = computed(() => tasks.value.find((item) => item.id === selectedTaskId.value) || null)
-const selectedShot = computed(() => selectedTask.value?.shots.find((item) => item.shotId === selectedShotId.value) || null)
-const taskStats = computed(() => {
-  const allProjects = tasks.value.length
-  const allShots = tasks.value.reduce((sum, item) => sum + item.totalShots, 0)
-  const completed = tasks.value.reduce((sum, item) => sum + item.completedShots, 0)
-  const waiting = tasks.value.reduce((sum, item) => sum + item.waitingShots, 0)
-  return { allProjects, allShots, completed, waiting }
+const products = ref<Product[]>([])
+const materials = ref<Material[]>([])
+const tasks = ref<Task[]>([])
+const accounts = ref<Account[]>([])
+const promptVersions = ref<PromptVersion[]>([])
+const selectedPromptVersionId = ref('')
+const promptEditorName = ref('')
+const promptEditorText = ref('')
+const promptVersionBusy = ref(false)
+const referenceImagePaths = ref<string[]>([])
+const selectedProductId = ref('')
+const productPickerOpen = ref(false)
+const accountDialogOpen = ref(false)
+const materialDialogOpen = ref(false)
+const accountName = ref('')
+const accountCookieJson = ref('')
+const editingAccountId = ref('')
+const selectedMaterialIds = ref<string[]>([])
+const selectedShotIds = ref<string[]>([])
+const libraryFilter = ref<'all' | 'completed' | 'running' | 'failed' | 'paused'>('all')
+const libraryViewMode = ref<'grid' | 'list'>('grid')
+const libraryPage = ref(1)
+const libraryPageSize = 12
+const detailTask = ref<Task | null>(null)
+const detailShot = ref<Shot | null>(null)
+const detailTab = ref<'overview' | 'request'>('overview')
+const runtimeTask = ref<Task | null>(null)
+const runtimeShot = ref<Shot | null>(null)
+const liveSubtitleDialogOpen = ref(false)
+const subtitleDialogBusy = ref(false)
+const subtitleDialogMode = ref<'batch' | 'single'>('batch')
+const subtitleDialogTab = ref<'title' | 'template' | 'style'>('title')
+const subtitleTitleStrategy = ref<'single_for_all' | 'random_pool'>('single_for_all')
+const subtitleTitleText = ref('')
+const subtitleTitlePoolText = ref('')
+const subtitleSelectedPreset = ref<SubtitlePresetId>('viral-hook')
+const subtitleCaptionStyle = reactive<SubtitleCaptionStyle>({ fontName: 'SimHei', fontSize: 68, fontColor: '#FFFFFF', strokeColor: '#101116', strokeWidth: 8, shadowColor: 'rgba(0, 0, 0, 0.34)', shadowBlur: 10, position: 'bottom', textAlign: 'center', safeMargin: 10, maxLines: 2, maxWidthRatio: 0.8, lineGap: 6, bottomMargin: 188 })
+const subtitleDialogTargets = ref<Array<{ taskId: string; shotId: string }>>([])
+const videoDialog = ref<{ task: Task; shot: Shot } | null>(null)
+const deleteTarget = ref<{ task: Task; shot: Shot } | null>(null)
+const deleteBusy = ref(false)
+const batchDeleteOpen = ref(false)
+const batchDeleteBusy = ref(false)
+const regionDialogTarget = ref<{ task: Task; shot: Shot } | null>(null)
+const regionStage = ref<HTMLElement | null>(null)
+const regionBusy = ref(false)
+const regionDraft = ref({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 })
+const regionCorners = ['nw', 'ne', 'sw', 'se'] as const
+const regionInteraction = ref<{
+  mode: 'draw' | 'move' | 'resize'
+  corner?: 'nw' | 'ne' | 'sw' | 'se'
+  startX: number
+  startY: number
+  initial: { x: number; y: number; width: number; height: number }
+} | null>(null)
+const runtimeDialogOpen = computed({
+  get: () => Boolean(runtimeTask.value),
+  set: (value: boolean) => { if (!value) { runtimeTask.value = null; runtimeShot.value = null } },
 })
-const pendingShotCount = computed(() => {
-  if (!selectedTask.value) return 0
-  return selectedTask.value.shots.filter((item) => item.status === 'draft' || item.status === 'failed').length
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+
+const selectedProduct = computed(() => products.value.find((item) => item.id === selectedProductId.value))
+const enabledAccounts = computed(() => accounts.value.filter((item) => item.enabled))
+const allShots = computed(() => tasks.value.flatMap((task) => task.shots.map((shot) => ({ task, shot }))))
+const filteredItems = computed(() => allShots.value.filter(({ shot }) => {
+  if (libraryFilter.value === 'all') return true
+  if (libraryFilter.value === 'completed') return shot.status === 'completed'
+  if (libraryFilter.value === 'running') return shot.status === 'running' || shot.remoteStatus === 'processing' || shot.remoteStatus === 'queued'
+  if (libraryFilter.value === 'failed') return shot.status === 'failed'
+  return shot.status === 'requires_manual' || shot.remoteStatus === 'paused_auth' || shot.remoteStatus === 'paused_error'
+}))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredItems.value.length / libraryPageSize)))
+const pagedItems = computed(() => filteredItems.value.slice((libraryPage.value - 1) * libraryPageSize, libraryPage.value * libraryPageSize))
+const completedCount = computed(() => allShots.value.filter(({ shot }) => shot.status === 'completed').length)
+const runningCount = computed(() => allShots.value.filter(({ shot }) => shot.status === 'running' || shot.remoteStatus === 'processing').length)
+const selectedPromptVersion = computed(() => promptVersions.value.find((item) => item.id === selectedPromptVersionId.value))
+const runtimeLogs = computed<LogItem[]>(() => {
+  const task = runtimeTask.value
+  const shot = runtimeShot.value
+  if (!task) return []
+  const requestLogs: LogItem[] = (shot?.requestTrace || []).map((trace, index) => ({
+    id: `request-${shot?.shotId || task.id}-${trace.capturedAt}-${index}`,
+    level: 'info',
+    message: `[tiktok-creative] ${trace.stage} request: ${trace.method} ${trace.url}`,
+    time: trace.capturedAt,
+  }))
+  return [...(task.logs || []), ...(shot?.logs || []), ...requestLogs]
+    .filter((item) => item && String(item.message || '').trim())
+    .sort((a, b) => Number(a.time || 0) - Number(b.time || 0))
 })
-const cloneProjectTotalPages = computed(() => Math.max(1, Math.ceil(cloneProjects.value.length / cloneProjectPageSize)))
-const pagedCloneProjects = computed(() => {
-  const start = (cloneProjectPage.value - 1) * cloneProjectPageSize
-  return cloneProjects.value.slice(start, start + cloneProjectPageSize)
-})
+const subtitleEligibleItems = computed(() => allShots.value.filter(({ shot }) => selectedShotIds.value.includes(shot.shotId) && Boolean(shot.resultVideoPath)))
+const subtitleDialogItems = computed(() => subtitleDialogTargets.value.length
+  ? allShots.value.filter(({ task, shot }) => subtitleDialogTargets.value.some((item) => item.taskId === task.id && item.shotId === shot.shotId) && Boolean(shot.resultVideoPath))
+  : subtitleEligibleItems.value)
 
-function safeText(value: unknown, fallback = '') {
-  const text = String(value ?? '').trim()
-  return text || fallback
-}
+const subtitlePresets: Array<{ id: SubtitlePresetId; name: string; summary: string; style: Partial<SubtitleCaptionStyle> }> = [
+  { id: 'viral-hook', name: '爆款钩子款', summary: '适合统一标题、停留感强、对比明显。', style: { fontName: 'SimHei', fontSize: 68, fontColor: '#FFFFFF', strokeColor: '#101116', strokeWidth: 8, shadowColor: 'rgba(0, 0, 0, 0.34)', shadowBlur: 10, position: 'bottom', textAlign: 'center', safeMargin: 10, maxLines: 2, maxWidthRatio: 0.8, lineGap: 6, bottomMargin: 188 } },
+  { id: 'deal-punch', name: '促单成交款', summary: '更适合卖点和利益点标题，转化感更强。', style: { fontName: 'Microsoft YaHei', fontSize: 64, fontColor: '#FFF7D6', strokeColor: '#17181F', strokeWidth: 6, shadowColor: 'rgba(4, 6, 12, 0.42)', shadowBlur: 12, position: 'bottom', textAlign: 'center', safeMargin: 11, maxLines: 2, maxWidthRatio: 0.76, lineGap: 6, bottomMargin: 194 } },
+  { id: 'premium-drop', name: '精致种草款', summary: '更克制，更适合珠宝首饰这类质感商品。', style: { fontName: 'Noto Sans SC', fontSize: 58, fontColor: '#F8FAFF', strokeColor: '#12131A', strokeWidth: 2, shadowColor: 'rgba(5, 8, 16, 0.56)', shadowBlur: 16, position: 'bottom', textAlign: 'center', safeMargin: 14, maxLines: 2, maxWidthRatio: 0.68, lineGap: 8, bottomMargin: 212 } },
+]
 
-function statusLabel(status: TaskStatus) {
-  if (status === 'completed') return '已完成'
-  if (status === 'failed') return '失败'
-  if (status === 'requires_manual') return '待人工处理'
-  if (status === 'running') return '执行中'
-  return '草稿'
-}
+function previewSrc(path?: string) { const value = String(path || '').trim(); return value ? `vg://file?path=${encodeURIComponent(value)}` : '' }
+function fileName(path?: string) { return String(path || '').replace(/\\/g, '/').split('/').pop() || '--' }
+function formatTime(value?: number) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '--' }
+function statusLabel(shot: Shot) { if (shot.status === 'completed') return '已完成'; if (shot.status === 'failed') return '失败'; if (shot.lastError?.includes('[image_retry_exhausted]')) return '等待框选'; if (shot.remoteStatus === 'paused_auth') return '账号需更新'; if (shot.remoteStatus === 'paused_error' && shot.lastError?.includes('[official_create_unconfirmed]')) return '创建结果待确认'; if (shot.remoteStatus === 'paused_error') return '已暂停'; if (shot.remoteStatus === 'processing') return 'TikTok 生成中'; if (shot.remoteStatus === 'queued') return '排队中'; return '准备中' }
+function statusTone(shot: Shot) { return shot.status === 'completed' ? 'status-completed' : shot.status === 'failed' ? 'status-failed' : shot.remoteStatus?.startsWith('paused') ? 'status-paused' : 'status-processing' }
+function accountState(account: Account) { if (!account.enabled) return '已停用'; if (account.state === 'ready') return account.credit === undefined ? '可用' : `可用 · ${account.credit} 积分`; if (account.state === 'expired') return 'Cookie 已过期'; if (account.state === 'insufficient_credit') return `积分不足${account.credit === undefined ? '' : ` · ${account.credit}`}`; if (account.state === 'error') return '检测失败'; return '等待检测' }
+function setPromptVersion(id: string) { const item = promptVersions.value.find((version) => version.id === id); if (!item) return; promptEditorName.value = item.name; promptEditorText.value = item.prompt }
+function syncRuntimeSelection() { if (!runtimeTask.value) return; const task = tasks.value.find((item) => item.id === runtimeTask.value?.id); if (!task) { runtimeTask.value = null; runtimeShot.value = null; return }; const shotId = runtimeShot.value?.shotId; runtimeTask.value = task; runtimeShot.value = task.shots.find((item) => item.shotId === shotId) || task.shots[0] || null }
 
-function statusTone(status: TaskStatus) {
-  if (status === 'completed') return 'is-success'
-  if (status === 'failed') return 'is-danger'
-  if (status === 'requires_manual') return 'is-warning'
-  if (status === 'running') return 'is-info'
-  return 'is-neutral'
-}
-
-function formatTime(value?: number) {
-  if (!value) return '--'
-  const date = new Date(value)
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const ii = String(date.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd} ${hh}:${ii}`
-}
-
-function previewLabel(path: string) {
-  const normalized = String(path || '').replace(/\\/g, '/')
-  const parts = normalized.split('/')
-  return parts[parts.length - 1] || path
-}
-
-async function withTimeout<T>(promise: Promise<T>, label: string, ms = 5000): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms)
-      }),
-    ])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
-function pushLogs(logs: TaskLog[]) {
-  runtimeLogs.value = Array.isArray(logs) ? logs.slice().reverse().slice(0, 200) : []
-}
-
-function syncSelection(task?: TaskItem | null) {
-  if (!task) return
-  if (!selectedShotId.value || !task.shots.some((item) => item.shotId === selectedShotId.value)) {
-    selectedShotId.value = task.shots[0]?.shotId || ''
-  }
-  pushLogs((task.shots.find((item) => item.shotId === selectedShotId.value)?.logs || task.logs || []) as TaskLog[])
-}
-
-async function loadCloneProjects() {
-  projectLoadError.value = ''
-  cloneProjects.value = []
-
-  try {
-    const summaries = ((await withTimeout(window.api.clone.listProjectSummaries(), 'listProjectSummaries')) as CloneProjectSummary[]) || []
-    if (summaries.length) {
-      cloneProjects.value = summaries.filter((item) => safeText(item.id, ''))
-      return
-    }
-  } catch (error) {
-    console.warn('[tiktok-creative] listProjectSummaries failed', error)
-  }
-
-  try {
-    const projects = ((await withTimeout(window.api.clone.listProjects(), 'listProjects')) as any[]) || []
-    cloneProjects.value = projects
-      .map((item) => ({
-        id: safeText(item?.id, ''),
-        title: safeText(item?.title, '未命名复刻项目'),
-        status: safeText(item?.status, 'draft'),
-        updatedAt: Number(item?.updatedAt || item?.createdAt || Date.now()),
-        shotCount: Number(item?.shotCount || item?.blueprint?.shots?.length || 0),
-      }))
-      .filter((item) => item.id)
-  } catch (error: any) {
-    const message = error?.message ?? String(error)
-    projectLoadError.value = `读取复刻项目失败：${message}`
-    return
-  }
-
-  if (!cloneProjects.value.length) {
-    projectLoadError.value = '当前没有读取到可导入的复刻项目。请先确认复刻任务列表里已有项目。'
-  }
-  cloneProjectPage.value = 1
-}
-
-async function refresh() {
-  loading.value = true
-  try {
-    tasks.value = (await window.api.tiktokCreative.list()) as TaskItem[]
-    await loadCloneProjects()
-    if (!selectedTaskId.value && tasks.value.length) {
-      selectedTaskId.value = tasks.value[0].id
-    }
-    syncSelection(selectedTask.value)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function importFromCloneProject(cloneProjectId: string) {
-  if (!cloneProjectId.trim()) return
-  importing.value = true
-  errorText.value = ''
-  notice.value = ''
-  try {
-    const task = (await window.api.tiktokCreative.createDraftFromCloneProject({ cloneProjectId })) as TaskItem
-    selectedTaskId.value = task.id
-    selectedShotId.value = task.shots[0]?.shotId || ''
-    pushLogs(task.shots[0]?.logs || task.logs || [])
-    notice.value = '已从复刻项目导入分镜图片和分镜视频提示词。'
-    await refresh()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    importing.value = false
-  }
-}
-
-async function importSelectedProjects() {
-  const ids = [...selectedImportProjectIds.value]
-  if (!ids.length) return
-  importing.value = true
-  errorText.value = ''
-  notice.value = ''
-  try {
-    await window.api.tiktokCreative.createDraftsFromCloneProjects({ cloneProjectIds: ids })
-    notice.value = `已批量导入 ${ids.length} 个复刻项目。`
-    selectedImportProjectIds.value = []
-    await refresh()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    importing.value = false
-  }
-}
-
-function toggleImportProject(projectId: string) {
-  const id = safeText(projectId, '')
-  if (!id) return
-  if (selectedImportProjectIds.value.includes(id)) {
-    selectedImportProjectIds.value = selectedImportProjectIds.value.filter((item) => item !== id)
-  } else {
-    selectedImportProjectIds.value = [...selectedImportProjectIds.value, id]
-  }
-}
-
-function goCloneProjectPage(page: number) {
-  cloneProjectPage.value = Math.min(Math.max(1, page), cloneProjectTotalPages.value)
-}
-
-async function startShot(shot: ShotTask) {
-  if (!selectedTask.value) return
-  runningShotId.value = shot.shotId
-  errorText.value = ''
-  notice.value = ''
-  try {
-    const updated = (await window.api.tiktokCreative.startShot({ id: selectedTask.value.id, shotId: shot.shotId })) as TaskItem
-    tasks.value = tasks.value.map((item) => (item.id === updated.id ? updated : item))
-    selectedTaskId.value = updated.id
-    selectedShotId.value = shot.shotId
-    syncSelection(updated)
-    notice.value = `已启动第 ${shot.shotIndex + 1} 条分镜，请在 TikTok Creative Studio 中继续确认。`
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    runningShotId.value = ''
-  }
-}
-
-async function startNextPendingShot() {
-  if (!selectedTask.value) return
-  runningQueue.value = true
-  errorText.value = ''
-  notice.value = ''
-  try {
-    const updated = (await window.api.tiktokCreative.startNextPendingShot({ id: selectedTask.value.id })) as TaskItem
-    tasks.value = tasks.value.map((item) => (item.id === updated.id ? updated : item))
-    selectedTaskId.value = updated.id
-    const current = updated.shots.find((item) => item.status === 'requires_manual' && !item.resultVideoPath)
-    selectedShotId.value = current?.shotId || updated.shots[0]?.shotId || ''
-    syncSelection(updated)
-    notice.value = '已按顺序启动下一条待处理分镜。'
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    runningQueue.value = false
-  }
-}
-
-async function markShotCompleted() {
-  if (!selectedTask.value || !selectedShot.value) return
-  const picked = await window.api.pickFiles({
-    title: '选择已下载的分镜视频',
-    filters: [{ name: 'Videos', extensions: ['mp4', 'mov', 'webm'] }],
-    multiple: false,
-  })
-  const resultVideoPath = safeText(picked?.[0], '')
-  if (!resultVideoPath) return
-  const updated = (await window.api.tiktokCreative.markShotCompleted({
-    id: selectedTask.value.id,
-    shotId: selectedShot.value.shotId,
-    resultVideoPath,
-  })) as TaskItem
-  tasks.value = tasks.value.map((item) => (item.id === updated.id ? updated : item))
-  syncSelection(updated)
-  notice.value = `第 ${selectedShot.value.shotIndex + 1} 条分镜已标记为完成。`
-}
-
-async function markShotFailed() {
-  if (!selectedTask.value || !selectedShot.value) return
-  const reason = window.prompt('请输入失败原因', selectedShot.value.lastError || 'Manual failure') || ''
-  if (!reason.trim()) return
-  const updated = (await window.api.tiktokCreative.markShotFailed({
-    id: selectedTask.value.id,
-    shotId: selectedShot.value.shotId,
-    error: reason.trim(),
-  })) as TaskItem
-  tasks.value = tasks.value.map((item) => (item.id === updated.id ? updated : item))
-  syncSelection(updated)
-  notice.value = `第 ${selectedShot.value.shotIndex + 1} 条分镜已标记为失败。`
-}
-
-async function removeTask(task: TaskItem) {
-  await window.api.tiktokCreative.remove(task.id)
-  if (selectedTaskId.value === task.id) {
-    selectedTaskId.value = ''
-    selectedShotId.value = ''
-    runtimeLogs.value = []
-  }
-  await refresh()
-}
-
-function selectTask(task: TaskItem) {
-  selectedTaskId.value = task.id
-  selectedShotId.value = task.shots[0]?.shotId || ''
-  syncSelection(task)
-}
-
-function selectShot(shot: ShotTask) {
-  selectedShotId.value = shot.shotId
-  pushLogs(shot.logs || [])
-}
-
-async function openResultVideo() {
-  const path = safeText(selectedShot.value?.resultVideoPath, '')
-  if (!path) return
-  await window.api.shell.openPath(path)
-}
-
-async function revealResultVideo() {
-  const path = safeText(selectedShot.value?.resultVideoPath, '')
-  if (!path) return
-  await window.api.shell.showItemInFolder(path)
-}
-
-async function openDownloadDir() {
-  const path = safeText(selectedShot.value?.downloadDir, '')
-  if (!path) return
-  await window.api.shell.openPath(path)
-}
-
-watch(selectedTask, (task) => {
-  syncSelection(task)
-})
-
-watch(selectedShot, (shot) => {
-  if (!shot) return
-  pushLogs(shot.logs || [])
-})
-
-onMounted(async () => {
-  await refresh()
-  const cloneProjectId = safeText(route.query.cloneProjectId, '')
-  cloneProjectIdInput.value = cloneProjectId
-  const autoCreate = safeText(route.query.autoCreate, '')
-  if (cloneProjectId && autoCreate === '1') {
-    await importFromCloneProject(cloneProjectId)
-    return
-  }
-  if (tasks.value.length) selectTask(tasks.value[0])
-})
+async function refresh(silent = false) { if (!silent) loading.value = true; try { const [taskRows, productRows, accountResult, versions] = await Promise.all([window.api.tiktokCreative.list(), window.api.products.list(), window.api.tiktokCreative.listAccounts(), window.api.tiktokCreative.listPromptVersions()]); tasks.value = Array.isArray(taskRows) ? taskRows : []; syncRuntimeSelection(); products.value = Array.isArray(productRows) ? productRows : []; accounts.value = Array.isArray(accountResult?.accounts) ? accountResult.accounts : []; promptVersions.value = Array.isArray(versions) ? versions : []; if (!selectedProductId.value && products.value[0]) selectedProductId.value = products.value[0].id; if (!selectedPromptVersionId.value && promptVersions.value[0]) { selectedPromptVersionId.value = (promptVersions.value.find((item) => item.active) || promptVersions.value[0]).id; setPromptVersion(selectedPromptVersionId.value) } if (libraryPage.value > totalPages.value) libraryPage.value = totalPages.value } catch (error: any) { if (!silent) errorText.value = error?.message || String(error) } finally { if (!silent) loading.value = false } }
+async function loadMaterials() { const rows = await window.api.productImageMaterials.listMaterials({ userId: 'desktop-local', filters: { category: 'all', usageStatus: 'all' } }); materials.value = Array.isArray(rows) ? rows : [] }
+async function pickReferenceImages() { const paths = await window.api.pickFiles({ title: '选择参考图片', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }], multiple: true }); referenceImagePaths.value = Array.from(new Set([...referenceImagePaths.value, ...(Array.isArray(paths) ? paths : [])])) }
+async function openMaterialPicker() { await loadMaterials(); selectedMaterialIds.value = []; materialDialogOpen.value = true }
+function toggleMaterial(id: string) { selectedMaterialIds.value = selectedMaterialIds.value.includes(id) ? selectedMaterialIds.value.filter((item) => item !== id) : [...selectedMaterialIds.value, id] }
+function addMaterials() { referenceImagePaths.value = Array.from(new Set([...referenceImagePaths.value, ...materials.value.filter((item) => selectedMaterialIds.value.includes(item.id)).map((item) => item.localImagePath)])); materialDialogOpen.value = false }
+async function createTasks() { if (!referenceImagePaths.value.length || !selectedProductId.value) return; if (!enabledAccounts.value.length) { accountDialogOpen.value = true; errorText.value = '请先配置至少一个已启用的 TikTok 账号'; return }; const imagePaths = [...referenceImagePaths.value]; creating.value = true; notice.value = ''; errorText.value = ''; try { await window.api.tiktokCreative.createFromReference({ referenceImagePaths: imagePaths, productId: selectedProductId.value, durationSec: 10 }); notice.value = `已创建 ${imagePaths.length} 个十秒视频任务，系统将自动完成图片校验、视频生成和下载`; referenceImagePaths.value = []; setActiveTab('library'); await refresh() } catch (error: any) { errorText.value = error?.message || String(error) } finally { creating.value = false } }
+async function savePrompt(mode: 'update' | 'copy' | 'activate' | 'rollback') { if (!selectedPromptVersionId.value) return; promptVersionBusy.value = true; try { if (mode === 'update') await window.api.tiktokCreative.updatePromptVersion({ id: selectedPromptVersionId.value, name: promptEditorName.value, prompt: promptEditorText.value }); if (mode === 'copy') { const created = await window.api.tiktokCreative.createPromptVersion({ name: promptEditorName.value || 'TikTok Prompt Copy', prompt: promptEditorText.value }); selectedPromptVersionId.value = created.id } if (mode === 'activate') await window.api.tiktokCreative.activatePromptVersion({ id: selectedPromptVersionId.value }); if (mode === 'rollback') { const created = await window.api.tiktokCreative.rollbackPromptVersion({ id: selectedPromptVersionId.value }); selectedPromptVersionId.value = created.id } await refresh(true); setPromptVersion(selectedPromptVersionId.value); notice.value = 'TikTok 提示词版本已更新' } catch (error: any) { errorText.value = error?.message || String(error) } finally { promptVersionBusy.value = false } }
+async function importCookieFile() { const paths = await window.api.pickFiles({ title: '选择 Cookie JSON', filters: [{ name: 'JSON', extensions: ['json', 'txt'] }], multiple: false }); const path = String(paths?.[0] || '').trim(); if (!path) return; const result = await window.api.readFileAsBase64({ path }); accountCookieJson.value = decodeURIComponent(escape(atob(String(result || '')))); if (!accountName.value) accountName.value = fileName(path).replace(/\.(json|txt)$/i, '') }
+function resetAccountForm() { editingAccountId.value = ''; accountName.value = ''; accountCookieJson.value = '' }
+function editAccount(account: Account) { editingAccountId.value = account.id; accountName.value = account.name; accountCookieJson.value = '' }
+async function saveAccount() { const accountId = editingAccountId.value; const cookieJson = accountCookieJson.value.trim(); if (!accountId && !cookieJson) return; try { if (accountId && !cookieJson) await window.api.tiktokCreative.updateAccount({ id: accountId, name: accountName.value }); else await window.api.tiktokCreative.importAccount({ id: accountId || undefined, name: accountName.value, cookieJson }); resetAccountForm(); await refresh(true); notice.value = accountId ? '账号已更新' : '账号 Cookie 已加密保存' } catch (error: any) { errorText.value = error?.message || String(error) } }
+async function testAccount(account: Account) { try { await window.api.tiktokCreative.testAccount(account.id); await refresh(true) } catch (error: any) { errorText.value = error?.message || String(error) } }
+async function removeAccount(account: Account) { if (!window.confirm(`删除账号“${account.name}”？历史任务仍会保留。`)) return; await window.api.tiktokCreative.removeAccount(account.id); await refresh(true) }
+async function toggleAccount(account: Account) { await window.api.tiktokCreative.updateAccount({ id: account.id, enabled: !account.enabled }); await refresh(true) }
+async function moveAccount(account: Account, direction: -1 | 1) { const ordered = [...accounts.value].sort((a, b) => a.priority - b.priority); const index = ordered.findIndex((item) => item.id === account.id); const target = ordered[index + direction]; if (!target) return; await window.api.tiktokCreative.updateAccount({ id: account.id, priority: target.priority }); await window.api.tiktokCreative.updateAccount({ id: target.id, priority: account.priority }); await refresh(true) }
+async function retryShot(task: Task, shot: Shot) { await window.api.tiktokCreative.retryShot({ id: task.id, shotId: shot.shotId }); await refresh(true) }
+function canCorrectRegion(shot: Shot) { return !shot.officialTaskId && Boolean(shot.referenceImagePath || shot.imagePath) && Boolean(shot.lastError?.includes('[image_retry_exhausted]')) }
+function imageAttemptCount(shot: Shot) { return shot.imagePreparation?.generationAttempts?.length || 0 }
+function qualityScore(shot: Shot) { const score = Number(shot.imagePreparation?.qualityReport?.score); return Number.isFinite(score) ? score.toFixed(3) : '--' }
+function qualityFailures(shot: Shot) { return shot.imagePreparation?.qualityReport?.hardFailures?.join(', ') || '--' }
+function clampRegion(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)) }
+function regionStyle() { return { left: `${regionDraft.value.x * 100}%`, top: `${regionDraft.value.y * 100}%`, width: `${regionDraft.value.width * 100}%`, height: `${regionDraft.value.height * 100}%` } }
+function openRegionEditor(task: Task, shot: Shot) { const region = shot.imagePreparation?.replacementRegion; regionDraft.value = { x: Number(region?.x ?? 0.25), y: Number(region?.y ?? 0.25), width: Number(region?.width ?? 0.5), height: Number(region?.height ?? 0.5) }; regionDialogTarget.value = { task, shot } }
+function closeRegionEditor() { if (regionBusy.value) return; regionInteraction.value = null; regionDialogTarget.value = null }
+function normalizedRegionPointer(event: PointerEvent) { const bounds = regionStage.value?.getBoundingClientRect(); if (!bounds) return { x: 0, y: 0 }; return { x: clampRegion((event.clientX - bounds.left) / Math.max(1, bounds.width), 0, 1), y: clampRegion((event.clientY - bounds.top) / Math.max(1, bounds.height), 0, 1) } }
+function beginRegionInteraction(event: PointerEvent, mode: 'draw' | 'move' | 'resize', corner?: 'nw' | 'ne' | 'sw' | 'se') { const point = normalizedRegionPointer(event); regionStage.value?.setPointerCapture(event.pointerId); const initial = { ...regionDraft.value }; if (mode === 'draw') regionDraft.value = { x: point.x, y: point.y, width: 0.02, height: 0.02 }; regionInteraction.value = { mode, corner, startX: point.x, startY: point.y, initial: mode === 'draw' ? { x: point.x, y: point.y, width: 0, height: 0 } : initial } }
+function updateRegionInteraction(event: PointerEvent) { const interaction = regionInteraction.value; if (!interaction) return; const point = normalizedRegionPointer(event); const dx = point.x - interaction.startX; const dy = point.y - interaction.startY; const initial = interaction.initial; if (interaction.mode === 'draw') { regionDraft.value = { x: Math.min(initial.x, point.x), y: Math.min(initial.y, point.y), width: Math.max(0.02, Math.abs(point.x - initial.x)), height: Math.max(0.02, Math.abs(point.y - initial.y)) }; return } if (interaction.mode === 'move') { regionDraft.value = { ...initial, x: clampRegion(initial.x + dx, 0, 1 - initial.width), y: clampRegion(initial.y + dy, 0, 1 - initial.height) }; return } let left = initial.x; let top = initial.y; let right = initial.x + initial.width; let bottom = initial.y + initial.height; if (interaction.corner?.includes('w')) left = clampRegion(initial.x + dx, 0, right - 0.02); if (interaction.corner?.includes('e')) right = clampRegion(initial.x + initial.width + dx, left + 0.02, 1); if (interaction.corner?.includes('n')) top = clampRegion(initial.y + dy, 0, bottom - 0.02); if (interaction.corner?.includes('s')) bottom = clampRegion(initial.y + initial.height + dy, top + 0.02, 1); regionDraft.value = { x: left, y: top, width: right - left, height: bottom - top } }
+function endRegionInteraction(event: PointerEvent) { regionInteraction.value = null; if (regionStage.value?.hasPointerCapture(event.pointerId)) regionStage.value.releasePointerCapture(event.pointerId) }
+async function saveRegionAndRetry() { const target = regionDialogTarget.value; if (!target || regionBusy.value) return; regionBusy.value = true; errorText.value = ''; try { await window.api.tiktokCreative.retryShot({ id: target.task.id, shotId: target.shot.shotId, replacementRegion: { ...regionDraft.value } }); notice.value = '主要区域已更新，图片重新获得两次重试机会'; closeRegionEditor(); detailTask.value = null; detailShot.value = null; await refresh(true) } catch (error: any) { errorText.value = error?.message || String(error) } finally { regionBusy.value = false; if (!errorText.value) closeRegionEditor() } }
+async function exportSelected() { const selected = allShots.value.filter(({ shot }) => selectedShotIds.value.includes(shot.shotId) && shot.status === 'completed'); if (!selected.length) return; const outputDir = await window.api.pickDir({ title: '选择 MP4 导出目录' }); if (!outputDir) return; const grouped = new Map<string, string[]>(); for (const { task, shot } of selected) grouped.set(task.id, [...(grouped.get(task.id) || []), shot.shotId]); let count = 0; for (const [taskId, shotIds] of grouped) { const result = await window.api.tiktokCreative.exportItems({ taskId, shotIds, outputDir }); count += Number(result?.exported?.length || 0) } notice.value = `已导出 ${count} 个 MP4`; selectedShotIds.value = [] }
+async function removeTask(task: Task) { if (!window.confirm('删除这个任务批次？已下载文件不会自动删除。')) return; await window.api.tiktokCreative.remove(task.id); await refresh(true) }
+function openDetail(task: Task, shot?: Shot) { detailTask.value = task; detailShot.value = shot || task.shots[0] || null; detailTab.value = 'overview' }
+function openLogs(task: Task, shot: Shot) { runtimeTask.value = task; runtimeShot.value = shot }
+function openVideo(path?: string) { const value = String(path || '').trim(); if (!value) return; const match = allShots.value.find(({ shot }) => shot.subtitleVideoPath === value || shot.resultVideoPath === value); if (match) videoDialog.value = match }
+function applySubtitlePreset(presetId: SubtitlePresetId) { const preset = subtitlePresets.find((item) => item.id === presetId); if (!preset) return; subtitleSelectedPreset.value = preset.id; Object.assign(subtitleCaptionStyle, preset.style) }
+function defaultSubtitleTitleForItems(items: Array<{ task: Task; shot: Shot }>) { return items.map(({ task, shot }) => String(task.productName || shot.shotId || '').trim()).find(Boolean) || 'TikTok Creative Studio' }
+function buildSubtitleTitleConfig() { const pool = subtitleTitlePoolText.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean); if (subtitleTitleStrategy.value === 'random_pool') { if (!pool.length) throw new Error('请至少输入一条随机标题。'); return { strategy: 'random_pool' as const, singleText: '', titlePool: pool } }; const singleText = String(subtitleTitleText.value || '').trim(); if (!singleText) throw new Error('请输入标题字幕。'); return { strategy: 'single_for_all' as const, singleText, titlePool: [] } }
+function openSingleSubtitleDialog(task: Task, shot: Shot) { subtitleDialogTargets.value = [{ taskId: task.id, shotId: shot.shotId }]; subtitleDialogMode.value = 'single'; subtitleDialogTab.value = 'title'; subtitleTitleText.value = subtitleTitleText.value || defaultSubtitleTitleForItems([{ task, shot }]); applySubtitlePreset(subtitleSelectedPreset.value); liveSubtitleDialogOpen.value = true }
+async function revertSubtitles(task: Task, shot: Shot) { if (!shot.subtitleVideoPath) return; if (!window.confirm('确认回退到原视频吗？字幕视频文件会被删除。')) return; subtitleDialogBusy.value = true; try { await window.api.tiktokCreative.revertSubtitles({ taskId: task.id, shotId: shot.shotId }); videoDialog.value = null; liveSubtitleDialogOpen.value = false; await refresh(true); notice.value = '字幕已回退' } catch (error: any) { errorText.value = error?.message || String(error) } finally { subtitleDialogBusy.value = false } }
+function toggleSelected(shotId: string) { selectedShotIds.value = selectedShotIds.value.includes(shotId) ? selectedShotIds.value.filter((id) => id !== shotId) : [...selectedShotIds.value, shotId] }
+function selectAllFiltered() { const ids = filteredItems.value.map(({ shot }) => shot.shotId); selectedShotIds.value = selectedShotIds.value.length === ids.length ? [] : ids }
+function requestRemoveShot(task: Task, shot: Shot) { deleteTarget.value = { task, shot } }
+function removeShot(task: Task, shot: Shot) { requestRemoveShot(task, shot) }
+async function confirmRemoveShot() { const target = deleteTarget.value; if (!target || deleteBusy.value) return; deleteBusy.value = true; errorText.value = ''; notice.value = ''; try { await window.api.tiktokCreative.removeShot({ taskId: target.task.id, shotId: target.shot.shotId }); selectedShotIds.value = selectedShotIds.value.filter((id) => id !== target.shot.shotId); if (detailShot.value?.shotId === target.shot.shotId) { detailTask.value = null; detailShot.value = null } deleteTarget.value = null; await refresh(true); notice.value = 'TikTok 视频任务已删除' } catch (error: any) { errorText.value = error?.message || String(error) } finally { deleteBusy.value = false } }
+function openBatchDelete() { if (selectedShotIds.value.length) batchDeleteOpen.value = true }
+async function confirmBatchDelete() { if (!selectedShotIds.value.length || batchDeleteBusy.value) return; batchDeleteBusy.value = true; errorText.value = ''; notice.value = ''; const selected = allShots.value.filter(({ shot }) => selectedShotIds.value.includes(shot.shotId)); const failedIds: string[] = []; let deletedCount = 0; for (const { task, shot } of selected) { try { await window.api.tiktokCreative.removeShot({ taskId: task.id, shotId: shot.shotId }); deletedCount += 1 } catch { failedIds.push(shot.shotId) } } selectedShotIds.value = failedIds; batchDeleteOpen.value = false; await refresh(true); if (deletedCount) notice.value = `已批量删除 ${deletedCount} 个 TikTok 视频任务`; if (failedIds.length) errorText.value = `${failedIds.length} 个任务删除失败，请重试`; batchDeleteBusy.value = false }
+function requestTraceJson(shot?: Shot | null) { return JSON.stringify({ imagePreparation: shot?.imagePreparation || null, officialRequests: shot?.requestTrace || [] }, null, 2) }
+function openSubtitleDialog() { if (!subtitleEligibleItems.value.length) return; subtitleDialogTargets.value = []; subtitleDialogMode.value = 'batch'; subtitleDialogTab.value = 'title'; subtitleTitleText.value = subtitleTitleText.value || defaultSubtitleTitleForItems(subtitleEligibleItems.value); applySubtitlePreset(subtitleSelectedPreset.value); liveSubtitleDialogOpen.value = true }
+async function generateSubtitles() { if (!subtitleDialogItems.value.length) return; subtitleDialogBusy.value = true; errorText.value = ''; try { const result = await window.api.tiktokCreative.generateSubtitles({ items: subtitleDialogItems.value.map(({ task, shot }) => ({ taskId: task.id, shotId: shot.shotId })), titleConfig: buildSubtitleTitleConfig(), captionStyle: { ...subtitleCaptionStyle }, overlayImageConfig: { canvasWidth: 1080, canvasHeight: 1920, ...subtitleCaptionStyle }, layoutPolicy: { maxLines: subtitleCaptionStyle.maxLines, maxWidthRatio: subtitleCaptionStyle.maxWidthRatio, reflowStrategy: 'balanced', avoidPosition: 'auto' } }); notice.value = `字幕处理完成：${Number(result?.outputCount || 0)} 个视频`; liveSubtitleDialogOpen.value = false; subtitleDialogTargets.value = []; selectedShotIds.value = []; await refresh(true) } catch (error: any) { errorText.value = error?.message || String(error) } finally { subtitleDialogBusy.value = false } }
+function cycleFilter() { libraryFilter.value = libraryFilter.value === 'all' ? 'completed' : libraryFilter.value === 'completed' ? 'running' : libraryFilter.value === 'running' ? 'failed' : libraryFilter.value === 'failed' ? 'paused' : 'all'; libraryPage.value = 1 }
+function setActiveTab(tab: 'reference' | 'library') { activeTab.value = tab; requestAnimationFrame(() => document.querySelector<HTMLElement>('.tiktok-page')?.scrollTo({ top: 0 })) }
+onMounted(async () => { await refresh(); refreshTimer = setInterval(() => void refresh(true), 5000) })
+onBeforeUnmount(() => { if (refreshTimer) clearInterval(refreshTimer) })
 </script>
 
 <template>
-  <div class="creative-page plugin-workspace-standard">
-    <section class="creative-shell">
-      <header class="creative-hero">
-        <div class="creative-hero__topline">
-          <button class="back-link" type="button" @click="router.push('/plugins?tab=installed')">
-            <ChevronLeft class="h-4 w-4" />
-            返回插件中心
-          </button>
-          <div class="hero-badge">
-            <Wand2 class="h-4 w-4" />
-            复刻分镜执行台
-          </div>
-        </div>
-
-        <div class="creative-hero__main">
-          <div class="creative-hero__copy">
-            <div class="creative-hero__eyebrow">
-              <span class="eyebrow-chip">TikTok Creative Studio</span>
-              <span class="eyebrow-text">桌面端批处理工作台</span>
-            </div>
-            <h1>直接读取复刻项目分镜，按顺序送入 TikTok 创意视频生成。</h1>
-            <p>
-              这里不会改动复刻页面本身，只读取现成的分镜图片和分镜视频提示词，在独立桌面工作台里逐条或顺序执行。
-            </p>
-          </div>
-
-          <div class="creative-hero__actions">
-            <button class="ghost-button hero-action" type="button" :disabled="loading" @click="refresh">
-              <RefreshCcw class="h-4 w-4" />
-              刷新
-            </button>
-            <button
-              class="primary-button hero-action"
-              type="button"
-              :disabled="runningQueue || !selectedTask"
-              @click="startNextPendingShot"
-            >
-              <Play class="h-4 w-4" />
-              {{ runningQueue ? '启动中...' : '按顺序启动下一条' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="hero-metrics">
-          <div class="metric-card">
-            <span>批次项目</span>
-            <strong>{{ taskStats.allProjects }}</strong>
-          </div>
-          <div class="metric-card">
-            <span>分镜总数</span>
-            <strong>{{ taskStats.allShots }}</strong>
-          </div>
-          <div class="metric-card">
-            <span>已完成</span>
-            <strong>{{ taskStats.completed }}</strong>
-          </div>
-          <div class="metric-card">
-            <span>待人工</span>
-            <strong>{{ taskStats.waiting }}</strong>
-          </div>
-        </div>
-      </header>
-
-      <div v-if="notice" class="notice success">{{ notice }}</div>
-      <div v-if="errorText" class="notice error">{{ errorText }}</div>
-
-      <div class="creative-grid">
-        <aside class="inbox-panel">
-          <section class="panel-card panel-card--gradient">
-            <div class="panel-head">
-              <div>
-                <span class="panel-tag">导入</span>
-                <strong>从复刻项目导入</strong>
-              </div>
-              <span class="panel-side-note">不需要你手填项目 ID</span>
-            </div>
-            <p class="panel-copy">
-              可以直接从下方复刻项目列表勾选批量导入，也支持手动输入 `cloneProjectId` 进行精确导入。
-            </p>
-            <div class="import-form">
-              <input v-model="cloneProjectIdInput" type="text" placeholder="手动输入 cloneProjectId" />
-              <button
-                class="primary-button"
-                type="button"
-                :disabled="importing || !safeText(cloneProjectIdInput, '')"
-                @click="importFromCloneProject(safeText(cloneProjectIdInput, ''))"
-              >
-                单个导入
-              </button>
-            </div>
-            <div v-if="currentCloneProjectId" class="current-clone-hint">
-              当前路由已带入 cloneProjectId：{{ currentCloneProjectId }}
-            </div>
-          </section>
-
-          <section class="panel-card">
-            <div class="panel-head">
-              <div>
-                <span class="panel-tag">项目列表</span>
-                <strong>可批量选择导入</strong>
-              </div>
-              <span class="panel-side-note">已选 {{ selectedImportProjectIds.length }} 个</span>
-            </div>
-
-            <div v-if="projectLoadError" class="empty-inline-card">
-              {{ projectLoadError }}
-            </div>
-
-            <div v-else-if="cloneProjects.length" class="project-pick-list">
-              <label
-                v-for="project in pagedCloneProjects"
-                :key="project.id"
-                class="project-pick-card"
-                :class="{ active: selectedImportProjectIds.includes(project.id) }"
-              >
-                <input
-                  type="checkbox"
-                  :checked="selectedImportProjectIds.includes(project.id)"
-                  @change="toggleImportProject(project.id)"
-                />
-                <div class="project-pick-card__body">
-                  <strong>{{ safeText(project.title, '未命名复刻项目') }}</strong>
-                  <p>{{ project.shotCount }} 条分镜 · {{ formatTime(project.updatedAt) }}</p>
-                  <small>{{ project.id }}</small>
-                </div>
-              </label>
-            </div>
-
-            <div v-else class="empty-inline-card">
-              正在尝试读取复刻项目列表。
-            </div>
-
-            <div v-if="cloneProjects.length" class="pagination-bar">
-              <button class="ghost-button small" type="button" :disabled="cloneProjectPage <= 1" @click="goCloneProjectPage(cloneProjectPage - 1)">
-                上一页
-              </button>
-              <span class="pagination-text">第 {{ cloneProjectPage }} / {{ cloneProjectTotalPages }} 页</span>
-              <button
-                class="ghost-button small"
-                type="button"
-                :disabled="cloneProjectPage >= cloneProjectTotalPages"
-                @click="goCloneProjectPage(cloneProjectPage + 1)"
-              >
-                下一页
-              </button>
-            </div>
-
-            <button
-              class="primary-button"
-              type="button"
-              :disabled="importing || !selectedImportProjectIds.length"
-              @click="importSelectedProjects"
-            >
-              {{ importing ? '导入中...' : '批量导入所选项目' }}
-            </button>
-          </section>
-
-          <section class="panel-card">
-            <div class="panel-head">
-              <div>
-                <span class="panel-tag">运行批次</span>
-                <strong>独立运行列表</strong>
-              </div>
-              <span class="panel-side-note">与复刻主流程隔离</span>
-            </div>
-
-            <div v-if="tasks.length" class="task-list">
-              <button
-                v-for="task in tasks"
-                :key="task.id"
-                class="task-card"
-                :class="{ active: selectedTaskId === task.id }"
-                type="button"
-                @click="selectTask(task)"
-              >
-                <div class="task-card__top">
-                  <strong>{{ safeText(task.sourceCloneProjectTitle, '复刻批次任务') }}</strong>
-                  <span class="status-pill" :class="statusTone(task.status)">{{ statusLabel(task.status) }}</span>
-                </div>
-                <p>{{ task.totalShots }} 条分镜，完成 {{ task.completedShots }} 条，待人工 {{ task.waitingShots }} 条。</p>
-                <div class="task-card__meta">
-                  <span>{{ formatTime(task.updatedAt) }}</span>
-                </div>
-              </button>
-            </div>
-
-            <div v-else class="empty-showcase">
-              <div class="empty-showcase__orb"></div>
-              <div class="empty-showcase__copy">
-                <strong>还没有导入批次</strong>
-                <p>从上方项目列表勾选复刻项目，即可快速创建多个分镜执行批次。</p>
-              </div>
-            </div>
-          </section>
-        </aside>
-
-        <main class="editor-panel">
-          <section v-if="selectedTask" class="panel-card panel-card--editor">
-            <div class="panel-head">
-              <div>
-                <span class="panel-tag">工作区</span>
-                <strong>{{ safeText(selectedTask.sourceCloneProjectTitle, '复刻批次任务') }}</strong>
-              </div>
-              <div class="panel-head__actions">
-                <button class="ghost-button small" type="button" @click="runtimeDialogOpen = true">查看日志</button>
-                <button class="ghost-button small is-danger" type="button" @click="removeTask(selectedTask)">
-                  <Trash2 class="h-4 w-4" />
-                  删除批次
-                </button>
-              </div>
-            </div>
-
-            <div class="editor-layout">
-              <section class="editor-column">
-                <div class="soft-block soft-block--accent">
-                  <div class="soft-block__topline">
-                    <span class="block-label">来源复刻项目</span>
-                    <span class="mini-kicker">只读引用</span>
-                  </div>
-                  <strong>{{ safeText(selectedTask.sourceCloneProjectTitle, '未命名复刻项目') }}</strong>
-                  <p>
-                    当前批次共 {{ selectedTask.totalShots }} 条分镜，待继续处理 {{ pendingShotCount }} 条。这里的运行状态、日志和下载结果都只保存在插件自己的空间里。
-                  </p>
-                </div>
-
-                <div class="soft-block">
-                  <div class="block-head">
-                    <div>
-                      <span class="block-label">分镜队列</span>
-                      <strong>{{ selectedTask.totalShots }} 条</strong>
-                    </div>
-                    <button
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="runningQueue"
-                      @click="startNextPendingShot"
-                    >
-                      {{ runningQueue ? '启动中...' : '启动下一条' }}
-                    </button>
-                  </div>
-
-                  <div class="shot-list">
-                    <button
-                      v-for="shot in selectedTask.shots"
-                      :key="shot.shotId"
-                      class="shot-card"
-                      :class="{ active: selectedShotId === shot.shotId }"
-                      type="button"
-                      @click="selectShot(shot)"
-                    >
-                      <div class="shot-card__top">
-                        <strong>第 {{ shot.shotIndex + 1 }} 条分镜</strong>
-                        <span class="status-pill" :class="statusTone(shot.status)">{{ statusLabel(shot.status) }}</span>
-                      </div>
-                      <p>{{ safeText(shot.scriptText, previewLabel(shot.imagePath)) }}</p>
-                      <div class="shot-card__meta">
-                        <span>{{ shot.durationSec }} 秒</span>
-                        <span>{{ previewLabel(shot.imagePath) }}</span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section v-if="selectedShot" class="editor-column editor-column--side">
-                <div class="soft-block">
-                  <span class="block-label">当前分镜</span>
-                  <div class="status-hero" :class="statusTone(selectedShot.status)">
-                    <div class="status-hero__icon">
-                      <Sparkles class="h-5 w-5" />
-                    </div>
-                    <div class="status-hero__copy">
-                      <strong>第 {{ selectedShot.shotIndex + 1 }} 条分镜</strong>
-                      <p>{{ safeText(selectedShot.scriptText, '当前分镜没有可展示的脚本文案。') }}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="soft-block">
-                  <span class="block-label">分镜图片</span>
-                  <div class="preview-card">
-                    <div class="preview-card__shine"></div>
-                    <div class="preview-card__body">
-                      <span class="preview-card__index">图片</span>
-                      <strong>{{ previewLabel(selectedShot.imagePath) }}</strong>
-                      <small>{{ selectedShot.imagePath }}</small>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="soft-block">
-                  <span class="block-label">分镜视频提示词</span>
-                  <textarea :value="selectedShot.prompt" rows="10" readonly></textarea>
-                </div>
-
-                <div class="soft-block">
-                  <span class="block-label">执行动作</span>
-                  <div class="inline-actions">
-                    <button
-                      class="primary-button"
-                      type="button"
-                      :disabled="runningShotId === selectedShot.shotId"
-                      @click="startShot(selectedShot)"
-                    >
-                      <Play class="h-4 w-4" />
-                      {{ runningShotId === selectedShot.shotId ? '启动中...' : '启动当前分镜' }}
-                    </button>
-                    <button class="ghost-button" type="button" :disabled="!safeText(selectedShot.downloadDir, '')" @click="openDownloadDir">
-                      <FolderOpen class="h-4 w-4" />
-                      打开下载目录
-                    </button>
-                  </div>
-                </div>
-
-                <div v-if="safeText(selectedShot.resultVideoPath, '')" class="soft-block">
-                  <span class="block-label">结果视频</span>
-                  <strong>{{ selectedShot.resultVideoPath }}</strong>
-                  <div class="inline-actions">
-                    <button class="ghost-button small" type="button" @click="openResultVideo">打开视频</button>
-                    <button class="ghost-button small" type="button" @click="revealResultVideo">打开位置</button>
-                  </div>
-                </div>
-
-                <div class="action-bar">
-                  <button class="ghost-button" type="button" @click="markShotCompleted">
-                    <CheckCircle2 class="h-4 w-4" />
-                    标记完成
-                  </button>
-                  <button class="ghost-button" type="button" @click="markShotFailed">
-                    <XCircle class="h-4 w-4" />
-                    标记失败
-                  </button>
-                  <button class="ghost-button" type="button" @click="runtimeDialogOpen = true">
-                    <ExternalLink class="h-4 w-4" />
-                    查看分镜日志
-                  </button>
-                </div>
-              </section>
-            </div>
-          </section>
-
-          <section v-else class="panel-card panel-card--editor">
-            <div class="empty-showcase empty-showcase--wide">
-              <div class="empty-showcase__orb"></div>
-              <div class="empty-showcase__copy">
-                <strong>先导入复刻项目</strong>
-                <p>导入后，这里会展示该项目的分镜队列、提示词和逐条执行面板。</p>
-              </div>
-            </div>
-          </section>
-        </main>
+  <div class="tiktok-page plugin-workspace-standard">
+    <section class="live-workspace-head">
+      <div class="live-workspace-intro">
+        <div class="live-workspace-icon"><Sparkles class="h-5 w-5" /></div>
+        <div class="live-workspace-copy"><h1>TikTok Creative Studio</h1><p>从参考图创建官方 TikTok 视频，独立管理账号、提示词版本和导出库。</p></div>
+        <div class="live-workspace-actions"><button class="ghost-button back-button" type="button" @click="router.push('/plugins')"><ChevronLeft class="h-4 w-4" />返回插件</button><button class="ghost-button refresh-button" type="button" :disabled="loading" @click="refresh()"><RefreshCcw class="h-4 w-4" />刷新</button></div>
       </div>
-
-      <RuntimeLogDialog
-        v-model="runtimeDialogOpen"
-        :logs="runtimeLogs"
-        :title="'运行日志'"
-        :description="'查看当前分镜在 TikTok Creative Studio 独立执行链路中的详细日志。'"
-        :hint="'这里只显示插件自己的日志，不会混入复刻主流程日志。'"
-      />
+      <section class="tab-bar live-workspace-tabs"><button class="tab-button" :class="{ active: activeTab === 'reference' }" type="button" data-testid="tiktok-reference-tab" @click="setActiveTab('reference')"><ImagePlus class="h-4 w-4" />从参考图创建</button><button class="tab-button" :class="{ active: activeTab === 'library' }" type="button" data-testid="tiktok-library-tab" @click="setActiveTab('library')"><FolderOpen class="h-4 w-4" />库 / 导出 <span class="live-tab-count">{{ completedCount }}</span></button><button class="tab-button account-tab" type="button" @click="accountDialogOpen = true"><KeyRound class="h-4 w-4" />账号管理 <span class="live-tab-count">{{ accounts.length }}</span></button></section>
     </section>
+    <div v-if="notice" class="banner banner-success">{{ notice }}</div><div v-if="errorText" class="banner banner-error"><AlertTriangle class="h-4 w-4" />{{ errorText }}</div>
+
+    <section v-if="activeTab === 'reference'" class="workspace-grid">
+      <article class="panel-card reference-card"><div class="panel-head"><div class="panel-title-wrap"><div class="step-badge">1</div><strong>参考图与商品</strong></div><span class="panel-head-note">批量创建 TikTok Image to Video 任务</span></div><div class="field-stack">
+        <div class="field"><span>参考图片</span><div class="reference-source-grid"><button class="reference-source-card" type="button" data-testid="tiktok-pick-reference" @click="pickReferenceImages"><template v-if="referenceImagePaths[0]"><img class="reference-source-card__preview" :src="previewSrc(referenceImagePaths[0])" alt="reference" /><div class="reference-source-card__copy"><strong>继续添加参考图</strong><small>{{ fileName(referenceImagePaths[0]) }}</small><span>{{ referenceImagePaths.length }} 张已加入</span></div></template><template v-else><div class="reference-source-card__icon"><ImagePlus class="h-7 w-7" /></div><div class="reference-source-card__copy"><strong>上传参考图</strong><small>支持 JPG、PNG、WEBP，可多选</small></div></template></button><button class="reference-source-card" type="button" @click="openMaterialPicker"><div class="reference-source-card__icon"><LayoutGrid class="h-7 w-7" /></div><div class="reference-source-card__copy"><strong>从素材库选择</strong><small>复用 Live Photo 的素材选择器</small><span>{{ materials.length }} 个素材</span></div></button></div></div>
+        <div v-if="referenceImagePaths.length" class="clone-shot-list"><div v-for="path in referenceImagePaths" :key="path" class="clone-shot-row reference-task-row"><div class="clone-shot-copy"><strong>{{ fileName(path) }}</strong><small>{{ path }}</small></div><button class="ghost-button small danger" type="button" @click="referenceImagePaths = referenceImagePaths.filter((item) => item !== path)"><Trash2 class="h-4 w-4" />删除</button></div></div>
+        <label class="field"><span>商品</span><button class="product-picker product-picker-button" type="button" @click="productPickerOpen = true"><div v-if="selectedProduct?.coverImagePath" class="product-thumb"><img :src="previewSrc(selectedProduct.coverImagePath)" alt="product" /></div><div v-else class="product-thumb"><Package class="h-4 w-4" /></div><span class="product-picker-name">{{ selectedProduct?.name || '选择商品' }}</span><ChevronDown class="picker-arrow h-4 w-4" /></button></label>
+        <button class="primary-button create-button" type="button" data-testid="tiktok-create-reference" :disabled="creating || !referenceImagePaths.length || !selectedProductId" @click="createTasks"><LoaderCircle v-if="creating" class="h-4 w-4 animate-spin" /><Sparkles v-else class="h-4 w-4" />{{ creating ? '正在创建任务...' : `创建任务 (${referenceImagePaths.length})` }}</button><div class="safe-note"><ShieldCheck class="h-4 w-4" />图片替换和质量校验沿用 Live Photo，TikTok 任务数据完全独立。</div>
+      </div></article>
+      <article class="panel-card rules-card"><div class="panel-head"><div class="panel-title-wrap"><div class="step-badge">2</div><strong>执行规则</strong></div><span class="panel-head-note">官方接口自动流程</span></div><div class="rules-box"><div class="rule-row"><div class="rule-icon">A</div><p>保持人物、姿态、构图、光线和场景布局，仅替换商品主体。</p></div><div class="rule-row"><div class="rule-icon">+</div><p>商品图与参考图分工明确，使用当前商品作为替换唯一来源。</p></div><div class="rule-row"><div class="rule-icon">O</div><p>质量校验通过后提交 TikTok 官方上传、创建和轮询接口。</p></div><div class="rule-row"><div class="rule-icon">*</div><p>视频完成后通过原账号立即下载 MP4，并在库中支持批量导出。</p></div></div><div class="output-note"><div class="output-note-head">账号调度</div><p>创建前按优先级选择登录有效且积分足够的账号。任务编号生成后固定绑定原账号，Cookie 失效时暂停任务。</p><strong>{{ enabledAccounts.length }} 个账号已启用 · {{ runningCount }} 个任务处理中</strong></div><div class="quality-control-card"><div class="quality-control-card__head"><div><strong>质量门禁与提示词版本</strong><small>TikTok 使用独立版本库，不读取或写入 Live Photo 提示词数据。</small></div><ShieldCheck class="h-5 w-5" /></div><div class="prompt-version-editor"><label class="field"><span>提示词版本</span><select v-model="selectedPromptVersionId" @change="setPromptVersion(selectedPromptVersionId)"><option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} · {{ version.name }}{{ version.active ? ' · 当前启用' : '' }}</option></select></label><label class="field"><span>版本名称</span><input v-model="promptEditorName" type="text" /></label><label class="field prompt-version-editor__prompt"><span>商品替换 Prompt</span><textarea v-model="promptEditorText" rows="7" spellcheck="false" /></label><div class="prompt-version-actions"><button class="ghost-button small" type="button" :disabled="promptVersionBusy" @click="savePrompt('update')">更新版本</button><button class="ghost-button small" type="button" :disabled="promptVersionBusy" @click="savePrompt('copy')">复制为新版本</button><button class="ghost-button small" type="button" :disabled="promptVersionBusy" @click="savePrompt('activate')">启用版本</button><button class="ghost-button small" type="button" :disabled="promptVersionBusy" @click="savePrompt('rollback')">回滚副本</button></div></div></div></article>
+    </section>
+
+    <section v-else class="library-layout"><div class="library-headline"><div class="library-summary-row"><div class="library-heading-cluster"><div class="library-title-row"><FolderOpen class="h-5 w-5" /><strong>库 / 导出</strong><span class="library-count">{{ filteredItems.length }} 项</span></div><span class="library-subtitle">查看任务状态、请求参数、创建时间、字幕版本和本地文件</span></div><div class="library-head-tools"><div class="library-view-toggle"><button class="toolbar-icon" :class="{ active: libraryViewMode === 'grid' }" type="button" @click="libraryViewMode = 'grid'"><Grid2x2 class="h-4 w-4" /></button><button class="toolbar-icon" :class="{ active: libraryViewMode === 'list' }" type="button" @click="libraryViewMode = 'list'"><List class="h-4 w-4" /></button></div><div class="library-pagination"><button class="library-page-button" type="button" :disabled="libraryPage <= 1" @click="libraryPage--"><ChevronLeft class="h-4 w-4" /></button><span>{{ libraryPage }} / {{ totalPages }}</span><button class="library-page-button" type="button" :disabled="libraryPage >= totalPages" @click="libraryPage++"><ChevronRight class="h-4 w-4" /></button></div></div></div><div class="library-toolbar"><div class="library-action-group"><button class="toolbar-button" type="button" @click="cycleFilter"><Filter class="h-4 w-4" />筛选 · {{ libraryFilter === 'all' ? '全部' : libraryFilter === 'completed' ? '已完成' : libraryFilter === 'running' ? '处理中' : libraryFilter === 'failed' ? '失败' : '暂停' }}</button><button class="toolbar-button" type="button" :disabled="!filteredItems.length" @click="selectAllFiltered"><CheckCircle2 class="h-4 w-4" />{{ selectedShotIds.length && selectedShotIds.length === filteredItems.length ? '取消选择' : '选择当前筛选' }}</button></div><div class="library-output-actions"><button class="toolbar-button batch-delete-button" type="button" :disabled="!selectedShotIds.length" @click="openBatchDelete"><Trash2 class="h-4 w-4" />批量删除 ({{ selectedShotIds.length }})</button><button class="toolbar-button" type="button" :disabled="!subtitleEligibleItems.length" @click="openSubtitleDialog"><Captions class="h-4 w-4" />批量添加字幕 ({{ subtitleEligibleItems.length }})</button><button class="primary-button" type="button" :disabled="!selectedShotIds.length" @click="exportSelected"><Download class="h-4 w-4" />导出选中 ({{ selectedShotIds.length }})</button></div></div></div>
+      <div v-if="!pagedItems.length" class="panel-card empty-card"><FileImage class="h-8 w-8" /><strong>暂无任务</strong><p>从参考图创建后，任务会自动出现在这里。</p></div>
+      <div v-else-if="libraryViewMode === 'grid'" class="live-console-grid">
+        <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="live-console-card" :class="{ selected: selectedShotIds.includes(shot.shotId) }">
+          <div class="live-console-card__head"><label class="live-console-row__check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /><span /></label><span class="live-console-row__status" :class="statusTone(shot)">{{ statusLabel(shot) }}</span></div>
+          <button class="live-console-card__preview" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"><div class="live-console-row__thumb"><img v-if="shot.subtitleCoverImagePath || shot.posterPath || shot.preparedImagePath || shot.referenceImagePath" :src="previewSrc(shot.subtitleCoverImagePath || shot.posterPath || shot.preparedImagePath || shot.referenceImagePath)" alt="poster" /><div v-else class="live-console-row__thumb-empty"><FileImage class="h-5 w-5" /></div><span v-if="shot.status === 'completed'" class="preview-play"><Play class="h-4 w-4" /></span></div></button>
+          <div class="live-console-card__metrics"><div title="图片尝试次数"><span>尝试</span><strong>{{ imageAttemptCount(shot) }}</strong></div><div title="自动重试进度"><span>重试</span><strong>{{ shot.imageRetryCount || 0 }}/{{ shot.imageRetryLimit || 2 }}</strong></div><div title="质量评分"><span>质量</span><strong>{{ qualityScore(shot) }}</strong></div></div>
+          <div class="live-console-card__body"><div class="live-console-row__titleline"><h3>{{ task.productName || 'TikTok 视频任务' }}</h3><span class="live-console-row__source">参考图</span><span v-if="shot.subtitleVideoPath" class="live-console-row__source">已加字幕</span></div><div class="live-console-row__meta"><Clock3 class="h-3 w-3" /><span>创建 {{ formatTime(shot.createdAt) }}</span></div><div class="live-console-row__subtitle">{{ fileName(shot.referenceImagePath || shot.imagePath) }}</div><div v-if="shot.lastError" class="live-console-row__error"><AlertTriangle class="h-3 w-3" /><span class="live-console-row__error-text">{{ shot.lastError }}</span></div></div>
+          <div class="live-console-row__actions"><button class="live-console-row__link live-console-row__link--primary" title="查看详情" type="button" @click.stop="openDetail(task, shot)"><PanelBottomOpen class="h-4 w-4" />查看详情</button><button class="live-console-row__link" title="请求参数" type="button" @click.stop="detailTask = task; detailShot = shot; detailTab = 'request'"><Code2 class="h-4 w-4" />请求参数</button><button class="live-console-row__link" title="查看日志" type="button" @click.stop="openLogs(task, shot)"><Logs class="h-4 w-4" />日志</button><button v-if="shot.resultVideoPath" class="live-console-row__action live-console-row__action--play" title="播放" type="button" @click.stop="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"><Play class="h-4 w-4" /></button><button v-if="canCorrectRegion(shot)" class="live-console-row__action live-console-row__action--region" title="框选主要区域" type="button" @click.stop="openRegionEditor(task, shot)"><ScanLine class="h-4 w-4" /></button><button v-else-if="shot.status !== 'completed'" class="live-console-row__action" title="重试" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw class="h-4 w-4" /></button><button class="live-console-row__action live-console-row__action--danger" title="删除" type="button" @click.stop="removeShot(task, shot)"><Trash2 class="h-4 w-4" /></button></div>
+        </article>
+      </div>
+      <div v-else class="live-console-list">
+        <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="live-console-row" :class="{ selected: selectedShotIds.includes(shot.shotId) }"><label class="live-console-row__check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /><span /></label><div class="live-console-row__preview"><div class="live-console-row__thumb"><img v-if="shot.subtitleCoverImagePath || shot.posterPath || shot.preparedImagePath || shot.referenceImagePath" :src="previewSrc(shot.subtitleCoverImagePath || shot.posterPath || shot.preparedImagePath || shot.referenceImagePath)" alt="poster" /><FileImage v-else class="h-5 w-5" /></div></div><div class="live-console-row__main"><div class="live-console-row__task"><div class="live-console-row__titleline"><h3>{{ task.productName || 'TikTok 视频任务' }}</h3><span class="live-console-row__source">参考图</span><span v-if="shot.subtitleVideoPath" class="live-console-row__source">已加字幕</span></div><div class="live-console-row__meta"><Clock3 class="h-3 w-3" /><span>创建 {{ formatTime(shot.createdAt) }}</span></div><div class="live-console-row__subtitle">{{ fileName(shot.referenceImagePath || shot.imagePath) }}</div><div class="live-console-list__metrics"><span>图片尝试 {{ imageAttemptCount(shot) }}</span><span>重试 {{ shot.imageRetryCount || 0 }}/{{ shot.imageRetryLimit || 2 }}</span><span>质量 {{ qualityScore(shot) }}</span></div><div v-if="shot.lastError" class="live-console-row__error"><AlertTriangle class="h-3 w-3" /><span class="live-console-row__error-text">{{ shot.lastError }}</span></div></div><div class="live-console-row__side"><span class="live-console-row__status" :class="statusTone(shot)">{{ statusLabel(shot) }}</span></div></div><div class="live-console-row__bottom"><div class="live-console-row__quickrefs"><span class="live-console-row__quickchip">{{ shot.resultVideoPath ? 'MP4 已下载' : '等待结果' }}</span><span v-if="shot.subtitleAppliedAt" class="live-console-row__quickchip">字幕 {{ formatTime(shot.subtitleAppliedAt) }}</span></div><div class="live-console-row__actions"><button class="live-console-row__link live-console-row__link--primary" type="button" @click="openDetail(task, shot)">查看详情</button><button class="live-console-row__link" type="button" @click="detailTask = task; detailShot = shot; detailTab = 'request'"><Code2 class="h-4 w-4" />请求参数</button><button class="live-console-row__link" type="button" @click="openLogs(task, shot)"><Logs class="h-4 w-4" />查看日志</button><button v-if="shot.resultVideoPath" class="live-console-row__action live-console-row__action--play" type="button" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"><Play class="h-4 w-4" /></button><button v-if="canCorrectRegion(shot)" class="live-console-row__action live-console-row__action--region" title="框选主要区域" type="button" @click="openRegionEditor(task, shot)"><ScanLine class="h-4 w-4" /></button><button v-else-if="shot.status !== 'completed'" class="live-console-row__action" title="重试" type="button" @click="retryShot(task, shot)"><RefreshCcw class="h-4 w-4" /></button><button class="live-console-row__action live-console-row__action--danger" type="button" @click="removeShot(task, shot)"><Trash2 class="h-4 w-4" /></button></div></div></article>
+      </div>
+    </section>
+
+    <div v-if="accountDialogOpen" class="live-subtitle-dialog"><div class="live-subtitle-dialog__panel account-dialog"><div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>账号管理</strong><p>Cookie 仅以系统加密方式保存，每个账号使用隔离会话。</p></div><button class="live-subtitle-dialog__close" type="button" @click="accountDialogOpen = false"><X class="h-4 w-4" /></button></div><div class="account-layout"><div class="account-list"><article v-for="(account, index) in accounts" :key="account.id" class="account-row" :class="{ disabled: !account.enabled, editing: editingAccountId === account.id }"><div class="account-order"><button type="button" :disabled="index === 0" @click="moveAccount(account, -1)">↑</button><button type="button" :disabled="index === accounts.length - 1" @click="moveAccount(account, 1)">↓</button></div><div class="account-main"><strong>{{ account.name }}</strong><small>{{ account.cookieCount }} 条 Cookie · 优先级 {{ account.priority + 1 }}</small><span class="account-state" :class="account.state">{{ accountState(account) }}</span><small v-if="account.lastError" class="account-error">{{ account.lastError }}</small></div><div class="account-actions"><button class="ghost-button small" type="button" @click="editAccount(account)"><Pencil class="h-3 w-3" />编辑</button><button class="ghost-button small" type="button" @click="testAccount(account)">测试</button><button class="ghost-button small" type="button" @click="toggleAccount(account)">{{ account.enabled ? '停用' : '启用' }}</button><button class="ghost-button small danger" type="button" @click="removeAccount(account)">删除</button></div></article><div v-if="!accounts.length" class="account-empty">还没有配置账号</div></div><div class="account-form"><strong>{{ editingAccountId ? '编辑账号' : '导入账号 Cookie' }}</strong><label>账号名称<input v-model="accountName" type="text" placeholder="账号 1" /></label><label>Cookie JSON<textarea v-model="accountCookieJson" rows="10" :placeholder="editingAccountId ? '留空则保留当前 Cookie，粘贴新 JSON 可替换' : '粘贴 Cookie JSON 数组'" /></label><small v-if="editingAccountId" class="account-form-hint">为保护账号安全，已保存的 Cookie 不会回显。只修改名称时请保持此处为空。</small><button class="ghost-button small" type="button" @click="importCookieFile">从文件导入</button><div class="dialog-actions"><button class="ghost-button" type="button" @click="resetAccountForm">{{ editingAccountId ? '取消编辑' : '清空' }}</button><button class="primary-button" type="button" :disabled="!editingAccountId && !accountCookieJson.trim()" @click="saveAccount">{{ editingAccountId ? '保存修改' : '保存账号' }}</button></div></div></div></div></div>
+    <div v-if="materialDialogOpen" class="live-subtitle-dialog"><div class="live-subtitle-dialog__panel"><div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>选择素材</strong><p>选择后会加入参考图队列，不会修改 Live Photo 数据。</p></div><button class="live-subtitle-dialog__close" type="button" @click="materialDialogOpen = false"><X class="h-4 w-4" /></button></div><div class="material-grid"><button v-for="material in materials" :key="material.id" :class="{ active: selectedMaterialIds.includes(material.id) }" type="button" @click="toggleMaterial(material.id)"><img :src="previewSrc(material.localImagePath)" alt="material" /><span>{{ fileName(material.localImagePath) }}</span></button></div><div class="dialog-actions"><button class="ghost-button" type="button" @click="materialDialogOpen = false">取消</button><button class="primary-button" type="button" @click="addMaterials">加入参考图</button></div></div></div>
+    <div v-if="detailTask && detailShot" class="live-subtitle-dialog">
+      <div class="live-subtitle-dialog__panel detail-dialog">
+        <div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>任务控制台</strong><p>{{ detailTask.productName || 'TikTok 任务' }} · 创建于 {{ formatTime(detailShot.createdAt) }}</p></div><button class="live-subtitle-dialog__close" type="button" @click="detailTask = null; detailShot = null"><X class="h-4 w-4" /></button></div>
+        <div class="detail-tabs"><button :class="{ active: detailTab === 'overview' }" type="button" @click="detailTab = 'overview'">任务详情</button><button :class="{ active: detailTab === 'request' }" type="button" @click="detailTab = 'request'"><Code2 class="h-4 w-4" />请求参数</button></div>
+        <div v-if="detailTab === 'overview'" class="detail-shot">
+          <img :src="previewSrc(detailShot.subtitleCoverImagePath || detailShot.posterPath || detailShot.preparedImagePath || detailShot.referenceImagePath)" alt="shot" />
+          <div class="detail-grid">
+            <div><span>当前状态</span><strong>{{ statusLabel(detailShot) }}</strong></div><div><span>创建时间</span><strong>{{ formatTime(detailShot.createdAt) }}</strong></div>
+            <div><span>更新时间</span><strong>{{ formatTime(detailShot.updatedAt) }}</strong></div><div><span>绑定账号</span><strong>{{ accounts.find((item) => item.id === detailShot?.accountId)?.name || '--' }}</strong></div>
+            <div><span>图片尝试次数</span><strong>{{ imageAttemptCount(detailShot) }}</strong></div><div><span>自动重试进度</span><strong>{{ detailShot.imageRetryCount || 0 }} / {{ detailShot.imageRetryLimit || 2 }}</strong></div>
+            <div><span>质量校验结果</span><strong>{{ detailShot.imagePreparation?.qualityReport?.decision || '--' }}</strong></div><div><span>质量评分</span><strong>{{ qualityScore(detailShot) }}</strong></div>
+            <div><span>区域来源</span><strong>{{ detailShot.imagePreparation?.replacementRegion?.source === 'manual' ? '手动框选' : detailShot.imagePreparation?.replacementRegion ? '自动识别' : '--' }}</strong></div><div><span>区域版本</span><strong>{{ detailShot.imagePreparation?.replacementRegion?.revision || '--' }}</strong></div>
+            <div class="detail-wide"><span>官方任务编号</span><strong>{{ detailShot.officialTaskId || '--' }}</strong></div>
+            <div class="detail-wide"><span>质量失败项</span><strong>{{ qualityFailures(detailShot) }}</strong></div><div class="detail-wide"><span>参考图片</span><strong>{{ detailShot.referenceImagePath || detailShot.imagePath }}</strong></div>
+            <div class="detail-wide"><span>原始视频</span><strong>{{ detailShot.resultVideoPath || '尚未下载' }}</strong></div><div v-if="detailShot.subtitleVideoPath" class="detail-wide"><span>字幕视频</span><strong>{{ detailShot.subtitleVideoPath }}</strong></div>
+            <div v-if="canCorrectRegion(detailShot)" class="detail-wide detail-region-action"><span>图片重试已用完</span><button class="primary-button" type="button" @click="openRegionEditor(detailTask, detailShot)"><ScanLine class="h-4 w-4" />框选主要区域并重新生成</button></div>
+          </div>
+        </div>
+        <div v-else class="request-parameter-panel"><div class="request-parameter-head"><div><strong>官方请求参数</strong><p>Cookie、CSRF、设备指纹和签名值均已脱敏。</p></div><span>{{ detailShot.requestTrace?.length || 0 }} 条请求</span></div><pre>{{ requestTraceJson(detailShot) }}</pre></div>
+      </div>
+    </div>
+    <div v-if="regionDialogTarget" class="live-subtitle-dialog" @click.self="closeRegionEditor">
+      <div class="live-subtitle-dialog__panel region-dialog">
+        <div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>框选主要区域</strong><p>重新绘制、拖动或缩放区域，保存后会重新获得两次图片重试机会。</p></div><button class="live-subtitle-dialog__close" type="button" :disabled="regionBusy" @click="closeRegionEditor"><X class="h-4 w-4" /></button></div>
+        <div ref="regionStage" class="region-stage" @pointerdown.self="beginRegionInteraction($event, 'draw')" @pointermove="updateRegionInteraction" @pointerup="endRegionInteraction" @pointercancel="endRegionInteraction">
+          <img :src="previewSrc(regionDialogTarget.shot.referenceImagePath || regionDialogTarget.shot.imagePath)" alt="region source" draggable="false" />
+          <div class="region-box" :style="regionStyle()" @pointerdown.stop="beginRegionInteraction($event, 'move')"><span v-for="corner in regionCorners" :key="corner" class="region-handle" :class="`is-${corner}`" @pointerdown.stop="beginRegionInteraction($event, 'resize', corner)" /></div>
+        </div>
+        <div class="region-meta"><span>区域版本 {{ regionDialogTarget.shot.imagePreparation?.replacementRegion?.revision || 0 }}</span><span>{{ Math.round(regionDraft.width * 100) }}% x {{ Math.round(regionDraft.height * 100) }}%</span></div>
+        <div class="dialog-actions"><button class="ghost-button" type="button" :disabled="regionBusy" @click="closeRegionEditor">取消</button><button class="primary-button" type="button" :disabled="regionBusy" @click="saveRegionAndRetry"><LoaderCircle v-if="regionBusy" class="h-4 w-4 animate-spin" /><ScanLine v-else class="h-4 w-4" />{{ regionBusy ? '保存中...' : '保存并重新生成' }}</button></div>
+      </div>
+    </div>
+    <div v-if="videoDialog" class="live-subtitle-dialog" @click.self="videoDialog = null"><div class="live-subtitle-dialog__panel video-dialog"><div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>{{ videoDialog.task.productName || 'TikTok 视频' }}</strong><p>{{ videoDialog.shot.subtitleVideoPath ? '当前播放：字幕版本' : '当前播放：原始视频' }} · {{ formatTime(videoDialog.shot.createdAt) }}</p></div><button class="live-subtitle-dialog__close" type="button" @click="videoDialog = null"><X class="h-4 w-4" /></button></div><video class="video-dialog__player" controls autoplay playsinline :src="previewSrc(videoDialog.shot.subtitleVideoPath || videoDialog.shot.resultVideoPath)" /><div class="video-dialog__meta"><span>{{ fileName(videoDialog.shot.subtitleVideoPath || videoDialog.shot.resultVideoPath) }}</span><span v-if="videoDialog.shot.officialVideoId">视频编号 {{ videoDialog.shot.officialVideoId }}</span></div><div class="dialog-actions"><button class="ghost-button" type="button" @click="openSingleSubtitleDialog(videoDialog.task, videoDialog.shot)"><Captions class="h-4 w-4" />生成字幕</button><button v-if="videoDialog.shot.subtitleVideoPath" class="ghost-button" type="button" :disabled="subtitleDialogBusy" @click="revertSubtitles(videoDialog.task, videoDialog.shot)"><RefreshCcw class="h-4 w-4" />回退字幕</button><button class="primary-button" type="button" @click="videoDialog = null">关闭</button></div></div></div>
+    <div v-if="liveSubtitleDialogOpen" class="live-subtitle-dialog" @click.self="liveSubtitleDialogOpen = false">
+      <div class="live-subtitle-dialog__panel live-subtitle-dialog__panel--copied">
+        <div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>{{ subtitleDialogMode === 'batch' ? '批量添加字幕' : '添加字幕' }}</strong><p>为 {{ subtitleDialogItems.length }} 个视频生成标题字幕，并保存独立字幕版本。</p></div><button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" @click="liveSubtitleDialogOpen = false">关闭</button></div>
+        <div class="live-subtitle-dialog__summary"><div class="live-subtitle-dialog__summary-item"><span>处理范围</span><strong>{{ subtitleDialogMode === 'batch' ? `已选 ${subtitleDialogItems.length} 条视频` : '当前视频' }}</strong></div><div class="live-subtitle-dialog__summary-item"><span>当前模板</span><strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || '爆款钩子款' }}</strong></div></div>
+        <div class="live-subtitle-dialog__tabs"><button type="button" :class="{ active: subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">标题</button><button type="button" :class="{ active: subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">模板</button><button type="button" :class="{ active: subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">样式</button></div>
+        <section v-if="subtitleDialogTab === 'title'" class="live-subtitle-dialog__section"><div class="live-subtitle-dialog__section-head"><span class="live-subtitle-dialog__kicker">Title Mode</span><strong>标题配置</strong></div><div class="live-subtitle-dialog__mode-pills"><button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'">统一标题</button><button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'">随机标题池</button></div><label v-if="subtitleTitleStrategy === 'single_for_all'" class="live-subtitle-dialog__field"><span>标题字幕</span><input v-model.trim="subtitleTitleText" type="text" maxlength="120" placeholder="请输入标题字幕" @keydown.enter.prevent="generateSubtitles" /></label><label v-else class="live-subtitle-dialog__field"><span>随机标题池</span><textarea v-model.trim="subtitleTitlePoolText" class="live-subtitle-dialog__textarea" placeholder="每行一条标题字幕" /></label><div class="live-subtitle-dialog__inline-tip">{{ subtitleTitleStrategy === 'single_for_all' ? '整批视频会共用这一条标题字幕。' : '每行一条，渲染时会为每个视频随机分配。' }}</div></section>
+        <section v-else-if="subtitleDialogTab === 'template'" class="live-subtitle-dialog__section"><div class="live-subtitle-dialog__section-head"><span class="live-subtitle-dialog__kicker">Template</span><strong>字幕模板</strong></div><div class="live-subtitle-dialog__preset-grid"><button v-for="preset in subtitlePresets" :key="preset.id" class="live-subtitle-dialog__preset" :class="{ active: subtitleSelectedPreset === preset.id }" type="button" @click="applySubtitlePreset(preset.id)"><strong>{{ preset.name }}</strong><span>{{ preset.summary }}</span></button></div><div class="live-subtitle-dialog__preset-note">优先选择最接近商品风格的模板，再调整细节样式。</div></section>
+        <section v-else class="live-subtitle-dialog__section"><div class="live-subtitle-dialog__section-head"><span class="live-subtitle-dialog__kicker">Style</span><strong>文字样式</strong></div><div class="live-subtitle-dialog__style-panel"><div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact"><label class="live-subtitle-dialog__field"><span>字体</span><input v-model.trim="subtitleCaptionStyle.fontName" type="text" /></label><label class="live-subtitle-dialog__field"><span>字号</span><input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" /></label><label class="live-subtitle-dialog__field"><span>描边</span><input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" /></label><label class="live-subtitle-dialog__field"><span>最大行数</span><input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" /></label></div><div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--dual"><label class="live-subtitle-dialog__field"><span>文字颜色</span><div class="live-subtitle-dialog__color-field"><input v-model.trim="subtitleCaptionStyle.fontColor" type="text" /><input v-model="subtitleCaptionStyle.fontColor" type="color" /></div></label><label class="live-subtitle-dialog__field"><span>描边颜色</span><div class="live-subtitle-dialog__color-field"><input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" /><input v-model="subtitleCaptionStyle.strokeColor" type="color" /></div></label></div><div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact"><label class="live-subtitle-dialog__field"><span>位置</span><select v-model="subtitleCaptionStyle.position"><option value="top">顶部</option><option value="center">中间</option><option value="bottom">底部</option></select></label><label class="live-subtitle-dialog__field"><span>对齐</span><select v-model="subtitleCaptionStyle.textAlign"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label><label class="live-subtitle-dialog__field"><span>底部边距</span><input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" /></label></div></div></section>
+        <div class="live-subtitle-dialog__actions"><button v-if="subtitleDialogMode === 'single' && videoDialog?.shot.subtitleVideoPath" type="button" class="ghost-button" :disabled="subtitleDialogBusy" @click="revertSubtitles(videoDialog.task, videoDialog.shot)">回退原视频</button><button type="button" class="ghost-button" :disabled="subtitleDialogBusy" @click="liveSubtitleDialogOpen = false">取消</button><button type="button" class="primary-button" :disabled="subtitleDialogBusy" @click="generateSubtitles">{{ subtitleDialogBusy ? '处理中...' : '开始生成字幕' }}</button></div>
+      </div>
+    </div>
+    <div v-if="deleteTarget" class="live-subtitle-dialog"><div class="live-subtitle-dialog__panel delete-dialog"><div class="live-subtitle-dialog__head"><div class="live-subtitle-dialog__titleblock"><strong>删除视频任务</strong><p>删除后任务将从 TikTok 库中移除。</p></div><button class="live-subtitle-dialog__close" type="button" :disabled="deleteBusy" @click="deleteTarget = null"><X class="h-4 w-4" /></button></div><div class="delete-dialog__body"><div class="delete-dialog__icon"><Trash2 class="h-5 w-5" /></div><div><strong>{{ deleteTarget.task.productName || 'TikTok 视频任务' }}</strong><p>创建时间：{{ formatTime(deleteTarget.shot.createdAt) }}</p><p>本地已下载的视频和封面文件不会自动删除。</p></div></div><div class="dialog-actions"><button class="ghost-button" type="button" :disabled="deleteBusy" @click="deleteTarget = null">取消</button><button class="primary-button delete-confirm-button" type="button" :disabled="deleteBusy" @click="confirmRemoveShot"><LoaderCircle v-if="deleteBusy" class="h-4 w-4 animate-spin" /><Trash2 v-else class="h-4 w-4" />{{ deleteBusy ? '正在删除...' : '确认删除' }}</button></div></div></div>
+    <BatchDeleteDialog :open="batchDeleteOpen" :count="selectedShotIds.length" :busy="batchDeleteBusy" @close="batchDeleteOpen = false" @confirm="confirmBatchDelete" />
+    <ProductSelectDialog :open="productPickerOpen" :products="products" :selected-id="selectedProductId" @close="productPickerOpen = false" @select="selectedProductId = $event" />
+    <RuntimeLogDialog v-if="runtimeTask" v-model="runtimeDialogOpen" :logs="runtimeLogs" :show-all="true" title="TikTok 任务日志" description="查看当前视频的创建、图片处理、账号调度、官方请求、轮询和下载记录。" hint="当前批次、单条视频和官方请求阶段已合并显示。" />
   </div>
 </template>
 
 <style scoped>
-.creative-page {
-  min-height: 100%;
-  padding: 18px;
-  color: #f7fbff;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(26, 86, 219, 0.18), transparent 28%),
-    radial-gradient(circle at 100% 0%, rgba(45, 212, 191, 0.14), transparent 24%),
-    linear-gradient(180deg, #07111d 0%, #0a1626 42%, #0d1b2f 100%);
-}
-
-.creative-shell,
-.panel-card,
-.creative-hero,
-.creative-hero__copy,
-.metric-card,
-.task-card,
-.shot-card,
-.soft-block,
-.status-hero__copy,
-.preview-card__body,
-.empty-showcase__copy,
-.project-pick-list {
-  display: grid;
-}
-
-.creative-shell {
-  gap: 18px;
-}
-
-.creative-hero {
-  gap: 18px;
-  padding: 24px 26px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 30px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.18), transparent 34%),
-    linear-gradient(135deg, rgba(8, 15, 28, 0.96), rgba(14, 23, 38, 0.94));
-  box-shadow:
-    0 26px 70px rgba(2, 6, 23, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.creative-hero__topline,
-.creative-hero__main,
-.creative-hero__eyebrow,
-.creative-hero__actions,
-.task-card__top,
-.task-card__meta,
-.shot-card__top,
-.shot-card__meta,
-.panel-head,
-.panel-head__actions,
-.inline-actions,
-.action-bar,
-.soft-block__topline,
-.block-head,
-.status-hero,
-.project-pick-card {
-  display: flex;
-}
-
-.creative-hero__topline,
-.creative-hero__main,
-.panel-head,
-.block-head,
-.task-card__top,
-.shot-card__top,
-.soft-block__topline {
-  justify-content: space-between;
-}
-
-.creative-hero__topline,
-.creative-hero__eyebrow,
-.creative-hero__actions,
-.task-card__top,
-.task-card__meta,
-.shot-card__top,
-.shot-card__meta,
-.panel-head,
-.panel-head__actions,
-.inline-actions,
-.action-bar,
-.soft-block__topline,
-.block-head,
-.status-hero,
-.project-pick-card {
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.back-link,
-.hero-badge,
-.panel-tag,
-.status-pill,
-.mini-kicker,
-.preview-card__index {
-  display: inline-flex;
-  align-items: center;
-}
-
-.back-link {
-  gap: 6px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: rgba(226, 232, 240, 0.92);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.hero-badge,
-.eyebrow-chip,
-.panel-tag,
-.status-pill,
-.mini-kicker,
-.preview-card__index {
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-}
-
-.hero-badge {
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid rgba(45, 212, 191, 0.16);
-  background: rgba(9, 24, 32, 0.72);
-  color: #cffafe;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.creative-hero__copy {
-  gap: 12px;
-  max-width: 780px;
-}
-
-.eyebrow-chip {
-  background: rgba(59, 130, 246, 0.18);
-  border: 1px solid rgba(96, 165, 250, 0.2);
-  color: #dbeafe;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.eyebrow-text,
-.metric-card span,
-.panel-side-note,
-.panel-copy,
-.current-clone-hint,
-.task-card p,
-.task-card__meta span,
-.shot-card p,
-.shot-card__meta span,
-.soft-block p,
-.preview-card small,
-.empty-showcase__copy p,
-.project-pick-card p,
-.project-pick-card small,
-.empty-inline-card {
-  color: rgba(191, 219, 254, 0.76);
-}
-
-.eyebrow-text,
-.metric-card span,
-.panel-tag,
-.mini-kicker,
-.preview-card__index {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.creative-hero__copy h1,
-.panel-head strong,
-.empty-showcase__copy strong {
-  margin: 0;
-  color: #ffffff;
-  letter-spacing: -0.04em;
-}
-
-.creative-hero__copy h1 {
-  font-size: 40px;
-  line-height: 1;
-  font-weight: 900;
-}
-
-.creative-hero__copy p,
-.panel-copy,
-.soft-block p,
-.empty-showcase__copy p,
-textarea {
-  line-height: 1.8;
-}
-
-.creative-hero__copy p {
-  margin: 0;
-  max-width: 760px;
-  font-size: 15px;
-}
-
-.hero-metrics,
-.creative-grid,
-.import-form,
-.task-list,
-.editor-layout,
-.editor-column,
-.shot-list {
-  display: grid;
-}
-
-.hero-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.metric-card {
-  gap: 10px;
-  padding: 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
-}
-
-.metric-card strong,
-.task-card__top strong,
-.shot-card__top strong,
-.soft-block strong,
-.status-hero__copy strong,
-.preview-card strong,
-.empty-showcase__copy strong,
-.project-pick-card strong {
-  color: #ffffff;
-}
-
-.metric-card strong {
-  font-size: 28px;
-  font-weight: 800;
-}
-
-.creative-grid {
-  grid-template-columns: 430px minmax(0, 1fr);
-  gap: 18px;
-}
-
-.panel-card {
-  gap: 16px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(8, 15, 28, 0.96), rgba(9, 17, 31, 0.98));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 18px 48px rgba(2, 6, 23, 0.24);
-}
-
-.panel-card--gradient {
-  background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 34%),
-    linear-gradient(180deg, rgba(10, 20, 35, 0.98), rgba(9, 16, 29, 0.98));
-}
-
-.panel-head strong {
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.panel-tag {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(191, 219, 254, 0.82);
-  font-weight: 700;
-}
-
-.panel-copy {
-  margin: 0;
-  font-size: 13px;
-}
-
-.import-form {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-}
-
-.import-form input,
-textarea {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(11, 22, 40, 0.74);
-  color: #ffffff;
-  padding: 13px 14px;
-  outline: none;
-  font-size: 14px;
-}
-
-.current-clone-hint {
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px dashed rgba(45, 212, 191, 0.18);
-  background: rgba(13, 32, 39, 0.54);
-  font-size: 12px;
-}
-
-.project-pick-list,
-.task-list,
-.shot-list {
-  gap: 12px;
-}
-
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.pagination-text {
-  color: rgba(191, 219, 254, 0.76);
-  font-size: 12px;
-}
-
-.project-pick-card,
-.task-card,
-.shot-card {
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-  text-align: left;
-}
-
-.project-pick-card.active,
-.task-card.active,
-.shot-card.active {
-  border-color: rgba(45, 212, 191, 0.22);
-  background:
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.1), transparent 40%),
-    linear-gradient(180deg, rgba(31, 49, 80, 0.3), rgba(19, 32, 54, 0.22));
-}
-
-.project-pick-card input {
-  margin-top: 4px;
-}
-
-.project-pick-card__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.project-pick-card p,
-.project-pick-card small,
-.task-card p,
-.shot-card p {
-  margin: 0;
-}
-
-.project-pick-card small {
-  display: block;
-  margin-top: 6px;
-  word-break: break-all;
-}
-
-.status-pill.is-success,
-.status-hero.is-success {
-  background: rgba(16, 185, 129, 0.14);
-  color: #bbf7d0;
-}
-
-.status-pill.is-danger,
-.status-hero.is-danger {
-  background: rgba(239, 68, 68, 0.14);
-  color: #fecaca;
-}
-
-.status-pill.is-warning,
-.status-hero.is-warning {
-  background: rgba(245, 158, 11, 0.14);
-  color: #fde68a;
-}
-
-.status-pill.is-info,
-.status-hero.is-info {
-  background: rgba(59, 130, 246, 0.14);
-  color: #bfdbfe;
-}
-
-.status-pill.is-neutral,
-.status-hero.is-neutral {
-  background: rgba(148, 163, 184, 0.14);
-  color: #cbd5e1;
-}
-
-.editor-layout {
-  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.95fr);
-  gap: 18px;
-}
-
-.editor-column {
-  gap: 16px;
-}
-
-.soft-block {
-  gap: 12px;
-  padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018)),
-    rgba(10, 20, 34, 0.9);
-}
-
-.soft-block--accent {
-  background:
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 36%),
-    linear-gradient(180deg, rgba(17, 29, 46, 0.94), rgba(10, 18, 31, 0.98));
-}
-
-.block-label {
-  color: rgba(191, 219, 254, 0.68);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.mini-kicker {
-  background: rgba(45, 212, 191, 0.08);
-  color: #ccfbf1;
-  font-weight: 700;
-}
-
-.status-hero {
-  gap: 14px;
-  padding: 16px;
-  border-radius: 22px;
-}
-
-.status-hero__icon {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.status-hero__copy {
-  gap: 6px;
-}
-
-.preview-card {
-  position: relative;
-  overflow: hidden;
-  min-height: 128px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(18, 31, 51, 0.9), rgba(9, 18, 33, 0.94));
-}
-
-.preview-card__shine {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(125, 211, 252, 0.08), transparent 54%);
-}
-
-.preview-card__body {
-  position: relative;
-  z-index: 1;
-  gap: 6px;
-  height: 100%;
-  padding: 14px;
-}
-
-.preview-card__index {
-  width: fit-content;
-  background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.empty-inline-card {
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px dashed rgba(255, 255, 255, 0.1);
-  background: rgba(11, 20, 34, 0.62);
-  line-height: 1.75;
-}
-
-textarea {
-  min-height: 220px;
-  resize: vertical;
-}
-
-.primary-button,
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.primary-button {
-  border: 1px solid rgba(45, 212, 191, 0.18);
-  background: linear-gradient(135deg, #1d4ed8, #14b8a6);
-  color: #ffffff;
-}
-
-.ghost-button {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
-  color: #f8fbff;
-}
-
-.ghost-button.small {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.ghost-button.is-danger {
-  border-color: rgba(239, 68, 68, 0.18);
-  color: #fecaca;
-}
-
-.notice {
-  padding: 13px 15px;
-  border-radius: 16px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.notice.success {
-  border: 1px solid rgba(16, 185, 129, 0.18);
-  background: rgba(16, 185, 129, 0.12);
-  color: #d1fae5;
-}
-
-.notice.error {
-  border: 1px solid rgba(239, 68, 68, 0.18);
-  background: rgba(239, 68, 68, 0.12);
-  color: #fecaca;
-}
-
-.empty-showcase {
-  position: relative;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  min-height: 260px;
-  padding: 28px;
-  border-radius: 26px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(11, 22, 38, 0.76), rgba(8, 16, 29, 0.94));
-}
-
-.empty-showcase--wide {
-  min-height: 420px;
-}
-
-.empty-showcase__orb {
-  position: absolute;
-  width: 280px;
-  height: 280px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(45, 212, 191, 0.18), transparent 66%);
-  filter: blur(12px);
-}
-
-.empty-showcase__copy {
-  position: relative;
-  z-index: 1;
-  gap: 10px;
-  text-align: center;
-}
-
-.empty-showcase__copy strong {
-  font-size: 24px;
-  font-weight: 800;
-}
-
-@media (max-width: 1320px) {
-  .creative-grid,
-  .editor-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 980px) {
-  .creative-page {
-    padding: 14px;
-  }
-
-  .creative-hero {
-    padding: 20px;
-  }
-
-  .creative-hero__main {
-    flex-direction: column;
-  }
-
-  .hero-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .import-form {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .hero-metrics {
-    grid-template-columns: 1fr;
-  }
-}
+.tiktok-page{display:grid;gap:10px;min-height:100vh;padding:10px;box-sizing:border-box;align-content:start;color:#f8fbff;background:radial-gradient(circle at top left,rgba(83,58,152,.12),transparent 28%),linear-gradient(180deg,#111521 0%,#171a29 42%,#111624 100%)}
+.live-workspace-head,.panel-card,.library-export-card{border:1px solid rgba(111,123,170,.2);border-radius:16px;background:linear-gradient(180deg,rgba(17,21,35,.98),rgba(13,17,30,.98));box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.live-workspace-head{display:grid;gap:8px;padding:10px 12px}.live-workspace-intro{display:flex;align-items:center;gap:10px;min-width:0}.live-workspace-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;color:#d8c8ff;background:linear-gradient(180deg,#5c45ae,#392978)}.live-workspace-copy{min-width:0;flex:1}.live-workspace-copy h1{margin:0;font-size:18px;line-height:1.28}.live-workspace-copy p{margin:6px 0 0;color:rgba(197,205,225,.82);font-size:12px}.live-workspace-actions{display:flex;gap:7px;flex-wrap:wrap}.tab-bar{display:flex;gap:8px;flex-wrap:wrap}.tab-button,.primary-button,.ghost-button,.toolbar-button,.toolbar-icon{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border-radius:12px;font-size:12px;font-weight:700}.tab-button,.ghost-button,.toolbar-button,.toolbar-icon{border:1px solid rgba(111,123,170,.2);background:rgba(18,23,38,.8);color:#eef5ff}.tab-button.active,.toolbar-icon.active{border-color:rgba(119,92,255,.38);background:linear-gradient(180deg,rgba(85,68,167,.78),rgba(67,49,138,.78))}.primary-button{border:1px solid rgba(145,106,255,.4);background:linear-gradient(90deg,#6d5cff,#9b52ff);color:#fff}.live-tab-count,.library-count{display:inline-flex;align-items:center;justify-content:center;min-height:22px;padding:0 8px;border-radius:999px;background:rgba(13,148,136,.14);color:#70e2d0;font-size:11px}.banner{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:700}.banner-success{border:1px solid rgba(34,197,94,.2);background:rgba(34,197,94,.12);color:#d1fae5}.banner-error{border:1px solid rgba(239,68,68,.2);background:rgba(239,68,68,.12);color:#fecaca}.workspace-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(330px,.92fr);gap:10px;align-items:start}.panel-card{display:grid;gap:10px;padding:12px}.panel-head,.library-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px}.panel-title-wrap{display:flex;align-items:center;gap:10px}.panel-title-wrap strong{font-size:18px}.panel-head-note{color:#9097bd;font-size:12px}.step-badge{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#7568e8,#5a4fd0);color:#fff;font-weight:700}.field-stack,.field{display:grid;gap:10px}.field>span{font-size:13px;font-weight:700}.reference-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.reference-source-card{min-width:0;min-height:164px;display:flex;align-items:center;gap:12px;padding:14px;border:1px solid rgba(111,123,170,.22);border-radius:16px;background:linear-gradient(180deg,rgba(18,23,38,.82),rgba(14,19,31,.92));color:#eef5ff;text-align:left;cursor:pointer}.reference-source-card__icon{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:#bba2ff;background:rgba(106,79,209,.16)}.reference-source-card__preview{width:72px;height:72px;object-fit:cover;border-radius:12px}.reference-source-card__copy{display:grid;gap:5px;min-width:0}.reference-source-card__copy strong{font-size:14px}.reference-source-card__copy small,.reference-source-card__copy span{color:#9fb1d8;font-size:11px}.clone-shot-list{display:grid;gap:8px;max-height:240px;overflow:auto}.clone-shot-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:11px;border-radius:12px;border:1px solid rgba(111,123,170,.18);background:rgba(18,23,38,.74)}.clone-shot-copy{min-width:0}.clone-shot-copy strong,.clone-shot-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.clone-shot-copy small{color:#9fb1d8;font-size:10px}.ghost-button.small{min-height:32px;padding:0 10px;font-size:11px}.danger{color:#fecaca!important}.field input,.field select,.field textarea{width:100%;box-sizing:border-box;min-height:40px;padding:9px 12px;border:1px solid rgba(111,123,170,.24);border-radius:12px;background:rgba(19,24,38,.92);color:#fff;font-size:13px}.field textarea{resize:vertical;line-height:1.5}.product-picker{position:relative;display:grid;grid-template-columns:42px minmax(0,1fr) 16px;gap:10px;align-items:center;min-height:50px;padding:0 12px;border:1px solid rgba(111,123,170,.22);border-radius:14px;background:rgba(19,24,38,.92)}.product-picker select{appearance:none;border:0;background:transparent;min-height:50px;padding:0;font-size:14px}.product-thumb{width:42px;height:42px;border-radius:11px;overflow:hidden;background:rgba(255,255,255,.06);display:grid;place-items:center}.product-thumb img{width:100%;height:100%;object-fit:cover}.picker-arrow{pointer-events:none}.create-button{width:100%;min-height:48px;border-radius:14px;font-size:15px}.safe-note{display:flex;align-items:center;justify-content:center;gap:8px;color:rgba(214,223,246,.78);font-size:12px;line-height:1.55}.rules-box{display:grid;border:1px solid rgba(111,123,170,.2);border-radius:16px;overflow:hidden;background:linear-gradient(180deg,rgba(18,22,36,.86),rgba(15,18,31,.9))}.rule-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(111,123,170,.14)}.rule-row:last-child{border:0}.rule-icon{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#c39bff;border:1px solid rgba(164,115,255,.34);background:rgba(122,82,255,.1);font-size:13px;font-weight:700}.rule-row p{margin:0;line-height:1.55;font-size:13px;color:rgba(233,238,251,.9)}.output-note{display:grid;gap:8px;padding:14px;border-radius:14px;background:linear-gradient(180deg,rgba(72,54,133,.82),rgba(58,44,108,.94));border:1px solid rgba(135,102,255,.24)}.output-note-head{font-size:15px;font-weight:700;color:#dfd5ff}.output-note p{margin:0;font-size:12px;line-height:1.6;color:rgba(220,228,246,.84)}.quality-control-card{display:grid;gap:12px;padding:14px;border-radius:16px;border:1px solid rgba(79,194,168,.22);background:linear-gradient(180deg,rgba(19,61,58,.36),rgba(12,28,35,.6))}.quality-control-card__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:#8ef0c8}.quality-control-card__head strong,.quality-control-card__head small{display:block}.quality-control-card__head small{margin-top:5px;color:#98cfc0;font-size:11px;line-height:1.5}.prompt-version-editor{display:grid;gap:9px}.prompt-version-editor__prompt textarea{min-height:138px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px}.prompt-version-actions{display:flex;flex-wrap:wrap;gap:8px}.library-layout{display:grid;gap:14px}.library-headline{display:grid;gap:18px;padding:8px 0 16px;border-bottom:1px solid rgba(111,123,170,.14)}.library-summary-row{display:flex;align-items:center;justify-content:space-between;gap:24px}.library-heading-cluster,.library-title-row,.library-head-tools,.library-toolbar,.library-action-group,.library-output-actions,.library-view-toggle,.library-pagination{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.library-title-row strong{font-size:18px}.library-subtitle{color:#9fb1d8;font-size:12px}.library-head-tools{margin-left:auto}.library-view-toggle{gap:2px;padding:2px;border-radius:6px;background:rgba(111,123,170,.08)}.library-pagination{font-size:12px;color:#aeb9d2}.library-page-button{width:30px;height:30px;border:1px solid rgba(111,123,170,.2);border-radius:9px;background:rgba(18,23,38,.8);color:#fff}.library-page-button:disabled{opacity:.35}.live-console-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.live-console-card,.live-console-row{border:1px solid rgba(111,123,170,.2);border-radius:16px;background:linear-gradient(180deg,rgba(17,21,35,.98),rgba(13,17,30,.98));overflow:hidden}.live-console-card.selected,.live-console-row.selected{border-color:rgba(124,92,255,.72)}.live-console-card__head,.live-console-card__body{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px}.live-console-card__preview{display:block;width:100%;height:190px;border:0;padding:0;background:rgba(5,8,16,.4)}.live-console-row__thumb{position:relative;width:100%;height:100%;display:grid;place-items:center;background:rgba(255,255,255,.04)}.live-console-row__thumb img{width:100%;height:100%;object-fit:cover}.live-console-row__thumb-empty{display:grid;place-items:center;color:#72809c}.preview-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:rgba(10,14,25,.58);color:#fff}.live-console-row__titleline{display:flex;align-items:center;gap:7px;min-width:0}.live-console-row__titleline h3{margin:0;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-console-row__source,.status-pill,.live-console-row__status,.live-console-row__quickchip{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;background:rgba(122,82,255,.12);color:#c9bdff;font-size:10px;white-space:nowrap}.live-console-row__meta,.live-console-row__quickrefs{display:flex;align-items:center;gap:7px;min-width:0;color:#9fb1d8;font-size:11px}.live-console-row__meta{margin-top:6px}.live-console-row__dot{width:3px;height:3px;border-radius:50%;background:#72809c}.live-console-row__quickrefs{margin-top:8px;flex-wrap:wrap}.status-completed{background:rgba(16,101,78,.18);color:#68f0b9}.status-failed,.status-paused{background:rgba(239,68,68,.18);color:#fecaca}.status-processing{background:rgba(91,118,255,.18);color:#cfd8ff}.live-console-row__actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:0 10px 10px}.live-console-row__link,.live-console-row__action{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:0 9px;border:1px solid rgba(111,123,170,.2);border-radius:9px;background:rgba(18,23,38,.8);color:#eef5ff;font-size:11px}.live-console-row__action{width:30px;padding:0}.live-console-row__link--primary{color:#d7cdff}.live-console-list{display:grid;gap:8px}.live-console-row{display:grid;grid-template-columns:30px 84px minmax(0,1fr);gap:12px;padding:10px}.live-console-row__check{display:grid;place-items:center}.live-console-row__preview{width:84px;height:84px;border-radius:12px;overflow:hidden}.live-console-row__main{min-width:0}.live-console-row__main .live-console-row__actions{padding:8px 0 0}.live-console-row__side{display:grid;justify-items:end;gap:8px}.live-console-row__updated-inline{display:flex;align-items:center;gap:4px;color:#9fb1d8;font-size:10px}.live-console-row__bottom{grid-column:2 / -1;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid rgba(111,123,170,.12);padding-top:8px}.live-console-row__error{display:flex;align-items:flex-start;gap:5px;margin-top:7px;color:#fecaca;font-size:11px}.live-console-row__error-text{min-width:0;overflow-wrap:anywhere;word-break:break-word}.empty-card{min-height:280px;place-items:center;text-align:center;color:#9fb1d8}.empty-card strong{font-size:16px}.empty-card p{margin:0;font-size:12px}.live-subtitle-dialog{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:16px;background:rgba(5,8,16,.72);backdrop-filter:blur(8px)}.live-subtitle-dialog__panel{width:min(760px,100%);max-height:calc(100vh - 32px);overflow:auto;display:grid;gap:14px;padding:18px;border:1px solid rgba(111,123,170,.24);border-radius:16px;background:linear-gradient(180deg,rgba(15,19,31,.98),rgba(12,16,27,.99))}.live-subtitle-dialog__head{display:flex;align-items:center;justify-content:space-between;gap:12px}.live-subtitle-dialog__titleblock{display:grid;gap:4px}.live-subtitle-dialog__titleblock strong{font-size:20px}.live-subtitle-dialog__titleblock p{margin:0;color:#9fb1d8;font-size:12px}.live-subtitle-dialog__close{min-height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(111,123,170,.24);background:rgba(19,24,38,.92);color:#fff}.account-layout{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.account-list{display:grid;gap:8px;align-content:start}.account-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px;border:1px solid rgba(111,123,170,.18);border-radius:12px;background:rgba(18,23,38,.74)}.account-row.disabled{opacity:.55}.account-order{display:grid}.account-order button{border:0;background:transparent;color:#9fb1d8}.account-main strong,.account-main small,.account-state{display:block}.account-main small{color:#9fb1d8;font-size:10px;overflow-wrap:anywhere}.account-state{width:max-content;margin:4px 0;padding:2px 7px;border-radius:999px;background:rgba(16,101,78,.18);color:#68f0b9;font-size:10px}.account-state.expired,.account-state.insufficient_credit,.account-state.error{background:rgba(239,68,68,.18);color:#fecaca}.account-actions{display:flex;gap:5px;flex-wrap:wrap}.account-form{display:grid;align-content:start;gap:10px;padding:14px;border:1px solid rgba(111,123,170,.18);border-radius:12px;background:rgba(18,23,38,.74)}.account-form label{display:grid;gap:5px;color:#9fb1d8;font-size:11px}.account-form input,.account-form textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid rgba(111,123,170,.24);border-radius:10px;background:rgba(19,24,38,.92);color:#fff}.dialog-actions{display:flex;justify-content:flex-end;gap:8px}.material-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;max-height:58vh;overflow:auto}.material-grid button{border:2px solid transparent;border-radius:11px;padding:6px;color:#bcc7d4;background:#151d2a}.material-grid button.active{border-color:#55dfca}.material-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px}.material-grid span{display:block;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}.detail-shot{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;padding:10px;border:1px solid rgba(111,123,170,.18);border-radius:12px;background:rgba(18,23,38,.74)}.detail-shot img{width:96px;height:96px;object-fit:cover;border-radius:10px}.detail-shot p{margin:5px 0;color:#9fb1d8;font-size:11px;overflow-wrap:anywhere}.account-error{color:#fecaca!important;overflow-wrap:anywhere}@media(max-width:1080px){.workspace-grid{grid-template-columns:1fr}.live-console-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.account-layout{grid-template-columns:1fr}}@media(max-width:700px){.live-workspace-intro,.library-summary-row{align-items:flex-start;flex-direction:column}.live-workspace-actions,.library-head-tools{margin-left:0}.reference-source-grid,.live-console-grid{grid-template-columns:1fr}.live-console-row{grid-template-columns:26px 64px minmax(0,1fr)}.live-console-row__preview{width:64px;height:64px}.live-console-row__bottom{grid-column:2 / -1;align-items:flex-start;flex-direction:column}.account-row{grid-template-columns:24px minmax(0,1fr)}.account-actions{grid-column:2}.material-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.live-console-row__thumb img{object-fit:contain}
+.live-console-row__preview{background:rgba(5,8,16,.4)}
+.live-console-list__metrics{display:flex;align-items:center;gap:10px;margin-top:6px;color:#9fb1d8;font-size:10px;flex-wrap:wrap}
+.live-console-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:start}
+.live-console-grid .live-console-card{display:grid;gap:10px;padding:12px;border-radius:20px;overflow:hidden;background:radial-gradient(circle at top right,rgba(120,96,255,.12),transparent 28%),linear-gradient(180deg,rgba(17,21,35,.98),rgba(13,17,30,.98));box-shadow:0 18px 40px rgba(6,10,20,.22)}
+.live-console-grid .live-console-card__head,.live-console-grid .live-console-card__body{padding:0}
+.live-console-grid .live-console-card__body{display:grid;gap:8px;min-width:0}
+.live-console-grid .live-console-card__preview{height:auto;aspect-ratio:9/16;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.live-console-grid .live-console-card__metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden;border:1px solid rgba(111,123,170,.14);border-radius:10px;background:rgba(8,13,23,.52)}
+.live-console-grid .live-console-card__metrics>div{display:grid;gap:1px;min-width:0;padding:5px 1px;text-align:center;border-right:1px solid rgba(111,123,170,.12)}
+.live-console-grid .live-console-card__metrics>div:last-child{border-right:0}
+.live-console-grid .live-console-card__metrics span{color:#8290ad;font-size:9px;white-space:nowrap}
+.live-console-grid .live-console-card__metrics strong{color:#70e2d0;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live-console-grid .live-console-row__titleline{align-items:flex-start;flex-wrap:wrap}
+.live-console-grid .live-console-row__titleline h3{width:100%;font-size:13px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.live-console-grid .live-console-row__meta{align-items:flex-start;white-space:normal;line-height:1.45}
+.live-console-grid .live-console-row__subtitle{color:#9fb1d8;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-console-grid .live-console-row__quickchip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.live-console-grid .live-console-row__error-text{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.live-console-grid .live-console-row__actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:0}
+.live-console-grid .live-console-row__link,.live-console-grid .live-console-row__action{width:100%;padding:0;font-size:0}
+.live-console-grid .live-console-row__link svg,.live-console-grid .live-console-row__action svg{width:15px;height:15px}
+.live-console-row__action--danger{color:#fecaca;border-color:rgba(239,68,68,.2)}
+.detail-dialog{width:min(980px,100%)}
+.detail-tabs{display:flex;gap:6px;padding:4px;border:1px solid rgba(111,123,170,.14);border-radius:12px;background:rgba(18,23,38,.82)}
+.detail-tabs button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 14px;border:0;border-radius:9px;background:transparent;color:#9fb1d8}
+.detail-tabs button.active{color:#fff;background:rgba(102,88,232,.24)}
+.detail-shot{grid-template-columns:220px minmax(0,1fr);align-items:start}
+.detail-shot>img{width:220px;height:auto;aspect-ratio:9/16;object-fit:contain;background:rgba(5,8,16,.4)}
+.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.detail-grid>div{display:grid;gap:5px;padding:11px;border:1px solid rgba(111,123,170,.16);border-radius:11px;background:rgba(9,16,28,.48);min-width:0}
+.detail-grid span{color:#9fb1d8;font-size:10px}.detail-grid strong{font-size:12px;overflow-wrap:anywhere}.detail-grid .detail-wide{grid-column:1/-1}
+.request-parameter-panel{display:grid;gap:12px}.request-parameter-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.request-parameter-head p{margin:4px 0 0;color:#9fb1d8;font-size:11px}.request-parameter-head span{padding:4px 9px;border-radius:999px;background:rgba(13,148,136,.14);color:#70e2d0;font-size:10px}
+.request-parameter-panel pre{max-height:56vh;margin:0;overflow:auto;padding:14px;border:1px solid rgba(111,123,170,.2);border-radius:12px;background:#090e18;color:#c9d6ef;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.subtitle-dialog{width:min(720px,100%)}.subtitle-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.subtitle-summary>div{display:grid;gap:4px;padding:12px;border:1px solid rgba(111,123,170,.16);border-radius:12px;background:rgba(18,23,38,.72)}.subtitle-summary span{color:#9fb1d8;font-size:11px}.subtitle-summary strong{font-size:15px}
+.video-dialog{width:min(900px,100%)}.video-dialog__player{display:block;width:100%;max-height:68vh;min-height:280px;object-fit:contain;border-radius:12px;background:#050810}.video-dialog__meta{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#9fb1d8;font-size:11px;overflow-wrap:anywhere}
+.live-subtitle-dialog__panel--copied{width:min(760px,100%)}.live-subtitle-dialog__actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding-top:6px;border-top:1px solid rgba(111,123,170,.12)}.live-subtitle-dialog__summary{display:flex;gap:12px}.live-subtitle-dialog__summary-item{flex:1;display:grid;gap:4px;padding:12px;border:1px solid rgba(111,123,170,.18);border-radius:12px;background:rgba(18,23,38,.72)}.live-subtitle-dialog__summary-item span,.live-subtitle-dialog__field span{color:#9fb1d8;font-size:12px}.live-subtitle-dialog__summary-item strong{font-size:14px;color:#eef5ff}.live-subtitle-dialog__tabs{display:inline-flex;gap:4px;width:fit-content;padding:4px;border-radius:12px;background:rgba(18,23,38,.82);border:1px solid rgba(111,123,170,.14)}.live-subtitle-dialog__tabs button{min-height:34px;padding:0 14px;border:0;border-radius:10px;background:transparent;color:#9fb1d8}.live-subtitle-dialog__tabs button.active{color:#fff;background:rgba(102,88,232,.24)}.live-subtitle-dialog__section{display:grid;gap:12px}.live-subtitle-dialog__section-head{display:grid;gap:4px}.live-subtitle-dialog__kicker{color:#9fb1d8;font-size:11px;text-transform:uppercase}.live-subtitle-dialog__section-head strong{color:#eef5ff;font-size:14px}.live-subtitle-dialog__mode-pills{display:flex;gap:10px;flex-wrap:wrap}.live-subtitle-dialog__mode-pills button{min-height:34px;padding:0 12px;border-radius:999px;border:1px solid rgba(111,123,170,.18);background:rgba(18,23,38,.72);color:#eef5ff}.live-subtitle-dialog__mode-pills button.is-active{border-color:rgba(124,92,255,.6);background:rgba(65,51,145,.18)}.live-subtitle-dialog__field{display:grid;gap:6px}.live-subtitle-dialog__section textarea,.live-subtitle-dialog__section input,.live-subtitle-dialog__section select{width:100%;min-height:38px;padding:10px 12px;border:1px solid rgba(111,123,170,.22);border-radius:10px;background:rgba(19,24,38,.92);color:#fff}.live-subtitle-dialog__textarea{min-height:120px;resize:vertical}.live-subtitle-dialog__inline-tip{padding:10px 12px;border-radius:10px;background:rgba(18,23,38,.68);color:#b8c7e8;font-size:12px;line-height:1.55}.live-subtitle-dialog__preset-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.live-subtitle-dialog__preset{display:grid;gap:4px;text-align:left;padding:12px 14px;border:1px solid rgba(111,123,170,.16);border-radius:12px;background:rgba(18,23,38,.7);color:#eef5ff}.live-subtitle-dialog__preset.active{border-color:rgba(124,92,255,.6);background:rgba(65,51,145,.18)}.live-subtitle-dialog__preset span,.live-subtitle-dialog__preset-note{color:#9fb1d8;font-size:11px;line-height:1.45}.live-subtitle-dialog__style-panel,.live-subtitle-dialog__form-grid{display:grid;gap:10px}.live-subtitle-dialog__form-grid--compact,.live-subtitle-dialog__form-grid--dual{grid-template-columns:repeat(2,minmax(0,1fr))}.live-subtitle-dialog__color-field{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center}
+.account-row.editing{border-color:rgba(145,106,255,.64);box-shadow:inset 0 0 0 1px rgba(145,106,255,.16)}
+.account-form-hint{color:#9fb1d8;font-size:10px;line-height:1.5}
+.product-picker-button{width:100%;color:#fff;text-align:left;cursor:pointer}
+.product-picker-button:hover{border-color:rgba(85,223,202,.44)}
+.product-picker-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.batch-delete-button{color:#fecaca;border-color:rgba(239,68,68,.24)}
+.delete-dialog{width:min(520px,100%)}
+.delete-dialog__body{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:start;padding:14px;border:1px solid rgba(239,68,68,.18);border-radius:12px;background:rgba(127,29,29,.12)}
+.delete-dialog__icon{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;background:rgba(239,68,68,.16);color:#fecaca}
+.delete-dialog__body p{margin:5px 0 0;color:#9fb1d8;font-size:11px;line-height:1.5}
+.delete-confirm-button{border-color:rgba(239,68,68,.38);background:linear-gradient(90deg,#b42332,#dc3545)}
+.account-tab{margin-left:auto}
+.live-console-row__action--region{color:#8ef0c8;border-color:rgba(79,194,168,.32);background:rgba(19,61,58,.42)}
+.detail-region-action{align-items:start}.detail-region-action .primary-button{width:max-content;max-width:100%;margin-top:4px}
+.region-dialog{width:min(820px,100%)}
+.region-stage{position:relative;width:fit-content;max-width:100%;margin:0 auto;overflow:hidden;border:1px solid rgba(111,123,170,.24);border-radius:12px;background:#090e18;touch-action:none;user-select:none;cursor:crosshair}
+.region-stage>img{width:auto;height:auto;max-width:100%;max-height:min(64vh,640px);display:block;pointer-events:none}
+.region-box{position:absolute;box-sizing:border-box;border:2px solid #55dfca;background:rgba(85,223,202,.12);box-shadow:0 0 0 9999px rgba(5,8,16,.46);cursor:move}
+.region-handle{position:absolute;width:14px;height:14px;border:2px solid #07121a;border-radius:50%;background:#55dfca}
+.region-handle.is-nw{left:-8px;top:-8px;cursor:nwse-resize}.region-handle.is-ne{right:-8px;top:-8px;cursor:nesw-resize}.region-handle.is-sw{left:-8px;bottom:-8px;cursor:nesw-resize}.region-handle.is-se{right:-8px;bottom:-8px;cursor:nwse-resize}
+.region-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#9fb1d8;font-size:11px}
+@media(max-width:700px){.region-stage>img{max-height:56vh}.detail-shot{grid-template-columns:1fr}.detail-shot>img{width:100%;height:auto;aspect-ratio:9/16}.detail-grid{grid-template-columns:1fr}.detail-grid .detail-wide{grid-column:auto}}
 </style>

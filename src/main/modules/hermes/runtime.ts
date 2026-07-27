@@ -94,6 +94,13 @@ function writeEnvValue(source: string, key: string, value: string) {
   return `${lines.filter((line, lineIndex) => lineIndex < lines.length - 1 || line).join('\n')}\n`
 }
 
+export function parseHermesConfig(source: string): Record<string, unknown> {
+  const value = parseDocument(source).toJS()
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
 class HermesRuntimeManager {
   readonly gateway = new HermesGatewayClient()
   private process: DashboardProcess | null = null
@@ -250,7 +257,7 @@ class HermesRuntimeManager {
     const configPath = join(profileDir, 'config.yaml')
     const envPath = join(profileDir, '.env')
     const configSource = existsSync(configPath) ? await readFile(configPath, 'utf8') : ''
-    const config = parseDocument(configSource).toJS() as Record<string, unknown>
+    const config = parseHermesConfig(configSource)
     const modelConfig = config.model && typeof config.model === 'object'
       ? config.model as Record<string, unknown>
       : { default: config.model }
@@ -265,8 +272,7 @@ class HermesRuntimeManager {
   async getApplicationModelBridgeSelection() {
     const configPath = join(hermesProfileDirectory(), 'config.yaml')
     if (!existsSync(configPath)) return undefined
-    const document = parseDocument(await readFile(configPath, 'utf8'))
-    const config = document.toJS() as Record<string, unknown>
+    const config = parseHermesConfig(await readFile(configPath, 'utf8'))
     const modelConfig = config.model && typeof config.model === 'object'
       ? config.model as Record<string, unknown>
       : {}
@@ -489,7 +495,7 @@ class HermesRuntimeManager {
       enabled: true,
       timeout: 7200,
     })
-    const config = document.toJS() as Record<string, unknown>
+    const config = parseHermesConfig(document.toString())
     const servers = config.mcp_servers && typeof config.mcp_servers === 'object'
       ? config.mcp_servers as Record<string, unknown>
       : {}
@@ -506,8 +512,7 @@ class HermesRuntimeManager {
   private async prepareApplicationModelBridge(profileDir: string) {
     const configPath = join(profileDir, 'config.yaml')
     if (!existsSync(configPath)) return undefined
-    const document = parseDocument(await readFile(configPath, 'utf8'))
-    const config = document.toJS() as Record<string, unknown>
+    const config = parseHermesConfig(await readFile(configPath, 'utf8'))
     const modelConfig = config.model && typeof config.model === 'object' ? config.model as Record<string, unknown> : {}
     if (modelConfig.videogenerate_bridge !== true) return undefined
     const model = String(modelConfig.default || '').trim()
@@ -521,7 +526,7 @@ class HermesRuntimeManager {
     const configPath = join(profileDir, 'config.yaml')
     const configSource = existsSync(configPath) ? await readFile(configPath, 'utf8') : ''
     const document = parseDocument(configSource)
-    const config = document.toJS() as Record<string, unknown>
+    const config = parseHermesConfig(configSource)
     const customProviders = Array.isArray(config.custom_providers)
       ? config.custom_providers.filter((entry) => {
           if (!entry || typeof entry !== 'object') return true

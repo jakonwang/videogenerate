@@ -38,7 +38,27 @@ function normalizeShotTask(shot: TiktokCreativeShotTask): TiktokCreativeShotTask
     resultVideoPath: String(shot.resultVideoPath || '').trim() || undefined,
     lastError: String(shot.lastError || '').trim() || undefined,
     logs: normalizeLogs(shot.logs),
+    sourceType: shot.sourceType || (shot.shotId ? 'legacy_clone_shot' : 'reference_image'),
+    referenceImagePath: String(shot.referenceImagePath || '').trim() || undefined,
+    preparedImagePath: String(shot.preparedImagePath || '').trim() || undefined,
+    imagePreparation: shot.imagePreparation && typeof shot.imagePreparation === 'object'
+      ? { ...shot.imagePreparation }
+      : undefined,
+    imageRetryCount: Math.max(0, Number(shot.imageRetryCount || 0) || 0),
+    imageRetryLimit: Math.max(1, Number(shot.imageRetryLimit || 2) || 2),
+    accountId: String(shot.accountId || '').trim() || undefined,
+    officialTaskId: String(shot.officialTaskId || '').trim() || undefined,
+    officialVideoId: String(shot.officialVideoId || '').trim() || undefined,
+    remoteStatus: shot.remoteStatus,
+    remoteStatusUpdatedAt: Number(shot.remoteStatusUpdatedAt || 0) || undefined,
+    posterPath: String(shot.posterPath || '').trim() || undefined,
+    pollAttempts: Math.max(0, Number(shot.pollAttempts || 0) || 0),
   }
+}
+
+function canMaterializeShotAssets(shot: TiktokCreativeShotTask) {
+  if (shot.sourceType !== 'reference_image') return false
+  return !String((shot as TiktokCreativeShotTask & { preparationItemId?: string }).preparationItemId || '').trim()
 }
 
 function summarizeShots(shots: TiktokCreativeShotTask[]) {
@@ -54,6 +74,8 @@ function normalizeTask(task: TiktokCreativeTask): TiktokCreativeTask {
   const summary = summarizeShots(shots)
   return {
     ...task,
+    productId: String(task.productId || '').trim() || undefined,
+    productName: String(task.productName || '').trim() || undefined,
     sourceCloneProjectId: String(task.sourceCloneProjectId || '').trim() || undefined,
     sourceCloneProjectTitle: String(task.sourceCloneProjectTitle || '').trim() || undefined,
     lastError: String(task.lastError || '').trim() || undefined,
@@ -72,12 +94,30 @@ async function materializeTaskAssets(task: TiktokCreativeTask): Promise<TiktokCr
     shots: await Promise.all(
       task.shots.map(async (shot) => ({
         ...shot,
-        imagePath: await materializeManagedAsset({
-          sourcePath: shot.imagePath,
-          module: 'tiktok-creative',
-          ownerId: task.id,
-          assetId: `shot-${shot.shotId}-image`,
-        }),
+        imagePath: canMaterializeShotAssets(shot)
+          ? await materializeManagedAsset({
+              sourcePath: shot.imagePath,
+              module: 'tiktok-creative',
+              ownerId: task.id,
+              assetId: `shot-${shot.shotId}-image`,
+            })
+          : shot.imagePath,
+        referenceImagePath: canMaterializeShotAssets(shot) && shot.referenceImagePath
+          ? await materializeManagedAsset({
+              sourcePath: shot.referenceImagePath,
+              module: 'tiktok-creative',
+              ownerId: task.id,
+              assetId: `shot-${shot.shotId}-reference`,
+            })
+          : shot.referenceImagePath,
+        preparedImagePath: canMaterializeShotAssets(shot) && shot.preparedImagePath
+          ? await materializeManagedAsset({
+              sourcePath: shot.preparedImagePath,
+              module: 'tiktok-creative',
+              ownerId: task.id,
+              assetId: `shot-${shot.shotId}-prepared`,
+            })
+          : shot.preparedImagePath,
       })),
     ),
   }

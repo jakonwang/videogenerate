@@ -49,6 +49,7 @@ import { productImageMaterialsService } from './modules/product-image-materials/
 import { productImageMaterialsRepo } from './modules/product-image-materials/repo'
 import { tiktokListingRepo } from './modules/tiktok-listing/repo'
 import { tiktokCreativeStudioRepo } from './modules/tiktok-creative-studio/repo'
+import { tiktokCreativeStudioService } from './modules/tiktok-creative-studio/service'
 import { livePhotoRepo } from './modules/live-photo/repo'
 import { videoParserDownloadService } from './modules/video-parser-download/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
@@ -1635,6 +1636,7 @@ app.whenReady().then(async () => {
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
         await livePhotoService.resumePendingTasksOnStartup()
+        await tiktokCreativeStudioService.resumePending()
         markStartupStage('background-initialization-complete')
       } catch (error: any) {
         console.error('[app-startup] bootstrap-failed', {

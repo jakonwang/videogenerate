@@ -33,6 +33,10 @@ function isSessionBusyError(error: unknown) {
   return /session busy/i.test(String((error as Error)?.message || error))
 }
 
+export function isApplicationModelBridgeProviderError(error: unknown) {
+  return /unknown provider ['"]custom:videogenerate-bridge['"]/i.test(String((error as Error)?.message || error))
+}
+
 function normalizeCreateResult(value: unknown): HermesSessionCreateResult {
   const result = asRecord(value)
   return {
@@ -392,11 +396,19 @@ class HermesAgentService {
         employeeId: conversation?.employeeId,
       }
     }
-    const result = normalizeCreateResult(await client.request('session.resume', {
-      session_id: storedSessionId,
-    }))
+    let sessionClient = client
+    let resumed: unknown
+    try {
+      resumed = await sessionClient.request('session.resume', { session_id: storedSessionId })
+    } catch (error) {
+      if (!isApplicationModelBridgeProviderError(error)) throw error
+      await this.useApplicationModel()
+      sessionClient = await this.client()
+      resumed = await sessionClient.request('session.resume', { session_id: storedSessionId })
+    }
+    const result = normalizeCreateResult(resumed)
     if (result.sessionId && result.storedSessionId) this.liveStoredSessionIds.set(result.sessionId, result.storedSessionId)
-    if (result.sessionId) await this.refreshApplicationModelBridgeSession(client, result.sessionId)
+    if (result.sessionId) await this.refreshApplicationModelBridgeSession(sessionClient, result.sessionId)
     const conversation = (
       await agentOsService.findConversationByHermesSession(result.storedSessionId)
       || await agentOsService.findConversationByHermesSession(storedSessionId)

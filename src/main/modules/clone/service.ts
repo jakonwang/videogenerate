@@ -7139,6 +7139,16 @@ function resolveShotVideoRemoteUrl(output: Partial<CloneShotVideoOutput> | undef
     remoteRaw?.data && typeof remoteRaw.data === 'object' ? (remoteRaw.data as Record<string, any>) : {}
   const remoteResult =
     remoteRaw?.result && typeof remoteRaw.result === 'object' ? (remoteRaw.result as Record<string, any>) : {}
+  const remoteOutput =
+    remoteRaw?.output && typeof remoteRaw.output === 'object' ? (remoteRaw.output as Record<string, any>) : {}
+  const remoteRawMetadata =
+    remoteRaw?.metadata && typeof remoteRaw.metadata === 'object' ? (remoteRaw.metadata as Record<string, any>) : {}
+  const remoteRawDataMetadata =
+    remoteRawData?.metadata && typeof remoteRawData.metadata === 'object' ? (remoteRawData.metadata as Record<string, any>) : {}
+  const remoteResultMetadata =
+    remoteResult?.metadata && typeof remoteResult.metadata === 'object' ? (remoteResult.metadata as Record<string, any>) : {}
+  const remoteOutputMetadata =
+    remoteOutput?.metadata && typeof remoteOutput.metadata === 'object' ? (remoteOutput.metadata as Record<string, any>) : {}
   return String(
     output?.videoUrl ||
       remoteRaw?.video_url ||
@@ -7153,9 +7163,24 @@ function resolveShotVideoRemoteUrl(output: Partial<CloneShotVideoOutput> | undef
       remoteRawData?.output_url ||
       remoteRaw?.output?.url ||
       remoteRawData?.output?.url ||
+      remoteRawMetadata?.video_url ||
+      remoteRawMetadata?.videoUrl ||
+      remoteRawMetadata?.url ||
+      remoteRawDataMetadata?.video_url ||
+      remoteRawDataMetadata?.videoUrl ||
+      remoteRawDataMetadata?.url ||
       remoteResult?.video_url ||
       remoteResult?.videoUrl ||
       remoteResult?.url ||
+      remoteResultMetadata?.video_url ||
+      remoteResultMetadata?.videoUrl ||
+      remoteResultMetadata?.url ||
+      remoteOutput?.video_url ||
+      remoteOutput?.videoUrl ||
+      remoteOutput?.url ||
+      remoteOutputMetadata?.video_url ||
+      remoteOutputMetadata?.videoUrl ||
+      remoteOutputMetadata?.url ||
       '',
   ).trim()
 }
@@ -8004,12 +8029,13 @@ async function continueShotVideoResultFlow(input: {
     await cloneRepo.upsertProject(currentProject)
   }
   const repairedOutput = resolveShotVideoOutput(currentProject, currentShot)
+  const repairedVideoUrl = resolveShotVideoRemoteUrl(repairedOutput)
   console.log('[clone-debug] shot-video-continue-flow:enter', {
     projectId: currentProject.id,
     shotId: currentShot.id,
     status: repairedOutput.status,
     taskId: resolveEffectiveVideoTaskId(repairedOutput.taskId, currentShot.generatedTaskId) || undefined,
-    hasVideoUrl: Boolean(String(repairedOutput.videoUrl || '').trim()),
+    hasVideoUrl: Boolean(repairedVideoUrl),
     hasLocalVideo: Boolean(String(repairedOutput.videoPath || repairedOutput.localPath || '').trim()),
   })
   if (isStaleShotVideoDownloadBlocked(
@@ -8030,9 +8056,10 @@ async function continueShotVideoResultFlow(input: {
       status: String(repairedOutput.status || 'submitting') as CloneShotVideoOutput['status'],
     }
   }
-  if (String(repairedOutput.videoUrl || '').trim() && !String(repairedOutput.videoPath || repairedOutput.localPath || '').trim()) {
+  if (repairedVideoUrl && !String(repairedOutput.videoPath || repairedOutput.localPath || '').trim()) {
     syncSegmentVideoOutput(currentProject, currentShot, {
       status: 'downloading',
+      videoUrl: repairedVideoUrl,
       error: undefined,
     })
     await cloneRepo.upsertProject(currentProject)
@@ -8050,7 +8077,7 @@ async function continueShotVideoResultFlow(input: {
       worker: () => downloadCompletedSegmentTask({ project: currentProject, shot: currentShot }),
     })
   }
-  if (isDownloadReadyShotStatus(repairedOutput.status) && String(repairedOutput.videoUrl || '').trim()) {
+  if (isDownloadReadyShotStatus(repairedOutput.status) && repairedVideoUrl) {
     console.log('[clone-debug] shot-video-continue-flow:reuse-download', {
       projectId: currentProject.id,
       shotId: currentShot.id,

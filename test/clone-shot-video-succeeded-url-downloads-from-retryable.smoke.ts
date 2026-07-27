@@ -80,7 +80,10 @@ async function main() {
           remoteStatus: 'succeeded',
           remoteRaw: {
             status: 'completed',
-            video_url: 'https://example.com/final.mp4',
+            metadata: {
+              url: 'https://example.com/final.mp4',
+              video_url: 'https://example.com/final.mp4',
+            },
           },
           error: '本地等待超时，但远端可能已完成',
           updatedAt: Date.now(),

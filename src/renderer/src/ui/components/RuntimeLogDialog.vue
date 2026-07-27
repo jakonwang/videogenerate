@@ -20,11 +20,13 @@ const props = withDefaults(
     fabLabel?: string
     emptyTitle?: string
     emptyDescription?: string
+    showAll?: boolean
   }>(),
   {
     title: '运行日志',
     description: '实时查看提交日志、接口返回、阶段切换与错误信息。',
     hint: '',
+    showAll: false,
     fabLabel: '运行日志',
     emptyTitle: '暂无日志',
     emptyDescription: '执行操作后，这里会显示最新的运行记录。',
@@ -89,7 +91,11 @@ const categoryOptions: Array<{ value: RuntimeLogCategory; label: string }> = [
 ]
 
 const activeCategory = ref<RuntimeLogCategory>('all')
-const importantLogs = computed(() => (Array.isArray(props.logs) ? props.logs : []).filter(isImportantRuntimeLog))
+const importantLogs = computed(() =>
+  (Array.isArray(props.logs) ? props.logs : []).filter((item) =>
+    props.showAll ? Boolean(String(item.message || '').trim()) : isImportantRuntimeLog(item),
+  ),
+)
 const visibleLogs = computed(() =>
   importantLogs.value.filter((item) => activeCategory.value === 'all' || resolveRuntimeCategory(item) === activeCategory.value),
 )
@@ -158,7 +164,7 @@ function resolveRuntimeAction(item: RuntimeLogItem) {
 }
 
 function formatRuntimeMessage(message: string) {
-  const text = String(message || '').trim()
+  const text = String(message || '').replace(/\u001b\[[0-9;]*m/g, '').trim()
   if (!text) return ''
 
   if (cloneDebugNoisePatterns.some((pattern) => pattern.test(text))) return ''
