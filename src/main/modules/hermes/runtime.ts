@@ -141,6 +141,7 @@ class HermesRuntimeManager {
     await this.stop()
     this.update({ state: 'installing', error: undefined })
     await hermesInstallation.install()
+    this.assertRuntimeInstalled()
     return await this.start()
   }
 
@@ -148,6 +149,7 @@ class HermesRuntimeManager {
     await this.stop()
     this.update({ state: 'updating', error: undefined })
     await hermesInstallation.update()
+    this.assertRuntimeInstalled()
     return await this.start()
   }
 
@@ -155,7 +157,15 @@ class HermesRuntimeManager {
     await this.stop()
     this.update({ state: 'installing', error: undefined })
     await hermesInstallation.repair()
+    this.assertRuntimeInstalled()
     return await this.start()
+  }
+
+  private assertRuntimeInstalled() {
+    const executable = join(hermesRuntimeRoot(), 'venv', 'Scripts', 'hermes.exe')
+    if (!existsSync(executable)) {
+      throw new Error(`Hermes installation did not create the expected executable at ${executable}`)
+    }
   }
 
   async dashboardRequest(path: string, init: RequestInit = {}) {

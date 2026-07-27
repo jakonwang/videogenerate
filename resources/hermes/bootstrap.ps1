@@ -88,7 +88,22 @@ try {
         throw "Hermes installer checksum verification failed."
     }
 
-    $protocolOutput = (& $installerPath -ProtocolVersion 2>&1 | Out-String).Trim()
+    $powershellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $protocolOutput = (& $powershellPath `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $installerPath `
+            -ProtocolVersion 2>&1 | Out-String).Trim()
+        $protocolExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($protocolExitCode -ne 0) {
+        throw "Hermes installer protocol check exited with code $protocolExitCode."
+    }
     $protocolVersion = 0
     if (-not [int]::TryParse($protocolOutput, [ref]$protocolVersion) -or $protocolVersion -lt [int]$manifest.minimumInstallerProtocol) {
         throw "Hermes installer protocol is incompatible."
@@ -117,16 +132,25 @@ try {
     }
 
     Write-InstallStatus -State "installing" -Message "Installing the compatible Hermes runtime." -Version $statusVersion -Commit $statusCommit
-    & $installerPath `
-        -Branch ([string]$manifest.branch) `
-        -Commit $statusCommit `
-        -HermesHome $runtimeRoot `
-        -InstallDir $stagingDir `
-        -SkipSetup `
-        -NonInteractive `
-        -Json
-    if ($LASTEXITCODE -ne 0) {
-        throw "Hermes installer exited with code $LASTEXITCODE."
+    try {
+        $ErrorActionPreference = "Continue"
+        & $powershellPath `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $installerPath `
+            -Branch ([string]$manifest.branch) `
+            -Commit $statusCommit `
+            -HermesHome $runtimeRoot `
+            -InstallDir $stagingDir `
+            -SkipSetup `
+            -NonInteractive `
+            -Json 2>&1 | ForEach-Object { Write-Output $_ }
+        $installerExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($installerExitCode -ne 0) {
+        throw "Hermes installer exited with code $installerExitCode."
     }
 
     foreach ($relativePath in $manifest.requiredFiles) {

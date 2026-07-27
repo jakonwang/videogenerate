@@ -22,6 +22,11 @@ async function main() {
   const { hermesRuntime } = await import('../src/main/modules/hermes/runtime')
 
   try {
+    const bootstrapSource = await readFile(path.join(process.cwd(), 'resources', 'hermes', 'bootstrap.ps1'), 'utf8')
+    assert.match(bootstrapSource, /-File \$installerPath[\s\S]+-ProtocolVersion/)
+    assert.match(bootstrapSource, /-File \$installerPath[\s\S]+-InstallDir \$stagingDir/)
+    assert.doesNotMatch(bootstrapSource, /& \$installerPath\s+`/)
+
     const missing = await hermesInstallation.inspect()
     assert.equal(missing.state, 'missing')
     assert.equal(missing.targetVersion, '0.17.0')
