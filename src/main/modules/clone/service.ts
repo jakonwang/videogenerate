@@ -1181,7 +1181,7 @@ function validateProjectReadyForFinalCompose(project: CloneProject) {
   const shots = project.blueprint?.shots ?? []
   const outputMap = getShotVideoOutputMap(project)
   if (!shots.length) {
-    return { ok: false as const, reason: '????????????' }
+    return { ok: false as const, reason: 'No storyboard shots are available for final composition.' }
   }
   const failed = shots.filter((shot) => {
     const shotStatus = String(shot.status || '').toLowerCase()
@@ -1197,7 +1197,7 @@ function validateProjectReadyForFinalCompose(project: CloneProject) {
     const onlyDurationMismatch =
       qualityStatus === 'failed' &&
       qualityReasons.length > 0 &&
-      qualityReasons.every((reason) => reason.includes('??????')) &&
+      qualityReasons.every((reason) => /duration|时长偏离目标/i.test(reason)) &&
       hasRenderableClip
     if (hasRecoveredRenderableOutput || onlyDurationMismatch) return false
     return (
@@ -1211,10 +1211,10 @@ function validateProjectReadyForFinalCompose(project: CloneProject) {
   })
   if (!failed.length) return { ok: true as const }
   const first = failed[0]
-  const firstReason = String(first.error || first.qualityReasons?.join('?') || '???????').trim()
+  const firstReason = String(first.error || first.qualityReasons?.join('; ') || 'The shot is not ready for composition.').trim()
   return {
     ok: false as const,
-    reason: `????????${failed.length} ????????????? #${Number(first.index ?? 0) + 1} ${firstReason}`.trim(),
+    reason: `Final composition is blocked by ${failed.length} incomplete shot(s). First issue: shot #${Number(first.index ?? 0) + 1}: ${firstReason}`.trim(),
   }
 }
 
@@ -6210,18 +6210,18 @@ function buildPreflightIssues(shots: ShotSpec[], project?: CloneProject | null, 
       canEnterRender: effective.canEnterRender,
     }
     const hasCloud = isCloudGeneratedShot(cloudLikeShot)
-    if (shot.status === 'failed') issues.push((label + ': ?????? ' + (shot.error || '')).trim())
+    if (shot.status === 'failed') issues.push((label + ': generation failed ' + (shot.error || '')).trim())
     const allowMockCompose = Boolean(options?.allowMockCompose)
     if ((shot.isMock || shot.generatedSource === 'mock') && !allowMockCompose) {
-      issues.push(label + ': mock ??????')
+      issues.push(label + ': mock output cannot be used for final composition')
     }
     if (!hasUpload && !hasCloud && !(allowMockCompose && Boolean(effective.generatedClipPath))) {
-      issues.push(label + ': ??????')
+      issues.push(label + ': no renderable video is available')
     }
     if (effective.generatedClipPath && !hasCloud && !hasUpload && !allowMockCompose) {
-      issues.push(label + ': AI ??????????')
+      issues.push(label + ': the local file is not a verified AI output')
     }
-    if (hasCloud && !effective.canEnterRender && !allowMockCompose) issues.push(label + ': AI ?????????')
+    if (hasCloud && !effective.canEnterRender && !allowMockCompose) issues.push(label + ': the AI output did not pass the render gate')
   }
   return issues
 }
@@ -11004,12 +11004,12 @@ export const cloneService = {
     return await runFinalComposeWithGlobalQueue(input.cloneProjectId, async () => {
       const baseProject = await cloneRepo.getProject(input.cloneProjectId)
       const hydratedProject = baseProject ? await reconcileRenderableShotsBeforeCompose(baseProject) : baseProject
-      if (!hydratedProject) throw new Error('???????')
+      if (!hydratedProject) throw new Error('Clone project does not exist.')
       await cloneRepo.upsertProject(hydratedProject)
       await reconcileRemoteStoryboardVideosInternal(input.cloneProjectId)
       const loadedProject = await cloneRepo.getProject(input.cloneProjectId)
       const project = loadedProject ? await reconcileRenderableShotsBeforeCompose(loadedProject) : loadedProject
-      if (!project) throw new Error('???????')
+      if (!project) throw new Error('Clone project does not exist.')
       ensureCloneFlowState(project)
       const gate = validateProjectReadyForFinalCompose(project)
       if (!gate.ok) {
@@ -11177,13 +11177,13 @@ export const cloneService = {
           nextRoundPlanPath,
           composeHealth,
           composeSummary,
-          error: finalOutputPath ? undefined : '?????????????????',
+          error: finalOutputPath ? undefined : 'Final composition completed without an output video path.',
         })
         previewPipelinePatch(latest, {
           status: finalOutputPath ? 'done' : 'failed',
           previewOutputPath: finalOutputPath,
           previewReportPath: String(rendered.reportPath || '').trim() || undefined,
-          lastError: finalOutputPath ? undefined : '?????????????????',
+          lastError: finalOutputPath ? undefined : 'Final composition completed without an output video path.',
         })
         if (finalOutputPath) {
           latest.lastError = ''

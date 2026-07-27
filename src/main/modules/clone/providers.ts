@@ -692,7 +692,7 @@ async function createKlingTask(input: {
   } else if (!isAtlasImageToVideoModel(model) && input.endFrameUrl && input.endFrameUrl !== input.startFrameUrl) {
     body.last_image = input.endFrameUrl
   }
-  const json = await postAtlasJson(`${input.host}/api/v1/model/generateVideo`, input.key, body, 'AtlasCloud ??????')
+  const json = await postAtlasJson(`${input.host}/api/v1/model/generateVideo`, input.key, body, 'AtlasCloud video generation')
   const taskId = pickTaskId(json)
   if (!taskId) throw new Error(`AtlasCloud video task id missing: ${JSON.stringify(json)}`)
   return { taskId, model }

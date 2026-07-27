@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { CheckCircle2, LoaderCircle, RefreshCw, Settings2, Smartphone, Sparkles } from 'lucide-vue-next'
 import {
   webApiClient,
   type GeelarkCloudPhoneSummary,
   type GeelarkPluginConfigSummary,
   type GeelarkPublishAccount,
-  type PluginDetail,
 } from '@/lib/webApiClient'
 
 const router = useRouter()
+const { t } = useI18n()
 
-const LOCAL_PLUGIN_STATE_KEY = 'videogen-desktop-plugin-state'
 const LOCAL_GEELARK_CONFIG_KEY = 'videogen-geelark-config'
 const LOCAL_GEELARK_ACCOUNTS_KEY = 'videogen-geelark-accounts'
 
@@ -49,36 +49,6 @@ function isApiNotFoundError(error: unknown) {
   return message.includes('接口不存在')
 }
 
-function isPluginMissingError(error: unknown) {
-  const message = String((error as { message?: string } | undefined)?.message ?? error ?? '').trim()
-  return message.includes('插件不存在')
-}
-
-function readLocalPluginState() {
-  try {
-    const raw = localStorage.getItem(LOCAL_PLUGIN_STATE_KEY)?.trim()
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, { status?: string; enabled?: boolean }>
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function writeLocalPluginState(state: Record<string, { status?: string; enabled?: boolean }>) {
-  localStorage.setItem(LOCAL_PLUGIN_STATE_KEY, JSON.stringify(state))
-}
-
-function saveLocalPluginState(patch: { status?: 'installed' | 'uninstalled'; enabled?: boolean }) {
-  const state = readLocalPluginState()
-  const prev = state['geelark-publisher'] || { status: 'uninstalled', enabled: false }
-  state['geelark-publisher'] = {
-    status: patch.status ?? prev.status,
-    enabled: patch.status === 'uninstalled' ? false : (patch.enabled ?? Boolean(prev.enabled)),
-  }
-  writeLocalPluginState(state)
-}
-
 function readLocalJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)?.trim()
@@ -91,25 +61,6 @@ function readLocalJson<T>(key: string, fallback: T): T {
 
 function writeLocalJson(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value))
-}
-
-function localPluginDetailFallback(): PluginDetail {
-  const local = readLocalPluginState()['geelark-publisher']
-  return {
-    id: 'geelark-publisher',
-    name: 'GeeLark 发布插件',
-    category: 'video_processing',
-    description: '管理 GeeLark API、发布账号与云手机绑定，并进入独立发布中心完成 TikTok 发布。',
-    version: '0.1.0',
-    entryType: 'tool',
-    workspacePath: '/plugins/geelark-publisher',
-    status: local?.status === 'installed' ? 'installed' : 'uninstalled',
-    enabled: local?.status === 'installed' ? Boolean(local.enabled) : false,
-    runtimeState: local?.status === 'installed' && local.enabled ? 'enabled' : 'disabled',
-    usageHint: '先配置 GeeLark API 与发布账号，再进入发布中心处理待发布成片。',
-    configSchema: [],
-    config: {},
-  }
 }
 
 function readLocalGeelarkConfig(): GeelarkPluginConfigSummary {
@@ -196,10 +147,8 @@ async function loadAll() {
     try {
       plugin.value = await webApiClient.getPlugin('geelark-publisher')
     } catch (error: any) {
-      plugin.value = localPluginDetailFallback()
-      if (!isPluginMissingError(error) && !isApiNotFoundError(error)) {
-        errorText.value = error?.message ?? String(error)
-      }
+      plugin.value = null
+      errorText.value = error?.message ?? String(error)
     }
 
     try {
@@ -241,13 +190,11 @@ async function installAndEnable() {
       await webApiClient.installPlugin('geelark-publisher')
     }
     await webApiClient.enablePlugin('geelark-publisher')
-    notice.value = 'GeeLark 插件已安装并启用。'
+    notice.value = t('geelarkPublisher.messages.pluginEnabled')
     await loadAll()
-  } catch {
-    saveLocalPluginState({ status: 'installed', enabled: true })
-    plugin.value = localPluginDetailFallback()
-    notice.value = 'GeeLark 插件已切换到本地启用状态。'
-    errorText.value = ''
+  } catch (error: any) {
+    plugin.value = null
+    errorText.value = error?.message ?? String(error)
   }
 }
 
@@ -264,7 +211,7 @@ async function saveConfig() {
       requestTimeoutMs: Number(configForm.requestTimeoutMs || 30000),
     })
     fillConfigForm(config.value)
-    notice.value = 'GeeLark 配置已保存。'
+    notice.value = t('geelarkPublisher.messages.configSaved')
   } catch (error: any) {
     if (isApiNotFoundError(error)) {
       config.value = writeLocalGeelarkConfig({
@@ -275,7 +222,7 @@ async function saveConfig() {
         requestTimeoutMs: Number(configForm.requestTimeoutMs || 30000),
       })
       fillConfigForm(config.value)
-      notice.value = 'GeeLark 配置已保存到本地。'
+      notice.value = t('geelarkPublisher.messages.configSavedLocal')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -291,11 +238,11 @@ async function reloadCloudPhones() {
   notice.value = ''
   try {
     cloudPhones.value = await webApiClient.listGeelarkCloudPhones()
-    notice.value = '云手机列表已刷新。'
+    notice.value = t('geelarkPublisher.messages.phonesRefreshed')
   } catch (error: any) {
     if (isApiNotFoundError(error)) {
       cloudPhones.value = []
-      notice.value = '当前运行实例未提供云手机接口。'
+      notice.value = t('geelarkPublisher.messages.phonesUnavailable')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -321,10 +268,10 @@ async function saveAccount() {
     }
     if (editingAccountId.value) {
       await webApiClient.updateGeelarkPublisherAccount(editingAccountId.value, payload)
-      notice.value = '发布账号已更新。'
+      notice.value = t('geelarkPublisher.messages.accountUpdated')
     } else {
       await webApiClient.createGeelarkPublisherAccount(payload)
-      notice.value = '发布账号已创建。'
+      notice.value = t('geelarkPublisher.messages.accountCreated')
     }
     accounts.value = await webApiClient.listGeelarkPublisherAccounts()
     writeLocalGeelarkAccounts(accounts.value)
@@ -352,7 +299,7 @@ async function saveAccount() {
       writeLocalGeelarkAccounts(nextItems)
       accounts.value = nextItems
       resetAccountForm()
-      notice.value = '发布账号已保存到本地。'
+      notice.value = t('geelarkPublisher.messages.accountSavedLocal')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -370,14 +317,14 @@ async function removeAccount(id: string) {
     accounts.value = await webApiClient.listGeelarkPublisherAccounts()
     writeLocalGeelarkAccounts(accounts.value)
     if (editingAccountId.value === id) resetAccountForm()
-    notice.value = '发布账号已删除。'
+    notice.value = t('geelarkPublisher.messages.accountDeleted')
   } catch (error: any) {
     if (isApiNotFoundError(error)) {
       const nextItems = readLocalGeelarkAccounts().filter((item) => item.id !== id)
       writeLocalGeelarkAccounts(nextItems)
       accounts.value = nextItems
       if (editingAccountId.value === id) resetAccountForm()
-      notice.value = '发布账号已从本地删除。'
+      notice.value = t('geelarkPublisher.messages.accountDeletedLocal')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -386,6 +333,10 @@ async function removeAccount(id: string) {
 }
 
 function openPublishCenter() {
+  if (!isPluginReady.value) {
+    errorText.value = t('geelarkPublisher.setup.desc')
+    return
+  }
   void router.push('/plugins/geelark-publisher/publish-center')
 }
 
@@ -398,19 +349,19 @@ onMounted(() => {
   <div class="geelark-settings-page">
     <section class="hero-card">
       <div class="hero-copy">
-        <span class="eyebrow">GeeLark 发布设置</span>
-        <h1>先配置插件与账号，再进入独立发布中心</h1>
-        <p>这个页面只负责 GeeLark 插件启用、接口配置和发布账号绑定。待发布复刻视频与发布任务已经拆到独立工作台，不再和设置混在一起。</p>
+        <span class="eyebrow">{{ t('geelarkPublisher.hero.eyebrow') }}</span>
+        <h1>{{ t('geelarkPublisher.hero.title') }}</h1>
+        <p>{{ t('geelarkPublisher.hero.desc') }}</p>
       </div>
 
       <div class="hero-actions">
         <button class="primary-button" type="button" @click="openPublishCenter">
           <Sparkles class="h-4 w-4" />
-          打开发布中心
+          {{ t('geelarkPublisher.actions.openCenter') }}
         </button>
         <button class="ghost-button" type="button" @click="loadAll">
           <RefreshCw class="h-4 w-4" />
-          刷新状态
+          {{ t('common.refresh') }}
         </button>
       </div>
     </section>
@@ -420,37 +371,37 @@ onMounted(() => {
 
     <section v-if="loading" class="loading-card">
       <LoaderCircle class="h-5 w-5 spin" />
-      <span>正在加载 GeeLark 配置...</span>
+      <span>{{ t('geelarkPublisher.loading') }}</span>
     </section>
 
     <template v-else>
       <section class="overview-grid">
         <article class="stat-card">
-          <span>插件状态</span>
-          <strong>{{ isPluginReady ? '已启用' : '未启用' }}</strong>
-          <small>{{ plugin?.status === 'installed' ? '插件已安装' : '插件未安装' }}</small>
+          <span>{{ t('geelarkPublisher.stats.pluginStatus') }}</span>
+          <strong>{{ isPluginReady ? t('geelarkPublisher.status.enabled') : t('geelarkPublisher.status.disabled') }}</strong>
+          <small>{{ plugin?.status === 'installed' ? t('geelarkPublisher.status.installed') : t('geelarkPublisher.status.notInstalled') }}</small>
         </article>
         <article class="stat-card">
-          <span>发布账号</span>
+          <span>{{ t('geelarkPublisher.stats.accounts') }}</span>
           <strong>{{ activeAccountCount }}</strong>
-          <small>当前可用于发布的账号数量</small>
+          <small>{{ t('geelarkPublisher.stats.accountsDesc') }}</small>
         </article>
         <article class="stat-card">
-          <span>云手机</span>
+          <span>{{ t('geelarkPublisher.stats.cloudPhones') }}</span>
           <strong>{{ cloudPhones.length }}</strong>
-          <small>已拉取的云手机设备数量</small>
+          <small>{{ t('geelarkPublisher.stats.cloudPhonesDesc') }}</small>
         </article>
       </section>
 
       <section v-if="!isPluginReady" class="panel-card blocked-card">
         <div class="blocked-card__copy">
-          <span class="eyebrow">插件准备</span>
-          <h2>GeeLark 插件尚未启用</h2>
-          <p>请先安装并启用插件，再继续配置 API、绑定账号和进入发布中心。</p>
+          <span class="eyebrow">{{ t('geelarkPublisher.setup.eyebrow') }}</span>
+          <h2>{{ t('geelarkPublisher.setup.title') }}</h2>
+          <p>{{ t('geelarkPublisher.setup.desc') }}</p>
         </div>
         <button class="primary-button" type="button" @click="installAndEnable">
           <CheckCircle2 class="h-4 w-4" />
-          安装并启用插件
+          {{ t('geelarkPublisher.actions.installEnable') }}
         </button>
       </section>
 
@@ -458,7 +409,7 @@ onMounted(() => {
         <article class="panel-card">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">接口配置</span>
+              <span class="eyebrow">{{ t('geelarkPublisher.config.eyebrow') }}</span>
               <h2>GeeLark API</h2>
             </div>
             <Settings2 class="h-5 w-5 panel-icon" />
@@ -471,26 +422,26 @@ onMounted(() => {
             </label>
             <label class="field">
               <span>App ID</span>
-              <input v-model="configForm.appId" type="text" placeholder="填写 GeeLark App ID" />
+              <input v-model="configForm.appId" type="text" :placeholder="t('geelarkPublisher.config.appIdPlaceholder')" />
             </label>
             <label class="field">
-              <span>请求超时（毫秒）</span>
+              <span>{{ t('geelarkPublisher.config.timeout') }}</span>
               <input v-model.number="configForm.requestTimeoutMs" type="number" min="5000" step="1000" />
             </label>
             <label class="field field--full">
               <span>App Secret</span>
-              <input v-model="configForm.appSecret" type="password" placeholder="留空则保持已有密钥不变" />
+              <input v-model="configForm.appSecret" type="password" :placeholder="t('geelarkPublisher.config.keepSecret')" />
             </label>
             <label class="field field--full">
               <span>Access Token</span>
-              <input v-model="configForm.accessToken" type="password" placeholder="可选，留空则保持已有 Token 不变" />
+              <input v-model="configForm.accessToken" type="password" :placeholder="t('geelarkPublisher.config.keepToken')" />
             </label>
           </div>
 
           <div class="inline-actions">
-            <button class="primary-button" type="button" :disabled="savingConfig" @click="saveConfig">保存配置</button>
+            <button class="primary-button" type="button" :disabled="savingConfig" @click="saveConfig">{{ t('geelarkPublisher.actions.saveConfig') }}</button>
             <span class="hint-text">
-              当前状态：Secret {{ config?.hasAppSecret ? '已保存' : '未保存' }}，Token {{ config?.hasAccessToken ? '已保存' : '未保存' }}
+              {{ t('geelarkPublisher.config.currentStatus') }}: Secret {{ config?.hasAppSecret ? t('geelarkPublisher.status.saved') : t('geelarkPublisher.status.notSaved') }}, Token {{ config?.hasAccessToken ? t('geelarkPublisher.status.saved') : t('geelarkPublisher.status.notSaved') }}
             </span>
           </div>
         </article>
@@ -498,17 +449,17 @@ onMounted(() => {
         <article class="panel-card">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">发布入口</span>
-              <h2>独立发布中心</h2>
+              <span class="eyebrow">{{ t('geelarkPublisher.center.eyebrow') }}</span>
+              <h2>{{ t('geelarkPublisher.center.title') }}</h2>
             </div>
             <Smartphone class="h-5 w-5 panel-icon" />
           </div>
 
           <div class="workspace-card">
-            <strong>发布列表已拆为单独界面</strong>
-            <p>待发布复刻视频、AI 标题生成、音乐候选池和最近发布任务都在独立页面处理。这样配置页更干净，发布操作也不会挤在同一个长页面里。</p>
+            <strong>{{ t('geelarkPublisher.center.cardTitle') }}</strong>
+            <p>{{ t('geelarkPublisher.center.desc') }}</p>
             <div class="workspace-card__actions">
-              <button class="primary-button" type="button" @click="openPublishCenter">进入发布中心</button>
+              <button class="primary-button" type="button" @click="openPublishCenter">{{ t('geelarkPublisher.actions.enterCenter') }}</button>
             </div>
           </div>
         </article>
@@ -517,50 +468,50 @@ onMounted(() => {
       <section class="panel-card">
         <div class="panel-head">
           <div>
-            <span class="eyebrow">账号绑定</span>
-            <h2>发布账号与云手机</h2>
+            <span class="eyebrow">{{ t('geelarkPublisher.accounts.eyebrow') }}</span>
+            <h2>{{ t('geelarkPublisher.accounts.title') }}</h2>
           </div>
           <button class="ghost-button" type="button" :disabled="reloadingPhones" @click="reloadCloudPhones">
             <RefreshCw class="h-4 w-4" />
-            {{ reloadingPhones ? '刷新中...' : '刷新云手机' }}
+            {{ reloadingPhones ? t('geelarkPublisher.actions.refreshing') : t('geelarkPublisher.actions.refreshPhones') }}
           </button>
         </div>
 
         <div class="field-grid">
           <label class="field">
-            <span>账号名称</span>
-            <input v-model="accountForm.name" type="text" placeholder="例如：TK 美区 01" />
+            <span>{{ t('geelarkPublisher.accounts.name') }}</span>
+            <input v-model="accountForm.name" type="text" :placeholder="t('geelarkPublisher.accounts.namePlaceholder')" />
           </label>
           <label class="field">
-            <span>GeeLark 账号 ID</span>
-            <input v-model="accountForm.geelarkAccountId" type="text" placeholder="可选，用于定位账号" />
+            <span>{{ t('geelarkPublisher.accounts.accountId') }}</span>
+            <input v-model="accountForm.geelarkAccountId" type="text" :placeholder="t('geelarkPublisher.accounts.accountIdPlaceholder')" />
           </label>
           <label class="field">
-            <span>绑定云手机</span>
+            <span>{{ t('geelarkPublisher.accounts.bindPhone') }}</span>
             <select v-model="accountForm.cloudPhoneId">
-              <option value="">请选择云手机</option>
+              <option value="">{{ t('geelarkPublisher.accounts.selectPhone') }}</option>
               <option v-for="item in cloudPhones" :key="item.id" :value="item.id">{{ item.serialName }} / {{ item.id }}</option>
             </select>
           </label>
           <label class="field">
-            <span>状态</span>
+            <span>{{ t('geelarkPublisher.accounts.status') }}</span>
             <select v-model="accountForm.status">
-              <option value="active">启用</option>
-              <option value="disabled">停用</option>
+              <option value="active">{{ t('geelarkPublisher.status.enabled') }}</option>
+              <option value="disabled">{{ t('geelarkPublisher.status.disabled') }}</option>
             </select>
           </label>
           <label class="field field--full">
-            <span>备注</span>
-            <input v-model="accountForm.remark" type="text" placeholder="记录账号用途、地区或商品方向" />
+            <span>{{ t('geelarkPublisher.accounts.remark') }}</span>
+            <input v-model="accountForm.remark" type="text" :placeholder="t('geelarkPublisher.accounts.remarkPlaceholder')" />
           </label>
         </div>
 
         <div class="inline-actions">
           <button class="primary-button" type="button" :disabled="savingAccount || !accountForm.name || !accountForm.cloudPhoneId" @click="saveAccount">
-            {{ editingAccountId ? '更新账号' : '新增账号' }}
+            {{ editingAccountId ? t('geelarkPublisher.actions.updateAccount') : t('geelarkPublisher.actions.addAccount') }}
           </button>
-          <button v-if="editingAccountId" class="ghost-button" type="button" @click="resetAccountForm">取消编辑</button>
-          <span class="hint-text">当前设备：{{ selectedCloudPhone?.serialName || '未选择' }}</span>
+          <button v-if="editingAccountId" class="ghost-button" type="button" @click="resetAccountForm">{{ t('geelarkPublisher.actions.cancelEdit') }}</button>
+          <span class="hint-text">{{ t('geelarkPublisher.accounts.currentDevice') }}: {{ selectedCloudPhone?.serialName || t('geelarkPublisher.status.notSelected') }}</span>
         </div>
 
         <div v-if="accounts.length" class="account-list">
@@ -568,15 +519,15 @@ onMounted(() => {
             <div class="account-item__copy">
               <strong>{{ item.name }}</strong>
               <p>{{ item.cloudPhoneName || item.cloudPhoneId }}</p>
-              <small>状态：{{ item.status === 'active' ? '启用' : '停用' }}，更新时间：{{ formatTime(item.updatedAt) }}</small>
+              <small>{{ t('geelarkPublisher.accounts.status') }}: {{ item.status === 'active' ? t('geelarkPublisher.status.enabled') : t('geelarkPublisher.status.disabled') }}, {{ t('geelarkPublisher.accounts.updatedAt') }}: {{ formatTime(item.updatedAt) }}</small>
             </div>
             <div class="account-item__actions">
-              <button class="ghost-button" type="button" @click="editAccount(item)">编辑</button>
-              <button class="danger-button" type="button" @click="removeAccount(item.id)">删除</button>
+              <button class="ghost-button" type="button" @click="editAccount(item)">{{ t('geelarkPublisher.actions.edit') }}</button>
+              <button class="danger-button" type="button" @click="removeAccount(item.id)">{{ t('geelarkPublisher.actions.delete') }}</button>
             </div>
           </div>
         </div>
-        <div v-else class="empty-card">还没有发布账号，先新增一个账号后再进入发布中心。</div>
+        <div v-else class="empty-card">{{ t('geelarkPublisher.accounts.empty') }}</div>
       </section>
     </template>
   </div>

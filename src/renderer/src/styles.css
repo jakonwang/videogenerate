@@ -20354,11 +20354,14 @@ html[data-app-theme] body #app .app-shell
 
 @media (max-width: 1180px) {
   html[data-app-theme] body #app .app-shell .live-workspace-head {
-    grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    flex-basis: auto !important;
+    min-height: 0 !important;
   }
 
   html[data-app-theme] body #app .app-shell .live-workspace-intro,
   html[data-app-theme] body #app .app-shell .live-workspace-tabs {
+    min-height: 0 !important;
     padding: 10px 12px !important;
   }
 
@@ -20370,6 +20373,13 @@ html[data-app-theme] body #app .app-shell
     gap: 5px !important;
     padding: 0 8px !important;
     font-size: 11px !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .live-workspace-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
 

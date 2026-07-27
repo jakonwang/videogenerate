@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   Boxes,
   CheckCircle2,
@@ -65,6 +66,7 @@ type Product = {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const list = ref<Product[]>([])
 const query = ref('')
 const sortMode = ref<SortMode>('updated_desc')
@@ -76,18 +78,10 @@ const pageSize = ref(12)
 const creating = reactive({ name: '', type: 'phone_case' as ProductType })
 const actionMenuOpenId = ref('')
 
-const productTypeOptionsV2: Array<{ value: ProductType; label: string }> = [
-  { value: 'phone_case', label: '手机壳' },
-  { value: 'earring', label: '耳环' },
-  { value: 'necklace', label: '项链' },
-  { value: 'ring', label: '戒指' },
-  { value: 'bracelet', label: '手链' },
-  { value: 'clothes', label: '服饰' },
-  { value: 'bag', label: '包袋' },
-  { value: 'shoes', label: '鞋靴' },
-  { value: 'toy', label: '玩具' },
-  { value: 'general', label: '通用商品' },
-]
+const productTypeOptionsV2 = computed<Array<{ value: ProductType; label: string }>>(() =>
+  (['phone_case', 'earring', 'necklace', 'ring', 'bracelet', 'clothes', 'bag', 'shoes', 'toy', 'general'] as ProductType[])
+    .map((value) => ({ value, label: t(`productLibrary.types.${value}`) })),
+)
 
 const analysisBoardStatusRank: Record<'idle' | 'processing' | 'done' | 'failed', number> = {
   done: 0,
@@ -111,11 +105,11 @@ const recentCount = computed(() =>
 )
 
 const statusTabs = computed(() => [
-  { key: 'all' as ProductStatusFilter, label: '全部', count: list.value.length },
-  { key: 'pending' as ProductStatusFilter, label: '待处理', count: pendingCount.value },
-  { key: 'processing' as ProductStatusFilter, label: '生成中', count: processingCount.value },
-  { key: 'done' as ProductStatusFilter, label: '已完成', count: readyCount.value },
-  { key: 'failed' as ProductStatusFilter, label: '异常', count: issueOnlyCount.value },
+  { key: 'all' as ProductStatusFilter, label: t('common.all'), count: list.value.length },
+  { key: 'pending' as ProductStatusFilter, label: t('productLibrary.status.pending'), count: pendingCount.value },
+  { key: 'processing' as ProductStatusFilter, label: t('productLibrary.status.processing'), count: processingCount.value },
+  { key: 'done' as ProductStatusFilter, label: t('productLibrary.status.done'), count: readyCount.value },
+  { key: 'failed' as ProductStatusFilter, label: t('productLibrary.status.failed'), count: issueOnlyCount.value },
 ])
 
 const filteredProducts = computed(() => {
@@ -134,7 +128,7 @@ const filteredProducts = computed(() => {
 
   return filtered.sort((a, b) => {
     if (sortMode.value === 'name_asc') {
-      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+      return String(a.name || '').localeCompare(String(b.name || ''), locale.value)
     }
     if (sortMode.value === 'analysis_board_status') {
       const rankDiff =
@@ -206,13 +200,13 @@ function productImageCount(product: Product) {
 }
 
 function productTypeLabelV2(type: ProductType) {
-  return productTypeOptionsV2.find((item) => item.value === type)?.label ?? '通用商品'
+  return productTypeOptionsV2.value.find((item) => item.value === type)?.label ?? t('productLibrary.types.general')
 }
 
 function formatDateTime(ts?: number) {
   if (!ts) return '-'
   try {
-    return new Date(ts).toLocaleString('zh-CN', {
+    return new Date(ts).toLocaleString(locale.value, {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -234,10 +228,7 @@ function productBusinessStatusKey(product: Product): ProductStatusFilter {
 
 function productBusinessStatusLabel(product: Product) {
   const key = productBusinessStatusKey(product)
-  if (key === 'done') return '已完成'
-  if (key === 'processing') return '生成中'
-  if (key === 'failed') return '异常'
-  return '待处理'
+  return t(`productLibrary.status.${key}`)
 }
 
 function productBusinessStatusTone(product: Product) {
@@ -258,7 +249,7 @@ function productAnalysisSummary(product: Product) {
 }
 
 function productAnalysisStatusLabel(product: Product) {
-  return productAnalysisSummary(product) ? 'DNA 已生成' : 'DNA 待生成'
+  return productAnalysisSummary(product) ? t('productLibrary.dna.done') : t('productLibrary.dna.pending')
 }
 
 function productAnalysisTone(product: Product) {
@@ -270,7 +261,7 @@ async function refresh() {
 }
 
 async function createProduct() {
-  const fallbackName = `未命名商品_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`
+  const fallbackName = `${t('productLibrary.unnamed')}_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`
   const name = creating.name.trim() || fallbackName
   const created = (await window.api.products.upsert({
     name,
@@ -301,7 +292,7 @@ function nextPage() {
 }
 
 async function removeProduct(product: Product) {
-  const confirmed = window.confirm(`确认删除商品「${product.name}」吗？`)
+  const confirmed = window.confirm(t('productLibrary.confirmDelete', { name: product.name }))
   if (!confirmed) return
   await window.api.products.remove(product.id)
   actionMenuOpenId.value = ''
@@ -333,8 +324,8 @@ onBeforeUnmount(() => {
     <section class="products-shell">
       <header class="products-hero">
         <div class="products-hero__copy">
-          <h1>商品库</h1>
-          <p>集中管理商品图片、分析画板与基础资料，保持后续生成链路素材一致。</p>
+          <h1>{{ t('productLibrary.title') }}</h1>
+          <p>{{ t('productLibrary.desc') }}</p>
         </div>
         <div class="products-create-card">
           <div class="products-create-card__fields">
@@ -344,11 +335,11 @@ onBeforeUnmount(() => {
               data-testid="product-create-name-input"
               type="text"
               maxlength="80"
-              placeholder="输入商品名称"
+              :placeholder="t('productLibrary.namePlaceholder')"
               @keydown.enter.prevent="createProduct"
             />
             <label class="products-create-card__type">
-              <span>商品类型</span>
+              <span>{{ t('productLibrary.productType') }}</span>
               <select v-model="creating.type" data-testid="product-create-type-select">
                 <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
                   {{ option.label }}
@@ -359,7 +350,7 @@ onBeforeUnmount(() => {
           </div>
           <button class="products-hero__create" data-testid="product-create-submit" type="button" @click="createProduct">
             <Plus class="h-4 w-4" />
-            <span>新建商品</span>
+            <span>{{ t('productLibrary.create') }}</span>
           </button>
         </div>
       </header>
@@ -368,41 +359,41 @@ onBeforeUnmount(() => {
         <article class="stat-card">
           <div class="stat-card__icon stat-card__icon--purple"><Boxes class="h-5 w-5" /></div>
           <div class="stat-card__body">
-            <span>商品总数</span>
+            <span>{{ t('productLibrary.stats.total') }}</span>
             <strong data-testid="product-library-total">{{ list.length }}</strong>
-            <small>全部商品</small>
+            <small>{{ t('productLibrary.stats.allProducts') }}</small>
           </div>
         </article>
         <article class="stat-card">
           <div class="stat-card__icon stat-card__icon--amber"><Clock3 class="h-5 w-5" /></div>
           <div class="stat-card__body">
-            <span>待处理</span>
+            <span>{{ t('productLibrary.status.pending') }}</span>
             <strong>{{ pendingCount }}</strong>
-            <small>待生成或处理中</small>
+            <small>{{ t('productLibrary.stats.pendingDesc') }}</small>
           </div>
         </article>
         <article class="stat-card">
           <div class="stat-card__icon stat-card__icon--green"><CheckCircle2 class="h-5 w-5" /></div>
           <div class="stat-card__body">
-            <span>已完成</span>
+            <span>{{ t('productLibrary.status.done') }}</span>
             <strong>{{ readyCount }}</strong>
-            <small>生成完成</small>
+            <small>{{ t('productLibrary.stats.doneDesc') }}</small>
           </div>
         </article>
         <article class="stat-card">
           <div class="stat-card__icon stat-card__icon--red"><Boxes class="h-5 w-5" /></div>
           <div class="stat-card__body">
-            <span>异常</span>
+            <span>{{ t('productLibrary.status.failed') }}</span>
             <strong>{{ issueOnlyCount }}</strong>
-            <small>生成失败或无图片</small>
+            <small>{{ t('productLibrary.stats.failedDesc') }}</small>
           </div>
         </article>
         <article class="stat-card">
           <div class="stat-card__icon stat-card__icon--blue"><RefreshCw class="h-5 w-5" /></div>
           <div class="stat-card__body">
-            <span>最近更新</span>
+            <span>{{ t('productLibrary.stats.recent') }}</span>
             <strong>{{ recentCount }}</strong>
-            <small>7 天内有编辑的商品</small>
+            <small>{{ t('productLibrary.stats.recentDesc') }}</small>
           </div>
         </article>
       </section>
@@ -414,15 +405,15 @@ onBeforeUnmount(() => {
             <input
               v-model="query"
               class="search-field__input"
-              placeholder="搜索商品名称、ID、类型或状态"
+              :placeholder="t('productLibrary.searchPlaceholder')"
               data-testid="product-library-search-input"
             />
           </div>
 
           <label class="select-field">
-            <span>商品类型</span>
+            <span>{{ t('productLibrary.productType') }}</span>
             <select v-model="typeFilter" data-testid="product-library-type-filter-select">
-              <option value="all">全部类型</option>
+              <option value="all">{{ t('productLibrary.allTypes') }}</option>
               <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
@@ -431,20 +422,20 @@ onBeforeUnmount(() => {
           </label>
 
           <label class="select-field">
-            <span>状态</span>
+            <span>{{ t('productLibrary.statusLabel') }}</span>
             <select v-model="statusFilter">
-              <option value="all">全部状态</option>
-              <option value="pending">待处理</option>
-              <option value="processing">生成中</option>
-              <option value="done">已完成</option>
-              <option value="failed">异常</option>
+              <option value="all">{{ t('productLibrary.allStatuses') }}</option>
+              <option value="pending">{{ t('productLibrary.status.pending') }}</option>
+              <option value="processing">{{ t('productLibrary.status.processing') }}</option>
+              <option value="done">{{ t('productLibrary.status.done') }}</option>
+              <option value="failed">{{ t('productLibrary.status.failed') }}</option>
             </select>
             <ChevronDown class="select-field__icon h-4 w-4" />
           </label>
 
           <button class="filter-button" type="button">
             <SlidersHorizontal class="h-4 w-4" />
-            <span>筛选</span>
+            <span>{{ t('productLibrary.filter') }}</span>
           </button>
 
           <div class="toolbar-right">
@@ -469,9 +460,9 @@ onBeforeUnmount(() => {
 
             <label class="sort-field">
               <select v-model="sortMode" data-testid="product-library-sort-select">
-                <option value="updated_desc">按最近更新</option>
-                <option value="name_asc">按商品名称</option>
-                <option value="analysis_board_status">按分析状态</option>
+                <option value="updated_desc">{{ t('productLibrary.sort.updated') }}</option>
+                <option value="name_asc">{{ t('productLibrary.sort.name') }}</option>
+                <option value="analysis_board_status">{{ t('productLibrary.sort.analysis') }}</option>
               </select>
               <ChevronDown class="sort-field__icon h-4 w-4" />
             </label>
@@ -528,27 +519,27 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="product-card__analysis">
-                <span>商品分析摘要</span>
-                <p>{{ productAnalysisSummary(product) || '标准图与多角度图尚未生成，完成商品建模后会在这里显示 Product DNA 摘要。' }}</p>
+                <span>{{ t('productLibrary.analysisSummary') }}</span>
+                <p>{{ productAnalysisSummary(product) || t('productLibrary.analysisEmpty') }}</p>
               </div>
 
               <div class="product-card__meta">
-                <span><FileImage class="h-3.5 w-3.5" /> {{ productImageCount(product) }} 张图片</span>
+                <span><FileImage class="h-3.5 w-3.5" /> {{ t('productLibrary.imageCount', { count: productImageCount(product) }) }}</span>
                 <span><Clock3 class="h-3.5 w-3.5" /> {{ formatDateTime(product.analysisBoardUpdatedAt ?? product.canonicalSourceUpdatedAt ?? product.updatedAt) }}</span>
               </div>
 
               <div class="product-card__actions">
-                <button class="product-card__primary" type="button" @click="openDetail(product.id)">进入详情</button>
-                <button class="product-card__secondary" type="button" @click="openDetail(product.id)">继续处理</button>
+                <button class="product-card__primary" type="button" @click="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
+                <button class="product-card__secondary" type="button" @click="openDetail(product.id)">{{ t('productLibrary.continue') }}</button>
                 <div class="product-card__menu">
-                  <button class="product-card__ghost" type="button" aria-label="更多操作" @click.stop="toggleActionMenu(product.id)">
+                  <button class="product-card__ghost" type="button" :aria-label="t('productLibrary.moreActions')" @click.stop="toggleActionMenu(product.id)">
                     <MoreHorizontal class="h-4 w-4" />
                   </button>
                   <div v-if="actionMenuOpenId === product.id" class="product-card__menu-panel">
-                    <button type="button" @click.stop="openDetail(product.id)">进入详情</button>
+                    <button type="button" @click.stop="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
                     <button type="button" class="is-danger" @click.stop="removeProduct(product)">
                       <Trash2 class="h-4 w-4" />
-                      <span>删除商品</span>
+                      <span>{{ t('productLibrary.delete') }}</span>
                     </button>
                   </div>
                 </div>
@@ -560,18 +551,18 @@ onBeforeUnmount(() => {
         <div v-else class="products-empty" data-testid="product-library-empty">
           <div class="products-empty__icon"><FolderOpen class="h-8 w-8" /></div>
           <div class="products-empty__copy">
-            <strong>{{ query ? '没有匹配的商品数据' : '暂无商品数据' }}</strong>
-            <p>{{ query ? '可以调整搜索词或筛选条件后重试。' : '创建商品并上传图片，开始进入商品详情维护。' }}</p>
+            <strong>{{ query ? t('productLibrary.empty.noMatch') : t('productLibrary.empty.title') }}</strong>
+            <p>{{ query ? t('productLibrary.empty.noMatchDesc') : t('productLibrary.empty.desc') }}</p>
           </div>
           <button class="products-empty__create" type="button" @click="createProduct">
             <Plus class="h-4 w-4" />
-            <span>新建商品</span>
+            <span>{{ t('productLibrary.create') }}</span>
           </button>
         </div>
 
         <footer v-if="filteredProducts.length" class="pagination-row">
           <div class="pagination-nav">
-            <button class="pagination-button" type="button" :disabled="currentPage <= 1" @click="prevPage">上一页</button>
+            <button class="pagination-button" type="button" :disabled="currentPage <= 1" @click="prevPage">{{ t('productLibrary.previous') }}</button>
             <button
               v-for="page in visiblePages"
               :key="page"
@@ -582,7 +573,7 @@ onBeforeUnmount(() => {
             >
               {{ page }}
             </button>
-            <button class="pagination-button" type="button" :disabled="currentPage >= totalPages" @click="nextPage">下一页</button>
+            <button class="pagination-button" type="button" :disabled="currentPage >= totalPages" @click="nextPage">{{ t('productLibrary.next') }}</button>
           </div>
           <label class="page-size-button">
             <select v-model.number="pageSize" class="page-size-select">
@@ -590,7 +581,7 @@ onBeforeUnmount(() => {
               <option :value="24">24</option>
               <option :value="48">48</option>
             </select>
-            <span>条 / 页</span>
+            <span>{{ t('productLibrary.perPage') }}</span>
             <ChevronDown class="h-4 w-4" />
           </label>
         </footer>

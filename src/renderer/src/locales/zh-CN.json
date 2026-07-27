@@ -4,7 +4,12 @@
     "products": "生产",
     "templates": "模板",
     "tasks": "任务",
-    "clone": "复刻"
+    "clone": "复刻",
+    "models": "模特",
+    "productLibrary": "商品",
+    "liveSlicer": "切片",
+    "plugins": "插件",
+    "settings": "设置"
   },
   "common": {
     "confirm": "确定",
@@ -13,7 +18,9 @@
     "language": "界面语言",
     "starting": "启动中...",
     "startGenerate": "开始生成",
-    "remove": "移除"
+    "remove": "移除",
+    "refresh": "刷新",
+    "all": "全部"
   },
   "auth": {
     "title": "授权激活",
@@ -39,7 +46,13 @@
     "view": "视图",
     "export": "导出",
     "openCloud": "打开云素材",
-    "quickExport": "快速出片"
+    "quickExport": "快速出片",
+    "localMode": "本地模式",
+    "helpModels": "管理可复用的模特身份与参考素材。",
+    "helpProducts": "维护商品图片、资料和标准源。",
+    "helpClone": "绑定模特和商品，生成脚本、分镜图与视频。",
+    "helpProduction": "创建生产任务并查看执行结果。",
+    "helpSlicer": "切分直播长视频并整理二次素材。"
   },
   "cloneWorkflow": {
     "uploadReference": "上传爆款视频",
@@ -77,6 +90,16 @@
     }
   },
   "tpl": {
+    "defaultName": "基础模板",
+    "newNamePh": "输入新模板名称",
+    "totalDur": "总时长：{min}-{max} 秒",
+    "styleAnalyzeDone": "分析完成，已创建模板。",
+    "styleAnalyzeFailed": "分析失败",
+    "newSegPrompt": "输入新分镜名称",
+    "newSegDefault": "新分镜",
+    "segDup": "该分镜名称已存在。",
+    "minTwoSeg": "模板至少需要保留两个分镜。",
+    "segDur": "时长 {min}-{max} 秒",
     "navLibrary": "模板库",
     "navStudio": "模板编辑",
     "navSubtitlePresets": "字幕预设",
@@ -113,7 +136,8 @@
     "openDataDirectory": "\u6253\u5f00\u6570\u636e\u76ee\u5f55",
     "minimize": "最小化",
     "maximize": "最大化",
-    "close": "关闭"
+    "close": "关闭",
+    "productSubtitle": "智能视频生产工作台"
   },
   "settings": {
     "hero": {
@@ -569,9 +593,31 @@
       "desc": "请先在插件市场安装插件，再回到这里继续使用。",
       "backToMarket": "返回插件市场"
     },
+    "catalog": {
+      "product-image-materials": { "name": "商品图片素材", "description": "批量切分视频并生成可复用商品图片素材，支持七牛上传和使用状态管理。" },
+      "live-photo-generator": { "name": "动态照片生成器", "description": "根据参考图片或复刻镜头创建兼容 Apple 的动态照片，并提供预览和导出。" },
+      "tiktok-creative-studio": { "name": "TikTok 创意工作室", "description": "读取复刻镜头和提示词，在独立工作台中执行创意视频批次。" },
+      "video-parser-download": { "name": "视频解析下载", "description": "解析短视频分享链接并下载、管理来源视频。" },
+      "video-batch-watermark": { "name": "视频批量水印", "description": "配置水印参数并执行批量视频处理。" },
+      "video-batch-subtitle": { "name": "视频批量字幕", "description": "完成字幕识别、样式设置、烧录和导出。" },
+      "geelark-publisher": { "name": "Geelark 发布工具", "description": "在专用工作台中把复刻成片提交到 Geelark 云手机发布流程。" }
+    },
     "detail": {
       "eyebrow": "插件详情"
     }
+  },
+  "geelarkPublishCenter": { "hero": { "back": "返回插件市场", "title": "发布工作台", "desc": "发布、管理和跟踪插件任务与配置。", "loading": "正在加载发布中心数据..." }, "gate": { "error": "GeeLark 插件尚未安装并启用。", "title": "发布中心已锁定", "desc": "请先返回插件设置，完成真实安装并启用 GeeLark 插件。", "back": "返回插件设置" } },
+  "geelarkPublisher": {
+    "hero": { "eyebrow": "GeeLark 发布设置", "title": "先配置插件与账号，再进入独立发布中心", "desc": "此页面负责 GeeLark 插件启用、接口配置和发布账号绑定。待发布视频与发布任务在独立工作台中处理。" },
+    "loading": "正在加载 GeeLark 配置...",
+    "stats": { "pluginStatus": "插件状态", "accounts": "发布账号", "accountsDesc": "当前可用于发布的账号数量", "cloudPhones": "云手机", "cloudPhonesDesc": "已拉取的云手机设备数量" },
+    "status": { "enabled": "已启用", "disabled": "未启用", "installed": "插件已安装", "notInstalled": "插件未安装", "saved": "已保存", "notSaved": "未保存", "notSelected": "未选择" },
+    "setup": { "eyebrow": "插件准备", "title": "GeeLark 插件尚未启用", "desc": "请先安装并启用插件，再继续配置 API、绑定账号和进入发布中心。" },
+    "config": { "eyebrow": "接口配置", "appIdPlaceholder": "填写 GeeLark App ID", "timeout": "请求超时（毫秒）", "keepSecret": "留空则保持已有密钥不变", "keepToken": "可选，留空则保持已有 Token 不变", "currentStatus": "当前状态" },
+    "center": { "eyebrow": "发布入口", "title": "独立发布中心", "cardTitle": "发布列表已拆为单独界面", "desc": "待发布复刻视频、AI 标题、音乐候选和最近发布任务都在独立页面处理。" },
+    "accounts": { "eyebrow": "账号绑定", "title": "发布账号与云手机", "name": "账号名称", "namePlaceholder": "例如：TK 美区 01", "accountId": "GeeLark 账号 ID", "accountIdPlaceholder": "可选，用于定位账号", "bindPhone": "绑定云手机", "selectPhone": "请选择云手机", "status": "状态", "remark": "备注", "remarkPlaceholder": "记录账号用途、地区或商品方向", "currentDevice": "当前设备", "updatedAt": "更新时间", "empty": "还没有发布账号，请先新增账号。" },
+    "actions": { "openCenter": "打开发布中心", "installEnable": "安装并启用插件", "saveConfig": "保存配置", "enterCenter": "进入发布中心", "refreshing": "刷新中...", "refreshPhones": "刷新云手机", "updateAccount": "更新账号", "addAccount": "新增账号", "cancelEdit": "取消编辑", "edit": "编辑", "delete": "删除" },
+    "messages": { "pluginEnabled": "GeeLark 插件已安装并启用。", "configSaved": "GeeLark 配置已保存。", "configSavedLocal": "GeeLark 配置已保存到本地。", "phonesRefreshed": "云手机列表已刷新。", "phonesUnavailable": "当前运行实例未提供云手机接口。", "accountUpdated": "发布账号已更新。", "accountCreated": "发布账号已创建。", "accountSavedLocal": "发布账号已保存到本地。", "accountDeleted": "发布账号已删除。", "accountDeletedLocal": "发布账号已从本地删除。" }
   },
   "livePhoto": {
     "hero": {
@@ -654,7 +700,192 @@
       "retried": "动态照片任务已重试。",
       "regenerated": "动态照片任务已重新生成。",
       "exportedCount": "已导出 {count} 个项目。"
+    },
+    "workspace": {
+      "hint": "在参考图任务、复刻镜头与素材库之间快速切换",
+      "referenceNote": "按当前比例批量创建任务",
+      "referenceUploadTitle": "点击上传或拖拽图片到此处",
+      "referenceUploadDesc": "支持 JPG、PNG、WEBP，建议宽度 2000 像素以上，可连续追加多张图片。",
+      "materialLibrarySelect": "从素材库选图",
+      "materialLibraryDesc": "打开商品图片素材库，批量选择未绑定商品的图片。",
+      "materialLibraryEmpty": "当前没有可用的未绑定商品素材图片。",
+      "materialLibraryAddSelected": "加入参考图",
+      "selectAll": "全选",
+      "clear": "清空",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "perPage": "每页",
+      "referenceQueuedSuffix": "张图片待创建任务，可继续追加更多参考图。",
+      "pendingTasks": "待创建任务",
+      "referenceTaskList": "参考图任务列表",
+      "missingImage": "图片已不存在",
+      "createTaskPrefix": "创建动态照片任务",
+      "referenceSafe": "系统会读取商品参考数据，生成替换图后继续生成视频与动态照片素材。",
+      "outputTitle": "输出说明",
+      "outputDesc": "参考图任务会生成替换图、动态预览视频与动态照片结果，完成后可在素材库统一导出。",
+      "previewStats": "预览与统计",
+      "settingsTitle": "生成设置",
+      "standardPackage": "Apple 动态照片标准包",
+      "recommended": "推荐",
+      "standardPackageDesc": "生成符合 Apple 动态照片标准的 JPG、MOV 与清单文件，可在 iOS 设备中预览和使用。",
+      "resolution": "分辨率",
+      "frameRate": "帧率",
+      "quality": "质量",
+      "cloneRuleReuse": "复用复刻任务的结构和镜头信息，自动生成动态视频素材。",
+      "cloneRuleAutoLive": "视频生成后继续写出动态照片资源，完成后进入素材库。",
+      "cloneSafe": "任务会读取现有分镜和视频数据，完成后进入动态照片输出流程。",
+      "itemUnit": "项目",
+      "filter": "筛选",
+      "referenceCreatedPrefix": "已创建",
+      "referenceCreatedSuffix": "个参考图任务。",
+      "runtimeLogTitle": "运行日志",
+      "primaryImage": "Live Photo 主图",
+      "primaryImageRequired": "当前商品还没有设置 Live Photo 主图，不能创建参考图替换任务。",
+      "qualityGateTitle": "质量门禁与提示词版本",
+      "qualityGateDesc": "待执行任务跟随当前启用版本，图片质检通过后才进入视频阶段。",
+      "passRate": "通过率",
+      "averageScore": "平均分",
+      "retryCount": "重试次数",
+      "cacheHits": "缓存命中",
+      "promptVersion": "提示词版本",
+      "activeVersion": "当前启用",
+      "versionName": "版本名称",
+      "promptContent": "Prompt 内容",
+      "updateVersion": "更新版本",
+      "copyVersion": "复制为新版本",
+      "activateVersion": "启用版本",
+      "rollbackVersion": "回滚副本",
+      "motionStrategy": "动作策略",
+      "motionStrategyDesc": "这两项会写入数据库，并作用于参考图任务、复刻镜头任务、失败重试和恢复执行。",
+      "referenceMotion": "参考图默认动作",
+      "cloneMotion": "复刻镜头默认动作",
+      "exportSettingsDesc": "当前导出规格会写入数据库，并在导出阶段参与分辨率、帧率和压缩质量处理。",
+      "saving": "保存中...",
+      "saveSettings": "保存动态照片设置",
+      "running": "运行中",
+      "paused": "暂停",
+      "viewMode": "视图切换",
+      "gridView": "网格视图",
+      "listView": "列表视图",
+      "clearFiltered": "取消当前筛选",
+      "selectFiltered": "选择当前筛选",
+      "retryFailed": "重试失败",
+      "resumePaused": "恢复暂停",
+      "pauseRunning": "暂停运行",
+      "batchDelete": "批量删除",
+      "batchSubtitles": "批量字幕",
+      "selectProduct": "选择商品"
     }
+  },
+  "billing": {
+    "title": "会员与钱包中心", "desc": "管理会员状态、算力余额、订单与扣费流水。当前使用本地演示支付流程。", "refresh": "刷新数据", "currentAccount": "当前账号", "currentPlan": "会员套餐", "balance": "算力余额", "notActive": "未开通", "days": "{count} 天", "creditCount": "{count} 算力点", "paying": "支付中...", "subscribe": "立即开通", "recharging": "充值中...", "recharge": "立即充值",
+    "plans": { "title": "会员套餐", "desc": "购买成功后自动开通并赠送月度算力。", "credits": "每期赠送 {count} 算力点" },
+    "packs": { "title": "算力包充值", "desc": "按包补充算力点，用于高成本生成动作。", "light": "适合轻量测试", "regular": "适合常规生产", "batch": "适合高频批量任务" },
+    "order": { "title": "订单记录", "desc": "当前演示环境使用模拟支付回调。", "type": "订单类型", "amount": "金额", "status": "状态", "time": "时间", "subscription": "会员订单", "compute": "算力包订单", "empty": "暂无订单记录" },
+    "transactions": { "title": "算力流水", "desc": "展示最近的充值与扣费明细。", "empty": "暂无流水" },
+    "notes": { "title": "状态说明", "membership": "会员负责功能权限与基础额度，算力包负责超额消耗补充。", "payment": "当前支付流程为本地模拟模式，可替换为正式支付回调。" },
+    "messages": { "subscribed": "会员已开通并到账算力。", "recharged": "算力包已充值到账。" }
+  },
+  "cloneTasks": {
+    "title": "爆款视频复刻", "desc": "复刻参考视频并生成可管理的项目成片。", "selectedCount": "已选 {count} 个任务", "materialCount": "{images} 图 / {videos} 视频", "allMaterials": "全部素材",
+    "stats": { "all": "全部任务", "allDesc": "总任务数", "draft": "草稿", "draftDesc": "待完善任务", "running": "进行中", "runningDesc": "任务处理中", "completed": "已完成", "completedDesc": "任务已完成", "failed": "失败任务", "failedDesc": "任务失败", "pendingOutput": "等待输出", "pendingOutputDesc": "尚未生成成片" },
+    "groups": { "all": "全部任务", "ungrouped": "未分组", "more": "更多分组", "create": "新建分组" },
+    "steps": { "reference": "参考分析", "script": "脚本生成", "identity": "身份定妆图", "storyboard": "分镜设计", "videos": "分镜视频", "compose": "成片合成", "pending": "待开始" },
+    "status": { "draft": "草稿", "completed": "完成", "failed": "失败", "running": "进行中", "review": "待检查" },
+    "runMode": { "auto": "自动运行", "manual": "手动运行" },
+    "actions": { "exporting": "导出中...", "batchExport": "批量导出", "creating": "创建中...", "create": "新建任务", "deleting": "删除中...", "batchDelete": "批量删除", "exportFinals": "批量导出成片", "moveToGroup": "移动到分组", "batchSubtitle": "批量添加字幕", "more": "更多操作", "rename": "重命名", "delete": "删除", "viewError": "查看错误" },
+    "selection": { "exportable": "可导出成片", "subtitleReady": "可加字幕" },
+    "sort": { "newest": "最新创建", "oldest": "最早创建" },
+    "columns": { "preview": "预览", "task": "任务信息", "stage": "阶段", "materials": "素材", "progress": "进度", "updated": "更新时间", "actions": "操作" },
+    "empty": { "loading": "正在读取任务列表", "title": "还没有复刻任务", "wait": "请稍候...", "desc": "点击右上角“新建任务”，创建第一个复刻项目。" },
+    "pagination": { "summary": "共 {count} 条，当前显示 {start}-{end}" }
+  },
+  "modelLibrary": {
+    "title": "模特库", "desc": "管理 AI 数字模特，筛选形象与场景，并绑定到复刻项目。", "import": "导入模特", "create": "创建模特", "itemCount": "{count} 个", "perPage": "{count} 条/页", "modelsUnit": "个模特", "availableSummary": "当前显示真实模特记录", "searchPlaceholder": "搜索模特名称或标签", "selectedCount": "已选 {count}", "pageSelected": "本页已全选", "selecting": "继续多选中", "unselectPage": "取消全选本页", "selectPage": "全选本页", "deleting": "删除中", "batchDelete": "批量删除 {count}", "empty": "当前筛选条件下没有模特", "totalCount": "共 {count} 条", "unnamed": "未命名模特", "modelProvider": "生成模型", "defaultName": "AI 模特 {index}", "defaultDescription": "当前模特尚未填写简介。",
+    "tabs": { "all": "全部模特", "ready": "已就绪" },
+    "filters": { "allStatuses": "全部状态", "allAges": "全部年龄", "allTags": "全部标签", "language": "支持语言" },
+    "status": { "ready": "已就绪", "generating": "生成中", "failed": "生成失败", "incomplete": "待完善" },
+    "styles": { "all": "全部风格", "urban": "都市质感", "fashion": "穿搭展示", "girl": "少女系", "general": "通用商业" },
+    "profile": { "autoRecommendation": "未选择具体设定时，将自动使用当前商品类型的推荐模特方案。", "identity": "基础身份", "identityDesc": "市场、性别、年龄段", "appearance": "外观特征", "appearanceDesc": "脸型、发型、发色、肤色、体型", "style": "表达风格", "styleDesc": "穿搭、气质、语言、镜头感", "scene": "场景倾向", "sceneDesc": "场景与风格重点" },
+    "missingKey": { "atlas": "请先在设置中心配置 AtlasCloud API Key", "grsai": "请先在设置中心配置 GRS.AI API Key", "vector": "请先在设置中心配置 VectorEngine 图片 API Key", "image": "请先在设置中心配置图片生成 API Key" },
+    "typeTags": { "earrings": "甜美", "phone_case": "都市女孩", "clothes": "穿搭", "toy": "少女感", "general": "生活方式" },
+    "defaults": { "mood": "未设置气质", "scene": "未设置场景", "skin": "未设置肤色", "gender": "未设置性别" },
+    "actions": { "assign": "设为当前项目模特", "rename": "重命名", "copyName": "复制名称", "revealCover": "定位封面文件", "delete": "删除模特", "use": "使用模特", "edit": "编辑信息", "openCover": "打开封面图" },
+    "details": { "tab": "模特信息", "basic": "基本信息", "id": "模特 ID", "createdAt": "创建时间", "updatedAt": "更新时间", "generationStatus": "生成状态", "tags": "标签", "description": "简介", "preview": "作品预览" },
+    "messages": { "idCopied": "模特 ID 已复制", "nameCopied": "模特名称已复制", "promptCopied": "提示词已复制" },
+    "createDialog": { "title": "创建模特", "desc": "设置模特方向并上传一张参考模特图。", "basic": "基础设置", "basicDesc": "先选择主要方向，再补充细节与参考模特图。", "profile": "模特设定", "summary": "当前设定摘要", "summaryHint": "会随左侧选项实时更新", "batchCount": "批量生成数量", "reference": "参考模特图", "referenceDesc": "上传一张参考模特图，用来约束模特的大致形象方向。", "uploadPanel": "参考图上传面板", "uploadDesc": "上传后会显示真实缩略预览。", "upload": "上传参考模特图", "previewHint": "上传后将在这里显示参考模特图预览", "currentTask": "当前模特任务", "promptTitle": "提示词查看", "promptDesc": "展示创建模特时实际发送给模型的主提示词", "viewPrompt": "查看提示词", "copyPrompt": "复制提示词", "unsetGender": "未设置性别", "unsetMarket": "未设置市场", "unsetOutfit": "未设置穿搭", "unsetScene": "未设置场景", "referenceCount": "参考模特图 {count} 张", "promptEmpty": "查看提示词后，可复制当前创建模特实际使用的提示词进行排查。", "generating": "正在生成模特", "generate": "生成新模特" },
+    "renameDialog": { "title": "重命名模特", "desc": "修改名称不会影响已生成素材和历史项目文件。", "name": "模特名称", "placeholder": "输入新的模特名称", "saving": "保存中", "save": "保存名称" },
+    "deleteDialog": { "title": "删除模特", "desc": "确认删除模特“{name}”吗？这会删除模特记录和素材目录，但不会删除历史项目产物。", "confirm": "确认删除" }
+  },
+  "productLibrary": {
+    "title": "商品库", "desc": "集中管理商品图片、分析画板与基础资料，保持生成链路素材一致。", "namePlaceholder": "输入商品名称", "productType": "商品类型", "create": "新建商品", "unnamed": "未命名商品", "confirmDelete": "确认删除商品「{name}」吗？", "statusLabel": "状态", "allTypes": "全部类型", "allStatuses": "全部状态", "filter": "筛选", "searchPlaceholder": "搜索商品名称、ID、类型或状态", "analysisSummary": "商品分析摘要", "analysisEmpty": "标准图与多角度图尚未生成，完成商品建模后会显示 Product DNA 摘要。", "imageCount": "{count} 张图片", "openDetail": "进入详情", "continue": "继续处理", "moreActions": "更多操作", "delete": "删除商品", "previous": "上一页", "next": "下一页", "perPage": "条 / 页",
+    "types": { "phone_case": "手机壳", "earring": "耳环", "necklace": "项链", "ring": "戒指", "bracelet": "手链", "clothes": "服饰", "bag": "包袋", "shoes": "鞋靴", "toy": "玩具", "general": "通用商品" },
+    "status": { "pending": "待处理", "processing": "生成中", "done": "已完成", "failed": "异常" },
+    "dna": { "done": "DNA 已生成", "pending": "DNA 待生成" },
+    "stats": { "total": "商品总数", "allProducts": "全部商品", "pendingDesc": "待生成或处理中", "doneDesc": "生成完成", "failedDesc": "生成失败或无图片", "recent": "最近更新", "recentDesc": "7 天内有编辑的商品" },
+    "sort": { "updated": "按最近更新", "name": "按商品名称", "analysis": "按分析状态" },
+    "empty": { "noMatch": "没有匹配的商品数据", "title": "暂无商品数据", "noMatchDesc": "可以调整搜索词或筛选条件后重试。", "desc": "创建商品并上传图片，开始维护商品详情。" }
+  },
+  "mediaPreview": {
+    "close": "关闭预览",
+    "loading": "正在加载本地视频...",
+    "errors": { "unavailable": "当前窗口无法预览该视频，请使用文件打开功能查看本地视频。" }
+  },
+  "pluginPlaceholder": {
+    "back": "返回我的插件",
+    "title": "插件工作台",
+    "description": "当前插件已接入入口，但暂未开放真实执行能力。",
+    "status": "状态",
+    "enabled": "已启用",
+    "disabled": "已停用",
+    "unknown": "未知",
+    "route": "路由",
+    "notes": "说明",
+    "notesFallback": "当前只完成入口闭环。"
+  },
+  "production": {
+    "tabs": {
+      "ariaLabel": "生产模块导航",
+      "products": { "label": "商品库", "desc": "先选商品，再进入详情管理图片与产品标准源。" },
+      "templates": { "label": "模板中心", "desc": "维护模板结构、字幕、音频和视觉输出规则。" },
+      "tasks": { "label": "任务中心", "desc": "查看生产进度、失败原因和导出结果。" }
+    },
+    "home": {
+      "kicker": "生产模块",
+      "title": "任务执行中心",
+      "desc": "统一管理新建任务、任务列表、任务详情和模板。",
+      "taskCount": "{count} 个任务",
+      "templateCount": "{count} 个模板",
+      "stats": { "totalTasks": "任务总数", "running": "运行中", "failed": "失败任务", "templates": "模板总数" },
+      "entries": {
+        "create": { "title": "新建任务", "desc": "从商品和模板创建新的生产任务。", "metric": "进入新建页" },
+        "tasks": { "title": "任务列表", "desc": "查看任务队列、执行进度和最近结果。" },
+        "templates": { "title": "模板中心", "desc": "维护模板结构、字幕、音频和输出规则。" }
+      },
+      "recent": { "title": "最近任务", "desc": "继续查看最近执行结果或失败任务。", "empty": "还没有任务，请先进入新建任务页。" },
+      "scope": { "title": "模块边界", "desc": "生产模块管理任务与模板，商品维护统一进入商品库。", "productionTitle": "生产", "productionDesc": "首页、新建任务、任务列表、任务详情和模板配置。", "productsTitle": "商品库", "productsDesc": "商品资料、商品图片、封面和产品标准源缓存。" },
+      "refreshing": "正在刷新生产摘要..."
+    },
+    "create": {
+      "kicker": "生产 / 新建任务", "title": "从商品和模板发起任务", "desc": "在此创建任务，任务日志和失败处理在任务详情中查看。", "noProduct": "未选择商品", "product": "商品", "template": "模板", "quantity": "数量", "outputDir": "输出目录", "chooseDir": "选择目录", "currentProduct": "当前商品", "currentTemplate": "当前模板", "creating": "创建中...", "submit": "创建任务", "viewTasks": "查看任务列表", "pickOutputDir": "选择输出目录", "validation": "请先选择商品、模板并设置输出目录。", "created": "已创建 {count} 个任务。", "failed": "任务创建失败"
+    },
+    "tasks": {
+      "kicker": "生产 / 任务列表", "title": "任务列表与失败筛选", "desc": "查看任务信息、筛选执行状态并进入任务详情。", "create": "新建任务", "pause": "暂停", "resume": "继续", "cancelAll": "取消全部", "emptyTitle": "当前没有任务", "emptyDesc": "请先创建任务，再回来查看执行情况。", "product": "商品", "template": "模板", "createdAt": "创建时间", "progress": "进度", "noOutput": "未生成输出路径",
+      "stats": { "total": "总任务", "running": "运行中", "done": "已完成", "failed": "失败" },
+      "status": { "queued": "排队中", "running": "运行中", "paused": "已暂停", "done": "已完成", "error": "失败", "skipped": "已跳过", "cancelled": "已取消" }
+    },
+    "detail": {
+      "kicker": "生产 / 任务详情", "taskTitle": "任务 {id}", "notFound": "未找到任务", "desc": "查看任务日志、失败原因、输出文件和报告。", "back": "返回任务列表", "status": "状态", "progress": "进度", "outputDir": "输出目录", "error": "错误详情", "locateOutput": "定位输出文件", "openReport": "打开报告", "openOutputDir": "打开输出目录", "logs": "运行日志", "noLogs": "暂无日志", "missing": "当前任务不存在，可能已被清理或尚未写入本地队列。"
+    }
+  },
+  "slicer": {
+    "title": "直播切片", "desc": "导入直播录像或长视频，识别片段并一键切片。", "noVideo": "未选择视频", "outputAfterSplit": "切片完成后显示输出目录",
+    "phase": { "ffmpeg": "正在调用 FFmpeg 切片", "collect": "正在整理输出片段", "done": "已生成 {count} 个片段", "failed": "切片失败", "ready": "已导入视频，等待分析", "idle": "等待导入" },
+    "pickers": { "video": "选择直播录像或长视频", "outputDir": "选择切片输出目录" },
+    "upload": { "title": "导入直播录像或长视频", "formats": "支持 MP4 / MOV / MKV / WEBM 格式", "sizeHint": "文件大小建议小于 10GB", "choose": "选择视频文件", "reselect": "重新选择视频", "openOriginal": "打开原视频" },
+    "results": { "title": "切片结果", "count": "{count} 个片段", "openDir": "打开目录", "empty": "请先导入视频并开始分析，切片结果会显示在这里。" },
+    "analysis": { "title": "分析设置", "recommended": "推荐设置", "mode": "识别模式", "smart": "智能识别", "smartDesc": "自动识别精彩片段", "manual": "人工标记", "manualDesc": "手动标记片段", "custom": "自定义", "customDesc": "设置识别规则", "minDuration": "最小片段时长（秒）", "maxDuration": "最大片段时长（秒）", "durationHint": "建议 15-60 秒", "fixedDuration": "当前 FFmpeg 按固定时长切片", "working": "正在智能分析", "start": "开始智能分析" },
+    "export": { "title": "导出设置", "format": "输出格式", "sourceFormat": "原格式", "quality": "画质", "sourceQuality": "保持原画", "outputDir": "输出目录", "all": "批量导出所有片段", "currentDir": "当前导出目录" }
   },
   "agentOs": {
     "businessCommandCatalog": { "scopeLabel": "命令分类", "scopes": { "recommended": "推荐", "business": "软件功能", "skill": "技能", "workspace": "页面", "management": "设置" }, "categories": { "product": "商品管理", "material": "商品素材", "sourceVideo": "来源视频", "clone": "视频复刻", "livePhoto": "动态照片", "subtitle": "字幕与切片", "listing": "商品刊登", "creative": "创意工作室", "modelIdentity": "模特资料", "template": "生产模板", "production": "生产任务", "publishing": "视频发布", "artifact": "产物管理" }, "descriptions": { "read": "查询当前软件中的真实数据和状态", "write": "使用当前软件能力创建或更新业务数据", "dangerous": "该操作会修改、删除或发布数据，执行前必须确认" }, "prompts": { "read": "请执行“{action}”。优先查询当前软件中的实际数据；如果缺少目标对象，请先向我确认。", "write": "请执行“{action}”。先检查当前数据和必要参数，展示执行计划；缺少信息时先向我确认。", "dangerous": "请准备执行“{action}”。先核对目标、影响范围和当前状态，列出具体操作并等待我明确确认；确认前不要产生不可逆或外部影响。" } },

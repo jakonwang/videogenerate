@@ -4,6 +4,14 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { configureAppPathRuntime, getAppPaths } from './paths'
 
+function hasExplicitStorageOverride() {
+  return Boolean(
+    String(process.env.VIDEOGENERATE_USER_DATA_DIR || '').trim() ||
+    String(process.env.VIDEOGENERATE_DATA_DIR || '').trim() ||
+    String(process.env.VIDEOGENERATE_WINDOWS_STORAGE_ROOT || '').trim(),
+  )
+}
+
 function resolveWindowsUserDataRoot() {
   const explicitUserData = String(process.env.VIDEOGENERATE_USER_DATA_DIR || '').trim()
   if (explicitUserData) return explicitUserData
@@ -34,6 +42,7 @@ export function configureWindowsStorageRoot() {
 
 export async function cleanupLegacyWindowsStorage() {
   if (process.platform !== 'win32') return
+  if (hasExplicitStorageOverride()) return
   const legacyRoot = join(app.getPath('appData'), 'VideoGenerate')
   const currentUserData = getAppPaths().userData
   if (legacyRoot === currentUserData) return
@@ -75,6 +84,7 @@ export async function cleanupLegacyWindowsStorage() {
 
 export async function migrateLegacyWindowsUserData() {
   if (process.platform !== 'win32') return
+  if (hasExplicitStorageOverride()) return
   const legacyRoot = join(app.getPath('appData'), 'VideoGenerate')
   const currentUserData = getAppPaths().userData
   if (legacyRoot === currentUserData) return

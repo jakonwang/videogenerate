@@ -33,45 +33,38 @@ const { visible: cloneTopbarVisible, items: cloneTopbarItems } = storeToRefs(clo
 const { enabled: designInspectorEnabled } = storeToRefs(designInspector)
 const showDesignInspectorToggle = computed(() => import.meta.env.DEV)
 const showCloneWorkflowTopbar = computed(() => route.path.includes('/clone/') && cloneTopbarVisible.value && cloneTopbarItems.value.length > 0)
-const topUserName = computed(() => 'Key Access')
-const topUserPlan = computed(() => 'Local Mode')
-const topWalletBalance = computed(() => 0)
-const sidebarPlanLabel = computed(() => 'Desktop Workspace')
-const sidebarPlanDesc = computed(() => 'No login required')
-const topStatusText = computed(() => 'Local workspace mode')
-const topGpuStatusText = computed(() => 'Standby')
-const topApiStatusText = computed(() => 'Disconnected')
-const topAccountStatusText = computed(() => `${topUserName.value} / ${topUserPlan.value}`)
+const topUserName = computed(() => 'VideoGenerate')
+const topUserPlan = computed(() => t('shell.localMode'))
 let unsubscribeHermesWorkspaceActions: (() => void) | null = null
 
 const navItems = computed(() => [
-  { to: '/home', icon: House, label: '首页', active: route.path.includes('/home') },
-  { to: '/models', icon: Sparkles, label: '模特', active: route.path.includes('/models') },
-  { to: '/products', icon: FolderOpen, label: '商品', active: route.path.includes('/products') },
-  { to: '/clone', icon: CopyPlus, label: '复刻', active: route.path.includes('/clone') },
+  { to: '/home', icon: House, label: t('nav.home'), active: route.path.includes('/home') },
+  { to: '/models', icon: Sparkles, label: t('nav.models'), active: route.path.includes('/models') },
+  { to: '/products', icon: FolderOpen, label: t('nav.productLibrary'), active: route.path.includes('/products') },
+  { to: '/clone', icon: CopyPlus, label: t('nav.clone'), active: route.path.includes('/clone') },
   {
     to: '/production',
     icon: Rocket,
-    label: '生产',
+    label: t('nav.products'),
     active: route.path.includes('/production') || route.path.includes('/tasks') || route.path.includes('/templates'),
   },
-  { to: '/live-slicer', icon: ScissorsLineDashed, label: '切片', active: route.path.includes('/live-slicer') },
+  { to: '/live-slicer', icon: ScissorsLineDashed, label: t('nav.liveSlicer'), active: route.path.includes('/live-slicer') },
 ])
 
-const helpItems = [
-  { to: '/models', title: '模特', desc: '管理统一复用的模特身份与参考素材。' },
-  { to: '/products', title: '商品', desc: '先管理商品列表，再进入详情维护图片和标准源。' },
-  { to: '/clone', title: '复刻', desc: '绑定模特和商品，生成脚本、分镜图与分镜视频。' },
-  { to: '/production', title: '生产', desc: '进入任务执行中心，发起任务并查看结果。' },
-  { to: '/live-slicer', title: '切片', desc: '处理直播长视频切片与二次素材拆分。' },
-]
+const helpItems = computed(() => [
+  { to: '/models', title: t('nav.models'), desc: t('shell.helpModels') },
+  { to: '/products', title: t('nav.productLibrary'), desc: t('shell.helpProducts') },
+  { to: '/clone', title: t('nav.clone'), desc: t('shell.helpClone') },
+  { to: '/production', title: t('nav.products'), desc: t('shell.helpProduction') },
+  { to: '/live-slicer', title: t('nav.liveSlicer'), desc: t('shell.helpSlicer') },
+])
 
 const sidebarSections = computed(() => [
   {
-    title: '插件',
+    title: t('nav.plugins'),
     items: [
-      { to: '/plugins', icon: Puzzle, label: '插件市场', active: route.path.includes('/plugins') && !route.query.tab },
-      { to: '/plugins?tab=installed', icon: Puzzle, label: '我的插件', active: route.path.includes('/plugins') && route.query.tab === 'installed' },
+      { to: '/plugins', icon: Puzzle, label: t('plugins.tabs.market'), active: route.path.includes('/plugins') && !route.query.tab },
+      { to: '/plugins?tab=installed', icon: Puzzle, label: t('plugins.tabs.installed'), active: route.path.includes('/plugins') && route.query.tab === 'installed' },
     ],
   },
 ])
@@ -154,7 +147,7 @@ onUnmounted(() => {
             </div>
             <button class="app-sidebar-footer-action" type="button" @click="go('/settings')">
               <Settings class="h-4 w-4" />
-              <span>设置</span>
+              <span>{{ t('nav.settings') }}</span>
             </button>
             <button class="app-sidebar-user" type="button">
               <div class="app-avatar">{{ topUserName.slice(0, 1).toUpperCase() }}</div>
@@ -182,21 +175,6 @@ onUnmounted(() => {
                   </button>
                   <span v-if="index < cloneTopbarItems.length - 1" class="app-topbar-clone__arrow"></span>
                 </template>
-              </div>
-              <div class="app-topbar-clone__spacer"></div>
-              <div class="app-topbar-clone__status">
-                <span class="app-topbar-clone__metric">
-                  <strong>GPU</strong>
-                  <small>{{ topGpuStatusText }}</small>
-                </span>
-                <span class="app-topbar-clone__metric">
-                  <strong>API</strong>
-                  <small>{{ topApiStatusText }}</small>
-                </span>
-                <span class="app-topbar-clone__metric app-topbar-clone__metric--account">
-                  <strong>账号状态</strong>
-                  <small>{{ topAccountStatusText }}</small>
-                </span>
               </div>
             </div>
           </div>
@@ -675,6 +653,26 @@ onUnmounted(() => {
     min-width: 56px;
     justify-content: center;
     padding: 0;
+  }
+
+  .app-sidebar-locale :deep(label) {
+    display: block !important;
+    width: 56px !important;
+  }
+
+  .app-sidebar-locale :deep(label > span) {
+    display: none !important;
+  }
+
+  .app-sidebar-locale :deep(select.ui-select) {
+    display: block !important;
+    width: 56px !important;
+    min-width: 56px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 4px !important;
+    font-size: 10px !important;
+    text-align: center;
   }
 
   .app-topbar-clone {

@@ -1,6 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   getModelProfileOptionGroups,
   getModelProfileOptionLabel,
@@ -66,7 +67,7 @@ type ModelIdentityLibraryItem = {
 
 type LibraryStatusFilter = 'all' | 'done' | 'generating' | 'failed'
 type ViewMode = 'grid' | 'list'
-type LibraryTab = 'all' | 'mine' | 'team' | 'favorites'
+type LibraryTab = 'all' | 'mine'
 type DropdownKey = 'status' | 'project' | 'productType' | 'pageSize' | null
 type ModelActionMenuKey = string | null
 type ModelDialogMode = 'rename' | 'delete' | null
@@ -85,6 +86,7 @@ type ModelPromptPreview = {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const busy = ref(false)
 const message = ref('')
 const library = ref<ModelIdentityLibraryItem[]>([])
@@ -133,11 +135,7 @@ const dialogBusy = ref(false)
 const promptPreview = ref<ModelPromptPreview | null>(null)
 const promptPreviewBusy = ref(false)
 const batchGenerateCount = ref(3)
-const batchGenerateOptions = [
-  { value: 1, label: '1 个' },
-  { value: 3, label: '3 个' },
-  { value: 5, label: '5 个' },
-]
+const batchGenerateOptions = computed(() => [1, 3, 5].map((value) => ({ value, label: t('modelLibrary.itemCount', { count: value }) })))
 
 const hasModelReferenceInput = computed(() => modelReferenceImages.value.length > 0)
 const imageProviderReady = computed(() =>
@@ -153,43 +151,35 @@ const imageProviderReady = computed(() =>
 const counts = computed(() => ({
   all: library.value.length,
   mine: library.value.filter((item) => item.status === 'done').length,
-  team: library.value.filter((_, index) => index % 3 === 0).length,
-  favorites: library.value.filter((_, index) => index % 4 === 0).length,
 }))
 
 const tabItems = computed(() => [
-  { key: 'all' as const, label: '全部模特', count: counts.value.all },
-  { key: 'mine' as const, label: '我的模特', count: counts.value.mine },
-  { key: 'team' as const, label: '团队模特', count: counts.value.team },
-  { key: 'favorites' as const, label: '收藏夹', count: counts.value.favorites },
+  { key: 'all' as const, label: t('modelLibrary.tabs.all'), count: counts.value.all },
+  { key: 'mine' as const, label: t('modelLibrary.tabs.ready'), count: counts.value.mine },
 ])
 
 const activeModelTask = computed(() => modelTasks.value.find((item) => item.id === modelTaskId.value) || null)
 
-const statusOptions = [
-  { value: 'all' as const, label: '全部状态' },
-  { value: 'done' as const, label: '在线模特' },
-  { value: 'generating' as const, label: '生成中' },
-  { value: 'failed' as const, label: '生成失败' },
-]
+const statusOptions = computed(() => [
+  { value: 'all' as const, label: t('modelLibrary.filters.allStatuses') },
+  { value: 'done' as const, label: t('modelLibrary.status.ready') },
+  { value: 'generating' as const, label: t('modelLibrary.status.generating') },
+  { value: 'failed' as const, label: t('modelLibrary.status.failed') },
+])
 
-const productTypeOptions = [
-  { value: 'earrings' as const, label: '全部风格' },
-  { value: 'phone_case' as const, label: '都市质感' },
-  { value: 'clothes' as const, label: '穿搭展示' },
-  { value: 'toy' as const, label: '少女系' },
-  { value: 'general' as const, label: '通用商业' },
-]
+const productTypeOptions = computed(() => [
+  { value: 'earrings' as const, label: t('modelLibrary.styles.all') },
+  { value: 'phone_case' as const, label: t('modelLibrary.styles.urban') },
+  { value: 'clothes' as const, label: t('modelLibrary.styles.fashion') },
+  { value: 'toy' as const, label: t('modelLibrary.styles.girl') },
+  { value: 'general' as const, label: t('modelLibrary.styles.general') },
+])
 
-const pageSizeOptions = [
-  { value: 8, label: '8 条/页' },
-  { value: 12, label: '12 条/页' },
-  { value: 16, label: '16 条/页' },
-]
+const pageSizeOptions = computed(() => [8, 12, 16].map((value) => ({ value, label: t('modelLibrary.perPage', { count: value }) })))
 
-const statusFilterLabel = computed(() => statusOptions.find((item) => item.value === statusFilter.value)?.label ?? '全部状态')
-const productTypeLabel = computed(() => productTypeOptions.find((item) => item.value === productType.value)?.label ?? '全部风格')
-const pageSizeLabel = computed(() => pageSizeOptions.find((item) => item.value === pageSize.value)?.label ?? '8 条/页')
+const statusFilterLabel = computed(() => statusOptions.value.find((item) => item.value === statusFilter.value)?.label ?? t('modelLibrary.filters.allStatuses'))
+const productTypeLabel = computed(() => productTypeOptions.value.find((item) => item.value === productType.value)?.label ?? t('modelLibrary.styles.all'))
+const pageSizeLabel = computed(() => pageSizeOptions.value.find((item) => item.value === pageSize.value)?.label ?? t('modelLibrary.perPage', { count: 8 }))
 const modelProfileGroups = getModelProfileOptionGroups()
 const modelProfileSummaryItems = computed(() =>
   modelProfileGroups
@@ -198,44 +188,44 @@ const modelProfileSummaryItems = computed(() =>
     .slice(0, 7),
 )
 const modelProfileSummaryText = computed(() => {
-  if (!modelProfileSummaryItems.value.length) return '未选择具体设定时，将自动使用当前商品类型的推荐模特方案。'
+  if (!modelProfileSummaryItems.value.length) return t('modelLibrary.profile.autoRecommendation')
   return modelProfileSummaryItems.value.join(' / ')
 })
 const modelProfileSections = computed(() => [
   {
     key: 'identity' as const,
-    label: '基础身份',
-    description: '市场、性别、年龄段',
+    label: t('modelLibrary.profile.identity'),
+    description: t('modelLibrary.profile.identityDesc'),
     groups: modelProfileGroups.filter((group) => ['market', 'gender', 'ageRange'].includes(group.key)),
   },
   {
     key: 'appearance' as const,
-    label: '外观特征',
-    description: '脸型、发型、发色、肤色、体型',
+    label: t('modelLibrary.profile.appearance'),
+    description: t('modelLibrary.profile.appearanceDesc'),
     groups: modelProfileGroups.filter((group) => ['faceShape', 'hairStyle', 'hairColor', 'skinTone', 'bodyType'].includes(group.key)),
   },
   {
     key: 'style' as const,
-    label: '表达风格',
-    description: '穿搭、气质、语言、镜头感',
+    label: t('modelLibrary.profile.style'),
+    description: t('modelLibrary.profile.styleDesc'),
     groups: modelProfileGroups.filter((group) => ['outfitStyle', 'mood', 'languageStyle', 'cameraPresence'].includes(group.key)),
   },
   {
     key: 'scene' as const,
-    label: '场景倾向',
-    description: '场景与风格重点',
+    label: t('modelLibrary.profile.scene'),
+    description: t('modelLibrary.profile.sceneDesc'),
     groups: modelProfileGroups.filter((group) => ['sceneStyle', 'styleBias'].includes(group.key)),
   },
 ])
 const imageProviderMissingText = computed(() => {
   if (imageProviderReady.value) return ''
   return imageProviderPrimary.value === 'kling'
-    ? '请先在设置中心配置 AtlasCloud API Key'
+    ? t('modelLibrary.missingKey.atlas')
     : imageProviderPrimary.value === 'grsai'
-      ? '请先在设置中心配置 GRS.AI API Key'
+      ? t('modelLibrary.missingKey.grsai')
       : imageProviderPrimary.value === 'apifox_hub'
-        ? '请先在设置中心配置 VectorEngine 图片 API Key'
-        : '请先在设置中心配置图片生成 API Key'
+        ? t('modelLibrary.missingKey.vector')
+        : t('modelLibrary.missingKey.image')
 })
 
 function defaultModelPromptProfile(type: typeof productType.value, gender?: 'female' | 'male') {
@@ -429,8 +419,6 @@ const filteredLibrary = computed(() => {
   return library.value.filter((item, index) => {
     if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
     if (activeTab.value === 'mine' && item.status !== 'done') return false
-    if (activeTab.value === 'team' && index % 3 !== 0) return false
-    if (activeTab.value === 'favorites' && index % 4 !== 0) return false
     if (!keyword) return true
     const text = [
       item.name,
@@ -499,10 +487,10 @@ function primaryMediaPath(item?: ModelIdentityLibraryItem | null) {
 }
 
 function modelStatusText(status?: string) {
-  if (status === 'done') return '在线'
-  if (status === 'generating') return '生成中'
-  if (status === 'failed') return '离线'
-  return '待完善'
+  if (status === 'done') return t('modelLibrary.status.ready')
+  if (status === 'generating') return t('modelLibrary.status.generating')
+  if (status === 'failed') return t('modelLibrary.status.failed')
+  return t('modelLibrary.status.incomplete')
 }
 
 function modelStatusTone(status?: string) {
@@ -515,42 +503,31 @@ function modelStatusTone(status?: string) {
 function modelTitle(item: ModelIdentityLibraryItem, index: number) {
   const name = String(item.name || '').trim()
   if (name) return name
-  return `AI 模特 ${String(index + 1).padStart(3, '0')}`
+  return t('modelLibrary.defaultName', { index: String(index + 1).padStart(3, '0') })
 }
 
 function modelDescriptionPreview(text?: string) {
   const content = String(text || '').replace(/\s+/g, ' ').trim()
-  if (!content) return '清新自然的邻家女孩形象，笑容甜美，气质温柔，适合生活化和产品展示类视频内容。'
+  if (!content) return t('modelLibrary.defaultDescription')
   return content.length > 110 ? `${content.slice(0, 110)}...` : content
 }
 
 function productTypeTag(type: ModelIdentityLibraryItem['productType']) {
-  if (type === 'earrings') return '甜美'
-  if (type === 'phone_case') return '都市女孩'
-  if (type === 'clothes') return '穿搭'
-  if (type === 'toy') return '少女感'
-  return '邻家女孩'
+  return t(`modelLibrary.typeTags.${type}`)
 }
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return '--'
-  const d = new Date(timestamp)
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`
+  return new Date(timestamp).toLocaleString(locale.value)
 }
 
 function modelMetrics(item?: ModelIdentityLibraryItem | null) {
-  if (!item) return '22岁 | 162cm | 45kg'
-  return [item.ageRange || '22岁', item.market || '162cm', item.outfitStyle || '45kg'].filter(Boolean).join(' | ')
+  if (!item) return '--'
+  return [item.ageRange, item.market, item.outfitStyle].filter(Boolean).join(' | ') || '--'
 }
 
 function languageText(item?: ModelIdentityLibraryItem | null) {
-  const text = String(item?.model || '').trim()
-  return text || '中文 / 英文'
+  return String(item?.model || '').trim() || '--'
 }
 
 function toggleDropdown(key: Exclude<DropdownKey, null>) {
@@ -1131,15 +1108,15 @@ watch([activeTab, statusFilter, search], () => {
       <div class="models-shell__main">
         <section class="models-hero">
           <div class="models-hero__copy">
-            <h1>模特库</h1>
-            <p>管理你的 AI 数字模特，支持形象筛选、声音适配和场景绑定，选中后可直接进入复刻工作台。</p>
+            <h1>{{ t('modelLibrary.title') }}</h1>
+            <p>{{ t('modelLibrary.desc') }}</p>
           </div>
           <div class="models-hero__actions">
             <button type="button" class="models-ghost-button" @click="openCreatePanel">
-              <span>导入模特</span>
+              <span>{{ t('modelLibrary.import') }}</span>
             </button>
             <button type="button" class="models-top-primary" data-testid="models-open-create" @click="openCreatePanel">
-              <span>创建模特</span>
+              <span>{{ t('modelLibrary.create') }}</span>
             </button>
           </div>
         </section>
@@ -1200,25 +1177,11 @@ watch([activeTab, statusFilter, search], () => {
                   </div>
                 </div>
 
-                <button type="button" class="models-select models-select--static">
-                  <span class="models-select-trigger__label">全部年龄</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-
-                <button type="button" class="models-select models-select--static">
-                  <span class="models-select-trigger__label">全部标签</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-
-                <button type="button" class="models-select models-select--static">
-                  <span class="models-select-trigger__label">支持语言</span>
-                  <ChevronDown class="h-4 w-4" />
-                </button>
               </div>
 
               <div class="models-toolbar__search">
                 <div class="models-input models-input--search">
-                  <input v-model="search" type="text" placeholder="搜索模特名称 / 标签" />
+                  <input v-model="search" type="text" :placeholder="t('modelLibrary.searchPlaceholder')" />
                 </div>
                 <div class="models-view-switch">
                   <button type="button" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
@@ -1235,17 +1198,17 @@ watch([activeTab, statusFilter, search], () => {
               <div class="models-catalog-head__summary">
                 <strong>{{ sortedLibrary.length }}</strong>
                 <div class="models-catalog-head__summary-copy">
-                  <b>个模特</b>
-                  <small>当前显示全部可用模特</small>
+                  <b>{{ t('modelLibrary.modelsUnit') }}</b>
+                  <small>{{ t('modelLibrary.availableSummary') }}</small>
                 </div>
               </div>
               <div class="models-catalog-head__actions" :class="{ 'is-selection-active': selectedIds.length > 0 }">
                 <div v-if="selectedIds.length" class="models-selection-pill">
-                  <strong>已选 {{ selectedIds.length }}</strong>
-                  <small>{{ allCurrentPageSelected ? '本页已全选' : '继续多选中' }}</small>
+                  <strong>{{ t('modelLibrary.selectedCount', { count: selectedIds.length }) }}</strong>
+                  <small>{{ allCurrentPageSelected ? t('modelLibrary.pageSelected') : t('modelLibrary.selecting') }}</small>
                 </div>
                 <button type="button" class="models-secondary-button models-secondary-button--compact" @click="toggleSelectCurrentPage">
-                  {{ allCurrentPageSelected ? '取消全选本页' : '全选本页' }}
+                  {{ allCurrentPageSelected ? t('modelLibrary.unselectPage') : t('modelLibrary.selectPage') }}
                 </button>
                 <button
                   v-if="selectedIds.length"
@@ -1254,7 +1217,7 @@ watch([activeTab, statusFilter, search], () => {
                   :disabled="dialogBusy"
                   @click="deleteModelsBatch"
                 >
-                  {{ dialogBusy ? '删除中' : `批量删除 ${selectedIds.length}` }}
+                  {{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.batchDelete', { count: selectedIds.length }) }}
                 </button>
               </div>
             </div>
@@ -1276,7 +1239,7 @@ watch([activeTab, statusFilter, search], () => {
                     />
                     <span></span>
                   </label>
-                  <button type="button" class="models-library-card__favorite" @click.stop="copyText(item.id, '模特 ID 已复制')">
+                  <button type="button" class="models-library-card__favorite" @click.stop="copyText(item.id, t('modelLibrary.messages.idCopied'))">
                     <Star class="h-4 w-4" />
                   </button>
                   <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="mediaUrl(item.coverImagePath || item.imagePaths?.[0])" :alt="item.name" />
@@ -1296,31 +1259,31 @@ watch([activeTab, statusFilter, search], () => {
                         <div class="models-library-card__pro">Pro</div>
                       </div>
                       <h3>{{ modelTitle(item, index) }}</h3>
-                      <p class="models-library-card__desc">支持语言：{{ languageText(item) }}</p>
+                      <p class="models-library-card__desc">{{ t('modelLibrary.modelProvider') }}: {{ languageText(item) }}</p>
                     </div>
                     <div class="models-action-menu">
                       <button type="button" class="models-library-card__more" @click.stop="toggleActionMenu(item.id)">
                         <MoreHorizontal class="h-4 w-4" />
                       </button>
                       <div v-if="openActionMenu === item.id" class="models-action-menu__panel">
-                        <button type="button" @click="assignModelToProject(item)">设为当前项目模特</button>
-                        <button type="button" @click="openRenameDialog(item)">重命名</button>
-                        <button type="button" @click="copyText(item.name || modelTitle(item, index), '模特名称已复制')">复制名称</button>
-                        <button type="button" @click="revealModelImage(item)">定位封面文件</button>
-                        <button type="button" class="is-danger" @click="openDeleteDialog(item)">删除模特</button>
+                        <button type="button" @click="assignModelToProject(item)">{{ t('modelLibrary.actions.assign') }}</button>
+                        <button type="button" @click="openRenameDialog(item)">{{ t('modelLibrary.actions.rename') }}</button>
+                        <button type="button" @click="copyText(item.name || modelTitle(item, index), t('modelLibrary.messages.nameCopied'))">{{ t('modelLibrary.actions.copyName') }}</button>
+                        <button type="button" @click="revealModelImage(item)">{{ t('modelLibrary.actions.revealCover') }}</button>
+                        <button type="button" class="is-danger" @click="openDeleteDialog(item)">{{ t('modelLibrary.actions.delete') }}</button>
                       </div>
                     </div>
                   </div>
 
                   <div class="models-tag-row models-tag-row--compact">
-                    <span>{{ item.mood || '甜美' }}</span>
-                    <span>{{ item.sceneStyle || '清新' }}</span>
-                    <span>{{ item.skinTone || '自然' }}</span>
+                    <span>{{ item.mood || t('modelLibrary.defaults.mood') }}</span>
+                    <span>{{ item.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
+                    <span>{{ item.skinTone || t('modelLibrary.defaults.skin') }}</span>
                   </div>
                 </div>
               </article>
             </div>
-            <div v-else class="models-empty-state">当前筛选条件下没有模特</div>
+            <div v-else class="models-empty-state">{{ t('modelLibrary.empty') }}</div>
 
             <div class="models-pagination">
               <div class="models-pagination__nav">
@@ -1329,7 +1292,7 @@ watch([activeTab, statusFilter, search], () => {
                 <button type="button" :disabled="page >= totalPages" @click="nextPage"><ArrowRight class="h-4 w-4" /></button>
               </div>
               <div class="models-pagination__meta">
-                <span>共 {{ sortedLibrary.length }} 条</span>
+                <span>{{ t('modelLibrary.totalCount', { count: sortedLibrary.length }) }}</span>
                 <div class="models-custom-select models-custom-select--compact" :class="{ 'is-open': openDropdown === 'pageSize' }">
                   <button type="button" class="models-select models-select--compact models-select-trigger" @click.stop="toggleDropdown('pageSize')">
                     <span class="models-select-trigger__label">{{ pageSizeLabel }}</span>
@@ -1365,7 +1328,7 @@ watch([activeTab, statusFilter, search], () => {
               <div class="models-detail-card__head">
                 <div>
                   <div class="models-detail-card__title">
-                    <h3>{{ selectedModel.name || '未命名模特' }}</h3>
+                    <h3>{{ selectedModel.name || t('modelLibrary.unnamed') }}</h3>
                     <span>Pro</span>
                   </div>
                   <div class="models-detail-card__online">
@@ -1381,72 +1344,66 @@ watch([activeTab, statusFilter, search], () => {
               <p class="models-detail-summary">{{ modelMetrics(selectedModel) }}</p>
 
               <div class="models-tag-row models-tag-row--compact">
-                <span>{{ selectedModel.mood || '甜美' }}</span>
-                <span>{{ selectedModel.sceneStyle || '清新' }}</span>
-                <span>{{ selectedModel.skinTone || '自然' }}</span>
-                <span>{{ selectedModel.gender || '少女感' }}</span>
+                <span>{{ selectedModel.mood || t('modelLibrary.defaults.mood') }}</span>
+                <span>{{ selectedModel.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
+                <span>{{ selectedModel.skinTone || t('modelLibrary.defaults.skin') }}</span>
+                <span>{{ selectedModel.gender || t('modelLibrary.defaults.gender') }}</span>
               </div>
             </div>
           </div>
 
           <div class="models-detail-cta">
-            <button type="button" class="models-primary-button models-primary-button--inline" @click="openCloneWithModel(selectedModel)">使用模特</button>
-            <button type="button" class="models-secondary-button" @click="openRenameDialog(selectedModel)">编辑信息</button>
+            <button type="button" class="models-primary-button models-primary-button--inline" @click="openCloneWithModel(selectedModel)">{{ t('modelLibrary.actions.use') }}</button>
+            <button type="button" class="models-secondary-button" @click="openRenameDialog(selectedModel)">{{ t('modelLibrary.actions.edit') }}</button>
             <div class="models-action-menu">
               <button type="button" class="models-detail-more" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)">
                 <MoreHorizontal class="h-4 w-4" />
               </button>
               <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="models-action-menu__panel models-action-menu__panel--detail">
-                <button type="button" @click="assignModelToProject(selectedModel)">设为当前项目模特</button>
-                <button type="button" @click="openModelImage(selectedModel)">打开封面图</button>
-                <button type="button" @click="revealModelImage(selectedModel)">定位封面文件</button>
-                <button type="button" class="is-danger" @click="openDeleteDialog(selectedModel)">删除模特</button>
+                <button type="button" @click="assignModelToProject(selectedModel)">{{ t('modelLibrary.actions.assign') }}</button>
+                <button type="button" @click="openModelImage(selectedModel)">{{ t('modelLibrary.actions.openCover') }}</button>
+                <button type="button" @click="revealModelImage(selectedModel)">{{ t('modelLibrary.actions.revealCover') }}</button>
+                <button type="button" class="is-danger" @click="openDeleteDialog(selectedModel)">{{ t('modelLibrary.actions.delete') }}</button>
               </div>
             </div>
           </div>
 
           <div class="models-detail-tabs">
-            <button type="button" class="active">模特信息</button>
-            <button type="button">声音克隆</button>
-            <button type="button">形象管理</button>
-            <button type="button">使用记录</button>
+            <button type="button" class="active">{{ t('modelLibrary.details.tab') }}</button>
           </div>
         </div>
 
         <div class="models-detail-section">
-          <h4>基本信息</h4>
+          <h4>{{ t('modelLibrary.details.basic') }}</h4>
           <div class="models-detail-time">
-            <div><span>模特 ID</span><strong>{{ selectedModel.id || 'model_001' }}</strong></div>
-            <div><span>创建时间</span><strong>{{ formatDate(selectedModel.createdAt) }}</strong></div>
-            <div><span>更新时间</span><strong>{{ formatDate(selectedModel.updatedAt) }}</strong></div>
-            <div><span>支持语言</span><strong>{{ languageText(selectedModel) }}</strong></div>
-            <div><span>适用场景</span><strong>穿搭、美妆、生活、产品展示</strong></div>
-            <div><span>授权类型</span><strong>企业授权</strong></div>
-            <div><span>使用状态</span><strong class="is-available">可用</strong></div>
+            <div><span>{{ t('modelLibrary.details.id') }}</span><strong>{{ selectedModel.id || '--' }}</strong></div>
+            <div><span>{{ t('modelLibrary.details.createdAt') }}</span><strong>{{ formatDate(selectedModel.createdAt) }}</strong></div>
+            <div><span>{{ t('modelLibrary.details.updatedAt') }}</span><strong>{{ formatDate(selectedModel.updatedAt) }}</strong></div>
+            <div><span>{{ t('modelLibrary.modelProvider') }}</span><strong>{{ languageText(selectedModel) }}</strong></div>
+            <div><span>{{ t('modelLibrary.details.generationStatus') }}</span><strong>{{ modelStatusText(selectedModel.status) }}</strong></div>
           </div>
         </div>
 
         <div class="models-detail-section">
-          <h4>标签</h4>
+          <h4>{{ t('modelLibrary.details.tags') }}</h4>
           <div class="models-tag-row">
-            <span>{{ selectedModel.mood || '甜美' }}</span>
-            <span>{{ selectedModel.sceneStyle || '清新' }}</span>
-            <span>{{ selectedModel.skinTone || '自然' }}</span>
-            <span>{{ selectedModel.gender || '少女感' }}</span>
+            <span>{{ selectedModel.mood || t('modelLibrary.defaults.mood') }}</span>
+            <span>{{ selectedModel.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
+            <span>{{ selectedModel.skinTone || t('modelLibrary.defaults.skin') }}</span>
+            <span>{{ selectedModel.gender || t('modelLibrary.defaults.gender') }}</span>
             <span>{{ productTypeTag(selectedModel.productType) }}</span>
-            <button type="button" class="models-link-button">+ 添加标签</button>
           </div>
         </div>
 
         <div v-if="selectedModel.error" class="models-hint is-error">{{ selectedModel.error }}</div>
 
         <div class="models-detail-section">
-          <h4>简介</h4>
+          <h4>{{ t('modelLibrary.details.description') }}</h4>
           <p class="models-detail-desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
         </div>
 
           <div class="models-detail-section">
-            <h4>作品预览</h4>
+            <h4>{{ t('modelLibrary.details.preview') }}</h4>
             <div class="models-preview-strip">
               <div v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)" :key="`${selectedModel.id}-${imageIndex}`" class="models-preview-strip__item">
                 <img :src="mediaUrl(image)" :alt="`${selectedModel.name}-${imageIndex}`" />
@@ -1462,8 +1419,8 @@ watch([activeTab, statusFilter, search], () => {
           <div class="models-dialog__head models-dialog__head--hero">
             <div class="models-dialog__title-block">
               <span class="models-dialog__eyebrow">Model Creation</span>
-              <h3>创建模特</h3>
-              <p>左侧完成模特设定，右侧上传一张参考模特图。当前弹窗优先保证设定清晰、素材可见和一屏可操作。</p>
+              <h3>{{ t('modelLibrary.createDialog.title') }}</h3>
+              <p>{{ t('modelLibrary.createDialog.desc') }}</p>
             </div>
             <button type="button" class="models-dialog__close" @click="closeCreatePanel">
               <X class="h-4 w-4" />
@@ -1473,16 +1430,16 @@ watch([activeTab, statusFilter, search], () => {
           <div class="models-create-grid models-create-grid--workspace">
             <section class="models-create-section">
               <div class="models-create-section__head">
-                <h4>基础设置</h4>
-                <p>先选择模特的主要方向，再补充细节与参考模特图。</p>
+                <h4>{{ t('modelLibrary.createDialog.basic') }}</h4>
+                <p>{{ t('modelLibrary.createDialog.basicDesc') }}</p>
               </div>
 
               <label class="models-field">
-                <span>模特设定</span>
+                <span>{{ t('modelLibrary.createDialog.profile') }}</span>
                 <div class="models-profile-summary">
                   <div class="models-profile-summary__head">
-                    <strong>当前设定摘要</strong>
-                    <small>会随左侧选项实时更新</small>
+                    <strong>{{ t('modelLibrary.createDialog.summary') }}</strong>
+                    <small>{{ t('modelLibrary.createDialog.summaryHint') }}</small>
                   </div>
                   <p>{{ modelProfileSummaryText }}</p>
                   <div v-if="modelProfileSummaryItems.length" class="models-profile-summary__chips">
@@ -1529,7 +1486,7 @@ watch([activeTab, statusFilter, search], () => {
               </label>
 
               <div class="models-field">
-                <span>批量生成数量</span>
+                <span>{{ t('modelLibrary.createDialog.batchCount') }}</span>
                 <div class="models-chip-row">
                   <button
                     v-for="option in batchGenerateOptions"
@@ -1548,8 +1505,8 @@ watch([activeTab, statusFilter, search], () => {
 
             <section class="models-create-section models-create-section--soft">
               <div class="models-section-heading">
-                <h4>参考模特图</h4>
-                <p>只需要上传一张参考模特图，用来约束模特的大致形象方向。</p>
+                <h4>{{ t('modelLibrary.createDialog.reference') }}</h4>
+                <p>{{ t('modelLibrary.createDialog.referenceDesc') }}</p>
               </div>
 
               <div class="models-upload-panel">
@@ -1558,13 +1515,13 @@ watch([activeTab, statusFilter, search], () => {
                     <ImagePlus class="h-4 w-4" />
                   </div>
                   <div class="models-upload-panel__copy">
-                    <strong>参考图上传面板</strong>
-                    <p>上传一张参考模特图，右侧会同步显示真实缩略预览。</p>
+                    <strong>{{ t('modelLibrary.createDialog.uploadPanel') }}</strong>
+                    <p>{{ t('modelLibrary.createDialog.uploadDesc') }}</p>
                   </div>
                 </div>
 
                 <div class="models-upload-panel__actions">
-                  <button type="button" data-testid="models-upload-main" @click="pickModelReferenceImage"><ImagePlus class="h-4 w-4" />上传参考模特图</button>
+                  <button type="button" data-testid="models-upload-main" @click="pickModelReferenceImage"><ImagePlus class="h-4 w-4" />{{ t('modelLibrary.createDialog.upload') }}</button>
                 </div>
               </div>
 
@@ -1572,17 +1529,17 @@ watch([activeTab, statusFilter, search], () => {
                 <div class="models-upload-preview__hero" :class="{ 'is-empty': !uploadPreviewHero }">
                   <img v-if="uploadPreviewHero" :src="mediaUrl(uploadPreviewHero)" alt="upload-preview" />
                   <div v-else class="models-upload-preview__empty">
-                    <span>上传后将在这里显示参考模特图预览</span>
+                    <span>{{ t('modelLibrary.createDialog.previewHint') }}</span>
                   </div>
                 </div>
               </div>
 
               <div class="models-stats-row">
-                <div class="models-stat-card"><span>参考模特图</span><strong>{{ modelReferenceImages.length }}</strong></div>
+                <div class="models-stat-card"><span>{{ t('modelLibrary.createDialog.reference') }}</span><strong>{{ modelReferenceImages.length }}</strong></div>
               </div>
 
               <div v-if="activeModelTask" class="models-hint models-hint--floating">
-                当前模特任务：{{ activeModelTask.title }} · {{ activeModelTask.status }}
+                {{ t('modelLibrary.createDialog.currentTask') }}: {{ activeModelTask.title }} · {{ activeModelTask.status }}
               </div>
 
               <div v-if="message" class="models-hint models-hint--floating">
@@ -1593,40 +1550,40 @@ watch([activeTab, statusFilter, search], () => {
               <div class="models-prompt-preview">
                 <div class="models-prompt-preview__head">
                   <div>
-                    <strong>提示词查看</strong>
-                    <small>这里展示创建模特时实际发送给模型的主提示词</small>
+                    <strong>{{ t('modelLibrary.createDialog.promptTitle') }}</strong>
+                    <small>{{ t('modelLibrary.createDialog.promptDesc') }}</small>
                   </div>
                   <div class="models-prompt-preview__actions">
                     <button type="button" class="models-secondary-button" :disabled="promptPreviewBusy" @click="previewModelPrompt">
-                      <span>{{ promptPreviewBusy ? '生成中' : '查看提示词' }}</span>
+                      <span>{{ promptPreviewBusy ? t('modelLibrary.status.generating') : t('modelLibrary.createDialog.viewPrompt') }}</span>
                     </button>
                     <button
                       type="button"
                       class="models-secondary-button"
                       :disabled="!(promptPreview?.prompt || '')"
-                      @click="copyText(promptPreview?.prompt || '', '提示词已复制')"
+                      @click="copyText(promptPreview?.prompt || '', t('modelLibrary.messages.promptCopied'))"
                     >
-                      复制提示词
+                      {{ t('modelLibrary.createDialog.copyPrompt') }}
                     </button>
                   </div>
                 </div>
                 <div v-if="promptPreview" class="models-prompt-preview__body">
                   <div class="models-tag-row models-tag-row--compact">
-                    <span>{{ promptPreview.profile.gender || '未设置性别' }}</span>
-                    <span>{{ promptPreview.profile.market || '未设置市场' }}</span>
-                    <span>{{ promptPreview.profile.outfitStyle || '未设置穿搭' }}</span>
-                    <span>{{ promptPreview.profile.sceneStyle || '未设置场景' }}</span>
-                    <span>参考模特图 {{ (promptPreview as any).modelReferenceImageCount || 0 }} 张</span>
+                    <span>{{ promptPreview.profile.gender || t('modelLibrary.createDialog.unsetGender') }}</span>
+                    <span>{{ promptPreview.profile.market || t('modelLibrary.createDialog.unsetMarket') }}</span>
+                    <span>{{ promptPreview.profile.outfitStyle || t('modelLibrary.createDialog.unsetOutfit') }}</span>
+                    <span>{{ promptPreview.profile.sceneStyle || t('modelLibrary.createDialog.unsetScene') }}</span>
+                    <span>{{ t('modelLibrary.createDialog.referenceCount', { count: (promptPreview as any).modelReferenceImageCount || 0 }) }}</span>
                   </div>
                   <p class="models-prompt-preview__summary">{{ promptPreview.description }}</p>
                   <textarea :value="promptPreview.prompt" readonly class="models-prompt-preview__textarea"></textarea>
                 </div>
-                <p v-else class="models-prompt-preview__empty">点击“查看提示词”后，可直接复制当前创建模特实际使用的 prompt 发给我排查。</p>
+                <p v-else class="models-prompt-preview__empty">{{ t('modelLibrary.createDialog.promptEmpty') }}</p>
               </div>
 
               <button class="models-primary-button models-primary-button--wide" data-testid="models-generate-submit" type="button" :disabled="busy || !hasModelReferenceInput" @click="generateModelsBatch">
                 <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
-                <span>{{ busy ? '正在生成模特' : '生成新模特' }}</span>
+                <span>{{ busy ? t('modelLibrary.createDialog.generating') : t('modelLibrary.createDialog.generate') }}</span>
               </button>
             </section>
           </div>
@@ -1638,26 +1595,26 @@ watch([activeTab, statusFilter, search], () => {
       <div v-if="dialogMode && dialogTarget" class="models-dialog-backdrop" @click="closeDialog">
         <div class="models-dialog" @click.stop>
           <div class="models-dialog__head">
-            <h3>{{ dialogMode === 'rename' ? '重命名模特' : '删除模特' }}</h3>
+            <h3>{{ dialogMode === 'rename' ? t('modelLibrary.renameDialog.title') : t('modelLibrary.deleteDialog.title') }}</h3>
             <button type="button" class="models-dialog__close" @click="closeDialog">
               <X class="h-4 w-4" />
             </button>
           </div>
 
           <div v-if="dialogMode === 'rename'" class="models-dialog__body">
-            <p class="models-dialog__desc">修改模特名称不会影响已生成素材和历史项目文件。</p>
+            <p class="models-dialog__desc">{{ t('modelLibrary.renameDialog.desc') }}</p>
             <label class="models-field">
-              <span>模特名称</span>
-              <input v-model="renameDraft" type="text" placeholder="输入新的模特名称" />
+              <span>{{ t('modelLibrary.renameDialog.name') }}</span>
+              <input v-model="renameDraft" type="text" :placeholder="t('modelLibrary.renameDialog.placeholder')" />
             </label>
           </div>
 
           <div v-else class="models-dialog__body">
-            <p class="models-dialog__desc">确认删除模特“{{ dialogTarget.name || '未命名模特' }}”吗？这会删除角色库记录和素材目录，但不会删除历史项目产物。</p>
+            <p class="models-dialog__desc">{{ t('modelLibrary.deleteDialog.desc', { name: dialogTarget.name || t('modelLibrary.unnamed') }) }}</p>
           </div>
 
           <div class="models-dialog__footer">
-            <button type="button" class="models-secondary-button models-secondary-button--dialog" :disabled="dialogBusy" @click="closeDialog">取消</button>
+            <button type="button" class="models-secondary-button models-secondary-button--dialog" :disabled="dialogBusy" @click="closeDialog">{{ t('common.cancel') }}</button>
             <button
               v-if="dialogMode === 'rename'"
               type="button"
@@ -1666,10 +1623,10 @@ watch([activeTab, statusFilter, search], () => {
               @click="renameModel(dialogTarget)"
             >
               <LoaderCircle v-if="dialogBusy" class="h-4 w-4 animate-spin" />
-              <span>{{ dialogBusy ? '保存中' : '保存名称' }}</span>
+              <span>{{ dialogBusy ? t('modelLibrary.renameDialog.saving') : t('modelLibrary.renameDialog.save') }}</span>
             </button>
             <button v-else type="button" class="models-danger-button" :disabled="dialogBusy" @click="deleteModel(dialogTarget)">
-              <span>{{ dialogBusy ? '删除中' : '确认删除' }}</span>
+              <span>{{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.deleteDialog.confirm') }}</span>
             </button>
           </div>
         </div>

@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl } from './atlasRetry'

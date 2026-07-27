@@ -1,6 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, FolderOpen, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, Search, Trash2, Video, Wand2 } from 'lucide-vue-next'
 import UiCard from '../components/UiCard.vue'
 import UiButton from '../components/UiButton.vue'
@@ -73,6 +74,7 @@ type SubtitleCaptionStyle = {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const loading = ref(false)
 const creating = ref(false)
 const removingId = ref('')
@@ -128,16 +130,16 @@ const subtitleCaptionStyle = reactive<SubtitleCaptionStyle>(defaultSubtitleCapti
 let offRuntimeLog: (() => void) | undefined
 const cloneApi = window.api.clone as any
 
-const subtitlePresets: Array<{
+const subtitlePresets = computed<Array<{
   id: SubtitlePresetId
   name: string
   summary: string
   style: Partial<SubtitleCaptionStyle>
-}> = [
+}>>(() => [
   {
     id: 'viral-hook',
-    name: '爆款钩子款',
-    summary: '适合统一标题、停留感强、对比明显。',
+    name: t('autoUi.k_469e324ba51b'),
+    summary: t('autoUi.k_4590ac4b0a19'),
     style: {
       fontName: 'SimHei',
       fontSize: 68,
@@ -157,8 +159,8 @@ const subtitlePresets: Array<{
   },
   {
     id: 'deal-punch',
-    name: '促单成交款',
-    summary: '更适合卖点和利益点标题，转化感更强。',
+    name: t('autoUi.k_16d824cf7aac'),
+    summary: t('autoUi.k_e11f729375a4'),
     style: {
       fontName: 'Microsoft YaHei',
       fontSize: 64,
@@ -178,8 +180,8 @@ const subtitlePresets: Array<{
   },
   {
     id: 'premium-drop',
-    name: '精致种草款',
-    summary: '更克制，更适合珠宝首饰这类质感商品。',
+    name: t('autoUi.k_f958549b03fe'),
+    summary: t('autoUi.k_7d570b2ce11a'),
     style: {
       fontName: 'Noto Sans SC',
       fontSize: 58,
@@ -197,7 +199,7 @@ const subtitlePresets: Array<{
       bottomMargin: 212,
     },
   },
-]
+])
 
 function defaultSubtitleCaptionStyle(): SubtitleCaptionStyle {
   return {
@@ -286,20 +288,20 @@ const stats = computed(() => ({
 }))
 
 const overviewCards = computed(() => [
-  { key: 'all', label: '全部任务', helper: '总任务数', value: stats.value.all, tone: 'all', icon: Video },
-  { key: 'draft', label: '草稿', helper: '待完善任务', value: stats.value.draft, tone: 'muted', icon: FolderOpen },
-  { key: 'running', label: '进行中', helper: '任务处理中', value: stats.value.running, tone: 'running', icon: LoaderCircle },
-  { key: 'completed', label: '已完成', helper: '任务已完成', value: stats.value.completed, tone: 'success', icon: CheckCircle2 },
-  { key: 'failed', label: '失败任务', helper: '任务失败', value: stats.value.failed, tone: 'danger', icon: AlertTriangle },
-  { key: 'pending-output', label: '等待输出', helper: '草稿存储', value: stats.value.pendingOutput, tone: 'muted', icon: FolderOpen },
+  { key: 'all', label: t('cloneTasks.stats.all'), helper: t('cloneTasks.stats.allDesc'), value: stats.value.all, tone: 'all', icon: Video },
+  { key: 'draft', label: t('cloneTasks.stats.draft'), helper: t('cloneTasks.stats.draftDesc'), value: stats.value.draft, tone: 'muted', icon: FolderOpen },
+  { key: 'running', label: t('cloneTasks.stats.running'), helper: t('cloneTasks.stats.runningDesc'), value: stats.value.running, tone: 'running', icon: LoaderCircle },
+  { key: 'completed', label: t('cloneTasks.stats.completed'), helper: t('cloneTasks.stats.completedDesc'), value: stats.value.completed, tone: 'success', icon: CheckCircle2 },
+  { key: 'failed', label: t('cloneTasks.stats.failed'), helper: t('cloneTasks.stats.failedDesc'), value: stats.value.failed, tone: 'danger', icon: AlertTriangle },
+  { key: 'pending-output', label: t('cloneTasks.stats.pendingOutput'), helper: t('cloneTasks.stats.pendingOutputDesc'), value: stats.value.pendingOutput, tone: 'muted', icon: FolderOpen },
 ])
 
 const groupSidebarItems = computed(() => {
   const ungroupedCount = rows.value.filter((item) => !String(item.groupId || '').trim()).length
   const dynamicGroups = groups.value.filter((item) => item.id !== '__ungrouped__')
   return [
-    { id: '__all__', name: '全部任务', taskCount: rows.value.length, system: true },
-    { id: '__ungrouped__', name: '未分组', taskCount: ungroupedCount, system: true },
+    { id: '__all__', name: t('cloneTasks.groups.all'), taskCount: rows.value.length, system: true },
+    { id: '__ungrouped__', name: t('cloneTasks.groups.ungrouped'), taskCount: ungroupedCount, system: true },
     ...dynamicGroups.map((item) => ({ id: item.id, name: item.name, taskCount: item.taskCount, system: false })),
   ]
 })
@@ -311,7 +313,7 @@ const activeOverflowGroup = computed(() => overflowGroupItems.value.find((item) 
 
 const activeGroupLabel = computed(() => {
   const current = groupSidebarItems.value.find((item) => item.id === activeGroupId.value)
-  return current?.name || '全部任务'
+  return current?.name || t('cloneTasks.groups.all')
 })
 
 const selectedSet = computed(() => new Set(selectedIds.value))
@@ -342,27 +344,27 @@ const visiblePageNumbers = computed(() => {
 })
 
 function humanStep(step?: string) {
-  if (step === 'reference_analysis') return '参考分析'
-  if (step === 'script_generation') return '脚本生成'
-  if (step === 'identity_grid') return '身份定妆图'
-  if (step === 'storyboard_design') return '分镜设计'
-  if (step === 'storyboard_videos') return '分镜视频'
-  if (step === 'final_compose') return '成片合成'
-  return '待开始'
+  if (step === 'reference_analysis') return t('cloneTasks.steps.reference')
+  if (step === 'script_generation') return t('cloneTasks.steps.script')
+  if (step === 'identity_grid') return t('cloneTasks.steps.identity')
+  if (step === 'storyboard_design') return t('cloneTasks.steps.storyboard')
+  if (step === 'storyboard_videos') return t('cloneTasks.steps.videos')
+  if (step === 'final_compose') return t('cloneTasks.steps.compose')
+  return t('cloneTasks.steps.pending')
 }
 
 function humanStatus(status?: string) {
   const text = String(status || '').toLowerCase()
-  if (text === 'draft') return '草稿'
-  if (text.includes('done') || text.includes('complete')) return '完成'
-  if (text.includes('fail') || text.includes('error')) return '失败'
-  if (text.includes('running') || text.includes('generating') || text === 'analyzed' || text === 'materials_ready') return '进行中'
-  if (text === 'ready_for_review') return '待检查'
-  return '进行中'
+  if (text === 'draft') return t('cloneTasks.status.draft')
+  if (text.includes('done') || text.includes('complete')) return t('cloneTasks.status.completed')
+  if (text.includes('fail') || text.includes('error')) return t('cloneTasks.status.failed')
+  if (text.includes('running') || text.includes('generating') || text === 'analyzed' || text === 'materials_ready') return t('cloneTasks.status.running')
+  if (text === 'ready_for_review') return t('cloneTasks.status.review')
+  return t('cloneTasks.status.running')
 }
 
 function humanRunMode(runMode?: 'auto' | 'manual') {
-  return runMode === 'auto' ? '自动运行' : '手动运行'
+  return runMode === 'auto' ? t('cloneTasks.runMode.auto') : t('cloneTasks.runMode.manual')
 }
 
 function statusTone(status?: string) {
@@ -433,14 +435,12 @@ function itemCoverSrc(item: CloneProjectSummary) {
 
 function formatTime(value?: number) {
   if (!value) return '--'
-  const d = new Date(value)
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return new Date(value).toLocaleString(locale.value)
 }
 
 function formatDateOnly(value?: number) {
   if (!value) return '--'
-  const d = new Date(value)
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+  return new Date(value).toLocaleDateString(locale.value)
 }
 
 function formatClockOnly(value?: number) {
@@ -522,10 +522,10 @@ function selectPageSize(nextSize: (typeof pageSizeOptions)[number]) {
 async function exportSelectedFinalVideos() {
   if (exporting.value) return
   if (!selectedIds.value.length) {
-    window.alert('请先选择要导出的任务。')
+    window.alert(t('autoUi.k_ef895767d0b6'))
     return
   }
-  const dir = await window.api.pickDir({ title: '选择批量导出目录' })
+  const dir = await window.api.pickDir({ title: t('autoUi.k_202d29a7c806') })
   if (!dir) return
   exporting.value = true
   batchExportMessage.value = ''
@@ -544,16 +544,16 @@ async function exportSelectedFinalVideos() {
     const exportedCount = result.exported.length
     const skippedCount = result.skipped.length
     batchExportMessage.value = skippedCount
-      ? `已导出 ${exportedCount} 个成片，跳过 ${skippedCount} 个未出片或文件缺失任务。`
-      : `已导出 ${exportedCount} 个成片。`
+      ? t('autoUi.k_9d347860fb9d', { p0: exportedCount, p1: skippedCount })
+      : t('autoUi.k_c9833ddf9991', { p0: exportedCount })
     pushRuntimeLog(`[clone-task-list] export completed exported=${exportedCount} skipped=${skippedCount}`, skippedCount ? 'info' : 'success')
     if (exportedCount > 0) {
       await window.api.shell.openPath(result.outputDir)
     } else {
-      window.alert('所选任务中没有可导出的成片。')
+      window.alert(t('autoUi.k_7741dce6b726'))
     }
   } catch (error: any) {
-    const message = String(error?.message ?? error ?? '批量导出失败。')
+    const message = String(error?.message ?? error ?? t('autoUi.k_40d21428a00a'))
     batchExportMessage.value = message
     pushRuntimeLog(`[clone-task-list] export failed message=${safeText(message, 'unknown error')}`, 'error')
     window.alert(message)
@@ -618,7 +618,7 @@ function resetSubtitleDialog() {
 }
 
 function applySubtitlePreset(presetId: SubtitlePresetId) {
-  const preset = subtitlePresets.find((item) => item.id === presetId)
+  const preset = subtitlePresets.value.find((item) => item.id === presetId)
   if (!preset) return
   subtitleSelectedPreset.value = preset.id
   Object.assign(subtitleCaptionStyle, defaultSubtitleCaptionStyle(), preset.style)
@@ -626,7 +626,7 @@ function applySubtitlePreset(presetId: SubtitlePresetId) {
 
 function openBatchSubtitleDialog() {
   if (!subtitleEligibleSelectedCount.value) {
-    window.alert('请先选择至少一个已有成片的任务。')
+    window.alert(t('autoUi.k_edebd6eca212'))
     return
   }
   applySubtitlePreset(subtitleSelectedPreset.value)
@@ -638,7 +638,7 @@ function openBatchSubtitleDialog() {
 
 function openSingleSubtitleDialog(item: CloneProjectSummary) {
   if (!String(item.finalOutputPath || '').trim()) {
-    window.alert('当前任务还没有可添加字幕的成片。')
+    window.alert(t('autoUi.k_611c5541cc75'))
     return
   }
   applySubtitlePreset(subtitleSelectedPreset.value)
@@ -659,7 +659,7 @@ function buildSubtitleTitleConfig() {
     .map((item) => item.trim())
     .filter(Boolean)
   if (subtitleTitleStrategy.value === 'random_pool') {
-    if (!pool.length) throw new Error('请至少输入一条随机标题。')
+    if (!pool.length) throw new Error(t('autoUi.k_83cd75f8d97e'))
     return {
       strategy: 'random_pool' as const,
       singleText: '',
@@ -667,7 +667,7 @@ function buildSubtitleTitleConfig() {
     }
   }
   const singleText = String(subtitleTitleText.value || '').trim()
-  if (!singleText) throw new Error('请输入标题字幕。')
+  if (!singleText) throw new Error(t('autoUi.k_7c43db8ada86'))
   return {
     strategy: 'single_for_all' as const,
     singleText,
@@ -679,13 +679,13 @@ async function submitSubtitleDialog() {
   if (subtitleDialogBusy.value) return
   const targets = rows.value.filter((item) => subtitleTargetIds.value.includes(item.id) && String(item.finalOutputPath || '').trim())
   if (!targets.length) {
-    window.alert('未找到可添加字幕的成片任务。')
+    window.alert(t('autoUi.k_30b14820e92b'))
     return
   }
   subtitleDialogBusy.value = true
   try {
     const ready = await ensureSubtitleFeatureReady()
-    if (!ready) throw new Error('批量字幕功能当前不可用。')
+    if (!ready) throw new Error(t('autoUi.k_4e5144b22529'))
     const titleConfig = buildSubtitleTitleConfig()
     const sourceItems = targets.map((item) => ({
       id: `clone-${item.id}`,
@@ -698,7 +698,7 @@ async function submitSubtitleDialog() {
     }))
     pushRuntimeLog(`[clone-task-list] subtitle submit count=${targets.length}`, 'info')
     const result = await window.api.clone.generateSubtitleVideosForProjects({
-      name: `复刻列表字幕 ${new Date().toLocaleString('zh-CN')}`,
+      name: t('autoUi.k_f5cd5ed7c729', { p0: new Date().toLocaleString('zh-CN') }),
       subtitleMode: 'static_title',
       subtitleSource: 'manual',
       exportEngine: 'ass_fallback',
@@ -744,12 +744,12 @@ async function submitSubtitleDialog() {
     await refresh()
     pushRuntimeLog(`[clone-task-list] subtitle applied count=${appliedProjectIds.size}`, 'success')
     if (!appliedProjectIds.size) {
-      window.alert('字幕任务已完成，但没有成功回写任何成片。')
+      window.alert(t('autoUi.k_af898b777e0a'))
       return
     }
     resetSubtitleDialog()
   } catch (error: any) {
-    const message = String(error?.message ?? error ?? '添加字幕失败。')
+    const message = String(error?.message ?? error ?? t('autoUi.k_7666d6b95883'))
     pushRuntimeLog(`[clone-task-list] subtitle failed message=${safeText(message, 'unknown error')}`, 'error')
     window.alert(message)
   } finally {
@@ -761,10 +761,10 @@ async function revertSubtitleFromPreview() {
   const item = videoPreviewItem.value
   if (!item?.id) return
   if (!itemHasAppliedSubtitle(item)) {
-    window.alert('当前视频没有可回退的字幕版本。')
+    window.alert(t('autoUi.k_21f9743c8890'))
     return
   }
-  const ok = window.confirm('确认回退到原始合成视频吗？字幕视频文件会被删除。')
+  const ok = window.confirm(t('autoUi.k_3fd479589dc0'))
   if (!ok) return
   videoPreviewSaving.value = true
   try {
@@ -772,7 +772,7 @@ async function revertSubtitleFromPreview() {
     await refresh()
     pushRuntimeLog(`[clone-task-list] subtitle reverted id=${item.id}`, 'success')
   } catch (error: any) {
-    const message = String(error?.message ?? error ?? '回退字幕视频失败。')
+    const message = String(error?.message ?? error ?? t('autoUi.k_cd66ecbed04b'))
     pushRuntimeLog(`[clone-task-list] subtitle revert failed message=${safeText(message, 'unknown error')}`, 'error')
     window.alert(message)
   } finally {
@@ -854,8 +854,8 @@ async function confirmRemoveTask(item: CloneProjectSummary) {
   const running = isRunningTask(item)
   const ok = window.confirm(
     running
-      ? `任务「${title}」正在运行中，确认强制删除吗？这会立即从列表移除，并停止当前任务的本地自动续跑。删除后无法恢复。`
-      : `确认删除「${title}」吗？删除后无法恢复。`,
+      ? t('autoUi.k_99c39b2e596c', { p0: title })
+      : t('autoUi.k_359076513d55', { p0: title }),
   )
   if (!ok) return
   await removeTaskWithMode(item.id, running)
@@ -864,14 +864,14 @@ async function confirmRemoveTask(item: CloneProjectSummary) {
 async function confirmBatchRemoveTasks() {
   if (removingId.value) return
   if (!selectedRows.value.length) {
-    window.alert('请先选择要删除的任务。')
+    window.alert(t('autoUi.k_5b94c8359e3c'))
     return
   }
   const total = selectedRows.value.length
   const runningCount = runningSelectedCount.value
   const message = runningCount
-    ? `已选 ${total} 个任务，其中 ${runningCount} 个正在运行中。确认批量删除吗？运行中的任务会按强制删除处理，删除后无法恢复。`
-    : `确认批量删除已选的 ${total} 个任务吗？删除后无法恢复。`
+    ? t('autoUi.k_341eddf3a668', { p0: total, p1: runningCount })
+    : t('autoUi.k_c2fe11a9ecb4', { p0: total })
   const ok = window.confirm(message)
   if (!ok) return
   batchExportMessage.value = ''
@@ -883,7 +883,7 @@ async function confirmBatchRemoveTasks() {
     selectedIds.value = []
     pushRuntimeLog(`[clone-task-list] batch remove completed count=${total}`, 'success')
   } catch (error: any) {
-    const messageText = String(error?.message ?? error ?? '批量删除失败')
+    const messageText = String(error?.message ?? error ?? t('autoUi.k_b59edb270d91'))
     pushRuntimeLog(`[clone-task-list] batch remove failed message=${safeText(messageText, 'unknown error')}`, 'error')
     window.alert(messageText)
   }
@@ -908,7 +908,7 @@ async function submitRename() {
   const title = String(renameDraft.value || '').trim()
   if (!cloneProjectId) return
   if (!title) {
-    window.alert('请输入任务名称。')
+    window.alert(t('autoUi.k_95b1ba060985'))
     return
   }
   savingRename.value = true
@@ -917,7 +917,7 @@ async function submitRename() {
     await refresh()
     closeRenameDialog()
   } catch (error: any) {
-    window.alert(`重命名失败：${String(error?.message ?? error ?? '未知错误')}`)
+    window.alert(t('autoUi.k_9910887469a0', { p0: String(error?.message ?? error ?? t('autoUi.k_5f76edc5de7b')) }))
   } finally {
     savingRename.value = false
   }
@@ -936,14 +936,14 @@ function openCreateGroupDialog() {
 
 async function renameGroupByPrompt(group: CloneTaskGroup) {
   if (!group?.id || group.id === '__ungrouped__' || !cloneGroupRenameReady.value) return
-  const name = String(window.prompt('请输入新的分组名称', String(group.name || '').trim()) || '').trim()
+  const name = String(window.prompt(t('autoUi.k_e877b7afbc3e'), String(group.name || '').trim()) || '').trim()
   if (!name) return
   try {
     groupMenuOpenId.value = ''
     await cloneApi.renameCloneGroup({ groupId: group.id, name })
     await refresh()
   } catch (error: any) {
-    window.alert(String(error?.message ?? error ?? '重命名分组失败'))
+    window.alert(String(error?.message ?? error ?? t('autoUi.k_e007e1f404fc')))
   }
 }
 
@@ -973,7 +973,7 @@ function openMoveSingleDialog(item: CloneProjectSummary) {
 function openMoveBatchDialog() {
   if (!hasCloneGroupApi('assignCloneProjectsToGroup')) return
   if (!selectedIds.value.length) {
-    window.alert('请先选择要移动的任务。')
+    window.alert(t('autoUi.k_e0461d4f37a4'))
     return
   }
   groupDialogMode.value = 'move_batch'
@@ -1023,7 +1023,7 @@ async function assignProjectToGroup(projectId: string, groupId?: string) {
     rowActionMenuOpenId.value = ''
     await refresh()
   } catch (error: any) {
-    window.alert(String(error?.message ?? error ?? '移动分组失败'))
+    window.alert(String(error?.message ?? error ?? t('autoUi.k_4f0a25b5ebe5')))
   } finally {
     assigningProjectId.value = ''
   }
@@ -1036,7 +1036,7 @@ async function submitGroupDialog() {
       if (!hasCloneGroupApi('createCloneGroup')) return
       const name = String(groupDraft.value || '').trim()
       if (!name) {
-        window.alert('请输入分组名称。')
+        window.alert(t('autoUi.k_c8f0c4c18bb0'))
         return
       }
       await cloneApi.createCloneGroup({ name })
@@ -1046,7 +1046,7 @@ async function submitGroupDialog() {
       const name = String(groupDraft.value || '').trim()
       if (!groupId) return
       if (!name) {
-        window.alert('请输入分组名称。')
+        window.alert(t('autoUi.k_c8f0c4c18bb0'))
         return
       }
       await cloneApi.renameCloneGroup({ groupId, name })
@@ -1062,7 +1062,7 @@ async function submitGroupDialog() {
     await refresh()
     closeGroupDialog()
   } catch (error: any) {
-    window.alert(String(error?.message ?? error ?? '操作失败'))
+    window.alert(String(error?.message ?? error ?? t('autoUi.k_09e424b5e896')))
   } finally {
     savingGroup.value = false
   }
@@ -1071,7 +1071,7 @@ async function submitGroupDialog() {
 async function confirmRemoveGroup(group: CloneTaskGroup) {
   if (!group?.id || group.id === '__ungrouped__') return
   if (!cloneGroupRemoveReady.value) return
-  const ok = window.confirm(`确认删除分组「${group.name}」吗？该分组下任务会回到未分组。`)
+  const ok = window.confirm(t('autoUi.k_c751ada771d4', { p0: group.name }))
   if (!ok) return
   try {
     groupMenuOpenId.value = ''
@@ -1079,7 +1079,7 @@ async function confirmRemoveGroup(group: CloneTaskGroup) {
     if (activeGroupId.value === group.id) activeGroupId.value = '__ungrouped__'
     await refresh()
   } catch (error: any) {
-    window.alert(String(error?.message ?? error ?? '删除分组失败'))
+    window.alert(String(error?.message ?? error ?? t('autoUi.k_3e61ca4d78d6')))
   }
 }
 
@@ -1111,13 +1111,13 @@ async function savePreviewVideo() {
     const result = await window.api.saveFileAs({
       sourcePath,
       defaultFileName: sourcePath.split(/[\\/]/).pop() || 'video.mp4',
-      title: '保存复刻视频',
+      title: t('autoUi.k_c9c7b18b7dc3'),
     })
     if (result?.ok && !result?.canceled) {
       pushRuntimeLog(`[clone-task-list] save preview video success path=${safeText(result.filePath, '')}`, 'success')
     }
   } catch (error: any) {
-    const message = String(error?.message ?? error ?? '保存视频失败。')
+    const message = String(error?.message ?? error ?? t('autoUi.k_48e14333c941'))
     pushRuntimeLog(`[clone-task-list] save preview video failed message=${safeText(message, 'unknown error')}`, 'error')
     window.alert(message)
   } finally {
@@ -1179,27 +1179,27 @@ onBeforeUnmount(() => {
           <header class="clone-console-hero">
             <div class="clone-console-hero__copy">
               <div class="clone-console-hero__title-row">
-                <h1>爆款视频复刻</h1>
+                <h1>{{ t('cloneTasks.title') }}</h1>
                 <span class="clone-console-hero__spark">✦</span>
               </div>
-              <p>智能复刻热门视频，快速生成优质内容</p>
+              <p>{{ t('cloneTasks.desc') }}</p>
             </div>
 
             <div class="clone-console-hero__actions">
               <UiButton class="clone-console-hero__button" variant="secondary" :disabled="exporting || !selectedIds.length" @click="exportSelectedFinalVideos">
-                {{ exporting ? '导出中...' : '批量导出' }}
+                {{ exporting ? t('cloneTasks.actions.exporting') : t('cloneTasks.actions.batchExport') }}
               </UiButton>
               <div class="clone-console-run-mode">
                 <button class="clone-console-run-mode__option" :class="{ 'is-active': createRunMode === 'auto' }" type="button" @click="createRunMode = 'auto'">
-                  自动运行
+                  {{ t('cloneTasks.runMode.auto') }}
                 </button>
                 <button class="clone-console-run-mode__option" :class="{ 'is-active': createRunMode === 'manual' }" type="button" @click="createRunMode = 'manual'">
-                  手动运行
+                  {{ t('cloneTasks.runMode.manual') }}
                 </button>
               </div>
               <UiButton class="clone-console-hero__button clone-console-hero__button--primary" :disabled="creating || !createRunMode" @click="createTask">
                 <Plus class="h-4 w-4" />
-                {{ creating ? '创建中...' : '新建任务' }}
+                {{ creating ? t('cloneTasks.actions.creating') : t('cloneTasks.actions.create') }}
               </UiButton>
             </div>
           </header>
@@ -1229,15 +1229,15 @@ onBeforeUnmount(() => {
 
         <div v-if="selectedIds.length || batchExportMessage" class="clone-list-batch-bar">
           <div class="clone-list-batch-bar__summary">
-            <strong>已选 {{ selectedIds.length }} 个任务</strong>
+            <strong>{{ t('cloneTasks.selectedCount', { count: selectedIds.length }) }}</strong>
             <div class="clone-list-batch-bar__stats">
               <span class="clone-list-batch-bar__stat">
                 <em>{{ exportableSelectedCount }}</em>
-                <small>可导出成片</small>
+                <small>{{ t('cloneTasks.selection.exportable') }}</small>
               </span>
               <span class="clone-list-batch-bar__stat">
                 <em>{{ subtitleEligibleSelectedCount }}</em>
-                <small>可加字幕</small>
+                <small>{{ t('cloneTasks.selection.subtitleReady') }}</small>
               </span>
             </div>
           </div>
@@ -1249,7 +1249,7 @@ onBeforeUnmount(() => {
               :disabled="Boolean(removingId)"
               @click="confirmBatchRemoveTasks"
             >
-              {{ removingId ? '删除中...' : '批量删除' }}
+              {{ removingId ? t('cloneTasks.actions.deleting') : t('cloneTasks.actions.batchDelete') }}
             </button>
             <button
               v-if="selectedIds.length"
@@ -1258,16 +1258,16 @@ onBeforeUnmount(() => {
               :disabled="exporting"
               @click="exportSelectedFinalVideos"
             >
-              {{ exporting ? '导出中...' : '批量导出成片' }}
+              {{ exporting ? t('cloneTasks.actions.exporting') : t('cloneTasks.actions.exportFinals') }}
             </button>
-            <button v-if="selectedIds.length && cloneGroupAssignReady" class="clone-list-batch-action" type="button" @click="openMoveBatchDialog">移动到分组</button>
+            <button v-if="selectedIds.length && cloneGroupAssignReady" class="clone-list-batch-action" type="button" @click="openMoveBatchDialog">{{ t('cloneTasks.actions.moveToGroup') }}</button>
             <button
               v-if="subtitleFeatureReady && subtitleEligibleSelectedCount"
               class="clone-list-batch-action clone-list-batch-action--accent"
               type="button"
               @click="openBatchSubtitleDialog"
             >
-              批量添加字幕
+              {{ t('cloneTasks.actions.batchSubtitle') }}
             </button>
             <span v-if="batchExportMessage" class="clone-list-batch-bar__message">{{ batchExportMessage }}</span>
           </div>
@@ -1287,12 +1287,12 @@ onBeforeUnmount(() => {
                   <em>{{ group.taskCount }}</em>
                 </button>
                 <div v-if="!group.system && (cloneGroupRenameReady || cloneGroupRemoveReady)" class="clone-group-menu">
-                  <button type="button" class="clone-console-group__more" aria-label="更多操作" @click.stop="toggleGroupMenu(group.id)">
+                  <button type="button" class="clone-console-group__more" :aria-label="t('cloneTasks.actions.more')" @click.stop="toggleGroupMenu(group.id)">
                     <MoreHorizontal class="h-3.5 w-3.5" />
                   </button>
                   <div v-if="groupMenuOpenId === group.id" class="clone-group-menu__dropdown">
-                    <button v-if="cloneGroupRenameReady" type="button" class="clone-group-menu__item" @click.stop="openRenameGroupDialog(group as CloneTaskGroup)">重命名</button>
-                    <button v-if="cloneGroupRemoveReady" type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveGroup(group as CloneTaskGroup)">删除</button>
+                    <button v-if="cloneGroupRenameReady" type="button" class="clone-group-menu__item" @click.stop="openRenameGroupDialog(group as CloneTaskGroup)">{{ t('cloneTasks.actions.rename') }}</button>
+                    <button v-if="cloneGroupRemoveReady" type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveGroup(group as CloneTaskGroup)">{{ t('cloneTasks.actions.delete') }}</button>
                   </div>
                 </div>
               </div>
@@ -1300,11 +1300,11 @@ onBeforeUnmount(() => {
 
             <div v-if="hasOverflowGroups" class="clone-console-group clone-console-group--overflow" :class="{ 'is-active': Boolean(activeOverflowGroup) }">
               <button type="button" class="clone-console-group__main" @click.stop="toggleGroupMenu('__overflow__')">
-                <span>{{ activeOverflowGroup ? activeOverflowGroup.name : '更多分组' }}</span>
+                <span>{{ activeOverflowGroup ? activeOverflowGroup.name : t('cloneTasks.groups.more') }}</span>
                 <em>{{ activeOverflowGroup ? activeOverflowGroup.taskCount : overflowGroupItems.length }}</em>
               </button>
               <div class="clone-group-menu">
-                <button type="button" class="clone-console-group__more" aria-label="更多分组" @click.stop="toggleGroupMenu('__overflow__')">
+                <button type="button" class="clone-console-group__more" :aria-label="t('autoUi.k_02965f90784d')" @click.stop="toggleGroupMenu('__overflow__')">
                   <MoreHorizontal class="h-3.5 w-3.5" />
                 </button>
                 <div v-if="groupMenuOpenId === '__overflow__'" class="clone-group-menu__dropdown">
@@ -1326,24 +1326,24 @@ onBeforeUnmount(() => {
             <div class="clone-console-table__groupbar-tools">
               <button v-if="cloneGroupCreateReady" type="button" class="clone-console-group__create" @click="openCreateGroupDialog">
                 <Plus class="h-3.5 w-3.5" />
-                <span>新建分组</span>
+                <span>{{ t('cloneTasks.groups.create') }}</span>
               </button>
               <button class="clone-console-overview__tool" type="button" @click="toggleSortOrder">
-                {{ sortOrder === 'created_desc' ? '最新创建' : '最早创建' }}
+                {{ sortOrder === 'created_desc' ? t('cloneTasks.sort.newest') : t('cloneTasks.sort.oldest') }}
                 <ChevronDown class="h-4 w-4" />
               </button>
               <button class="clone-console-overview__tool" type="button">
-                全部素材
+                {{ t('cloneTasks.allMaterials') }}
                 <ChevronDown class="h-4 w-4" />
               </button>
-              <button class="clone-console-overview__icon" type="button" aria-label="全选当前页任务" @click="toggleSelectCurrentPage">
+              <button class="clone-console-overview__icon" type="button" :aria-label="t('autoUi.k_a6156a9057ee')" @click="toggleSelectCurrentPage">
                 <span class="clone-console-overview__icon-bars"></span>
               </button>
               <button
                 class="clone-console-table__viewtool"
                 :class="{ 'is-active': viewMode === 'list' }"
                 type="button"
-                aria-label="列表视图"
+                :aria-label="t('autoUi.k_1fd2104d08a1')"
                 @click="viewMode = 'list'"
               >
                 <span class="clone-console-table__viewtool-bars"></span>
@@ -1352,12 +1352,12 @@ onBeforeUnmount(() => {
                 class="clone-console-table__viewtool"
                 :class="{ 'is-active': viewMode === 'grid' }"
                 type="button"
-                aria-label="网格视图"
+                :aria-label="t('autoUi.k_63a3454ede3c')"
                 @click="viewMode = 'grid'"
               >
                 <span class="clone-console-table__viewtool-grid"></span>
               </button>
-              <button class="clone-console-table__viewtool" type="button" aria-label="设置">
+              <button class="clone-console-table__viewtool" type="button" :aria-label="t('autoUi.k_7debf9cb0372')">
                 <span class="clone-console-table__viewtool-dot"></span>
               </button>
             </div>
@@ -1365,7 +1365,7 @@ onBeforeUnmount(() => {
 
           <div v-if="filteredRows.length && viewMode === 'list'" class="clone-console-table__body">
             <div class="clone-console-table__head">
-              <label class="clone-console-table__check" aria-label="全选当前页任务">
+              <label class="clone-console-table__check" :aria-label="t('autoUi.k_a6156a9057ee')">
                 <input
                   type="checkbox"
                   :checked="allCurrentPageSelected"
@@ -1373,13 +1373,13 @@ onBeforeUnmount(() => {
                 />
                 <span></span>
               </label>
-              <span class="clone-console-table__headcell">预览</span>
-              <span class="clone-console-table__headcell">任务信息</span>
-              <span class="clone-console-table__headcell">阶段</span>
-              <span class="clone-console-table__headcell">素材</span>
-              <span class="clone-console-table__headcell">进度</span>
-              <span class="clone-console-table__headcell">更新时间</span>
-              <span class="clone-console-table__headcell">操作</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.preview') }}</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.task') }}</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.stage') }}</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.materials') }}</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.progress') }}</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.updated') }}</span>
+              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.actions') }}</span>
             </div>
 
             <article v-for="item in pagedRows" :key="item.id" class="clone-console-row">
@@ -1404,20 +1404,20 @@ onBeforeUnmount(() => {
               <div class="clone-console-row__task">
                 <div class="clone-console-row__titleline">
                   <h3>{{ item.title }}</h3>
-                  <button class="clone-console-row__rename" type="button" aria-label="修改任务名称" @click="openRenameDialog(item)">
+                  <button class="clone-console-row__rename" type="button" :aria-label="t('autoUi.k_29f5ec945b98')" @click="openRenameDialog(item)">
                     <Pencil class="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <div class="clone-console-row__meta">
                   <span class="clone-console-row__mode">{{ humanRunMode(item.runMode) }}</span>
                   <span class="clone-console-row__dot"></span>
-                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || 'AI模特 003' }}</span>
+                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || '--' }}</span>
                   <span class="clone-console-row__dot"></span>
                   <span class="clone-console-row__text">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
                 </div>
                 <div v-if="item.lastError" class="clone-console-row__error">
                   <span class="clone-console-row__error-text">{{ compactError(item.lastError, 72) }}</span>
-                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">查看错误</button>
+                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">{{ t('cloneTasks.actions.viewError') }}</button>
                 </div>
               </div>
 
@@ -1428,7 +1428,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div v-if="cloneGroupAssignReady" class="clone-row-move-menu clone-row-move-menu--inline">
                   <button class="clone-console-row__groupmove" type="button" @click.stop="toggleRowMoveMenu(item.id)">
-                    <span>{{ item.groupName || '移动到分组' }}</span>
+                    <span>{{ item.groupName || t('cloneTasks.actions.moveToGroup') }}</span>
                     <ChevronDown class="h-3.5 w-3.5" />
                   </button>
                   <div v-if="rowMoveMenuOpenId === item.id" class="clone-row-move-menu__dropdown">
@@ -1439,7 +1439,7 @@ onBeforeUnmount(() => {
                       :disabled="assigningProjectId === item.id"
                       @click.stop="assignProjectToGroup(item.id)"
                     >
-                      未分组
+                      {{ t('cloneTasks.groups.ungrouped') }}
                     </button>
                     <button
                       v-for="group in groups.filter((entry) => entry.id !== '__ungrouped__')"
@@ -1457,7 +1457,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="clone-console-row__assets">
-                <strong>{{ item.productReferenceImageCount }} 图 / {{ item.generatedVideoCount || 0 }} 视频</strong>
+                <strong>{{ t('cloneTasks.materialCount', { images: item.productReferenceImageCount, videos: item.generatedVideoCount || 0 }) }}</strong>
                 <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
               </div>
 
@@ -1489,7 +1489,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="clone-console-row__actions">
-                <button class="clone-console-row__action clone-console-row__action--edit" type="button" title="编辑任务" @click="openTask(item.id)">
+                <button class="clone-console-row__action clone-console-row__action--edit" type="button" :title="t('autoUi.k_67659ba581ad')" @click="openTask(item.id)">
                   <Pencil class="h-4 w-4" />
                 </button>
                 <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openVideoPreview(item)">
@@ -1499,12 +1499,12 @@ onBeforeUnmount(() => {
                   <Trash2 class="h-4 w-4" />
                 </button>
                 <div class="clone-row-action-menu">
-                  <button class="clone-console-row__action" type="button" aria-label="更多操作" @click.stop="toggleRowActionMenu(item.id)">
+                  <button class="clone-console-row__action" type="button" :aria-label="t('autoUi.k_77836d3a9942')" @click.stop="toggleRowActionMenu(item.id)">
                     <MoreHorizontal class="h-4 w-4" />
                   </button>
                   <div v-if="rowActionMenuOpenId === item.id" class="clone-group-menu__dropdown clone-row-action-menu__dropdown">
-                    <button type="button" class="clone-group-menu__item" @click.stop="openRenameDialog(item)">重命名</button>
-                    <button type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveTask(item)">删除</button>
+                    <button type="button" class="clone-group-menu__item" @click.stop="openRenameDialog(item)">{{ t('cloneTasks.actions.rename') }}</button>
+                    <button type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveTask(item)">{{ t('cloneTasks.actions.delete') }}</button>
                   </div>
                 </div>
               </div>
@@ -1535,26 +1535,26 @@ onBeforeUnmount(() => {
               <div class="clone-console-card__body">
                 <div class="clone-console-row__titleline">
                   <h3>{{ item.title }}</h3>
-                  <button class="clone-console-row__rename" type="button" aria-label="修改任务名称" @click="openRenameDialog(item)">
+                  <button class="clone-console-row__rename" type="button" :aria-label="t('autoUi.k_29f5ec945b98')" @click="openRenameDialog(item)">
                     <Pencil class="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <div class="clone-console-row__meta">
                   <span class="clone-console-row__mode">{{ humanRunMode(item.runMode) }}</span>
                   <span class="clone-console-row__dot"></span>
-                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || 'AI模特 003' }}</span>
+                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || '--' }}</span>
                 </div>
                 <div class="clone-console-row__stage">
                   <span class="clone-console-row__stepbadge" :class="stepTone(item.currentStep)">{{ humanStep(item.currentStep) }}</span>
                   <span class="clone-console-row__text">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
                 </div>
                 <div class="clone-console-row__assets">
-                  <strong>{{ item.productReferenceImageCount }} 图 / {{ item.generatedVideoCount || 0 }} 视频</strong>
+                  <strong>{{ t('cloneTasks.materialCount', { images: item.productReferenceImageCount, videos: item.generatedVideoCount || 0 }) }}</strong>
                   <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
                 </div>
                 <div v-if="item.lastError" class="clone-console-row__error">
                   <span class="clone-console-row__error-text">{{ compactError(item.lastError, 72) }}</span>
-                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">查看错误</button>
+                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">{{ t('cloneTasks.actions.viewError') }}</button>
                 </div>
               </div>
 
@@ -1577,7 +1577,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="clone-console-card__actions">
-                <button class="clone-console-row__action clone-console-row__action--edit" type="button" title="编辑任务" @click="openTask(item.id)">
+                <button class="clone-console-row__action clone-console-row__action--edit" type="button" :title="t('autoUi.k_67659ba581ad')" @click="openTask(item.id)">
                   <Pencil class="h-4 w-4" />
                 </button>
                 <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openVideoPreview(item)">
@@ -1592,12 +1592,12 @@ onBeforeUnmount(() => {
           <div v-else class="clone-list-empty">
             <LoaderCircle v-if="loading" class="h-5 w-5 is-spinning" />
             <Wand2 v-else class="h-5 w-5" />
-            <strong>{{ loading ? '正在读取任务列表' : '还没有复刻任务' }}</strong>
-            <span>{{ loading ? '请稍候...' : '点击右上角“新建任务”，创建第一个复刻项目。' }}</span>
+            <strong>{{ loading ? t('cloneTasks.empty.loading') : t('cloneTasks.empty.title') }}</strong>
+            <span>{{ loading ? t('cloneTasks.empty.wait') : t('cloneTasks.empty.desc') }}</span>
           </div>
 
           <div class="clone-list-pagination">
-            <span class="clone-list-pagination__summary">共 {{ filteredRows.length }} 条，当前显示 {{ currentPageStart }}-{{ currentPageEnd }}</span>
+            <span class="clone-list-pagination__summary">{{ t('cloneTasks.pagination.summary', { count: filteredRows.length, start: currentPageStart, end: currentPageEnd }) }}</span>
             <div class="clone-list-pagination__controls">
               <button type="button" :disabled="currentPage <= 1" @click="goToPrevPage">‹</button>
               <button
@@ -1612,8 +1612,7 @@ onBeforeUnmount(() => {
               <button type="button" :disabled="currentPage >= pageCount" @click="goToNextPage">›</button>
               <div class="clone-list-page-size-wrap">
                 <button type="button" class="clone-list-page-size" :aria-expanded="pageSizeMenuOpen" @click="togglePageSizeMenu">
-                  {{ pageSize }} 条/页
-                  <ChevronDown class="h-3.5 w-3.5" />
+                  {{ pageSize }} {{ t('autoUi.k_2189643c968f') }} <ChevronDown class="h-3.5 w-3.5" />
                 </button>
                 <div v-if="pageSizeMenuOpen" class="clone-list-page-size-menu">
                   <button
@@ -1623,8 +1622,7 @@ onBeforeUnmount(() => {
                     :class="{ 'is-active': pageSize === option }"
                     @click="selectPageSize(option)"
                   >
-                    {{ option }} 条/页
-                  </button>
+                    {{ option }} {{ t('autoUi.k_2189643c968f') }} </button>
                 </div>
               </div>
             </div>
@@ -1637,10 +1635,10 @@ onBeforeUnmount(() => {
       <div class="clone-error-dialog" @click.stop>
         <div class="clone-error-dialog__head">
           <div class="clone-error-dialog__copy">
-            <strong>任务错误详情</strong>
+            <strong>{{ t('autoUi.k_6bd471fe24ae') }}</strong>
             <span>{{ errorDialogTitle }}</span>
           </div>
-          <UiButton variant="ghost" @click="closeErrorDialog">关闭</UiButton>
+          <UiButton variant="ghost" @click="closeErrorDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
         </div>
         <div class="clone-error-dialog__body">
           {{ errorDialogMessage }}
@@ -1652,20 +1650,20 @@ onBeforeUnmount(() => {
       <div class="clone-error-dialog clone-rename-dialog" @click.stop>
         <div class="clone-error-dialog__head">
           <div class="clone-error-dialog__copy">
-            <strong>修改任务名称</strong>
-            <span>仅更新当前复刻任务标题，不影响详情内容和素材。</span>
+            <strong>{{ t('autoUi.k_29f5ec945b98') }}</strong>
+            <span>{{ t('autoUi.k_cf099d4c47c6') }}</span>
           </div>
-          <UiButton variant="ghost" :disabled="savingRename" @click="closeRenameDialog">关闭</UiButton>
+          <UiButton variant="ghost" :disabled="savingRename" @click="closeRenameDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
         </div>
         <div class="clone-rename-dialog__body">
           <label class="clone-rename-dialog__field">
-            <span>任务名称</span>
-            <input v-model.trim="renameDraft" type="text" maxlength="80" placeholder="请输入任务名称" @keydown.enter.prevent="submitRename" />
+            <span>{{ t('autoUi.k_2e3046989973') }}</span>
+            <input v-model.trim="renameDraft" type="text" maxlength="80" :placeholder="t('autoUi.k_5169b9ecce30')" @keydown.enter.prevent="submitRename" />
           </label>
           <div class="clone-rename-dialog__actions">
-            <UiButton variant="secondary" :disabled="savingRename" @click="closeRenameDialog">取消</UiButton>
+            <UiButton variant="secondary" :disabled="savingRename" @click="closeRenameDialog">{{ t('autoUi.k_4d0b4688c787') }}</UiButton>
             <UiButton :disabled="savingRename || !renameDraft.trim()" @click="submitRename">
-              {{ savingRename ? '保存中...' : '保存' }}
+              {{ savingRename ? t('autoUi.k_d70d425039f2') : t('autoUi.k_fadf24dbc5a9') }}
             </UiButton>
           </div>
         </div>
@@ -1676,11 +1674,11 @@ onBeforeUnmount(() => {
       <div class="clone-error-dialog clone-video-preview-dialog" @click.stop>
         <div class="clone-error-dialog__head">
           <div class="clone-error-dialog__copy">
-            <strong>{{ videoPreviewItem.title || '复刻视频预览' }}</strong>
-            <span>{{ safeText(shortPath(itemPlayableVideoPath(videoPreviewItem)), '暂无视频文件') }}</span>
+            <strong>{{ videoPreviewItem.title || t('autoUi.k_891a69798937') }}</strong>
+            <span>{{ safeText(shortPath(itemPlayableVideoPath(videoPreviewItem)), t('autoUi.k_b31b6e8ace7e')) }}</span>
           </div>
           <div class="clone-video-preview-dialog__head-actions">
-            <UiButton variant="ghost" :disabled="videoPreviewSaving" @click="closeVideoPreview">关闭</UiButton>
+            <UiButton variant="ghost" :disabled="videoPreviewSaving" @click="closeVideoPreview">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
           </div>
         </div>
         <div class="clone-video-preview-dialog__body">
@@ -1692,18 +1690,18 @@ onBeforeUnmount(() => {
               preload="metadata"
               autoplay
             ></video>
-            <div v-else class="clone-video-preview-dialog__empty">当前任务还没有可播放的成片视频。</div>
+            <div v-else class="clone-video-preview-dialog__empty">{{ t('autoUi.k_7422247d9267') }}</div>
           </div>
           <div class="clone-video-preview-dialog__meta">
             <div class="clone-video-preview-dialog__meta-copy">
-              <span>任务：{{ videoPreviewItem.selectedModelIdentityName || '未命名模型' }}</span>
-              <span>时间：{{ formatTime(videoPreviewItem.updatedAt) }}</span>
+              <span>{{ t('autoUi.k_2b43bab7b2d0') }}{{ videoPreviewItem.selectedModelIdentityName || t('autoUi.k_9e035909e964') }}</span>
+              <span>{{ t('autoUi.k_32d77333df9b') }}{{ formatTime(videoPreviewItem.updatedAt) }}</span>
             </div>
           </div>
           <div class="clone-rename-dialog__actions clone-video-preview-dialog__actions">
-            <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem)" @click="revealPreviewVideo">在文件夹中显示</UiButton>
+            <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem)" @click="revealPreviewVideo">{{ t('autoUi.k_1213bb4b8d53') }}</UiButton>
             <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving" @click="savePreviewVideo">
-              {{ videoPreviewSaving ? '保存中...' : '下载保存' }}
+              {{ videoPreviewSaving ? t('autoUi.k_d70d425039f2') : t('autoUi.k_1ec4db03f027') }}
             </UiButton>
             <UiButton
               v-if="subtitleFeatureReady && !itemHasAppliedSubtitle(videoPreviewItem)"
@@ -1711,9 +1709,7 @@ onBeforeUnmount(() => {
               variant="secondary"
               :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving"
               @click="openSingleSubtitleDialog(videoPreviewItem)"
-            >
-              添加字幕
-            </UiButton>
+            > {{ t('autoUi.k_6e4c3e5ffee8') }} </UiButton>
             <UiButton
               v-if="itemHasAppliedSubtitle(videoPreviewItem)"
               class="clone-video-preview-dialog__revert-button"
@@ -1721,9 +1717,9 @@ onBeforeUnmount(() => {
               :disabled="videoPreviewSaving"
               @click="revertSubtitleFromPreview"
             >
-              {{ videoPreviewSaving ? '回退中...' : '回退原视频' }}
+              {{ videoPreviewSaving ? t('autoUi.k_ecd814390988') : t('autoUi.k_5d2a55f19c91') }}
             </UiButton>
-            <UiButton :disabled="!videoPreviewItem.id" @click="openTask(videoPreviewItem.id)">打开详情</UiButton>
+            <UiButton :disabled="!videoPreviewItem.id" @click="openTask(videoPreviewItem.id)">{{ t('autoUi.k_0d428278d9d4') }}</UiButton>
           </div>
         </div>
       </div>
@@ -1733,56 +1729,52 @@ onBeforeUnmount(() => {
       <div class="clone-error-dialog clone-rename-dialog clone-subtitle-dialog" @click.stop>
         <div class="clone-error-dialog__head clone-subtitle-dialog__head">
           <div class="clone-error-dialog__copy clone-subtitle-dialog__copy">
-            <strong>{{ subtitleDialogMode === 'batch' ? '批量添加字幕' : '添加字幕' }}</strong>
-            <span>为 {{ subtitleTargetIds.length }} 个复刻成片生成标题字幕，并直接替换当前查看视频。</span>
+            <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_c6f0209a1cfa') : t('autoUi.k_6e4c3e5ffee8') }}</strong>
+            <span>{{ t('autoUi.k_b7a385ec00d6') }} {{ subtitleTargetIds.length }} {{ t('autoUi.k_23be11c82f2f') }}</span>
           </div>
-          <UiButton variant="ghost" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">关闭</UiButton>
+          <UiButton variant="ghost" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
         </div>
         <div class="clone-rename-dialog__body clone-subtitle-dialog__body">
           <div class="clone-subtitle-dialog__summary">
             <div class="clone-subtitle-dialog__summary-item">
-              <span>处理范围</span>
-              <strong>{{ subtitleDialogMode === 'batch' ? `已选 ${subtitleTargetIds.length} 条视频` : '当前视频' }}</strong>
+              <span>{{ t('autoUi.k_11a2736ed3c4') }}</span>
+              <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_50e078e7f961', { p0: subtitleTargetIds.length }) : t('autoUi.k_bda3ae2da55b') }}</strong>
             </div>
             <div class="clone-subtitle-dialog__summary-item">
-              <span>当前模板</span>
-              <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || '爆款钩子款' }}</strong>
+              <span>{{ t('autoUi.k_5d9ef99b61c5') }}</span>
+              <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || t('autoUi.k_469e324ba51b') }}</strong>
             </div>
           </div>
           <div class="clone-subtitle-dialog__tabs">
-            <button :class="{ 'is-active': subtitleDialogTab === 'title' }" type="button" @click="subtitleDialogTab = 'title'">标题</button>
-            <button :class="{ 'is-active': subtitleDialogTab === 'template' }" type="button" @click="subtitleDialogTab = 'template'">模板</button>
-            <button :class="{ 'is-active': subtitleDialogTab === 'style' }" type="button" @click="subtitleDialogTab = 'style'">样式</button>
+            <button :class="{ 'is-active': subtitleDialogTab === 'title' }" type="button" @click="subtitleDialogTab = 'title'">{{ t('autoUi.k_748d7dc7e321') }}</button>
+            <button :class="{ 'is-active': subtitleDialogTab === 'template' }" type="button" @click="subtitleDialogTab = 'template'">{{ t('autoUi.k_06d0f38dd26c') }}</button>
+            <button :class="{ 'is-active': subtitleDialogTab === 'style' }" type="button" @click="subtitleDialogTab = 'style'">{{ t('autoUi.k_393a6c9117bc') }}</button>
           </div>
           <section v-if="subtitleDialogTab === 'title'" class="clone-subtitle-dialog__section">
             <div class="clone-subtitle-dialog__section-head">
               <span class="clone-subtitle-dialog__kicker">Title Mode</span>
-              <strong>标题配置</strong>
+              <strong>{{ t('autoUi.k_7f39a0d9ffad') }}</strong>
             </div>
             <div class="clone-subtitle-dialog__mode-pills">
-              <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'">
-                统一标题
-              </button>
-              <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'">
-                随机标题池
-              </button>
+              <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'"> {{ t('autoUi.k_73e18b3f4a29') }} </button>
+              <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'"> {{ t('autoUi.k_84ba3e6f5cfb') }} </button>
             </div>
             <label v-if="subtitleTitleStrategy === 'single_for_all'" class="clone-rename-dialog__field">
-              <span>标题字幕</span>
-              <input v-model.trim="subtitleTitleText" type="text" maxlength="120" placeholder="请输入标题字幕" @keydown.enter.prevent="submitSubtitleDialog" />
+              <span>{{ t('autoUi.k_7e33e07fd936') }}</span>
+              <input v-model.trim="subtitleTitleText" type="text" maxlength="120" :placeholder="t('autoUi.k_169a71f2d82c')" @keydown.enter.prevent="submitSubtitleDialog" />
             </label>
             <label v-else class="clone-rename-dialog__field">
-              <span>随机标题池</span>
-              <textarea v-model.trim="subtitleTitlePoolText" class="clone-subtitle-dialog__textarea" placeholder="每行一条标题字幕"></textarea>
+              <span>{{ t('autoUi.k_84ba3e6f5cfb') }}</span>
+              <textarea v-model.trim="subtitleTitlePoolText" class="clone-subtitle-dialog__textarea" :placeholder="t('autoUi.k_60e49a8dd0a0')"></textarea>
             </label>
             <div class="clone-subtitle-dialog__inline-tip">
-              {{ subtitleTitleStrategy === 'single_for_all' ? '整批视频会共用这一条标题字幕。' : '每行一条，渲染时会为每个视频随机分配。' }}
+              {{ subtitleTitleStrategy === 'single_for_all' ? t('autoUi.k_fb5b47107a9b') : t('autoUi.k_70164720b604') }}
             </div>
           </section>
           <section v-else-if="subtitleDialogTab === 'template'" class="clone-subtitle-dialog__section">
             <div class="clone-subtitle-dialog__section-head">
               <span class="clone-subtitle-dialog__kicker">Template</span>
-              <strong>字幕模板</strong>
+              <strong>{{ t('autoUi.k_f84c2e382440') }}</strong>
             </div>
             <div class="clone-subtitle-dialog__preset-grid">
               <button
@@ -1797,42 +1789,42 @@ onBeforeUnmount(() => {
                 <span>{{ preset.summary }}</span>
               </button>
             </div>
-            <div class="clone-subtitle-dialog__preset-note">优先选择最接近你商品风格的模板，再调整下面的细节样式。</div>
+            <div class="clone-subtitle-dialog__preset-note">{{ t('autoUi.k_6bf2c4d17ccd') }}</div>
           </section>
           <section v-else class="clone-subtitle-dialog__section">
             <div class="clone-subtitle-dialog__section-head">
               <span class="clone-subtitle-dialog__kicker">Style</span>
-              <strong>文字样式</strong>
+              <strong>{{ t('autoUi.k_856e405fcf39') }}</strong>
             </div>
             <div class="clone-subtitle-dialog__style-panel clone-subtitle-dialog__style-panel--full">
               <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--compact">
                 <label class="clone-rename-dialog__field">
-                  <span>字体</span>
-                  <input v-model.trim="subtitleCaptionStyle.fontName" type="text" placeholder="例如：SimHei" />
+                  <span>{{ t('autoUi.k_b50d4d8352f5') }}</span>
+                  <input v-model.trim="subtitleCaptionStyle.fontName" type="text" :placeholder="t('autoUi.k_9567b9609e02')" />
                 </label>
                 <label class="clone-rename-dialog__field">
-                  <span>字号</span>
+                  <span>{{ t('autoUi.k_576ccdb1f1c7') }}</span>
                   <input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" />
                 </label>
                 <label class="clone-rename-dialog__field">
-                  <span>描边</span>
+                  <span>{{ t('autoUi.k_a48b15a6de71') }}</span>
                   <input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" />
                 </label>
                 <label class="clone-rename-dialog__field">
-                  <span>最大行数</span>
+                  <span>{{ t('autoUi.k_3ca120ca0195') }}</span>
                   <input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" />
                 </label>
               </div>
               <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--dual">
                 <label class="clone-rename-dialog__field">
-                  <span>文字颜色</span>
+                  <span>{{ t('autoUi.k_07f568dada4d') }}</span>
                   <div class="clone-subtitle-dialog__color-field">
                     <input v-model.trim="subtitleCaptionStyle.fontColor" type="text" />
                     <input v-model="subtitleCaptionStyle.fontColor" type="color" />
                   </div>
                 </label>
                 <label class="clone-rename-dialog__field">
-                  <span>描边颜色</span>
+                  <span>{{ t('autoUi.k_eaa98f95ba53') }}</span>
                   <div class="clone-subtitle-dialog__color-field">
                     <input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" />
                     <input v-model="subtitleCaptionStyle.strokeColor" type="color" />
@@ -1841,32 +1833,32 @@ onBeforeUnmount(() => {
               </div>
               <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--compact">
                 <label class="clone-rename-dialog__field">
-                  <span>位置</span>
+                  <span>{{ t('autoUi.k_88c34452cc46') }}</span>
                   <select v-model="subtitleCaptionStyle.position" class="clone-group-select">
-                    <option value="top">顶部</option>
-                    <option value="center">中间</option>
-                    <option value="bottom">底部</option>
+                    <option value="top">{{ t('autoUi.k_a9d35ab0a675') }}</option>
+                    <option value="center">{{ t('autoUi.k_910253ea0c16') }}</option>
+                    <option value="bottom">{{ t('autoUi.k_435b2d8982fd') }}</option>
                   </select>
                 </label>
                 <label class="clone-rename-dialog__field">
-                  <span>对齐</span>
+                  <span>{{ t('autoUi.k_6ff4e8934c7f') }}</span>
                   <select v-model="subtitleCaptionStyle.textAlign" class="clone-group-select">
-                    <option value="left">左对齐</option>
-                    <option value="center">居中</option>
-                    <option value="right">右对齐</option>
+                    <option value="left">{{ t('autoUi.k_413f8db65f69') }}</option>
+                    <option value="center">{{ t('autoUi.k_5009324782b9') }}</option>
+                    <option value="right">{{ t('autoUi.k_70fe40dec2fa') }}</option>
                   </select>
                 </label>
                 <label class="clone-rename-dialog__field">
-                  <span>底部边距</span>
+                  <span>{{ t('autoUi.k_fa0119023442') }}</span>
                   <input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" />
                 </label>
               </div>
             </div>
           </section>
           <div class="clone-rename-dialog__actions">
-            <UiButton variant="secondary" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">取消</UiButton>
+            <UiButton variant="secondary" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_4d0b4688c787') }}</UiButton>
             <UiButton class="clone-subtitle-dialog__submit" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">
-              {{ subtitleDialogBusy ? '处理中...' : '开始添加字幕' }}
+              {{ subtitleDialogBusy ? t('autoUi.k_dde1db57718c') : t('autoUi.k_9ca6795dd07f') }}
             </UiButton>
           </div>
         </div>
@@ -1880,47 +1872,47 @@ onBeforeUnmount(() => {
             <strong>
               {{
                 groupDialogMode === 'create'
-                  ? '新建分组'
+                  ? t('autoUi.k_fa4ff6b10e32')
                   : groupDialogMode === 'rename'
-                    ? '重命名分组'
+                    ? t('autoUi.k_8f62b6b255c3')
                     : groupDialogMode === 'move_batch'
-                      ? '批量移动到分组'
-                      : '移动到分组'
+                      ? t('autoUi.k_b6c2525a1fb6')
+                      : t('autoUi.k_fe238ad8bfec')
               }}
             </strong>
             <span>
               {{
                 groupDialogMode === 'move_batch'
-                  ? `将 ${movingProjectIds.length} 个任务移动到指定分组。`
+                  ? t('autoUi.k_dcf7ccbc9a09', { p0: movingProjectIds.length })
                   : groupDialogMode === 'move_single'
-                    ? '为当前任务选择一个归属分组。'
-                    : '分组仅用于列表归类与快速查找。'
+                    ? t('autoUi.k_5cbed79340b3')
+                    : t('autoUi.k_905f3ead8016')
               }}
             </span>
           </div>
-          <UiButton variant="ghost" :disabled="savingGroup" @click="closeGroupDialog">关闭</UiButton>
+          <UiButton variant="ghost" :disabled="savingGroup" @click="closeGroupDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
         </div>
         <div class="clone-rename-dialog__body">
           <label v-if="groupDialogMode === 'create' || groupDialogMode === 'rename'" class="clone-rename-dialog__field">
-            <span>分组名称</span>
-            <input v-model.trim="groupDraft" type="text" maxlength="40" placeholder="请输入分组名称" @keydown.enter.prevent="submitGroupDialog" />
+            <span>{{ t('autoUi.k_65731c12ae52') }}</span>
+            <input v-model.trim="groupDraft" type="text" maxlength="40" :placeholder="t('autoUi.k_5b44baabf1b4')" @keydown.enter.prevent="submitGroupDialog" />
           </label>
           <label v-else class="clone-rename-dialog__field">
-            <span>目标分组</span>
+            <span>{{ t('autoUi.k_b8fdfa5a79c0') }}</span>
             <select v-model="moveTargetGroupId" class="clone-group-select">
-              <option value="__ungrouped__">未分组</option>
+              <option value="__ungrouped__">{{ t('autoUi.k_8de957a7b7a2') }}</option>
               <option v-for="group in groups.filter((item) => item.id !== '__ungrouped__')" :key="group.id" :value="group.id">
                 {{ group.name }}
               </option>
             </select>
           </label>
           <div class="clone-rename-dialog__actions">
-            <UiButton variant="secondary" :disabled="savingGroup" @click="closeGroupDialog">取消</UiButton>
+            <UiButton variant="secondary" :disabled="savingGroup" @click="closeGroupDialog">{{ t('autoUi.k_4d0b4688c787') }}</UiButton>
             <UiButton
               :disabled="savingGroup || ((groupDialogMode === 'create' || groupDialogMode === 'rename') ? !groupDraft.trim() : false)"
               @click="submitGroupDialog"
             >
-              {{ savingGroup ? '保存中...' : '保存' }}
+              {{ savingGroup ? t('autoUi.k_d70d425039f2') : t('autoUi.k_fadf24dbc5a9') }}
             </UiButton>
           </div>
         </div>
@@ -1930,10 +1922,10 @@ onBeforeUnmount(() => {
     <RuntimeLogDialog
       v-model="runtimeDialogOpen"
       :logs="runtimeLogs"
-      title="运行日志"
-      description="实时查看复刻任务列表的刷新、新建、删除、导出以及主进程桥接过来的 clone 运行日志。"
-      hint="列表页会聚合 /clone 相关运行日志"
-      empty-description="在任务列表执行刷新、新建、删除、打开任务或导出操作后，这里会显示最新运行记录。"
+      :title="t('autoUi.k_a8ce402665f3')"
+      :description="t('autoUi.k_ae7c05c666c4')"
+      :hint="t('autoUi.k_cae376183ef8')"
+      :empty-description="t('autoUi.k_f8ea28d7b865')"
     />
   </div>
 </template>

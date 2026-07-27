@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t: tr } = useI18n()
 
 type RuntimeLogItem = {
   id: string
@@ -23,13 +26,13 @@ const props = withDefaults(
     showAll?: boolean
   }>(),
   {
-    title: '运行日志',
-    description: '实时查看提交日志、接口返回、阶段切换与错误信息。',
+    title: '',
+    description: '',
     hint: '',
     showAll: false,
-    fabLabel: '运行日志',
-    emptyTitle: '暂无日志',
-    emptyDescription: '执行操作后，这里会显示最新的运行记录。',
+    fabLabel: '',
+    emptyTitle: '',
+    emptyDescription: '',
   },
 )
 
@@ -79,18 +82,23 @@ function resolveRuntimeCategory(item: RuntimeLogItem): Exclude<RuntimeLogCategor
   return 'other'
 }
 
-const categoryOptions: Array<{ value: RuntimeLogCategory; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'generation', label: '生成' },
-  { value: 'export', label: '导出' },
-  { value: 'sync', label: '同步' },
-  { value: 'stage', label: '阶段' },
-  { value: 'model', label: '模型' },
-  { value: 'error', label: '错误' },
-  { value: 'other', label: '其他' },
-]
+const categoryOptions = computed<Array<{ value: RuntimeLogCategory; label: string }>>(() => [
+  { value: 'all', label: tr('autoUi.k_778fc8f99453') },
+  { value: 'generation', label: tr('autoUi.k_4aa23063955b') },
+  { value: 'export', label: tr('autoUi.k_188896795f1d') },
+  { value: 'sync', label: tr('autoUi.k_e88ab5ba616a') },
+  { value: 'stage', label: tr('autoUi.k_4ca39faad0bd') },
+  { value: 'model', label: tr('autoUi.k_98fd0cbd9c31') },
+  { value: 'error', label: tr('autoUi.k_b859c7be7501') },
+  { value: 'other', label: tr('autoUi.k_1a26edf94a81') },
+])
 
 const activeCategory = ref<RuntimeLogCategory>('all')
+const resolvedTitle = computed(() => props.title || tr('autoUi.k_a8ce402665f3'))
+const resolvedDescription = computed(() => props.description || tr('autoUi.k_9bac1ee6e12b'))
+const resolvedFabLabel = computed(() => props.fabLabel || tr('autoUi.k_a8ce402665f3'))
+const resolvedEmptyTitle = computed(() => props.emptyTitle || tr('autoUi.k_44060e77b11c'))
+const resolvedEmptyDescription = computed(() => props.emptyDescription || tr('autoUi.k_21f67051b889'))
 const importantLogs = computed(() =>
   (Array.isArray(props.logs) ? props.logs : []).filter((item) =>
     props.showAll ? Boolean(String(item.message || '').trim()) : isImportantRuntimeLog(item),
@@ -99,7 +107,7 @@ const importantLogs = computed(() =>
 const visibleLogs = computed(() =>
   importantLogs.value.filter((item) => activeCategory.value === 'all' || resolveRuntimeCategory(item) === activeCategory.value),
 )
-const countLabel = computed(() => `${visibleLogs.value.length} 条`)
+const countLabel = computed(() => tr('autoUi.k_2a23e842e5d2', { p0: visibleLogs.value.length }))
 
 const categoryCountMap = computed(() => {
   const counts: Record<RuntimeLogCategory, number> = {
@@ -135,9 +143,9 @@ function formatRuntimeTime(value: number) {
 }
 
 function levelLabel(level: RuntimeLogItem['level']) {
-  if (level === 'error') return '错误'
-  if (level === 'success') return '成功'
-  return '日志'
+  if (level === 'error') return tr('autoUi.k_b859c7be7501')
+  if (level === 'success') return tr('autoUi.k_51991a5d111a')
+  return tr('autoUi.k_4de50894b8c1')
 }
 
 function extractField(text: string, key: string) {
@@ -153,14 +161,14 @@ function extractJsonValue(text: string, key: string) {
 
 function resolveRuntimeAction(item: RuntimeLogItem) {
   const text = String(item.message || '').toLowerCase()
-  if (item.level === 'error') return '失败'
-  if (text.includes('model-routing')) return '模型'
-  if (text.includes('export')) return '导出'
-  if (text.includes('retry')) return '重试'
-  if (text.includes('stage')) return '阶段'
-  if (text.includes('generate')) return '生成'
-  if (item.level === 'success') return '完成'
-  return '日志'
+  if (item.level === 'error') return tr('autoUi.k_3e3c8068bb0e')
+  if (text.includes('model-routing')) return tr('autoUi.k_98fd0cbd9c31')
+  if (text.includes('export')) return tr('autoUi.k_188896795f1d')
+  if (text.includes('retry')) return tr('autoUi.k_e2d53a6d3a6a')
+  if (text.includes('stage')) return tr('autoUi.k_4ca39faad0bd')
+  if (text.includes('generate')) return tr('autoUi.k_4aa23063955b')
+  if (item.level === 'success') return tr('autoUi.k_33246f6a5e5b')
+  return tr('autoUi.k_4de50894b8c1')
 }
 
 function formatRuntimeMessage(message: string) {
@@ -170,55 +178,55 @@ function formatRuntimeMessage(message: string) {
   if (cloneDebugNoisePatterns.some((pattern) => pattern.test(text))) return ''
 
   if (text.includes('tiktok-listing-model-routing')) {
-    const provider = extractJsonValue(text, 'provider') || '未知平台'
-    const model = extractJsonValue(text, 'model') || '未知模型'
-    return `模型路由已确认，当前使用 ${provider} / ${model}`
+    const provider = extractJsonValue(text, 'provider') || tr('autoUi.k_8fa4efdb7e89')
+    const model = extractJsonValue(text, 'model') || tr('autoUi.k_8b2303608fbd')
+    return tr('autoUi.k_a4541621551b', { p0: provider, p1: model })
   }
   if (text.includes('[tiktok-listing] start generate')) {
     const sku = extractField(text, 'sku')
-    return sku ? `开始为 SKU ${sku} 生成标题并准备商品图` : '开始生成商品标题并准备商品图'
+    return sku ? tr('autoUi.k_61d7005f0c6f', { p0: sku }) : tr('autoUi.k_970fb9cadf54')
   }
   if (text.includes('[tiktok-listing] stage title')) {
     const sku = extractField(text, 'sku')
-    return sku ? `正在为 SKU ${sku} 生成标题` : '正在生成标题'
+    return sku ? tr('autoUi.k_271402093c17', { p0: sku }) : tr('autoUi.k_ef9b4a19c536')
   }
   if (text.includes('[tiktok-listing] stage analysis-board')) {
     const sku = extractField(text, 'sku')
-    return sku ? `正在为 SKU ${sku} 生成临时多角度图` : '正在生成临时多角度图'
+    return sku ? tr('autoUi.k_8934eb45b7c6', { p0: sku }) : tr('autoUi.k_cccc23dbfb80')
   }
   if (text.includes('[tiktok-listing] stage images')) {
     const sku = extractField(text, 'sku')
-    return sku ? `正在为 SKU ${sku} 生成商品图` : '正在生成商品图'
+    return sku ? tr('autoUi.k_c712d7b3eaf8', { p0: sku }) : tr('autoUi.k_147fdf88c8f9')
   }
   if (text.includes('[tiktok-listing] stage description-html')) {
     const sku = extractField(text, 'sku')
-    return sku ? `正在为 SKU ${sku} 拼接 HTML 图片描述` : '正在拼接 HTML 图片描述'
+    return sku ? tr('autoUi.k_f28b2ed6097e', { p0: sku }) : tr('autoUi.k_ed06cecdcf72')
   }
   if (text.includes('[tiktok-listing] retry title')) {
     const sku = extractField(text, 'sku')
     const attempt = extractField(text, 'attempt')
-    return sku ? `SKU ${sku} 标题生成失败，正在第 ${attempt} 次重试` : `标题生成失败，正在第 ${attempt} 次重试`
+    return sku ? tr('autoUi.k_dc203b880cda', { p0: sku, p1: attempt }) : tr('autoUi.k_6dc66fcb580a', { p0: attempt })
   }
   if (text.includes('[tiktok-listing] retry analysis-board')) {
     const sku = extractField(text, 'sku')
     const attempt = extractField(text, 'attempt')
-    return sku ? `SKU ${sku} 临时多角度图生成失败，正在第 ${attempt} 次重试` : `临时多角度图生成失败，正在第 ${attempt} 次重试`
+    return sku ? tr('autoUi.k_6630bfad7331', { p0: sku, p1: attempt }) : tr('autoUi.k_62f8f9df54a1', { p0: attempt })
   }
   if (text.includes('[tiktok-listing] retry images')) {
     const sku = extractField(text, 'sku')
     const attempt = extractField(text, 'attempt')
-    return sku ? `SKU ${sku} 商品图生成失败，正在第 ${attempt} 次重试` : `商品图生成失败，正在第 ${attempt} 次重试`
+    return sku ? tr('autoUi.k_6fc7adf3f79a', { p0: sku, p1: attempt }) : tr('autoUi.k_47e11419947e', { p0: attempt })
   }
   if (text.includes('[tiktok-listing] save item sku=')) {
     const sku = extractField(text, 'sku')
-    return sku ? `商品记录已保存，SKU：${sku}` : '商品记录已保存'
+    return sku ? tr('autoUi.k_2eef583f38bc', { p0: sku }) : tr('autoUi.k_69f15098edc4')
   }
   if (text.includes('[tiktok-listing] remove item completed')) {
     const sku = extractField(text, 'sku')
-    return sku ? `商品记录已删除，SKU：${sku}` : '商品记录已删除'
+    return sku ? tr('autoUi.k_1692579fe5d6', { p0: sku }) : tr('autoUi.k_4478a948f85b')
   }
-  if (text.includes('[tiktok-listing] export excel path=')) return 'Excel 模板导出成功'
-  if (text.includes('[tiktok-listing] save export category configs')) return '导出分类配置已保存'
+  if (text.includes('[tiktok-listing] export excel path=')) return tr('autoUi.k_9303cc81f994')
+  if (text.includes('[tiktok-listing] save export category configs')) return tr('autoUi.k_eab6bee944f2')
 
   return text.replace(/^\[[^\]]+\]\s*/, '')
 }
@@ -227,7 +235,7 @@ function formatRuntimeMessage(message: string) {
 <template>
   <button class="runtime-fab" type="button" @click="openDialog">
     <span class="runtime-fab__dot" :class="{ active: visibleLogs.length > 0 }"></span>
-    <span>{{ fabLabel }}</span>
+    <span>{{ resolvedFabLabel }}</span>
     <strong>{{ visibleLogs.length }}</strong>
   </button>
 
@@ -236,10 +244,10 @@ function formatRuntimeMessage(message: string) {
     <div class="runtime-dialog__panel">
       <div class="runtime-dialog__head">
         <div>
-          <strong>{{ title }}</strong>
-          <p>{{ description }}</p>
+          <strong>{{ resolvedTitle }}</strong>
+          <p>{{ resolvedDescription }}</p>
         </div>
-        <button class="runtime-dialog__close" type="button" @click="closeDialog">关闭</button>
+        <button class="runtime-dialog__close" type="button" @click="closeDialog">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
       </div>
 
       <div class="runtime-summary">
@@ -276,8 +284,8 @@ function formatRuntimeMessage(message: string) {
         </div>
 
         <div v-else class="runtime-empty">
-          <strong>{{ emptyTitle }}</strong>
-          <p>{{ emptyDescription }}</p>
+          <strong>{{ resolvedEmptyTitle }}</strong>
+          <p>{{ resolvedEmptyDescription }}</p>
         </div>
       </div>
     </div>

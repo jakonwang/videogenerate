@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   CheckCircle2,
   ChevronDown,
@@ -55,20 +56,21 @@ type ExportCategoryConfig = {
 }
 
 const router = useRouter()
+const { t: tr } = useI18n()
 
-const categoryOptions: Array<{ value: Category; label: string }> = [
-  { value: 'earring', label: '耳环 (Earring)' },
-  { value: 'ring', label: '戒指 (Ring)' },
-  { value: 'necklace', label: '项链 (Necklace)' },
-  { value: 'phone_case', label: '手机壳 (Phone Case)' },
-  { value: 'bracelet', label: '手链 (Bracelet)' },
-]
+const categoryOptions = computed<Array<{ value: Category; label: string }>>(() => [
+  { value: 'earring', label: tr('autoUi.k_0e17cd118937') },
+  { value: 'ring', label: tr('autoUi.k_58e24abc1430') },
+  { value: 'necklace', label: tr('autoUi.k_53af67d6bcab') },
+  { value: 'phone_case', label: tr('autoUi.k_db7edce09c55') },
+  { value: 'bracelet', label: tr('autoUi.k_da76d14a8008') },
+])
 
-const languageOptions: Array<{ value: Language; label: string }> = [
-  { value: 'zh-CN', label: '简体中文 (zh-CN)' },
+const languageOptions = computed<Array<{ value: Language; label: string }>>(() => [
+  { value: 'zh-CN', label: tr('autoUi.k_b6754c19aba8') },
   { value: 'en-US', label: 'English (en-US)' },
   { value: 'vi-VN', label: 'Tiếng Việt (vi-VN)' },
-]
+])
 
 const loading = ref(false)
 const saving = ref(false)
@@ -107,7 +109,7 @@ const form = reactive({
 })
 
 function defaultExportCategoryConfigs(): ExportCategoryConfig[] {
-  return categoryOptions.map((item) => ({
+  return categoryOptions.value.map((item) => ({
     category: item.value,
     categoryId: '',
     productAttributes: '',
@@ -121,18 +123,18 @@ function toFileUrl(filePath: string) {
 }
 
 function categoryLabel(value: Category) {
-  return categoryOptions.find((item) => item.value === value)?.label || value
+  return categoryOptions.value.find((item) => item.value === value)?.label || value
 }
 
 function languageLabel(value: Language) {
-  return languageOptions.find((item) => item.value === value)?.label || value
+  return languageOptions.value.find((item) => item.value === value)?.label || value
 }
 
 function statusLabel(value: GenerationStatus) {
-  if (value === 'done') return '已完成'
-  if (value === 'generating') return '生成中'
-  if (value === 'failed') return '失败'
-  return '草稿'
+  if (value === 'done') return tr('autoUi.k_e99b48a29bdf')
+  if (value === 'generating') return tr('autoUi.k_57c08c730a51')
+  if (value === 'failed') return tr('autoUi.k_3e3c8068bb0e')
+  return tr('autoUi.k_0f436818c0b4')
 }
 
 function statusTone(value: GenerationStatus) {
@@ -164,18 +166,18 @@ function extraReferenceImages(item: Partial<Item> | null | undefined) {
 }
 
 function analysisBoardStatus(item?: Partial<Item> | null) {
-  if (String(item?.generationStatus || '') === 'generating') return '生成中'
-  if (String(item?.analysisBoardImage?.filePath || '').trim()) return '已生成'
-  if (String(item?.generationStatus || '') === 'failed') return '失败'
-  return '未生成'
+  if (String(item?.generationStatus || '') === 'generating') return tr('autoUi.k_57c08c730a51')
+  if (String(item?.analysisBoardImage?.filePath || '').trim()) return tr('autoUi.k_79c74f41ca9e')
+  if (String(item?.generationStatus || '') === 'failed') return tr('autoUi.k_3e3c8068bb0e')
+  return tr('autoUi.k_3c04f9eb8b65')
 }
 
 function previewTitle(item?: Partial<Item> | null) {
-  return String(item?.generatedTitle || '').trim() || '尚未生成标题'
+  return String(item?.generatedTitle || '').trim() || tr('autoUi.k_f3d343a4df0c')
 }
 
 function previewDescription(item?: Partial<Item> | null) {
-  return String(item?.generatedDescription || '').trim() || '尚未生成图片描述 HTML，先保存商品后再生成。'
+  return String(item?.generatedDescription || '').trim() || tr('autoUi.k_4206f35eabfa')
 }
 
 function generationErrorText(item?: Partial<Item> | null) {
@@ -295,7 +297,7 @@ async function openExportConfigDialog() {
   try {
     await loadExportCategoryConfigs()
   } catch (error: any) {
-    errorText.value = `导出配置加载失败：${error?.message ?? String(error)}`
+    errorText.value = tr('autoUi.k_ec6d6684363f', { p0: error?.message ?? String(error) })
     pushRuntimeLog(`[tiktok-listing] load export category configs failed message=${safeText(error?.message ?? error, 'unknown error')}`, 'error')
   }
 }
@@ -306,7 +308,7 @@ async function saveExportCategoryConfigs() {
   notice.value = ''
   try {
     const saver = window.api.tiktokListing?.saveExportCategoryConfigs
-    if (typeof saver !== 'function') throw new Error('当前桌面端实例尚未加载导出配置保存接口，请重启后重试')
+    if (typeof saver !== 'function') throw new Error(tr('autoUi.k_fdeee04bd605'))
     await saver(
       exportCategoryConfigs.value.map((item) => ({
         category: item.category,
@@ -314,7 +316,7 @@ async function saveExportCategoryConfigs() {
         productAttributes: String(item.productAttributes ?? ''),
       })),
     )
-    notice.value = '导出分类配置已保存'
+    notice.value = tr('autoUi.k_eab6bee944f2')
     exportConfigDialogOpen.value = false
     pushRuntimeLog('[tiktok-listing] save export category configs', 'success')
   } catch (error: any) {
@@ -327,7 +329,7 @@ async function saveExportCategoryConfigs() {
 
 async function pickImage() {
   const paths = await window.api.pickFiles({
-    title: '选择商品实拍图',
+    title: tr('autoUi.k_35270ec460cb'),
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
     multiple: false,
   })
@@ -337,17 +339,17 @@ async function pickImage() {
 
 async function saveItem() {
   if (!form.sourceImagePath.trim()) {
-    errorText.value = '请先上传商品图片'
+    errorText.value = tr('autoUi.k_a6f621c81d96')
     activeTab.value = 'editor'
     return
   }
   if (!form.sku.trim()) {
-    errorText.value = '请输入 SKU'
+    errorText.value = tr('autoUi.k_f0c424a3130e')
     activeTab.value = 'editor'
     return
   }
   if (!form.localDisplayPrice.trim()) {
-    errorText.value = '请输入本地展示价'
+    errorText.value = tr('autoUi.k_a349bb508d54')
     activeTab.value = 'editor'
     return
   }
@@ -365,7 +367,7 @@ async function saveItem() {
       localDisplayPrice: form.localDisplayPrice,
       titleLanguage: form.titleLanguage,
     })) as Item
-    notice.value = '商品已保存'
+    notice.value = tr('autoUi.k_858dd89864ed')
     form.id = saved.id
     pushRuntimeLog(`[tiktok-listing] save item sku=${saved.sku}`, 'success')
     await refresh()
@@ -380,7 +382,7 @@ async function saveItem() {
 
 async function pickReferenceImages() {
   const paths = await window.api.pickFiles({
-    title: '閫夋嫨鍟嗗搧杈呭姪鍙傝€冨浘',
+    title: tr('autoUi.k_264a463ddfc4'),
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
     multiple: true,
   })
@@ -407,7 +409,7 @@ async function generate(item: Item) {
   pushRuntimeLog(`[tiktok-listing] stage title sku=${item.sku}`, 'info')
   try {
     const updated = (await window.api.tiktokListing.generate({ id: item.id })) as Item
-    notice.value = `已触发生成，可在日志中查看标题与图片重试进度：${item.sku}`
+    notice.value = tr('autoUi.k_66cf2f451e44', { p0: item.sku })
     pushRuntimeLog(
       `[tiktok-listing] generate completed sku=${item.sku} status=${safeText(updated.generationStatus, 'done')} images=${Array.isArray(updated.listingImages) ? updated.listingImages.length : 0}`,
       updated.generationStatus === 'done' ? 'success' : 'error',
@@ -425,7 +427,7 @@ async function generate(item: Item) {
 
 function deleteTargetLabel(item?: Item | null) {
   if (!item) return ''
-  return safeText(item.sku, '') || safeText(item.generatedTitle, '') || '当前商品'
+  return safeText(item.sku, '') || safeText(item.generatedTitle, '') || tr('autoUi.k_1afb97bd7686')
 }
 
 function openDeleteDialog(item: Item) {
@@ -447,7 +449,7 @@ async function removeItem(item: Item) {
     await window.api.tiktokListing.remove(item.id)
     selectedIds.value = selectedIds.value.filter((id) => id !== item.id)
     if (form.id === item.id) resetForm()
-    notice.value = `商品已删除：${item.sku}`
+    notice.value = tr('autoUi.k_a944730e9d9a', { p0: item.sku })
     pushRuntimeLog(`[tiktok-listing] remove item completed sku=${item.sku}`, 'success')
     await refresh()
   } catch (error: any) {
@@ -499,7 +501,7 @@ async function removeListingImage(item: Item, imageId: string) {
 
 async function exportExcel() {
   if (!selectedIds.value.length) {
-    errorText.value = '请先选择要导出的商品'
+    errorText.value = tr('autoUi.k_dff0626234ad')
     activeTab.value = 'list'
     return
   }
@@ -510,7 +512,7 @@ async function exportExcel() {
     const result = await window.api.tiktokListing.exportExcel({ ids: [...selectedIds.value].map((id) => String(id)) })
     pushRuntimeLog(`[tiktok-listing] export excel path=${safeText((result as any).filePath, '')}`, 'success')
     await openExportFile(String((result as any).filePath || ''))
-    notice.value = `Excel 已导出：${(result as any).filePath}`
+    notice.value = tr('autoUi.k_885b8964e1b3', { p0: (result as any).filePath })
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
     pushRuntimeLog(`[tiktok-listing] export excel failed message=${safeText(error?.message ?? error, 'unknown error')}`, 'error')
@@ -595,40 +597,36 @@ onBeforeUnmount(() => {
       <div class="page-top">
         <div class="crumb-row">
           <button class="back-link" type="button" @click="router.push('/plugins?tab=installed')">
-            <ChevronLeft class="h-4 w-4" />
-            返回插件中心
-          </button>
+            <ChevronLeft class="h-4 w-4" /> {{ tr('autoUi.k_a2a2147b4eb9') }} </button>
           <span>/</span>
-          <strong>TikTok 商品上架助手</strong>
+          <strong>{{ tr('autoUi.k_add920d22933') }}</strong>
         </div>
 
         <div class="page-top__main">
           <div class="hero-copy">
             <div class="page-title-row">
-              <h1>{{ activeTab === 'list' ? '商品列表' : '添加 / 编辑商品' }}</h1>
-              <span class="official-badge">官方插件</span>
+              <h1>{{ activeTab === 'list' ? tr('autoUi.k_44544d214520') : tr('autoUi.k_8ded76cf707b') }}</h1>
+              <span class="official-badge">{{ tr('autoUi.k_174b4bbfebfc') }}</span>
             </div>
             <p>
               {{
                 activeTab === 'list'
-                  ? '管理您的商品，批量导出店小秘 Excel 模板'
-                  : '上传商品图、维护价格与语言，并生成 TikTok 标题与商品图片 HTML 描述'
+                  ? tr('autoUi.k_13ba9420d681')
+                  : tr('autoUi.k_5040843bf739')
               }}
             </p>
           </div>
 
           <div class="hero-actions">
             <button class="hero-ghost-button" type="button" @click="openExportConfigDialog">
-              <Pencil class="h-4 w-4" />
-              导出配置
-            </button>
+              <Pencil class="h-4 w-4" /> {{ tr('autoUi.k_3d05c8ad5e08') }} </button>
             <button class="hero-ghost-button" type="button" @click="openCreate">
               <Plus class="h-4 w-4" />
-              {{ activeTab === 'list' ? '添加商品' : '新建商品' }}
+              {{ activeTab === 'list' ? tr('autoUi.k_78e54d4ece28') : tr('autoUi.k_8d420ca267bb') }}
             </button>
             <button class="hero-primary-button" type="button" :disabled="exporting" @click="exportExcel">
               <Download class="h-4 w-4" />
-              {{ exporting ? '导出中...' : '批量导出 Excel' }}
+              {{ exporting ? tr('autoUi.k_a2c0cf876cfc') : tr('autoUi.k_10462051c131') }}
             </button>
           </div>
         </div>
@@ -638,8 +636,8 @@ onBeforeUnmount(() => {
       <div v-if="errorText" class="notice error">{{ errorText }}</div>
 
       <div class="tab-bar">
-        <button class="tab-button" :class="{ active: activeTab === 'list' }" type="button" @click="activeTab = 'list'">商品列表</button>
-        <button class="tab-button" :class="{ active: activeTab === 'editor' }" type="button" @click="activeTab = 'editor'">商品编辑</button>
+        <button class="tab-button" :class="{ active: activeTab === 'list' }" type="button" @click="activeTab = 'list'">{{ tr('autoUi.k_44544d214520') }}</button>
+        <button class="tab-button" :class="{ active: activeTab === 'editor' }" type="button" @click="activeTab = 'editor'">{{ tr('autoUi.k_00809ec84ab2') }}</button>
       </div>
 
       <template v-if="activeTab === 'list'">
@@ -647,12 +645,12 @@ onBeforeUnmount(() => {
           <div class="filter-board">
             <label class="field-shell field-shell--search">
               <Search class="h-4 w-4" />
-              <input v-model="searchKeyword" type="text" placeholder="搜索 SKU、标题、分类" />
+              <input v-model="searchKeyword" type="text" :placeholder="tr('autoUi.k_d67bf0c7e896')" />
             </label>
 
             <label class="field-shell">
               <select v-model="categoryFilter">
-                <option value="all">全部分类</option>
+                <option value="all">{{ tr('autoUi.k_a8e369c4b6d5') }}</option>
                 <option v-for="option in categoryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
               </select>
               <ChevronDown class="h-4 w-4" />
@@ -660,58 +658,58 @@ onBeforeUnmount(() => {
 
             <label class="field-shell">
               <select v-model="statusFilter">
-                <option value="all">全部状态</option>
-                <option value="done">已完成</option>
-                <option value="generating">生成中</option>
-                <option value="failed">失败</option>
-                <option value="idle">草稿</option>
+                <option value="all">{{ tr('autoUi.k_1a4c26d92d7d') }}</option>
+                <option value="done">{{ tr('autoUi.k_e99b48a29bdf') }}</option>
+                <option value="generating">{{ tr('autoUi.k_57c08c730a51') }}</option>
+                <option value="failed">{{ tr('autoUi.k_3e3c8068bb0e') }}</option>
+                <option value="idle">{{ tr('autoUi.k_0f436818c0b4') }}</option>
               </select>
               <ChevronDown class="h-4 w-4" />
             </label>
 
             <label class="field-shell">
               <select v-model="languageFilter">
-                <option value="all">全部语言</option>
+                <option value="all">{{ tr('autoUi.k_5924113b5c59') }}</option>
                 <option v-for="option in languageOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
               </select>
               <ChevronDown class="h-4 w-4" />
             </label>
 
-            <button class="toolbar-button toolbar-button--ghost" type="button" @click="resetFilters">重置</button>
+            <button class="toolbar-button toolbar-button--ghost" type="button" @click="resetFilters">{{ tr('autoUi.k_3d81345303ab') }}</button>
           </div>
 
           <div class="stats-grid">
             <article class="stat-card">
               <div>
-                <span>全部商品</span>
+                <span>{{ tr('autoUi.k_4b2301945ea3') }}</span>
                 <strong>{{ stats.all }}</strong>
               </div>
               <div class="stat-icon stat-icon--violet"><List class="h-5 w-5" /></div>
             </article>
             <article class="stat-card">
               <div>
-                <span>已完成</span>
+                <span>{{ tr('autoUi.k_e99b48a29bdf') }}</span>
                 <strong>{{ stats.done }}</strong>
               </div>
               <div class="stat-icon stat-icon--green"><CheckCircle2 class="h-5 w-5" /></div>
             </article>
             <article class="stat-card">
               <div>
-                <span>生成中</span>
+                <span>{{ tr('autoUi.k_57c08c730a51') }}</span>
                 <strong>{{ stats.generating }}</strong>
               </div>
               <div class="stat-icon stat-icon--blue"><Sparkles class="h-5 w-5" /></div>
             </article>
             <article class="stat-card">
               <div>
-                <span>失败</span>
+                <span>{{ tr('autoUi.k_3e3c8068bb0e') }}</span>
                 <strong>{{ stats.failed }}</strong>
               </div>
               <div class="stat-icon stat-icon--amber"><CircleAlert class="h-5 w-5" /></div>
             </article>
             <article class="stat-card">
               <div>
-                <span>草稿</span>
+                <span>{{ tr('autoUi.k_0f436818c0b4') }}</span>
                 <strong>{{ stats.draft }}</strong>
               </div>
               <div class="stat-icon stat-icon--slate"><Pencil class="h-5 w-5" /></div>
@@ -722,7 +720,7 @@ onBeforeUnmount(() => {
             <div class="table-header">
               <label class="check-label">
                 <input type="checkbox" :checked="pagedItems.length > 0 && pagedItems.every((item) => selectedIds.includes(item.id))" @change="toggleCurrentPageSelection" />
-                <span>当前页全选</span>
+                <span>{{ tr('autoUi.k_702a6e3aa1e2') }}</span>
               </label>
 
               <div class="table-header__right">
@@ -736,25 +734,25 @@ onBeforeUnmount(() => {
             </div>
 
             <template v-if="loading">
-              <div class="empty-state">正在加载商品列表...</div>
+              <div class="empty-state">{{ tr('autoUi.k_a41f43fea603') }}</div>
             </template>
 
             <template v-else-if="!filteredItems.length">
-              <div class="empty-state">暂无商品，先新建一条记录。</div>
+              <div class="empty-state">{{ tr('autoUi.k_ab7cf4dc40f1') }}</div>
             </template>
 
             <template v-else-if="listViewMode === 'table'">
               <div class="product-table">
                 <div class="product-table__head">
                   <span></span>
-                  <span>商品</span>
+                  <span>{{ tr('autoUi.k_004922066efd') }}</span>
                   <span>SKU</span>
-                  <span>分类</span>
-                  <span>价格</span>
-                  <span>状态</span>
-                  <span>语言</span>
-                  <span>更新时间</span>
-                  <span>操作</span>
+                  <span>{{ tr('autoUi.k_435c5259e4df') }}</span>
+                  <span>{{ tr('autoUi.k_b70c2d28a16b') }}</span>
+                  <span>{{ tr('autoUi.k_62e951a692ff') }}</span>
+                  <span>{{ tr('autoUi.k_cd99b225a08e') }}</span>
+                  <span>{{ tr('autoUi.k_093dea88c930') }}</span>
+                  <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
                 </div>
 
                 <div v-for="item in pagedItems" :key="item.id" class="product-row">
@@ -787,7 +785,7 @@ onBeforeUnmount(() => {
                   <div class="row-actions">
                     <button class="row-action" type="button" @click="viewItem(item)"><Eye class="h-4 w-4" /></button>
                     <button class="row-action" type="button" @click="editItem(item)"><Pencil class="h-4 w-4" /></button>
-                    <button class="row-action" type="button" :title="item.generationStatus === 'failed' ? '重新生成' : '生成素材'" @click="generate(item)">
+                    <button class="row-action" type="button" :title="item.generationStatus === 'failed' ? tr('autoUi.k_2e19057052a3') : tr('autoUi.k_d98ab8620485')" @click="generate(item)">
                       <Sparkles class="h-4 w-4" />
                     </button>
                     <button class="row-action" type="button" @click="openDeleteDialog(item)"><Trash2 class="h-4 w-4" /></button>
@@ -796,23 +794,23 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="table-footer">
-                <div>已选择 {{ selectedCount }} 项</div>
+                <div>{{ tr('autoUi.k_743aaf951e5d') }} {{ selectedCount }} {{ tr('autoUi.k_64728a772742') }}</div>
                 <div class="table-footer__meta">
-                  <span>共 {{ filteredItems.length }} 条</span>
+                  <span>{{ tr('autoUi.k_3b6ef811b85a') }} {{ filteredItems.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
                   <label class="page-size">
                     <select v-model="pageSize">
-                      <option :value="10">10 条/页</option>
-                      <option :value="20">20 条/页</option>
-                      <option :value="50">50 条/页</option>
+                      <option :value="10">{{ tr('autoUi.k_cb79efdcac1a') }}</option>
+                      <option :value="20">{{ tr('autoUi.k_8f7267417423') }}</option>
+                      <option :value="50">{{ tr('autoUi.k_c8747d88608a') }}</option>
                     </select>
                     <ChevronDown class="h-4 w-4" />
                   </label>
                   <div class="pagination">
-                    <button class="page-btn" type="button" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">上一页</button>
+                    <button class="page-btn" type="button" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">{{ tr('autoUi.k_b41561d80765') }}</button>
                     <button v-for="page in pageNumbers" :key="page" class="page-btn" :class="{ active: page === currentPage }" type="button" @click="goPage(page)">
                       {{ page }}
                     </button>
-                    <button class="page-btn" type="button" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">下一页</button>
+                    <button class="page-btn" type="button" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">{{ tr('autoUi.k_67a246a344ae') }}</button>
                   </div>
                 </div>
               </div>
@@ -838,7 +836,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="grid-card__actions">
                     <button class="row-action" type="button" @click="editItem(item)"><Pencil class="h-4 w-4" /></button>
-                    <button class="row-action" type="button" :title="item.generationStatus === 'failed' ? '重新生成' : '生成素材'" @click="generate(item)">
+                    <button class="row-action" type="button" :title="item.generationStatus === 'failed' ? tr('autoUi.k_2e19057052a3') : tr('autoUi.k_d98ab8620485')" @click="generate(item)">
                       <Sparkles class="h-4 w-4" />
                     </button>
                     <button class="row-action" type="button" @click="openDeleteDialog(item)"><Trash2 class="h-4 w-4" /></button>
@@ -854,7 +852,7 @@ onBeforeUnmount(() => {
         <section class="editor-stage">
           <aside class="editor-card editor-side">
             <div class="panel-head">
-              <strong>基本信息</strong>
+              <strong>{{ tr('autoUi.k_b122f813d551') }}</strong>
               <ChevronDown class="h-4 w-4" />
             </div>
 
@@ -864,13 +862,13 @@ onBeforeUnmount(() => {
               </div>
               <button class="upload-trigger" type="button" @click="pickImage">
                 <Upload class="h-4 w-4" />
-                {{ form.sourceImagePath ? '更换图片' : '上传图片' }}
+                {{ form.sourceImagePath ? tr('autoUi.k_294eaf59f203') : tr('autoUi.k_59b308c817cd') }}
               </button>
-              <small>支持 png/jpg/jpeg/webp，建议 1:1 比例</small>
+              <small>{{ tr('autoUi.k_f7085ab63db5') }}</small>
             </div>
 
             <label class="editor-field">
-              <span>商品分类 <em>*</em></span>
+              <span>{{ tr('autoUi.k_09482df68d8a') }} <em>*</em></span>
               <div class="select-shell">
                 <select v-model="form.category">
                   <option v-for="option in categoryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
@@ -881,13 +879,11 @@ onBeforeUnmount(() => {
 
             <div class="upload-box">
               <div class="panel-head panel-head--compact">
-                <strong>辅助参考图</strong>
-                <span>{{ referenceImageCount(form) }} 张</span>
+                <strong>{{ tr('autoUi.k_33588b09ab41') }}</strong>
+                <span>{{ referenceImageCount(form) }} {{ tr('autoUi.k_9273cc90ea18') }}</span>
               </div>
               <button class="upload-trigger" type="button" @click="pickReferenceImages">
-                <Upload class="h-4 w-4" />
-                添加辅图
-              </button>
+                <Upload class="h-4 w-4" /> {{ tr('autoUi.k_eca37c8e10fa') }} </button>
               <div v-if="extraReferenceImages(form).length" class="reference-thumb-strip">
                 <button
                   v-for="filePath in extraReferenceImages(form)"
@@ -902,23 +898,23 @@ onBeforeUnmount(() => {
                   </span>
                 </button>
               </div>
-              <small>辅图会与主图一起作为深层结构分析依据</small>
+              <small>{{ tr('autoUi.k_1786ea5d7212') }}</small>
             </div>
 
             <label class="editor-field">
               <span>SKU <em>*</em></span>
-              <input v-model="form.sku" type="text" placeholder="例如 ER-20250601-001" />
+              <input v-model="form.sku" type="text" :placeholder="tr('autoUi.k_4c3fb9f6ffc6')" />
             </label>
 
             <label class="editor-field">
-              <span>本地展示价 <em>*</em></span>
+              <span>{{ tr('autoUi.k_1be706711964') }} <em>*</em></span>
               <div class="price-row">
                 <input v-model="form.localDisplayPrice" type="text" placeholder="29.90" />
               </div>
             </label>
 
             <label class="editor-field">
-              <span>标题语言 <em>*</em></span>
+              <span>{{ tr('autoUi.k_7606a1ee61e8') }} <em>*</em></span>
               <div class="select-shell">
                 <select v-model="form.titleLanguage">
                   <option v-for="option in languageOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
@@ -929,21 +925,21 @@ onBeforeUnmount(() => {
 
             <div class="generate-box">
               <div class="panel-head panel-head--compact">
-                <strong>生成素材</strong>
+                <strong>{{ tr('autoUi.k_d98ab8620485') }}</strong>
                 <ChevronDown class="h-4 w-4" />
               </div>
               <button class="hero-primary-button hero-primary-button--full" type="button" :disabled="generating || !selectedItem" @click="selectedItem && generate(selectedItem)">
                 <Sparkles class="h-4 w-4" />
-                {{ generating ? '生成中...' : ((currentEditorItem.generationStatus as GenerationStatus) === 'failed' ? '重新生成' : '生成素材') }}
+                {{ generating ? tr('autoUi.k_26eab253a08e') : ((currentEditorItem.generationStatus as GenerationStatus) === 'failed' ? tr('autoUi.k_2e19057052a3') : tr('autoUi.k_d98ab8620485')) }}
               </button>
-              <p>生成 1 条标题、5 张商品图，并自动拼接 HTML img 描述</p>
+              <p>{{ tr('autoUi.k_1014ffa592c8') }}</p>
             </div>
           </aside>
 
           <section class="editor-card editor-main">
             <div class="result-topbar">
               <div class="result-head">
-                <strong>生成结果</strong>
+                <strong>{{ tr('autoUi.k_99045f8ee1cd') }}</strong>
                 <span class="status-pill" :class="statusTone((currentEditorItem.generationStatus as GenerationStatus) || 'idle')">
                   {{ statusLabel((currentEditorItem.generationStatus as GenerationStatus) || 'idle') }}
                 </span>
@@ -952,7 +948,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="result-block">
-              <div class="result-label">商品标题</div>
+              <div class="result-label">{{ tr('autoUi.k_d415beaceafd') }}</div>
               <div class="result-box">
                 <div>{{ previewTitle(currentEditorItem) }}</div>
                 <span>{{ previewTitle(currentEditorItem).length }}/200</span>
@@ -960,7 +956,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="result-block">
-              <div class="result-label">商品描述 HTML</div>
+              <div class="result-label">{{ tr('autoUi.k_1d7d172f9df7') }}</div>
               <div class="result-box result-box--multi">
                 <div>{{ previewDescription(currentEditorItem) }}</div>
                 <span>{{ previewDescription(currentEditorItem).length }}/2000</span>
@@ -968,18 +964,16 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="generationErrorText(currentEditorItem)" class="result-block">
-              <div class="result-label">生成失败原因</div>
+              <div class="result-label">{{ tr('autoUi.k_9ced4aad5c44') }}</div>
               <div class="result-box result-box--error">
                 <div>{{ generationErrorText(currentEditorItem) }}</div>
                 <button class="toolbar-button toolbar-button--ghost" type="button" :disabled="!selectedItem || generating" @click="selectedItem && generate(selectedItem)">
-                  <RefreshCcw class="h-4 w-4" />
-                  重新生成
-                </button>
+                  <RefreshCcw class="h-4 w-4" /> {{ tr('autoUi.k_2e19057052a3') }} </button>
               </div>
             </div>
 
             <div class="result-block">
-              <div class="result-label">参考图（共 {{ referenceImageCount(currentEditorItem) }} 张）</div>
+              <div class="result-label">{{ tr('autoUi.k_04eac4ec03db') }} {{ referenceImageCount(currentEditorItem) }} {{ tr('autoUi.k_8831af0f9f89') }}</div>
               <div class="result-image-strip">
                 <article v-for="filePath in resolveReferenceImages(currentEditorItem)" :key="filePath" class="result-thumb-card">
                   <img :src="toFileUrl(filePath)" alt="reference" />
@@ -988,13 +982,13 @@ onBeforeUnmount(() => {
                       <button class="thumb-tool" type="button" @click="previewImage(filePath)"><Eye class="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
-                  <div v-if="filePath === currentEditorItem.sourceImagePath" class="primary-mark">主图</div>
+                  <div v-if="filePath === currentEditorItem.sourceImagePath" class="primary-mark">{{ tr('autoUi.k_943cbcd28d78') }}</div>
                 </article>
               </div>
             </div>
 
             <div class="result-block">
-              <div class="result-label">临时多角度图</div>
+              <div class="result-label">{{ tr('autoUi.k_43467a763e7e') }}</div>
               <div class="result-analysis-board">
                 <button
                   v-if="currentEditorItem.analysisBoardImage?.filePath"
@@ -1004,16 +998,16 @@ onBeforeUnmount(() => {
                 >
                   <img :src="toFileUrl(currentEditorItem.analysisBoardImage.filePath)" alt="analysis board" />
                 </button>
-                <div v-else class="result-analysis-board__placeholder">本次生成会自动先产出临时多角度图</div>
+                <div v-else class="result-analysis-board__placeholder">{{ tr('autoUi.k_9337e3254ab5') }}</div>
                 <div class="result-analysis-board__meta">
                   <strong>{{ analysisBoardStatus(currentEditorItem) }}</strong>
-                  <p>系统会先结合 {{ referenceImageCount(currentEditorItem) }} 张参考图生成 product-only 的深层多角度图，再用它作为商品图主参考。</p>
+                  <p>{{ tr('autoUi.k_36f68ac52ade') }} {{ referenceImageCount(currentEditorItem) }} {{ tr('autoUi.k_55e931aa268f') }}</p>
                 </div>
               </div>
             </div>
 
             <div class="result-block">
-              <div class="result-label">商品图片（共 {{ imageCount(currentEditorItem) }} 张）</div>
+              <div class="result-label">{{ tr('autoUi.k_a99ce1d46454') }} {{ imageCount(currentEditorItem) }} {{ tr('autoUi.k_8831af0f9f89') }}</div>
               <div class="result-image-strip">
                 <article v-for="(image, index) in currentEditorItem.listingImages || []" :key="image.id" class="result-thumb-card" :class="{ primary: index === 0 }">
                   <img :src="toFileUrl(image.filePath)" alt="listing" />
@@ -1026,29 +1020,27 @@ onBeforeUnmount(() => {
                       </button>
                     </div>
                   </div>
-                  <div v-if="index === 0" class="primary-mark">主图</div>
+                  <div v-if="index === 0" class="primary-mark">{{ tr('autoUi.k_943cbcd28d78') }}</div>
                 </article>
 
                 <button class="regenerate-tile" type="button" :disabled="!selectedItem || generating" @click="selectedItem && generate(selectedItem)">
-                  <Plus class="h-5 w-5" />
-                  重新生成图片
-                </button>
+                  <Plus class="h-5 w-5" /> {{ tr('autoUi.k_031c7e12ddae') }} </button>
               </div>
             </div>
 
             <div class="editor-footer">
-              <button class="toolbar-button toolbar-button--ghost" type="button" @click="resetForm">取消</button>
+              <button class="toolbar-button toolbar-button--ghost" type="button" @click="resetForm">{{ tr('autoUi.k_4d0b4688c787') }}</button>
               <button class="hero-primary-button" type="button" :disabled="saving" @click="saveItem">
-                {{ saving ? '保存中...' : '保存商品' }}
+                {{ saving ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_29fa80a6528e') }}
               </button>
             </div>
           </section>
 
           <aside class="editor-card preview-side">
-            <strong class="preview-side__title">商品预览</strong>
+            <strong class="preview-side__title">{{ tr('autoUi.k_bb4c036cb9a5') }}</strong>
             <div class="preview-card">
               <img v-if="form.sourceImagePath" :src="toFileUrl(form.sourceImagePath)" alt="preview" class="preview-card__image" />
-              <div v-else class="preview-card__placeholder">暂无商品图片</div>
+              <div v-else class="preview-card__placeholder">{{ tr('autoUi.k_9f1bdea3c04f') }}</div>
 
               <strong>{{ previewTitle(currentEditorItem) }}</strong>
               <p>{{ previewDescription(currentEditorItem) }}</p>
@@ -1059,19 +1051,19 @@ onBeforeUnmount(() => {
                   <dd>{{ form.sku || '--' }}</dd>
                 </div>
                 <div>
-                  <dt>本地展示价</dt>
+                  <dt>{{ tr('autoUi.k_1be706711964') }}</dt>
                   <dd>{{ form.localDisplayPrice || '--' }}</dd>
                 </div>
                 <div>
-                  <dt>分类</dt>
+                  <dt>{{ tr('autoUi.k_435c5259e4df') }}</dt>
                   <dd>{{ categoryLabel(form.category) }}</dd>
                 </div>
                 <div>
-                  <dt>标题语言</dt>
+                  <dt>{{ tr('autoUi.k_7606a1ee61e8') }}</dt>
                   <dd>{{ languageLabel(form.titleLanguage) }}</dd>
                 </div>
                 <div>
-                  <dt>生成状态</dt>
+                  <dt>{{ tr('autoUi.k_290779610148') }}</dt>
                   <dd>
                     <span class="status-pill" :class="statusTone((currentEditorItem.generationStatus as GenerationStatus) || 'idle')">
                       {{ statusLabel((currentEditorItem.generationStatus as GenerationStatus) || 'idle') }}
@@ -1079,11 +1071,11 @@ onBeforeUnmount(() => {
                   </dd>
                 </div>
                 <div>
-                  <dt>参考图</dt>
-                  <dd>{{ referenceImageCount(currentEditorItem) }} 张</dd>
+                  <dt>{{ tr('autoUi.k_5149ae9c3017') }}</dt>
+                  <dd>{{ referenceImageCount(currentEditorItem) }} {{ tr('autoUi.k_9273cc90ea18') }}</dd>
                 </div>
                 <div>
-                  <dt>更新时间</dt>
+                  <dt>{{ tr('autoUi.k_093dea88c930') }}</dt>
                   <dd>{{ formatDate(currentEditorItem.updatedAt || currentEditorItem.generatedAt) }}</dd>
                 </div>
               </dl>
@@ -1097,8 +1089,8 @@ onBeforeUnmount(() => {
       <div class="export-config-dialog" @click.stop>
         <div class="export-config-dialog__head">
           <div class="export-config-dialog__copy">
-            <strong>导出分类配置</strong>
-            <p>提前维护 5 个分类各自的分类 ID 和产品属性，批量导出时将直接使用这里的配置。</p>
+            <strong>{{ tr('autoUi.k_82232d270311') }}</strong>
+            <p>{{ tr('autoUi.k_4d47a4b75dae') }}</p>
           </div>
           <button type="button" class="export-config-dialog__close" @click="exportConfigDialogOpen = false">×</button>
         </div>
@@ -1109,20 +1101,20 @@ onBeforeUnmount(() => {
               <strong>{{ categoryLabel(config.category) }}</strong>
             </div>
             <label class="export-config-field">
-              <span>分类 ID</span>
-              <input v-model="config.categoryId" type="text" placeholder="请输入分类 ID" />
+              <span>{{ tr('autoUi.k_3381afb339a6') }}</span>
+              <input v-model="config.categoryId" type="text" :placeholder="tr('autoUi.k_1968c37da723')" />
             </label>
             <label class="export-config-field">
-              <span>产品属性 JSON</span>
-              <textarea v-model="config.productAttributes" rows="6" placeholder="请输入产品属性 JSON"></textarea>
+              <span>{{ tr('autoUi.k_f72648e7131d') }}</span>
+              <textarea v-model="config.productAttributes" rows="6" :placeholder="tr('autoUi.k_00bda65b45c8')"></textarea>
             </label>
           </article>
         </div>
 
         <div class="export-config-dialog__footer">
-          <button type="button" class="toolbar-button toolbar-button--ghost" :disabled="exportConfigSaving" @click="exportConfigDialogOpen = false">取消</button>
+          <button type="button" class="toolbar-button toolbar-button--ghost" :disabled="exportConfigSaving" @click="exportConfigDialogOpen = false">{{ tr('autoUi.k_4d0b4688c787') }}</button>
           <button type="button" class="hero-primary-button" :disabled="exportConfigSaving" @click="saveExportCategoryConfigs">
-            {{ exportConfigSaving ? '保存中...' : '保存配置' }}
+            {{ exportConfigSaving ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_817af1870ca0') }}
           </button>
         </div>
       </div>
@@ -1132,8 +1124,8 @@ onBeforeUnmount(() => {
       <div class="export-config-dialog delete-dialog" @click.stop>
         <div class="export-config-dialog__head">
           <div class="export-config-dialog__copy">
-            <strong>删除商品</strong>
-            <p>确认删除商品“{{ deleteTargetLabel(deleteTarget) }}”吗？删除后无法恢复，请谨慎操作。</p>
+            <strong>{{ tr('autoUi.k_1c4e19354208') }}</strong>
+            <p>{{ tr('autoUi.k_e228b9e5d1d9') }}{{ deleteTargetLabel(deleteTarget) }}{{ tr('autoUi.k_fd97c2f368d3') }}</p>
           </div>
           <button type="button" class="export-config-dialog__close" :disabled="deleteBusy" @click="closeDeleteDialog">×</button>
         </div>
@@ -1143,15 +1135,15 @@ onBeforeUnmount(() => {
             <Trash2 class="h-5 w-5" />
           </div>
           <div class="delete-dialog__content">
-            <strong>{{ deleteTarget?.sku || '未命名商品' }}</strong>
+            <strong>{{ deleteTarget?.sku || tr('autoUi.k_81918f2f9c19') }}</strong>
             <span>{{ previewTitle(deleteTarget) }}</span>
           </div>
         </div>
 
         <div class="export-config-dialog__footer">
-          <button type="button" class="toolbar-button toolbar-button--ghost" :disabled="deleteBusy" @click="closeDeleteDialog">取消</button>
+          <button type="button" class="toolbar-button toolbar-button--ghost" :disabled="deleteBusy" @click="closeDeleteDialog">{{ tr('autoUi.k_4d0b4688c787') }}</button>
           <button type="button" class="hero-primary-button delete-dialog__confirm" :disabled="deleteBusy" @click="confirmRemoveItem">
-            {{ deleteBusy ? '删除中...' : '确认删除' }}
+            {{ deleteBusy ? tr('autoUi.k_6f941d67b36a') : tr('autoUi.k_3c06abe11651') }}
           </button>
         </div>
       </div>
@@ -1160,10 +1152,10 @@ onBeforeUnmount(() => {
     <RuntimeLogDialog
       v-model="runtimeDialogOpen"
       :logs="runtimeLogs"
-      :title="'运行日志'"
-      :description="'实时查看 TikTok 商品上架助手的提交日志、接口返回、阶段切换与错误信息。'"
-      :hint="'仅显示 tiktok-listing 相关运行日志'"
-      :empty-description="'在插件内执行保存、生成、导出等操作后，这里会显示最新运行信息。'"
+      :title="tr('autoUi.k_a8ce402665f3')"
+      :description="tr('autoUi.k_109e135d32f6')"
+      :hint="tr('autoUi.k_1d892f16b6a9')"
+      :empty-description="tr('autoUi.k_998fd14c229b')"
     />
   </div>
 </template>

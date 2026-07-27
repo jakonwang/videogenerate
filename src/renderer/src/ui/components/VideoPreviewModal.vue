@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { AlertTriangle, LoaderCircle, X } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -61,7 +64,7 @@ function onVideoError() {
     return
   }
   isLoading.value = false
-  mediaError.value = '当前窗口无法预览该视频，请点击“打开文件”直接查看本地视频。'
+  mediaError.value = t('mediaPreview.errors.unavailable')
 }
 
 watch(
@@ -91,7 +94,7 @@ onBeforeUnmount(() => stopPlayback())
       <div :class="panelClass">
         <button
           class="preview-close"
-          title="关闭预览"
+          :title="t('mediaPreview.close')"
           type="button"
           @click="close"
         >
@@ -129,7 +132,7 @@ onBeforeUnmount(() => stopPlayback())
 
             <div v-if="isLoading" class="preview-status">
               <LoaderCircle class="preview-status__icon spin" />
-              <span>正在加载本地视频...</span>
+              <span>{{ t('mediaPreview.loading') }}</span>
             </div>
 
             <div v-else-if="mediaError" class="preview-status preview-status--error">

@@ -260,93 +260,78 @@ type SubtitleCaptionStyle = {
 const router = useRouter()
 const { t } = useI18n()
 
-const uiText = {
+const uiText = computed(() => ({
   workspaceTitle: 'Live Photo',
-  workspaceHint: '\u5728\u53c2\u8003\u56fe\u4efb\u52a1\u3001\u590d\u523b\u955c\u5934\u4e0e\u7d20\u6750\u5e93\u4e4b\u95f4\u5feb\u901f\u5207\u6362',
-  heroTitle: '\u4ece\u5546\u54c1\u53c2\u8003\u56fe\u6216\u590d\u523b\u955c\u5934\u751f\u6210\u53ef\u76f4\u63a5\u5bfc\u51fa\u7684\u52a8\u6001\u7167\u7247\u7d20\u6750',
-  heroDesc:
-    '\u652f\u6301\u53c2\u8003\u56fe\u6279\u91cf\u5efa\u4efb\u52a1\u3001\u81ea\u52a8\u53d6\u6570\u3001\u81ea\u52a8\u751f\u6210\u89c6\u9891\u5e76\u7ee7\u7eed\u5199\u51fa\u52a8\u6001\u7167\u7247\u7d20\u6750\uff0c\u5c06\u53c2\u8003\u56fe\u3001\u590d\u523b\u955c\u5934\u4e0e\u5e93\u5bfc\u51fa\u96c6\u4e2d\u5728\u4e00\u4e2a\u9875\u9762\u5b8c\u6210\u3002',
-  completed: '\u5df2\u5b8c\u6210',
-  tabReference: '\u4ece\u53c2\u8003\u56fe\u521b\u5efa',
-  tabClone: '\u4ece\u590d\u523b\u955c\u5934\u521b\u5efa',
-  tabLibrary: '\u5e93 / \u5bfc\u51fa',
-  referenceTitle: '\u53c2\u8003\u56fe\u66ff\u6362',
-  referenceNote: '\u6309\u8bbe\u8ba1\u7a3f\u6bd4\u4f8b\u8fdb\u884c\u6279\u91cf\u5efa\u4efb\u52a1',
-  referenceImage: '\u53c2\u8003\u56fe\u7247',
-  referenceUploadTitle: '\u70b9\u51fb\u4e0a\u4f20\u6216\u62d6\u62fd\u56fe\u7247\u5230\u6b64\u5904',
-  referenceUploadDesc:
-    '\u652f\u6301 JPG\u3001PNG\u3001WEBP\uff0c\u5efa\u8bae 2000px \u4ee5\u4e0a\uff0c\u53ef\u8fde\u7eed\u8ffd\u52a0\u591a\u5f20\u53c2\u8003\u56fe\u3002',
-  materialLibraryOption: '\u6216\u4ece\u5546\u54c1\u56fe\u7247\u7d20\u6750\u5e93\u6279\u91cf\u9009\u62e9\u672a\u7ed1\u5b9a\u5546\u54c1\u7684\u56fe\u7247',
-  materialLibrarySelect: '\u4ece\u7d20\u6750\u5e93\u9009\u56fe',
-  materialLibraryDesc: '\u6253\u5f00\u5546\u54c1\u56fe\u7247\u7d20\u6750\u5e93\uff0c\u53ef\u6279\u91cf\u9009\u62e9\u672a\u7ed1\u5b9a\u5546\u54c1\u7684\u56fe\u7247\u3002',
-  materialLibraryClose: '\u5173\u95ed',
-  materialLibraryEmpty: '\u5f53\u524d\u6ca1\u6709\u53ef\u7528\u7684\u672a\u7ed1\u5b9a\u5546\u54c1\u7d20\u6750\u56fe\u7247\u3002',
-  materialLibrarySelected: '\u5df2\u9009',
-  materialLibraryAddSelected: '\u52a0\u5165\u53c2\u8003\u56fe',
-  materialLibrarySelectAll: '\u5168\u9009',
-  materialLibraryClear: '\u6e05\u7a7a',
-  previousPage: '\u4e0a\u4e00\u9875',
-  nextPage: '\u4e0b\u4e00\u9875',
-  perPage: '\u6bcf\u9875',
-  referenceQueuedSuffix:
-    '\u5f20\u56fe\u7247\u5f85\u521b\u5efa\u4efb\u52a1\uff0c\u7ee7\u7eed\u70b9\u51fb\u53ef\u8ffd\u52a0\u66f4\u591a\u53c2\u8003\u56fe\u3002',
-  pendingTasks: '\u5f85\u521b\u5efa\u4efb\u52a1',
-  referenceTaskList: '\u53c2\u8003\u56fe\u4efb\u52a1\u5217\u8868',
-  missingImage: '\u56fe\u7247\u5df2\u4e0d\u5b58\u5728',
-  product: '\u5546\u54c1',
-  delete: '\u5220\u9664',
-  createTaskPrefix: '\u521b\u5efa\u52a8\u6001\u7167\u7247\u4efb\u52a1',
-  referenceSafe:
-    '\u7cfb\u7edf\u4f1a\u81ea\u52a8\u83b7\u53d6\u5546\u54c1\u53c2\u8003\u6570\u636e\uff0c\u751f\u6210\u66ff\u6362\u56fe\u540e\u7ee7\u7eed\u81ea\u52a8\u751f\u6210\u89c6\u9891\u4e0e\u52a8\u6001\u7167\u7247\u7d20\u6750\u3002',
-  rulesTitle: '\u6267\u884c\u89c4\u5219',
-  rulesVersion: 'V1 \u9ed8\u8ba4',
-  ruleIdentity: '\u4fdd\u6301\u76f8\u540c\u7684\u4eba\u7269\u8eab\u4efd\u3001\u59ff\u6001\u3001\u6784\u56fe\u3001\u5149\u7ebf\u548c\u573a\u666f\u5e03\u5c40\u3002',
-  ruleReplace: '\u4ec5\u4f7f\u7528\u6240\u9009\u5546\u54c1\u5feb\u7167\u66ff\u6362\u5546\u54c1\u672c\u8eab\u3002',
-  ruleMotion:
-    '\u5148\u8c03\u7528 AI \u89c6\u9891\u6a21\u578b\u751f\u6210\u5bf9\u5e94\u89c6\u9891\u7247\u6bb5\uff0c\u518d\u81ea\u52a8\u5199\u51fa\u52a8\u6001\u7167\u7247\u8d44\u6e90\u3002',
-  rulePackage: '\u5bfc\u51fa\u5185\u5bb9\u4f1a\u6574\u7406\u4e3a\u56fe\u7247\u3001\u89c6\u9891\u548c\u6e05\u5355\u6587\u4ef6\uff0c\u6253\u5305\u8f93\u51fa\u5230\u53ef\u91cd\u590d\u8f93\u51fa\u76ee\u5f55\u4e2d\u3002',
-  outputTitle: '\u8f93\u51fa\u8bf4\u660e',
-  outputDesc:
-    '\u53c2\u8003\u56fe\u4efb\u52a1\u4f1a\u81ea\u52a8\u751f\u6210\u66ff\u6362\u56fe\u3001\u52a8\u6001\u9884\u89c8\u89c6\u9891\u4e0e\u52a8\u6001\u7167\u7247\u7ed3\u679c\uff0c\u5b8c\u6210\u540e\u53ef\u76f4\u63a5\u5728\u5e93\u91cc\u7edf\u4e00\u5bfc\u51fa\u3002',
-  cloneProject: '\u53c2\u8003\u9879\u76ee',
-  cloneReadonly: '\u53ea\u8bfb\u7d20\u6750\u5bfc\u5165',
-  cloneCreateSelected: '+ \u4ece\u9009\u4e2d\u955c\u5934\u521b\u5efa',
-  previewStats: '\u9884\u89c8\u4e0e\u7edf\u8ba1',
-  summary: '\u9879\u76ee\u6458\u8981',
-  eligibleShots: '\u53ef\u7528\u955c\u5934',
-  selectedShots: '\u5df2\u9009\u62e9',
-  settingsTitle: '\u751f\u6210\u8bbe\u7f6e',
-  standardPackage: 'Apple \u52a8\u6001\u7167\u7247\u6807\u51c6\u5305',
-  recommended: '\u63a8\u8350',
-  standardPackageDesc:
-    '\u751f\u6210\u7b26\u5408 Apple \u52a8\u6001\u7167\u7247\u6807\u51c6\u7684 JPG\u3001MOV \u4e0e\u6e05\u5355\u6253\u5305\u6587\u4ef6\uff0c\u53ef\u76f4\u63a5\u5728 iOS \u8bbe\u5907\u4e2d\u9884\u89c8\u4e0e\u4f7f\u7528\u3002',
-  customFormat: '\u81ea\u5b9a\u4e49\u683c\u5f0f',
-  customFormatDesc:
-    '\u81ea\u5b9a\u4e49\u8f93\u51fa\u5206\u8fa8\u7387\u3001\u5e27\u7387\u548c\u7f16\u7801\u8bbe\u7f6e\uff0c\u9002\u7528\u4e8e\u9ad8\u7ea7\u7528\u6237\u7684\u4e2a\u6027\u5316\u9700\u6c42\u3002',
-  resolution: '\u5206\u8fa8\u7387',
-  frameRate: '\u5e27\u7387',
-  quality: '\u8d28\u91cf',
-  highRecommended: '\u9ad8 (\u63a8\u8350)',
-  cloneRuleReuse:
-    '\u4f18\u5148\u590d\u7528\u590d\u523b\u4efb\u52a1\u91cc\u7684\u7ed3\u6784\u548c\u955c\u5934\u4fe1\u606f\uff0c\u81ea\u52a8\u751f\u6210\u52a8\u6001\u89c6\u9891\u7d20\u6750\u3002',
-  cloneRuleAutoLive:
-    '\u751f\u6210\u89c6\u9891\u540e\u81ea\u52a8\u7ee7\u7eed\u5199\u51fa\u52a8\u6001\u7167\u7247\u8d44\u6e90\uff0c\u5b8c\u6210\u540e\u8fdb\u5165\u5e93\u4e0e\u5bfc\u51fa\u3002',
-  createNow: '\u7acb\u5373\u751f\u6210\u52a8\u6001\u7167\u7247',
-  cloneSafe:
-    '\u590d\u523b\u955c\u5934\u4efb\u52a1\u4f1a\u81ea\u52a8\u8bfb\u53d6\u5df2\u6709\u5206\u955c\u548c\u89c6\u9891\u6570\u636e\uff0c\u5b8c\u6210\u540e\u76f4\u63a5\u8fdb\u5165\u52a8\u56fe\u8d44\u6e90\u8f93\u51fa\u94fe\u8def\u3002',
-  libraryTitle: '\u5e93\u4e0e\u5bfc\u51fa',
-  itemUnit: '\u9879\u76ee',
-  filter: '\u7b5b\u9009',
-  exportSelectedPrefix: '\u5bfc\u51fa\u9009\u4e2d\u9879',
-  packagingMetadata: '\u6253\u5305\u5143\u6570\u636e',
-  preview: '\u9884\u89c8',
-  metadata: '\u5143\u6570\u636e',
-  reveal: '\u6253\u5f00\u76ee\u5f55',
-  regenerate: '\u91cd\u65b0\u751f\u6210',
-  referenceCreatedPrefix: '\u5df2\u521b\u5efa',
-  referenceCreatedSuffix: '\u4e2a\u53c2\u8003\u56fe\u4efb\u52a1\u3002',
-  runtimeLogTitlePrefix: '\u8fd0\u884c\u65e5\u5fd7',
-} as const
+  workspaceHint: t('livePhoto.workspace.hint'),
+  heroTitle: t('livePhoto.hero.title'),
+  heroDesc: t('livePhoto.hero.desc'),
+  completed: t('livePhoto.hero.completed'),
+  tabReference: t('livePhoto.tabs.reference'),
+  tabClone: t('livePhoto.tabs.clone'),
+  tabLibrary: t('livePhoto.tabs.library'),
+  referenceTitle: t('livePhoto.reference.title'),
+  referenceNote: t('livePhoto.workspace.referenceNote'),
+  referenceImage: t('livePhoto.reference.referenceImage'),
+  referenceUploadTitle: t('livePhoto.workspace.referenceUploadTitle'),
+  referenceUploadDesc: t('livePhoto.workspace.referenceUploadDesc'),
+  materialLibrarySelect: t('livePhoto.workspace.materialLibrarySelect'),
+  materialLibraryDesc: t('livePhoto.workspace.materialLibraryDesc'),
+  materialLibraryClose: t('common.close'),
+  materialLibraryEmpty: t('livePhoto.workspace.materialLibraryEmpty'),
+  materialLibrarySelected: t('livePhoto.clone.selected'),
+  materialLibraryAddSelected: t('livePhoto.workspace.materialLibraryAddSelected'),
+  materialLibrarySelectAll: t('livePhoto.workspace.selectAll'),
+  materialLibraryClear: t('livePhoto.workspace.clear'),
+  previousPage: t('livePhoto.workspace.previousPage'),
+  nextPage: t('livePhoto.workspace.nextPage'),
+  perPage: t('livePhoto.workspace.perPage'),
+  referenceQueuedSuffix: t('livePhoto.workspace.referenceQueuedSuffix'),
+  pendingTasks: t('livePhoto.workspace.pendingTasks'),
+  referenceTaskList: t('livePhoto.workspace.referenceTaskList'),
+  missingImage: t('livePhoto.workspace.missingImage'),
+  product: t('livePhoto.reference.product'),
+  delete: t('common.remove'),
+  createTaskPrefix: t('livePhoto.workspace.createTaskPrefix'),
+  referenceSafe: t('livePhoto.workspace.referenceSafe'),
+  rulesTitle: t('livePhoto.rules.title'),
+  rulesVersion: t('livePhoto.rules.version'),
+  ruleIdentity: t('livePhoto.rules.items.identity'),
+  ruleReplace: t('livePhoto.rules.items.replaceOnly'),
+  ruleMotion: t('livePhoto.rules.items.motion'),
+  rulePackage: t('livePhoto.rules.items.package'),
+  outputTitle: t('livePhoto.workspace.outputTitle'),
+  outputDesc: t('livePhoto.workspace.outputDesc'),
+  cloneProject: t('livePhoto.clone.title'),
+  cloneReadonly: t('livePhoto.clone.lock'),
+  cloneCreateSelected: t('livePhoto.actions.createFromSelectedShots'),
+  previewStats: t('livePhoto.workspace.previewStats'),
+  summary: t('livePhoto.clone.summaryTitle'),
+  eligibleShots: t('livePhoto.clone.eligibleShots'),
+  selectedShots: t('livePhoto.clone.selected'),
+  settingsTitle: t('livePhoto.workspace.settingsTitle'),
+  standardPackage: t('livePhoto.workspace.standardPackage'),
+  recommended: t('livePhoto.workspace.recommended'),
+  standardPackageDesc: t('livePhoto.workspace.standardPackageDesc'),
+  resolution: t('livePhoto.workspace.resolution'),
+  frameRate: t('livePhoto.workspace.frameRate'),
+  quality: t('livePhoto.workspace.quality'),
+  cloneRuleReuse: t('livePhoto.workspace.cloneRuleReuse'),
+  cloneRuleAutoLive: t('livePhoto.workspace.cloneRuleAutoLive'),
+  createNow: t('livePhoto.actions.createLivePhoto'),
+  cloneSafe: t('livePhoto.workspace.cloneSafe'),
+  libraryTitle: t('livePhoto.library.title'),
+  itemUnit: t('livePhoto.workspace.itemUnit'),
+  filter: t('livePhoto.workspace.filter'),
+  exportSelectedPrefix: t('livePhoto.actions.exportSelected'),
+  packagingMetadata: t('livePhoto.library.packagingMetadata'),
+  preview: t('livePhoto.library.preview'),
+  metadata: t('livePhoto.library.metadata'),
+  reveal: t('livePhoto.library.reveal'),
+  regenerate: t('livePhoto.library.regenerate'),
+  referenceCreatedPrefix: t('livePhoto.workspace.referenceCreatedPrefix'),
+  referenceCreatedSuffix: t('livePhoto.workspace.referenceCreatedSuffix'),
+  runtimeLogTitlePrefix: t('livePhoto.workspace.runtimeLogTitle'),
+}))
 
 const loading = ref(false)
 const creatingReference = ref(false)
@@ -383,7 +368,7 @@ const batchDeleteBusy = ref(false)
 const sendingToFeishu = ref(false)
 const runtimeDialogOpen = ref(false)
 const runtimeLogs = ref<Array<{ id: string; level: 'info' | 'success' | 'error'; message: string; time: number }>>([])
-const runtimeDialogTitle = ref('运行日志')
+const runtimeDialogTitle = ref('')
 const detailDialogOpen = ref(false)
 const detailDialogItem = ref<LivePhotoItem | null>(null)
 const replacementRegionDialogOpen = ref(false)
@@ -430,21 +415,21 @@ const livePhotoSettings = ref<LivePhotoSettings>({
   updatedAt: 0,
 })
 
-const resolutionOptions = [
-  { value: '1080x1440', label: '1080 x 1440', note: '轻量导出，适合快速预览与批量出图' },
-  { value: '2160x2880', label: '2160 x 2880', note: '默认推荐，质量与体积更均衡' },
-  { value: '3024x4032', label: '3024 x 4032', note: '最高规格，适合最终成片与精细展示' },
-] as const
+const resolutionOptions = computed(() => [
+  { value: '1080x1440', label: '1080 x 1440', note: t('autoUi.k_881de32901d5') },
+  { value: '2160x2880', label: '2160 x 2880', note: t('autoUi.k_4ef41efedb3c') },
+  { value: '3024x4032', label: '3024 x 4032', note: t('autoUi.k_83fb35964da6') },
+] as const)
 
-const frameRateOptions = [
-  { value: '24', label: '24 fps', note: '更电影感，文件更轻' },
-  { value: '30', label: '30 fps', note: '更流畅，适合作为默认导出' },
-] as const
+const frameRateOptions = computed(() => [
+  { value: '24', label: '24 fps', note: t('autoUi.k_219a6464c9db') },
+  { value: '30', label: '30 fps', note: t('autoUi.k_e162faa756b1') },
+] as const)
 
-const qualityOptions = [
-  { value: 'medium', label: '标准质量', note: '压缩更高，导出更快' },
-  { value: 'high', label: '高质量', note: '保留更多细节，适合作为默认导出' },
-] as const
+const qualityOptions = computed(() => [
+  { value: 'medium', label: t('autoUi.k_1ec9333876bf'), note: t('autoUi.k_9ca96203a16a') },
+  { value: 'high', label: t('autoUi.k_491e64d88f53'), note: t('autoUi.k_2b90e9f980de') },
+] as const)
 
 const selectedProduct = computed(() => products.value.find((item) => item.id === selectedProductId.value) || null)
 const selectedProductAnalysisBoardRef = computed(() => String(selectedProduct.value?.analysisBoardPath || '').trim())
@@ -522,8 +507,8 @@ const feishuEligibleSelectedItems = computed(() =>
   selectedLibraryItems.value.filter((item) => item.packagingStatus === 'completed' && Boolean(livePhotoDisplayVideoPath(item))),
 )
 const feishuEligibleSelectedCount = computed(() => feishuEligibleSelectedItems.value.length)
-const feishuBatchLabel = '\u6279\u91cf\u53d1\u9001\u98de\u4e66'
-const feishuSendingLabel = '\u6b63\u5728\u53d1\u9001'
+const feishuBatchLabel = computed(() => t('autoUi.k_47e9e6b9f0c7'))
+const feishuSendingLabel = computed(() => t('autoUi.k_a1121121b1f7'))
 const pagedLibraryItems = computed(() => filteredLibraryItems.value)
 const runningLibraryItems = computed(() =>
   items.value.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running'),
@@ -581,9 +566,9 @@ function formatElapsed(value?: number) {
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
-  if (hours > 0) return `${hours}小时${minutes}分`
-  if (minutes > 0) return `${minutes}分${seconds}秒`
-  return `${seconds}秒`
+  if (hours > 0) return t('autoUi.k_a407dd94a3c0', { p0: hours, p1: minutes })
+  if (minutes > 0) return t('autoUi.k_b54206bf2a1c', { p0: minutes, p1: seconds })
+  return t('autoUi.k_ad7dee82f450', { p0: seconds })
 }
 
 function previewSrc(path?: string) {
@@ -644,12 +629,12 @@ function metadataModeLabel(item: LivePhotoItem) {
 }
 
 function workflowStepLabel(step?: LivePhotoItem['workflow']['currentStep']) {
-  if (step === 'image_generation') return '图片生成'
-  if (step === 'image_validation') return '图片质检'
-  if (step === 'video_generation') return '视频生成'
-  if (step === 'live_photo_packaging') return '动态照片打包'
-  if (step === 'completed') return '已完成'
-  return '排队中'
+  if (step === 'image_generation') return t('autoUi.k_1f6a9dab8b96')
+  if (step === 'image_validation') return t('autoUi.k_6e03657a1a84')
+  if (step === 'video_generation') return t('autoUi.k_19978a8da5e2')
+  if (step === 'live_photo_packaging') return t('autoUi.k_089c8515d929')
+  if (step === 'completed') return t('autoUi.k_e99b48a29bdf')
+  return t('autoUi.k_4dcbbcfa6154')
 }
 
 function workflowStepIndex(step?: LivePhotoItem['workflow']['currentStep']) {
@@ -659,12 +644,12 @@ function workflowStepIndex(step?: LivePhotoItem['workflow']['currentStep']) {
 
 function liveTaskStatusLabel(item: LivePhotoItem) {
   const autoStatus = String(item.autoFlowStatus?.status || '').trim()
-  if (item.packagingStatus === 'completed' || autoStatus === 'done') return '已完成'
-  if (autoStatus === 'failed_terminal') return '失败'
-  if (autoStatus === 'failed_retryable') return '可重试失败'
-  if (item.packagingStatus === 'failed') return '失败'
-  if (item.packagingStatus === 'processing' || autoStatus === 'running') return '运行中'
-  return '排队中'
+  if (item.packagingStatus === 'completed' || autoStatus === 'done') return t('autoUi.k_e99b48a29bdf')
+  if (autoStatus === 'failed_terminal') return t('autoUi.k_3e3c8068bb0e')
+  if (autoStatus === 'failed_retryable') return t('autoUi.k_26c89557cf8f')
+  if (item.packagingStatus === 'failed') return t('autoUi.k_3e3c8068bb0e')
+  if (item.packagingStatus === 'processing' || autoStatus === 'running') return t('autoUi.k_594249700590')
+  return t('autoUi.k_4dcbbcfa6154')
 }
 
 function liveTaskStatusTone(item: LivePhotoItem) {
@@ -694,7 +679,7 @@ function liveTaskRetryText(item: LivePhotoItem) {
   const retryCount = Number(item.autoFlowStatus?.retryCount ?? 0)
   const retryLimit = Number(item.autoFlowStatus?.retryLimit ?? 0)
   if (!retryCount && !retryLimit) return ''
-  return `重试 ${retryCount} / ${retryLimit || livePhotoRetryLimitFallback}`
+  return t('autoUi.k_1e7e6cda0875', { p0: retryCount, p1: retryLimit || livePhotoRetryLimitFallback })
 }
 
 function liveTaskErrorSummary(item: LivePhotoItem) {
@@ -702,23 +687,23 @@ function liveTaskErrorSummary(item: LivePhotoItem) {
   if (!text) return ''
   if (text.includes('[remote_pending]')) {
     const taskId = extractLivePhotoTaskId(item)
-    return taskId ? `已提交远端，等待结果查询。taskId=${taskId}` : '已提交远端，等待结果查询。'
+    return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
   }
-  return sanitizeVisibleText(text, '任务错误信息不可读')
+  return sanitizeVisibleText(text, t('autoUi.k_160f09e2ed5d'))
 }
 
 function liveTaskAutoSummary(item: LivePhotoItem) {
-  if (item.autoFlowStatus?.paused) return '已暂停'
-  if (String(item.autoFlowStatus?.lastError || item.error || '').includes('[remote_pending]')) return '等待远程结果'
-  if (item.autoFlowStatus?.status === 'failed_retryable') return '可重试失败'
-  if (item.autoFlowStatus?.status === 'failed_terminal') return '已达到重试上限'
-  if (item.autoFlowStatus?.status === 'running') return '自动流程运行中'
-  if (item.autoFlowStatus?.status === 'done') return '自动流程完成'
-  if (item.autoFlowStatus?.status === 'idle') return '等待执行'
-  if (item.packagingStatus === 'processing') return '处理中'
-  if (item.packagingStatus === 'completed') return '已完成'
-  if (item.packagingStatus === 'failed') return '失败'
-  return '待处理'
+  if (item.autoFlowStatus?.paused) return t('autoUi.k_fcbae46bf890')
+  if (String(item.autoFlowStatus?.lastError || item.error || '').includes('[remote_pending]')) return t('autoUi.k_f5903c87b0f8')
+  if (item.autoFlowStatus?.status === 'failed_retryable') return t('autoUi.k_26c89557cf8f')
+  if (item.autoFlowStatus?.status === 'failed_terminal') return t('autoUi.k_cd2eb05a80ae')
+  if (item.autoFlowStatus?.status === 'running') return t('autoUi.k_dc8ac053db7a')
+  if (item.autoFlowStatus?.status === 'done') return t('autoUi.k_69f8125c3ccb')
+  if (item.autoFlowStatus?.status === 'idle') return t('autoUi.k_d0de7734364c')
+  if (item.packagingStatus === 'processing') return t('autoUi.k_fcb979ef0b91')
+  if (item.packagingStatus === 'completed') return t('autoUi.k_e99b48a29bdf')
+  if (item.packagingStatus === 'failed') return t('autoUi.k_3e3c8068bb0e')
+  return t('autoUi.k_59a9eb4e6574')
 }
 
 function isWaitingRemoteResult(item: LivePhotoItem) {
@@ -727,10 +712,10 @@ function isWaitingRemoteResult(item: LivePhotoItem) {
 
 function liveTaskWaitingHint(item: LivePhotoItem) {
   if (isWaitingRemoteResult(item)) {
-    return `已等待 ${formatElapsed(item.autoFlowStatus?.lastStartedAt || item.workflow?.updatedAt || item.updatedAt)}`
+    return t('autoUi.k_1b935b669e03', { p0: formatElapsed(item.autoFlowStatus?.lastStartedAt || item.workflow?.updatedAt || item.updatedAt) })
   }
   if (item.autoFlowStatus?.status === 'running') {
-    return `本轮运行 ${formatElapsed(item.autoFlowStatus?.lastStartedAt || item.workflow?.updatedAt || item.updatedAt)}`
+    return t('autoUi.k_d7dd8a9ea2b3', { p0: formatElapsed(item.autoFlowStatus?.lastStartedAt || item.workflow?.updatedAt || item.updatedAt) })
   }
   return ''
 }
@@ -738,11 +723,11 @@ function liveTaskWaitingHint(item: LivePhotoItem) {
 function workflowStepStatusText(item: LivePhotoItem, step: (typeof livePhotoSteps)[number]) {
   const status = String(item.workflow?.stepStatus?.[step]?.status || 'idle').trim()
   const errorText = String(item.workflow?.stepStatus?.[step]?.error || '').trim()
-  if (status === 'failed' && errorText.includes('[remote_pending]')) return '等待远程结果'
-  if (status === 'done') return '已完成'
-  if (status === 'failed') return '失败'
-  if (status === 'running') return '运行中'
-  return '等待中'
+  if (status === 'failed' && errorText.includes('[remote_pending]')) return t('autoUi.k_f5903c87b0f8')
+  if (status === 'done') return t('autoUi.k_e99b48a29bdf')
+  if (status === 'failed') return t('autoUi.k_3e3c8068bb0e')
+  if (status === 'running') return t('autoUi.k_594249700590')
+  return t('autoUi.k_bd3488d0a929')
 }
 
 function workflowStepErrorText(item: LivePhotoItem, step: (typeof livePhotoSteps)[number]) {
@@ -750,9 +735,9 @@ function workflowStepErrorText(item: LivePhotoItem, step: (typeof livePhotoSteps
   if (!text) return ''
   if (text.includes('[remote_pending]')) {
     const taskId = extractLivePhotoTaskId(item)
-    return taskId ? `已提交远端，等待结果查询。taskId=${taskId}` : '已提交远端，等待结果查询。'
+    return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
   }
-  return sanitizeVisibleText(text, '阶段错误信息不可读')
+  return sanitizeVisibleText(text, t('autoUi.k_543156065601'))
 }
 
 function liveTaskMetaSummary(item: LivePhotoItem) {
@@ -780,7 +765,7 @@ function liveTaskRemoteEntries(item: LivePhotoItem) {
   const entries = [
     String(item.imageTaskId || '').trim()
       ? {
-          stage: '图片生成',
+          stage: t('autoUi.k_1f6a9dab8b96'),
           provider: String(item.imageTaskProvider || '').trim() || '--',
           model: String(item.imageTaskModel || '').trim() || '--',
           taskId: String(item.imageTaskId || '').trim(),
@@ -788,7 +773,7 @@ function liveTaskRemoteEntries(item: LivePhotoItem) {
       : null,
     String(item.videoTaskId || '').trim()
       ? {
-          stage: '视频生成',
+          stage: t('autoUi.k_19978a8da5e2'),
           provider: String(item.videoTaskProvider || '').trim() || '--',
           model: String(item.videoTaskModel || '').trim() || '--',
           taskId: String(item.videoTaskId || '').trim(),
@@ -801,18 +786,18 @@ function liveTaskRemoteEntries(item: LivePhotoItem) {
 function liveTaskRemoteStateText(item: LivePhotoItem) {
   const taskId = extractLivePhotoTaskId(item)
   if (isWaitingRemoteResult(item)) {
-    return taskId ? `已提交远端，等待结果查询。taskId=${taskId}` : '已提交远端，等待结果查询。'
+    return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
   }
   if (item.autoFlowStatus?.status === 'running') {
-    return taskId ? `自动流程运行中，当前远端任务 taskId=${taskId}` : '自动流程运行中'
+    return taskId ? t('autoUi.k_b9ee7fea6250', { p0: taskId }) : t('autoUi.k_dc8ac053db7a')
   }
   if (item.packagingStatus === 'completed') {
-    return taskId ? `任务已完成，最近远端任务 taskId=${taskId}` : '任务已完成'
+    return taskId ? t('autoUi.k_8c525989d330', { p0: taskId }) : t('autoUi.k_f2741315f7aa')
   }
   if (item.packagingStatus === 'failed') {
-    return taskId ? `当前任务失败，但保留了远端 taskId=${taskId}` : '当前任务失败'
+    return taskId ? t('autoUi.k_351dc1e7178c', { p0: taskId }) : t('autoUi.k_2d46ca36d22b')
   }
-  return taskId ? `当前已记录远端 taskId=${taskId}` : '当前还没有可展示的远端任务号'
+  return taskId ? t('autoUi.k_ccfe4619ca2d', { p0: taskId }) : t('autoUi.k_c786d2a74dc5')
 }
 
 function detailLogPreview(item: LivePhotoItem) {
@@ -830,9 +815,9 @@ function latestExportSettingsText(item: LivePhotoItem) {
 
 function taskSourceSummary(item: LivePhotoItem) {
   if (item.sourceType === 'clone_shot') {
-    return item.sourceProjectTitle ? `来源项目：${item.sourceProjectTitle}` : '来源项目：复刻镜头'
+    return item.sourceProjectTitle ? t('autoUi.k_cdef37d90bbe', { p0: item.sourceProjectTitle }) : t('autoUi.k_aef9fefe3e16')
   }
-  return item.productSnapshot?.name ? `绑定商品：${item.productSnapshot.name}` : '绑定商品：参考图替换'
+  return item.productSnapshot?.name ? t('autoUi.k_bb63a465143b', { p0: item.productSnapshot.name }) : t('autoUi.k_34f1f7105b38')
 }
 
 function hasExportArtifacts(item: LivePhotoItem) {
@@ -850,8 +835,8 @@ function hasVideoResult(item: LivePhotoItem) {
 function sanitizeVisibleText(value: string, fallback = '--') {
   const text = String(value || '').trim()
   if (!text) return fallback
-  if (/[�]/.test(text)) return fallback
-  if (/[鍙鎏鏃鐢绋璇褰鍥瀹诲竷镞冨欧锟]/.test(text)) return fallback
+  if (/\uFFFD/.test(text)) return fallback
+  if (/[\u9359\u938f\u93c3\u9422\u7ecb\u7487\u8930\u9365\u7039\u8bf2\u7af7\u955e\u51a8\u6b27\u951f]/.test(text)) return fallback
   return text
 }
 
@@ -919,7 +904,7 @@ function resetSubtitleDialog() {
 }
 
 function applySubtitlePreset(presetId: SubtitlePresetId) {
-  const preset = subtitlePresets.find((item) => item.id === presetId)
+  const preset = subtitlePresets.value.find((item) => item.id === presetId)
   if (!preset) return
   subtitleSelectedPreset.value = preset.id
   Object.assign(subtitleCaptionStyle, defaultSubtitleCaptionStyle(), preset.style)
@@ -936,7 +921,7 @@ function defaultSubtitleTitleForItems(items: LivePhotoItem[]) {
 function openBatchSubtitleDialog() {
   const targets = subtitleEligibleSelectedItems.value
   if (!targets.length) {
-    window.alert('请先选择至少一个可生成字幕的任务。')
+    window.alert(t('autoUi.k_e151dcc1a8d1'))
     return
   }
   applySubtitlePreset(subtitleSelectedPreset.value)
@@ -951,7 +936,7 @@ function openBatchSubtitleDialog() {
 
 function openSingleSubtitleDialog(item: LivePhotoItem) {
   if (!livePhotoDisplayVideoPath(item)) {
-    window.alert('当前任务还没有可添加字幕的视频。')
+    window.alert(t('autoUi.k_ecd306161e2b'))
     return
   }
   applySubtitlePreset(subtitleSelectedPreset.value)
@@ -968,16 +953,16 @@ function openSingleSubtitleDialog(item: LivePhotoItem) {
 async function revertSubtitleFromItem(item: LivePhotoItem) {
   if (!item?.id) return
   if (!itemHasAppliedSubtitle(item)) {
-    window.alert('当前视频没有可回退的字幕版本。')
+    window.alert(t('autoUi.k_21f9743c8890'))
     return
   }
-  const ok = window.confirm('确认回退到原视频吗？字幕视频文件会被删除。')
+  const ok = window.confirm(t('autoUi.k_ceb6710c577d'))
   if (!ok) return
   subtitleDialogBusy.value = true
   try {
     await window.api.livePhoto.revertSubtitleVideoFromItem({ id: item.id })
     await loadAll()
-    notice.value = '字幕已回退。'
+    notice.value = t('autoUi.k_b3b598ffcdd4')
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -996,7 +981,7 @@ function buildSubtitleTitleConfig() {
     .map((item) => item.trim())
     .filter(Boolean)
   if (subtitleTitleStrategy.value === 'random_pool') {
-    if (!pool.length) throw new Error('请至少输入一条随机标题。')
+    if (!pool.length) throw new Error(t('autoUi.k_83cd75f8d97e'))
     return {
       strategy: 'random_pool' as const,
       singleText: '',
@@ -1004,7 +989,7 @@ function buildSubtitleTitleConfig() {
     }
   }
   const singleText = String(subtitleTitleText.value || '').trim()
-  if (!singleText) throw new Error('请输入标题字幕。')
+  if (!singleText) throw new Error(t('autoUi.k_7c43db8ada86'))
   return {
     strategy: 'single_for_all' as const,
     singleText,
@@ -1016,12 +1001,12 @@ async function submitSubtitleDialog() {
   if (subtitleDialogBusy.value) return
   const targets = filteredLibraryItems.value.filter((item) => subtitleTargetIds.value.includes(item.id) && Boolean(livePhotoDisplayVideoPath(item)))
   if (!targets.length) {
-    window.alert('未找到可添加字幕的视频。')
+    window.alert(t('autoUi.k_0fd62a176bf0'))
     return
   }
   subtitleDialogBusy.value = true
   try {
-    notice.value = '正在生成字幕，请稍候...'
+    notice.value = t('autoUi.k_3e3db9ad55d3')
     const titleConfig = buildSubtitleTitleConfig()
     const sourceItems = targets.map((item) => ({
       id: `live-photo-${item.id}`,
@@ -1033,7 +1018,7 @@ async function submitSubtitleDialog() {
       coverImagePath: item.posterPath || undefined,
     }))
     const result = await window.api.livePhoto.generateSubtitleVideosForItems({
-      name: `Live Photo 字幕 ${new Date().toLocaleString('zh-CN')}`,
+      name: t('autoUi.k_af6e189c6973', { p0: new Date().toLocaleString('zh-CN') }),
       subtitleMode: 'static_title',
       subtitleSource: 'manual',
       exportEngine: 'ass_fallback',
@@ -1080,11 +1065,11 @@ async function submitSubtitleDialog() {
     await loadAll()
     if (!appliedCount) {
       const firstError = String(failedOutputs[0]?.error || '').trim()
-      window.alert(firstError || '字幕任务未生成可回写的视频，请检查本次任务错误信息。')
+      window.alert(firstError || t('autoUi.k_b6c2689e5042'))
       return
     }
     resetSubtitleDialog()
-    notice.value = `已为 ${appliedCount} 个视频生成字幕。`
+    notice.value = t('autoUi.k_960abbf38680', { p0: appliedCount })
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
     window.alert(errorText.value)
@@ -1112,16 +1097,16 @@ function defaultSubtitleCaptionStyle(): SubtitleCaptionStyle {
   }
 }
 
-const subtitlePresets: Array<{
+const subtitlePresets = computed<Array<{
   id: SubtitlePresetId
   name: string
   summary: string
   style: Partial<SubtitleCaptionStyle>
-}> = [
+}>>(() => [
   {
     id: 'viral-hook',
-    name: '爆款钩子款',
-    summary: '适合统一标题、停留感强、对比明显。',
+    name: t('autoUi.k_469e324ba51b'),
+    summary: t('autoUi.k_4590ac4b0a19'),
     style: {
       fontName: 'SimHei',
       fontSize: 68,
@@ -1141,8 +1126,8 @@ const subtitlePresets: Array<{
   },
   {
     id: 'deal-punch',
-    name: '促单成交款',
-    summary: '更适合卖点和利益点标题，转化感更强。',
+    name: t('autoUi.k_16d824cf7aac'),
+    summary: t('autoUi.k_e11f729375a4'),
     style: {
       fontName: 'Microsoft YaHei',
       fontSize: 64,
@@ -1162,8 +1147,8 @@ const subtitlePresets: Array<{
   },
   {
     id: 'premium-drop',
-    name: '精致种草款',
-    summary: '更克制，更适合珠宝首饰这类质感商品。',
+    name: t('autoUi.k_f958549b03fe'),
+    summary: t('autoUi.k_7d570b2ce11a'),
     style: {
       fontName: 'Noto Sans SC',
       fontSize: 58,
@@ -1181,7 +1166,7 @@ const subtitlePresets: Array<{
       bottomMargin: 212,
     },
   },
-]
+])
 
 function openTaskDetail(item: LivePhotoItem) {
   void (async () => {
@@ -1206,15 +1191,15 @@ function closeTaskDetail() {
 }
 
 function referenceMotionTemplateLabel(value: LivePhotoSettings['referenceMotionTemplate']) {
-  if (value === 'push_out') return '轻微移动'
-  if (value === 'ambient_sway') return '轻微摆动'
-  return '轻微移动'
+  if (value === 'push_out') return t('autoUi.k_1e4c40cf5d5f')
+  if (value === 'ambient_sway') return t('autoUi.k_e95355896fde')
+  return t('autoUi.k_1e4c40cf5d5f')
 }
 
 function cloneMotionTemplateLabel(value: LivePhotoSettings['cloneMotionTemplate']) {
-  if (value === 'push_in') return '轻微移动'
-  if (value === 'push_out') return '轻微移动'
-  return '轻微摆动'
+  if (value === 'push_in') return t('autoUi.k_1e4c40cf5d5f')
+  if (value === 'push_out') return t('autoUi.k_1e4c40cf5d5f')
+  return t('autoUi.k_e95355896fde')
 }
 
 async function loadLivePhotoSettings() {
@@ -1240,7 +1225,7 @@ async function saveLivePhotoSettings() {
       ...livePhotoSettings.value,
       ...next,
     }
-    notice.value = '动态照片设置已保存到数据库。'
+    notice.value = t('autoUi.k_9e5018e7d5b4')
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -1283,7 +1268,7 @@ async function createPromptVersion() {
     }) as LivePhotoPromptVersion
     await loadPromptManagement()
     selectPromptVersion(created.id)
-    notice.value = `已创建提示词版本 V${created.version}。`
+    notice.value = t('autoUi.k_dc9af490c182', { p0: created.version })
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -1304,8 +1289,8 @@ async function updatePromptVersion() {
     await loadPromptManagement()
     await refreshLibraryItems(true)
     notice.value = updated.active
-      ? '提示词版本已更新。待执行任务已同步，重试任务会使用当前版本。'
-      : '提示词版本已更新。启用该版本后才会应用到任务。'
+      ? t('autoUi.k_4016d80ac671')
+      : t('autoUi.k_5384b125af47')
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -1320,7 +1305,7 @@ async function activatePromptVersion() {
     await window.api.livePhoto.activatePromptVersion({ id: selectedPromptVersionId.value })
     await loadPromptManagement()
     await refreshLibraryItems(true)
-    notice.value = '当前提示词版本已启用。待执行任务已同步，重试任务会使用当前版本。'
+    notice.value = t('autoUi.k_975c2f826062')
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -1336,7 +1321,7 @@ async function rollbackPromptVersion() {
     await loadPromptManagement()
     await refreshLibraryItems(true)
     selectPromptVersion(next.id)
-    notice.value = `已复制并启用回滚版本 V${next.version}。`
+    notice.value = t('autoUi.k_3c2338025732', { p0: next.version })
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -1348,7 +1333,7 @@ function openRuntimeLogs(item: LivePhotoItem) {
   void (async () => {
     const detailedItem = await loadLivePhotoItemDetail(item)
     const targetLabel = sanitizeVisibleText(String(detailedItem.sourceShotLabel || detailedItem.productSnapshot?.name || detailedItem.id || ''), detailedItem.id)
-    runtimeDialogTitle.value = `${uiText.runtimeLogTitlePrefix} · ${targetLabel}`
+    runtimeDialogTitle.value = `${uiText.value.runtimeLogTitlePrefix} · ${targetLabel}`
     runtimeLogs.value = Array.isArray(detailedItem.logs) ? [...detailedItem.logs].slice().reverse() : []
     runtimeDialogOpen.value = true
   })()
@@ -1512,7 +1497,7 @@ async function pickReferenceImage() {
   if (!existingPaths.length && mergedPaths.length) {
     notice.value = ''
   } else if (missingPaths.length) {
-    notice.value = `已跳过 ${missingPaths.length} 张不存在的参考图。`
+    notice.value = t('autoUi.k_74cad9baa9fd', { p0: missingPaths.length })
   }
 }
 
@@ -1561,7 +1546,7 @@ async function appendMaterialImagesAsReferences() {
   if (!existingPaths.length && mergedPaths.length) {
     notice.value = ''
   } else if (missingPaths.length) {
-    notice.value = `已跳过 ${missingPaths.length} 张不存在的参考图。`
+    notice.value = t('autoUi.k_74cad9baa9fd', { p0: missingPaths.length })
   }
 }
 
@@ -1577,7 +1562,7 @@ function removeReferenceImage(path: string) {
 async function createReferenceItem() {
   if (!referenceImagePaths.value.length || !selectedProductId.value) return
   if (!selectedProductReadyForLivePhoto.value) {
-    errorText.value = '请先在商品详情中设置 Live Photo 主图，再创建任务。'
+    errorText.value = t('autoUi.k_df905e7370e1')
     notice.value = ''
     return
   }
@@ -1587,10 +1572,10 @@ async function createReferenceItem() {
   try {
     const { existingPaths, missingPaths } = await splitExistingReferencePaths(referenceImagePaths.value)
     if (!existingPaths.length) {
-      throw new Error('所选参考图已不存在，请重新选择。')
+      throw new Error(t('autoUi.k_35ccc4d3cae8'))
     }
     if (missingPaths.length) {
-      notice.value = `已跳过 ${missingPaths.length} 张不存在的参考图。`
+      notice.value = t('autoUi.k_74cad9baa9fd', { p0: missingPaths.length })
       referenceImagePaths.value = existingPaths
       referenceMissingPaths.value = missingPaths
     }
@@ -1603,7 +1588,7 @@ async function createReferenceItem() {
     const selectedProductIdSnapshot = selectedProductId.value
     notice.value =
       existingPaths.length > 1
-        ? `${uiText.referenceCreatedPrefix} ${existingPaths.length} ${uiText.referenceCreatedSuffix}`
+        ? `${uiText.value.referenceCreatedPrefix} ${existingPaths.length} ${uiText.value.referenceCreatedSuffix}`
         : t('livePhoto.messages.referenceCreated')
     referenceImagePaths.value = []
     referenceMissingPaths.value = []
@@ -1709,7 +1694,7 @@ async function exportSelected() {
     const pickedDir = await (pickDirOverride ?? window.api.pickDir)({ title: t('livePhoto.pickers.exportDirectoryTitle') })
     const outputDir = String(pickedDir || '').trim()
     if (!outputDir) {
-      notice.value = '已取消导出。'
+      notice.value = t('autoUi.k_94870c503eed')
       return
     }
     const result = await window.api.livePhoto.exportItems({
@@ -1727,11 +1712,11 @@ async function exportSelected() {
         .filter(Boolean)
         .slice(0, 3)
         .join('；')
-      notice.value = reasonText ? `没有可导出的 Live Photo。${reasonText}` : '没有可导出的 Live Photo。'
+      notice.value = reasonText ? t('autoUi.k_0e2d25ce06fd', { p0: reasonText }) : t('autoUi.k_b737560f461e')
     } else {
       notice.value = t('livePhoto.messages.exportedCount', { count: exportedCount })
       if (skipped.length) {
-        notice.value += `，跳过 ${skipped.length} 项`
+        notice.value += t('autoUi.k_ffb217ae79d6', { p0: skipped.length })
       }
     }
     selectedLibraryIds.value = selectedLibraryIds.value.filter((id) => !result?.exported?.some((item: { id: string }) => item.id === id))
@@ -1785,8 +1770,8 @@ async function confirmBatchDelete() {
     selectedLibraryIds.value = failedIds
     batchDeleteOpen.value = false
     await loadAll()
-    if (deletedCount) notice.value = `\u5df2\u6279\u91cf\u5220\u9664 ${deletedCount} \u4e2a Live Photo \u4efb\u52a1`
-    if (failedIds.length) errorText.value = `${failedIds.length} \u4e2a\u4efb\u52a1\u5220\u9664\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5`
+    if (deletedCount) notice.value = t('autoUi.k_e988f0111f99', { p0: deletedCount })
+    if (failedIds.length) errorText.value = t('autoUi.k_2e4898151fcc', { p0: failedIds.length })
   } finally {
     batchDeleteBusy.value = false
   }
@@ -1804,7 +1789,7 @@ async function sendSelectedToFeishu() {
     const sent = Array.isArray(result?.sent) ? result.sent : []
     const skipped = Array.isArray(result?.skipped) ? result.skipped : []
     if (sent.length) {
-      notice.value = `\u5df2\u6210\u529f\u53d1\u9001 ${sent.length} \u4e2a Live Photo \u89c6\u9891\u5230\u98de\u4e66\u3002`
+      notice.value = t('autoUi.k_96fafeafd6c2', { p0: sent.length })
       selectedLibraryIds.value = selectedLibraryIds.value.filter(
         (id) => !sent.some((item: { id?: string }) => String(item?.id || '') === id),
       )
@@ -1815,7 +1800,7 @@ async function sendSelectedToFeishu() {
         .filter(Boolean)
         .slice(0, 2)
         .join('; ')
-      const detail = `\u6709 ${skipped.length} \u4e2a\u89c6\u9891\u672a\u53d1\u9001${reason ? `: ${reason}` : '\u3002'}`
+      const detail = t('autoUi.k_aa14a3234b05', { p0: skipped.length, p1: reason ? `: ${reason}` : '\u3002' })
       if (sent.length) notice.value = `${notice.value} ${detail}`
       else errorText.value = detail
     }
@@ -1942,7 +1927,7 @@ async function saveReplacementRegionAndRetry() {
       motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
       replacementRegion: { ...replacementRegionDraft },
     })
-    notice.value = '替换区域已更新，任务已重新开始。'
+    notice.value = t('autoUi.k_24ad33fba50a')
     replacementRegionBusy.value = false
     closeReplacementRegionEditor()
     closeTaskDetail()
@@ -1984,7 +1969,7 @@ async function retryFailedItems() {
         }),
       ),
     )
-    notice.value = `已重试 ${targets.length} 个失败任务。`
+    notice.value = t('autoUi.k_b6ae72694d09', { p0: targets.length })
     await refreshLibraryItemsWithWarmup()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -1997,7 +1982,7 @@ async function pauseRunningItems() {
   errorText.value = ''
   try {
     await Promise.all(targets.map((item) => window.api.livePhoto.pauseAutoFlow({ id: item.id })))
-    notice.value = `已暂停 ${targets.length} 个运行中的任务。`
+    notice.value = t('autoUi.k_ab2158ab7049', { p0: targets.length })
     await refreshLibraryItemsWithWarmup()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -2017,7 +2002,7 @@ async function resumePausedItems() {
         }),
       ),
     )
-    notice.value = `已恢复 ${targets.length} 个暂停任务。`
+    notice.value = t('autoUi.k_4562082cd7d4', { p0: targets.length })
     await refreshLibraryItemsWithWarmup()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -2261,13 +2246,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <div v-else class="product-thumb product-thumb-fallback">
                 <Package class="h-4 w-4" />
               </div>
-              <span class="product-picker-name">{{ selectedProduct?.name || '\u9009\u62e9\u5546\u54c1' }}</span>
+              <span class="product-picker-name">{{ selectedProduct?.name || t('livePhoto.workspace.selectProduct') }}</span>
               <ChevronDown class="picker-arrow h-4 w-4" />
             </button>
           </label>
 
           <div class="field">
-            <span>Live Photo 主图</span>
+            <span>{{ t('livePhoto.workspace.primaryImage') }}</span>
             <div v-if="selectedProductLivePhotoRef" class="live-photo-master-ref">
               <button class="live-photo-master-ref__preview" type="button" @click="openPath(selectedProductLivePhotoRef)">
                 <img :src="previewSrc(selectedProductLivePhotoRef)" alt="live photo master reference" />
@@ -2279,7 +2264,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </div>
             <div v-else class="live-photo-master-ref live-photo-master-ref--missing">
               <AlertTriangle class="h-4 w-4" />
-              <span>当前商品还没有设置 Live Photo 主图，不能创建参考图替换任务。</span>
+              <span>{{ t('livePhoto.workspace.primaryImageRequired') }}</span>
             </div>
           </div>
 
@@ -2328,39 +2313,39 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         <div class="quality-control-card">
           <div class="quality-control-card__head">
             <div>
-              <strong>质量门禁与提示词版本</strong>
-              <small>待执行任务跟随当前启用版本，图片质检通过后才进入视频阶段。</small>
+              <strong>{{ t('livePhoto.workspace.qualityGateTitle') }}</strong>
+              <small>{{ t('livePhoto.workspace.qualityGateDesc') }}</small>
             </div>
             <ShieldCheck class="h-5 w-5" />
           </div>
           <div class="quality-metric-grid" v-if="qualityMetrics">
-            <div><span>通过率</span><strong>{{ formatQualityScore(qualityMetrics.passRate) }}</strong></div>
-            <div><span>平均分</span><strong>{{ formatQualityScore(qualityMetrics.averageScore) }}</strong></div>
-            <div><span>重试次数</span><strong>{{ qualityMetrics.retryCount }}</strong></div>
-            <div><span>缓存命中</span><strong>{{ qualityMetrics.cacheHitCount }}</strong></div>
+            <div><span>{{ t('livePhoto.workspace.passRate') }}</span><strong>{{ formatQualityScore(qualityMetrics.passRate) }}</strong></div>
+            <div><span>{{ t('livePhoto.workspace.averageScore') }}</span><strong>{{ formatQualityScore(qualityMetrics.averageScore) }}</strong></div>
+            <div><span>{{ t('livePhoto.workspace.retryCount') }}</span><strong>{{ qualityMetrics.retryCount }}</strong></div>
+            <div><span>{{ t('livePhoto.workspace.cacheHits') }}</span><strong>{{ qualityMetrics.cacheHitCount }}</strong></div>
           </div>
           <div class="prompt-version-editor">
             <label class="field">
-              <span>提示词版本</span>
+              <span>{{ t('livePhoto.workspace.promptVersion') }}</span>
               <select v-model="selectedPromptVersionId" @change="selectPromptVersion(selectedPromptVersionId)">
                 <option v-for="version in promptVersions" :key="version.id" :value="version.id">
-                  V{{ version.version }} · {{ version.name }}{{ version.active ? ' · 当前启用' : '' }}
+                  V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${t('livePhoto.workspace.activeVersion')}` : '' }}
                 </option>
               </select>
             </label>
             <label class="field">
-              <span>版本名称</span>
+              <span>{{ t('livePhoto.workspace.versionName') }}</span>
               <input v-model="promptEditorName" type="text" placeholder="Live Photo Product Replacement" />
             </label>
             <label class="field prompt-version-editor__prompt">
-              <span>Prompt 内容</span>
+              <span>{{ t('livePhoto.workspace.promptContent') }}</span>
               <textarea v-model="promptEditorText" rows="7" spellcheck="false"></textarea>
             </label>
             <div class="prompt-version-actions">
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">更新版本</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">复制为新版本</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">启用版本</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">回滚副本</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">{{ t('livePhoto.workspace.updateVersion') }}</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">{{ t('livePhoto.workspace.copyVersion') }}</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('livePhoto.workspace.activateVersion') }}</button>
+              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ t('livePhoto.workspace.rollbackVersion') }}</button>
             </div>
           </div>
         </div>
@@ -2488,13 +2473,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <div class="format-card-head">
                 <div class="format-card-title">
                   <Settings class="h-4 w-4" />
-                  <strong>动作策略</strong>
+                  <strong>{{ t('livePhoto.workspace.motionStrategy') }}</strong>
                 </div>
               </div>
-              <p>这两项会真实写入数据库，并直接作用于参考图任务、复刻镜头任务、失败重试和恢复执行。</p>
+              <p>{{ t('livePhoto.workspace.motionStrategyDesc') }}</p>
               <div class="field-stack">
                 <label class="field">
-                  <span>参考图默认动作</span>
+                  <span>{{ t('livePhoto.workspace.referenceMotion') }}</span>
                   <select v-model="livePhotoSettings.referenceMotionTemplate">
                     <option value="push_in">{{ referenceMotionTemplateLabel('push_in') }}</option>
                     <option value="push_out">{{ referenceMotionTemplateLabel('push_out') }}</option>
@@ -2502,7 +2487,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   </select>
                 </label>
                 <label class="field">
-                  <span>复刻镜头默认动作</span>
+                  <span>{{ t('livePhoto.workspace.cloneMotion') }}</span>
                   <select v-model="livePhotoSettings.cloneMotionTemplate">
                     <option value="ambient_sway">{{ cloneMotionTemplateLabel('ambient_sway') }}</option>
                     <option value="push_in">{{ cloneMotionTemplateLabel('push_in') }}</option>
@@ -2536,9 +2521,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </label>
           </div>
           <div class="panel-head">
-            <span class="panel-head-note">当前导出规格会写入数据库，并在导出阶段真实参与分辨率、帧率和压缩质量处理。</span>
+            <span class="panel-head-note">{{ t('livePhoto.workspace.exportSettingsDesc') }}</span>
             <button class="ghost-button small" type="button" :disabled="livePhotoSettingsBusy" @click="saveLivePhotoSettings">
-              {{ livePhotoSettingsBusy ? '保存中...' : '保存动态照片设置' }}
+              {{ livePhotoSettingsBusy ? t('livePhoto.workspace.saving') : t('livePhoto.workspace.saveSettings') }}
             </button>
           </div>
         </article>
@@ -2578,30 +2563,30 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </div>
             <div class="library-overview">
               <div class="library-overview__card is-running">
-                <span>运行中</span>
+                <span>{{ t('livePhoto.workspace.running') }}</span>
                 <strong>{{ runningLibraryItems.length }}</strong>
               </div>
               <div class="library-overview__card is-failed">
-                <span>失败</span>
+                <span>{{ t('livePhoto.status.failed') }}</span>
                 <strong>{{ failedLibraryItems.length }}</strong>
               </div>
               <div class="library-overview__card is-paused">
-                <span>暂停</span>
+                <span>{{ t('livePhoto.workspace.paused') }}</span>
                 <strong>{{ pausedLibraryItems.length }}</strong>
               </div>
               <div class="library-overview__card is-selected">
-                <span>已选</span>
+                <span>{{ t('livePhoto.clone.selected') }}</span>
                 <strong>{{ selectedLibraryItems.length }}</strong>
               </div>
             </div>
           </div>
           <div class="library-head-tools">
-            <div class="library-view-toggle" aria-label="视图切换">
+            <div class="library-view-toggle" :aria-label="t('livePhoto.workspace.viewMode')">
               <button
                 class="toolbar-icon"
                 :class="{ active: libraryViewMode === 'grid' }"
                 type="button"
-                aria-label="网格视图"
+                :aria-label="t('livePhoto.workspace.gridView')"
                 :aria-pressed="libraryViewMode === 'grid'"
                 @click="libraryViewMode = 'grid'"
               >
@@ -2611,7 +2596,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 class="toolbar-icon"
                 :class="{ active: libraryViewMode === 'list' }"
                 type="button"
-                aria-label="列表视图"
+                :aria-label="t('livePhoto.workspace.listView')"
                 :aria-pressed="libraryViewMode === 'list'"
                 @click="libraryViewMode = 'list'"
               >
@@ -2619,11 +2604,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </button>
             </div>
             <div class="library-pagination">
-              <button class="library-page-button" type="button" aria-label="上一页" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">
+              <button class="library-page-button" type="button" :aria-label="t('livePhoto.workspace.previousPage')" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">
                 <ChevronLeft class="h-4 w-4" />
               </button>
               <span class="library-pagination__text">{{ libraryPage }} / {{ libraryTotalPages }}</span>
-              <button class="library-page-button" type="button" aria-label="下一页" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">
+              <button class="library-page-button" type="button" :aria-label="t('livePhoto.workspace.nextPage')" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">
                 <ChevronRight class="h-4 w-4" />
               </button>
             </div>
@@ -2633,26 +2618,26 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <div class="library-action-group">
             <button class="toolbar-button" type="button" @click="libraryFilter = libraryFilter === 'all' ? 'failed' : libraryFilter === 'failed' ? 'running' : libraryFilter === 'running' ? 'paused' : 'all'">
               <Filter class="h-4 w-4" />
-              {{ uiText.filter }} {{ libraryFilter === 'all' ? '全部' : libraryFilter === 'failed' ? '失败' : libraryFilter === 'running' ? '运行中' : '暂停' }}
+              {{ uiText.filter }} {{ libraryFilter === 'all' ? t('common.all') : libraryFilter === 'failed' ? t('livePhoto.status.failed') : libraryFilter === 'running' ? t('livePhoto.workspace.running') : t('livePhoto.workspace.paused') }}
             </button>
             <button class="toolbar-button" type="button" :disabled="!filteredLibraryItems.length" @click="toggleSelectAllFiltered">
               <CheckCircle2 class="h-4 w-4" />
-              {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? '取消当前筛选' : '选择当前筛选' }}
+              {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? t('livePhoto.workspace.clearFiltered') : t('livePhoto.workspace.selectFiltered') }}
             </button>
           </div>
           <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-divider"></div>
           <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-group library-task-actions">
             <button v-if="retryableFailedLibraryItems.length" class="toolbar-button" type="button" @click="retryFailedItems">
               <RefreshCcw class="h-4 w-4" />
-              重试失败 {{ retryableFailedLibraryItems.length ? `(${retryableFailedLibraryItems.length})` : '' }}
+              {{ t('livePhoto.workspace.retryFailed') }} {{ retryableFailedLibraryItems.length ? `(${retryableFailedLibraryItems.length})` : '' }}
             </button>
             <button v-if="pausedLibraryItems.length" class="toolbar-button" type="button" @click="resumePausedItems">
               <Play class="h-4 w-4" />
-              恢复暂停 {{ pausedLibraryItems.length ? `(${pausedLibraryItems.length})` : '' }}
+              {{ t('livePhoto.workspace.resumePaused') }} {{ pausedLibraryItems.length ? `(${pausedLibraryItems.length})` : '' }}
             </button>
             <button v-if="runningLibraryItems.length" class="toolbar-button" type="button" @click="pauseRunningItems">
               <LoaderCircle class="h-4 w-4" />
-              暂停运行 {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
+              {{ t('livePhoto.workspace.pauseRunning') }} {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
             </button>
           </div>
           <div class="library-output-actions">
@@ -2663,7 +2648,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               @click="openBatchDelete"
             >
               <Trash2 class="h-4 w-4" />
-              {{ '\u6279\u91cf\u5220\u9664' }} ({{ selectedLibraryIds.length }})
+              {{ t('livePhoto.workspace.batchDelete') }} ({{ selectedLibraryIds.length }})
             </button>
             <button
               v-if="subtitleEligibleSelectedCount"
@@ -2672,7 +2657,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               @click="openBatchSubtitleDialog"
             >
               <Sparkles class="h-4 w-4" />
-              批量字幕 {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
+              {{ t('livePhoto.workspace.batchSubtitles') }} {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
             </button>
             <button
               class="toolbar-button feishu-send-button"
@@ -2715,7 +2700,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   v-if="livePhotoDisplayVideoPath(item)"
                   class="preview-play"
                   type="button"
-                  :aria-label="`播放 ${item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo'} 视频`"
+                  :aria-label="t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' })"
                   @click.stop="openVideoDialog(item)"
                 >
                   <Play class="h-4 w-4" />
@@ -2727,15 +2712,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <div class="live-console-row__task">
                 <div class="live-console-row__titleline">
                   <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                  <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? '复刻镜头' : '参考图替换' }}</span>
-                  <span v-if="itemHasSubtitle(item)" class="live-console-row__source">已加字幕</span>
+                  <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
+                  <span v-if="itemHasSubtitle(item)" class="live-console-row__source">{{ t('autoUi.k_83e422384f7f') }}</span>
                 </div>
                 <div class="live-console-row__meta">
                   <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
                   <span class="live-console-row__dot"></span>
                   <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
                   <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
-                  <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || '自动流程' }}</span>
+                  <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || t('autoUi.k_2a83614918bc') }}</span>
                 </div>
                 <div class="live-console-row__subtitle">
                   <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
@@ -2760,42 +2745,34 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
             <div class="live-console-row__bottom">
               <div class="live-console-row__quickrefs">
-                <span class="live-console-row__quickchip">图片参考 {{ item.imagePromptPreview?.referenceImagePaths?.length || 0 }}</span>
-                <span class="live-console-row__quickchip">视频参考 {{ item.videoPromptPreview?.referenceImagePaths?.length || 0 }}</span>
+                <span class="live-console-row__quickchip">{{ t('autoUi.k_a0f61f08d796') }} {{ item.imagePromptPreview?.referenceImagePaths?.length || 0 }}</span>
+                <span class="live-console-row__quickchip">{{ t('autoUi.k_6925f0298cba') }} {{ item.videoPromptPreview?.referenceImagePaths?.length || 0 }}</span>
                 <span class="live-console-row__quickchip">{{ liveTaskProgressPercent(item) }}%</span>
                 <span class="live-console-row__quickchip">{{ liveTaskAutoSummary(item) }}</span>
-                <span class="live-console-row__quickchip">当前阶段 {{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-                <span v-if="extractLivePhotoTaskId(item)" class="live-console-row__quickchip">任务号 {{ extractLivePhotoTaskId(item) }}</span>
+                <span class="live-console-row__quickchip">{{ t('autoUi.k_0a2489f651ae') }} {{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+                <span v-if="extractLivePhotoTaskId(item)" class="live-console-row__quickchip">{{ t('autoUi.k_9b53e535acea') }} {{ extractLivePhotoTaskId(item) }}</span>
                 <span v-if="liveTaskWaitingHint(item)" class="live-console-row__quickchip live-console-row__quickchip--accent">{{ liveTaskWaitingHint(item) }}</span>
               </div>
 
               <div class="live-console-row__actions">
                 <button class="live-console-row__link live-console-row__link--primary" type="button" @click.stop="openTaskDetail(item)">
-                  <PanelBottomOpen class="h-4 w-4" />
-                  查看详情
-                </button>
+                  <PanelBottomOpen class="h-4 w-4" /> {{ t('autoUi.k_faea8c1db9cc') }} </button>
                 <button class="live-console-row__link" type="button" @click.stop="openRuntimeLogs(item)">
-                  <Logs class="h-4 w-4" />
-                  查看日志
-                </button>
+                  <Logs class="h-4 w-4" /> {{ t('autoUi.k_b923b26d335a') }} </button>
                 <button
                   class="live-console-row__link"
                   type="button"
                   :disabled="!livePhotoDisplayVideoPath(item)"
                   @click.stop="openSingleSubtitleDialog(item)"
                 >
-                  <Sparkles class="h-4 w-4" />
-                  字幕
-                </button>
+                  <Sparkles class="h-4 w-4" /> {{ t('autoUi.k_aaa5f2e9f006') }} </button>
                 <button
                   v-if="itemHasAppliedSubtitle(item)"
                   class="live-console-row__link"
                   type="button"
                   :disabled="subtitleDialogBusy"
                   @click.stop="revertSubtitleFromItem(item)"
-                >
-                  回退字幕
-                </button>
+                > {{ t('autoUi.k_6d32dea55ea6') }} </button>
                 <button
                   :data-testid="`live-photo-preview-${item.id}`"
                   class="live-console-row__action live-console-row__action--play"
@@ -2828,7 +2805,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   :data-testid="`live-photo-region-${item.id}`"
                   class="live-console-row__action"
                   type="button"
-                  title="校正替换区域"
+                  :title="t('autoUi.k_329d5e81ce23')"
                   @click.stop="openReplacementRegionEditor(item)"
                 >
                   <ScanLine class="h-4 w-4" />
@@ -2878,7 +2855,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <button
             class="live-console-card__preview"
             type="button"
-            :aria-label="livePhotoDisplayVideoPath(item) ? `播放 ${item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo'} 视频` : '查看任务详情'"
+            :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' }) : t('autoUi.k_fe0ccc53ab2b')"
             @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
           >
             <div class="live-console-row__thumb">
@@ -2896,15 +2873,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <div class="live-console-row__task">
               <div class="live-console-row__titleline">
                 <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? '复刻镜头' : '参考图替换' }}</span>
-                <span v-if="itemHasSubtitle(item)" class="live-console-row__source">已加字幕</span>
+                <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
+                <span v-if="itemHasSubtitle(item)" class="live-console-row__source">{{ t('autoUi.k_83e422384f7f') }}</span>
               </div>
               <div class="live-console-row__meta">
                 <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
                 <span class="live-console-row__dot"></span>
                 <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
                 <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
-                <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || '自动流程' }}</span>
+                <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || t('autoUi.k_2a83614918bc') }}</span>
               </div>
               <div class="live-console-row__subtitle">
                 <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
@@ -2987,7 +2964,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 :data-testid="`live-photo-region-${item.id}`"
                 class="live-console-row__action"
                 type="button"
-                title="校正替换区域"
+                :title="t('autoUi.k_329d5e81ce23')"
                 @click.stop="openReplacementRegionEditor(item)"
               >
                 <ScanLine class="h-4 w-4" />
@@ -3111,73 +3088,73 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         <div class="live-detail-dialog__head">
           <div class="live-detail-dialog__title">
             <strong>{{ detailDialogItem.sourceShotLabel || detailDialogItem.productSnapshot?.name || detailDialogItem.id }}</strong>
-            <p>{{ detailDialogItem.sourceType === 'clone_shot' ? '复刻镜头任务详情' : '参考图替换任务详情' }}</p>
+            <p>{{ detailDialogItem.sourceType === 'clone_shot' ? t('autoUi.k_d44b948f06f0') : t('autoUi.k_a09de3d53e0c') }}</p>
           </div>
-          <button class="live-detail-dialog__close" type="button" @click="closeTaskDetail">关闭</button>
+          <button class="live-detail-dialog__close" type="button" @click="closeTaskDetail">{{ t('autoUi.k_6c14bd7f6f9e') }}</button>
         </div>
 
         <div class="live-detail-dialog__summary">
           <div class="live-detail-dialog__summary-card">
-            <span>状态</span>
+            <span>{{ t('autoUi.k_62e951a692ff') }}</span>
             <strong>{{ liveTaskStatusLabel(detailDialogItem) }}</strong>
             <small>{{ liveTaskAutoSummary(detailDialogItem) }}</small>
           </div>
           <div class="live-detail-dialog__summary-card">
-            <span>当前阶段</span>
+            <span>{{ t('autoUi.k_0a2489f651ae') }}</span>
             <strong>{{ workflowStepLabel(detailDialogItem.workflow?.currentStep) }}</strong>
             <small>{{ formatTime(detailDialogItem.updatedAt) }}</small>
           </div>
           <div class="live-detail-dialog__summary-card">
-            <span>参考数量</span>
+            <span>{{ t('autoUi.k_8edafb8f44a9') }}</span>
             <strong>{{ detailDialogItem.imagePromptPreview?.referenceImagePaths?.length || 0 }} / {{ detailDialogItem.videoPromptPreview?.referenceImagePaths?.length || 0 }}</strong>
-            <small>图片参考 / 视频参考</small>
+            <small>{{ t('autoUi.k_c1f18a2af6b4') }}</small>
           </div>
           <div class="live-detail-dialog__summary-card">
-            <span>等待时长</span>
+            <span>{{ t('autoUi.k_7df7698e6ee4') }}</span>
             <strong>{{ liveTaskWaitingHint(detailDialogItem) || '--' }}</strong>
-            <small>{{ isWaitingRemoteResult(detailDialogItem) ? '当前更像远程结果等待，不是本地立即失败。' : '显示当前自动流程最近一次运行时长。' }}</small>
+            <small>{{ isWaitingRemoteResult(detailDialogItem) ? t('autoUi.k_156f1ffe8947') : t('autoUi.k_a08e8ea14d74') }}</small>
           </div>
           <div class="live-detail-dialog__summary-card">
-            <span>远端任务号</span>
+            <span>{{ t('autoUi.k_aa35ad90c049') }}</span>
             <strong>{{ extractLivePhotoTaskId(detailDialogItem) || '--' }}</strong>
             <small>{{ liveTaskRemoteStateText(detailDialogItem) }}</small>
           </div>
           <div class="live-detail-dialog__summary-card">
-            <span>图片质量</span>
+            <span>{{ t('autoUi.k_47928c96a42e') }}</span>
             <strong>{{ detailDialogItem.qualityReport ? formatQualityScore(detailDialogItem.qualityReport.score) : '--' }}</strong>
-            <small>{{ detailDialogItem.qualityReport?.mode === 'local_python' ? '本地 Python 检查' : detailDialogItem.qualityReport ? '远程降级检查' : '尚未检查' }}</small>
+            <small>{{ detailDialogItem.qualityReport?.mode === 'local_python' ? t('autoUi.k_3743ca161582') : detailDialogItem.qualityReport ? t('autoUi.k_94209efc6e97') : t('autoUi.k_0399892b3886') }}</small>
           </div>
         </div>
 
         <div class="live-detail-dialog__hero">
           <section class="live-detail-dialog__hero-card">
             <div class="live-detail-dialog__hero-head">
-              <strong>任务概览</strong>
+              <strong>{{ t('autoUi.k_7ebfc7c126cc') }}</strong>
               <span>{{ detailDialogItem.sourceProjectTitle || detailDialogItem.productSnapshot?.name || '--' }}</span>
             </div>
             <div class="live-detail-dialog__hero-grid">
               <div class="live-detail-dialog__metric">
-                <span>任务类型</span>
-                <strong>{{ detailDialogItem.sourceType === 'clone_shot' ? '复刻镜头' : '参考图替换' }}</strong>
+                <span>{{ t('autoUi.k_4a6f4156fc71') }}</span>
+                <strong>{{ detailDialogItem.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>自动流程</span>
+                <span>{{ t('autoUi.k_2a83614918bc') }}</span>
                 <strong>{{ liveTaskAutoSummary(detailDialogItem) }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>最近更新时间</span>
+                <span>{{ t('autoUi.k_71df90260b2b') }}</span>
                 <strong>{{ formatTime(detailDialogItem.updatedAt) }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>重试状态</span>
+                <span>{{ t('autoUi.k_e53fc9418478') }}</span>
                 <strong>{{ liveTaskRetryText(detailDialogItem) || '--' }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>远端状态</span>
+                <span>{{ t('autoUi.k_4659062eaa91') }}</span>
                 <strong>{{ extractLivePhotoTaskId(detailDialogItem) || '--' }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>状态说明</span>
+                <span>{{ t('autoUi.k_68e297c888ef') }}</span>
                 <strong>{{ liveTaskRemoteStateText(detailDialogItem) }}</strong>
               </div>
             </div>
@@ -3185,32 +3162,32 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <section class="live-detail-dialog__hero-card">
             <div class="live-detail-dialog__hero-head">
-              <strong>质量门禁</strong>
+              <strong>{{ t('autoUi.k_046e015ff882') }}</strong>
               <span>{{ detailDialogItem.qualityReport?.checkerVersion || '--' }}</span>
             </div>
             <div class="live-detail-dialog__hero-grid">
               <div class="live-detail-dialog__metric">
-                <span>决策</span>
+                <span>{{ t('autoUi.k_462f8a61da1f') }}</span>
                 <strong>{{ detailDialogItem.qualityReport?.decision || '--' }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>提示词版本</span>
+                <span>{{ t('autoUi.k_e3ba534bb0ab') }}</span>
                 <strong>{{ detailDialogItem.promptVersion ? `V${detailDialogItem.promptVersion}` : '--' }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>生成尝试</span>
+                <span>{{ t('autoUi.k_2acbed5a521e') }}</span>
                 <strong>{{ detailDialogItem.generationAttempts?.length || 0 }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>缓存</span>
-                <strong>{{ detailDialogItem.cacheHit ? '命中' : '未命中' }}</strong>
+                <span>{{ t('autoUi.k_6cdba4aad0c1') }}</span>
+                <strong>{{ detailDialogItem.cacheHit ? t('autoUi.k_7a130d7fde44') : t('autoUi.k_786d17cf29be') }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>降级原因</span>
+                <span>{{ t('autoUi.k_33d863c412e8') }}</span>
                 <strong>{{ detailDialogItem.checkerFallbackReason || detailDialogItem.qualityReport?.fallbackReason || '--' }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>硬性失败</span>
+                <span>{{ t('autoUi.k_7f879a128512') }}</span>
                 <strong>{{ detailDialogItem.qualityReport?.hardFailures?.join(', ') || '--' }}</strong>
               </div>
             </div>
@@ -3218,16 +3195,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <section class="live-detail-dialog__hero-card">
             <div class="live-detail-dialog__hero-head">
-              <strong>导出摘要</strong>
-              <span>{{ hasExportArtifacts(detailDialogItem) ? '已生成导出产物' : '尚未导出' }}</span>
+              <strong>{{ t('autoUi.k_fb5212190a9a') }}</strong>
+              <span>{{ hasExportArtifacts(detailDialogItem) ? t('autoUi.k_d3eaaf60ed1c') : t('autoUi.k_792405ac8c02') }}</span>
             </div>
             <div class="live-detail-dialog__hero-grid">
               <div class="live-detail-dialog__metric">
-                <span>最近导出规格</span>
+                <span>{{ t('autoUi.k_8d3692399f98') }}</span>
                 <strong>{{ latestExportSettingsText(detailDialogItem) || '--' }}</strong>
               </div>
               <div class="live-detail-dialog__metric">
-                <span>资源标识</span>
+                <span>{{ t('autoUi.k_0579bf571dd0') }}</span>
                 <strong>{{ detailDialogItem.packagingAssetIdentifier || '--' }}</strong>
               </div>
             </div>
@@ -3238,37 +3215,25 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 type="button"
                 @click="openReplacementRegionEditor(detailDialogItem)"
               >
-                <ScanLine class="h-4 w-4" />
-                校正替换区域
-              </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
-                打开预览视频
-              </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)">
-                打开元数据桥接文件
-              </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
-                打开导出视频
-              </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openSingleSubtitleDialog(detailDialogItem)">
-                添加字幕
-              </button>
-              <button v-if="itemHasAppliedSubtitle(detailDialogItem)" class="live-detail-dialog__ghost" type="button" :disabled="subtitleDialogBusy" @click="revertSubtitleFromItem(detailDialogItem)">
-                回退原视频
-              </button>
+                <ScanLine class="h-4 w-4" /> {{ t('autoUi.k_329d5e81ce23') }} </button>
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_441a7a4e66da') }} </button>
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)"> {{ t('autoUi.k_721f98528d0c') }} </button>
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_f7fa88a1d462') }} </button>
+              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openSingleSubtitleDialog(detailDialogItem)"> {{ t('autoUi.k_6e4c3e5ffee8') }} </button>
+              <button v-if="itemHasAppliedSubtitle(detailDialogItem)" class="live-detail-dialog__ghost" type="button" :disabled="subtitleDialogBusy" @click="revertSubtitleFromItem(detailDialogItem)"> {{ t('autoUi.k_5d2a55f19c91') }} </button>
             </div>
           </section>
 
           <section class="live-detail-dialog__hero-card live-detail-dialog__hero-card--wide">
             <div class="live-detail-dialog__hero-head">
-              <strong>生成结果</strong>
-              <span>{{ hasImageResult(detailDialogItem) || hasVideoResult(detailDialogItem) ? '可直接查看图片与视频结果' : '当前还没有可展示的生成结果' }}</span>
+              <strong>{{ t('autoUi.k_99045f8ee1cd') }}</strong>
+              <span>{{ hasImageResult(detailDialogItem) || hasVideoResult(detailDialogItem) ? t('autoUi.k_99f31f48079b') : t('autoUi.k_b05d19807150') }}</span>
             </div>
             <div class="live-result-grid">
               <article class="live-result-card">
                 <div class="live-result-card__head">
-                  <strong>生成图片</strong>
-                  <span>{{ detailDialogItem.generatedStillPath ? fileNameOf(detailDialogItem.generatedStillPath) : '未生成' }}</span>
+                  <strong>{{ t('autoUi.k_55e7017a46b1') }}</strong>
+                  <span>{{ detailDialogItem.generatedStillPath ? fileNameOf(detailDialogItem.generatedStillPath) : t('autoUi.k_3c04f9eb8b65') }}</span>
                 </div>
                 <button
                   v-if="detailDialogItem.generatedStillPath"
@@ -3280,22 +3245,18 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 </button>
                 <div v-else class="live-result-card__empty">
                   <FileImage class="h-5 w-5" />
-                  <span>图片结果将在图片生成完成后显示</span>
+                  <span>{{ t('autoUi.k_01916819b0dd') }}</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.generatedStillPath" @click="openPath(detailDialogItem.generatedStillPath)">
-                    打开图片
-                  </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.generatedStillPath" @click="showPath(detailDialogItem.generatedStillPath)">
-                    打开目录
-                  </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.generatedStillPath" @click="openPath(detailDialogItem.generatedStillPath)"> {{ t('autoUi.k_e77f787d2a02') }} </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.generatedStillPath" @click="showPath(detailDialogItem.generatedStillPath)"> {{ t('autoUi.k_031c10557843') }} </button>
                 </div>
               </article>
 
               <article class="live-result-card">
                 <div class="live-result-card__head">
-                  <strong>生成视频</strong>
-                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : '未生成' }}</span>
+                  <strong>{{ t('autoUi.k_d7bf85820488') }}</strong>
+                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : t('autoUi.k_3c04f9eb8b65') }}</span>
                 </div>
                 <video
                   v-if="livePhotoDisplayVideoPath(detailDialogItem)"
@@ -3307,25 +3268,19 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 ></video>
                 <div v-else class="live-result-card__empty">
                   <Play class="h-5 w-5" />
-                  <span>视频结果将在视频生成完成后显示</span>
+                  <span>{{ t('autoUi.k_895c04381433') }}</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
-                    播放视频
-                  </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
-                    打开预览
-                  </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="showPath(livePhotoDisplayVideoPath(detailDialogItem))">
-                    打开目录
-                  </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_af7d6e03da10') }} </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_200787975353') }} </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="showPath(livePhotoDisplayVideoPath(detailDialogItem))"> {{ t('autoUi.k_031c10557843') }} </button>
                 </div>
               </article>
 
               <article class="live-result-card">
                 <div class="live-result-card__head">
-                  <strong>动态照片导出</strong>
-                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : '未导出' }}</span>
+                  <strong>{{ t('autoUi.k_107deff0eeb2') }}</strong>
+                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : t('autoUi.k_3875de324c45') }}</span>
                 </div>
                 <button
                   v-if="livePhotoThumbnailPath(detailDialogItem)"
@@ -3337,15 +3292,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 </button>
                 <div v-else class="live-result-card__empty">
                   <Package class="h-5 w-5" />
-                  <span>导出完成后会在这里展示最终封面</span>
+                  <span>{{ t('autoUi.k_a42b18cc7f5c') }}</span>
                 </div>
                 <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)">
-                    打开导出视频
-                  </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)">
-                    打开桥接文件
-                  </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_f7fa88a1d462') }} </button>
+                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)"> {{ t('autoUi.k_62de58ce6175') }} </button>
                 </div>
               </article>
             </div>
@@ -3353,8 +3304,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <section class="live-detail-dialog__hero-card">
             <div class="live-detail-dialog__hero-head">
-              <strong>最近日志预览</strong>
-              <button class="live-detail-dialog__ghost" type="button" @click="openRuntimeLogs(detailDialogItem)">查看完整日志</button>
+              <strong>{{ t('autoUi.k_9e8cf3077f3f') }}</strong>
+              <button class="live-detail-dialog__ghost" type="button" @click="openRuntimeLogs(detailDialogItem)">{{ t('autoUi.k_d13c118628a2') }}</button>
             </div>
             <div v-if="detailLogPreview(detailDialogItem).length" class="live-detail-dialog__log-list">
               <article v-for="log in detailLogPreview(detailDialogItem)" :key="log.id" class="live-detail-dialog__log-item" :class="`is-${log.level}`">
@@ -3365,13 +3316,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <p>{{ log.message }}</p>
               </article>
             </div>
-            <div v-else class="live-detail-dialog__log-empty">当前还没有可显示的任务日志。</div>
+            <div v-else class="live-detail-dialog__log-empty">{{ t('autoUi.k_a53be4ed9948') }}</div>
           </section>
 
           <section class="live-detail-dialog__hero-card">
             <div class="live-detail-dialog__hero-head">
-              <strong>远端任务详情</strong>
-              <span>{{ liveTaskRemoteEntries(detailDialogItem).length ? '已记录远端任务' : '当前没有远端任务号' }}</span>
+              <strong>{{ t('autoUi.k_2677be45ab9e') }}</strong>
+              <span>{{ liveTaskRemoteEntries(detailDialogItem).length ? t('autoUi.k_ba8faa42e939') : t('autoUi.k_9971be8eec5e') }}</span>
             </div>
             <div v-if="liveTaskRemoteEntries(detailDialogItem).length" class="live-detail-dialog__hero-grid">
               <div v-for="entry in liveTaskRemoteEntries(detailDialogItem)" :key="entry.stage + entry.taskId" class="live-detail-dialog__metric">
@@ -3380,14 +3331,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <small>{{ entry.provider }} / {{ entry.model }}</small>
               </div>
             </div>
-            <div v-else class="live-detail-dialog__log-empty">当前还没有持久化的图片或视频远端任务号。</div>
+            <div v-else class="live-detail-dialog__log-empty">{{ t('autoUi.k_a130784863c0') }}</div>
           </section>
         </div>
 
         <div class="live-console-row__detail-grid">
           <section class="live-console-row__detail-card">
             <div class="live-console-row__detail-head">
-              <strong>当前流程</strong>
+              <strong>{{ t('autoUi.k_ac8056850c8e') }}</strong>
               <span>{{ workflowStepLabel(detailDialogItem.workflow?.currentStep) }}</span>
             </div>
             <div class="live-console-row__timeline">
@@ -3404,11 +3355,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <section class="live-console-row__detail-card">
             <div class="live-console-row__detail-head">
-              <strong>图片请求</strong>
+              <strong>{{ t('autoUi.k_d5d2753e959d') }}</strong>
               <span>{{ detailDialogItem.imagePromptPreview?.provider || '--' }} / {{ detailDialogItem.imagePromptPreview?.model || '--' }}</span>
             </div>
             <div class="live-console-row__detail-block">
-              <label>参考图绑定</label>
+              <label>{{ t('autoUi.k_1f1359c9a86e') }}</label>
               <div class="live-console-row__binding-grid">
                 <button class="live-console-row__binding-card" type="button" :disabled="!livePhotoImageBaseRef(detailDialogItem)" @click="openPath(livePhotoImageBaseRef(detailDialogItem))">
                   <strong>Image 1</strong>
@@ -3423,15 +3374,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </div>
             </div>
             <div class="live-console-row__detail-block">
-              <label>请求提示词</label>
+              <label>{{ t('autoUi.k_ce74779d621a') }}</label>
               <pre>{{ detailDialogItem.imagePromptPreview?.prompt || detailDialogItem.promptPreview?.instructions?.join('\n') || '--' }}</pre>
             </div>
             <div class="live-console-row__detail-block">
-              <label>负向提示词</label>
+              <label>{{ t('autoUi.k_0156a9ed0adc') }}</label>
               <pre>{{ detailDialogItem.imagePromptPreview?.negativePrompt || '--' }}</pre>
             </div>
             <div class="live-console-row__detail-block">
-              <label>完整参考</label>
+              <label>{{ t('autoUi.k_75e8e161c9b0') }}</label>
               <div v-if="detailDialogItem.imagePromptPreview?.referenceImagePaths?.length" class="live-console-row__ref-preview-grid">
                 <button
                   v-for="refPath in detailDialogItem.imagePromptPreview?.referenceImagePaths || []"
@@ -3452,19 +3403,19 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
           <section class="live-console-row__detail-card">
             <div class="live-console-row__detail-head">
-              <strong>视频请求</strong>
+              <strong>{{ t('autoUi.k_fecc5ce7de5a') }}</strong>
               <span>{{ detailDialogItem.videoPromptPreview?.provider || '--' }} / {{ detailDialogItem.videoPromptPreview?.model || '--' }}</span>
             </div>
             <div class="live-console-row__detail-block">
-              <label>请求提示词</label>
+              <label>{{ t('autoUi.k_ce74779d621a') }}</label>
               <pre>{{ detailDialogItem.videoPromptPreview?.prompt || '--' }}</pre>
             </div>
             <div class="live-console-row__detail-block">
-              <label>负向提示词</label>
+              <label>{{ t('autoUi.k_0156a9ed0adc') }}</label>
               <pre>{{ detailDialogItem.videoPromptPreview?.negativePrompt || '--' }}</pre>
             </div>
             <div class="live-console-row__detail-block">
-              <label>完整参考</label>
+              <label>{{ t('autoUi.k_75e8e161c9b0') }}</label>
               <div v-if="detailDialogItem.videoPromptPreview?.referenceImagePaths?.length" class="live-console-row__ref-preview-grid">
                 <button
                   v-for="refPath in detailDialogItem.videoPromptPreview?.referenceImagePaths || []"
@@ -3487,13 +3438,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
     </div>
 
     <div v-if="videoDialogItem" class="live-subtitle-dialog" @click.self="closeVideoDialog">
-      <div class="live-subtitle-dialog__panel live-photo-video-dialog" role="dialog" aria-modal="true" aria-label="Live Photo 视频预览">
+      <div class="live-subtitle-dialog__panel live-photo-video-dialog" role="dialog" aria-modal="true" :aria-label="t('autoUi.k_1bb36d91a68c')">
         <div class="live-subtitle-dialog__head">
           <div class="live-subtitle-dialog__titleblock">
-            <strong>{{ videoDialogItem.sourceShotLabel || videoDialogItem.productSnapshot?.name || 'Live Photo 视频' }}</strong>
-            <p>{{ itemHasAppliedSubtitle(videoDialogItem) ? '当前播放：字幕版本' : '当前播放：原始视频' }} · {{ formatTime(videoDialogItem.createdAt) }}</p>
+            <strong>{{ videoDialogItem.sourceShotLabel || videoDialogItem.productSnapshot?.name || t('autoUi.k_9609fccf1585') }}</strong>
+            <p>{{ itemHasAppliedSubtitle(videoDialogItem) ? t('autoUi.k_6d27a746c36c') : t('autoUi.k_1a73a0bbb20c') }} · {{ formatTime(videoDialogItem.createdAt) }}</p>
           </div>
-          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" aria-label="关闭视频预览" @click="closeVideoDialog">
+          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" :aria-label="t('autoUi.k_03a55b6d4114')" @click="closeVideoDialog">
             <X class="h-4 w-4" />
           </button>
         </div>
@@ -3511,9 +3462,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         </div>
         <div class="live-subtitle-dialog__actions">
           <button class="ghost-button" type="button" :disabled="subtitleDialogBusy" @click="openSingleSubtitleDialog(videoDialogItem)">
-            <Captions class="h-4 w-4" />
-            生成字幕
-          </button>
+            <Captions class="h-4 w-4" /> {{ t('autoUi.k_9475af4a63e9') }} </button>
           <button
             v-if="itemHasAppliedSubtitle(videoDialogItem)"
             class="ghost-button"
@@ -3521,10 +3470,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             :disabled="subtitleDialogBusy"
             @click="revertSubtitleFromItem(videoDialogItem)"
           >
-            <RefreshCcw class="h-4 w-4" />
-            回退字幕
-          </button>
-          <button class="primary-button" type="button" :disabled="subtitleDialogBusy" @click="closeVideoDialog">关闭</button>
+            <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_6d32dea55ea6') }} </button>
+          <button class="primary-button" type="button" :disabled="subtitleDialogBusy" @click="closeVideoDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</button>
         </div>
       </div>
     </div>
@@ -3533,59 +3480,55 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       <div class="live-subtitle-dialog__panel">
         <div class="live-subtitle-dialog__head">
           <div class="live-subtitle-dialog__titleblock">
-            <strong>{{ subtitleDialogMode === 'batch' ? '批量添加字幕' : '添加字幕' }}</strong>
-            <p>为 {{ subtitleTargetIds.length }} 个视频生成标题字幕，并直接替换当前查看视频。</p>
+            <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_c6f0209a1cfa') : t('autoUi.k_6e4c3e5ffee8') }}</strong>
+            <p>{{ t('autoUi.k_b7a385ec00d6') }} {{ subtitleTargetIds.length }} {{ t('autoUi.k_f2b41b9c6a9c') }}</p>
           </div>
-          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">关闭</button>
+          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</button>
         </div>
 
         <div class="live-subtitle-dialog__summary">
           <div class="live-subtitle-dialog__summary-item">
-            <span>处理范围</span>
-            <strong>{{ subtitleDialogMode === 'batch' ? `已选 ${subtitleTargetIds.length} 条视频` : '当前视频' }}</strong>
+            <span>{{ t('autoUi.k_11a2736ed3c4') }}</span>
+            <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_50e078e7f961', { p0: subtitleTargetIds.length }) : t('autoUi.k_bda3ae2da55b') }}</strong>
           </div>
           <div class="live-subtitle-dialog__summary-item">
-            <span>当前模板</span>
-            <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || '爆款钩子款' }}</strong>
+            <span>{{ t('autoUi.k_5d9ef99b61c5') }}</span>
+            <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || t('autoUi.k_469e324ba51b') }}</strong>
           </div>
         </div>
 
         <div class="live-subtitle-dialog__tabs">
-          <button type="button" :class="{ active: subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">标题</button>
-          <button type="button" :class="{ active: subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">模板</button>
-          <button type="button" :class="{ active: subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">样式</button>
+          <button type="button" :class="{ active: subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">{{ t('autoUi.k_748d7dc7e321') }}</button>
+          <button type="button" :class="{ active: subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">{{ t('autoUi.k_06d0f38dd26c') }}</button>
+          <button type="button" :class="{ active: subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">{{ t('autoUi.k_393a6c9117bc') }}</button>
         </div>
 
         <section v-if="subtitleDialogTab === 'title'" class="live-subtitle-dialog__section">
           <div class="live-subtitle-dialog__section-head">
             <span class="live-subtitle-dialog__kicker">Title Mode</span>
-            <strong>标题配置</strong>
+            <strong>{{ t('autoUi.k_7f39a0d9ffad') }}</strong>
           </div>
           <div class="live-subtitle-dialog__mode-pills">
-            <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'">
-              统一标题
-            </button>
-            <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'">
-              随机标题池
-            </button>
+            <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'"> {{ t('autoUi.k_73e18b3f4a29') }} </button>
+            <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'"> {{ t('autoUi.k_84ba3e6f5cfb') }} </button>
           </div>
           <label v-if="subtitleTitleStrategy === 'single_for_all'" class="live-subtitle-dialog__field">
-            <span>标题字幕</span>
-            <input v-model.trim="subtitleTitleText" type="text" maxlength="120" placeholder="请输入标题字幕" @keydown.enter.prevent="submitSubtitleDialog" />
+            <span>{{ t('autoUi.k_7e33e07fd936') }}</span>
+            <input v-model.trim="subtitleTitleText" type="text" maxlength="120" :placeholder="t('autoUi.k_169a71f2d82c')" @keydown.enter.prevent="submitSubtitleDialog" />
           </label>
           <label v-else class="live-subtitle-dialog__field">
-            <span>随机标题池</span>
-            <textarea v-model.trim="subtitleTitlePoolText" class="live-subtitle-dialog__textarea" placeholder="每行一条标题字幕"></textarea>
+            <span>{{ t('autoUi.k_84ba3e6f5cfb') }}</span>
+            <textarea v-model.trim="subtitleTitlePoolText" class="live-subtitle-dialog__textarea" :placeholder="t('autoUi.k_60e49a8dd0a0')"></textarea>
           </label>
           <div class="live-subtitle-dialog__inline-tip">
-            {{ subtitleTitleStrategy === 'single_for_all' ? '整批视频会共用这一条标题字幕。' : '每行一条，渲染时会为每个视频随机分配。' }}
+            {{ subtitleTitleStrategy === 'single_for_all' ? t('autoUi.k_fb5b47107a9b') : t('autoUi.k_70164720b604') }}
           </div>
         </section>
 
         <section v-else-if="subtitleDialogTab === 'template'" class="live-subtitle-dialog__section">
           <div class="live-subtitle-dialog__section-head">
             <span class="live-subtitle-dialog__kicker">Template</span>
-            <strong>字幕模板</strong>
+            <strong>{{ t('autoUi.k_f84c2e382440') }}</strong>
           </div>
           <div class="live-subtitle-dialog__preset-grid">
             <button
@@ -3600,43 +3543,43 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <span>{{ preset.summary }}</span>
             </button>
           </div>
-          <div class="live-subtitle-dialog__preset-note">优先选择最接近你商品风格的模板，再调整下面的细节样式。</div>
+          <div class="live-subtitle-dialog__preset-note">{{ t('autoUi.k_6bf2c4d17ccd') }}</div>
         </section>
 
         <section v-else class="live-subtitle-dialog__section">
           <div class="live-subtitle-dialog__section-head">
             <span class="live-subtitle-dialog__kicker">Style</span>
-            <strong>文字样式</strong>
+            <strong>{{ t('autoUi.k_856e405fcf39') }}</strong>
           </div>
           <div class="live-subtitle-dialog__style-panel">
             <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact">
               <label class="live-subtitle-dialog__field">
-                <span>字体</span>
-                <input v-model.trim="subtitleCaptionStyle.fontName" type="text" placeholder="例如：SimHei" />
+                <span>{{ t('autoUi.k_b50d4d8352f5') }}</span>
+                <input v-model.trim="subtitleCaptionStyle.fontName" type="text" :placeholder="t('autoUi.k_9567b9609e02')" />
               </label>
               <label class="live-subtitle-dialog__field">
-                <span>字号</span>
+                <span>{{ t('autoUi.k_576ccdb1f1c7') }}</span>
                 <input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" />
               </label>
               <label class="live-subtitle-dialog__field">
-                <span>描边</span>
+                <span>{{ t('autoUi.k_a48b15a6de71') }}</span>
                 <input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" />
               </label>
               <label class="live-subtitle-dialog__field">
-                <span>最大行数</span>
+                <span>{{ t('autoUi.k_3ca120ca0195') }}</span>
                 <input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" />
               </label>
             </div>
             <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--dual">
               <label class="live-subtitle-dialog__field">
-                <span>文字颜色</span>
+                <span>{{ t('autoUi.k_07f568dada4d') }}</span>
                 <div class="live-subtitle-dialog__color-field">
                   <input v-model.trim="subtitleCaptionStyle.fontColor" type="text" />
                   <input v-model="subtitleCaptionStyle.fontColor" type="color" />
                 </div>
               </label>
               <label class="live-subtitle-dialog__field">
-                <span>描边颜色</span>
+                <span>{{ t('autoUi.k_eaa98f95ba53') }}</span>
                 <div class="live-subtitle-dialog__color-field">
                   <input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" />
                   <input v-model="subtitleCaptionStyle.strokeColor" type="color" />
@@ -3645,23 +3588,23 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </div>
             <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact">
               <label class="live-subtitle-dialog__field">
-                <span>位置</span>
+                <span>{{ t('autoUi.k_88c34452cc46') }}</span>
                 <select v-model="subtitleCaptionStyle.position">
-                  <option value="top">顶部</option>
-                  <option value="center">中间</option>
-                  <option value="bottom">底部</option>
+                  <option value="top">{{ t('autoUi.k_a9d35ab0a675') }}</option>
+                  <option value="center">{{ t('autoUi.k_910253ea0c16') }}</option>
+                  <option value="bottom">{{ t('autoUi.k_435b2d8982fd') }}</option>
                 </select>
               </label>
               <label class="live-subtitle-dialog__field">
-                <span>对齐</span>
+                <span>{{ t('autoUi.k_6ff4e8934c7f') }}</span>
                 <select v-model="subtitleCaptionStyle.textAlign">
-                  <option value="left">左对齐</option>
-                  <option value="center">居中</option>
-                  <option value="right">右对齐</option>
+                  <option value="left">{{ t('autoUi.k_413f8db65f69') }}</option>
+                  <option value="center">{{ t('autoUi.k_5009324782b9') }}</option>
+                  <option value="right">{{ t('autoUi.k_70fe40dec2fa') }}</option>
                 </select>
               </label>
               <label class="live-subtitle-dialog__field">
-                <span>底部边距</span>
+                <span>{{ t('autoUi.k_fa0119023442') }}</span>
                 <input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" />
               </label>
             </div>
@@ -3675,12 +3618,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             class="ghost-button"
             :disabled="subtitleDialogBusy"
             @click="revertSubtitleFromItem(subtitleDialogItem)"
-          >
-            回退原视频
-          </button>
-          <button type="button" class="ghost-button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">取消</button>
+          > {{ t('autoUi.k_5d2a55f19c91') }} </button>
+          <button type="button" class="ghost-button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_4d0b4688c787') }}</button>
           <button type="button" class="primary-button" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">
-            {{ subtitleDialogBusy ? '处理中...' : '开始生成字幕' }}
+            {{ subtitleDialogBusy ? t('autoUi.k_dde1db57718c') : t('autoUi.k_c0b013507133') }}
           </button>
         </div>
       </div>
@@ -3690,10 +3631,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       <div class="replacement-region-dialog__panel">
         <div class="replacement-region-dialog__head">
           <div>
-            <strong>校正替换区域</strong>
+            <strong>{{ t('autoUi.k_329d5e81ce23') }}</strong>
             <span>{{ replacementRegionDialogItem.productSnapshot?.name || replacementRegionDialogItem.id }}</span>
           </div>
-          <button type="button" :disabled="replacementRegionBusy" @click="closeReplacementRegionEditor">关闭</button>
+          <button type="button" :disabled="replacementRegionBusy" @click="closeReplacementRegionEditor">{{ t('autoUi.k_6c14bd7f6f9e') }}</button>
         </div>
         <div
           ref="replacementRegionStage"
@@ -3719,14 +3660,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           </div>
         </div>
         <div class="replacement-region-dialog__meta">
-          <span>区域版本 {{ replacementRegionDialogItem.replacementRegion?.revision || 0 }}</span>
+          <span>{{ t('autoUi.k_223bacf5d4b9') }} {{ replacementRegionDialogItem.replacementRegion?.revision || 0 }}</span>
           <span>{{ Math.round(replacementRegionDraft.width * 100) }}% x {{ Math.round(replacementRegionDraft.height * 100) }}%</span>
         </div>
         <div class="replacement-region-dialog__actions">
-          <button type="button" class="ghost-button" :disabled="replacementRegionBusy" @click="closeReplacementRegionEditor">取消</button>
+          <button type="button" class="ghost-button" :disabled="replacementRegionBusy" @click="closeReplacementRegionEditor">{{ t('autoUi.k_4d0b4688c787') }}</button>
           <button type="button" class="primary-button" :disabled="replacementRegionBusy" @click="saveReplacementRegionAndRetry">
             <ScanLine class="h-4 w-4" />
-            {{ replacementRegionBusy ? '保存中...' : '保存并重试' }}
+            {{ replacementRegionBusy ? t('autoUi.k_d70d425039f2') : t('autoUi.k_c33516da3121') }}
           </button>
         </div>
       </div>
@@ -3751,10 +3692,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
     <RuntimeLogDialog
       v-model="runtimeDialogOpen"
       :logs="runtimeLogs"
-      :title="runtimeDialogTitle"
-      :description="'查看 Live Photo 单任务自动流程的阶段切换、请求准备、重试和失败信息。'"
-      :hint="'这里只显示当前任务自己的运行日志。'"
-      :fab-label="'任务日志'"
+      :title="runtimeDialogTitle || t('autoUi.k_a8ce402665f3')"
+      :description="t('autoUi.k_bd11660cb06b')"
+      :hint="t('autoUi.k_7ca26501dd28')"
+      :fab-label="t('autoUi.k_e29c909bf39f')"
     />
   </div>
 </template>

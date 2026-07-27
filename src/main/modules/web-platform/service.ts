@@ -1405,7 +1405,7 @@ export const webPlatformService = {
   ) {
     const auth = await this.authByToken(token)
     const pluginRecord = await webPlatformRepo.ensurePluginRecord(auth.user.id, 'video-batch-subtitle')
-    if (pluginRecord.status !== 'installed') throw new Error('?????????????')
+    if (pluginRecord.status !== 'installed') throw new Error('Please install the batch subtitle plugin first.')
     return await reflowBatchSubtitleJob({
       userId: auth.user.id,
       jobId: input.jobId,
@@ -1447,7 +1447,7 @@ export const webPlatformService = {
   async transcribeBatchSubtitleJob(token: string, input: { jobId: string; sourceItemId?: string }) {
     const auth = await this.authByToken(token)
     const pluginRecord = await webPlatformRepo.ensurePluginRecord(auth.user.id, 'video-batch-subtitle')
-    if (pluginRecord.status !== 'installed') throw new Error('?????????????')
+    if (pluginRecord.status !== 'installed') throw new Error('Please install the batch subtitle plugin first.')
     return await transcribeBatchSubtitleJob({
       userId: auth.user.id,
       jobId: input.jobId,
@@ -1458,7 +1458,7 @@ export const webPlatformService = {
   async exportBatchSubtitleJobWithCapcut(token: string, input: { jobId: string }) {
     const auth = await this.authByToken(token)
     const pluginRecord = await webPlatformRepo.ensurePluginRecord(auth.user.id, 'video-batch-subtitle')
-    if (pluginRecord.status !== 'installed') throw new Error('?????????????')
+    if (pluginRecord.status !== 'installed') throw new Error('Please install the batch subtitle plugin first.')
     return await exportBatchSubtitleJobWithCapcut({
       userId: auth.user.id,
       jobId: input.jobId,
@@ -1491,7 +1491,7 @@ export const webPlatformService = {
   ) {
     const auth = await this.authByToken(token)
     const pluginRecord = await webPlatformRepo.ensurePluginRecord(auth.user.id, 'video-batch-subtitle')
-    if (pluginRecord.status !== 'installed') throw new Error('?????????????')
+    if (pluginRecord.status !== 'installed') throw new Error('Please install the batch subtitle plugin first.')
     return await previewBatchSubtitleFrame({
       userId: auth.user.id,
       sourceItem: input.sourceItem,

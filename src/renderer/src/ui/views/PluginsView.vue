@@ -6,7 +6,6 @@ import { ArrowRight, Check, Download, Power, Search, Trash2, Wrench } from 'luci
 import { webApiClient, type PluginDetail, type PluginSummary } from '@/lib/webApiClient'
 
 type WorkspaceMode = 'market' | 'installed'
-type LocalPluginState = Record<string, { status: PluginSummary['status']; enabled: boolean }>
 
 const route = useRoute()
 const router = useRouter()
@@ -20,7 +19,6 @@ const searchKeyword = ref('')
 const workspace = ref<WorkspaceMode>('market')
 const plugins = ref<PluginSummary[]>([])
 const selectedPluginId = ref('')
-const LOCAL_PLUGIN_STATE_KEY = 'videogen-desktop-plugin-state'
 
 const fallbackPlugins: PluginSummary[] = [
   {
@@ -102,49 +100,11 @@ const fallbackPlugins: PluginSummary[] = [
   },
 ]
 
-function readLocalPluginState(): LocalPluginState {
-  try {
-    const raw = localStorage.getItem(LOCAL_PLUGIN_STATE_KEY)?.trim()
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as LocalPluginState
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function writeLocalPluginState(state: LocalPluginState) {
-  localStorage.setItem(LOCAL_PLUGIN_STATE_KEY, JSON.stringify(state))
-}
-
-function mergeLocalPluginState(source: PluginSummary[]) {
-  const state = readLocalPluginState()
-  return source.map((item) => {
-    const local = state[item.id]
-    if (!local) return item
-    return {
-      ...item,
-      status: local.status,
-      enabled: local.status === 'installed' ? Boolean(local.enabled) : false,
-    }
-  })
-}
-
 function mergePluginCatalogWithFallback(source: PluginSummary[]) {
   const merged = new Map<string, PluginSummary>()
   for (const item of fallbackPlugins) merged.set(item.id, item)
   for (const item of source) merged.set(item.id, { ...(merged.get(item.id) || item), ...item })
   return [...merged.values()]
-}
-
-function saveLocalPluginItem(pluginId: string, patch: { status?: PluginSummary['status']; enabled?: boolean }) {
-  const current = readLocalPluginState()
-  const prev = current[pluginId] || { status: 'uninstalled' as const, enabled: false }
-  current[pluginId] = {
-    status: patch.status ?? prev.status,
-    enabled: patch.status === 'uninstalled' ? false : (patch.enabled ?? prev.enabled),
-  }
-  writeLocalPluginState(current)
 }
 
 const filteredPlugins = computed(() => {
@@ -155,6 +115,16 @@ const filteredPlugins = computed(() => {
 })
 
 const selectedPlugin = computed(() => plugins.value.find((item) => item.id === selectedPluginId.value) ?? filteredPlugins.value[0] ?? null)
+
+function pluginName(plugin: PluginSummary | PluginDetail) {
+  const key = `plugins.catalog.${plugin.id}.name`
+  return t(key, plugin.name)
+}
+
+function pluginDescription(plugin: PluginSummary | PluginDetail) {
+  const key = `plugins.catalog.${plugin.id}.description`
+  return t(key, plugin.description)
+}
 
 function syncRoute() {
   void router.replace({
@@ -206,20 +176,19 @@ function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
 }
 
 function primaryActionText(plugin: PluginSummary) {
-  if (isDirectWorkspacePlugin(plugin)) return t('plugins.actions.openWorkspace')
   if (plugin.status !== 'installed') return t('plugins.actions.install')
   if (!plugin.enabled) return t('plugins.actions.enable')
-  return t('plugins.actions.use')
+  return isDirectWorkspacePlugin(plugin) ? t('plugins.actions.openWorkspace') : t('plugins.actions.use')
 }
 
 async function loadPlugins() {
   loading.value = true
   errorText.value = ''
   try {
-    plugins.value = mergeLocalPluginState(mergePluginCatalogWithFallback(await webApiClient.listPlugins()))
+    plugins.value = mergePluginCatalogWithFallback(await webApiClient.listPlugins())
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
-    plugins.value = mergeLocalPluginState(fallbackPlugins)
+    plugins.value = fallbackPlugins
   } finally {
     loading.value = false
     if (!selectedPlugin.value && filteredPlugins.value.length) selectedPluginId.value = filteredPlugins.value[0].id
@@ -244,43 +213,18 @@ async function runPluginAction(action: () => Promise<{ plugin: PluginDetail }>, 
 
 async function installPlugin(pluginId: string) {
   await runPluginAction(() => webApiClient.installPlugin(pluginId), t('plugins.messages.installed'))
-  if (errorText.value) {
-    saveLocalPluginItem(pluginId, { status: 'installed', enabled: false })
-    notice.value = t('plugins.messages.markedInstalledLocal')
-    errorText.value = ''
-    await loadPlugins()
-    selectedPluginId.value = pluginId
-  }
 }
 
 async function enablePlugin(pluginId: string) {
   await runPluginAction(() => webApiClient.enablePlugin(pluginId), t('plugins.messages.enabled'))
-  if (errorText.value) {
-    saveLocalPluginItem(pluginId, { status: 'installed', enabled: true })
-    notice.value = t('plugins.messages.markedEnabledLocal')
-    errorText.value = ''
-    await loadPlugins()
-  }
 }
 
 async function disablePlugin(pluginId: string) {
   await runPluginAction(() => webApiClient.disablePlugin(pluginId), t('plugins.messages.disabled'))
-  if (errorText.value) {
-    saveLocalPluginItem(pluginId, { status: 'installed', enabled: false })
-    notice.value = t('plugins.messages.markedDisabledLocal')
-    errorText.value = ''
-    await loadPlugins()
-  }
 }
 
 async function uninstallPlugin(pluginId: string) {
   await runPluginAction(() => webApiClient.uninstallPlugin(pluginId), t('plugins.messages.uninstalled'))
-  if (errorText.value) {
-    saveLocalPluginItem(pluginId, { status: 'uninstalled', enabled: false })
-    notice.value = t('plugins.messages.removedLocal')
-    errorText.value = ''
-    await loadPlugins()
-  }
 }
 
 function openMarket() {
@@ -296,6 +240,14 @@ function selectPlugin(pluginId: string) {
 }
 
 function usePlugin(plugin: PluginSummary | PluginDetail) {
+  if (plugin.status !== 'installed') {
+    errorText.value = t('plugins.errors.installFirst')
+    return
+  }
+  if (!plugin.enabled) {
+    errorText.value = t('plugins.errors.enableFirst')
+    return
+  }
   if (plugin.id === 'product-image-materials') {
     void router.push('/plugins/product-image-materials')
     return
@@ -316,22 +268,10 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
     void router.push('/plugins/video-parser-download')
     return
   }
-  if (plugin.status !== 'installed') {
-    errorText.value = t('plugins.errors.installFirst')
-    return
-  }
-  if (!plugin.enabled) {
-    errorText.value = t('plugins.errors.enableFirst')
-    return
-  }
   void router.push(plugin.workspacePath)
 }
 
 function onPrimaryAction(plugin: PluginSummary) {
-  if (isDirectWorkspacePlugin(plugin)) {
-    void usePlugin(plugin)
-    return
-  }
   if (plugin.status !== 'installed') {
     void installPlugin(plugin.id)
     return
@@ -413,15 +353,15 @@ onMounted(async () => {
           :key="plugin.id"
           class="plugin-card"
           :class="{ selected: selectedPluginId === plugin.id }"
-          @click="isDirectWorkspacePlugin(plugin) ? usePlugin(plugin) : selectPlugin(plugin.id)"
+          @click="selectPlugin(plugin.id)"
         >
           <div class="plugin-card__top">
             <div class="plugin-card__icon" :class="pluginCardTone(plugin)">{{ pluginIconText(plugin) }}</div>
             <span class="plugin-card__state" :class="{ installed: plugin.status === 'installed' }">{{ pluginStatusText(plugin) }}</span>
           </div>
           <div class="plugin-card__body">
-            <h3>{{ plugin.name }}</h3>
-            <p>{{ plugin.description }}</p>
+            <h3>{{ pluginName(plugin) }}</h3>
+            <p>{{ pluginDescription(plugin) }}</p>
           </div>
           <div class="plugin-card__meta">
             <span>{{ pluginCategoryText(plugin) }}</span>
@@ -439,8 +379,8 @@ onMounted(async () => {
           <div class="detail-card__icon" :class="pluginCardTone(selectedPlugin)">{{ pluginIconText(selectedPlugin) }}</div>
           <div class="detail-card__copy">
             <div class="detail-card__eyebrow">{{ t('plugins.detail.eyebrow') }}</div>
-            <h2>{{ selectedPlugin.name }}</h2>
-            <p>{{ selectedPlugin.description }}</p>
+            <h2>{{ pluginName(selectedPlugin) }}</h2>
+            <p>{{ pluginDescription(selectedPlugin) }}</p>
           </div>
         </div>
 
@@ -452,7 +392,7 @@ onMounted(async () => {
 
         <div class="detail-card__actions">
           <button
-            v-if="!isDirectWorkspacePlugin(selectedPlugin) && selectedPlugin.status !== 'installed'"
+            v-if="selectedPlugin.status !== 'installed'"
             class="primary-button"
             type="button"
             :disabled="actionBusy"
@@ -461,7 +401,7 @@ onMounted(async () => {
             {{ t('plugins.actions.installPlugin') }}
           </button>
           <button
-            v-else-if="!isDirectWorkspacePlugin(selectedPlugin) && !selectedPlugin.enabled"
+            v-else-if="!selectedPlugin.enabled"
             class="primary-button"
             type="button"
             :disabled="actionBusy"

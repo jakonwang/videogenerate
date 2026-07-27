@@ -10,8 +10,10 @@ import {
   webApiClient,
 } from '@/lib/webApiClient'
 import { useWebSessionStore } from '@/stores/webSession'
+import { useI18n } from 'vue-i18n'
 
 const webSession = useWebSessionStore()
+const { t, locale } = useI18n()
 
 const loading = ref(false)
 const paying = ref('')
@@ -21,22 +23,21 @@ const transactions = ref<WalletTransaction[]>([])
 const feedback = ref('')
 
 const walletBalance = computed(() => webSession.wallet?.balanceCredits ?? 0)
-const activePlan = computed(() => webSession.subscription?.planName || '未开通')
+const activePlan = computed(() => webSession.subscription?.planName || t('billing.notActive'))
 
-const computePackOptions = [
-  { credits: 100, priceHint: '适合轻量测试' },
-  { credits: 300, priceHint: '适合常规生产' },
-  { credits: 1000, priceHint: '适合高频批量任务' },
-]
+const computePackOptions = computed(() => [
+  { credits: 100, priceHint: t('billing.packs.light') },
+  { credits: 300, priceHint: t('billing.packs.regular') },
+  { credits: 1000, priceHint: t('billing.packs.batch') },
+])
 
 function formatTime(value?: number) {
   if (!value) return '--'
-  const d = new Date(value)
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return new Date(value).toLocaleString(locale.value)
 }
 
 function orderTypeLabel(type: BillingOrder['type']) {
-  return type === 'subscription' ? '会员订单' : '算力包订单'
+  return type === 'subscription' ? t('billing.order.subscription') : t('billing.order.compute')
 }
 
 function transactionTone(type: WalletTransaction['type']) {
@@ -69,7 +70,7 @@ async function createAndPayOrder(input: { type: 'subscription' | 'compute_pack';
       paymentChannel: 'mock_wechat',
     })
     await webApiClient.payMockOrder(created.order.id)
-    feedback.value = input.type === 'subscription' ? '会员已开通并到账算力。' : '算力包已充值到账。'
+    feedback.value = input.type === 'subscription' ? t('billing.messages.subscribed') : t('billing.messages.recharged')
     await refresh()
   } catch (error: any) {
     feedback.value = error?.message ?? String(error)
@@ -88,27 +89,27 @@ onMounted(() => {
     <section class="billing-hero">
       <div class="billing-hero__copy">
         <span class="panel-tag">Billing</span>
-        <h1>会员与钱包中心</h1>
-        <p>管理 Web 商业化账号的会员状态、算力余额、订单与扣费流水。当前为本地演示支付链路，便于后续切正式微信 / 支付宝。</p>
+        <h1>{{ t('billing.title') }}</h1>
+        <p>{{ t('billing.desc') }}</p>
       </div>
       <UiButton variant="ghost" :disabled="loading" @click="refresh">
         <LoaderCircle v-if="loading" class="h-4 w-4 is-spinning" />
         <Wallet v-else class="h-4 w-4" />
-        刷新数据
+        {{ t('billing.refresh') }}
       </UiButton>
     </section>
 
     <section class="billing-summary">
       <UiCard class="billing-summary-card">
-        <span>当前账号</span>
+        <span>{{ t('billing.currentAccount') }}</span>
         <strong>{{ webSession.displayName }}</strong>
       </UiCard>
       <UiCard class="billing-summary-card">
-        <span>会员套餐</span>
+        <span>{{ t('billing.currentPlan') }}</span>
         <strong>{{ activePlan }}</strong>
       </UiCard>
       <UiCard class="billing-summary-card">
-        <span>算力余额</span>
+        <span>{{ t('billing.balance') }}</span>
         <strong>{{ walletBalance }}</strong>
       </UiCard>
     </section>
@@ -117,21 +118,21 @@ onMounted(() => {
       <div class="billing-main">
         <UiCard class="billing-panel">
           <div class="billing-panel__head">
-            <strong>会员套餐</strong>
-            <small>购买成功后自动开通并赠送月度算力。</small>
+            <strong>{{ t('billing.plans.title') }}</strong>
+            <small>{{ t('billing.plans.desc') }}</small>
           </div>
           <div class="plan-grid">
             <article v-for="plan in plans" :key="plan.id" class="plan-card">
               <div class="plan-card__price">
                 <strong>{{ plan.name }}</strong>
-                <span>¥{{ plan.priceCny }} / {{ plan.durationDays }} 天</span>
+                <span>¥{{ plan.priceCny }} / {{ t('billing.days', { count: plan.durationDays }) }}</span>
               </div>
               <div class="plan-card__meta">
-                <span>每期赠送 {{ plan.monthlyComputeCredits }} 算力点</span>
+                <span>{{ t('billing.plans.credits', { count: plan.monthlyComputeCredits }) }}</span>
               </div>
               <UiButton :disabled="paying === plan.id" @click="createAndPayOrder({ type: 'subscription', planId: plan.id })">
                 <CreditCard class="h-4 w-4" />
-                {{ paying === plan.id ? '支付中...' : '立即开通' }}
+                {{ paying === plan.id ? t('billing.paying') : t('billing.subscribe') }}
               </UiButton>
             </article>
           </div>
@@ -139,18 +140,18 @@ onMounted(() => {
 
         <UiCard class="billing-panel">
           <div class="billing-panel__head">
-            <strong>算力包充值</strong>
-            <small>按包补充算力点，用于高成本生成动作。</small>
+            <strong>{{ t('billing.packs.title') }}</strong>
+            <small>{{ t('billing.packs.desc') }}</small>
           </div>
           <div class="plan-grid pack-grid">
             <article v-for="pack in computePackOptions" :key="pack.credits" class="plan-card pack-card">
               <div class="plan-card__price">
-                <strong>{{ pack.credits }} 算力点</strong>
+                <strong>{{ t('billing.creditCount', { count: pack.credits }) }}</strong>
                 <span>{{ pack.priceHint }}</span>
               </div>
               <UiButton :disabled="paying === String(pack.credits)" @click="createAndPayOrder({ type: 'compute_pack', credits: pack.credits })">
                 <Zap class="h-4 w-4" />
-                {{ paying === String(pack.credits) ? '充值中...' : '立即充值' }}
+                {{ paying === String(pack.credits) ? t('billing.recharging') : t('billing.recharge') }}
               </UiButton>
             </article>
           </div>
@@ -158,15 +159,15 @@ onMounted(() => {
 
         <UiCard class="billing-panel">
           <div class="billing-panel__head">
-            <strong>订单记录</strong>
-            <small>当前演示环境使用模拟支付回调。</small>
+            <strong>{{ t('billing.order.title') }}</strong>
+            <small>{{ t('billing.order.desc') }}</small>
           </div>
           <div class="billing-table">
             <div class="billing-table__head">
-              <span>订单类型</span>
-              <span>金额</span>
-              <span>状态</span>
-              <span>时间</span>
+              <span>{{ t('billing.order.type') }}</span>
+              <span>{{ t('billing.order.amount') }}</span>
+              <span>{{ t('billing.order.status') }}</span>
+              <span>{{ t('billing.order.time') }}</span>
             </div>
             <div v-if="orders.length" class="billing-table__body">
               <article v-for="order in orders.slice(0, 12)" :key="order.id" class="billing-table__row">
@@ -176,7 +177,7 @@ onMounted(() => {
                 <span>{{ formatTime(order.paidAt || order.createdAt) }}</span>
               </article>
             </div>
-            <div v-else class="billing-empty">暂无订单记录</div>
+            <div v-else class="billing-empty">{{ t('billing.order.empty') }}</div>
           </div>
         </UiCard>
       </div>
@@ -184,8 +185,8 @@ onMounted(() => {
       <aside class="billing-side">
         <UiCard class="billing-panel">
           <div class="billing-panel__head">
-            <strong>算力流水</strong>
-            <small>展示最近的充值与扣费明细。</small>
+            <strong>{{ t('billing.transactions.title') }}</strong>
+            <small>{{ t('billing.transactions.desc') }}</small>
           </div>
           <div v-if="transactions.length" class="transaction-list">
             <article v-for="item in transactions.slice(0, 12)" :key="item.id" class="transaction-item">
@@ -196,21 +197,21 @@ onMounted(() => {
               <em :class="transactionTone(item.type)">{{ item.amountCredits > 0 ? `+${item.amountCredits}` : item.amountCredits }}</em>
             </article>
           </div>
-          <div v-else class="billing-empty">暂无流水</div>
+          <div v-else class="billing-empty">{{ t('billing.transactions.empty') }}</div>
         </UiCard>
 
         <UiCard class="billing-panel">
           <div class="billing-panel__head">
-            <strong>状态说明</strong>
+            <strong>{{ t('billing.notes.title') }}</strong>
           </div>
           <div class="billing-note-list">
             <article class="billing-note">
               <CheckCircle2 class="h-4 w-4" />
-              <span>会员负责功能权限与基础额度，算力包负责超额消耗补充。</span>
+              <span>{{ t('billing.notes.membership') }}</span>
             </article>
             <article class="billing-note">
               <CheckCircle2 class="h-4 w-4" />
-              <span>当前支付链路为本地模拟模式，后续可平滑替换为真实微信 / 支付宝回调。</span>
+              <span>{{ t('billing.notes.payment') }}</span>
             </article>
           </div>
           <p v-if="feedback" class="billing-feedback">{{ feedback }}</p>

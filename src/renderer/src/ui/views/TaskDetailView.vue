@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 type VideoTask = {
   id: string
@@ -18,9 +19,11 @@ type VideoTask = {
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const task = ref<VideoTask | null>(null)
 
 const progressLabel = computed(() => `${Math.round(Number(task.value?.progress ?? 0) * 100)}%`)
+const statusLabel = computed(() => task.value ? t(`production.tasks.status.${task.value.status}`) : '-')
 
 async function refresh() {
   const taskId = String(route.params.taskId || '').trim()
@@ -45,54 +48,54 @@ onMounted(refresh)
   <div class="task-detail-page">
     <section class="task-detail-hero">
       <div class="task-detail-hero__copy">
-        <span class="task-detail-hero__tag">生产 / 任务详情</span>
-        <h1>{{ task ? `任务 ${task.id.slice(0, 8)}` : '未找到任务' }}</h1>
-        <p>这里统一处理任务日志、失败原因、输出文件和报告，不再放在任务列表页里。</p>
+        <span class="task-detail-hero__tag">{{ t('production.detail.kicker') }}</span>
+        <h1>{{ task ? t('production.detail.taskTitle', { id: task.id.slice(0, 8) }) : t('production.detail.notFound') }}</h1>
+        <p>{{ t('production.detail.desc') }}</p>
       </div>
-      <button class="app-ghost px-4 py-2 text-sm" @click="router.push('/production/tasks')">返回任务列表</button>
+      <button class="app-ghost px-4 py-2 text-sm" @click="router.push('/production/tasks')">{{ t('production.detail.back') }}</button>
     </section>
 
     <section v-if="task" class="task-detail-card">
       <div class="task-detail-grid">
         <div class="task-detail-metric">
-          <span>状态</span>
-          <strong>{{ task.status }}</strong>
+          <span>{{ t('production.detail.status') }}</span>
+          <strong>{{ statusLabel }}</strong>
         </div>
         <div class="task-detail-metric">
-          <span>进度</span>
+          <span>{{ t('production.detail.progress') }}</span>
           <strong>{{ progressLabel }}</strong>
         </div>
         <div class="task-detail-metric">
-          <span>输出目录</span>
+          <span>{{ t('production.detail.outputDir') }}</span>
           <strong>{{ task.outDir || '-' }}</strong>
         </div>
       </div>
 
       <div v-if="task.error" class="task-detail-error">
-        <strong>错误详情</strong>
+        <strong>{{ t('production.detail.error') }}</strong>
         <p>{{ task.error }}</p>
       </div>
 
       <div class="task-detail-actions">
-        <button class="app-ghost px-4 py-2 text-sm" :disabled="!task.outPath" @click="showInFolder(task.outPath)">定位输出文件</button>
-        <button class="app-ghost px-4 py-2 text-sm" :disabled="!task.reportPath" @click="openPath(task.reportPath || '')">打开报告</button>
-        <button class="app-ghost px-4 py-2 text-sm" :disabled="!task.outDir" @click="openPath(task.outDir)">打开输出目录</button>
+        <button class="app-ghost px-4 py-2 text-sm" :disabled="!task.outPath" @click="showInFolder(task.outPath)">{{ t('production.detail.locateOutput') }}</button>
+        <button class="app-ghost px-4 py-2 text-sm" :disabled="!task.reportPath" @click="openPath(task.reportPath || '')">{{ t('production.detail.openReport') }}</button>
+        <button class="app-ghost px-4 py-2 text-sm" :disabled="!task.outDir" @click="openPath(task.outDir)">{{ t('production.detail.openOutputDir') }}</button>
       </div>
 
       <div class="task-detail-logs">
         <div class="task-detail-section__head">
-          <strong>运行日志</strong>
-          <button class="app-ghost px-3 py-2 text-xs" @click="refresh">刷新</button>
+          <strong>{{ t('production.detail.logs') }}</strong>
+          <button class="app-ghost px-3 py-2 text-xs" @click="refresh">{{ t('common.refresh') }}</button>
         </div>
         <div class="task-log-list">
-          <div v-if="!task.logs.length" class="task-log-empty">暂无日志</div>
+          <div v-if="!task.logs.length" class="task-log-empty">{{ t('production.detail.noLogs') }}</div>
           <pre v-for="(log, index) in task.logs" :key="`${task.id}-${index}`" class="task-log-item">{{ log }}</pre>
         </div>
       </div>
     </section>
 
     <section v-else class="task-detail-card task-detail-card--empty">
-      <p>当前任务不存在，可能已被清理或尚未写入本地队列。</p>
+      <p>{{ t('production.detail.missing') }}</p>
     </section>
   </div>
 </template>

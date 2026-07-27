@@ -1458,7 +1458,7 @@ export async function transcribeBatchSubtitleJob(input: {
   sourceItemId?: string
 }) {
   const currentRaw = await webPlatformRepo.getBatchSubtitleJob(input.userId, input.jobId)
-  if (!currentRaw) throw new Error('?????????')
+  if (!currentRaw) throw new Error('Batch subtitle job does not exist.')
   const current = normalizeBatchSubtitleJob(currentRaw)
   const preparing = await webPlatformRepo.upsertBatchSubtitleJob({
     ...current,
@@ -1474,11 +1474,11 @@ export async function transcribeBatchSubtitleJob(input: {
 
 export async function exportBatchSubtitleJobWithCapcut(input: { userId: string; jobId: string }) {
   const currentRaw = await webPlatformRepo.getBatchSubtitleJob(input.userId, input.jobId)
-  if (!currentRaw) throw new Error('?????????')
+  if (!currentRaw) throw new Error('Batch subtitle job does not exist.')
   const current = normalizeBatchSubtitleJob(currentRaw)
   const config = await getBatchSubtitlePluginConfig(input.userId)
   if (!isCapcutMateConfigured({ baseUrl: config.capcutMateBaseUrl })) {
-    throw new Error('??? capcut-mate ????')
+    throw new Error('The capcut-mate service is not configured.')
   }
   const outputDir = join(getAppPaths().dataDir, 'batch-subtitle', input.userId, current.id)
   await mkdir(outputDir, { recursive: true })
@@ -1519,7 +1519,7 @@ export async function exportBatchSubtitleJobWithCapcut(input: { userId: string; 
           error,
         }),
       )
-      failures.push(`${sourceItem.fileName || sourceItem.id}: ${String(error?.message || error || 'capcut-mate ????')}`)
+      failures.push(`${sourceItem.fileName || sourceItem.id}: ${String(error?.message || error || 'capcut-mate export failed')}`)
     }
     await webPlatformRepo.upsertBatchSubtitleJob({
       ...queued,
@@ -1561,7 +1561,7 @@ export async function runBatchSubtitleJob(input: { userId: string; jobId: string
       job: current,
     })
     if (!current.subtitleTracks.some((item) => item.cues.length)) {
-      throw new Error('ASR ????????')
+      throw new Error('ASR did not return any usable subtitle cues.')
     }
   }
   if (current.exportEngine === 'capcut_mate' && isCapcutMateConfigured({ baseUrl: config.capcutMateBaseUrl })) {
@@ -1698,7 +1698,7 @@ export async function runBatchSubtitleJob(input: { userId: string; jobId: string
       })
       failedOutputMap.set(result.sourceItem.id, failedOutput)
       failures.push(
-        `${result.sourceItem.fileName || result.sourceItem.id}: ${String(result.error?.message || result.error || '????????')}`,
+        `${result.sourceItem.fileName || result.sourceItem.id}: ${String(result.error?.message || result.error || 'Batch subtitle rendering failed')}`,
       )
     }
     const processedCount = Math.min(startOffset + batchStart + batchItems.length, pendingSourceItems.length)

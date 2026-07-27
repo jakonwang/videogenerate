@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -442,7 +442,7 @@ const selectedProductId = ref('')
 const productQuery = ref('')
 const selectedModelId = ref('')
 const errorText = ref('')
-const stageLog = ref('等待上传参考视频并开始分析')
+const stageLog = ref(tr('autoUi.k_4498055b51f3'))
 const runtimeLogs = ref<RuntimeLogItem[]>([])
 const runtimeDialogOpen = ref(false)
 const autoBootstrapSignature = ref('')
@@ -786,11 +786,11 @@ const storyboardDesignRows = computed(() =>
       scriptCode: `脚本-${typeof shot.shotIndex === 'number' ? shot.shotIndex + 1 : index + 1}`,
       imagePath: frame?.imagePath || '',
       statusText: isRegenerating
-        ? '重新生成中'
+        ? tr('autoUi.k_487e1c4e2927')
         : blueprintShot?.locked
-          ? '已锁定'
+          ? tr('autoUi.k_3cc7a5af4c19')
           : frame?.imagePath
-            ? '已生成'
+            ? tr('autoUi.k_79c74f41ca9e')
             : humanStatus(frame?.status || blueprintShot?.status || 'idle'),
       retryCount: typeof frame?.retryCount === 'number' ? frame.retryCount : 0,
       promptText: safeText(shot.scriptText, safeText(blueprintShot?.scriptText, '等待脚本内容')),
@@ -814,26 +814,26 @@ const selectedStoryboardErrorText = computed(() => safeText(selectedStoryboardRo
 const selectedStoryboardErrorAdvice = computed(() => {
   const errorText = selectedStoryboardErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '当前分镜设计已不再依赖模特身份包，请刷新项目后重试；如果仍出现该报错，说明主进程仍有旧缓存。'
-  if (errorText.includes('请先生成身份定妆图')) return '先生成项目级身份定妆图，再回到当前任务重新生成分镜。'
-  if (errorText.includes('请先选择商品库商品')) return '先绑定商品库商品，并确认当前项目已经同步到商品参考图后再重试。'
-  if (errorText.includes('请先完成参考视频分析')) return '先回到参考分析阶段完成参考视频分析，再继续生成分镜图片。'
-  if (errorText.includes('产品标准源生成失败')) return '请更换更清晰、无遮挡的商品图，或确认当前项目已回退到可用原图后再重试。'
+  if (errorText.includes('请先生成并确认新模特身份包')) return tr('autoUi.k_7d6ec4c16873')
+  if (errorText.includes('请先生成身份定妆图')) return tr('autoUi.k_2595f165df6d')
+  if (errorText.includes('请先选择商品库商品')) return tr('autoUi.k_d04f83a22556')
+  if (errorText.includes('请先完成参考视频分析')) return tr('autoUi.k_b52ccf3a734a')
+  if (errorText.includes('产品标准源生成失败')) return tr('autoUi.k_e2dd92ea09a9')
   if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) {
-    return '请检查当前图片模型供应商、模型配置和 API 凭证是否可用，然后再重试。'
+    return tr('autoUi.k_d976a74c2018')
   }
-  return '请先根据原始报错修正前置条件，再重新生成当前分镜；如果仍失败，再结合运行日志继续排查。'
+  return tr('autoUi.k_565c73bcd588')
 })
 const selectedStoryboardErrorTitle = computed(() => {
   const errorText = selectedStoryboardErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '旧前置条件残留'
-  if (errorText.includes('请先生成身份定妆图')) return '缺少身份定妆图'
-  if (errorText.includes('请先选择商品库商品')) return '缺少商品绑定'
-  if (errorText.includes('请先完成参考视频分析')) return '缺少参考分析'
-  if (errorText.includes('产品标准源生成失败')) return '商品参考图不可用'
-  if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) return '模型配置异常'
-  return '分镜生成失败'
+  if (errorText.includes('请先生成并确认新模特身份包')) return tr('autoUi.k_018019407fe3')
+  if (errorText.includes('请先生成身份定妆图')) return tr('autoUi.k_fd3602ad3c58')
+  if (errorText.includes('请先选择商品库商品')) return tr('autoUi.k_dcc251d28547')
+  if (errorText.includes('请先完成参考视频分析')) return tr('autoUi.k_b45cb3fa2725')
+  if (errorText.includes('产品标准源生成失败')) return tr('autoUi.k_d9217cf4da0a')
+  if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) return tr('autoUi.k_1e5403fc012d')
+  return tr('autoUi.k_5c52a00786ec')
 })
 const selectedStoryboardErrorAction = computed(() => {
   const errorText = selectedStoryboardErrorText.value.toLowerCase()
@@ -845,26 +845,26 @@ const selectedShotVideoErrorText = computed(() => safeText(selectedShotOutput.va
 const selectedShotVideoErrorAdvice = computed(() => {
   const errorText = selectedShotVideoErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '当前分镜视频已不再依赖模特身份包，请刷新项目后重试；如果仍出现该报错，说明主进程仍有旧缓存。'
-  if (errorText.includes('请先生成身份定妆图')) return '先生成项目级身份定妆图，再回到当前任务重新生成分镜视频。'
-  if (errorText.includes('请先选择商品库商品')) return '先绑定商品库商品，并确认当前项目已经同步到商品参考图后再重试。'
-  if (errorText.includes('请先完成参考视频分析')) return '先回到参考分析阶段完成参考视频分析，再继续生成当前分镜视频。'
-  if (errorText.includes('产品标准源生成失败')) return '请更换更清晰、无遮挡的商品图，或确认当前项目已回退到可用原图后再重试。'
+  if (errorText.includes('请先生成并确认新模特身份包')) return tr('autoUi.k_81d2f34a4e28')
+  if (errorText.includes('请先生成身份定妆图')) return tr('autoUi.k_3451d3693625')
+  if (errorText.includes('请先选择商品库商品')) return tr('autoUi.k_d04f83a22556')
+  if (errorText.includes('请先完成参考视频分析')) return tr('autoUi.k_a82292641219')
+  if (errorText.includes('产品标准源生成失败')) return tr('autoUi.k_e2dd92ea09a9')
   if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) {
-    return '请检查当前视频模型供应商、模型配置和 API 凭证是否可用，然后再重试。'
+    return tr('autoUi.k_b64f448aea45')
   }
-  return '请先根据原始报错修正当前镜头的视频生成前置条件，再重新生成；如果仍失败，再结合运行日志继续排查。'
+  return tr('autoUi.k_c3dd8ab992f6')
 })
 const selectedShotVideoErrorTitle = computed(() => {
   const errorText = selectedShotVideoErrorText.value.toLowerCase()
   if (!errorText) return ''
-  if (errorText.includes('请先生成并确认新模特身份包')) return '旧前置条件残留'
-  if (errorText.includes('请先生成身份定妆图')) return '缺少身份定妆图'
-  if (errorText.includes('请先选择商品库商品')) return '缺少商品绑定'
-  if (errorText.includes('请先完成参考视频分析')) return '缺少参考分析'
-  if (errorText.includes('产品标准源生成失败')) return '商品参考图不可用'
-  if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) return '模型配置异常'
-  return '分镜视频失败'
+  if (errorText.includes('请先生成并确认新模特身份包')) return tr('autoUi.k_018019407fe3')
+  if (errorText.includes('请先生成身份定妆图')) return tr('autoUi.k_fd3602ad3c58')
+  if (errorText.includes('请先选择商品库商品')) return tr('autoUi.k_dcc251d28547')
+  if (errorText.includes('请先完成参考视频分析')) return tr('autoUi.k_b45cb3fa2725')
+  if (errorText.includes('产品标准源生成失败')) return tr('autoUi.k_d9217cf4da0a')
+  if (errorText.includes('未配置') || errorText.includes('api key') || errorText.includes('provider')) return tr('autoUi.k_1e5403fc012d')
+  return tr('autoUi.k_2752ffaa75a4')
 })
 const selectedShotVideoErrorAction = computed(() => {
   const errorText = selectedShotVideoErrorText.value.toLowerCase()
@@ -924,16 +924,16 @@ const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath |
 const selectedGeelarkAccount = computed(
   () => geelarkAccounts.value.find((item) => item.id === geelarkPublishForm.publishAccountId) || null,
 )
-const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), '默认项目输出目录'))
+const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), tr('autoUi.k_1507374d9548')))
 const localComposeErrorText = computed(() => safeText(current.value?.finalCompose?.error || composeLocalError.value, ''))
 const composeHealthFlagLabelMap: Record<string, string> = {
-  hook_overloaded: '开头钩子过密',
-  weak_opening_signal: '开头重点不够直接',
-  cta_heavy: '结尾销售感偏重',
-  too_many_aggressive_shots: '高强度镜头过多',
-  product_focus_weak: '产品重点不足',
-  text_heavy: '文案信息过重',
-  low_variation_signal: '镜头变化偏少',
+  hook_overloaded: tr('autoUi.k_68540c8d27cf'),
+  weak_opening_signal: tr('autoUi.k_a2cdfd8d707e'),
+  cta_heavy: tr('autoUi.k_e05805410133'),
+  too_many_aggressive_shots: tr('autoUi.k_7977c650ffb7'),
+  product_focus_weak: tr('autoUi.k_e2627d4a83fc'),
+  text_heavy: tr('autoUi.k_0c4c5f0d21f5'),
+  low_variation_signal: tr('autoUi.k_04c1e8f2adb6'),
 }
 const composeHealthFlags = computed(() => safeArray(current.value?.finalCompose?.composeHealth?.flags).map((item) => safeText(item)).filter(Boolean))
 const composeHealthFlagLabels = computed(() =>
@@ -941,18 +941,18 @@ const composeHealthFlagLabels = computed(() =>
 )
 const composeHealthVerdictText = computed(() => {
   const verdict = safeText(current.value?.finalCompose?.composeHealth?.verdict)
-  if (verdict === 'balanced') return '当前节奏基本平衡'
-  if (verdict === 'needs_tuning') return '当前节奏仍需优化'
+  if (verdict === 'balanced') return tr('autoUi.k_61204fe5bd72')
+  if (verdict === 'needs_tuning') return tr('autoUi.k_0a530aedca0e')
   return ''
 })
 const composeHealthRecommendationLabelMap: Record<string, string> = {
-  'Reduce hook-like shots or soften the first sequence to avoid front-loaded fatigue.': '减少连续钩子镜头，或放缓开头节奏，避免前段过于疲劳。',
-  'Strengthen the opening with a clearer product hero, action reveal, or more direct payoff shot.': '开头应更直接给到产品主视觉、动作展示或结果感镜头，减少铺垫感。',
-  'Reduce close-stage density so the ending feels cleaner and less sales-heavy.': '降低结尾收口镜头密度，让结尾更干净，减少过强的销售感。',
-  'Soften consecutive aggressive shots or add steadier product moments between them.': '连续高强度镜头之间加入更稳的产品镜头，或适当放缓强刺激节奏。',
-  'Increase product-priority shots so the video spends more time on clear product value.': '增加产品重点镜头，让视频有更多时间停留在清晰的产品价值上。',
-  'Reduce text density or split long selling lines so rhythm stays natural.': '降低文案密度，或把过长卖点拆开，避免节奏显得生硬。',
-  'Consider adding more variation in framing or motion if the middle feels flat.': '如果中段发平，可增加镜头景别或运动方式的变化。',
+  'Reduce hook-like shots or soften the first sequence to avoid front-loaded fatigue.': tr('autoUi.k_cb9194270b22'),
+  'Strengthen the opening with a clearer product hero, action reveal, or more direct payoff shot.': tr('autoUi.k_19d05e948f5b'),
+  'Reduce close-stage density so the ending feels cleaner and less sales-heavy.': tr('autoUi.k_f4beebb4909e'),
+  'Soften consecutive aggressive shots or add steadier product moments between them.': tr('autoUi.k_eb07b4f34412'),
+  'Increase product-priority shots so the video spends more time on clear product value.': tr('autoUi.k_ae7fc61a1b0d'),
+  'Reduce text density or split long selling lines so rhythm stays natural.': tr('autoUi.k_fbda7b0b1703'),
+  'Consider adding more variation in framing or motion if the middle feels flat.': tr('autoUi.k_e13bc676b50e'),
 }
 const composeHealthRecommendations = computed(() =>
   safeArray(current.value?.finalCompose?.composeHealth?.recommendations)
@@ -964,12 +964,12 @@ const composeSummaryStats = computed(() => current.value?.finalCompose?.composeS
 const composeStageCountText = computed(() => {
   const stats = composeSummaryStats.value
   if (!stats?.stageCounts) return ''
-  return `开头 ${Number(stats.stageCounts.hook || 0)} / 中段 ${Number(stats.stageCounts.body || 0)} / 收尾 ${Number(stats.stageCounts.close || 0)}`
+  return tr('autoUi.k_264ddb5d7604', { p0: Number(stats.stageCounts.hook || 0), p1: Number(stats.stageCounts.body || 0), p2: Number(stats.stageCounts.close || 0) })
 })
 const composeAverageClipDurationText = computed(() => {
   const avg = Number(composeSummaryStats.value?.averageClipDurationSec || 0)
   if (!avg) return ''
-  return `${avg.toFixed(2)} 秒/镜头`
+  return tr('autoUi.k_aab248bb2e03', { p0: avg.toFixed(2) })
 })
 const pipelineErrorContext = computed(() => current.value?.pipelineStatus?.errorContext || null)
 const configuredVideoProvider = computed(() => safeText(current.value?.pipelineStatus?.configuredProviderSummary?.video?.provider, '--'))
@@ -1004,11 +1004,11 @@ const visibleProductThumbs = computed(() =>
   (productRefPreviewMode.value === 'original' ? originalProductRefs.value : effectiveProductRefs.value).slice(0, 9),
 )
 const productSanitizationStatusLabel = computed(() => {
-  if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) return '待绑定'
-  if (productSanitizationStatus.value === 'processing') return '生成中'
-  if (productSanitizationStatus.value === 'done') return '生成完成'
-  if (productSanitizationStatus.value === 'failed') return '生成失败'
-  return '待生成'
+  if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) return tr('autoUi.k_143b1332cb1f')
+  if (productSanitizationStatus.value === 'processing') return tr('autoUi.k_57c08c730a51')
+  if (productSanitizationStatus.value === 'done') return tr('autoUi.k_2ff97308c65a')
+  if (productSanitizationStatus.value === 'failed') return tr('autoUi.k_64ba75d9d600')
+  return tr('autoUi.k_aef4104370ae')
 })
 const productSanitizationStatusClass = computed(() => {
   if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) return 'working'
@@ -1043,49 +1043,49 @@ const boundProductDisplayName = computed(() => {
     return `${boundProductLibraryItem.value.name} · ${boundProductLibraryItem.value.id}`
   }
   if (current.value?.productId) {
-    return `商品 ${current.value.productId}`
+    return tr('autoUi.k_9fccd6defd22', { p0: current.value.productId })
   }
-  return '未绑定商品'
+  return tr('autoUi.k_ab8274a60c22')
 })
 const selectedProductDisplayName = computed(() => {
   if (selectedProductLibraryItem.value?.name) {
     return `${selectedProductLibraryItem.value.name} · ${selectedProductLibraryItem.value.id}`
   }
   if (selectedProductId.value) {
-    return `商品 ${selectedProductId.value}`
+    return tr('autoUi.k_9fccd6defd22', { p0: selectedProductId.value })
   }
-  return '未选择'
+  return tr('autoUi.k_53e2db70167f')
 })
 const cloneProductBindingHint = computed(() => {
   if (hasDraftProductRefs.value && !current.value?.productImageSanitizationStatus) {
-    return '商品已选中，但当前还未真正绑定到项目；请先完成参考视频分析后再绑定商品。'
+    return tr('autoUi.k_e63d8c73eb95')
   }
   if (productSanitizationStatus.value === 'processing') {
-    return '正在同步商品库标准源缓存；分镜阶段会优先使用当前项目保存的标准源快照。'
+    return tr('autoUi.k_f6baf6358fe8')
   }
   if (productSanitizationStatus.value === 'failed') {
-    return safeText(current.value?.productImageSanitizationError, '产品标准源生成失败，当前已回退原图继续。')
+    return safeText(current.value?.productImageSanitizationError, tr('autoUi.k_a36330265a32'))
   }
   if (effectiveProductRefs.value.length) {
-    return '当前项目已保存商品库原图快照与标准源快照；分镜阶段优先使用标准源，原图仅作补充参考与回退源。'
+    return tr('autoUi.k_49014a7b907c')
   }
-  return '请先从商品库选择一个商品。'
+  return tr('autoUi.k_5767b8b4dc21')
 })
 const selectedProductBindingHint = computed(() => {
   const selectedId = String(selectedProductId.value || '').trim()
   const boundId = String(current.value?.productId || '').trim()
-  if (!selectedId) return '请先从商品库选择一个商品。'
-  if (selectedId === boundId && boundId) return '当前选中的商品已经绑定到项目。'
-  return '当前只是选中了商品，仍需点击“绑定商品”后才会真正绑定到当前项目。'
+  if (!selectedId) return tr('autoUi.k_5767b8b4dc21')
+  if (selectedId === boundId && boundId) return tr('autoUi.k_bd138daf17d4')
+  return tr('autoUi.k_20fdc505f2be')
 })
 const cloneProductSnapshotLabel = computed(() =>
-  productRefPreviewMode.value === 'original' ? '商品库原图快照' : '产品标准源快照',
+  productRefPreviewMode.value === 'original' ? tr('autoUi.k_5dcee54a4ce1') : tr('autoUi.k_4fc382794fd5'),
 )
 const cloneProductSnapshotHint = computed(() => {
   if (productRefPreviewMode.value === 'original') {
-    return '原图快照保留商品真实佩戴方向、结构和细节，用于分镜主事实源。'
+    return tr('autoUi.k_3cc0a5df1118')
   }
-  return '标准源快照用于统一商品结构锁定和后续提示词商品描述。'
+  return tr('autoUi.k_354f98fde2e0')
 })
 const activeProjectId = computed(() => resolveActiveProjectId(current.value?.id))
 const isDraftingNewProject = computed(() => Boolean(referenceVideoPath.value.trim()) && !current.value?.id)
@@ -1106,14 +1106,14 @@ const canGenerateStoryboardFrames = computed(
     ),
 )
 const storyboardFrameBlockReason = computed(() => {
-  if (!activeProjectId.value) return '请先完成参考视频分析'
-  if (!selectedVariantId.value) return '请先选择一条脚本候选'
-  if (!hasUsableStoryboardProductRefs.value) return '请先选择并绑定商品库商品'
+  if (!activeProjectId.value) return tr('autoUi.k_190f82ef0fe5')
+  if (!selectedVariantId.value) return tr('autoUi.k_c447a40c6d1a')
+  if (!hasUsableStoryboardProductRefs.value) return tr('autoUi.k_ad0bfd1c4686')
   if (!hasUsableExtractedProductRefs.value) {
-    return safeText(current.value?.productImageSanitizationError, '产品标准源生成失败且没有可用原图，请重新绑定更清晰的商品库商品。')
+    return safeText(current.value?.productImageSanitizationError, tr('autoUi.k_4c20ac1302eb'))
   }
-  if (!hasBoundModel.value) return '请先选择模特'
-  if (!hasProjectIdentityGrid.value) return '请先生成身份定妆图'
+  if (!hasBoundModel.value) return tr('autoUi.k_c8e1546a1f2e')
+  if (!hasProjectIdentityGrid.value) return tr('autoUi.k_32f267a0db30')
   return ''
 })
 const failedShotOutputs = computed(() =>
@@ -1123,18 +1123,18 @@ const failedStoryboardFrames = computed(() => storyboardFrames.value.filter((ite
 const autoRetryableFailedStoryboardFrames = computed(() =>
   failedStoryboardFrames.value.filter((item) => Number(item.retryCount || 0) < 2),
 )
-const runModeLabel = computed(() => (current.value?.runMode === 'auto' ? '自动运行' : '手动运行'))
+const runModeLabel = computed(() => (current.value?.runMode === 'auto' ? tr('autoUi.k_3736f7e25eb4') : tr('autoUi.k_dca303282767')))
 const autoFlowCurrentStageLabel = computed(() => {
   const stage = String(current.value?.autoFlowStatus?.currentStage || '').trim()
-  if (stage === 'reference_analysis') return '参考分析'
-  if (stage === 'script_generation') return '脚本生成'
-  if (stage === 'identity_grid') return '身份定妆图'
-  if (stage === 'storyboard_design') return '分镜设计'
-  if (stage === 'storyboard_videos') return '分镜视频'
-  if (stage === 'final_compose') return '成片合成'
-  return '待开始'
+  if (stage === 'reference_analysis') return tr('autoUi.k_d224e7c027df')
+  if (stage === 'script_generation') return tr('autoUi.k_6766ae37d5ac')
+  if (stage === 'identity_grid') return tr('autoUi.k_54f65b6b0c67')
+  if (stage === 'storyboard_design') return tr('autoUi.k_3a87e98554a1')
+  if (stage === 'storyboard_videos') return tr('autoUi.k_4fe061c7ebff')
+  if (stage === 'final_compose') return tr('autoUi.k_47badcfc4cad')
+  return tr('autoUi.k_5349eb3e5762')
 })
-const autoFlowTargetLabel = computed(() => (current.value?.autoFlowStatus?.targetStage === 'final_compose' ? '最终成片' : '分镜视频'))
+const autoFlowTargetLabel = computed(() => (current.value?.autoFlowStatus?.targetStage === 'final_compose' ? tr('autoUi.k_780ee868bcca') : tr('autoUi.k_4fe061c7ebff')))
 const shotVideoOutputById = computed<Record<string, ShotVideoOutput>>(() =>
   Object.fromEntries(shotVideoOutputs.value.map((item) => [String(item.shotId || '').trim(), item])),
 )
@@ -1167,31 +1167,31 @@ const gateBlockedShots = computed(() =>
 const gatePassAllowed = computed(() => Boolean(blueprintShots.value.length) && gateBlockedShots.value.length === 0)
 const gateFailureSummary = computed(() => {
   const first = gateBlockedShots.value[0]
-  if (!first) return '全部镜头已通过最终门禁，可进入最终成片。'
-  const reason = first.error || first.qualityReasons?.join('；') || '镜头未通过生产质检'
-  return `当前有 ${gateBlockedShots.value.length} 个镜头阻塞最终成片，首个失败镜头 #${Number(first.index ?? 0) + 1}：${reason}`
+  if (!first) return tr('autoUi.k_e4af82ef053a')
+  const reason = first.error || first.qualityReasons?.join('；') || tr('autoUi.k_ec3a7f693919')
+  return tr('autoUi.k_1fcaf64e3385', { p0: gateBlockedShots.value.length, p1: Number(first.index ?? 0) + 1, p2: reason })
 })
 const generationQueueRuntime = computed(() => current.value?.generationQueue?.runtime || null)
 const lastShotVideoSummary = computed(() => current.value?.generationQueue?.lastShotVideoSummary || null)
 const lastShotVideoFailureBreakdown = computed(() => current.value?.generationQueue?.lastShotVideoFailureBreakdown || null)
 const videoDispatchSummary = computed(() => {
   const runtime = generationQueueRuntime.value
-  if (!runtime) return '任务池待启动。'
-  return `任务池：提交 ${runtime.submitActive || 0}/${runtime.submitQueued || 0}，轮询 ${runtime.pollActive || 0}/${runtime.pollQueued || 0}，下载 ${runtime.downloadActive || 0}/${runtime.downloadQueued || 0}。`
+  if (!runtime) return tr('autoUi.k_cedc39b86013')
+  return tr('autoUi.k_8c424b0d9548', { p0: runtime.submitActive || 0, p1: runtime.submitQueued || 0, p2: runtime.pollActive || 0, p3: runtime.pollQueued || 0, p4: runtime.downloadActive || 0, p5: runtime.downloadQueued || 0 })
 })
 const videoFailureSummary = computed(() => {
   const breakdown = lastShotVideoFailureBreakdown.value
   if (!breakdown) return ''
   const parts: string[] = []
-  if (Number(breakdown.remoteTimeout || 0) > 0) parts.push(`超时待续查 ${Number(breakdown.remoteTimeout || 0)}`)
-  if (Number(breakdown.downloadFailed || 0) > 0) parts.push(`下载失败 ${Number(breakdown.downloadFailed || 0)}`)
-  if (Number(breakdown.missingTask || 0) > 0) parts.push(`缺少任务号 ${Number(breakdown.missingTask || 0)}`)
-  if (Number(breakdown.remoteFailed || 0) > 0) parts.push(`云端失败 ${Number(breakdown.remoteFailed || 0)}`)
-  if (Number(breakdown.localFailed || 0) > 0) parts.push(`本地失败 ${Number(breakdown.localFailed || 0)}`)
-  return parts.length ? `失败分流：${parts.join('，')}。` : ''
+  if (Number(breakdown.remoteTimeout || 0) > 0) parts.push(tr('autoUi.k_7c9474742cbe', { p0: Number(breakdown.remoteTimeout || 0) }))
+  if (Number(breakdown.downloadFailed || 0) > 0) parts.push(tr('autoUi.k_e020ec7e37a3', { p0: Number(breakdown.downloadFailed || 0) }))
+  if (Number(breakdown.missingTask || 0) > 0) parts.push(tr('autoUi.k_7fb50c4c7d35', { p0: Number(breakdown.missingTask || 0) }))
+  if (Number(breakdown.remoteFailed || 0) > 0) parts.push(tr('autoUi.k_8ec9d192d406', { p0: Number(breakdown.remoteFailed || 0) }))
+  if (Number(breakdown.localFailed || 0) > 0) parts.push(tr('autoUi.k_aa621628d6f9', { p0: Number(breakdown.localFailed || 0) }))
+  return parts.length ? tr('autoUi.k_f60106caf2a0', { p0: parts.join('，') }) : ''
 })
 const videoStageDescription = computed(() =>
-  `${tr('cloneView.videoStage.description')} ${gatePassAllowed.value ? '门禁已通过。' : '门禁未通过。'} ${videoDispatchSummary.value} ${videoFailureSummary.value} ${autoFlowHeartbeatSummary.value}`,
+  `${tr('cloneView.videoStage.description')} ${gatePassAllowed.value ? tr('autoUi.k_80333f7a00b2') : tr('autoUi.k_baab4b989c76')} ${videoDispatchSummary.value} ${videoFailureSummary.value} ${autoFlowHeartbeatSummary.value}`,
 )
 const videoRenderResolutionOptions = computed<Array<{ value: VideoRenderResolution; label: string; aspectRatio: VideoRenderAspectRatio }>>(() => [
   { value: '720x1280', label: '720x1280 (9:16, 720p)', aspectRatio: '9:16' },
@@ -1219,7 +1219,7 @@ function syncVideoRenderHintsFromProject(project?: CloneProject | null) {
   videoRenderResolution.value = allowedResolution
 }
 const autoFlowSummary = computed(() =>
-  safeText(current.value?.autoFlowStatus?.lastSummary, current.value?.runMode === 'auto' ? '自动推进' : '手动推进'),
+  safeText(current.value?.autoFlowStatus?.lastSummary, current.value?.runMode === 'auto' ? tr('autoUi.k_f5d27fe35cd8') : tr('autoUi.k_201587ca1c9e')),
 )
 const autoFlowHeartbeatSummary = computed(() => {
   const autoFlow = current.value?.autoFlowStatus
@@ -1227,14 +1227,14 @@ const autoFlowHeartbeatSummary = computed(() => {
   const idleCount = Number(autoFlow.idleHeartbeatCount ?? 0)
   const lastProgressAt = Number(autoFlow.lastProgressAt ?? 0)
   const lastSummary = String(autoFlow.lastSummary || '')
-  if (lastSummary.includes('已触发自动纠偏')) return '视频心跳：检测到空转后，系统已自动优先续查超时镜头。'
+  if (lastSummary.includes('已触发自动纠偏')) return tr('autoUi.k_027476505316')
   const parts: string[] = []
-  if (idleCount > 0) parts.push(`连续空转 ${idleCount} 轮`)
+  if (idleCount > 0) parts.push(tr('autoUi.k_ddf6184c90e2', { p0: idleCount }))
   if (lastProgressAt > 0) {
     const deltaSec = Math.max(0, Math.floor((Date.now() - lastProgressAt) / 1000))
-    parts.push(`上次推进 ${deltaSec} 秒前`)
+    parts.push(tr('autoUi.k_bf968d17ac74', { p0: deltaSec }))
   }
-  return parts.length ? `视频心跳：${parts.join('，')}。` : ''
+  return parts.length ? tr('autoUi.k_2d896055c8ec', { p0: parts.join('，') }) : ''
 })
 const autoFlowRunning = computed(() => current.value?.autoFlowStatus?.status === 'running')
 const retryableShotOutputs = computed(() =>
@@ -1315,15 +1315,15 @@ const composeAiScore = computed(() => {
   return Math.max(62, Math.min(98, Math.round(78 + success * 18 - failurePenalty * 12)))
 })
 const composeQualityLabel = computed(() => {
-  if (composeAiScore.value >= 92) return '非常优秀'
-  if (composeAiScore.value >= 84) return '质量良好'
-  if (composeAiScore.value >= 76) return '可继续优化'
-  return '建议调整'
+  if (composeAiScore.value >= 92) return tr('autoUi.k_0ee20648be03')
+  if (composeAiScore.value >= 84) return tr('autoUi.k_336628cd2566')
+  if (composeAiScore.value >= 76) return tr('autoUi.k_582996bf3983')
+  return tr('autoUi.k_36c5aa8cd8c3')
 })
 const composeScoreChecklist = computed(() => [
-  { label: '节奏表现', value: composeAiScore.value >= 90 ? '优秀' : composeAiScore.value >= 80 ? '良好' : '待优化' },
-  { label: '结构完整', value: gatePassAllowed.value ? '优秀' : '待检查' },
-  { label: '转化潜力', value: hasFreshFinalCompose.value ? '优秀' : '待合成' },
+  { label: tr('autoUi.k_f8963baf3033'), value: composeAiScore.value >= 90 ? tr('autoUi.k_3e61f3679297') : composeAiScore.value >= 80 ? tr('autoUi.k_9d2c3d1616d2') : tr('autoUi.k_9ce7235cccfa') },
+  { label: tr('autoUi.k_baf8fc779be0'), value: gatePassAllowed.value ? tr('autoUi.k_3e61f3679297') : tr('autoUi.k_15ccba3a57d1') },
+  { label: tr('autoUi.k_12ba96716460'), value: hasFreshFinalCompose.value ? tr('autoUi.k_3e61f3679297') : tr('autoUi.k_942a589f6e38') },
 ])
 const composeAspectClass = computed(() => {
   if (composeAspectRatio.value === '1:1') return 'is-square'
@@ -1391,27 +1391,27 @@ const selectedShotVideoMediaUrl = computed(() =>
   mediaUrl(resolveShotOutputVideoPath(selectedShotOutput.value), Number(selectedShotOutput.value?.updatedAt || Date.now())),
 )
 const composePreviewLabel = computed(() => {
-  if (hasFreshFinalCompose.value && finalOutputPath.value) return '最终成片预览'
-  if (previewPipelineOutputPath.value) return '预览成片'
-  if (finalOutputPath.value) return '分镜预览'
-  if (hasReadyShotOutputVideo(selectedShotOutput.value)) return `${safeText(shotLabel(selectedShotOutput.value?.shotId || ''), '当前镜头')} 预览`
-  if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return `${safeText(shotLabel(firstReadyShotOutput.value?.shotId || ''), '可用镜头')} 预览`
-  return '等待成片'
+  if (hasFreshFinalCompose.value && finalOutputPath.value) return tr('autoUi.k_f0f714654722')
+  if (previewPipelineOutputPath.value) return tr('autoUi.k_2a1336483535')
+  if (finalOutputPath.value) return tr('autoUi.k_76917c58e1ee')
+  if (hasReadyShotOutputVideo(selectedShotOutput.value)) return tr('autoUi.k_ec5d4fe89c92', { p0: safeText(shotLabel(selectedShotOutput.value?.shotId || ''), '当前镜头') })
+  if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return tr('autoUi.k_ec5d4fe89c92', { p0: safeText(shotLabel(firstReadyShotOutput.value?.shotId || ''), '可用镜头') })
+  return tr('autoUi.k_0ac754b27412')
 })
 const composePreviewHint = computed(() => {
-  if (hasFreshFinalCompose.value && finalOutputPath.value) return '当前显示的是最新合成完成的最终成片。'
-  if (previewPipelineOutputPath.value) return '当前显示的是预览渲染输出，可继续检查后导出最终成片。'
-  if (finalOutputPath.value) return '旧的最终成片已过期，当前优先展示最新预览链路或最新分镜视频。重新合成后会更新最终成片。'
-  if (hasReadyShotOutputVideo(selectedShotOutput.value)) return '最终成片尚未更新，当前先展示选中镜头，方便检查后继续合成。'
-  if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return '当前镜头还没有可预览视频，已自动切换到首个可用镜头预览。'
-  return '合成完成后，这里会显示最终成片；未合成前会显示当前可用镜头预览。'
+  if (hasFreshFinalCompose.value && finalOutputPath.value) return tr('autoUi.k_ecbd831cbadd')
+  if (previewPipelineOutputPath.value) return tr('autoUi.k_b4b04cf7ca9b')
+  if (finalOutputPath.value) return tr('autoUi.k_c09224264123')
+  if (hasReadyShotOutputVideo(selectedShotOutput.value)) return tr('autoUi.k_d58579f4bd5a')
+  if (hasReadyShotOutputVideo(firstReadyShotOutput.value)) return tr('autoUi.k_541ffadc27e2')
+  return tr('autoUi.k_f53112a0d4a1')
 })
 const composeExportStatusLabel = computed(() => {
-  if (hasFreshFinalCompose.value) return '已输出'
-  if (finalOutputPath.value) return '待重合成'
-  if (loading.value) return '处理中'
-  if (failedShotOutputs.value.length) return '待检查'
-  return '待导出'
+  if (hasFreshFinalCompose.value) return tr('autoUi.k_19f0c32ce11b')
+  if (finalOutputPath.value) return tr('autoUi.k_60f05c3dac9c')
+  if (loading.value) return tr('autoUi.k_fcb979ef0b91')
+  if (failedShotOutputs.value.length) return tr('autoUi.k_15ccba3a57d1')
+  return tr('autoUi.k_2c843fe0b39d')
 })
 const composeExportTimeText = computed(() => {
   const totalSeconds = Math.max(20, Math.round(composeTotalDuration.value || 0))
@@ -1426,17 +1426,17 @@ const composeExportTimeText = computed(() => {
     cinematic: 0.45,
   }
   const minutes = Math.max(1, Math.round((totalSeconds / 30) * qualityBaseMap[composeQuality.value] + styleExtraMap[composeStyle.value]))
-  return `约${minutes}分钟`
+  return tr('autoUi.k_06ad4b20f387', { p0: minutes })
 })
 const composeDurationDisplay = computed(() => {
   const total = Number(composeTotalDuration.value || 0)
   if (!total) return '--'
-  if (total < 60) return `${Math.round(total)}秒`
+  if (total < 60) return tr('autoUi.k_ad7dee82f450', { p0: Math.round(total) })
   const minutes = Math.floor(total / 60)
   const seconds = Math.round(total % 60)
-  return `${minutes}分${seconds}秒`
+  return tr('autoUi.k_b54206bf2a1c', { p0: minutes, p1: seconds })
 })
-const composeExportActionLabel = computed(() => (hasFreshFinalCompose.value && finalOutputPath.value ? '开始导出视频' : finalButtonLabel.value))
+const composeExportActionLabel = computed(() => (hasFreshFinalCompose.value && finalOutputPath.value ? tr('autoUi.k_2571de3c4132') : finalButtonLabel.value))
 const hasGeneratedStoryboardFrames = computed(() => storyboardFrames.value.some((item) => Boolean(String(item.imagePath || '').trim())))
 const canBootstrapAutoRun = computed(() => {
   if (!current.value?.id) return false
@@ -1471,18 +1471,18 @@ const analyzeStageProgress = computed(() => {
 const analyzeSummaryCards = computed(() => [
   {
     key: 'structure',
-    title: '脚本结构',
-    desc: storyBeats.value.length ? `${storyBeats.value.length} 个主要片段，结构已识别` : '等待分析完成后生成结构拆解',
+    title: tr('autoUi.k_c9a4640d399f'),
+    desc: storyBeats.value.length ? tr('autoUi.k_da5c7643b3e8', { p0: storyBeats.value.length }) : tr('autoUi.k_d573d9481294'),
   },
   {
     key: 'style',
-    title: '视觉风格',
-    desc: safeText(current.value?.blueprint?.visualStyle || current.value?.blueprint?.renderHints?.resolution, '等待识别视觉风格'),
+    title: tr('autoUi.k_97779e2726fc'),
+    desc: safeText(current.value?.blueprint?.visualStyle || current.value?.blueprint?.renderHints?.resolution, tr('autoUi.k_ffa0f44b3a67')),
   },
   {
     key: 'hook',
-    title: '爆款要素',
-    desc: safeText(current.value?.blueprint?.hookType || current.value?.blueprint?.rhythm, '等待提炼爆款钩子与节奏'),
+    title: tr('autoUi.k_9044a92e7bea'),
+    desc: safeText(current.value?.blueprint?.hookType || current.value?.blueprint?.rhythm, tr('autoUi.k_1f445e9fdc10')),
   },
 ])
 const analyzeScriptPreview = computed(() => {
@@ -1501,18 +1501,18 @@ const analyzeScriptPreview = computed(() => {
     .filter(Boolean)
     .slice(0, 4)
     .join('\n')
-  return beatScript || '分析完成后，这里会显示节选脚本预览。'
+  return beatScript || tr('autoUi.k_ccca0a00408c')
 })
 const analyzeGlobalSections = computed(() => {
   const global = current.value?.blueprint?.globalScript
   if (!global) return []
   return [
-    { key: 'cameraMotion', title: '镜头运动', desc: safeText(global.cameraMotion, '') },
-    { key: 'shotScale', title: '景别变化', desc: safeText(global.shotScale, '') },
-    { key: 'lighting', title: '光线分析', desc: safeText(global.lighting, '') },
-    { key: 'colorTone', title: '色彩色调', desc: safeText(global.colorTone, '') },
-    { key: 'subjectAction', title: '主体动作', desc: safeText(global.subjectAction, '') },
-    { key: 'environment', title: '环境细节', desc: safeText(global.environment, '') },
+    { key: 'cameraMotion', title: tr('autoUi.k_0118461d56e8'), desc: safeText(global.cameraMotion, '') },
+    { key: 'shotScale', title: tr('autoUi.k_636d5b60dc0a'), desc: safeText(global.shotScale, '') },
+    { key: 'lighting', title: tr('autoUi.k_e985d7b043d5'), desc: safeText(global.lighting, '') },
+    { key: 'colorTone', title: tr('autoUi.k_aa3b2a6bf406'), desc: safeText(global.colorTone, '') },
+    { key: 'subjectAction', title: tr('autoUi.k_81bbe719239f'), desc: safeText(global.subjectAction, '') },
+    { key: 'environment', title: tr('autoUi.k_2a4e5414b520'), desc: safeText(global.environment, '') },
   ].filter((item) => item.desc)
 })
 const analyzeReversePrompt = computed(() => safeText(current.value?.blueprint?.globalScript?.reversePrompt, ''))
@@ -1566,15 +1566,15 @@ const productAnalysisSections = computed(() => {
   const analysis = productAnalysisSnapshot.value
   if (!analysis) return []
   return [
-    { key: 'summary', title: '商品摘要', desc: analysis.summary },
-    { key: 'coreSubject', title: '核心主体', desc: analysis.coreSubject },
-    { key: 'connectionStructure', title: '连接结构', desc: analysis.connectionStructure },
-    { key: 'materialDetails', title: '材质细节', desc: analysis.materialDetails },
-    { key: 'wearingPosition', title: '佩戴/展示位置', desc: analysis.wearingPosition },
-    { key: 'surfaceDetails', title: '表面细节', desc: analysis.surfaceDetails },
-    { key: 'colorDetails', title: '颜色细节', desc: analysis.colorDetails },
-    { key: 'geometryDetails', title: '几何结构', desc: analysis.geometryDetails },
-    { key: 'sizeScale', title: '尺寸比例', desc: analysis.sizeScale },
+    { key: 'summary', title: tr('autoUi.k_54984046a18e'), desc: analysis.summary },
+    { key: 'coreSubject', title: tr('autoUi.k_4958b1a96d65'), desc: analysis.coreSubject },
+    { key: 'connectionStructure', title: tr('autoUi.k_2b1340f7dddc'), desc: analysis.connectionStructure },
+    { key: 'materialDetails', title: tr('autoUi.k_d954ac6ba742'), desc: analysis.materialDetails },
+    { key: 'wearingPosition', title: tr('autoUi.k_1113c2d96ce4'), desc: analysis.wearingPosition },
+    { key: 'surfaceDetails', title: tr('autoUi.k_5d621e22d50d'), desc: analysis.surfaceDetails },
+    { key: 'colorDetails', title: tr('autoUi.k_564b2da8f4cb'), desc: analysis.colorDetails },
+    { key: 'geometryDetails', title: tr('autoUi.k_2f7852d6419c'), desc: analysis.geometryDetails },
+    { key: 'sizeScale', title: tr('autoUi.k_a640c6c16bb5'), desc: analysis.sizeScale },
   ].filter((item) => item.desc)
 })
 const shotProgressPercent = computed(() => {
@@ -1611,85 +1611,85 @@ const stageItems = computed<StageItem[]>(() => {
   return [
     {
       key: 'analyze',
-      title: '参考分析',
-      desc: hasBlueprint ? '结构已识别' : '上传参考视频',
+      title: tr('autoUi.k_d224e7c027df'),
+      desc: hasBlueprint ? tr('autoUi.k_96b8424c5232') : tr('autoUi.k_f743536d6df3'),
       done: hasBlueprint,
       active: visibleStageKey.value === 'analyze',
     },
     {
       key: 'variant',
-      title: '脚本生成',
+      title: tr('autoUi.k_6766ae37d5ac'),
       desc: hasVariants
         ? hasSelectedVariant
-          ? '已选定，可进分镜'
-          : `已生成 ${scriptVariants.value.length} 条候选`
-        : '绑定素材后生成候选',
+          ? tr('autoUi.k_20a7e875601d')
+          : tr('autoUi.k_01a6255884d5', { p0: scriptVariants.value.length })
+        : tr('autoUi.k_3866455ca578'),
       done: hasVariants && hasSelectedVariant,
       active: visibleStageKey.value === 'variant',
     },
     {
       key: 'identity-grid',
-      title: '身份定妆图',
-      desc: hasIdentityGrid ? '定妆图已生成，可进分镜' : '先生成产品+模特身份定妆图',
+      title: tr('autoUi.k_54f65b6b0c67'),
+      desc: hasIdentityGrid ? tr('autoUi.k_b94a67221100') : tr('autoUi.k_326c6105a5b3'),
       done: hasIdentityGrid,
       active: visibleStageKey.value === 'identity-grid',
     },
     {
       key: 'grid',
-      title: '分镜设计',
-      desc: hasFrames ? '已生成，可进视频' : '生成逐镜头画面',
+      title: tr('autoUi.k_3a87e98554a1'),
+      desc: hasFrames ? tr('autoUi.k_58ca945c1f62') : tr('autoUi.k_509197ea2eba'),
       done: hasFrames,
       active: visibleStageKey.value === 'grid',
     },
     {
       key: 'video',
-      title: '分镜视频',
-      desc: hasVideos ? '已生成，可替换镜头' : '生成视频片段',
+      title: tr('autoUi.k_4fe061c7ebff'),
+      desc: hasVideos ? tr('autoUi.k_056ecad4b6ca') : tr('autoUi.k_972994f9d113'),
       done: hasVideos,
       active: visibleStageKey.value === 'video',
     },
     {
       key: 'compose',
-      title: '成片合成',
-      desc: hasFinal ? '已输出并保存' : '合成并导出成片',
+      title: tr('autoUi.k_47badcfc4cad'),
+      desc: hasFinal ? tr('autoUi.k_d259ac0b3bea') : tr('autoUi.k_2b0761c3d37e'),
       done: hasFinal,
       active: visibleStageKey.value === 'compose',
     },
   ]
 })
 
-const currentStageTitle = computed(() => stageItems.value.find((item) => item.active)?.title || stageItems.value.find((item) => !item.done)?.title || '等待继续')
-const nextStageTitle = computed(() => stageItems.value.find((item) => !item.done)?.title || '可继续复用历史项目')
+const currentStageTitle = computed(() => stageItems.value.find((item) => item.active)?.title || stageItems.value.find((item) => !item.done)?.title || tr('autoUi.k_ef471c838309'))
+const nextStageTitle = computed(() => stageItems.value.find((item) => !item.done)?.title || tr('autoUi.k_3b2b6e963eb3'))
 const finalButtonLabel = computed(() => {
-  if (loading.value && workflowStep.value === 'final_compose') return '正在合成'
-  return shotVideoOutputs.value.length ? '重新合成' : '开始合成'
+  if (loading.value && workflowStep.value === 'final_compose') return tr('autoUi.k_8f3d9b05c960')
+  return shotVideoOutputs.value.length ? tr('autoUi.k_bcad6ee34bb4') : tr('autoUi.k_74a000b7ac6e')
 })
-const analyzePrimaryButtonLabel = computed(() => (referenceSourcePath.value ? '分析脚本' : '上传参考视频'))
+const analyzePrimaryButtonLabel = computed(() => (referenceSourcePath.value ? tr('autoUi.k_a363213d1869') : tr('autoUi.k_f743536d6df3')))
 const selectedVariantCandidate = computed(
   () => scriptVariants.value.find((item) => item.id === selectedVariantId.value) || scriptVariants.value.find((item) => item.selected) || scriptVariants.value[0] || null,
 )
 const failedShotActionText = computed(() => {
-  if (regeneratingFailedShotVideos.value) return `重新生成中… ${failedShotOutputs.value.length}`
-  return failedShotOutputs.value.length ? `重新生成失败项 ${failedShotOutputs.value.length}` : '重新生成失败项'
+  if (regeneratingFailedShotVideos.value) return tr('autoUi.k_891f59779865', { p0: failedShotOutputs.value.length })
+  return failedShotOutputs.value.length ? tr('autoUi.k_f16863b53694', { p0: failedShotOutputs.value.length }) : tr('autoUi.k_09b0c0e25169')
 })
 const failedStoryboardActionText = computed(() => {
-  if (regeneratingFailedStoryboardFrames.value) return `重生失败分镜中… ${failedStoryboardFrames.value.length}`
-  return failedStoryboardFrames.value.length ? `重新生成失败分镜 ${failedStoryboardFrames.value.length}` : '重新生成失败分镜'
+  if (regeneratingFailedStoryboardFrames.value) return tr('autoUi.k_eb1e40090567', { p0: failedStoryboardFrames.value.length })
+  return failedStoryboardFrames.value.length ? tr('autoUi.k_616a0f7ede80', { p0: failedStoryboardFrames.value.length }) : tr('autoUi.k_c888e7e154e8')
 })
 const selectedStoryboardActionText = computed(() => {
   const count = selectedStoryboardShotIds.value.length
   const regeneratingCount = selectedStoryboardShotIds.value.filter((shotId) =>
     regeneratingStoryboardShotIds.value.includes(shotId),
   ).length
-  if (regeneratingCount) return `重生成中… ${regeneratingCount}`
-  return count ? `重新生成选中分镜 ${count}` : '重新生成选中分镜'
+  if (regeneratingCount) return tr('autoUi.k_332a68dd23a4', { p0: regeneratingCount })
+  return count ? tr('autoUi.k_47645262d471', { p0: count }) : tr('autoUi.k_8e7bc9c65072')
 })
 const pendingStoryboardFrames = computed(() =>
   storyboardFrames.value.filter((item) => !item.imagePath && !item.error),
 )
 const pendingStoryboardActionText = computed(() => {
-  if (queryingStoryboardFrames.value) return `查询未完成分镜中… ${pendingStoryboardFrames.value.length}`
-  return pendingStoryboardFrames.value.length ? `批量查询未完成分镜 ${pendingStoryboardFrames.value.length}` : '批量查询未完成分镜'
+  if (queryingStoryboardFrames.value) return tr('autoUi.k_9827ba1c3829', { p0: pendingStoryboardFrames.value.length })
+  return pendingStoryboardFrames.value.length ? tr('autoUi.k_ea68fc6bdc62', { p0: pendingStoryboardFrames.value.length }) : tr('autoUi.k_8f72ce7045e3')
 })
 const selectedShotFrame = computed<StoryboardFrame | null>(() =>
   selectedShotOutput.value ? shotFrameMap.value[selectedShotOutput.value.shotId] || null : null,
@@ -1817,26 +1817,26 @@ function formatRelativeSeconds(ts?: number) {
   const value = Number(ts || 0)
   if (!value) return ''
   const deltaSec = Math.max(0, Math.floor((Date.now() - value) / 1000))
-  if (deltaSec < 60) return `${deltaSec} 秒`
+  if (deltaSec < 60) return tr('autoUi.k_186d77cad7f8', { p0: deltaSec })
   const minutes = Math.floor(deltaSec / 60)
   const seconds = deltaSec % 60
-  return seconds ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
+  return seconds ? tr('autoUi.k_096a68d68f6c', { p0: minutes, p1: seconds }) : tr('autoUi.k_c915422eaaf8', { p0: minutes })
 }
 
 function humanWorkflowStep(step: string) {
   switch (step) {
     case 'reference_analysis':
-      return '参考分析'
+      return tr('autoUi.k_d224e7c027df')
     case 'script_generation':
-      return '生成脚本'
+      return tr('autoUi.k_19b125a3c592')
     case 'identity_grid':
-      return '身份定妆图'
+      return tr('autoUi.k_54f65b6b0c67')
     case 'storyboard_design':
-      return '分镜设计'
+      return tr('autoUi.k_3a87e98554a1')
     case 'storyboard_videos':
-      return '分镜视频'
+      return tr('autoUi.k_4fe061c7ebff')
     case 'final_compose':
-      return '成片合成'
+      return tr('autoUi.k_47badcfc4cad')
     default:
       return step || '--'
   }
@@ -1845,39 +1845,39 @@ function humanWorkflowStep(step: string) {
 function humanStatus(status?: string) {
   switch (status) {
     case 'idle':
-      return '待开始'
+      return tr('autoUi.k_5349eb3e5762')
     case 'running':
-      return '执行中'
+      return tr('autoUi.k_1f425b6bf0a4')
     case 'done':
-      return '已完成'
+      return tr('autoUi.k_e99b48a29bdf')
     case 'failed_terminal':
-      return '失败'
+      return tr('autoUi.k_3e3c8068bb0e')
     case 'failed_retryable':
-      return '待重试'
+      return tr('autoUi.k_cbd2eed80315')
     case 'background_running':
-      return '后台处理中'
+      return tr('autoUi.k_fea652be3320')
     case 'preview_ready':
-      return '预览已就绪'
+      return tr('autoUi.k_3d27c264c271')
     case 'cropped':
-      return '已生成'
+      return tr('autoUi.k_79c74f41ca9e')
     case 'remote_pending':
-      return '生成中'
+      return tr('autoUi.k_57c08c730a51')
     case 'submitting':
-      return '创建任务中'
+      return tr('autoUi.k_2e4171e1affa')
     case 'remote_running':
-      return '云端生成中'
+      return tr('autoUi.k_e13e1d9b03d2')
     case 'remote_succeeded_pending_download':
-      return '待下载回写'
+      return tr('autoUi.k_d8819ff6c2da')
     case 'polling_timeout':
-      return '待继续查询'
+      return tr('autoUi.k_01a763c21a01')
     case 'downloading':
-      return '下载中'
+      return tr('autoUi.k_327d59b5bd11')
     case 'ready':
-      return '已就绪'
+      return tr('autoUi.k_f2afde8960a6')
     case 'composing':
-      return '合成中'
+      return tr('autoUi.k_459388d36a3f')
     case 'uploaded_replacement':
-      return '已替换'
+      return tr('autoUi.k_fae3a27e128a')
     default:
       return status || '--'
   }
@@ -1957,33 +1957,33 @@ function describeShotSyncState(item?: ShotVideoOutput | null) {
 
   if (status === 'submitting') {
     return {
-      title: '创建任务中',
-      detail: shotTaskId ? `taskId=${shotTaskId}，正在提交云端任务` : '正在提交云端任务',
+      title: tr('autoUi.k_2e4171e1affa'),
+      detail: shotTaskId ? tr('autoUi.k_7e49a7c09a59', { p0: shotTaskId }) : tr('autoUi.k_e7823e38b055'),
       tone: 'warning' as const,
     }
   }
   if (status === 'remote_pending' || status === 'remote_running') {
     return {
-      title: '云端生成中',
-      detail: shotTaskId ? `taskId=${shotTaskId}，可继续查询` : remoteStatus || '云端正在生成',
+      title: tr('autoUi.k_e13e1d9b03d2'),
+      detail: shotTaskId ? tr('autoUi.k_587e7ed345bb', { p0: shotTaskId }) : remoteStatus || tr('autoUi.k_59e4656c796e'),
       tone: 'warning' as const,
     }
   }
   if (status === 'remote_succeeded_pending_download' || (status === 'done' && !isActiveRemoteTask)) {
     return {
-      title: status === 'done' && hasVideo ? '已完成' : '待下载回写',
+      title: status === 'done' && hasVideo ? tr('autoUi.k_e99b48a29bdf') : tr('autoUi.k_d8819ff6c2da'),
       detail:
         status === 'done' && hasVideo
           ? 'succeeded'
           : shotTaskId
-            ? `taskId=${shotTaskId}，远端已完成，等待本地回写`
-            : '远端已完成，等待本地回写',
+            ? tr('autoUi.k_0f1fc958755b', { p0: shotTaskId })
+            : tr('autoUi.k_2301a62b4b86'),
       tone: status === 'done' && hasVideo ? ('success' as const) : ('warning' as const),
     }
   }
   if (hasVideo && !isActiveRemoteTask) {
     return {
-      title: '已完成',
+      title: tr('autoUi.k_e99b48a29bdf'),
       detail: 'succeeded',
       tone: 'success' as const,
     }
@@ -1991,102 +1991,102 @@ function describeShotSyncState(item?: ShotVideoOutput | null) {
   if (status === 'downloading') {
     const waitText = formatRelativeSeconds(item.updatedAt || item.lastPollAt)
     return {
-      title: '结果下载中',
+      title: tr('autoUi.k_f0743b71d2a2'),
       detail: shotTaskId
-        ? `${waitText ? `已等待 ${waitText}，` : ''}taskId=${shotTaskId}`
+        ? `${waitText ? tr('autoUi.k_23defe089283', { p0: waitText }) : ''}taskId=${shotTaskId}`
         : waitText
-          ? `云端已返回，已等待 ${waitText}`
-          : '云端已返回，正在下载',
+          ? tr('autoUi.k_4c51748c989d', { p0: waitText })
+          : tr('autoUi.k_7624b9af025c'),
       tone: 'warning' as const,
     }
   }
   if (resolvedVideoUrl && remoteStatus === 'succeeded' && (status === 'failed_retryable' || status === 'failed_terminal' || errorText === 'succeeded')) {
     return {
-      title: '结果下载中',
-      detail: shotTaskId ? `云端已完成，等待本地回写，taskId=${shotTaskId}` : '云端已完成，等待本地回写',
+      title: tr('autoUi.k_f0743b71d2a2'),
+      detail: shotTaskId ? tr('autoUi.k_5995a41d68d7', { p0: shotTaskId }) : tr('autoUi.k_2e2672e6532a'),
       tone: 'warning' as const,
     }
   }
   if (errorText || status === 'failed_retryable' || status === 'failed_terminal') {
     if (failureTag === 'retry_limit') {
       return {
-        title: '已停止处理',
-        detail: '已自动重试 2 次，仍未成功，请手动检查素材、提示词或模型配置后重新生成',
+        title: tr('autoUi.k_91b396071dc6'),
+        detail: tr('autoUi.k_5dc5e08fdd77'),
         tone: 'danger' as const,
       }
     }
     if (failureTag === 'missing_task') {
       return {
-        title: '缺少任务号',
-        detail: '当前镜头没有可继续查询的 taskId，需要重新生成',
+        title: tr('autoUi.k_50dca2f1dd40'),
+        detail: tr('autoUi.k_875f93981c83'),
         tone: 'danger' as const,
       }
     }
     if (failureTag === 'remote_timeout') {
       return {
-        title: '远端无响应',
-        detail: shotTaskId ? `taskId=${shotTaskId}，可继续查询` : '远端长时间无响应',
+        title: tr('autoUi.k_981ab43e70c0'),
+        detail: shotTaskId ? tr('autoUi.k_587e7ed345bb', { p0: shotTaskId }) : tr('autoUi.k_0a51ed7857af'),
         tone: 'warning' as const,
       }
     }
     if (failureTag === 'download_failed') {
       return {
-        title: '下载回写失败',
-        detail: shotTaskId ? `taskId=${shotTaskId}，云端可能已成功` : '云端返回后本地下载失败',
+        title: tr('autoUi.k_8c44c3a90ad0'),
+        detail: shotTaskId ? tr('autoUi.k_8e227973c1e7', { p0: shotTaskId }) : tr('autoUi.k_41a6838bb73a'),
         tone: 'danger' as const,
       }
     }
     if (failureTag === 'remote_failed') {
       return {
-        title: '云端任务失败',
-        detail: shotTaskId ? `taskId=${shotTaskId}` : '远端任务失败',
+        title: tr('autoUi.k_f707d4fab78e'),
+        detail: shotTaskId ? `taskId=${shotTaskId}` : tr('autoUi.k_9328a9c2b8e0'),
         tone: 'danger' as const,
       }
     }
     if (failureTag === 'local_failed') {
       return {
-        title: '本地生成失败',
-        detail: errorText.replace(/^\[[a-z_]+\]\s*/i, '') || '本地执行失败',
+        title: tr('autoUi.k_1c5c2e4b4892'),
+        detail: errorText.replace(/^\[[a-z_]+\]\s*/i, '') || tr('autoUi.k_02c5be5b1f6d'),
         tone: 'danger' as const,
       }
     }
     return {
-      title: shotTaskId ? '云端失败' : '本地失败',
-      detail: errorText || remoteStatus || (shotTaskId ? 'task failed' : '未生成任务'),
+      title: shotTaskId ? tr('autoUi.k_6c9bf5912809') : tr('autoUi.k_b0a06a532b0f'),
+      detail: errorText || remoteStatus || (shotTaskId ? 'task failed' : tr('autoUi.k_d2c4105f29f6')),
       tone: 'danger' as const,
     }
   }
   if (status === 'remote_pending' || status === 'remote_running' || remoteStatus === 'processing' || remoteStatus === 'running') {
     return {
-      title: status === 'remote_pending' ? '等待云端接单' : '云端生成中',
-      detail: shotTaskId ? `taskId=${shotTaskId}` : '任务已提交，等待回写',
+      title: status === 'remote_pending' ? tr('autoUi.k_92c4d69c411e') : tr('autoUi.k_e13e1d9b03d2'),
+      detail: shotTaskId ? `taskId=${shotTaskId}` : tr('autoUi.k_5e790f0645e5'),
       tone: 'warning' as const,
     }
   }
   if (status === 'failed_retryable') {
     return {
-      title: shotTaskId ? '查询超时' : '待补任务号',
-      detail: shotTaskId ? `taskId=${shotTaskId}` : '当前镜头没有 taskId，无法继续查询',
+      title: shotTaskId ? tr('autoUi.k_abc5c3e95c85') : tr('autoUi.k_dc61f4f0fcef'),
+      detail: shotTaskId ? `taskId=${shotTaskId}` : tr('autoUi.k_91b5d84ab92e'),
       tone: shotTaskId ? ('warning' as const) : ('danger' as const),
     }
   }
   if (status === 'submitting') {
     return {
-      title: '创建任务中',
-      detail: shotTaskId ? `taskId=${shotTaskId}` : '任务已提交，等待任务号回写',
+      title: tr('autoUi.k_2e4171e1affa'),
+      detail: shotTaskId ? `taskId=${shotTaskId}` : tr('autoUi.k_01cd8b497828'),
       tone: 'warning' as const,
     }
   }
   if (status === 'pending' || status === 'idle') {
     return {
-      title: shotTaskId ? '待继续查询' : '待补任务号',
-      detail: shotTaskId ? `taskId=${shotTaskId}` : '当前镜头没有 taskId，无法继续查询',
+      title: shotTaskId ? tr('autoUi.k_01a763c21a01') : tr('autoUi.k_dc61f4f0fcef'),
+      detail: shotTaskId ? `taskId=${shotTaskId}` : tr('autoUi.k_91b5d84ab92e'),
       tone: shotTaskId ? ('warning' as const) : ('danger' as const),
     }
   }
   return {
     title: humanStatus(item.status),
-    detail: remoteStatus || shotTaskId || '待完成',
+    detail: remoteStatus || shotTaskId || tr('autoUi.k_f9ddfd643456'),
     tone: 'idle' as const,
   }
 }
@@ -2104,9 +2104,9 @@ function shotRetryStatusText(item?: ShotVideoOutput | null) {
   if (!item || typeof item.retryCount !== 'number') return ''
   const currentRetryCount = Math.max(0, Math.min(item.retryCount, 2))
   if (hasShotRetryLimitStopped(item)) {
-    return `已自动重试 ${currentRetryCount} / 2，已停止处理`
+    return tr('autoUi.k_585767963b43', { p0: currentRetryCount })
   }
-  return `重试 ${item.retryCount} / 2`
+  return tr('autoUi.k_0c11c453e1b6', { p0: item.retryCount })
 }
 
 function setStageLog(message: string, level: RuntimeLogItem['level'] = 'info') {
@@ -2124,7 +2124,7 @@ async function copyPromptText(text: string, successMessage: string) {
       return
     }
   } catch {}
-  const ok = window.prompt('请复制以下内容', value)
+  const ok = window.prompt(tr('autoUi.k_5120a5920064'), value)
   if (ok !== null) {
     shotPromptCopyMessage.value = successMessage
   }
@@ -2149,7 +2149,7 @@ async function loadIdentityGridPromptPreview(force = false, openModal = false) {
     if (openModal) identityGridPromptPreviewOpen.value = true
   } catch (error: any) {
     identityGridPromptPreview.value = null
-    identityGridPromptPreviewError.value = safeText(error?.message ?? error, '身份定妆图提示词预览加载失败')
+    identityGridPromptPreviewError.value = safeText(error?.message ?? error, tr('autoUi.k_414871055dc1'))
     if (openModal) identityGridPromptPreviewOpen.value = true
   } finally {
     identityGridPromptPreviewLoading.value = false
@@ -2159,19 +2159,19 @@ async function loadIdentityGridPromptPreview(force = false, openModal = false) {
 async function generateProjectIdentityGrid() {
   const projectId = String(current.value?.id || '').trim()
   if (!projectId) {
-    const message = '请先完成参考视频分析'
+    const message = tr('autoUi.k_190f82ef0fe5')
     markError(message, message)
     setStageLog(message, 'error')
     return
   }
   if (!identityGridProductRefs.value.length) {
-    const message = '请先选择并绑定商品库商品'
+    const message = tr('autoUi.k_ad0bfd1c4686')
     markError(message, message)
     setStageLog(message, 'error')
     return
   }
   if (!hasBoundModel.value) {
-    const message = '请先选择模特'
+    const message = tr('autoUi.k_c8e1546a1f2e')
     markError(message, message)
     setStageLog(message, 'error')
     return
@@ -2179,7 +2179,7 @@ async function generateProjectIdentityGrid() {
 
   loading.value = true
   errorText.value = ''
-  setStageLog('正在生成身份定妆图，请稍候。')
+  setStageLog(tr('autoUi.k_bcb32bb42d36'))
 
   try {
     const result = (await window.api.clone.generateModelIdentityPack({
@@ -2189,9 +2189,9 @@ async function generateProjectIdentityGrid() {
     })) as CloneProject
     applyProject((result || current.value) as CloneProject)
     await loadIdentityGridPromptPreview(true, false)
-    setStageLog('身份定妆图已生成完成。', 'success')
+    setStageLog(tr('autoUi.k_37e73b7c6dbd'), 'success')
   } catch (error: any) {
-    const message = safeText(error?.message ?? error, '身份定妆图生成失败')
+    const message = safeText(error?.message ?? error, tr('autoUi.k_5ca86d35dfb0'))
     markError(message, message)
     setStageLog(message, 'error')
   } finally {
@@ -2202,7 +2202,7 @@ async function generateProjectIdentityGrid() {
 async function copyAllShotPrompts() {
   if (!shotImagePromptPreview.value) return
   const parts = [`Image Request JSON:\n${safeText(shotImagePromptPreview.value.requestJsonStart, '--')}`]
-  await copyPromptText(parts.join('\n\n'), '参数列表已复制')
+  await copyPromptText(parts.join('\n\n'), tr('autoUi.k_1ed7cccea774'))
 }
 
 function promptParamRowsFromJson(raw?: string) {
@@ -2299,12 +2299,12 @@ async function downloadMediaFile(path: string) {
     const result = await window.api.saveFileAs({
       sourcePath,
       defaultFileName: sourcePath.split(/[\\/]/).pop() || 'download',
-      title: '保存参考图',
+      title: tr('autoUi.k_3ad9ac92d390'),
     })
     if (!result?.ok || result?.canceled) return
-    setStageLog(`参考图已保存到 ${shortPath(result.filePath || '')}`, 'success')
+    setStageLog(tr('autoUi.k_6a08605c3c79', { p0: shortPath(result.filePath || '') }), 'success')
   } catch (error: any) {
-    const message = safeText(error?.message ?? error, '保存失败')
+    const message = safeText(error?.message ?? error, tr('autoUi.k_40525a732872'))
     markError(message, message)
     setStageLog(message, 'error')
     window.alert(message)
@@ -2314,7 +2314,7 @@ async function downloadMediaFile(path: string) {
 async function copyAllShotVideoPrompts() {
   if (!shotVideoPromptPreview.value) return
   const parts = [`Video Request Payload:\n${safeText(shotVideoPromptPreview.value.requestPayloadPreview || shotVideoPromptPreview.value.requestJson, '--')}`]
-  await copyPromptText(parts.join('\n\n'), '视频参数列表已复制')
+  await copyPromptText(parts.join('\n\n'), tr('autoUi.k_3fb911525325'))
 }
 
 function resetShotImagePromptPreviewState(clearLoadedShotId = false) {
@@ -2350,7 +2350,7 @@ async function loadShotImagePromptPreview(shotId?: string, force = false, openMo
     if (openModal) shotPromptPreviewOpen.value = true
   } catch (error: any) {
     resetShotImagePromptPreviewState(true)
-    shotImagePromptPreviewError.value = safeText(error?.message ?? error, '分镜图片提示词预览加载失败')
+    shotImagePromptPreviewError.value = safeText(error?.message ?? error, tr('autoUi.k_91fe0c0e014c'))
     if (openModal) shotPromptPreviewOpen.value = true
   } finally {
     shotImagePromptPreviewLoading.value = false
@@ -2377,7 +2377,7 @@ async function loadShotVideoPromptPreview(shotId?: string, force = false, openMo
     if (openModal) shotVideoPromptPreviewOpen.value = true
   } catch (error: any) {
     resetShotVideoPromptPreviewState(true)
-    shotVideoPromptPreviewError.value = safeText(error?.message ?? error, '分镜视频提示词预览加载失败')
+    shotVideoPromptPreviewError.value = safeText(error?.message ?? error, tr('autoUi.k_749e3bb62514'))
     if (openModal) shotVideoPromptPreviewOpen.value = true
   } finally {
     shotVideoPromptPreviewLoading.value = false
@@ -2403,18 +2403,18 @@ const shotImageReferenceLockSummary = computed(() => {
   const preview = shotImagePromptPreview.value
   if (!preview?.referenceModeLocked) return ''
   if (preview.referenceModeLockReason === 'manual') {
-    return '已锁定为模特场景模式，原因：手动锁定'
+    return tr('autoUi.k_b52d117b2925')
   }
-  return '已锁定为模特场景模式'
+  return tr('autoUi.k_15d1e137c315')
 })
 const shotImageReferenceReasonSummary = computed(() => {
   const preview = shotImagePromptPreview.value
   if (!preview) return ''
   if (shotImageReferenceMode.value === 'product_closeup' && preview.storyboardSubjectType === 'hand_only_product') {
-    return '识别为产品特写：仅检测到手部持物，无手外人体部位'
+    return tr('autoUi.k_071f23ff6388')
   }
   if (shotImageReferenceMode.value === 'model_presentation' && preview.storyboardReferenceConfidence === 'low') {
-    return '低置信度，已按模特场景兜底'
+    return tr('autoUi.k_0c63b580c7ae')
   }
   const reasons = Array.isArray(preview.storyboardReferenceReason) ? preview.storyboardReferenceReason.filter(Boolean) : []
   return reasons.join('；')
@@ -2429,19 +2429,19 @@ const shotImageDisplayRefs = computed(() => {
   const identityGridPath = String(preview.identityGridReferenceImagePath || '').trim() || String(preview.modelReferenceImagePaths?.[0] || '').trim()
   const scenePath = String(preview.sceneReferenceImagePath || '').trim()
   if (referenceMode === 'product_closeup') {
-    if (primaryProductPath) refs.push({ label: '产品参考图', path: primaryProductPath })
-    if (scenePath) refs.push({ label: '分镜场景图', path: scenePath })
+    if (primaryProductPath) refs.push({ label: tr('autoUi.k_6a54e4d57fb7'), path: primaryProductPath })
+    if (scenePath) refs.push({ label: tr('autoUi.k_60c1dec32afc'), path: scenePath })
     if (!refs.length) {
-      if (requestUrlPaths[0]) refs.push({ label: '实际请求参考图 1', path: requestUrlPaths[0] })
-      if (requestUrlPaths[1]) refs.push({ label: '实际请求参考图 2', path: requestUrlPaths[1] })
+      if (requestUrlPaths[0]) refs.push({ label: tr('autoUi.k_2d235592bfbb'), path: requestUrlPaths[0] })
+      if (requestUrlPaths[1]) refs.push({ label: tr('autoUi.k_953ee99a8643'), path: requestUrlPaths[1] })
     }
     return refs
   }
-  if (identityGridPath) refs.push({ label: '身份定妆图', path: identityGridPath })
-  if (scenePath) refs.push({ label: '分镜场景图', path: scenePath })
+  if (identityGridPath) refs.push({ label: tr('autoUi.k_54f65b6b0c67'), path: identityGridPath })
+  if (scenePath) refs.push({ label: tr('autoUi.k_60c1dec32afc'), path: scenePath })
   if (!refs.length) {
-    if (requestUrlPaths[0]) refs.push({ label: '实际请求参考图 1', path: requestUrlPaths[0] })
-    if (requestUrlPaths[1]) refs.push({ label: '实际请求参考图 2', path: requestUrlPaths[1] })
+    if (requestUrlPaths[0]) refs.push({ label: tr('autoUi.k_2d235592bfbb'), path: requestUrlPaths[0] })
+    if (requestUrlPaths[1]) refs.push({ label: tr('autoUi.k_953ee99a8643'), path: requestUrlPaths[1] })
   }
   console.log('[clone-debug] renderer-shot-image-display-refs', {
     shotId: preview.shotId,
@@ -2507,19 +2507,19 @@ const identityGridResolvedProductType = computed(() => {
 })
 const identityGridPreviewStats = computed<PromptPreviewStat[]>(() => [
   {
-    label: '商品类型',
+    label: tr('autoUi.k_8c0e804b9002'),
     value: safeText(identityGridResolvedProductType.value, '--'),
   },
   {
-    label: '参考图数量',
+    label: tr('autoUi.k_efb5568d1e87'),
     value: String(Number(identityGridPromptSource.value?.productReferenceImageCount || identityGridReferencePaths.value.length || 0)),
   },
   {
-    label: '模特图数量',
+    label: tr('autoUi.k_72167c6e8717'),
     value: String(Number(identityGridPromptSource.value?.modelReferenceImageCount || identityGridModelReferencePaths.value.length || 0)),
   },
   {
-    label: '请求模型',
+    label: tr('autoUi.k_4eec0f4d40fe'),
     value: safeText(identityGridPromptSource.value?.requestModel || identityGridPromptSource.value?.requestProvider, '--'),
   },
 ])
@@ -2547,28 +2547,28 @@ const promptHealthStatus = computed(() => {
   if (hasMissingScene) {
     return {
       tone: 'danger',
-      label: '场景锁缺失',
-      message: '当前分镜图缺少场景氛围锁，可能继续生成白底分镜图片。',
+      label: tr('autoUi.k_7828a37a6196'),
+      message: tr('autoUi.k_fd16551ef572'),
     }
   }
   if (hasMissingCore) {
     return {
       tone: 'danger',
-      label: '核心块缺失',
-      message: '商品锁、直用锁、商品描述或模特锁有缺失，当前 Prompt 不安全。',
+      label: tr('autoUi.k_1cfc8d5ed626'),
+      message: tr('autoUi.k_415a479f14c6'),
     }
   }
   if (hasHighLength) {
     return {
       tone: 'warning',
-      label: '长度偏高',
-      message: '核心块已保留，但 Prompt 已接近上限，仍有被截断风险。',
+      label: tr('autoUi.k_b376caf2d8fc'),
+      message: tr('autoUi.k_19b502ee1ae9'),
     }
   }
   return {
     tone: 'success',
-    label: '状态安全',
-    message: '核心块齐全且长度安全，可以继续用于分镜设计生成。',
+    label: tr('autoUi.k_cafb86248dd0'),
+    message: tr('autoUi.k_c7733bb92e22'),
   }
 })
 
@@ -2677,7 +2677,7 @@ function startNewDraft() {
   referenceVideoPath.value = ''
   errorText.value = ''
   selectedStageKey.value = ''
-  setStageLog('已切换到新建模式，请上传新的参考视频。')
+  setStageLog(tr('autoUi.k_9cb25b9d849e'))
 }
 
 function selectStage(key: StageItem['key']) {
@@ -2774,7 +2774,7 @@ function shotLabel(shotId: string) {
   const beat = storyBeats.value.find((item) => item.id === shotId)
   if (beat) return beat.purpose
   const frame = storyboardFrames.value.find((item) => item.shotId === shotId)
-  return `分镜 ${Number(frame?.frameIndex ?? 0) + 1}`
+  return tr('autoUi.k_65f2f856e95d', { p0: Number(frame?.frameIndex ?? 0) + 1 })
 }
 
 function openFramePreview(frameOrPath: StoryboardFrame | string, title?: string) {
@@ -2782,7 +2782,7 @@ function openFramePreview(frameOrPath: StoryboardFrame | string, title?: string)
     const directPath = String(frameOrPath || '').trim()
     if (!directPath) return
     framePreviewPath.value = directPath
-    framePreviewTitle.value = safeText(title, '图片预览')
+    framePreviewTitle.value = safeText(title, tr('autoUi.k_feabb054e58a'))
     framePreviewOpen.value = true
     return
   }
@@ -2790,7 +2790,7 @@ function openFramePreview(frameOrPath: StoryboardFrame | string, title?: string)
   if (!frame.imagePath) return
   const shot = blueprintShots.value.find((item) => item.id === frame.shotId)
   framePreviewPath.value = frame.imagePath
-  framePreviewTitle.value = `${safeText(shotLabel(frame.shotId), '分镜')} ${shot ? `· ${storyBeatRangeText(shot as StoryBeat, Number(frame.frameIndex ?? 0))}` : ''}`.trim()
+  framePreviewTitle.value = `${safeText(shotLabel(frame.shotId), tr('autoUi.k_fcad7fe371b8'))} ${shot ? `· ${storyBeatRangeText(shot as StoryBeat, Number(frame.frameIndex ?? 0))}` : ''}`.trim()
   framePreviewOpen.value = true
 }
 
@@ -2798,7 +2798,7 @@ function openIdentityGridPreview() {
   const imagePath = String(current.value?.projectIdentityGridPath || '').trim()
   if (!imagePath) return
   framePreviewPath.value = imagePath
-  framePreviewTitle.value = '身份定妆图预览'
+  framePreviewTitle.value = tr('autoUi.k_393c5c3a5168')
   framePreviewOpen.value = true
 }
 
@@ -2808,18 +2808,18 @@ async function toggleFrameLock(shotId: string) {
   if (!shot) return
   loading.value = true
   errorText.value = ''
-  setStageLog(`正在${shot.locked ? '解除锁定' : '锁定'} ${shotLabel(shotId)}。`)
+  setStageLog(tr('autoUi.k_ea60dd8a8659', { p0: shot.locked ? '解除锁定' : '锁定', p1: shotLabel(shotId) }))
   try {
     const resolved = await resolveCloneWorkspaceClient<CloneProject>(current.value.id)
     const project = ((await resolved.client.updateShot(current.value.id, shotId, {
       locked: !shot.locked,
     }))?.project || current.value) as CloneProject
     applyProject(project || current.value)
-    setStageLog(`${shotLabel(shotId)} 已${shot.locked ? '解除锁定' : '锁定'}，当前通道：${resolved.channel}。`, 'success')
+    setStageLog(tr('autoUi.k_5a9dd00d57ff', { p0: shotLabel(shotId), p1: shot.locked ? '解除锁定' : '锁定', p2: resolved.channel }), 'success')
   } catch (error: any) {
-    markError(error?.message ?? error, '分镜锁定失败。')
+    markError(error?.message ?? error, tr('autoUi.k_ec45ef305a36'))
     await refreshProjectAfterFailure()
-    setStageLog('分镜锁定失败，请重试。', 'error')
+    setStageLog(tr('autoUi.k_8ff7a7be0616'), 'error')
   } finally {
     loading.value = false
   }
@@ -2870,7 +2870,7 @@ function storyBeatRangeText(beat: StoryBeat, fallbackIndex = 0) {
   if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
     return `${formatDuration(start)}-${formatDuration(end)}`
   }
-  return `片段 ${String(storyBeatDisplayIndex(beat, fallbackIndex)).padStart(2, '0')}`
+  return tr('autoUi.k_7a27f4893bf7', { p0: String(storyBeatDisplayIndex(beat, fallbackIndex)).padStart(2, '0') })
 }
 
 function localizeShotField(value?: string) {
@@ -2878,25 +2878,25 @@ function localizeShotField(value?: string) {
   if (!text) return '--'
   const normalized = text.toLowerCase()
   const map: Record<string, string> = {
-    'close-up': '特写',
-    closeup: '特写',
-    'medium shot': '中景',
-    medium: '中景',
-    'wide shot': '远景',
-    wide: '远景',
-    'top shot': '俯拍',
-    top: '俯拍',
-    'tracking shot': '跟拍',
-    tracking: '跟拍',
-    pan: '平移',
-    tilt: '俯仰',
-    dolly: '推拉',
-    zoom: '变焦',
-    hook: '钩子镜头',
-    demo: '演示镜头',
-    product: '产品主体',
-    model: '模特主体',
-    hand: '手部展示',
+    'close-up': tr('autoUi.k_5a380a0ace9b'),
+    closeup: tr('autoUi.k_5a380a0ace9b'),
+    'medium shot': tr('autoUi.k_a0e85a087553'),
+    medium: tr('autoUi.k_a0e85a087553'),
+    'wide shot': tr('autoUi.k_b015efa6512f'),
+    wide: tr('autoUi.k_b015efa6512f'),
+    'top shot': tr('autoUi.k_99e2de994bf1'),
+    top: tr('autoUi.k_99e2de994bf1'),
+    'tracking shot': tr('autoUi.k_ebee67cfd6cc'),
+    tracking: tr('autoUi.k_ebee67cfd6cc'),
+    pan: tr('autoUi.k_0e855ea2fda6'),
+    tilt: tr('autoUi.k_f17b90b1c5e4'),
+    dolly: tr('autoUi.k_4c6e41056f1e'),
+    zoom: tr('autoUi.k_a462c30c725f'),
+    hook: tr('autoUi.k_f8728da14917'),
+    demo: tr('autoUi.k_4209499b7b3b'),
+    product: tr('autoUi.k_40cd73364d18'),
+    model: tr('autoUi.k_f69382f26e8a'),
+    hand: tr('autoUi.k_5b98cb5f608e'),
   }
   return map[normalized] || text
 }
@@ -2921,24 +2921,24 @@ function mimeTypeFromPath(filePath: string) {
 
 function localizePurpose(value?: string) {
   const text = String(value || '').trim()
-  if (!text) return '内容片段'
+  if (!text) return tr('autoUi.k_9c1d5accb8ef')
   const normalized = text.toLowerCase()
   const map: Record<string, string> = {
-    hook: '开场钩子',
-    problem: '痛点引出',
-    proof: '效果证明',
-    offer: '卖点展示',
-    cta: '转化收口',
-    benefit: '卖点强化',
-    demo: '产品演示',
+    hook: tr('autoUi.k_7d0694653644'),
+    problem: tr('autoUi.k_b6bbb1a7609c'),
+    proof: tr('autoUi.k_efa6b43dae6c'),
+    offer: tr('autoUi.k_0bb69cfc6f36'),
+    cta: tr('autoUi.k_af490f0044c3'),
+    benefit: tr('autoUi.k_e7616a4eadcf'),
+    demo: tr('autoUi.k_ff5c9efb002a'),
   }
   return map[normalized] || text
 }
 
 function localizeReferenceMode(value?: string) {
   const normalized = String(value || '').trim().toLowerCase()
-  if (normalized === 'product_closeup') return '产品特写'
-  if (normalized === 'model_presentation') return '模特场景'
+  if (normalized === 'product_closeup') return tr('autoUi.k_7b569a67abe5')
+  if (normalized === 'model_presentation') return tr('autoUi.k_420b23e27c6d')
   return ''
 }
 
@@ -2948,7 +2948,7 @@ function shotReferenceLabel(input?: { storyboardReferenceMode?: string; shotType
 
 function shotScriptSummary(shotId?: string) {
   const beat = storyBeats.value.find((item) => item.id === shotId)
-  if (!beat) return '当前镜头还没有可用的分镜脚本摘要。'
+  if (!beat) return tr('autoUi.k_94606e0c0a67')
   const parts = [
     beat.purpose,
     shotReferenceLabel({
@@ -2958,7 +2958,7 @@ function shotScriptSummary(shotId?: string) {
     }),
     localizeShotField(beat.productRole),
   ].map((item) => String(item || '').trim()).filter(Boolean)
-  return parts.join(' · ') || '当前镜头还没有可用的分镜脚本摘要。'
+  return parts.join(' · ') || tr('autoUi.k_94606e0c0a67')
 }
 
 function selectAdjacentShot(offset: number) {
@@ -2986,7 +2986,7 @@ async function refreshProducts() {
 
 async function pickReferenceVideo() {
   const files = await window.api.pickFiles({
-    title: '选择参考视频',
+    title: tr('autoUi.k_4cd75c868c2e'),
     filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'm4v'] }],
     multiple: false,
   })
@@ -2997,7 +2997,7 @@ async function pickReferenceVideo() {
 
 async function pickProductImages() {
   const files = await window.api.pickFiles({
-    title: '选择商品参考图',
+    title: tr('autoUi.k_2edd0e805bf7'),
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
     multiple: true,
   })
@@ -3010,20 +3010,20 @@ async function bindSelectedProduct() {
   const productId = String(selectedProductId.value || '').trim()
   pushRuntimeLog(`[clone-debug] bind-selected-product:click productId=${productId || 'empty'} currentId=${String(current.value?.id || '').trim() || 'empty'}`, 'info')
   if (!productId) {
-    markError('请先选择商品库商品。', '请先选择商品库商品。')
-    window.alert('请先选择商品库商品。')
+    markError(tr('autoUi.k_049be83c03c5'), tr('autoUi.k_049be83c03c5'))
+    window.alert(tr('autoUi.k_049be83c03c5'))
     return
   }
   try {
     await bindLibraryProduct(productId)
     const boundProductId = String(current.value?.productId || '').trim()
     if (boundProductId === productId) {
-      window.alert('商品绑定成功。')
+      window.alert(tr('autoUi.k_809ff6b760b0'))
       return
     }
-    window.alert('绑定请求已提交，但当前页面还未显示绑定结果，请查看运行日志。')
+    window.alert(tr('autoUi.k_1f60d1240791'))
   } catch (error: any) {
-    const message = safeText(error?.message ?? error, '商品绑定失败。')
+    const message = safeText(error?.message ?? error, tr('autoUi.k_6cc953df3eed'))
     markError(message, message)
     window.alert(message)
   }
@@ -3042,8 +3042,8 @@ async function createBlueprint() {
   const selectedProductIdText = String(selectedProductId.value || '').trim()
   if (!boundProductId) {
     const message = selectedProductIdText
-      ? '请先点击“绑定商品”，将当前选中的商品绑定到项目后再分析脚本。'
-      : '请先选择商品并点击“绑定商品”后，再继续分析脚本。'
+      ? tr('autoUi.k_2ef3076b44c5')
+      : tr('autoUi.k_79d220908086')
     markError(message, message)
     setStageLog(message, 'error')
     window.alert(message)
@@ -3053,7 +3053,7 @@ async function createBlueprint() {
   await createBlueprintInWorkspace(sourcePath)
   const canContinueToScript = Boolean(effectiveProductRefs.value.length) && Boolean(hasBoundModel.value)
   if (!canContinueToScript) {
-    setStageLog('脚本分析完成。请先确认已准备商品参考图和模特，再继续生成脚本候选。', 'info')
+    setStageLog(tr('autoUi.k_6fce855845a4'), 'info')
     return
   }
   if (current.value?.runMode === 'auto') {
@@ -3079,7 +3079,7 @@ async function generateScriptVariants() {
     selectedModelId: selectedModelId.value || current.value?.selectedModelIdentitySnapshot?.id || '',
     variantCount: variantCount.value,
   })
-  pushRuntimeLog(`开始请求脚本变体生成：${variantCount.value} 条候选`, 'info')
+  pushRuntimeLog(tr('autoUi.k_70d5d79b2bf6', { p0: variantCount.value }), 'info')
   await generateScriptVariantsInWorkspace(effectiveProductRefs.value, hasBoundModel.value)
   await nextTick()
   if (scriptVariants.value.length) {
@@ -3100,7 +3100,7 @@ async function generateScriptVariants() {
     autoBootstrapSignature.value = `script-auto-continue:${String(current.value?.id || '').trim()}:${Date.now()}`
   }
   selectStage('identity-grid')
-  setStageLog('脚本候选已生成，正在自动生成身份定妆图，完成后再进入分镜设计。')
+  setStageLog(tr('autoUi.k_55c2c7bc1576'))
   try {
     await autoRunToStoryboardVideos()
     selectedStageKey.value = ''
@@ -3110,9 +3110,9 @@ async function generateScriptVariants() {
     autoBootstrapSignature.value = ''
     autoRunRequestedAfterAnalyze.value = false
     autoRunIntentArmed.value = false
-    markError(error?.message ?? error, '自动运行衔接失败。')
+    markError(error?.message ?? error, tr('autoUi.k_ac380d4b486d'))
     await refreshProjectAfterFailure()
-    setStageLog('脚本生成后自动衔接失败，请重试。', 'error')
+    setStageLog(tr('autoUi.k_d66752d60d33'), 'error')
   }
 }
 
@@ -3175,11 +3175,11 @@ async function regenerateStoryboardFrame(shotId: string) {
     return
   }
   if (regeneratingStoryboardShotIds.value.includes(normalizedShotId)) {
-    setStageLog(`${shotLabel(normalizedShotId)} 正在重新生成，请不要重复点击。`)
+    setStageLog(tr('autoUi.k_88481b5b3996', { p0: shotLabel(normalizedShotId) }))
     return
   }
   regeneratingStoryboardShotIds.value = [...regeneratingStoryboardShotIds.value, normalizedShotId]
-  setStageLog(`${shotLabel(normalizedShotId)} 已提交重新生成，正在处理中。`)
+  setStageLog(tr('autoUi.k_8fc5b7c8f4a3', { p0: shotLabel(normalizedShotId) }))
   try {
     await regenerateStoryboardFrameInWorkspace(normalizedShotId, effectiveProductRefs.value)
   } finally {
@@ -3197,7 +3197,7 @@ async function regenerateUnlockedStoryboardFrames() {
     .filter((shot) => !shot.locked)
     .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
   if (!targets.length) {
-    setStageLog('没有可重新生成的未锁定分镜。')
+    setStageLog(tr('autoUi.k_dbc0b80307e9'))
     return
   }
   regeneratingStoryboardShotIds.value = Array.from(new Set([...regeneratingStoryboardShotIds.value, ...targets.map((shot) => shot.id)]))
@@ -3205,7 +3205,7 @@ async function regenerateUnlockedStoryboardFrames() {
     await regenerateStoryboardFramesInWorkspace({
       shotIds: targets.map((shot) => shot.id),
       effectiveProductRefs: effectiveProductRefs.value,
-      stageLogLabel: `已提交 ${targets.length} 条未锁定分镜重新生成，正在并发处理中。`,
+      stageLogLabel: tr('autoUi.k_936d826201d2', { p0: targets.length }),
     })
   } finally {
     regeneratingStoryboardShotIds.value = regeneratingStoryboardShotIds.value.filter((id) => !targets.some((shot) => shot.id === id))
@@ -3219,26 +3219,26 @@ async function regenerateFailedStoryboardFrames() {
     return
   }
   if (regeneratingFailedStoryboardFrames.value) {
-    setStageLog('失败分镜正在批量重新生成，请不要重复点击。')
+    setStageLog(tr('autoUi.k_be58d1215366'))
     return
   }
   const targets = failedStoryboardFrames.value
     .map((item) => item.shotId)
     .filter(Boolean)
   if (!targets.length) {
-    setStageLog('当前没有失败的分镜图片需要重新生成。')
+    setStageLog(tr('autoUi.k_5afee0cb377d'))
     return
   }
   regeneratingFailedStoryboardFrames.value = true
   regeneratingStoryboardShotIds.value = Array.from(new Set([...regeneratingStoryboardShotIds.value, ...targets]))
-  setStageLog(`已提交 ${targets.length} 条失败分镜重新生成，正在并发处理。`)
+  setStageLog(tr('autoUi.k_0a9ffccc5b2e', { p0: targets.length }))
   try {
     await regenerateStoryboardFramesInWorkspace({
       shotIds: targets,
       effectiveProductRefs: effectiveProductRefs.value,
-      stageLogLabel: `已提交 ${targets.length} 条失败分镜重新生成，正在并发处理。`,
+      stageLogLabel: tr('autoUi.k_0a9ffccc5b2e', { p0: targets.length }),
     })
-    setStageLog(`失败分镜批量重新生成已完成，共处理 ${targets.length} 条。`, 'success')
+    setStageLog(tr('autoUi.k_1802d02893eb', { p0: targets.length }), 'success')
   } finally {
     regeneratingStoryboardShotIds.value = regeneratingStoryboardShotIds.value.filter((id) => !targets.includes(id))
     regeneratingFailedStoryboardFrames.value = false
@@ -3255,18 +3255,18 @@ async function regenerateSelectedStoryboardFrames() {
     .map((row) => row.shotId)
     .filter((shotId) => selectedStoryboardShotIds.value.includes(shotId))
   if (!targets.length) {
-    setStageLog('请先选择需要重新生成的分镜。')
+    setStageLog(tr('autoUi.k_2f5f2efc257f'))
     return
   }
   regeneratingStoryboardShotIds.value = Array.from(new Set([...regeneratingStoryboardShotIds.value, ...targets]))
-  setStageLog(`已提交 ${targets.length} 条选中分镜重新生成，正在并发处理。`)
+  setStageLog(tr('autoUi.k_5107f362963f', { p0: targets.length }))
   try {
     await regenerateStoryboardFramesInWorkspace({
       shotIds: targets,
       effectiveProductRefs: effectiveProductRefs.value,
-      stageLogLabel: `已提交 ${targets.length} 条选中分镜重新生成，正在并发处理。`,
+      stageLogLabel: tr('autoUi.k_5107f362963f', { p0: targets.length }),
     })
-    setStageLog(`选中分镜批量重新生成已完成，共处理 ${targets.length} 条。`, 'success')
+    setStageLog(tr('autoUi.k_a9718812998f', { p0: targets.length }), 'success')
   } finally {
     regeneratingStoryboardShotIds.value = regeneratingStoryboardShotIds.value.filter((id) => !targets.includes(id))
   }
@@ -3274,24 +3274,24 @@ async function regenerateSelectedStoryboardFrames() {
 
 async function batchQueryPendingStoryboardFrames() {
   if (queryingStoryboardFrames.value) {
-    setStageLog('未完成分镜正在批量查询，请不要重复点击。')
+    setStageLog(tr('autoUi.k_c72e6e721b6e'))
     return
   }
   const targets = pendingStoryboardFrames.value
     .map((item) => item.shotId)
     .filter(Boolean)
   if (!targets.length) {
-    setStageLog('当前没有待查询的分镜图片。')
+    setStageLog(tr('autoUi.k_682bce8f1ee5'))
     return
   }
   queryingStoryboardFrames.value = true
-  setStageLog(`已提交 ${targets.length} 条未完成分镜批量查询，正在处理中。`)
+  setStageLog(tr('autoUi.k_c956a341ab26', { p0: targets.length }))
   try {
     await batchQueryStoryboardImagesInWorkspace({
       effectiveProductRefs: effectiveProductRefs.value,
       shotIds: targets,
     })
-    setStageLog(`未完成分镜批量查询已完成，共处理 ${targets.length} 条。`, 'success')
+    setStageLog(tr('autoUi.k_06258768d7ef', { p0: targets.length }), 'success')
   } finally {
     queryingStoryboardFrames.value = false
   }
@@ -3333,11 +3333,11 @@ async function saveVideoRenderHints(input?: { aspectRatio?: VideoRenderAspectRat
     const project = ((result as any)?.project || current.value) as CloneProject
     applyProject(project)
     syncVideoRenderHintsFromProject(project)
-    setStageLog(`视频尺寸已更新为 ${resolution}。`, 'success')
+    setStageLog(tr('autoUi.k_10c60e23161d', { p0: resolution }), 'success')
   } catch (error: any) {
-    markError(error?.message ?? error, '视频尺寸保存失败。')
+    markError(error?.message ?? error, tr('autoUi.k_26786a46f372'))
     syncVideoRenderHintsFromProject(current.value)
-    setStageLog('视频尺寸保存失败，请重试。', 'error')
+    setStageLog(tr('autoUi.k_523cdae527c8'), 'error')
   } finally {
     savingVideoRenderHints.value = false
   }
@@ -3391,7 +3391,7 @@ async function forceDownloadShotVideoResult(shotId: string) {
 
 async function replaceShotVideo(shotId: string) {
   const files = await window.api.pickFiles({
-    title: '选择替换分镜视频',
+    title: tr('autoUi.k_c6835c4750fa'),
     filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'm4v'] }],
     multiple: false,
   })
@@ -3404,11 +3404,11 @@ async function regenerateShotClip(shotId: string) {
   const normalizedShotId = String(shotId || '').trim()
   if (!normalizedShotId) return
   if (regeneratingShotVideoIds.value.includes(normalizedShotId)) {
-    setStageLog(`${shotLabel(normalizedShotId)} 正在重新生成，请不要重复点击。`)
+    setStageLog(tr('autoUi.k_88481b5b3996', { p0: shotLabel(normalizedShotId) }))
     return
   }
   regeneratingShotVideoIds.value = [...regeneratingShotVideoIds.value, normalizedShotId]
-  setStageLog(`${shotLabel(normalizedShotId)} 已提交重新生成，正在处理中，请勿重复点击。`)
+  setStageLog(tr('autoUi.k_6605b1571733', { p0: shotLabel(normalizedShotId) }))
   try {
     await regenerateShotClipInWorkspace(normalizedShotId)
     if (current.value?.id) {
@@ -3422,11 +3422,11 @@ async function regenerateShotClip(shotId: string) {
 async function regenerateFailedShotVideos() {
   if (!failedShotOutputs.value.length) return
   if (regeneratingFailedShotVideos.value) {
-    setStageLog('失败分镜正在批量重新生成，请不要重复点击。')
+    setStageLog(tr('autoUi.k_be58d1215366'))
     return
   }
   regeneratingFailedShotVideos.value = true
-  setStageLog(`已提交 ${failedShotOutputs.value.length} 个失败分镜重新生成，正在处理中，请勿重复点击。`)
+  setStageLog(tr('autoUi.k_8fb7aad7fd28', { p0: failedShotOutputs.value.length }))
   try {
     for (const item of failedShotOutputs.value) {
       await regenerateShotClip(item.shotId)
@@ -3455,7 +3455,7 @@ async function composeFinalVideo() {
     loading: loading.value,
   })
   if (!gatePassAllowed.value) {
-    const message = gateFailureSummary.value || '当前仍有镜头未通过最终门禁，请先处理后再合成。'
+    const message = gateFailureSummary.value || tr('autoUi.k_ee3f5a9629c5')
     composeLocalError.value = message
     setStageLog(message, 'error')
     markError(message, message)
@@ -3466,7 +3466,7 @@ async function composeFinalVideo() {
 
 async function openGeelarkPublishModal() {
   if (!finalOutputPath.value) {
-    geelarkPublishMessage.value = '请先生成成片。'
+    geelarkPublishMessage.value = tr('autoUi.k_2ead337584f9')
     return
   }
   errorText.value = ''
@@ -3487,11 +3487,11 @@ async function openGeelarkPublishModal() {
 }
 
 async function pickComposeOutputDir() {
-  const dir = await window.api.pickDir({ title: '选择最终成片输出目录' })
+  const dir = await window.api.pickDir({ title: tr('autoUi.k_ebcc859bd923') })
   if (!dir) return
   composeOutputDir.value = dir
   composeLocalError.value = ''
-  setStageLog(`已设置输出目录：${shortPath(dir)}`, 'success')
+  setStageLog(tr('autoUi.k_899dd08ab96f', { p0: shortPath(dir) }), 'success')
 }
 
 async function openFinalOutput() {
@@ -3506,11 +3506,11 @@ async function revealFinalOutput() {
 
 async function submitGeelarkPublish() {
   if (!current.value?.id || !finalOutputPath.value) {
-    geelarkPublishMessage.value = '当前还没有可发布的成片。'
+    geelarkPublishMessage.value = tr('autoUi.k_8eed551d0ade')
     return
   }
   if (!geelarkPublishForm.publishAccountId) {
-    geelarkPublishMessage.value = '请选择发布账号。'
+    geelarkPublishMessage.value = tr('autoUi.k_b75809f9a5d3')
     return
   }
   geelarkPublishSubmitting.value = true
@@ -3526,7 +3526,7 @@ async function submitGeelarkPublish() {
       scheduleAt: geelarkPublishForm.scheduleAt ? new Date(geelarkPublishForm.scheduleAt).getTime() : Date.now(),
       needShareLink: Boolean(geelarkPublishForm.needShareLink),
     })
-    geelarkPublishMessage.value = '已提交到 Geelark。'
+    geelarkPublishMessage.value = tr('autoUi.k_73a4cf5d0400')
     geelarkPublishModalOpen.value = false
     void router.push('/plugins/geelark-publisher')
   } catch (error: any) {
@@ -3606,9 +3606,9 @@ onMounted(async () => {
   try {
     await loadProject(projectId)
   } catch (error: any) {
-    pushRuntimeLog(`任务载入失败：${safeText(error?.message ?? error, '未知错误')}`, 'error')
-    markError(error?.message ?? error, '任务载入失败。')
-    setStageLog('任务载入失败，请检查当前任务数据后重试。', 'error')
+    pushRuntimeLog(tr('autoUi.k_17ff59cc5738', { p0: safeText(error?.message ?? error, '未知错误') }), 'error')
+    markError(error?.message ?? error, tr('autoUi.k_eb84ac0a09a1'))
+    setStageLog(tr('autoUi.k_cebbe58c734b'), 'error')
     return
   }
   timer = window.setInterval(() => {
@@ -3727,7 +3727,7 @@ watch(
   async (key) => {
     if (!key || key === autoBootstrapSignature.value) return
     autoBootstrapSignature.value = key
-    setStageLog('自动模式素材已齐备，开始自动运行。')
+    setStageLog(tr('autoUi.k_16239dc8cae5'))
     try {
       await nextTick()
       if (!current.value?.blueprint?.shots?.length && referenceSourcePath.value) {
@@ -3740,9 +3740,9 @@ watch(
       autoBootstrapSignature.value = ''
       autoRunRequestedAfterAnalyze.value = false
       autoRunIntentArmed.value = false
-      markError(error?.message ?? error, '自动运行启动失败。')
+      markError(error?.message ?? error, tr('autoUi.k_0fb571537a10'))
       await refreshProjectAfterFailure()
-      setStageLog('自动运行启动失败，请重试。', 'error')
+      setStageLog(tr('autoUi.k_92662ff96cf1'), 'error')
     }
   },
   { immediate: true },
@@ -3924,7 +3924,7 @@ watch(
   (next, prev) => {
     const text = [next?.provider, next?.model, next?.requestCapability, next?.responseSnippet].filter(Boolean).join(' / ')
     const prevText = [prev?.provider, prev?.model, prev?.requestCapability, prev?.responseSnippet].filter(Boolean).join(' / ')
-    if (text && text !== prevText) pushRuntimeLog(`云端调用上下文：${text}`, 'info')
+    if (text && text !== prevText) pushRuntimeLog(tr('autoUi.k_7d3344fb9024', { p0: text }), 'info')
   },
   { deep: true },
 )
@@ -3946,13 +3946,11 @@ onUnmounted(() => {
             <section class="analyze-hero-card">
               <div class="analyze-hero-card__head">
                 <div class="analyze-hero-card__copy">
-                  <h2>参考视频分析</h2>
-                  <p>提取脚本结构、内容节奏与可复刻信息</p>
+                  <h2>{{ tr('autoUi.k_070160e04cfa') }}</h2>
+                  <p>{{ tr('autoUi.k_3e20340c353f') }}</p>
                 </div>
                 <div class="analyze-hero-card__controls">
-                  <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')">
-                    返回任务列表
-                  </button>
+                  <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')"> {{ tr('autoUi.k_cd3b2229aab1') }} </button>
                   <button
                     class="primary-button small"
                     type="button"
@@ -3967,51 +3965,51 @@ onUnmounted(() => {
               <div class="analyze-main-grid">
                 <div class="analyze-video-card">
                   <div class="analyze-video-card__head">
-                    <strong>参考视频</strong>
-                    <span>{{ referenceSourcePath ? '上传后用于后续脚本、分镜与视频阶段分析' : '请先上传参考视频' }}</span>
+                    <strong>{{ tr('autoUi.k_ce9406ae8fc8') }}</strong>
+                    <span>{{ referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a') }}</span>
                   </div>
                   <div class="video-shell analyze-video-shell">
                     <video v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" controls preload="metadata"></video>
                     <CloneStateCard
                       v-else
                       class="empty-state"
-                      title="等待参考视频"
-                      description="上传一条参考视频后，系统会开始分析整条脚本结构。"
+                      :title="tr('autoUi.k_8704840e5b6a')"
+                      :description="tr('autoUi.k_8542c9c4c761')"
                     />
                   </div>
                   <div class="analyze-video-card__actions">
                     <button class="ghost-button small secondary-action" type="button" :disabled="loading" @click="pickReferenceVideo">
-                      {{ referenceSourcePath ? '重新选择视频' : '上传参考视频' }}
+                      {{ referenceSourcePath ? tr('autoUi.k_afe2bfaa6eee') : tr('autoUi.k_f743536d6df3') }}
                     </button>
                   </div>
                   <div class="analyze-video-meta-card">
-                    <strong>视频信息</strong>
+                    <strong>{{ tr('autoUi.k_2be1fa57c981') }}</strong>
                     <div class="analyze-video-meta-card__grid">
-                      <span>文件名</span>
-                      <strong>{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, '未上传') }}</strong>
-                      <span>片段数</span>
+                      <span>{{ tr('autoUi.k_1275f6feb703') }}</span>
+                      <strong>{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, tr('autoUi.k_937d465574eb')) }}</strong>
+                      <span>{{ tr('autoUi.k_3c7800e243ac') }}</span>
                       <strong>{{ storyBeats.length || 0 }}</strong>
-                      <span>状态</span>
-                      <strong>{{ analyzeStageProgress >= 100 ? '分析完成' : loading ? '分析中' : '待分析' }}</strong>
+                      <span>{{ tr('autoUi.k_62e951a692ff') }}</span>
+                      <strong>{{ analyzeStageProgress >= 100 ? tr('autoUi.k_1f481168be32') : loading ? tr('autoUi.k_2c2a1493ca90') : tr('autoUi.k_605dc7e35e02') }}</strong>
                     </div>
                   </div>
                 </div>
 
                 <div class="analyze-results-card">
                   <div class="analyze-results-card__head">
-                    <strong>分析结果</strong>
-                    <span>{{ storyBeats.length ? `${storyBeats.length} 个片段` : '等待分析' }}</span>
+                    <strong>{{ tr('autoUi.k_bc2c6108be10') }}</strong>
+                    <span>{{ storyBeats.length ? tr('autoUi.k_411bdad5dc98', { p0: storyBeats.length }) : tr('autoUi.k_28bbf71875ea') }}</span>
                   </div>
                   <div class="analyze-results-tabs">
-                    <button class="analyze-results-tabs__item is-active" type="button">分析结果</button>
-                    <button class="analyze-results-tabs__item" type="button">爆款要素</button>
-                    <button class="analyze-results-tabs__item" type="button">情绪曲线</button>
-                    <button class="analyze-results-tabs__item" type="button">节奏分析</button>
+                    <button class="analyze-results-tabs__item is-active" type="button">{{ tr('autoUi.k_bc2c6108be10') }}</button>
+                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_9044a92e7bea') }}</button>
+                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_6734561fef5b') }}</button>
+                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_856af808c18a') }}</button>
                   </div>
                   <div class="analyze-results-card__section">
                     <div class="analyze-results-card__section-head">
-                      <strong>内容结构</strong>
-                      <span>视频由 {{ storyBeats.length || 0 }} 个主要片段组成</span>
+                      <strong>{{ tr('autoUi.k_ed3891236489') }}</strong>
+                      <span>{{ tr('autoUi.k_08e62304a021') }} {{ storyBeats.length || 0 }} {{ tr('autoUi.k_6bc35039a31e') }}</span>
                     </div>
                     <div v-if="storyBeats.length" class="analyze-structure-track">
                       <div
@@ -4029,15 +4027,15 @@ onUnmounted(() => {
                     <CloneStateCard
                       v-else
                       class="empty-state small-empty"
-                      title="等待内容结构"
-                      description="完成分析后，这里会展示参考视频的内容分段。"
+                      :title="tr('autoUi.k_6390364017f6')"
+                      :description="tr('autoUi.k_7db04ef30936')"
                     />
                   </div>
 
                   <div class="analyze-results-card__section">
                     <div class="analyze-results-card__section-head">
-                      <strong>脚本内容</strong>
-                      <span>{{ analyzeScriptLines.length ? `${analyzeScriptLines.length} 段` : '等待识别' }}</span>
+                      <strong>{{ tr('autoUi.k_2a33eaa96d0e') }}</strong>
+                      <span>{{ analyzeScriptLines.length ? tr('autoUi.k_75f7d1c9ae4f', { p0: analyzeScriptLines.length }) : tr('autoUi.k_472b66a0f2d0') }}</span>
                     </div>
                     <div v-if="analyzeScriptLines.length" class="analyze-script-lines analyze-script-lines--compact">
                       <p v-for="(line, index) in analyzeScriptLines.slice(0, 6)" :key="`${index}-${line}`">{{ line }}</p>
@@ -4049,64 +4047,64 @@ onUnmounted(() => {
                 <div class="analyze-project-info-card">
                   <div class="analyze-project-info-card__section">
                     <div class="analyze-project-info-card__head">
-                      <strong>项目信息</strong>
+                      <strong>{{ tr('autoUi.k_4166d1b1467c') }}</strong>
                     </div>
                     <div class="analyze-project-field">
-                      <span>项目名称</span>
-                      <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, '当前项目') }}</strong>
+                      <span>{{ tr('autoUi.k_3e7255522b33') }}</span>
+                      <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, tr('autoUi.k_96cb64ae6045')) }}</strong>
                     </div>
                     <div class="analyze-project-pills">
-                      <em>{{ current?.runMode === 'auto' ? '智能复刻' : '手动流程' }}</em>
-                      <em>{{ hasBoundModel ? '已选模特' : '未选模特' }}</em>
-                      <em>{{ effectiveProductRefs.length ? `参考图 ${effectiveProductRefs.length}` : '未绑定商品' }}</em>
+                      <em>{{ current?.runMode === 'auto' ? tr('autoUi.k_49c1cdf32be8') : tr('autoUi.k_e1a420acee0f') }}</em>
+                      <em>{{ hasBoundModel ? tr('autoUi.k_9fa4faa55db6') : tr('autoUi.k_ca3dd55eb098') }}</em>
+                      <em>{{ effectiveProductRefs.length ? tr('autoUi.k_c8b458421614', { p0: effectiveProductRefs.length }) : tr('autoUi.k_ab8274a60c22') }}</em>
                     </div>
                   </div>
 
                   <div class="analyze-project-info-card__section">
                     <div class="analyze-project-info-card__head">
-                      <strong>模特信息</strong>
+                      <strong>{{ tr('autoUi.k_77c468a45a48') }}</strong>
                     </div>
                     <div class="variant-asset-card">
                       <div class="variant-asset-card__media variant-asset-card__media--model">
                         <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
-                        <span v-else>模特</span>
+                        <span v-else>{{ tr('autoUi.k_39dab49974bf') }}</span>
                       </div>
                       <div class="variant-summary-card__copy">
-                        <span>当前模特</span>
-                        <strong>{{ safeText(modelSnapshot?.name, '未选择') }}</strong>
-                        <p>{{ modelSnapshot?.id ? '已绑定到当前项目。' : '请先选择模特。' }}</p>
+                        <span>{{ tr('autoUi.k_200b9dbfd963') }}</span>
+                        <strong>{{ safeText(modelSnapshot?.name, tr('autoUi.k_53e2db70167f')) }}</strong>
+                        <p>{{ modelSnapshot?.id ? tr('autoUi.k_4d9e8c358e49') : tr('autoUi.k_b1a363b419c5') }}</p>
                       </div>
                     </div>
-                    <button class="ghost-button small secondary-action full-width" type="button" :disabled="modelLoading" @click="modelModalOpen = true">选择模特</button>
+                    <button class="ghost-button small secondary-action full-width" type="button" :disabled="modelLoading" @click="modelModalOpen = true">{{ tr('autoUi.k_be7dc2544329') }}</button>
                   </div>
 
                   <div class="analyze-project-info-card__section">
                     <div class="analyze-project-info-card__head">
-                      <strong>商品图片</strong>
+                      <strong>{{ tr('autoUi.k_188d1e2d5f79') }}</strong>
                       <span class="status-pill" :class="productSanitizationStatusClass">{{ productSanitizationStatusLabel }}</span>
                     </div>
                     <div class="variant-summary-card__copy">
-                      <span>当前绑定商品</span>
+                      <span>{{ tr('autoUi.k_caa411888696') }}</span>
                       <strong>{{ boundProductDisplayName }}</strong>
                       <p>{{ cloneProductBindingHint }}</p>
                     </div>
                     <div class="variant-asset-card">
                       <div class="variant-asset-card__media variant-asset-card__media--model">
                         <img v-if="selectedProductPreview" :src="selectedProductPreview" alt="product-preview" />
-                        <span v-else>商品</span>
+                        <span v-else>{{ tr('autoUi.k_004922066efd') }}</span>
                       </div>
                       <div class="variant-summary-card__copy">
-                        <span>当前选中待绑定商品</span>
+                        <span>{{ tr('autoUi.k_b609537c0a3f') }}</span>
                         <strong>{{ selectedProductDisplayName }}</strong>
                         <p>{{ selectedProductBindingHint }}</p>
                       </div>
                     </div>
                     <div class="variant-product-actions">
-                      <button class="ghost-button small secondary-action full-width" type="button" @click="productModalOpen = true">选择商品</button>
-                      <button class="ghost-button small secondary-action" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct">绑定商品</button>
+                      <button class="ghost-button small secondary-action full-width" type="button" @click="productModalOpen = true">{{ tr('autoUi.k_f4d8d03ce5b4') }}</button>
+                      <button class="ghost-button small secondary-action" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct">{{ tr('autoUi.k_4f59a65e8f54') }}</button>
                     </div>
                     <div class="analyze-project-field">
-                      <span>商品快照状态</span>
+                      <span>{{ tr('autoUi.k_c417c63c9408') }}</span>
                       <strong>{{ cloneProductSnapshotLabel }}</strong>
                     </div>
                     <p v-if="originalProductRefs.length || effectiveProductRefs.length" class="analyze-project-field__hint">
@@ -4119,18 +4117,14 @@ onUnmounted(() => {
                         :class="{ active: productRefPreviewMode === 'sanitized' }"
                         :disabled="!effectiveProductRefs.length"
                         @click="productRefPreviewMode = 'sanitized'"
-                      >
-                        查看产品标准源
-                      </button>
+                      > {{ tr('autoUi.k_7f3a812a9479') }} </button>
                       <button
                         class="ghost-button small secondary-action"
                         type="button"
                         :class="{ active: productRefPreviewMode === 'original' }"
                         :disabled="!originalProductRefs.length"
                         @click="productRefPreviewMode = 'original'"
-                      >
-                        查看原图
-                      </button>
+                      > {{ tr('autoUi.k_a0217cd1e435') }} </button>
                     </div>
                     <div v-if="visibleProductThumbs.length" class="variant-product-strip">
                       <span v-for="item in visibleProductThumbs.slice(0, 4)" :key="item" class="variant-product-strip__item">
@@ -4141,29 +4135,27 @@ onUnmounted(() => {
                           type="button"
                           :disabled="loading"
                           @click.stop.prevent="removeProductImage(item)"
-                        >
-                          删除
-                        </button>
+                        > {{ tr('autoUi.k_3755f56f2f83') }} </button>
                       </span>
                     </div>
                     <div v-if="visibleProductThumbs.length" class="variant-product-meta">
-                      <span>{{ cloneProductSnapshotLabel }}预览</span>
-                      <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), '商品图') }}</strong>
+                      <span>{{ cloneProductSnapshotLabel }}{{ tr('autoUi.k_de61aa8e1cbc') }}</span>
+                      <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), tr('autoUi.k_1b089e8482c7')) }}</strong>
                     </div>
                     <div class="variant-product-actions">
-                      <button class="ghost-button small danger-action" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages">解除当前商品快照</button>
+                      <button class="ghost-button small danger-action" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages">{{ tr('autoUi.k_f8290c92d783') }}</button>
                     </div>
                   </div>
 
                   <div class="analyze-project-info-card__section">
                     <div class="analyze-project-info-card__head">
-                      <strong>商品描述</strong>
-                      <span>{{ productAnalysisSections.length ? '分析后自动生成' : '等待参考分析完成' }}</span>
+                      <strong>{{ tr('autoUi.k_8f1a3358e56e') }}</strong>
+                      <span>{{ productAnalysisSections.length ? tr('autoUi.k_00f111551681') : tr('autoUi.k_86ba72ec4975') }}</span>
                     </div>
                     <div v-if="productAnalysisSnapshot" class="product-analysis-card">
                       <div class="product-analysis-card__summary">
-                        <span>商品类型</span>
-                        <strong>{{ safeText(productAnalysisSnapshot.category, '未识别') }}</strong>
+                        <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
+                        <strong>{{ safeText(productAnalysisSnapshot.category, tr('autoUi.k_face982a4aae')) }}</strong>
                       </div>
                       <div class="product-analysis-card__list">
                         <div v-for="item in productAnalysisSections" :key="item.key" class="product-analysis-card__item">
@@ -4172,7 +4164,7 @@ onUnmounted(() => {
                         </div>
                       </div>
                       <div v-if="productAnalysisSnapshot.matchingRules.length" class="product-analysis-card__rules">
-                        <span>匹配规则</span>
+                        <span>{{ tr('autoUi.k_f1c3fed4770a') }}</span>
                         <div class="product-analysis-card__tags">
                           <em v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</em>
                         </div>
@@ -4181,8 +4173,8 @@ onUnmounted(() => {
                     <CloneStateCard
                       v-else
                       class="empty-state small-empty"
-                      title="等待商品描述"
-                      description="绑定商品库商品并完成参考分析后，这里会展示后续脚本和分镜复用的商品结构描述。"
+                      :title="tr('autoUi.k_f372a7d84008')"
+                      :description="tr('autoUi.k_d650f5947a1e')"
                     />
                   </div>
                 </div>
@@ -4193,16 +4185,16 @@ onUnmounted(() => {
 
         <article v-if="visibleStageKey === 'variant'" class="panel">
           <div class="variant-workbench">
-            <CloneStageHeader tag="脚本生成" title="生成脚本候选" description="选好模特和商品库商品后，生成多条候选脚本。">
+            <CloneStageHeader :tag="tr('autoUi.k_6766ae37d5ac')" :title="tr('autoUi.k_239d48dea044')" :description="tr('autoUi.k_e48255e2ceca')">
               <template #actions>
                 <button class="ghost-button small secondary-action" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
-                  {{ autoFlowRunning ? '自动运行中' : current?.runMode === 'auto' ? '继续自动运行' : '从当前阶段开始自动运行' }}
+                  {{ autoFlowRunning ? tr('autoUi.k_fb63b65d5637') : current?.runMode === 'auto' ? tr('autoUi.k_263d2e2109a4') : tr('autoUi.k_df815f635a0d') }}
                 </button>
                 <label class="inline-control">
-                  <span>数量</span>
+                  <span>{{ tr('autoUi.k_b9ae89319036') }}</span>
                   <input v-model.number="variantCount" class="count-input" type="number" min="1" max="6" />
                 </label>
-                <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants">生成候选脚本</button>
+                <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants">{{ tr('autoUi.k_ed70ccdd3b92') }}</button>
               </template>
             </CloneStageHeader>
 
@@ -4210,23 +4202,23 @@ onUnmounted(() => {
               <aside class="variant-summary-panel">
                 <CloneDataCard class="variant-summary-card">
                   <div class="variant-summary-card__copy">
-                    <span>当前候选</span>
+                    <span>{{ tr('autoUi.k_4a2fcce5030a') }}</span>
                     <strong>{{ scriptVariants.length }}</strong>
-                    <p>已生成 {{ scriptVariants.length }} 条脚本候选</p>
+                    <p>{{ tr('autoUi.k_79c74f41ca9e') }} {{ scriptVariants.length }} {{ tr('autoUi.k_98c1b3e34c1b') }}</p>
                   </div>
                 </CloneDataCard>
                 <CloneDataCard class="variant-summary-card">
                   <div class="variant-summary-card__copy">
-                    <span>当前选择</span>
-                    <strong>{{ selectedVariantId ? '已选中' : '未选择' }}</strong>
-                    <p>{{ selectedVariantId ? '点击右侧卡片即可切换' : '先生成候选，再选择一条继续' }}</p>
+                    <span>{{ tr('autoUi.k_7f06ec27ae46') }}</span>
+                    <strong>{{ selectedVariantId ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_53e2db70167f') }}</strong>
+                    <p>{{ selectedVariantId ? tr('autoUi.k_a53e25aa8df1') : tr('autoUi.k_e96de04f49c6') }}</p>
                   </div>
                 </CloneDataCard>
                 <CloneDataCard class="variant-summary-card variant-summary-card--highlight">
                   <div class="variant-summary-card__copy">
-                    <span>默认脚本</span>
-                    <strong>{{ safeText(selectedVariantCandidate?.title, '等待生成') }}</strong>
-                    <p>{{ safeText(selectedVariantCandidate?.summary, '生成后会显示当前默认沿用的脚本内容') }}</p>
+                    <span>{{ tr('autoUi.k_8221bf9d729f') }}</span>
+                    <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_4363468b43bf')) }}</strong>
+                    <p>{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_51dcc484cd16')) }}</p>
                   </div>
                 </CloneDataCard>
               </aside>
@@ -4237,18 +4229,16 @@ onUnmounted(() => {
                     <span>{{ selectedVariantCandidate?.score?.toFixed(1) || '0.0' }}</span>
                   </div>
                   <div class="variant-hero-card__copy">
-                    <strong>{{ safeText(selectedVariantCandidate?.title, '等待候选脚本') }}</strong>
-                    <p>{{ safeText(selectedVariantCandidate?.summary, '生成脚本后在这里显示默认沿用的脚本。') }}</p>
-                    <small>{{ safeText(selectedVariantCandidate?.reason, '默认脚本说明会显示在这里。') }}</small>
+                    <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_758dc6dc197b')) }}</strong>
+                    <p>{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_75bafc33692e')) }}</p>
+                    <small>{{ safeText(selectedVariantCandidate?.reason, tr('autoUi.k_b413cad5257d')) }}</small>
                   </div>
                   <button
                     class="ghost-button small secondary-action"
                     type="button"
                     :disabled="!selectedVariantCandidate"
                     @click="selectedVariantCandidate ? selectScriptVariant(selectedVariantCandidate.id) : undefined"
-                  >
-                    应用默认脚本
-                  </button>
+                  > {{ tr('autoUi.k_96fe1ffdfa89') }} </button>
                 </div>
 
                 <div class="variant-list-panel">
@@ -4264,13 +4254,13 @@ onUnmounted(() => {
                     <div class="variant-copy">
                       <div class="variant-copy__head">
                         <strong>{{ item.title }}</strong>
-                        <span>{{ selectedVariantId === item.id ? '已选中' : '可继续' }}</span>
+                        <span>{{ selectedVariantId === item.id ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_ed15fd8c6ccb') }}</span>
                       </div>
                       <p>{{ item.summary }}</p>
                       <small>{{ item.reason }}</small>
                       <div v-if="item.shotScripts?.length" class="variant-shot-lines">
                         <div v-for="shot in item.shotScripts" :key="`${item.id}-${shot.shotId}`" class="variant-shot-line">
-                          <strong>{{ safeText(shot.timeRange, `分镜 ${shot.shotIndex + 1}`) }}</strong>
+                          <strong>{{ safeText(shot.timeRange, tr('autoUi.k_65f2f856e95d', { p0: shot.shotIndex + 1 })) }}</strong>
                           <span>{{ shot.scriptText }}</span>
                         </div>
                       </div>
@@ -4279,8 +4269,8 @@ onUnmounted(() => {
                   <CloneStateCard
                     v-if="!scriptVariants.length"
                     class="empty-state section-empty"
-                    title="等待脚本候选"
-                    description="选择模特、绑定商品库商品后点击“生成脚本”，系统会输出多条逐分镜候选脚本。"
+                    :title="tr('autoUi.k_1f81d16ba9a3')"
+                    :description="tr('autoUi.k_bd3fa57462c3')"
                   />
                 </div>
               </section>
@@ -4291,29 +4281,27 @@ onUnmounted(() => {
         <article v-if="visibleStageKey === 'identity-grid'" class="panel panel-storyboard-design">
           <div class="storyboard-stage-hero">
             <div class="storyboard-stage-hero__copy">
-              <strong>身份定妆图</strong>
-              <p>先生成一张项目级产品+模特身份定妆图，后续所有分镜共用这一张稳定真值。</p>
-              <small class="storyboard-stage-hero__hint">身份定妆图位于脚本生成和分镜设计之间，并支持查看主进程真实提示词。</small>
+              <strong>{{ tr('autoUi.k_54f65b6b0c67') }}</strong>
+              <p>{{ tr('autoUi.k_4da3b7faacaa') }}</p>
+              <small class="storyboard-stage-hero__hint">{{ tr('autoUi.k_5467275a0a9c') }}</small>
             </div>
             <div class="storyboard-stage-hero__actions">
               <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="identityGridPromptPreviewLoading || !current?.id" @click="loadIdentityGridPromptPreview(true, true)">
-                {{ identityGridPromptPreviewLoading ? '加载中' : '查看提示词' }}
+                {{ identityGridPromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_896a398739bb') }}
               </button>
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', '提示词已复制')">
-                复制提示词
-              </button>
+              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', tr('autoUi.k_abc7750ecb1f'))"> {{ tr('autoUi.k_57459c07244a') }} </button>
               <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !current?.id || !hasBoundModel || !effectiveProductRefs.length" @click="generateProjectIdentityGrid">
-                {{ hasProjectIdentityGrid ? '重新生成身份定妆图' : '生成身份定妆图' }}
+                {{ hasProjectIdentityGrid ? tr('autoUi.k_e33a423416a9') : tr('autoUi.k_7d1e8e131273') }}
               </button>
             </div>
           </div>
           <div class="storyboard-preview-card storyboard-preview-card--identity-grid">
             <div class="storyboard-preview-card__head">
               <div>
-                <strong>项目级身份定妆图</strong>
-                <span>{{ current?.projectIdentityGridStatus === 'done' ? '已就绪' : current?.projectIdentityGridStatus === 'generating' ? '生成中' : current?.projectIdentityGridStatus === 'failed' ? '生成失败' : '待生成' }}</span>
+                <strong>{{ tr('autoUi.k_ca9a6d04438b') }}</strong>
+                <span>{{ current?.projectIdentityGridStatus === 'done' ? tr('autoUi.k_f2afde8960a6') : current?.projectIdentityGridStatus === 'generating' ? tr('autoUi.k_57c08c730a51') : current?.projectIdentityGridStatus === 'failed' ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_aef4104370ae') }}</span>
               </div>
-              <button class="ghost-button small" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">进入分镜设计</button>
+              <button class="ghost-button small" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">{{ tr('autoUi.k_c5f3b41eeba8') }}</button>
             </div>
             <div class="identity-grid-preview-layout">
               <button
@@ -4322,29 +4310,29 @@ onUnmounted(() => {
                 :disabled="!current?.projectIdentityGridPath"
                 @click="openIdentityGridPreview"
               >
-                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" alt="身份定妆图">
+                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" :alt="tr('autoUi.k_54f65b6b0c67')">
                 <div v-else class="storyboard-preview-media__empty storyboard-preview-media__empty--identity-grid">
-                  <strong>等待生成身份定妆图</strong>
-                  <span>完成后，这里会显示当前项目的身份定妆图。</span>
+                  <strong>{{ tr('autoUi.k_be185dd5a7c7') }}</strong>
+                  <span>{{ tr('autoUi.k_4e8bd6a46ac7') }}</span>
                 </div>
-                <span v-if="current?.projectIdentityGridPath" class="storyboard-preview-media__hint">点击放大预览</span>
+                <span v-if="current?.projectIdentityGridPath" class="storyboard-preview-media__hint">{{ tr('autoUi.k_f27060c8e9f6') }}</span>
               </button>
               <div class="identity-grid-preview-aside">
                 <div class="identity-grid-preview-copy">
-                  <strong>项目级统一真值</strong>
-                  <p>身份定妆图只需要确认人物与商品展示一致，后续分镜设计会直接复用这张项目级资产。</p>
+                  <strong>{{ tr('autoUi.k_a2645b7a4aea') }}</strong>
+                  <p>{{ tr('autoUi.k_c2d8cda2bae5') }}</p>
                 </div>
                 <div class="storyboard-preview-meta storyboard-preview-meta--identity-grid">
                   <div class="storyboard-preview-meta__item">
-                    <span>商品图</span>
+                    <span>{{ tr('autoUi.k_1b089e8482c7') }}</span>
                     <strong>{{ effectiveProductRefs.length }}</strong>
                   </div>
                   <div class="storyboard-preview-meta__item">
-                    <span>模特</span>
-                    <strong>{{ hasBoundModel ? '已绑定' : '待绑定' }}</strong>
+                    <span>{{ tr('autoUi.k_39dab49974bf') }}</span>
+                    <strong>{{ hasBoundModel ? tr('autoUi.k_b3addb5e3f54') : tr('autoUi.k_143b1332cb1f') }}</strong>
                   </div>
                   <div class="storyboard-preview-meta__item">
-                    <span>用途</span>
+                    <span>{{ tr('autoUi.k_7c49c8f25a7a') }}</span>
                     <strong>{{ (current?.projectIdentityGridPromptPreview?.gridUsagePlan || []).join(' / ') || '--' }}</strong>
                   </div>
                 </div>
@@ -4356,14 +4344,12 @@ onUnmounted(() => {
         <article v-if="visibleStageKey === 'grid'" class="panel panel-storyboard-design">
           <div class="storyboard-stage-hero">
             <div class="storyboard-stage-hero__copy">
-              <strong>分镜设计</strong>
-              <p>基于脚本内容和风格，AI 为你生成分镜画面，支持调整镜头、画面和提示词</p>
-              <small class="storyboard-stage-hero__hint">失败分镜支持手动重试，单镜头最多自动补试 2 次，也支持批量重新生成失败项。</small>
+              <strong>{{ tr('autoUi.k_3a87e98554a1') }}</strong>
+              <p>{{ tr('autoUi.k_37f4224e223f') }}</p>
+              <small class="storyboard-stage-hero__hint">{{ tr('autoUi.k_a2480e598930') }}</small>
             </div>
             <div class="storyboard-stage-hero__actions">
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject">
-                保存项目
-              </button>
+              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject"> {{ tr('autoUi.k_61bc0b0ca8b1') }} </button>
               <button
                 class="ghost-button storyboard-stage-hero__button"
                 type="button"
@@ -4389,7 +4375,7 @@ onUnmounted(() => {
                 {{ pendingStoryboardActionText }}
               </button>
               <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="storyboardFrames.length ? enterVideoStageAndAutoSubmit('manual_next_step') : generateStoryboardGrids()">
-                {{ storyboardFrames.length ? '下一步' : '开始生成分镜' }}
+                {{ storyboardFrames.length ? tr('autoUi.k_ea0ef2ae7245') : tr('autoUi.k_266542f0ab19') }}
               </button>
             </div>
           </div>
@@ -4398,7 +4384,7 @@ onUnmounted(() => {
             <section class="storyboard-column storyboard-column--frames">
               <div class="storyboard-column__head">
                 <div class="storyboard-column__copy"></div>
-                <em>{{ storyboardDesignRows.length }} 条</em>
+                <em>{{ storyboardDesignRows.length }} {{ tr('autoUi.k_bce2ef61514a') }}</em>
               </div>
 
               <div class="storyboard-design-table">
@@ -4410,13 +4396,13 @@ onUnmounted(() => {
                       @change="toggleSelectAllStoryboardShots"
                     >
                   </span>
-                  <span>镜头</span>
-                  <span>画面 / 提示词</span>
-                  <span>时长</span>
-                  <span>景别</span>
-                  <span>运镜</span>
-                  <span>台词 / 旁白</span>
-                  <span>操作</span>
+                  <span>{{ tr('autoUi.k_c7d1925fd5af') }}</span>
+                  <span>{{ tr('autoUi.k_695dd5f4b7d4') }}</span>
+                  <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
+                  <span>{{ tr('autoUi.k_6867f7b4537a') }}</span>
+                  <span>{{ tr('autoUi.k_3be5bb46d065') }}</span>
+                  <span>{{ tr('autoUi.k_5e64b9174ce0') }}</span>
+                  <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
                 </div>
 
                 <div class="storyboard-design-table__body">
@@ -4445,16 +4431,16 @@ onUnmounted(() => {
 
                     <span class="storyboard-design-cell storyboard-design-cell--prompt">
                       <span class="storyboard-design-thumb">
-                        <img v-if="row.imagePath" :src="previewImage(row.imagePath, row.updatedAt)" :alt="safeText(shotLabel(row.shotId), '分镜')">
-                        <span v-else class="storyboard-design-thumb__empty">{{ row.isRegenerating ? '生成中' : row.error ? '失败' : '待生成' }}</span>
+                        <img v-if="row.imagePath" :src="previewImage(row.imagePath, row.updatedAt)" :alt="safeText(shotLabel(row.shotId), tr('autoUi.k_fcad7fe371b8'))">
+                        <span v-else class="storyboard-design-thumb__empty">{{ row.isRegenerating ? tr('autoUi.k_57c08c730a51') : row.error ? tr('autoUi.k_3e3c8068bb0e') : tr('autoUi.k_aef4104370ae') }}</span>
                       </span>
                       <span class="storyboard-design-copy">
                         <strong>{{ row.promptText }}</strong>
                         <span class="storyboard-design-tags">
                           <em v-for="tag in row.tags" :key="`${row.shotId}-${tag}`">{{ tag }}</em>
                         </span>
-                        <small v-if="row.isRegenerating" class="storyboard-design-copy__status storyboard-design-copy__status--working">正在重新生成分镜图，请稍候自动刷新结果</small>
-                        <small v-if="row.retryCount > 0">已重试 {{ row.retryCount }} 次</small>
+                        <small v-if="row.isRegenerating" class="storyboard-design-copy__status storyboard-design-copy__status--working">{{ tr('autoUi.k_b99b4b26222c') }}</small>
+                        <small v-if="row.retryCount > 0">{{ tr('autoUi.k_a3477f849226') }} {{ row.retryCount }} {{ tr('autoUi.k_5e5b8169eee6') }}</small>
                       </span>
                     </span>
 
@@ -4471,24 +4457,22 @@ onUnmounted(() => {
                         class="ghost-button small icon-button"
                         type="button"
                         :disabled="!shotFrameMap[row.shotId]?.imagePath"
-                        title="预览"
+                        :title="tr('autoUi.k_de61aa8e1cbc')"
                         @click.stop="shotFrameMap[row.shotId] && openFramePreview(shotFrameMap[row.shotId])"
                       >
                         ◱
                       </button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="toggleFrameLock(row.shotId)" :title="row.locked ? '解除锁定' : '锁定分镜'">
-                        {{ row.locked ? '解' : '锁' }}
+                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="toggleFrameLock(row.shotId)" :title="row.locked ? tr('autoUi.k_eafaffdf18b7') : tr('autoUi.k_8a91cefeb3fb')">
+                        {{ row.locked ? tr('autoUi.k_d2feb31d47eb') : tr('autoUi.k_a9e2a2864404') }}
                       </button>
                       <button
                         class="ghost-button small"
                         type="button"
                         :disabled="shotImagePromptPreviewLoading || row.isRegenerating"
                         @click.stop="selectedShotId = row.shotId; loadShotImagePromptPreview(row.shotId, true, true)"
-                        title="提示词预览"
-                      >
-                        提示词
-                      </button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading || row.isRegenerating || regeneratingFailedStoryboardFrames" @click.stop="regenerateStoryboardFrame(row.shotId)" :title="row.isRegenerating ? '重新生成中' : '重新生成'">
+                        :title="tr('autoUi.k_ca445a4a0ad9')"
+                      > {{ tr('autoUi.k_2f0bb1238738') }} </button>
+                      <button class="ghost-button small icon-button" type="button" :disabled="loading || row.isRegenerating || regeneratingFailedStoryboardFrames" @click.stop="regenerateStoryboardFrame(row.shotId)" :title="row.isRegenerating ? tr('autoUi.k_487e1c4e2927') : tr('autoUi.k_2e19057052a3')">
                         {{ row.isRegenerating ? '…' : '↻' }}
                       </button>
                     </span>
@@ -4501,28 +4485,26 @@ onUnmounted(() => {
               <div class="storyboard-preview-card">
                 <div class="storyboard-preview-card__head">
                   <div>
-                    <strong>分镜预览</strong>
-                    <span>{{ selectedStoryboardRow ? `镜头 ${String(selectedStoryboardRow.shotIndex).padStart(2, '0')}` : '等待选择镜头' }}</span>
+                    <strong>{{ tr('autoUi.k_76917c58e1ee') }}</strong>
+                    <span>{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_0601c4d9d5c0') }}</span>
                   </div>
                   <button
                     class="ghost-button small"
                     type="button"
                     :disabled="!selectedStoryboardFrame?.imagePath"
                     @click="selectedStoryboardFrame && openFramePreview(selectedStoryboardFrame)"
-                  >
-                    放大查看
-                  </button>
+                  > {{ tr('autoUi.k_c5d7f819baf3') }} </button>
                 </div>
 
                 <div class="storyboard-preview-media">
                   <img
                     v-if="selectedStoryboardFrame?.imagePath"
                     :src="previewImage(selectedStoryboardFrame.imagePath, selectedStoryboardFrame.updatedAt)"
-                    :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), '分镜预览')"
+                    :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), tr('autoUi.k_76917c58e1ee'))"
                   >
                   <div v-else class="storyboard-preview-media__empty">
-                    <strong>{{ selectedStoryboardRow?.error ? '生成失败' : '等待生成' }}</strong>
-                    <span>{{ selectedStoryboardRow?.error || '当前镜头生成完成后会在这里显示大图预览。' }}</span>
+                    <strong>{{ selectedStoryboardRow?.error ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_4363468b43bf') }}</strong>
+                    <span>{{ selectedStoryboardRow?.error || tr('autoUi.k_961be9633733') }}</span>
                   </div>
                 </div>
 
@@ -4533,15 +4515,15 @@ onUnmounted(() => {
 
                 <div class="storyboard-preview-meta">
                   <div class="storyboard-preview-meta__item">
-                    <span>时长</span>
+                    <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
                     <strong>{{ selectedStoryboardRow?.durationText || '--' }}</strong>
                   </div>
                   <div class="storyboard-preview-meta__item">
-                    <span>景别</span>
+                    <span>{{ tr('autoUi.k_6867f7b4537a') }}</span>
                     <strong>{{ selectedStoryboardRow?.sceneText || '--' }}</strong>
                   </div>
                   <div class="storyboard-preview-meta__item">
-                    <span>运镜</span>
+                    <span>{{ tr('autoUi.k_3be5bb46d065') }}</span>
                     <strong>{{ selectedStoryboardRow?.cameraText || '--' }}</strong>
                   </div>
                 </div>
@@ -4551,18 +4533,18 @@ onUnmounted(() => {
                 </div>
                 <div v-if="selectedStoryboardErrorText" class="storyboard-preview-error">
                   <div class="storyboard-preview-error__head">
-                    <strong>真实报错原因</strong>
+                    <strong>{{ tr('autoUi.k_ce8a92e25f09') }}</strong>
                     <span>{{ selectedStoryboardErrorTitle }}</span>
                   </div>
                   <div class="storyboard-preview-error__body">
                     <p>{{ selectedStoryboardErrorText }}</p>
                   </div>
                   <div class="storyboard-preview-error__advice">
-                    <span>处理建议</span>
+                    <span>{{ tr('autoUi.k_aba23c4b2667') }}</span>
                     <p>{{ selectedStoryboardErrorAdvice }}</p>
                   </div>
                   <div v-if="selectedStoryboardErrorAction === 'go-models' || selectedStoryboardErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
-                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? '去生成身份定妆图' : '去生成身份包' }}</button>
+                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
                   </div>
                 </div>
               </div>
@@ -4570,8 +4552,8 @@ onUnmounted(() => {
               <div class="storyboard-preview-card storyboard-preview-card--script">
                 <div class="storyboard-preview-card__head">
                   <div>
-                    <strong>脚本视图</strong>
-                    <span>{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : '等待脚本' }}</span>
+                    <strong>{{ tr('autoUi.k_79d85c0b1ac0') }}</strong>
+                    <span>{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : tr('autoUi.k_104ca25508ce') }}</span>
                   </div>
                   <button
                     class="ghost-button small"
@@ -4579,11 +4561,11 @@ onUnmounted(() => {
                     :disabled="shotImagePromptPreviewLoading || !selectedStoryboardRow"
                     @click="loadShotImagePromptPreview(selectedStoryboardRow?.shotId, true, true)"
                   >
-                    {{ shotImagePromptPreviewLoading ? '加载中' : '提示词预览' }}
+                    {{ shotImagePromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_ca445a4a0ad9') }}
                   </button>
                 </div>
                 <div class="storyboard-preview-script">
-                  <p>{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || '当前镜头还没有可用脚本内容。' }}</p>
+                  <p>{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || tr('autoUi.k_aa90b861324e') }}</p>
                 </div>
               </div>
             </aside>
@@ -4599,22 +4581,22 @@ onUnmounted(() => {
           >
             <template #actions>
               <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">{{ tr('cloneView.videoStage.primaryAction') }}</button>
-              <button class="ghost-button small" type="button" :disabled="loading" @click="selectStage('compose')">进入最终成片</button>
+              <button class="ghost-button small" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}</button>
             </template>
               <template #aux>
-                <span>运行模式：{{ runModeLabel }}</span>
-                <span>分镜：{{ shotVideoOutputs.length }} · 失败：{{ failedShotOutputs.length }}</span>
+                <span>{{ tr('autoUi.k_d7f0f988776f') }}{{ runModeLabel }}</span>
+                <span>{{ tr('autoUi.k_75d859e8ba00') }}{{ shotVideoOutputs.length }} {{ tr('autoUi.k_7800d67eeb34') }}{{ failedShotOutputs.length }}</span>
               </template>
             </CloneStageHeader>
 
           <div class="video-render-hints-card">
             <div class="video-render-hints-card__copy">
-              <strong>视频生成设置</strong>
-              <span>在这里选择本项目的视频比例和固定尺寸。XIBAPI 提交时会原样使用这个尺寸。</span>
+              <strong>{{ tr('autoUi.k_0b14bbf64906') }}</strong>
+              <span>{{ tr('autoUi.k_7fb18dbeec08') }}</span>
             </div>
             <div class="video-render-hints-card__controls">
               <label class="video-render-hints-card__field">
-                <span>比例</span>
+                <span>{{ tr('autoUi.k_c27f341ce598') }}</span>
                 <select
                   :value="videoRenderAspectRatio"
                   :disabled="loading || !current?.id || savingVideoRenderHints"
@@ -4625,7 +4607,7 @@ onUnmounted(() => {
                 </select>
               </label>
               <label class="video-render-hints-card__field">
-                <span>尺寸</span>
+                <span>{{ tr('autoUi.k_94a6711f2408') }}</span>
                 <select
                   :value="videoRenderResolution"
                   :disabled="loading || !current?.id || savingVideoRenderHints"
@@ -4647,10 +4629,8 @@ onUnmounted(() => {
                         <button class="ghost-button small" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos">
                           {{ failedShotActionText }}
                         </button>
-                        <button class="ghost-button small" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos">
-                          手动查询待回写
-                        </button>
-                        <button class="ghost-button small" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">同步云端状态</button>
+                        <button class="ghost-button small" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos"> {{ tr('autoUi.k_cc874aad6450') }} </button>
+                        <button class="ghost-button small" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">{{ tr('autoUi.k_b89f115ab421') }}</button>
                       </div>
                     </div>
 
@@ -4664,10 +4644,10 @@ onUnmounted(() => {
                       <div class="shot-table-stats">
                         <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
                         <span>{{ tr('cloneView.videoStage.stats.failedPending') }}：{{ failedShotOutputs.length }}</span>
-                        <span>可继续查询：{{ continueQueryableShotCount }}</span>
-                        <span>缺少任务号：{{ missingTaskIdShotCount }}</span>
-                        <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">超时待续查：{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</span>
-                        <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">下载失败：{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</span>
+                        <span>{{ tr('autoUi.k_e4baf28f5192') }}{{ continueQueryableShotCount }}</span>
+                        <span>{{ tr('autoUi.k_366462f4d6fb') }}{{ missingTaskIdShotCount }}</span>
+                        <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">{{ tr('autoUi.k_76a00d6e4987') }}{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</span>
+                        <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">{{ tr('autoUi.k_b0578cac28c2') }}{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</span>
                       </div>
                     </div>
 
@@ -4701,20 +4681,20 @@ onUnmounted(() => {
                         >
                           <span class="shot-reference-cell shot-reference-cell--index">
                             <strong>{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</strong>
-                            <small>{{ `脚本-${(shotVideoOutputIndexMap[item.shotId] ?? 0) + 1}` }}</small>
+                            <small>{{ tr('autoUi.k_21468aa05330', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }) }}</small>
                           </span>
                           <span class="shot-reference-cell shot-reference-cell--thumb">
                             <span v-if="shotFrameMap[item.shotId]?.imagePath" class="shot-thumb shot-thumb--large">
                               <img
                                 :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)"
-                                :alt="safeText(shotLabel(item.shotId), '分镜')"
+                                :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))"
                               />
                             </span>
                             <span v-else class="shot-thumb shot-thumb--large shot-thumb--empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
                           </span>
                           <span class="shot-reference-cell shot-reference-cell--copy">
                             <strong>{{ shotScriptSummary(item.shotId) }}</strong>
-                            <small>{{ safeText(shotLabel(item.shotId), '分镜') }}</small>
+                            <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}</small>
                           </span>
                           <span class="shot-reference-cell shot-reference-cell--metric">
                             <strong>{{ formatDuration(item.durationSec) }}</strong>
@@ -4734,22 +4714,20 @@ onUnmounted(() => {
                             </span>
                           </span>
                           <span class="shot-reference-cell shot-reference-cell--actions">
-                            <button class="ghost-button small action-button" type="button" @click.stop="selectedShotId = item.shotId">预览</button>
+                            <button class="ghost-button small action-button" type="button" @click.stop="selectedShotId = item.shotId">{{ tr('autoUi.k_de61aa8e1cbc') }}</button>
                             <button
                               class="ghost-button small action-button"
                               type="button"
                               :disabled="shotVideoPromptPreviewLoading"
                               @click.stop="selectedShotId = item.shotId; loadShotVideoPromptPreview(item.shotId, true, true)"
-                            >
-                              提示词
-                            </button>
+                            > {{ tr('autoUi.k_2f0bb1238738') }} </button>
                             <button
                               class="ghost-button small action-button"
                               type="button"
                               :disabled="!current?.id || regeneratingShotVideoIds.includes(item.shotId)"
                               @click.stop="regenerateShotClip(item.shotId)"
                             >
-                              {{ regeneratingShotVideoIds.includes(item.shotId) ? '重新生成中…' : '重新生成' }}
+                              {{ regeneratingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_7038c8e1829a') : tr('autoUi.k_2e19057052a3') }}
                             </button>
                             <button
                               v-if="canForceDownloadShot(item)"
@@ -4758,7 +4736,7 @@ onUnmounted(() => {
                               :disabled="forceDownloadingShotVideoIds.includes(item.shotId)"
                               @click.stop="forceDownloadShotVideoResult(item.shotId)"
                             >
-                              {{ forceDownloadingShotVideoIds.includes(item.shotId) ? '回写中…' : '强制下载回写' }}
+                              {{ forceDownloadingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_8185f33c5e78') : tr('autoUi.k_ef3781caac2d') }}
                             </button>
                             <button
                               v-if="canContinueSyncShot(item)"
@@ -4766,18 +4744,14 @@ onUnmounted(() => {
                               type="button"
                               :disabled="loading"
                               @click.stop="syncFailedShotVideo(item.shotId)"
-                            >
-                              继续查询
-                            </button>
+                            > {{ tr('autoUi.k_59588f0c7deb') }} </button>
                             <button
                               v-else-if="canRepairShotTaskId(item)"
                               class="ghost-button small action-button"
                               type="button"
                               :disabled="loading || !current?.id"
                               @click.stop="refreshRemoteStatus"
-                            >
-                              同步补查
-                            </button>
+                            > {{ tr('autoUi.k_c669d0d0cdfc') }} </button>
                           </span>
                         </div>
                       </div>
@@ -4823,7 +4797,7 @@ onUnmounted(() => {
                         <div v-if="selectedShotFrame?.imagePath" class="sidebar-frame-thumb">
                           <img
                             :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)"
-                            :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), '参考分镜')"
+                            :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))"
                           />
                         </div>
                         <div v-else class="sidebar-frame-thumb sidebar-frame-thumb--empty">{{ tr('cloneView.videoStage.noReferenceFrame') }}</div>
@@ -4831,9 +4805,9 @@ onUnmounted(() => {
                       <CloneDataCard class="meta-card compact-meta-grid">
                         <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
                         <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</strong>
-                        <span>状态说明</span>
+                        <span>{{ tr('autoUi.k_68e297c888ef') }}</span>
                         <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</strong>
-                        <span>当前配置视频模型</span>
+                        <span>{{ tr('autoUi.k_9d2c439d0b11') }}</span>
                         <strong>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</strong>
                         <span>{{ tr('cloneView.videoStage.modelLabel') }}</span>
                         <strong>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</strong>
@@ -4842,18 +4816,18 @@ onUnmounted(() => {
                       </CloneDataCard>
                       <div v-if="selectedShotVideoErrorText" class="storyboard-preview-error">
                         <div class="storyboard-preview-error__head">
-                          <strong>真实报错原因</strong>
+                          <strong>{{ tr('autoUi.k_ce8a92e25f09') }}</strong>
                           <span>{{ selectedShotVideoErrorTitle }}</span>
                         </div>
                         <div class="storyboard-preview-error__body">
                           <p>{{ selectedShotVideoErrorText }}</p>
                         </div>
                         <div class="storyboard-preview-error__advice">
-                          <span>处理建议</span>
+                          <span>{{ tr('autoUi.k_aba23c4b2667') }}</span>
                           <p>{{ selectedShotVideoErrorAdvice }}</p>
                         </div>
                         <div v-if="selectedShotVideoErrorAction === 'go-models' || selectedShotVideoErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
-                          <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? '去生成身份定妆图' : '去生成身份包' }}</button>
+                          <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
                         </div>
                       </div>
                     </section>
@@ -4864,33 +4838,31 @@ onUnmounted(() => {
 
             <div class="compose-fallback-bar">
               <div class="compose-fallback-copy">
-                <strong>下一步：成片合成</strong>
-                <span>如果右上角步骤无法点击，可直接从这里进入。</span>
+                <strong>{{ tr('autoUi.k_1099e21fef55') }}</strong>
+                <span>{{ tr('autoUi.k_b4618efa3ca7') }}</span>
               </div>
               <button
                 class="primary-button small"
                 type="button"
                 :disabled="loading"
                 @click.stop="selectStage('compose')"
-              >
-                前往成片合成
-              </button>
+              > {{ tr('autoUi.k_6a9b747fac2c') }} </button>
             </div>
           </div>
 
           <CloneStateCard
             v-else
             class="empty-state section-empty"
-            title="等待视频结果"
-            description="分镜设计完成后，这里会进入镜头队列工作区，并按镜头顺序查看生成结果。"
+            :title="tr('autoUi.k_b7ec5f2532fc')"
+            :description="tr('autoUi.k_7b060ff47103')"
           />
         </article>
 
         <article v-if="visibleStageKey === 'compose'" class="panel panel-compose-stage">
-          <CloneStageHeader tag="" title="最终成片" description="预览并导出成片">
+          <CloneStageHeader tag="" :title="tr('autoUi.k_780ee868bcca')" :description="tr('autoUi.k_302215860a11')">
             <template #aux>
-              <span>门禁：{{ gatePassAllowed ? '通过' : '阻塞' }}</span>
-              <span>{{ finalOutputPath ? '已有成片' : '待合成' }}</span>
+              <span>{{ tr('autoUi.k_794c95d23fb2') }}{{ gatePassAllowed ? tr('autoUi.k_dcc4233255ab') : tr('autoUi.k_a00db105bd49') }}</span>
+              <span>{{ finalOutputPath ? tr('autoUi.k_26876a1765af') : tr('autoUi.k_942a589f6e38') }}</span>
             </template>
           </CloneStageHeader>
 
@@ -4902,7 +4874,7 @@ onUnmounted(() => {
                   <CloneStateCard
                     v-else
                     class="empty-state"
-                    title="等待成片"
+                    :title="tr('autoUi.k_0ac754b27412')"
                     :description="composePreviewHint"
                   />
                 </div>
@@ -4911,12 +4883,12 @@ onUnmounted(() => {
               <section class="compose-sequence-card">
                 <div class="compose-sequence-card__head">
                   <div class="compose-list-copy">
-                    <strong>镜头顺序</strong>
-                    <p>可拖拽调整，逐个检查并替换片段。</p>
+                    <strong>{{ tr('autoUi.k_ab7bce9cbbe7') }}</strong>
+                    <p>{{ tr('autoUi.k_4cdcbc82fa16') }}</p>
                   </div>
                   <div class="compose-list-actions">
-                    <span class="mini-pill mini-pill--ghost">{{ shotVideoOutputs.length }} 条</span>
-                    <button class="ghost-button small" type="button" :disabled="loading || !selectedShotOutput" @click="replaceShotVideo(selectedShotOutput?.shotId || '')">替换当前镜头</button>
+                    <span class="mini-pill mini-pill--ghost">{{ shotVideoOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
+                    <button class="ghost-button small" type="button" :disabled="loading || !selectedShotOutput" @click="replaceShotVideo(selectedShotOutput?.shotId || '')">{{ tr('autoUi.k_e33ea5f87622') }}</button>
                   </div>
                 </div>
 
@@ -4941,10 +4913,10 @@ onUnmounted(() => {
                         alt="shot-frame"
                         loading="lazy"
                       />
-                      <span v-else>无预览</span>
+                      <span v-else>{{ tr('autoUi.k_6fd0592e6878') }}</span>
                     </span>
                     <div class="compose-sequence-item__meta">
-                      <strong>{{ safeText(shotLabel(item.shotId), `镜头 ${(shotVideoOutputIndexMap[item.shotId] ?? 0) + 1}`) }}</strong>
+                      <strong>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_24f7d6982256', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 })) }}</strong>
                       <small>{{ formatDuration(item.durationSec) }}</small>
                     </div>
                   </div>
@@ -4952,8 +4924,8 @@ onUnmounted(() => {
 
                 <div v-if="selectedShotOutput" class="compose-sequence-detail">
                   <div class="compose-sequence-detail__copy">
-                    <span class="panel-tag">当前镜头</span>
-                    <strong>{{ safeText(shotLabel(selectedShotOutput.shotId), '当前镜头') }}</strong>
+                    <span class="panel-tag">{{ tr('autoUi.k_103c08e0b996') }}</span>
+                    <strong>{{ safeText(shotLabel(selectedShotOutput.shotId), tr('autoUi.k_103c08e0b996')) }}</strong>
                     <small>{{ shotScriptSummary(selectedShotOutput.shotId) }}</small>
                   </div>
                   <div class="compose-sequence-detail__actions">
@@ -4962,34 +4934,28 @@ onUnmounted(() => {
                       type="button"
                       :disabled="loading || !selectedShotOutput"
                       @click="selectedShotOutput && replaceShotVideo(selectedShotOutput.shotId)"
-                    >
-                      替换当前镜头
-                    </button>
+                    > {{ tr('autoUi.k_e33ea5f87622') }} </button>
                     <button
                       class="ghost-button small"
                       type="button"
                       :disabled="loading || !canContinueSyncShot(selectedShotOutput)"
                       @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"
-                    >
-                      继续查询当前镜头
-                    </button>
+                    > {{ tr('autoUi.k_0f80598c1ffa') }} </button>
                     <button
                       v-if="canRepairShotTaskId(selectedShotOutput)"
                       class="ghost-button small"
                       type="button"
                       :disabled="loading || !current?.id"
                       @click="refreshRemoteStatus"
-                    >
-                      同步补查
-                    </button>
+                    > {{ tr('autoUi.k_c669d0d0cdfc') }} </button>
                   </div>
                 </div>
 
                 <CloneStateCard
                   v-else
                   class="empty-state section-empty"
-                  title="等待检查片段"
-                  description="分镜视频完成后，这里可以逐个替换镜头再重新合成。"
+                  :title="tr('autoUi.k_52198bfdbee3')"
+                  :description="tr('autoUi.k_fcdc361d35ed')"
                 />
               </section>
             </div>
@@ -4997,33 +4963,33 @@ onUnmounted(() => {
             <aside class="compose-studio__side">
               <section class="compose-side-card final-delivery-side">
                 <div class="compose-side-card__head">
-                  <strong>导出设置</strong>
-                  <small>仅显示本地合成与导出状态</small>
+                  <strong>{{ tr('autoUi.k_7aaa2f87edf4') }}</strong>
+                  <small>{{ tr('autoUi.k_df429736ba90') }}</small>
                 </div>
                 <div class="compose-option-group">
-                  <span>输出目录</span>
+                  <span>{{ tr('autoUi.k_305c965ad310') }}</span>
                   <div class="compose-output-dir">
                     <strong>{{ finalOutputDirText }}</strong>
-                    <button class="ghost-button small" type="button" :disabled="loading" @click="pickComposeOutputDir">选择文件夹</button>
+                    <button class="ghost-button small" type="button" :disabled="loading" @click="pickComposeOutputDir">{{ tr('autoUi.k_ed358091bc9c') }}</button>
                   </div>
                 </div>
               </section>
 
               <section class="compose-side-card compose-estimate-card">
                 <div class="compose-side-card__head">
-                  <strong>导出预估</strong>
+                  <strong>{{ tr('autoUi.k_09d1dbd189c8') }}</strong>
                 </div>
                 <div class="compose-export-grid">
                   <div class="compose-export-stat">
-                    <span>时长</span>
+                    <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
                     <strong>{{ composeDurationDisplay }}</strong>
                   </div>
                   <div class="compose-export-stat">
-                    <span>大小</span>
+                    <span>{{ tr('autoUi.k_fd20702c73d1') }}</span>
                     <strong>{{ composeEstimatedSize }}</strong>
                   </div>
                   <div class="compose-export-stat">
-                    <span>耗时</span>
+                    <span>{{ tr('autoUi.k_a9704e1997b9') }}</span>
                     <strong>{{ composeExportTimeText }}</strong>
                   </div>
                 </div>
@@ -5034,27 +5000,25 @@ onUnmounted(() => {
                   <button class="ghost-button compose-side-button" :class="{ 'is-warning': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo">
                     {{ finalButtonLabel }}
                   </button>
-                  <button class="ghost-button compose-side-button" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio">
-                    发送到 TikTok 创意生成
-                  </button>
+                  <button class="ghost-button compose-side-button" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio"> {{ tr('autoUi.k_f0effeae0cf7') }} </button>
                 </div>
               </section>
 
               <CloneDataCard v-if="localComposeErrorText" class="meta-card" tone="danger">
-                <span>本地合成提示</span>
+                <span>{{ tr('autoUi.k_408228b05be1') }}</span>
                 <strong>{{ localComposeErrorText }}</strong>
               </CloneDataCard>
               <CloneDataCard v-if="composeSummaryStats || composeHealthFlags.length || composeHealthRecommendations.length || composeHealthVerdictText" class="meta-card">
-                <span>节奏体检</span>
+                <span>{{ tr('autoUi.k_906e2b8b14d2') }}</span>
                 <strong v-if="composeHealthVerdictText">{{ composeHealthVerdictText }}</strong>
-                <strong>{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.join(' / ') : '当前未发现明显节奏风险' }}</strong>
-                <small v-if="composeSummaryStats?.totalShots">镜头总数：{{ composeSummaryStats.totalShots }}，节奏分布：{{ composeStageCountText }}</small>
-                <small v-if="composeAverageClipDurationText">平均镜头时长：{{ composeAverageClipDurationText }}</small>
-                <small v-if="composeSummaryStats">高强度镜头：{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}，文案保护：{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}，产品重点：{{ Number(composeSummaryStats.productPriorityCount || 0) }}，强开头：{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
+                <strong>{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.join(' / ') : tr('autoUi.k_438a2458e735') }}</strong>
+                <small v-if="composeSummaryStats?.totalShots">{{ tr('autoUi.k_e3c71dbd0f6e') }}{{ composeSummaryStats.totalShots }}{{ tr('autoUi.k_bfbf845243b4') }}{{ composeStageCountText }}</small>
+                <small v-if="composeAverageClipDurationText">{{ tr('autoUi.k_5b8be1da2596') }}{{ composeAverageClipDurationText }}</small>
+                <small v-if="composeSummaryStats">{{ tr('autoUi.k_c6965fe469f4') }}{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}{{ tr('autoUi.k_112fd0c2aff9') }}{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}{{ tr('autoUi.k_e30d73d034d5') }}{{ Number(composeSummaryStats.productPriorityCount || 0) }}{{ tr('autoUi.k_e985a4d66628') }}{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
                 <small v-for="item in composeHealthRecommendations" :key="item">{{ item }}</small>
               </CloneDataCard>
               <CloneDataCard v-if="previewPipelineReportPath" class="meta-card">
-                <span>预览报告</span>
+                <span>{{ tr('autoUi.k_68ad7f89e687') }}</span>
                 <strong>{{ shortPath(previewPipelineReportPath) }}</strong>
               </CloneDataCard>
             </aside>
@@ -5063,9 +5027,9 @@ onUnmounted(() => {
           <section class="compose-tip-card">
             <span class="compose-tip-card__icon">✧</span>
             <div>
-              <strong>小贴士</strong>
-              <p>如需调整部分片段，请返回「分镜视频」重新生成对应片段。</p>
-              <p>导出的视频将保存在所选目录中。</p>
+              <strong>{{ tr('autoUi.k_ce6897595b74') }}</strong>
+              <p>{{ tr('autoUi.k_f5d8e9430ad5') }}</p>
+              <p>{{ tr('autoUi.k_34be97c09b46') }}</p>
             </div>
           </section>
         </article>
@@ -5087,10 +5051,10 @@ onUnmounted(() => {
       <div class="modal-panel modal-panel--frame-preview">
         <div class="panel-head">
           <div>
-            <span class="panel-tag">分镜预览</span>
-            <h2>{{ safeText(framePreviewTitle, '分镜大图预览') }}</h2>
+            <span class="panel-tag">{{ tr('autoUi.k_76917c58e1ee') }}</span>
+            <h2>{{ safeText(framePreviewTitle, tr('autoUi.k_daa6ea9a0eb4')) }}</h2>
           </div>
-          <button class="ghost-button small" type="button" @click="framePreviewOpen = false">关闭</button>
+          <button class="ghost-button small" type="button" @click="framePreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
         </div>
         <div class="frame-preview-shell">
           <img v-if="framePreviewPath" :src="previewImage(framePreviewPath, Date.now())" alt="frame-preview" />
@@ -5102,13 +5066,13 @@ onUnmounted(() => {
       <div class="modal-card prompt-preview-modal prompt-preview-modal--identity-grid">
         <div class="modal-card__header">
           <div class="prompt-preview-modal__title">
-            <span class="panel-tag">身份定妆图</span>
-            <strong>身份定妆图提示词预览</strong>
-            <p>主进程真实生成 prompt</p>
+            <span class="panel-tag">{{ tr('autoUi.k_54f65b6b0c67') }}</span>
+            <strong>{{ tr('autoUi.k_ed96bfd66e94') }}</strong>
+            <p>{{ tr('autoUi.k_021b8a7dec6e') }}</p>
           </div>
           <div class="modal-card__actions">
-            <button class="ghost-button small" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', '提示词已复制')">复制全部</button>
-            <button class="ghost-button small" type="button" @click="identityGridPromptPreviewOpen = false">关闭</button>
+            <button class="ghost-button small" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', tr('autoUi.k_abc7750ecb1f'))">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
+            <button class="ghost-button small" type="button" @click="identityGridPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
         </div>
         <div v-if="identityGridPromptSource" class="prompt-preview-card prompt-preview-card--identity-grid">
@@ -5122,61 +5086,61 @@ onUnmounted(() => {
             <div class="identity-grid-preview-column">
               <div v-if="identityGridReferencePaths.length || identityGridModelReferencePaths.length" class="prompt-preview-section identity-grid-preview-section">
                 <div class="prompt-preview-section__header">
-                  <strong>参考素材</strong>
-                  <span>产品图和模特图并排对照展示</span>
+                  <strong>{{ tr('autoUi.k_a4c9a83772b3') }}</strong>
+                  <span>{{ tr('autoUi.k_e2efc3482a19') }}</span>
                 </div>
                 <div class="identity-grid-asset-pair">
                   <div class="identity-grid-asset-group">
                     <div class="identity-grid-asset-group__head">
-                      <strong>产品图</strong>
-                      <span>{{ identityGridReferencePaths.length ? `${identityGridReferencePaths.length} 张` : '暂无' }}</span>
+                      <strong>{{ tr('autoUi.k_9ae39426bcca') }}</strong>
+                      <span>{{ identityGridReferencePaths.length ? tr('autoUi.k_30a97706c37b', { p0: identityGridReferencePaths.length }) : tr('autoUi.k_5dbd015496af') }}</span>
                     </div>
                     <div v-if="identityGridReferencePaths.length" class="prompt-reference-grid prompt-reference-grid--identity-grid">
                       <div v-for="(item, index) in identityGridReferencePaths" :key="`identity-ref-${item}`" class="prompt-reference-card prompt-reference-card--compact prompt-reference-card--identity-grid">
-                        <button class="prompt-reference-card__thumb" type="button" @click="openFramePreview(item, `参考图 ${index + 1}`)">
+                        <button class="prompt-reference-card__thumb" type="button" @click="openFramePreview(item, tr('autoUi.k_c8b458421614', { p0: index + 1 }))">
                           <img :src="previewImage(item)" alt="identity-grid-reference" />
                         </button>
                         <div class="prompt-reference-card__actions">
-                          <button class="ghost-button tiny" type="button" @click="openFramePreview(item, `参考图 ${index + 1}`)">放大</button>
-                          <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">下载</button>
+                          <button class="ghost-button tiny" type="button" @click="openFramePreview(item, tr('autoUi.k_c8b458421614', { p0: index + 1 }))">{{ tr('autoUi.k_d7f48a059cf3') }}</button>
+                          <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">{{ tr('autoUi.k_2b9d013177da') }}</button>
                         </div>
                       </div>
                     </div>
-                    <div v-else class="prompt-reference-empty">当前没有产品参考图。</div>
+                    <div v-else class="prompt-reference-empty">{{ tr('autoUi.k_b7da8f65d973') }}</div>
                   </div>
                   <div class="identity-grid-asset-group">
                     <div class="identity-grid-asset-group__head">
-                      <strong>模特图</strong>
-                      <span>{{ identityGridModelReferencePaths.length ? `${identityGridModelReferencePaths.length} 张` : '暂无' }}</span>
+                      <strong>{{ tr('autoUi.k_63b2cf7794b3') }}</strong>
+                      <span>{{ identityGridModelReferencePaths.length ? tr('autoUi.k_30a97706c37b', { p0: identityGridModelReferencePaths.length }) : tr('autoUi.k_5dbd015496af') }}</span>
                     </div>
                     <div v-if="identityGridModelReferencePaths.length" class="prompt-reference-grid prompt-reference-grid--identity-grid">
                       <div v-for="(item, index) in identityGridModelReferencePaths" :key="`identity-model-ref-${item}`" class="prompt-reference-card prompt-reference-card--compact prompt-reference-card--identity-grid">
-                        <button class="prompt-reference-card__thumb" type="button" @click="openFramePreview(item, `模特图 ${index + 1}`)">
+                        <button class="prompt-reference-card__thumb" type="button" @click="openFramePreview(item, tr('autoUi.k_52b08e4bfe85', { p0: index + 1 }))">
                           <img :src="previewImage(item)" alt="identity-grid-model-reference" />
                         </button>
                         <div class="prompt-reference-card__actions">
-                          <button class="ghost-button tiny" type="button" @click="openFramePreview(item, `模特图 ${index + 1}`)">放大</button>
-                          <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">下载</button>
+                          <button class="ghost-button tiny" type="button" @click="openFramePreview(item, tr('autoUi.k_52b08e4bfe85', { p0: index + 1 }))">{{ tr('autoUi.k_d7f48a059cf3') }}</button>
+                          <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">{{ tr('autoUi.k_2b9d013177da') }}</button>
                         </div>
                       </div>
                     </div>
-                    <div v-else class="prompt-reference-empty">当前没有模特参考图。</div>
+                    <div v-else class="prompt-reference-empty">{{ tr('autoUi.k_87c3e289a734') }}</div>
                   </div>
                 </div>
               </div>
               <div v-else class="prompt-preview-section identity-grid-preview-section">
                 <div class="prompt-preview-section__header">
-                  <strong>参考素材</strong>
-                  <span>当前没有可展示的图片</span>
+                  <strong>{{ tr('autoUi.k_a4c9a83772b3') }}</strong>
+                  <span>{{ tr('autoUi.k_e370cdaf4557') }}</span>
                 </div>
-                <div class="prompt-reference-empty">主进程预览中未返回产品图或模特图。</div>
+                <div class="prompt-reference-empty">{{ tr('autoUi.k_06a6c7335e59') }}</div>
               </div>
             </div>
             <div class="identity-grid-preview-column">
               <div class="prompt-preview-section prompt-preview-section--textarea prompt-preview-section--identity-grid-prompt">
                 <div class="prompt-preview-section__header">
-                  <strong>完整 Prompt</strong>
-                  <span>这里展示传给模型的真实提示词</span>
+                  <strong>{{ tr('autoUi.k_63b7e2717fbb') }}</strong>
+                  <span>{{ tr('autoUi.k_ee92e0cae58d') }}</span>
                 </div>
                 <div class="prompt-preview-code-shell prompt-preview-code-shell--identity-grid-top">
                   <pre class="prompt-preview-code prompt-preview-code--identity-grid">{{ identityGridPromptSource.prompt || '' }}</pre>
@@ -5184,8 +5148,8 @@ onUnmounted(() => {
               </div>
               <div v-if="safeArray(identityGridPromptSource?.gridUsagePlan).length" class="prompt-preview-section identity-grid-preview-usage">
                 <div class="prompt-preview-section__header">
-                  <strong>用途覆盖</strong>
-                  <span>{{ `${safeArray(identityGridPromptSource?.gridUsagePlan).length} 个固定用途槽位，不是评分` }}</span>
+                  <strong>{{ tr('autoUi.k_b06c340dc0e4') }}</strong>
+                  <span>{{ tr('autoUi.k_f2d06a139c22', { p0: safeArray(identityGridPromptSource?.gridUsagePlan).length }) }}</span>
                 </div>
                 <div class="prompt-preview-paths prompt-preview-paths--chips">
                   <span v-for="item in safeArray(identityGridPromptSource?.gridUsagePlan)" :key="item">{{ item }}</span>
@@ -5193,55 +5157,53 @@ onUnmounted(() => {
               </div>
               <div class="prompt-preview-section identity-grid-preview-section">
                 <div class="prompt-preview-section__header">
-                  <strong>请求摘要</strong>
-                  <span>先看核心参数，避免大字段撑满界面</span>
+                  <strong>{{ tr('autoUi.k_08dca24f2c10') }}</strong>
+                  <span>{{ tr('autoUi.k_203dfc5a8216') }}</span>
                 </div>
                 <div v-if="identityGridRequestParamRowsCompact.length" class="prompt-param-table prompt-param-table--compact">
                   <div class="prompt-param-table__head">
-                    <span>参数名</span>
-                    <span>参数值</span>
-                    <span>操作</span>
+                    <span>{{ tr('autoUi.k_ecb6c72b4c56') }}</span>
+                    <span>{{ tr('autoUi.k_b9e8f6fc752b') }}</span>
+                    <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
                   </div>
                   <div v-for="row in identityGridRequestParamRowsCompact" :key="`identity-grid-compact-${row.key}`" class="prompt-param-table__row">
                     <strong>{{ row.key }}</strong>
                     <pre>{{ row.value }}</pre>
-                    <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, `${row.key} 已复制`)">复制</button>
+                    <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, tr('autoUi.k_b2a92ec67b81', { p0: row.key }))">{{ tr('autoUi.k_4edd1d00875d') }}</button>
                   </div>
                 </div>
-                <div v-else class="prompt-preview-empty">当前没有可展示的请求摘要参数。</div>
+                <div v-else class="prompt-preview-empty">{{ tr('autoUi.k_95eb81c7b494') }}</div>
               </div>
             </div>
           </div>
           <div class="prompt-preview-block prompt-preview-block--identity-grid">
             <div class="prompt-preview-block__head">
-              <strong>完整请求参数</strong>
+              <strong>{{ tr('autoUi.k_5cf0f59c3cd1') }}</strong>
               <button
                 class="ghost-button small"
                 type="button"
                 :disabled="!(identityGridPromptPreview?.requestJson || current?.projectIdentityGridPromptPreview?.requestJson)"
-                @click="copyPromptText(safeText(identityGridPromptPreview?.requestJson || current?.projectIdentityGridPromptPreview?.requestJson, ''), '参数已复制')"
-              >
-                复制全部
-              </button>
+                @click="copyPromptText(safeText(identityGridPromptPreview?.requestJson || current?.projectIdentityGridPromptPreview?.requestJson, ''), tr('autoUi.k_8a2f4f1fa013'))"
+              > {{ tr('autoUi.k_55f59bc2f0c3') }} </button>
             </div>
             <div v-if="identityGridRequestParamRowsExpanded.length" class="prompt-param-table prompt-param-table--expanded">
               <div class="prompt-param-table__head">
-                <span>参数名</span>
-                <span>参数值</span>
-                <span>操作</span>
+                <span>{{ tr('autoUi.k_ecb6c72b4c56') }}</span>
+                <span>{{ tr('autoUi.k_b9e8f6fc752b') }}</span>
+                <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
               </div>
               <div v-for="row in identityGridRequestParamRowsExpanded" :key="`identity-grid-expanded-${row.key}`" class="prompt-param-table__row">
                 <strong>{{ row.key }}</strong>
                 <pre>{{ row.value }}</pre>
-                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, `${row.key} 已复制`)">复制</button>
+                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, tr('autoUi.k_b2a92ec67b81', { p0: row.key }))">{{ tr('autoUi.k_4edd1d00875d') }}</button>
               </div>
             </div>
-            <div v-else class="prompt-preview-empty">当前没有额外的大字段参数。</div>
+            <div v-else class="prompt-preview-empty">{{ tr('autoUi.k_fb1b15f4a1c9') }}</div>
           </div>
           <div v-if="identityGridPromptSource.description" class="prompt-preview-section identity-grid-preview-section">
             <div class="prompt-preview-section__header">
-              <strong>说明摘要</strong>
-              <span>主进程返回的身份定妆图生成说明</span>
+              <strong>{{ tr('autoUi.k_2564f3578ec4') }}</strong>
+              <span>{{ tr('autoUi.k_9c72a5cd5060') }}</span>
             </div>
             <div class="prompt-highlight-card__block">
               <pre>{{ identityGridPromptSource.description }}</pre>
@@ -5249,8 +5211,8 @@ onUnmounted(() => {
           </div>
           <div class="prompt-preview-section prompt-preview-section--textarea">
             <div class="prompt-preview-section__header">
-              <strong>完整 Prompt</strong>
-              <span>可直接复制用于身份定妆图生成</span>
+              <strong>{{ tr('autoUi.k_63b7e2717fbb') }}</strong>
+              <span>{{ tr('autoUi.k_2d0a5be2d7a0') }}</span>
             </div>
             <div class="prompt-preview-code-shell">
               <pre class="prompt-preview-code prompt-preview-code--identity-grid">{{ identityGridPromptSource.prompt || '' }}</pre>
@@ -5267,20 +5229,20 @@ onUnmounted(() => {
       <div class="modal-panel modal-panel--prompt-preview">
         <div class="panel-head">
           <div>
-            <span class="panel-tag">提示词预览</span>
-            <h2>{{ selectedStoryboardRow ? `镜头 ${String(selectedStoryboardRow.shotIndex).padStart(2, '0')}` : '分镜图片提示词' }}</h2>
+            <span class="panel-tag">{{ tr('autoUi.k_ca445a4a0ad9') }}</span>
+            <h2>{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_9fec4d6ec5ef') }}</h2>
           </div>
           <div class="panel-actions">
-            <button class="ghost-button small" type="button" :disabled="!shotImagePromptPreview" @click="copyAllShotPrompts">复制全部</button>
-            <button class="ghost-button small" type="button" @click="shotPromptPreviewOpen = false">关闭</button>
+            <button class="ghost-button small" type="button" :disabled="!shotImagePromptPreview" @click="copyAllShotPrompts">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
+            <button class="ghost-button small" type="button" @click="shotPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
         </div>
         <div v-if="shotImagePromptPreview" class="prompt-preview-card">
           <div class="prompt-preview-meta">
-            <span>模式：{{ safeText(shotImagePromptPreview.consistencyMode, '--') }}</span>
-            <span>商品类型：{{ safeText(shotImagePromptPreview.productType, '--') }}</span>
-            <span>参考图：{{ Number(shotImagePromptPreview.referenceImageCount || 0) }}</span>
-            <span>参考模式：{{ shotImageReferenceMode === 'product_closeup' ? '产品特写模式' : '模特场景模式' }}</span>
+            <span>{{ tr('autoUi.k_04dc94e11529') }}{{ safeText(shotImagePromptPreview.consistencyMode, '--') }}</span>
+            <span>{{ tr('autoUi.k_abd5bce91f06') }}{{ safeText(shotImagePromptPreview.productType, '--') }}</span>
+            <span>{{ tr('autoUi.k_f20d9f75fb6a') }}{{ Number(shotImagePromptPreview.referenceImageCount || 0) }}</span>
+            <span>{{ tr('autoUi.k_439f5ea210cc') }}{{ shotImageReferenceMode === 'product_closeup' ? tr('autoUi.k_4d17c549bcdc') : tr('autoUi.k_646cba661d87') }}</span>
             <span v-if="shotImageReferenceReasonSummary">{{ shotImageReferenceReasonSummary }}</span>
             <span v-if="shotImageReferenceLockSummary">{{ shotImageReferenceLockSummary }}</span>
             <span v-if="shotPromptCopyMessage">{{ shotPromptCopyMessage }}</span>
@@ -5288,26 +5250,26 @@ onUnmounted(() => {
           <div class="prompt-preview-block">
             <div class="prompt-preview-block__head">
               <strong>Image Request Params</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotImagePromptPreview.requestJsonStart, ''), '参数已复制')">复制全部</button>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotImagePromptPreview.requestJsonStart, ''), tr('autoUi.k_8a2f4f1fa013'))">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             </div>
             <div v-if="shotImageRequestParamRows.length" class="prompt-param-table">
               <div class="prompt-param-table__head">
-                <span>参数名</span>
-                <span>参数值</span>
-                <span>操作</span>
+                <span>{{ tr('autoUi.k_ecb6c72b4c56') }}</span>
+                <span>{{ tr('autoUi.k_b9e8f6fc752b') }}</span>
+                <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
               </div>
               <div v-for="row in shotImageRequestParamRows" :key="row.key" class="prompt-param-table__row">
                 <strong>{{ row.key }}</strong>
                 <pre>{{ row.value }}</pre>
-                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, `${row.key} 已复制`)">复制</button>
+                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, tr('autoUi.k_b2a92ec67b81', { p0: row.key }))">{{ tr('autoUi.k_4edd1d00875d') }}</button>
               </div>
             </div>
-            <div v-else class="prompt-preview-empty">当前没有可展示的请求参数。</div>
+            <div v-else class="prompt-preview-empty">{{ tr('autoUi.k_b56039e4f65c') }}</div>
           </div>
           <div class="prompt-highlight-card">
             <div class="prompt-highlight-card__head">
-              <strong>参考图</strong>
-              <span>当前这次分镜图请求实际使用的两张参考图</span>
+              <strong>{{ tr('autoUi.k_5149ae9c3017') }}</strong>
+              <span>{{ tr('autoUi.k_32ad59d1654e') }}</span>
             </div>
             <div v-if="safeShotImageDisplayRefs.length" class="prompt-reference-grid">
               <div v-for="item in safeShotImageDisplayRefs" :key="`image-ref-${item.path}`" class="prompt-reference-card">
@@ -5316,20 +5278,18 @@ onUnmounted(() => {
                 </a>
                 <span>{{ item.label }}</span>
                 <div class="prompt-reference-card__actions">
-                  <button class="ghost-button tiny" type="button" @click="copyPromptText(item.path, '图片路径已复制')">复制路径</button>
-                  <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item.path)">下载</button>
+                  <button class="ghost-button tiny" type="button" @click="copyPromptText(item.path, tr('autoUi.k_d14d5d43036b'))">{{ tr('autoUi.k_e0c29eaeb30b') }}</button>
+                  <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item.path)">{{ tr('autoUi.k_2b9d013177da') }}</button>
                 </div>
               </div>
             </div>
-            <div v-else class="prompt-reference-empty">当前没有可展示的身份定妆图或分镜场景图。</div>
+            <div v-else class="prompt-reference-empty">{{ tr('autoUi.k_53bbf3d53751') }}</div>
           </div>
         </div>
         <div v-else-if="shotImagePromptPreviewError" class="prompt-preview-empty prompt-preview-empty--error">
           {{ shotImagePromptPreviewError }}
         </div>
-        <div v-else class="prompt-preview-empty">
-          当前没有可展示的分镜图片提示词。
-        </div>
+        <div v-else class="prompt-preview-empty"> {{ tr('autoUi.k_5aaf25feec91') }} </div>
       </div>
     </div>
 
@@ -5337,63 +5297,61 @@ onUnmounted(() => {
       <div class="modal-panel modal-panel--prompt-preview">
         <div class="panel-head">
           <div>
-            <span class="panel-tag">视频提示词预览</span>
-            <h2>{{ selectedShotOutput ? `镜头 ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` : '分镜视频提示词' }}</h2>
+            <span class="panel-tag">{{ tr('autoUi.k_161657ad1c55') }}</span>
+            <h2>{{ selectedShotOutput ? tr('autoUi.k_24f7d6982256', { p0: String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0') }) : tr('autoUi.k_589157bc90cb') }}</h2>
           </div>
           <div class="panel-actions">
-            <button class="ghost-button small" type="button" :disabled="!shotVideoPromptPreview" @click="copyAllShotVideoPrompts">复制全部</button>
-            <button class="ghost-button small" type="button" @click="shotVideoPromptPreviewOpen = false">关闭</button>
+            <button class="ghost-button small" type="button" :disabled="!shotVideoPromptPreview" @click="copyAllShotVideoPrompts">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
+            <button class="ghost-button small" type="button" @click="shotVideoPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
         </div>
         <div v-if="shotVideoPromptPreview" class="prompt-preview-card">
           <div class="prompt-preview-meta">
-            <span>商品类型：{{ safeText(shotVideoPromptPreview.productType, '--') }}</span>
+            <span>{{ tr('autoUi.k_abd5bce91f06') }}{{ safeText(shotVideoPromptPreview.productType, '--') }}</span>
           </div>
           <div class="prompt-highlight-card">
             <div class="prompt-highlight-card__head">
-              <strong>输入参考图</strong>
-              <span>严格按当前这次分镜视频真实请求里的图片列表展示</span>
+              <strong>{{ tr('autoUi.k_bb8ed1a96b33') }}</strong>
+              <span>{{ tr('autoUi.k_b00a94cc6010') }}</span>
             </div>
             <div v-if="shotVideoReferencePaths.length" class="prompt-reference-grid">
               <div v-for="(item, index) in shotVideoReferencePaths" :key="`video-ref-${item}`" class="prompt-reference-card">
                 <a :href="mediaUrl(item)" target="_blank" rel="noreferrer">
                   <img :src="previewImage(item)" alt="video-request-reference" />
                 </a>
-                <span>{{ `参考图 ${index + 1} · ${shortPath(item)}` }}</span>
+                <span>{{ tr('autoUi.k_038c4864181e', { p0: index + 1, p1: shortPath(item) }) }}</span>
                 <div class="prompt-reference-card__actions">
-                  <button class="ghost-button tiny" type="button" @click="copyPromptText(item, '图片路径已复制')">复制路径</button>
-                  <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">下载</button>
+                  <button class="ghost-button tiny" type="button" @click="copyPromptText(item, tr('autoUi.k_d14d5d43036b'))">{{ tr('autoUi.k_e0c29eaeb30b') }}</button>
+                  <button class="ghost-button tiny" type="button" @click="downloadMediaFile(item)">{{ tr('autoUi.k_2b9d013177da') }}</button>
                 </div>
               </div>
             </div>
-            <div v-else class="prompt-reference-empty">当前视频请求没有参考图。</div>
+            <div v-else class="prompt-reference-empty">{{ tr('autoUi.k_a6dfe908a7d4') }}</div>
           </div>
           <div class="prompt-preview-block">
             <div class="prompt-preview-block__head">
               <strong>Video Request Params</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.requestPayloadPreview || shotVideoPromptPreview.requestJson, ''), '视频请求参数已复制')">复制全部</button>
+              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.requestPayloadPreview || shotVideoPromptPreview.requestJson, ''), tr('autoUi.k_368cd625a419'))">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             </div>
             <div v-if="shotVideoRequestParamRows.length" class="prompt-param-table">
               <div class="prompt-param-table__head">
-                <span>参数名</span>
-                <span>参数值</span>
-                <span>操作</span>
+                <span>{{ tr('autoUi.k_ecb6c72b4c56') }}</span>
+                <span>{{ tr('autoUi.k_b9e8f6fc752b') }}</span>
+                <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
               </div>
               <div v-for="row in shotVideoRequestParamRows" :key="`video-${row.key}`" class="prompt-param-table__row">
                 <strong>{{ row.key }}</strong>
                 <pre>{{ row.value }}</pre>
-                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, `${row.key} 已复制`)">复制</button>
+                <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, tr('autoUi.k_b2a92ec67b81', { p0: row.key }))">{{ tr('autoUi.k_4edd1d00875d') }}</button>
               </div>
             </div>
-            <div v-else class="prompt-preview-empty">当前没有可展示的视频请求参数。</div>
+            <div v-else class="prompt-preview-empty">{{ tr('autoUi.k_80ee3f68f9ff') }}</div>
           </div>
         </div>
         <div v-else-if="shotVideoPromptPreviewError" class="prompt-preview-empty prompt-preview-empty--error">
           {{ shotVideoPromptPreviewError }}
         </div>
-        <div v-else class="prompt-preview-empty">
-          当前没有可展示的分镜视频提示词。
-        </div>
+        <div v-else class="prompt-preview-empty"> {{ tr('autoUi.k_a91b1682f300') }} </div>
       </div>
     </div>
 
@@ -5401,11 +5359,11 @@ onUnmounted(() => {
       <div class="modal-panel">
         <div class="panel-head">
           <div>
-            <span class="panel-tag">模特库</span>
-            <h2>选择可复用模特</h2>
+            <span class="panel-tag">{{ tr('autoUi.k_d6c594acfe3a') }}</span>
+            <h2>{{ tr('autoUi.k_e7365a7456ac') }}</h2>
           </div>
           <div class="panel-actions">
-            <button class="ghost-button small" type="button" @click="modelModalOpen = false">关闭</button>
+            <button class="ghost-button small" type="button" @click="modelModalOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
         </div>
 
@@ -5413,11 +5371,11 @@ onUnmounted(() => {
           <CloneMediaCard v-for="item in models" :key="item.id" as="button" class="model-card" type="button" @click="selectModel(item)">
             <div class="model-card-cover">
               <img v-if="modelPreview(item)" :src="modelPreview(item)" alt="model-preview" />
-              <div v-else class="empty-state small-empty">无图</div>
+              <div v-else class="empty-state small-empty">{{ tr('autoUi.k_a42d709dc06f') }}</div>
             </div>
             <div class="model-card-copy data-card-copy">
-              <strong>{{ safeText(item.name, '未命名模特') }}</strong>
-              <span>{{ safeText(item.sceneStyle || item.model, 'AI 模特') }}</span>
+              <strong>{{ safeText(item.name, tr('autoUi.k_524ed3a52e93')) }}</strong>
+              <span>{{ safeText(item.sceneStyle || item.model, tr('autoUi.k_a5890121d6e5')) }}</span>
             </div>
           </CloneMediaCard>
         </div>
@@ -5428,15 +5386,15 @@ onUnmounted(() => {
       <div class="modal-panel">
         <div class="panel-head">
           <div>
-            <span class="panel-tag">商品库</span>
-            <h2>选择要绑定的商品</h2>
+            <span class="panel-tag">{{ tr('autoUi.k_b69b999b0e86') }}</span>
+            <h2>{{ tr('autoUi.k_ed1d3b8effdf') }}</h2>
           </div>
           <div class="panel-actions">
-            <button class="ghost-button small" type="button" @click="productModalOpen = false">关闭</button>
+            <button class="ghost-button small" type="button" @click="productModalOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
         </div>
 
-        <input v-model="productQuery" class="field-control" type="text" placeholder="搜索商品名称、类型或商品 ID" />
+        <input v-model="productQuery" class="field-control" type="text" :placeholder="tr('autoUi.k_5f35074561bb')" />
 
         <div v-if="filteredProducts.length" class="model-grid">
           <CloneMediaCard
@@ -5453,19 +5411,17 @@ onUnmounted(() => {
           >
             <div class="model-card-cover">
               <img v-if="previewImage(item.coverImagePath || item.images?.[0]?.filePath)" :src="previewImage(item.coverImagePath || item.images?.[0]?.filePath)" alt="product-preview" />
-              <div v-else class="empty-state small-empty">无图</div>
+              <div v-else class="empty-state small-empty">{{ tr('autoUi.k_a42d709dc06f') }}</div>
             </div>
             <div class="model-card-copy data-card-copy">
-              <strong>{{ safeText(item.name, '未命名商品') }}</strong>
-              <span>{{ safeText(item.type, '商品') }} · {{ item.id }}</span>
-              <span v-if="current?.productId === item.id" class="model-card-badge">当前已绑定</span>
-              <span v-else-if="selectedProductId === item.id" class="model-card-badge model-card-badge--selected">当前已选中</span>
+              <strong>{{ safeText(item.name, tr('autoUi.k_81918f2f9c19')) }}</strong>
+              <span>{{ safeText(item.type, tr('autoUi.k_004922066efd')) }} · {{ item.id }}</span>
+              <span v-if="current?.productId === item.id" class="model-card-badge">{{ tr('autoUi.k_6956b88d0e95') }}</span>
+              <span v-else-if="selectedProductId === item.id" class="model-card-badge model-card-badge--selected">{{ tr('autoUi.k_230e98fe5340') }}</span>
             </div>
           </CloneMediaCard>
         </div>
-        <div v-else class="prompt-preview-empty">
-          没有匹配的商品。
-        </div>
+        <div v-else class="prompt-preview-empty"> {{ tr('autoUi.k_4638e45ae2ad') }} </div>
       </div>
     </div>
 
@@ -5473,22 +5429,22 @@ onUnmounted(() => {
       <div class="modal-panel">
         <div class="panel-head">
           <div>
-            <span class="panel-tag">发布到 Geelark</span>
-            <h2>提交 TikTok 发布任务</h2>
+            <span class="panel-tag">{{ tr('autoUi.k_6adb64a596d8') }}</span>
+            <h2>{{ tr('autoUi.k_533305d1af7c') }}</h2>
           </div>
-          <button class="ghost-button small" type="button" @click="geelarkPublishModalOpen = false">关闭</button>
+          <button class="ghost-button small" type="button" @click="geelarkPublishModalOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
         </div>
 
         <div class="publish-modal-grid">
           <label class="publish-field publish-field--full">
-            <span>成片文件</span>
-            <strong>{{ safeText(shortPath(finalOutputPath), '暂无成片') }}</strong>
+            <span>{{ tr('autoUi.k_f9d9425f7924') }}</span>
+            <strong>{{ safeText(shortPath(finalOutputPath), tr('autoUi.k_40cf5c1ab780')) }}</strong>
           </label>
 
           <label class="publish-field">
-            <span>发布账号</span>
+            <span>{{ tr('autoUi.k_f6afab4f2d29') }}</span>
             <select v-model="geelarkPublishForm.publishAccountId" class="field-control">
-              <option value="">请选择账号</option>
+              <option value="">{{ tr('autoUi.k_107c18a5bb99') }}</option>
               <option v-for="item in geelarkAccounts" :key="item.id" :value="item.id">
                 {{ item.name }}
               </option>
@@ -5496,27 +5452,27 @@ onUnmounted(() => {
           </label>
 
           <label class="publish-field">
-            <span>绑定云手机</span>
-            <strong>{{ selectedGeelarkAccount?.cloudPhoneName || '未绑定' }}</strong>
+            <span>{{ tr('autoUi.k_3f8afdc8504e') }}</span>
+            <strong>{{ selectedGeelarkAccount?.cloudPhoneName || tr('autoUi.k_3bf179d8d045') }}</strong>
           </label>
 
           <label class="publish-field publish-field--full">
-            <span>发布文案</span>
-            <textarea v-model="geelarkPublishForm.videoDesc" class="field-control field-control--textarea" placeholder="填写 TikTok 发布文案"></textarea>
+            <span>{{ tr('autoUi.k_d6c3ef6ebcd3') }}</span>
+            <textarea v-model="geelarkPublishForm.videoDesc" class="field-control field-control--textarea" :placeholder="tr('autoUi.k_5a38b0c89b33')"></textarea>
           </label>
 
           <label class="publish-field">
-            <span>商品 ID</span>
-            <input v-model="geelarkPublishForm.productId" class="field-control" type="text" placeholder="可选" />
+            <span>{{ tr('autoUi.k_dffd0cb74c18') }}</span>
+            <input v-model="geelarkPublishForm.productId" class="field-control" type="text" :placeholder="tr('autoUi.k_53e32830a538')" />
           </label>
 
           <label class="publish-field">
-            <span>商品标题</span>
-            <input v-model="geelarkPublishForm.productTitle" class="field-control" type="text" placeholder="可选" />
+            <span>{{ tr('autoUi.k_d415beaceafd') }}</span>
+            <input v-model="geelarkPublishForm.productTitle" class="field-control" type="text" :placeholder="tr('autoUi.k_53e32830a538')" />
           </label>
 
           <label class="publish-field">
-            <span>计划发布时间</span>
+            <span>{{ tr('autoUi.k_9c735206b1c6') }}</span>
             <input v-model="geelarkPublishForm.scheduleAt" class="field-control" type="datetime-local" />
           </label>
 
@@ -5526,7 +5482,7 @@ onUnmounted(() => {
             :class="{ 'is-active': geelarkPublishForm.needShareLink }"
             @click="geelarkPublishForm.needShareLink = !geelarkPublishForm.needShareLink"
           >
-            <span>{{ geelarkPublishForm.needShareLink ? '回传分享链接：开启' : '回传分享链接：关闭' }}</span>
+            <span>{{ geelarkPublishForm.needShareLink ? tr('autoUi.k_485e3bbb5e66') : tr('autoUi.k_e2f19210dbbf') }}</span>
           </button>
         </div>
 
@@ -5536,7 +5492,7 @@ onUnmounted(() => {
 
         <div class="panel-actions">
           <button class="primary-button" type="button" :disabled="geelarkPublishSubmitting" @click="submitGeelarkPublish">
-            {{ geelarkPublishSubmitting ? '提交中...' : '提交发布任务' }}
+            {{ geelarkPublishSubmitting ? tr('autoUi.k_3a1624e3e681') : tr('autoUi.k_e9d29123e9e3') }}
           </button>
         </div>
       </div>

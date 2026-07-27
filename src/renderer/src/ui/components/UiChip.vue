@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import DsTag from '../../design-system/components/Tag.vue'
 
 const props = withDefaults(

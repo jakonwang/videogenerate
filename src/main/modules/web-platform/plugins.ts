@@ -115,7 +115,7 @@ export const pluginDefinitions: PluginDefinition[] = [
         key: 'watermarkText',
         label: '默认水印文案',
         type: 'text',
-        placeholder: 'VideoGen',
+        placeholder: 'VideoGenerate',
       },
       {
         key: 'position',

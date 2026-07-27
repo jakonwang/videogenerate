@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import UiCard from '../components/UiCard.vue'
 import { FolderKanban, LayoutTemplate, PlayCircle, PlusCircle } from 'lucide-vue-next'
 
@@ -14,6 +15,7 @@ type TemplateSummary = {
 }
 
 const router = useRouter()
+const { t } = useI18n()
 const tasks = ref<TaskSummary[]>([])
 const templates = ref<TemplateSummary[]>([])
 const loading = ref(false)
@@ -30,23 +32,23 @@ const recentTasks = computed(() => tasks.value.slice(0, 6))
 
 const entryCards = computed(() => [
   {
-    title: '新建任务',
-    desc: '从商品和模板创建新的生产任务。',
-    metric: '进入新建页',
+    title: t('production.home.entries.create.title'),
+    desc: t('production.home.entries.create.desc'),
+    metric: t('production.home.entries.create.metric'),
     route: '/production/create',
     icon: PlusCircle,
   },
   {
-    title: '任务列表',
-    desc: '查看任务队列、执行进度和最近结果。',
-    metric: `${totalTaskCount.value} 个任务`,
+    title: t('production.home.entries.tasks.title'),
+    desc: t('production.home.entries.tasks.desc'),
+    metric: t('production.home.taskCount', { count: totalTaskCount.value }),
     route: '/production/tasks',
     icon: FolderKanban,
   },
   {
-    title: '模板中心',
-    desc: '维护模板结构、字幕、音频和输出规则。',
-    metric: `${templateCount.value} 个模板`,
+    title: t('production.home.entries.templates.title'),
+    desc: t('production.home.entries.templates.desc'),
+    metric: t('production.home.templateCount', { count: templateCount.value }),
     route: '/templates',
     icon: LayoutTemplate,
   },
@@ -73,25 +75,25 @@ onMounted(refresh)
   <div class="production-home-page">
     <section class="production-home-hero">
       <div class="production-home-hero__copy">
-        <span class="production-home-hero__tag">生产模块</span>
-        <h1>任务执行中心</h1>
-        <p>生产模块统一收口为首页、新建任务、任务列表和任务详情，不再散落在旧入口里。</p>
+        <span class="production-home-hero__tag">{{ t('production.home.kicker') }}</span>
+        <h1>{{ t('production.home.title') }}</h1>
+        <p>{{ t('production.home.desc') }}</p>
       </div>
       <div class="production-home-hero__stats">
         <div class="production-home-stat">
-          <span>任务总数</span>
+          <span>{{ t('production.home.stats.totalTasks') }}</span>
           <strong>{{ totalTaskCount }}</strong>
         </div>
         <div class="production-home-stat">
-          <span>运行中</span>
+          <span>{{ t('production.home.stats.running') }}</span>
           <strong>{{ runningTaskCount }}</strong>
         </div>
         <div class="production-home-stat">
-          <span>失败任务</span>
+          <span>{{ t('production.home.stats.failed') }}</span>
           <strong>{{ failedTaskCount }}</strong>
         </div>
         <div class="production-home-stat">
-          <span>模板总数</span>
+          <span>{{ t('production.home.stats.templates') }}</span>
           <strong>{{ templateCount }}</strong>
         </div>
       </div>
@@ -120,8 +122,8 @@ onMounted(refresh)
       <UiCard class="production-home-panel">
         <div class="production-home-panel__head">
           <div>
-            <strong>最近任务</strong>
-            <span>从这里继续查看最近执行结果或失败任务。</span>
+            <strong>{{ t('production.home.recent.title') }}</strong>
+            <span>{{ t('production.home.recent.desc') }}</span>
           </div>
           <PlayCircle class="h-5 w-5 text-emerald-200" />
         </div>
@@ -137,28 +139,28 @@ onMounted(refresh)
             <span>{{ task.status || 'queued' }}</span>
           </button>
         </div>
-        <div v-else class="production-home-empty">还没有任务，先进入新建任务页。</div>
+        <div v-else class="production-home-empty">{{ t('production.home.recent.empty') }}</div>
       </UiCard>
 
       <UiCard class="production-home-panel">
         <div class="production-home-panel__head">
           <div>
-            <strong>模块边界</strong>
-            <span>生产只管任务与模板，商品维护统一进入商品库。</span>
+            <strong>{{ t('production.home.scope.title') }}</strong>
+            <span>{{ t('production.home.scope.desc') }}</span>
           </div>
           <FolderKanban class="h-5 w-5 text-violet-200" />
         </div>
         <div class="production-home-panel__list">
           <div>
-            <strong>生产</strong>
-            <p>首页、新建任务、任务列表、任务详情、模板配置。</p>
+            <strong>{{ t('production.home.scope.productionTitle') }}</strong>
+            <p>{{ t('production.home.scope.productionDesc') }}</p>
           </div>
           <div>
-            <strong>商品库</strong>
-            <p>商品事实源、商品图片、封面和产品标准源缓存。</p>
+            <strong>{{ t('production.home.scope.productsTitle') }}</strong>
+            <p>{{ t('production.home.scope.productsDesc') }}</p>
           </div>
         </div>
-        <small v-if="loading">正在刷新生产摘要...</small>
+        <small v-if="loading">{{ t('production.home.refreshing') }}</small>
       </UiCard>
     </section>
   </div>

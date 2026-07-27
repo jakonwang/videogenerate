@@ -2,29 +2,31 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { Boxes, LayoutTemplate, ListVideo } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 
 const route = useRoute()
+const { t } = useI18n()
 
-const items = [
+const items = computed(() => [
   {
     to: '/products',
-    label: '商品库',
-    desc: '先选商品，再进入详情管理图片与产品标准源。',
+    label: t('production.tabs.products.label'),
+    desc: t('production.tabs.products.desc'),
     icon: Boxes,
   },
   {
     to: '/templates',
-    label: '模板中心',
-    desc: '只维护模板结构、字幕、音频和视觉输出规则。',
+    label: t('production.tabs.templates.label'),
+    desc: t('production.tabs.templates.desc'),
     icon: LayoutTemplate,
   },
   {
     to: '/production/tasks',
-    label: '任务中心',
-    desc: '查看生产进度、失败原因和导出结果。',
+    label: t('production.tabs.tasks.label'),
+    desc: t('production.tabs.tasks.desc'),
     icon: ListVideo,
   },
-]
+])
 
 const isActive = (to: string) => {
   if (to === '/products') return route.path === '/products' || route.path.startsWith('/products/')
@@ -34,7 +36,7 @@ const isActive = (to: string) => {
 </script>
 
 <template>
-  <nav class="production-tabs" aria-label="生产模块导航">
+  <nav class="production-tabs" :aria-label="t('production.tabs.ariaLabel')">
     <RouterLink
       v-for="item in items"
       :key="item.to"

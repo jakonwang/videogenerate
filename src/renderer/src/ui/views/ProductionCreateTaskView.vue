@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import UiChip from '../components/UiChip.vue'
 
 type Product = { id: string; name: string }
 type Template = { id: string; name: string }
 
 const router = useRouter()
+const { t } = useI18n()
 const products = ref<Product[]>([])
 const templates = ref<Template[]>([])
 const submitting = ref(false)
@@ -44,14 +46,14 @@ async function refresh() {
 }
 
 async function pickOutDir() {
-  const outDir = await window.api.pickDir({ title: '选择输出目录' })
+  const outDir = await window.api.pickDir({ title: t('production.create.pickOutputDir') })
   if (outDir) form.outDir = outDir
 }
 
 async function submit() {
   feedback.value = ''
   if (!form.productId || !form.templateId || !String(form.outDir || '').trim()) {
-    feedback.value = '请先选择商品、模板并设置输出目录。'
+    feedback.value = t('production.create.validation')
     return
   }
 
@@ -63,10 +65,10 @@ async function submit() {
       count: Math.max(1, Math.floor(Number(form.count) || 1)),
       outDir: String(form.outDir || '').trim(),
     })
-    feedback.value = `已创建 ${meta?.enqueued ?? 0} 个任务。`
+    feedback.value = t('production.create.created', { count: meta?.enqueued ?? 0 })
     void router.push('/production/tasks')
   } catch (error: any) {
-    feedback.value = String(error?.message ?? error ?? '任务创建失败')
+    feedback.value = String(error?.message ?? error ?? t('production.create.failed'))
   } finally {
     submitting.value = false
   }
@@ -79,59 +81,59 @@ onMounted(refresh)
   <div class="production-create-page">
     <section class="production-create-hero">
       <div class="production-create-hero__copy">
-        <span class="production-create-hero__tag">生产 / 新建任务</span>
-        <h1>从商品和模板发起任务</h1>
-        <p>这里专门负责创建任务，不混入任务列表、日志和失败处理。</p>
+        <span class="production-create-hero__tag">{{ t('production.create.kicker') }}</span>
+        <h1>{{ t('production.create.title') }}</h1>
+        <p>{{ t('production.create.desc') }}</p>
       </div>
-      <UiChip tone="neutral">{{ selectedProduct?.name || '未选择商品' }}</UiChip>
+      <UiChip tone="neutral">{{ selectedProduct?.name || t('production.create.noProduct') }}</UiChip>
     </section>
 
     <section class="production-create-card">
       <div class="production-create-grid">
         <label class="production-field">
-          <span>商品</span>
+          <span>{{ t('production.create.product') }}</span>
           <select v-model="form.productId" class="ui-select h-11">
             <option v-for="item in products" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select>
         </label>
 
         <label class="production-field">
-          <span>模板</span>
+          <span>{{ t('production.create.template') }}</span>
           <select v-model="form.templateId" class="ui-select h-11">
             <option v-for="item in templates" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select>
         </label>
 
         <label class="production-field">
-          <span>数量</span>
+          <span>{{ t('production.create.quantity') }}</span>
           <input v-model.number="form.count" class="ui-input h-11" type="number" min="1" max="100" />
         </label>
 
         <label class="production-field production-field--outdir">
-          <span>输出目录</span>
+          <span>{{ t('production.create.outputDir') }}</span>
           <div class="production-outdir">
             <input v-model="form.outDir" class="ui-input h-11 min-w-0 flex-1" />
-            <button class="app-ghost px-4 py-2 text-sm" @click="pickOutDir">选择目录</button>
+            <button class="app-ghost px-4 py-2 text-sm" @click="pickOutDir">{{ t('production.create.chooseDir') }}</button>
           </div>
         </label>
       </div>
 
       <div class="production-summary">
         <div class="production-summary__item">
-          <span>当前商品</span>
+          <span>{{ t('production.create.currentProduct') }}</span>
           <strong>{{ selectedProduct?.name || '-' }}</strong>
         </div>
         <div class="production-summary__item">
-          <span>当前模板</span>
+          <span>{{ t('production.create.currentTemplate') }}</span>
           <strong>{{ selectedTemplate?.name || '-' }}</strong>
         </div>
       </div>
 
       <div class="production-create-actions">
         <button class="app-primary px-5 py-3 text-sm" :disabled="submitting" @click="submit">
-          {{ submitting ? '创建中...' : '创建任务' }}
+          {{ submitting ? t('production.create.creating') : t('production.create.submit') }}
         </button>
-        <button class="app-ghost px-5 py-3 text-sm" @click="router.push('/production/tasks')">查看任务列表</button>
+        <button class="app-ghost px-5 py-3 text-sm" @click="router.push('/production/tasks')">{{ t('production.create.viewTasks') }}</button>
       </div>
 
       <p v-if="feedback" class="production-feedback">{{ feedback }}</p>

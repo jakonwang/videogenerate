@@ -1,6 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   ArrowLeft,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
 } from '@/lib/webApiClient'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const LOCAL_GEELARK_ACCOUNTS_KEY = 'videogen-geelark-accounts'
 const LOCAL_GEELARK_TASKS_KEY = 'videogen-geelark-tasks'
@@ -36,6 +38,7 @@ const LOCAL_GEELARK_PUBLISH_DRAFT_KEY = 'videogen-geelark-publish-draft'
 const REQUEST_TIMEOUT_MS = 5000
 
 const loading = ref(false)
+const pluginReady = ref(false)
 const candidateRefreshing = ref(false)
 const publishing = ref(false)
 const generatingTitle = ref(false)
@@ -53,14 +56,14 @@ const candidatePage = ref(1)
 const activePublishStep = ref<'content' | 'goods' | 'music' | 'options'>('content')
 
 const CANDIDATE_PAGE_SIZE = 8
-const PUBLISH_LANGUAGE_OPTIONS = [
-  { value: 'zh-CN', label: '简体中文' },
+const PUBLISH_LANGUAGE_OPTIONS = computed(() => [
+  { value: 'zh-CN', label: t('autoUi.k_93659150d0e5') },
   { value: 'en-US', label: 'English' },
   { value: 'vi-VN', label: 'Tiếng Việt' },
   { value: 'th-TH', label: 'ไทย' },
   { value: 'id-ID', label: 'Bahasa Indonesia' },
   { value: 'ms-MY', label: 'Bahasa Melayu' },
-] as const
+] as const)
 
 const publishForm = reactive({
   publishAccountId: '',
@@ -90,7 +93,7 @@ function ensureArray<T>(value: unknown): T[] {
 
 function isApiNotFoundError(error: unknown) {
   const message = String((error as { message?: string } | undefined)?.message ?? error ?? '').trim()
-  return message.includes('接口不存在')
+  return message.includes('\u63a5\u53e3\u4e0d\u5b58\u5728')
 }
 
 function readLocalJson<T>(key: string, fallback: T): T {
@@ -137,7 +140,7 @@ async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = RE
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(label + ' 请求超时')), timeoutMs)
+        timer = setTimeout(() => reject(new Error(label + t('autoUi.k_a9d49c7d6b95'))), timeoutMs)
       }),
     ])
   } finally {
@@ -158,10 +161,10 @@ const selectedMusicPreset = computed(
 )
 const activeAccounts = computed(() => ensureArray<GeelarkPublishAccount>(accounts.value).filter((item) => item.status === 'active'))
 const publishSteps = computed(() => [
-  { key: 'content', index: '01', title: '发布内容', description: '选择并配置发布内容' },
-  { key: 'goods', index: '02', title: '商品信息', description: '设置商品信息与展示' },
-  { key: 'music', index: '03', title: '策略设置', description: '配置音乐与音量策略' },
-  { key: 'options', index: '04', title: '附加选项', description: '设置更多发布选项' },
+  { key: 'content', index: '01', title: t('autoUi.k_882d03bcf21c'), description: t('autoUi.k_9d5af0919383') },
+  { key: 'goods', index: '02', title: t('autoUi.k_751c5853892e'), description: t('autoUi.k_dc81cf3d2a9c') },
+  { key: 'music', index: '03', title: t('autoUi.k_f99830ac6219'), description: t('autoUi.k_971714bb3171') },
+  { key: 'options', index: '04', title: t('autoUi.k_dc7f89c5e018'), description: t('autoUi.k_3e517eca98f7') },
 ] as const)
 const currentStepIndex = computed(() => publishSteps.value.findIndex((item) => item.key === activePublishStep.value))
 const lastRefreshText = computed(() => {
@@ -171,7 +174,7 @@ const lastRefreshText = computed(() => {
     ...tasks.value.map((item) => Number(item.updatedAt || 0)),
     ...accounts.value.map((item) => Number(item.updatedAt || 0)),
   )
-  return latest ? `${formatTime(latest)} 更新` : '暂无刷新记录'
+  return latest ? t('autoUi.k_842292abaac4', { p0: formatTime(latest) }) : t('autoUi.k_fc1ac38a2f82')
 })
 
 watch(
@@ -224,27 +227,27 @@ function mediaUrl(path?: string) {
 }
 
 function candidateStatusText(status: GeelarkClonePublishCandidate['publishedStatus']) {
-  if (status === 'published') return '已发布'
-  if (status === 'failed') return '发布失败'
-  return '待发布'
+  if (status === 'published') return t('autoUi.k_176a2eb4eb17')
+  if (status === 'failed') return t('autoUi.k_7e7f5d44c467')
+  return t('autoUi.k_0654678dec5f')
 }
 
 function taskStatusText(status: GeelarkPublishTaskSummary['status']) {
-  if (status === 'waiting') return '等待中'
-  if (status === 'in_progress') return '发布中'
-  if (status === 'completed') return '已完成'
-  if (status === 'failed') return '失败'
-  if (status === 'cancelled') return '已取消'
-  return '未知'
+  if (status === 'waiting') return t('autoUi.k_bd3488d0a929')
+  if (status === 'in_progress') return t('autoUi.k_7e4da0f6e774')
+  if (status === 'completed') return t('autoUi.k_e99b48a29bdf')
+  if (status === 'failed') return t('autoUi.k_3e3c8068bb0e')
+  if (status === 'cancelled') return t('autoUi.k_a5ffdc95eeb0')
+  return t('autoUi.k_d9c32a4c3dda')
 }
 
 function taskFailHint(item: GeelarkPublishTaskSummary) {
   const code = Number(item.failCode || 0)
   if ([20243, 20244, 20252, 20253].includes(code)) {
-    return '音乐未授权或参考音乐不可用，建议切换本地候选项，或改用更保守的音量策略后重试。'
+    return t('autoUi.k_294bd298ff0b')
   }
   if ([20232, 20233, 20234, 20236, 20241, 20256, 20266, 20702, 20703].includes(code)) {
-    return '商品信息校验失败，请检查 Product ID 与 Product Title 是否完整有效。'
+    return t('autoUi.k_1fb52b54daec')
   }
   return ''
 }
@@ -283,7 +286,7 @@ function restorePublishDraft() {
 
 function savePublishDraft() {
   writeLocalJson(LOCAL_GEELARK_PUBLISH_DRAFT_KEY, { ...publishForm })
-  notice.value = '当前发布配置已保存为草稿。'
+  notice.value = t('autoUi.k_65eedfe4ddcc')
   errorText.value = ''
 }
 
@@ -371,7 +374,7 @@ async function loadCandidatesWithFallback(taskItems: GeelarkPublishTaskSummary[]
 async function refreshCandidates(taskItems: GeelarkPublishTaskSummary[] = tasks.value) {
   candidateRefreshing.value = true
   try {
-    await withTimeout(loadCandidatesWithFallback(taskItems), '待发布成片')
+    await withTimeout(loadCandidatesWithFallback(taskItems), t('autoUi.k_f109b5c73a8f'))
   } catch (error: any) {
     if (!isApiNotFoundError(error)) {
       errorText.value = error?.message ?? String(error)
@@ -385,16 +388,28 @@ async function refreshCandidates(taskItems: GeelarkPublishTaskSummary[] = tasks.
 async function loadAll() {
   loading.value = true
   errorText.value = ''
+  pluginReady.value = false
   publishCandidates.value = []
-  accounts.value = readLocalGeelarkAccounts()
-  tasks.value = readLocalGeelarkTasks()
-  musicPresets.value = readLocalMusicPresets()
 
   try {
+    const plugin = await webApiClient.getPlugin('geelark-publisher')
+    pluginReady.value = plugin.status === 'installed' && plugin.runtimeState === 'enabled'
+    if (!pluginReady.value) {
+      errorText.value = t('geelarkPublishCenter.gate.error')
+      accounts.value = []
+      tasks.value = []
+      musicPresets.value = []
+      return
+    }
+
+    accounts.value = readLocalGeelarkAccounts()
+    tasks.value = readLocalGeelarkTasks()
+    musicPresets.value = readLocalMusicPresets()
+
     const [accountsResult, tasksResult, musicResult] = await Promise.allSettled([
-      withTimeout(webApiClient.listGeelarkPublisherAccounts(), '发布账号'),
-      withTimeout(webApiClient.listGeelarkPublishTasks(), '发布任务'),
-      withTimeout(webApiClient.listGeelarkMusicPresets(), '音乐候选项'),
+      withTimeout(webApiClient.listGeelarkPublisherAccounts(), t('autoUi.k_f6afab4f2d29')),
+      withTimeout(webApiClient.listGeelarkPublishTasks(), t('autoUi.k_81e993ba8045')),
+      withTimeout(webApiClient.listGeelarkMusicPresets(), t('autoUi.k_6bcc3e938805')),
     ])
 
     if (accountsResult.status === 'fulfilled') {
@@ -420,7 +435,7 @@ async function loadAll() {
 
     try {
       const remoteCandidates = ensureArray<GeelarkClonePublishCandidate>(
-        await withTimeout(webApiClient.listGeelarkPublishCandidates(), '待发布成片'),
+        await withTimeout(webApiClient.listGeelarkPublishCandidates(), t('autoUi.k_f109b5c73a8f')),
       )
       if (remoteCandidates.length) {
         publishCandidates.value = remoteCandidates
@@ -430,12 +445,17 @@ async function loadAll() {
         errorText.value = String(error?.message || error || '')
       }
     }
+  } catch (error: any) {
+    accounts.value = []
+    tasks.value = []
+    musicPresets.value = []
+    errorText.value = error?.message ?? String(error)
   } finally {
     loading.value = false
     syncSelectedCandidate()
   }
 
-  if (!publishCandidates.value.length) {
+  if (pluginReady.value && !publishCandidates.value.length) {
     void refreshCandidates(tasks.value)
   }
 }
@@ -463,7 +483,7 @@ function buildFallbackTitle() {
   if (language === 'id-ID' || language === 'ms-MY') {
     return [productTitle || sourceTitle, productId ? `Produk ${productId}` : '', 'Belanja sekarang'].filter(Boolean).join(' · ')
   }
-  return [productTitle || sourceTitle, productId ? ('商品 ' + productId) : '', '同款分享'].filter(Boolean).join(' · ')
+  return [productTitle || sourceTitle, productId ? (t('autoUi.k_03d27561da75') + productId) : '', t('autoUi.k_5aa53645b92e')].filter(Boolean).join(' · ')
 }
 
 function containsCjk(text: string) {
@@ -501,11 +521,11 @@ async function generateTitle() {
     const primary = String(result.content || result.candidates?.[0] || '').trim()
     const matched = isPublishTitleLanguageMatched(primary)
     publishForm.videoDesc = matched ? primary : buildFallbackTitle()
-    notice.value = matched ? 'AI 标题已生成，可继续手动修改。' : 'AI 返回语言不匹配，已按所选语言使用本地模板回填。'
+    notice.value = matched ? t('autoUi.k_0b82f85b5790') : t('autoUi.k_e96f223e487f')
   } catch (error: any) {
     publishForm.videoDesc = buildFallbackTitle()
     if (isApiNotFoundError(error)) {
-      notice.value = '当前运行实例未提供 AI 标题接口，已使用本地标题模板回填。'
+      notice.value = t('autoUi.k_b0a9036d5d90')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -539,7 +559,7 @@ function importFromTemplate() {
     publishForm.productTitle = latestTask.productTitle || publishForm.productTitle
     publishForm.refVideoId = latestTask.refVideoId || publishForm.refVideoId
   }
-  notice.value = '已导入当前成片可复用配置。'
+  notice.value = t('autoUi.k_001646c3c0a0')
   errorText.value = ''
 }
 
@@ -571,7 +591,7 @@ async function saveMusicPreset() {
     musicPresets.value = ensureArray<GeelarkMusicPreset>(await webApiClient.listGeelarkMusicPresets())
     writeLocalMusicPresets(musicPresets.value)
     resetMusicPresetForm()
-    notice.value = '音乐候选项已保存。'
+    notice.value = t('autoUi.k_4d42b62a6f5c')
   } catch (error: any) {
     if (isApiNotFoundError(error)) {
       const now = Date.now()
@@ -591,7 +611,7 @@ async function saveMusicPreset() {
       writeLocalMusicPresets(nextItems)
       musicPresets.value = nextItems
       resetMusicPresetForm()
-      notice.value = '音乐候选项已保存到本地。'
+      notice.value = t('autoUi.k_ace216fc653e')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -609,14 +629,14 @@ async function removeMusicPreset(id: string) {
     musicPresets.value = ensureArray<GeelarkMusicPreset>(await webApiClient.listGeelarkMusicPresets())
     writeLocalMusicPresets(musicPresets.value)
     if (editingMusicPresetId.value === id) resetMusicPresetForm()
-    notice.value = '音乐候选项已删除。'
+    notice.value = t('autoUi.k_1706c28c3c1e')
   } catch (error: any) {
     if (isApiNotFoundError(error)) {
       const nextItems = readLocalMusicPresets().filter((item) => item.id !== id)
       writeLocalMusicPresets(nextItems)
       musicPresets.value = nextItems
       if (editingMusicPresetId.value === id) resetMusicPresetForm()
-      notice.value = '音乐候选项已从本地删除。'
+      notice.value = t('autoUi.k_c9b9addcd24e')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -628,11 +648,11 @@ async function removeMusicPreset(id: string) {
 
 async function publishSelected() {
   if (!selectedCandidate.value) {
-    errorText.value = '请先选择待发布成片。'
+    errorText.value = t('autoUi.k_0b1146f9f41d')
     return
   }
   if (!publishForm.publishAccountId) {
-    errorText.value = '请先选择发布账号。'
+    errorText.value = t('autoUi.k_0f8c6014d29e')
     return
   }
 
@@ -657,7 +677,7 @@ async function publishSelected() {
     })
     tasks.value = [item, ...tasks.value.filter((task) => task.id !== item.id)]
     writeLocalGeelarkTasks(tasks.value)
-    notice.value = '发布任务已提交。'
+    notice.value = t('autoUi.k_5a7fbde7268c')
     resetPublishForm()
     await refreshCandidates(tasks.value)
   } catch (error: any) {
@@ -675,10 +695,10 @@ async function syncTask(id: string) {
     const item = await webApiClient.syncGeelarkPublishTask(id)
     tasks.value = tasks.value.map((task) => (task.id === id ? item : task))
     writeLocalGeelarkTasks(tasks.value)
-    notice.value = '任务状态已同步。'
+    notice.value = t('autoUi.k_6935a97cbc8c')
   } catch (error: any) {
     if (isApiNotFoundError(error)) {
-      notice.value = '当前运行实例未提供任务同步接口。'
+      notice.value = t('autoUi.k_07701b9cb7ce')
       errorText.value = ''
     } else {
       errorText.value = error?.message ?? String(error)
@@ -704,44 +724,42 @@ onMounted(() => {
       <div class="hero-main">
         <button class="back-link" type="button" @click="openSettings">
           <ArrowLeft class="h-4 w-4" />
-          返回插件市场
+          {{ t('geelarkPublishCenter.hero.back') }}
         </button>
         <div class="hero-title-row">
           <div class="hero-copy">
-            <h1>发布工作台</h1>
-            <p>发布、管理和跟踪你的插件任务与插件配置，一切尽在掌控。</p>
+            <h1>{{ t('geelarkPublishCenter.hero.title') }}</h1>
+            <p>{{ t('geelarkPublishCenter.hero.desc') }}</p>
           </div>
-          <div class="hero-stats">
+          <div v-if="pluginReady" class="hero-stats">
             <span class="hero-stat hero-stat--purple">
               <span class="hero-stat__icon"><Sparkles class="h-4 w-4" /></span>
               <div>
                 <strong>{{ publishCandidates.length }}</strong>
-                <small>待发布</small>
+                <small>{{ t('autoUi.k_0654678dec5f') }}</small>
               </div>
             </span>
             <span class="hero-stat hero-stat--blue">
               <span class="hero-stat__icon"><UserRound class="h-4 w-4" /></span>
               <div>
                 <strong>{{ activeAccounts.length }}</strong>
-                <small>账号</small>
+                <small>{{ t('autoUi.k_901384917949') }}</small>
               </div>
             </span>
             <span class="hero-stat hero-stat--green">
               <span class="hero-stat__icon"><ShieldCheck class="h-4 w-4" /></span>
               <div>
                 <strong>{{ tasks.length }}</strong>
-                <small>任务</small>
+                <small>{{ t('autoUi.k_3172b317f9fc') }}</small>
               </div>
             </span>
           </div>
         </div>
       </div>
-      <div class="hero-actions">
-        <span class="hero-refresh-meta">上次刷新：{{ lastRefreshText }}</span>
+      <div v-if="pluginReady" class="hero-actions">
+        <span class="hero-refresh-meta">{{ t('autoUi.k_aacd708347a8') }}{{ lastRefreshText }}</span>
         <button class="ghost-button hero-refresh-button" type="button" @click="loadAll">
-          <RefreshCw class="h-4 w-4" />
-          刷新数据
-        </button>
+          <RefreshCw class="h-4 w-4" /> {{ t('autoUi.k_048f7692c8a0') }} </button>
       </div>
     </section>
 
@@ -750,25 +768,25 @@ onMounted(() => {
 
     <section v-if="loading" class="loading-card">
       <LoaderCircle class="h-5 w-5 spin" />
-      <span>正在加载发布中心数据...</span>
+      <span>{{ t('geelarkPublishCenter.hero.loading') }}</span>
     </section>
 
-    <template v-else>
+    <template v-else-if="pluginReady">
       <section class="workspace-layout">
         <article class="panel-card candidate-panel">
           <div class="panel-head">
             <div class="panel-head__copy">
-              <h2>待发布任务</h2>
+              <h2>{{ t('autoUi.k_4f1be97c3e3d') }}</h2>
             </div>
             <div class="candidate-panel__summary">
               <span class="count-badge">{{ publishCandidates.length }}</span>
-              <span v-if="candidateRefreshing" class="summary-hint">刷新中...</span>
+              <span v-if="candidateRefreshing" class="summary-hint">{{ t('autoUi.k_1751688d9519') }}</span>
             </div>
           </div>
 
           <div v-if="!publishCandidates.length" class="empty-inline">
             <Upload class="h-5 w-5" />
-            <span>当前没有待发布成片。只有已生成最终成片且没有成功/进行中发布记录的项目会显示在这里。</span>
+            <span>{{ t('autoUi.k_40ffcf85da2d') }}</span>
           </div>
 
           <div v-else class="candidate-list">
@@ -790,7 +808,7 @@ onMounted(() => {
                   <small>{{ formatTime(item.updatedAt) }}</small>
                 </div>
                 <strong>{{ shortPath(item.finalOutputPath) }}</strong>
-                <p>参考素材：{{ item.referenceVideoName || shortPath(item.referenceVideoPath) }}</p>
+                <p>{{ t('autoUi.k_2629bbb744ec') }}{{ item.referenceVideoName || shortPath(item.referenceVideoPath) }}</p>
               </div>
               <div class="candidate-item__meta">
                 <ChevronRight class="h-4 w-4" />
@@ -802,18 +820,16 @@ onMounted(() => {
             <button class="ghost-button candidate-pagination__button" type="button" :disabled="candidatePage <= 1" @click="changeCandidatePage(candidatePage - 1)">
               <ArrowLeft class="h-4 w-4" />
             </button>
-            <span class="candidate-pagination__text">{{ candidatePage }} / {{ candidateTotalPages }} 页</span>
-            <button class="ghost-button candidate-pagination__button" type="button" :disabled="candidatePage >= candidateTotalPages" @click="changeCandidatePage(candidatePage + 1)">
-              下一页
-            </button>
+            <span class="candidate-pagination__text">{{ candidatePage }} / {{ candidateTotalPages }} {{ t('autoUi.k_73422182ab45') }}</span>
+            <button class="ghost-button candidate-pagination__button" type="button" :disabled="candidatePage >= candidateTotalPages" @click="changeCandidatePage(candidatePage + 1)"> {{ t('autoUi.k_67a246a344ae') }} </button>
           </div>
         </article>
 
         <article class="panel-card publish-panel">
           <div class="panel-head">
             <div class="panel-head__copy">
-              <h2>发布面板</h2>
-              <p class="panel-subcopy">完善以下信息并提交发布任务</p>
+              <h2>{{ t('autoUi.k_c2903ef9f803') }}</h2>
+              <p class="panel-subcopy">{{ t('autoUi.k_e332ee564757') }}</p>
             </div>
           </div>
 
@@ -855,7 +871,7 @@ onMounted(() => {
             <div class="selected-preview__action">
               <button class="ghost-button ai-button" type="button" :disabled="generatingTitle || !selectedCandidate" @click="generateTitle">
                 <Sparkles class="h-4 w-4" />
-                {{ generatingTitle ? '生成中...' : 'AI 生成标题' }}
+                {{ generatingTitle ? t('autoUi.k_26eab253a08e') : t('autoUi.k_5adc2759b4bb') }}
               </button>
             </div>
           </div>
@@ -865,27 +881,27 @@ onMounted(() => {
               <section v-if="activePublishStep === 'content'" class="form-section workspace-card">
                 <div class="workspace-card__head">
                   <div>
-                    <strong>发布账号与文案</strong>
-                    <p>选择发布账号并填写发布文案。</p>
+                    <strong>{{ t('autoUi.k_cf7e1fa5b337') }}</strong>
+                    <p>{{ t('autoUi.k_c55065c0e8c5') }}</p>
                   </div>
                 </div>
                 <div class="field-grid">
                   <label class="field field--full">
-                    <span>发布账号</span>
+                    <span>{{ t('autoUi.k_f6afab4f2d29') }}</span>
                     <select v-model="publishForm.publishAccountId">
-                      <option value="">请选择发布账号</option>
+                      <option value="">{{ t('autoUi.k_88a6f17b9a1d') }}</option>
                       <option v-for="item in activeAccounts" :key="item.id" :value="item.id">{{ item.name }} / {{ item.cloudPhoneName }}</option>
                     </select>
                   </label>
                   <label class="field">
-                    <span>文案语言</span>
+                    <span>{{ t('autoUi.k_d7b1b6f1a6a7') }}</span>
                     <select v-model="publishForm.contentLanguage">
                       <option v-for="item in PUBLISH_LANGUAGE_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option>
                     </select>
                   </label>
                   <label class="field field--full">
-                    <span>发布标题 / 文案</span>
-                    <textarea v-model="publishForm.videoDesc" rows="4" placeholder="可先用 AI 生成，再手动微调"></textarea>
+                    <span>{{ t('autoUi.k_d3c2609020fc') }}</span>
+                    <textarea v-model="publishForm.videoDesc" rows="4" :placeholder="t('autoUi.k_da110e3d2cc6')"></textarea>
                   </label>
                 </div>
               </section>
@@ -893,18 +909,18 @@ onMounted(() => {
               <section v-if="activePublishStep === 'goods'" class="form-section workspace-card">
                 <div class="workspace-card__head">
                   <div>
-                    <strong>商品信息</strong>
-                    <p>设置 TikTok Shop 商品信息与展示标题。</p>
+                    <strong>{{ t('autoUi.k_751c5853892e') }}</strong>
+                    <p>{{ t('autoUi.k_c8e13b4cf69f') }}</p>
                   </div>
                 </div>
                 <div class="field-grid">
                   <label class="field">
-                    <span>商品 ID</span>
-                    <input v-model="publishForm.productId" type="text" placeholder="例如：498614361651" />
+                    <span>{{ t('autoUi.k_dffd0cb74c18') }}</span>
+                    <input v-model="publishForm.productId" type="text" :placeholder="t('autoUi.k_cb6fc8edd673')" />
                   </label>
                   <label class="field">
-                    <span>商品展示标题</span>
-                    <input v-model="publishForm.productTitle" type="text" placeholder="用于 TikTok Shop 展示标题" />
+                    <span>{{ t('autoUi.k_7cb2abcdb2fe') }}</span>
+                    <input v-model="publishForm.productTitle" type="text" :placeholder="t('autoUi.k_5d32389a465a')" />
                   </label>
                 </div>
               </section>
@@ -912,36 +928,36 @@ onMounted(() => {
               <section v-if="activePublishStep === 'music'" class="form-section workspace-card">
                 <div class="workspace-card__head">
                   <div>
-                    <strong>策略设置</strong>
-                    <p>配置音乐引用和音量策略。</p>
+                    <strong>{{ t('autoUi.k_f99830ac6219') }}</strong>
+                    <p>{{ t('autoUi.k_3e23e3529066') }}</p>
                   </div>
                 </div>
                 <div class="field-grid">
                   <label class="field">
-                    <span>音乐策略</span>
+                    <span>{{ t('autoUi.k_4f562ba4d396') }}</span>
                     <select v-model="publishForm.musicMode">
-                      <option value="volume_only">只使用音量策略</option>
-                      <option value="library_ref">使用本地音乐候选项</option>
-                      <option value="manual_ref">手动填写参考视频 ID</option>
+                      <option value="volume_only">{{ t('autoUi.k_266fcbae3a07') }}</option>
+                      <option value="library_ref">{{ t('autoUi.k_ee6d8a648daa') }}</option>
+                      <option value="manual_ref">{{ t('autoUi.k_d41002fbce28') }}</option>
                     </select>
                   </label>
                   <label v-if="publishForm.musicMode === 'library_ref'" class="field">
-                    <span>本地音乐候选项</span>
+                    <span>{{ t('autoUi.k_c6d3aa28f8c7') }}</span>
                     <select v-model="publishForm.musicPresetId" @change="onMusicPresetChange">
-                      <option value="">请选择候选项</option>
+                      <option value="">{{ t('autoUi.k_b7fabc277ec5') }}</option>
                       <option v-for="item in musicPresets" :key="item.id" :value="item.id">{{ item.label }} / {{ item.refVideoId }}</option>
                     </select>
                   </label>
                   <label v-if="publishForm.musicMode !== 'volume_only'" class="field field--full">
-                    <span>参考视频 ID</span>
-                    <input v-model="publishForm.refVideoId" type="text" placeholder="用于同款音乐或参考音轨" />
+                    <span>{{ t('autoUi.k_9932971b51b4') }}</span>
+                    <input v-model="publishForm.refVideoId" type="text" :placeholder="t('autoUi.k_c968a13f3c79')" />
                   </label>
                   <label class="field">
-                    <span>同款音量</span>
+                    <span>{{ t('autoUi.k_fb134163e07a') }}</span>
                     <input v-model.number="publishForm.sameVideoVolume" type="number" min="0" max="100" step="1" />
                   </label>
                   <label class="field">
-                    <span>原视频音量</span>
+                    <span>{{ t('autoUi.k_4a40016f6b0e') }}</span>
                     <input v-model.number="publishForm.sourceVideoVolume" type="number" min="0" max="100" step="1" />
                   </label>
                 </div>
@@ -950,23 +966,21 @@ onMounted(() => {
               <section v-if="activePublishStep === 'options'" class="form-section workspace-card">
                 <div class="workspace-card__head">
                   <div>
-                    <strong>附加选项</strong>
-                    <p>控制 AI 标记、分享链接回收和最终提交提醒。</p>
+                    <strong>{{ t('autoUi.k_dc7f89c5e018') }}</strong>
+                    <p>{{ t('autoUi.k_6c33094bcd3a') }}</p>
                   </div>
                 </div>
                 <div class="meta-row">
                   <label class="check-row">
                     <input v-model="publishForm.markAI" type="checkbox" />
-                    <span>标记 AI 内容</span>
+                    <span>{{ t('autoUi.k_a6973340dd3d') }}</span>
                   </label>
                   <label class="check-row">
                     <input v-model="publishForm.needShareLink" type="checkbox" />
-                    <span>回收分享链接</span>
+                    <span>{{ t('autoUi.k_a100f3f1b07e') }}</span>
                   </label>
                 </div>
-                <div class="hint-card">
-                  音乐失败码 20243 / 20244 / 20252 / 20253 出现时，优先切换候选项或降低音量策略。
-                </div>
+                <div class="hint-card"> {{ t('autoUi.k_60f1c166ff50') }} </div>
               </section>
             </div>
 
@@ -974,30 +988,30 @@ onMounted(() => {
               <section class="side-card quick-card">
                 <div class="workspace-card__head">
                   <div>
-                    <strong>快捷操作</strong>
-                    <p>复用常用发布动作。</p>
+                    <strong>{{ t('autoUi.k_309c0a9e6282') }}</strong>
+                    <p>{{ t('autoUi.k_41723d5cfa5d') }}</p>
                   </div>
                 </div>
                 <button class="shortcut-button" type="button" :disabled="!selectedCandidate" @click="importFromTemplate">
                   <span class="shortcut-button__icon"><Package2 class="h-4 w-4" /></span>
                   <span class="shortcut-button__copy">
-                    <strong>从模板导入</strong>
-                    <small>快速使用已有发布模板</small>
+                    <strong>{{ t('autoUi.k_721aa05e33b1') }}</strong>
+                    <small>{{ t('autoUi.k_ac6f9e6169ad') }}</small>
                   </span>
                   <ChevronRight class="h-4 w-4" />
                 </button>
                 <button class="shortcut-button" type="button" @click="savePublishDraft">
                   <span class="shortcut-button__icon"><Save class="h-4 w-4" /></span>
                   <span class="shortcut-button__copy">
-                    <strong>保存为草稿</strong>
-                    <small>暂存当前配置</small>
+                    <strong>{{ t('autoUi.k_7320d8885687') }}</strong>
+                    <small>{{ t('autoUi.k_878590943b3f') }}</small>
                   </span>
                   <ChevronRight class="h-4 w-4" />
                 </button>
               </section>
 
               <button class="primary-button primary-button--wide next-step-button" type="button" :disabled="publishing || !selectedCandidate" @click="goNextStep">
-                {{ currentStepIndex < publishSteps.length - 1 ? `下一步：${publishSteps[currentStepIndex + 1].title}` : (publishing ? '提交中...' : '提交发布任务') }}
+                {{ currentStepIndex < publishSteps.length - 1 ? t('autoUi.k_646598c361ae', { p0: publishSteps[currentStepIndex + 1].title }) : (publishing ? t('autoUi.k_3a1624e3e681') : t('autoUi.k_e9d29123e9e3')) }}
               </button>
             </aside>
           </div>
@@ -1008,32 +1022,32 @@ onMounted(() => {
         <article class="panel-card utility-panel">
           <div class="panel-head">
             <div>
-              <h2>本地音乐候选池</h2>
-              <p class="panel-subcopy">把常用参考视频 ID 收进本地候选池，减少每次重复填写。</p>
+              <h2>{{ t('autoUi.k_3f0fedc0b717') }}</h2>
+              <p class="panel-subcopy">{{ t('autoUi.k_fd86b1a290b2') }}</p>
             </div>
             <Music4 class="h-5 w-5 panel-icon" />
           </div>
 
           <div class="field-grid">
             <label class="field">
-              <span>候选项名称</span>
-              <input v-model="musicPresetForm.label" type="text" placeholder="例如：耳环上身同款 BGM 01" />
+              <span>{{ t('autoUi.k_34b3071ebd12') }}</span>
+              <input v-model="musicPresetForm.label" type="text" :placeholder="t('autoUi.k_79969aa2f219')" />
             </label>
             <label class="field">
-              <span>参考视频 ID</span>
-              <input v-model="musicPresetForm.refVideoId" type="text" placeholder="填入可复用的 refVideoId" />
+              <span>{{ t('autoUi.k_9932971b51b4') }}</span>
+              <input v-model="musicPresetForm.refVideoId" type="text" :placeholder="t('autoUi.k_02c1fe03182e')" />
             </label>
             <label class="field field--full">
-              <span>备注</span>
-              <input v-model="musicPresetForm.remark" type="text" placeholder="记录适用商品、音乐来源或授权说明" />
+              <span>{{ t('autoUi.k_e0361480e3a5') }}</span>
+              <input v-model="musicPresetForm.remark" type="text" :placeholder="t('autoUi.k_5a487d29f33d')" />
             </label>
           </div>
 
           <div class="inline-actions">
             <button class="primary-button" type="button" :disabled="savingMusicPreset || !musicPresetForm.label || !musicPresetForm.refVideoId" @click="saveMusicPreset">
-              {{ editingMusicPresetId ? '更新候选项' : '新增候选项' }}
+              {{ editingMusicPresetId ? t('autoUi.k_2f511e66fbf9') : t('autoUi.k_b1cee46d8b79') }}
             </button>
-            <button v-if="editingMusicPresetId" class="ghost-button" type="button" @click="resetMusicPresetForm">取消编辑</button>
+            <button v-if="editingMusicPresetId" class="ghost-button" type="button" @click="resetMusicPresetForm">{{ t('autoUi.k_c698df948dd9') }}</button>
           </div>
 
           <div v-if="musicPresets.length" class="mini-list">
@@ -1041,45 +1055,45 @@ onMounted(() => {
               <div>
                 <strong>{{ item.label }}</strong>
                 <p>{{ item.refVideoId }}</p>
-                <small>{{ item.remark || '无备注' }}</small>
+                <small>{{ item.remark || t('autoUi.k_4823293f83bd') }}</small>
               </div>
               <div class="mini-item__actions">
-                <button class="ghost-button" type="button" @click="editMusicPreset(item)">编辑</button>
-                <button class="danger-button" type="button" @click="removeMusicPreset(item.id)">删除</button>
+                <button class="ghost-button" type="button" @click="editMusicPreset(item)">{{ t('autoUi.k_a7f814c0a40d') }}</button>
+                <button class="danger-button" type="button" @click="removeMusicPreset(item.id)">{{ t('autoUi.k_3755f56f2f83') }}</button>
               </div>
             </div>
           </div>
-          <div v-else class="empty-card">当前没有音乐候选项，可先手动维护几个常用参考视频 ID。</div>
+          <div v-else class="empty-card">{{ t('autoUi.k_2ee61c8e2044') }}</div>
         </article>
 
         <article class="panel-card record-panel">
           <div class="panel-head">
             <div>
-              <h2>发布记录</h2>
-              <p class="panel-subcopy">查看最近提交的发布状态、失败原因和回刷结果。</p>
+              <h2>{{ t('autoUi.k_f37ecd8ac3d6') }}</h2>
+              <p class="panel-subcopy">{{ t('autoUi.k_862dcc21e281') }}</p>
             </div>
             <Wand2 class="h-5 w-5 panel-icon" />
           </div>
 
           <div v-if="!tasks.length" class="empty-inline">
             <Wrench class="h-5 w-5" />
-            <span>还没有发布记录。选择一条成片后提交发布任务，这里会显示最近状态。</span>
+            <span>{{ t('autoUi.k_240518e498a1') }}</span>
           </div>
 
           <div v-else class="task-list">
             <div v-for="item in tasks" :key="item.id" class="task-row">
               <div class="task-row__main">
                 <strong>{{ item.cloudPhoneName || item.cloudPhoneId }}</strong>
-                <p>{{ item.videoDesc || '未填写发布文案' }}</p>
+                <p>{{ item.videoDesc || t('autoUi.k_4402f7ddf2bc') }}</p>
                 <small>{{ shortPath(item.sourceVideoPath) }}</small>
-                <small v-if="item.productId || item.refVideoId">商品：{{ item.productId || '--' }} / 参考视频：{{ item.refVideoId || '--' }}</small>
+                <small v-if="item.productId || item.refVideoId">{{ t('autoUi.k_d051be6685c1') }}{{ item.productId || '--' }} {{ t('autoUi.k_4c4b93b79f55') }}{{ item.refVideoId || '--' }}</small>
                 <small v-if="taskFailHint(item)" class="status-fail">{{ taskFailHint(item) }}</small>
               </div>
               <div class="task-row__meta">
                 <span class="status-pill">{{ taskStatusText(item.status) }}</span>
                 <span v-if="item.failDesc" class="status-fail">{{ item.failDesc }}</span>
                 <button class="ghost-button" type="button" :disabled="syncingTaskId === item.id" @click="syncTask(item.id)">
-                  {{ syncingTaskId === item.id ? '同步中...' : '刷新状态' }}
+                  {{ syncingTaskId === item.id ? t('autoUi.k_ed1af5ec30c4') : t('autoUi.k_7cc7f07a2c03') }}
                 </button>
               </div>
             </div>
@@ -1087,6 +1101,14 @@ onMounted(() => {
         </article>
       </section>
     </template>
+    <section v-else class="loading-card">
+      <ShieldCheck class="h-5 w-5" />
+      <div>
+        <strong>{{ t('geelarkPublishCenter.gate.title') }}</strong>
+        <p>{{ t('geelarkPublishCenter.gate.desc') }}</p>
+      </div>
+      <button class="primary-button" type="button" @click="openSettings">{{ t('geelarkPublishCenter.gate.back') }}</button>
+    </section>
   </div>
 </template>
 

@@ -1,6 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   ArrowLeft,
   Check,
@@ -96,6 +97,7 @@ type FeedbackTone = 'info' | 'success' | 'error'
 
 const route = useRoute()
 const router = useRouter()
+const { t: tr } = useI18n()
 const list = ref<Product[]>([])
 const previewOpen = ref(false)
 const previewSrc = ref<string | null>(null)
@@ -116,18 +118,18 @@ const feedback = ref('')
 const feedbackTone = ref<FeedbackTone>('info')
 const galleryViewMode = ref<GalleryViewMode>('grid')
 
-const productTypeOptionsV2: Array<{ value: ProductType; label: string }> = [
-  { value: 'phone_case', label: '手机壳' },
-  { value: 'earring', label: '耳环' },
-  { value: 'necklace', label: '项链' },
-  { value: 'ring', label: '戒指' },
-  { value: 'bracelet', label: '手链' },
-  { value: 'clothes', label: '服饰' },
-  { value: 'bag', label: '包袋' },
-  { value: 'shoes', label: '鞋靴' },
-  { value: 'toy', label: '玩具' },
-  { value: 'general', label: '通用商品' },
-]
+const productTypeOptionsV2 = computed<Array<{ value: ProductType; label: string }>>(() => [
+  { value: 'phone_case', label: tr('autoUi.k_afabad5de2c2') },
+  { value: 'earring', label: tr('autoUi.k_329e434a7323') },
+  { value: 'necklace', label: tr('autoUi.k_cf7a4db3d465') },
+  { value: 'ring', label: tr('autoUi.k_669d663512e8') },
+  { value: 'bracelet', label: tr('autoUi.k_6e4748e0e92c') },
+  { value: 'clothes', label: tr('autoUi.k_c430623070e3') },
+  { value: 'bag', label: tr('autoUi.k_e71c5a827969') },
+  { value: 'shoes', label: tr('autoUi.k_4c2e7ca1d1a3') },
+  { value: 'toy', label: tr('autoUi.k_dc0613dae17b') },
+  { value: 'general', label: tr('autoUi.k_3843dd0edcb0') },
+])
 
 const productId = computed(() => String(route.params.productId || '').trim())
 const selected = computed(() => list.value.find((item) => item.id === productId.value) ?? null)
@@ -195,33 +197,33 @@ const productFlowActiveStep = computed(() => {
   return 2
 })
 
-const pageTitle = computed(() => selected.value?.name || '未找到商品')
+const pageTitle = computed(() => selected.value?.name || tr('autoUi.k_b4b756c20051'))
 const pageSubtitle = computed(() => {
-  if (!selected.value) return '\u5f53\u524d\u5546\u54c1\u4e0d\u5b58\u5728\uff0c\u53ef\u80fd\u5df2\u7ecf\u88ab\u5220\u9664\u3002'
-  if (!hasImages.value) return '\u8bf7\u5148\u4e0a\u4f20 1 \u5f20\u767d\u5e95\u3001\u65e0\u906e\u6321\u7684\u5546\u54c1\u56fe\u3002'
-  if (refreshingAnalysisBoard.value) return '系统正在生成深层多角度图，并会在完成后自动补齐 Product DNA。'
-  if (refreshingProductAnalysis.value) return '系统正在分析商品结构并提取 Product DNA，不会重新生成深层多角度图。'
-  if (analysisBoardReady.value) return '深层多角度图与 Product DNA 已生成，可继续进入 /clone。'
-  if (analysisBoardStageStatus.value === 'processing') return '系统正在生成深层多角度图，请稍后刷新查看结果。'
-  if (analysisBoardStageStatus.value === 'failed') return '深层多角度图生成失败：仅支持白底纯商品单图，请更换图片后重试。'
-  if (canonicalStageStatus.value === 'processing') return '\u7cfb\u7edf\u6b63\u5728\u6821\u9a8c\u767d\u5e95\u7eaf\u5546\u54c1\u56fe\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0\u67e5\u770b\u7ed3\u679c\u3002'
-  if (canonicalStageStatus.value === 'failed') return '\u767d\u5e95\u7eaf\u5546\u54c1\u56fe\u6821\u9a8c\u672a\u901a\u8fc7\uff1a\u8bf7\u66f4\u6362\u767d\u5e95\u3001\u65e0\u906e\u6321\u3001\u7eaf\u5546\u54c1\u5355\u56fe\u3002'
-  return '商品图已上传。点击“重新生成深层多角度图”开始手动生成。'
+  if (!selected.value) return tr('autoUi.k_c2dcc0b6ff43')
+  if (!hasImages.value) return tr('autoUi.k_d96e8da326c5')
+  if (refreshingAnalysisBoard.value) return tr('autoUi.k_63926f53edb4')
+  if (refreshingProductAnalysis.value) return tr('autoUi.k_4583ae4129ac')
+  if (analysisBoardReady.value) return tr('autoUi.k_a5fc269f8641')
+  if (analysisBoardStageStatus.value === 'processing') return tr('autoUi.k_b702fef6a092')
+  if (analysisBoardStageStatus.value === 'failed') return tr('autoUi.k_bb3e9fef9764')
+  if (canonicalStageStatus.value === 'processing') return tr('autoUi.k_17851e29d573')
+  if (canonicalStageStatus.value === 'failed') return tr('autoUi.k_648b525832b3')
+  return tr('autoUi.k_5a9f669f486f')
 })
 const stepItems = computed(() => [
-  { number: 1, title: '\u4e0a\u4f20\u5355\u56fe', desc: hasImages.value ? '\u5df2\u5b8c\u6210' : '\u5f85\u5904\u7406' },
-  { number: 2, title: '\u767d\u5e95\u6821\u9a8c', desc: canonicalStatusLabel(canonicalStageStatus.value) },
-  { number: 3, title: '深层多角度图 + Product DNA', desc: canonicalStatusLabel(analysisBoardStageStatus.value) },
-  { number: 4, title: '\u751f\u6210\u5b8c\u6210', desc: analysisBoardReady.value ? '\u53ef\u590d\u7528' : '\u5f85\u5904\u7406' },
+  { number: 1, title: tr('autoUi.k_376da9f72940'), desc: hasImages.value ? tr('autoUi.k_e99b48a29bdf') : tr('autoUi.k_59a9eb4e6574') },
+  { number: 2, title: tr('autoUi.k_7cc234042ef7'), desc: canonicalStatusLabel(canonicalStageStatus.value) },
+  { number: 3, title: tr('autoUi.k_dce511108f5c'), desc: canonicalStatusLabel(analysisBoardStageStatus.value) },
+  { number: 4, title: tr('autoUi.k_2ff97308c65a'), desc: analysisBoardReady.value ? tr('autoUi.k_ec5baa1975a2') : tr('autoUi.k_59a9eb4e6574') },
 ])
 const actionStatusText = computed(() => {
-  if (refreshingAnalysisBoard.value) return '正在生成深层多角度图并同步补齐 DNA'
-  if (refreshingProductAnalysis.value) return '正在获取 Product DNA'
+  if (refreshingAnalysisBoard.value) return tr('autoUi.k_7ac7d958f450')
+  if (refreshingProductAnalysis.value) return tr('autoUi.k_169b2ea3be23')
   if (feedback.value) return feedback.value
-  if (analysisBoardStageStatus.value === 'processing') return '深层多角度图任务进行中'
-  if (analysisBoardStageStatus.value === 'failed') return '深层多角度图生成失败，可查看下方诊断'
-  if (productAnalysisSnapshot.value) return '深层多角度图与 Product DNA 已可复用'
-  return '等待手动触发生成'
+  if (analysisBoardStageStatus.value === 'processing') return tr('autoUi.k_5e6d2d976a9f')
+  if (analysisBoardStageStatus.value === 'failed') return tr('autoUi.k_d05c9b150d11')
+  if (productAnalysisSnapshot.value) return tr('autoUi.k_733b1066d118')
+  return tr('autoUi.k_624ee6312a09')
 })
 
 function toFileUrl(filePath: string) {
@@ -245,32 +247,32 @@ function resolveProductCoverPath(product: Product | null | undefined) {
 }
 
 function canonicalStatusLabel(status?: Product['canonicalSourceStatus']) {
-  if (status === 'done') return '\u5df2\u5b8c\u6210'
-  if (status === 'processing') return '\u5904\u7406\u4e2d'
-  if (status === 'failed') return '\u5931\u8d25'
-  return '\u5f85\u5904\u7406'
+  if (status === 'done') return tr('autoUi.k_e99b48a29bdf')
+  if (status === 'processing') return tr('autoUi.k_fcb979ef0b91')
+  if (status === 'failed') return tr('autoUi.k_3e3c8068bb0e')
+  return tr('autoUi.k_59a9eb4e6574')
 }
 function canonicalStatusValue(status?: Product['canonicalSourceStatus']) {
-  if (status === 'done') return '\u5df2\u5b8c\u6210'
-  if (status === 'processing') return '\u5904\u7406\u4e2d'
-  if (status === 'failed') return '\u5931\u8d25'
-  return '\u5f85\u5904\u7406'
+  if (status === 'done') return tr('autoUi.k_e99b48a29bdf')
+  if (status === 'processing') return tr('autoUi.k_fcb979ef0b91')
+  if (status === 'failed') return tr('autoUi.k_3e3c8068bb0e')
+  return tr('autoUi.k_59a9eb4e6574')
 }
 function canonicalStatusHint(status?: Product['canonicalSourceStatus']) {
-  if (status === 'done') return '\u767d\u5e95\u7eaf\u5546\u54c1\u56fe\u6821\u9a8c\u901a\u8fc7\uff0c\u53ef\u7ee7\u7eed\u751f\u6210\u591a\u89d2\u5ea6\u5206\u6790\u753b\u677f\u3002'
-  if (status === 'processing') return '\u7cfb\u7edf\u6b63\u5728\u6821\u9a8c\u767d\u5e95\u7eaf\u5546\u54c1\u56fe\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0\u3002'
-  if (status === 'failed') return '\u767d\u5e95\u7eaf\u5546\u54c1\u56fe\u6821\u9a8c\u672a\u901a\u8fc7\uff0c\u8bf7\u66f4\u6362\u767d\u5e95\u3001\u65e0\u906e\u6321\u3001\u7eaf\u5546\u54c1\u5355\u56fe\u3002'
-  return '\u5148\u4e0a\u4f20\u5355\u5f20\u5546\u54c1\u56fe\uff0c\u518d\u624b\u52a8\u70b9\u51fb\u751f\u6210\u3002'
+  if (status === 'done') return tr('autoUi.k_594fa15cbdaa')
+  if (status === 'processing') return tr('autoUi.k_f164b8f467c2')
+  if (status === 'failed') return tr('autoUi.k_1d487b742dea')
+  return tr('autoUi.k_750ec810852f')
 }
 
 function canonicalDiagnosticStatusLabel(status: ProductCanonicalDiagnostic['status']) {
-  if (status === 'sanitized') return '已生成深层多角度图'
-  if (status === 'kept') return '保留原图'
-  return '处理失败'
+  if (status === 'sanitized') return tr('autoUi.k_0601341b26ac')
+  if (status === 'kept') return tr('autoUi.k_ef299d4cdd93')
+  return tr('autoUi.k_763284f0fbc6')
 }
 
 function productTypeLabel(type: ProductType) {
-  return productTypeOptionsV2.find((item) => item.value === type)?.label ?? '通用商品'
+  return productTypeOptionsV2.value.find((item) => item.value === type)?.label ?? tr('autoUi.k_3843dd0edcb0')
 }
 
 function shortFileName(filePath?: string) {
@@ -345,7 +347,7 @@ async function saveProductName() {
   const nextName = nameDraft.value.trim()
   if (!nextName) {
     feedbackTone.value = 'error'
-    feedback.value = '商品名称不能为空'
+    feedback.value = tr('autoUi.k_b19642d6c9dd')
     return
   }
   if (nextName === selected.value.name) {
@@ -359,10 +361,10 @@ async function saveProductName() {
     await saveProductPatch({ name: nextName })
     editingName.value = false
     feedbackTone.value = 'success'
-    feedback.value = '商品名称已更新。'
+    feedback.value = tr('autoUi.k_2f0a28677465')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '修改商品名称失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_3f51890ceb7e'))
   } finally {
     savingName.value = false
   }
@@ -403,10 +405,10 @@ async function saveProductType() {
     await saveProductPatch({ type: typeDraft.value })
     editingType.value = false
     feedbackTone.value = 'success'
-    feedback.value = '商品类型已更新。'
+    feedback.value = tr('autoUi.k_6b8c653a9458')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '修改商品类型失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_4e0d70198039'))
   } finally {
     savingType.value = false
   }
@@ -429,7 +431,7 @@ async function uploadImages() {
       | undefined
     const pickFiles = pickFilesOverride ?? window.api.pickFiles
     const paths = (await pickFiles({
-      title: '选择商品图片素材',
+      title: tr('autoUi.k_0f6e4fcf79f7'),
       multiple: false,
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
     })) as string[]
@@ -477,10 +479,10 @@ async function uploadImages() {
     })
     await refresh()
     feedbackTone.value = 'success'
-    feedback.value = `已上传 ${nextImages.length} 张图片。`
+    feedback.value = tr('autoUi.k_ce0fd017d226', { p0: nextImages.length })
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '上传图片失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_1d0e79b2f6d0'))
   } finally {
     uploading.value = false
   }
@@ -503,10 +505,10 @@ async function setCover(imageId: string) {
       livePhotoReferenceImagePath: selected.value.livePhotoReferenceImagePath || cover?.filePath,
     })
     feedbackTone.value = 'success'
-    feedback.value = '封面已更新。'
+    feedback.value = tr('autoUi.k_efcd07809518')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '设置封面失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_9b5c3c8f2f43'))
   }
 }
 
@@ -522,10 +524,10 @@ async function removeImage(imageId: string) {
       livePhotoReferenceImagePath: '',
     })
     feedbackTone.value = 'success'
-    feedback.value = '标准原图已删除。'
+    feedback.value = tr('autoUi.k_b5d5bf6cbedf')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '删除图片失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_d04f16a549c8'))
   }
 }
 
@@ -537,10 +539,10 @@ async function saveRemark() {
   try {
     await saveProductPatch({ remark: remarkDraft.value })
     feedbackTone.value = 'success'
-    feedback.value = '备注已保存。'
+    feedback.value = tr('autoUi.k_856480e2c5e1')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '保存备注失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_5a7a18ede132'))
   } finally {
     savingRemark.value = false
   }
@@ -557,17 +559,17 @@ async function setLivePhotoReferenceImage(imageId: string) {
       livePhotoReferenceImagePath: target.filePath,
     })
     feedbackTone.value = 'success'
-    feedback.value = 'Live Photo 产品主参考图已更新。'
+    feedback.value = tr('autoUi.k_dbd461ea511f')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '设置 Live Photo 产品主参考图失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_035c205a5a4c'))
   }
 }
 
 async function refreshAnalysisBoard() {
   if (!selected.value) return
   feedbackTone.value = 'info'
-  feedback.value = '已开始生成深层多角度图，完成后会自动补齐 Product DNA。'
+  feedback.value = tr('autoUi.k_515bf9aa00f7')
   refreshingAnalysisBoard.value = true
   try {
     list.value = list.value.map((item) =>
@@ -585,10 +587,10 @@ async function refreshAnalysisBoard() {
     startCanonicalPolling()
     await refresh()
     feedbackTone.value = 'success'
-    feedback.value = '深层多角度图任务已提交，请等待处理完成后自动刷新结果。'
+    feedback.value = tr('autoUi.k_0690eb48f525')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? '深层多角度图生成失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_54dd3a1f97df'))
   } finally {
     refreshingAnalysisBoard.value = false
   }
@@ -597,16 +599,16 @@ async function refreshAnalysisBoard() {
 async function refreshProductAnalysis() {
   if (!selected.value) return
   feedbackTone.value = 'info'
-  feedback.value = '已开始获取 Product DNA，系统会直接分析当前商品图片与已有结果，不会重生成深层多角度图。'
+  feedback.value = tr('autoUi.k_e019fc9d00d7')
   refreshingProductAnalysis.value = true
   try {
     await window.api.products.refreshProductAnalysis({ productId: selected.value.id })
     await refresh()
     feedbackTone.value = 'success'
-    feedback.value = 'Product DNA 已刷新。'
+    feedback.value = tr('autoUi.k_ae9e8db6b394')
   } catch (error: any) {
     feedbackTone.value = 'error'
-    feedback.value = String(error?.message ?? error ?? 'Product DNA 获取失败')
+    feedback.value = String(error?.message ?? error ?? tr('autoUi.k_8689ec87d769'))
   } finally {
     refreshingProductAnalysis.value = false
   }
@@ -639,7 +641,7 @@ watch(productId, () => {
       <div class="top-area">
         <button class="back-button" data-testid="product-detail-back" type="button" @click="router.push('/products')">
           <ArrowLeft class="h-4 w-4" />
-          <span>返回商品列表</span>
+          <span>{{ tr('autoUi.k_cac1a287bf6d') }}</span>
         </button>
 
         <div class="title-row">
@@ -656,9 +658,9 @@ watch(productId, () => {
                   @keydown.esc.prevent="cancelEditName"
                 />
                 <button class="name-editor__button name-editor__button--primary" :disabled="savingName" data-testid="product-name-save-button" type="button" @click="saveProductName">
-                  {{ savingName ? '保存中...' : '保存' }}
+                  {{ savingName ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
                 </button>
-                <button class="name-editor__button" type="button" @click="cancelEditName">取消</button>
+                <button class="name-editor__button" type="button" @click="cancelEditName">{{ tr('autoUi.k_4d0b4688c787') }}</button>
               </div>
             </template>
             <template v-else>
@@ -675,22 +677,22 @@ watch(productId, () => {
           <div class="hero-actions">
             <button class="hero-button" :disabled="uploading" data-testid="product-upload-button" type="button" @click="uploadImages">
               <Upload class="h-4 w-4" />
-              <span>{{ uploading ? '上传中...' : '上传标准原图' }}</span>
+              <span>{{ uploading ? tr('autoUi.k_ba72be007133') : tr('autoUi.k_45bba1a10c73') }}</span>
             </button>
             <button class="hero-button" :disabled="refreshingAnalysisBoard || !hasImages" data-testid="product-refresh-canonical-button" type="button" @click="refreshAnalysisBoard">
               <Sparkles class="h-4 w-4" />
-              <span>{{ refreshingAnalysisBoard ? '生成中...' : '生成深层多角度图' }}</span>
+              <span>{{ refreshingAnalysisBoard ? tr('autoUi.k_26eab253a08e') : tr('autoUi.k_27a715d5991e') }}</span>
             </button>
             <button class="hero-button hero-button--danger" data-testid="product-delete-button" type="button" @click="removeProduct">
               <Trash2 class="h-4 w-4" />
-              <span>删除商品</span>
+              <span>{{ tr('autoUi.k_1c4e19354208') }}</span>
             </button>
           </div>
         </div>
 
         <div class="summary-strip">
           <div class="summary-item">
-            <span>商品类型</span>
+            <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
             <template v-if="editingType">
               <div class="type-editor">
                 <label class="type-editor__field">
@@ -708,9 +710,9 @@ watch(productId, () => {
                     type="button"
                     @click="saveProductType"
                   >
-                    {{ savingType ? '保存中...' : '保存' }}
+                    {{ savingType ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
                   </button>
-                  <button class="name-editor__button" type="button" @click="cancelEditType">取消</button>
+                  <button class="name-editor__button" type="button" @click="cancelEditType">{{ tr('autoUi.k_4d0b4688c787') }}</button>
                 </div>
               </div>
             </template>
@@ -724,22 +726,22 @@ watch(productId, () => {
             </template>
           </div>
           <div class="summary-item">
-            <span>图片资产</span>
-            <strong>{{ selectedImageCount }} 张</strong>
+            <span>{{ tr('autoUi.k_604dfedb0ba5') }}</span>
+            <strong>{{ selectedImageCount }} {{ tr('autoUi.k_9273cc90ea18') }}</strong>
           </div>
           <div class="summary-item">
-            <span>分析状态</span>
+            <span>{{ tr('autoUi.k_98943466db66') }}</span>
             <strong class="summary-item__status">
               <i :class="`status-dot status-dot--${analysisBoardStageStatus || canonicalStageStatus || 'idle'}`"></i>
-              {{ `深层多角度图 ${canonicalStatusValue(analysisBoardStageStatus)} / Product DNA ${productAnalysisSnapshot ? '已生成' : '待生成'}` }}
+              {{ tr('autoUi.k_d64c41f40928', { p0: canonicalStatusValue(analysisBoardStageStatus), p1: productAnalysisSnapshot ? tr('autoUi.k_79c74f41ca9e') : tr('autoUi.k_aef4104370ae') }) }}
             </strong>
           </div>
           <div class="summary-item">
-            <span>更新时间</span>
+            <span>{{ tr('autoUi.k_093dea88c930') }}</span>
             <strong>{{ formatDateTime(selected.analysisBoardUpdatedAt ?? selected.canonicalSourceUpdatedAt ?? selected.updatedAt) }}</strong>
           </div>
           <div class="summary-item">
-            <span>创建时间</span>
+            <span>{{ tr('autoUi.k_84e3802f60a7') }}</span>
             <strong>{{ formatDateTime(selected.createdAt) }}</strong>
           </div>
           <div class="summary-item">
@@ -754,11 +756,11 @@ watch(productId, () => {
 
       <div class="action-banner" :class="`action-banner--${feedbackTone}`">
         <div class="action-banner__main">
-          <strong>当前操作</strong>
+          <strong>{{ tr('autoUi.k_a30ab87b6869') }}</strong>
           <p>{{ actionStatusText }}</p>
         </div>
-        <span v-if="refreshingAnalysisBoard" class="action-banner__tag">画板生成中</span>
-        <span v-else-if="refreshingProductAnalysis" class="action-banner__tag">DNA 分析中</span>
+        <span v-if="refreshingAnalysisBoard" class="action-banner__tag">{{ tr('autoUi.k_f5394c6ce4af') }}</span>
+        <span v-else-if="refreshingProductAnalysis" class="action-banner__tag">{{ tr('autoUi.k_403c4b72c90e') }}</span>
       </div>
 
       <p v-if="feedback" class="detail-feedback" :class="`detail-feedback--${feedbackTone}`" data-testid="product-detail-feedback">{{ feedback }}</p>
@@ -767,7 +769,7 @@ watch(productId, () => {
         <div class="left-column">
           <article class="panel-card image-panel">
             <div class="panel-head">
-              <strong>商品图片 ({{ selectedImageCount }})</strong>
+              <strong>{{ tr('autoUi.k_c2e3ab910df2') }}{{ selectedImageCount }})</strong>
               <div class="panel-head__tools">
                 <div class="view-toggle">
                   <button
@@ -787,7 +789,7 @@ watch(productId, () => {
                     <LayoutList class="h-4 w-4" />
                   </button>
                 </div>
-                <button class="ghost-pill" type="button">单图模式</button>
+                <button class="ghost-pill" type="button">{{ tr('autoUi.k_b170b0f4deef') }}</button>
               </div>
             </div>
 
@@ -800,49 +802,43 @@ watch(productId, () => {
               >
                 <button class="preview-card__media" type="button" @click="openPreview(image.filePath, image.fileName)">
                   <img :src="toFileUrl(image.filePath)" class="preview-card__img" />
-                  <span v-if="image.isCover" class="preview-card__badge">封面</span>
-                  <span v-if="livePhotoReferenceImagePath === image.filePath" class="preview-card__badge preview-card__badge--accent">Live Photo 主图</span>
+                  <span v-if="image.isCover" class="preview-card__badge">{{ tr('autoUi.k_b8bb31e17014') }}</span>
+                  <span v-if="livePhotoReferenceImagePath === image.filePath" class="preview-card__badge preview-card__badge--accent">{{ tr('autoUi.k_43e228224b35') }}</span>
                 </button>
                 <div class="preview-card__actions">
-                  <button class="preview-card__action" :disabled="image.isCover" :data-testid="`product-set-cover-${image.id}`" type="button" @click.stop="setCover(image.id)">
-                    设为封面
-                  </button>
+                  <button class="preview-card__action" :disabled="image.isCover" :data-testid="`product-set-cover-${image.id}`" type="button" @click.stop="setCover(image.id)"> {{ tr('autoUi.k_b7607a6106bb') }} </button>
                   <button
                     class="preview-card__action"
                     :disabled="livePhotoReferenceImagePath === image.filePath"
                     :data-testid="`product-set-live-photo-ref-${image.id}`"
                     type="button"
                     @click.stop="setLivePhotoReferenceImage(image.id)"
-                  >
-                    设为 Live Photo 主图
-                  </button>
-                  <button class="preview-card__action preview-card__action--danger" :data-testid="`product-delete-image-${image.id}`" type="button" @click.stop="removeImage(image.id)">
-                    删除
-                  </button>
+                  > {{ tr('autoUi.k_5ea5cbe5b672') }} </button>
+                  <button class="preview-card__action preview-card__action--danger" :data-testid="`product-delete-image-${image.id}`" type="button" @click.stop="removeImage(image.id)"> {{ tr('autoUi.k_3755f56f2f83') }} </button>
                 </div>
               </article>
 
               <button class="upload-card" type="button" @click="uploadImages">
                 <Plus class="h-11 w-11" />
-                <strong>拖拽图片到此处</strong>
-                <span>或点击上传图片</span>
+                <strong>{{ tr('autoUi.k_9eb26c4cb30b') }}</strong>
+                <span>{{ tr('autoUi.k_f2190e39fc99') }}</span>
               </button>
             </div>
 
             <div v-else class="empty-card" data-testid="product-images-empty">
               <ImageIcon class="h-10 w-10" />
-              <strong>当前商品还没有图片</strong>
-              <p>先上传商品图片，再继续生成深层多角度图与后续链路。</p>
+              <strong>{{ tr('autoUi.k_3ac724a49cd2') }}</strong>
+              <p>{{ tr('autoUi.k_dfebb5a654b9') }}</p>
               <button class="empty-card__button" type="button" @click="uploadImages">
                 <Plus class="h-4 w-4" />
-                <span>上传图片</span>
+                <span>{{ tr('autoUi.k_59b308c817cd') }}</span>
               </button>
             </div>
           </article>
 
           <article class="panel-card flow-panel">
             <div class="panel-head">
-              <strong>生成流程</strong>
+              <strong>{{ tr('autoUi.k_83056258dd36') }}</strong>
             </div>
             <div class="flow-strip">
               <div v-for="(step, index) in stepItems" :key="step.number" class="flow-step">
@@ -866,47 +862,45 @@ watch(productId, () => {
 
           <article class="panel-card canonical-panel" data-testid="product-canonical-source-panel">
             <div class="panel-head">
-              <strong>商品深层多角度图</strong>
+              <strong>{{ tr('autoUi.k_ff7656c30444') }}</strong>
             </div>
 
             <div v-if="analysisBoardPath" class="canonical-result">
-              <button class="canonical-result__media" data-testid="product-canonical-preview" type="button" @click="openPreview(analysisBoardPath, '商品深层多角度图')">
+              <button class="canonical-result__media" data-testid="product-canonical-preview" type="button" @click="openPreview(analysisBoardPath, tr('autoUi.k_ff7656c30444'))">
                 <img :src="toFileUrl(analysisBoardPath)" alt="Product Analysis Board" />
               </button>
               <div class="canonical-result__body">
                 <div class="canonical-result__meta">
-                  <span>结果文件</span>
+                  <span>{{ tr('autoUi.k_9190b6bf7713') }}</span>
                   <strong>{{ shortFileName(analysisBoardPath) }}</strong>
                 </div>
                 <div class="canonical-result__meta">
-                  <span>生成时间</span>
+                  <span>{{ tr('autoUi.k_2213d2e64aff') }}</span>
                   <strong>{{ formatDateTime(selected.analysisBoardUpdatedAt || selected.canonicalSourceUpdatedAt) }}</strong>
                 </div>
                 <div class="canonical-result__actions">
-                  <button class="ghost-pill ghost-pill--accent" type="button" @click="openPreview(analysisBoardPath, '商品深层多角度图')">
-                    查看深层多角度图
-                  </button>
+                  <button class="ghost-pill ghost-pill--accent" type="button" @click="openPreview(analysisBoardPath, tr('autoUi.k_ff7656c30444'))"> {{ tr('autoUi.k_552647d32c4b') }} </button>
                 </div>
               </div>
             </div>
 
             <div v-else class="canonical-placeholder" :class="{ 'canonical-placeholder--danger': analysisBoardStageStatus === 'failed' }">
               <strong>{{ canonicalStatusValue(analysisBoardStageStatus) }}</strong>
-              <p>{{ analysisBoardStageStatus === 'failed' ? '深层多角度图生成失败，可直接重试当前阶段。' : canonicalStatusHint(analysisBoardStageStatus) }}</p>
+              <p>{{ analysisBoardStageStatus === 'failed' ? tr('autoUi.k_c90e34c224cb') : canonicalStatusHint(analysisBoardStageStatus) }}</p>
             </div>
 
             <div v-if="analysisBoardDiagnostics.length" class="diagnostic-list">
               <div v-for="(item, index) in analysisBoardDiagnostics" :key="`${item.originalPath}-${index}`" class="diagnostic-item">
                 <div class="diagnostic-item__row">
-                  <span>处理状态</span>
+                  <span>{{ tr('autoUi.k_8542beb99054') }}</span>
                   <strong>{{ canonicalDiagnosticStatusLabel(item.status) }}</strong>
                 </div>
                 <div class="diagnostic-item__row">
-                  <span>原图</span>
+                  <span>{{ tr('autoUi.k_cd0f3ad8ddd8') }}</span>
                   <strong>{{ shortFileName(item.originalPath) }}</strong>
                 </div>
                 <div v-if="item.sanitizedPath" class="diagnostic-item__row">
-                  <span>输出</span>
+                  <span>{{ tr('autoUi.k_ded698ae1e7e') }}</span>
                   <strong>{{ shortFileName(item.sanitizedPath) }}</strong>
                 </div>
                 <p v-if="item.note">{{ item.note }}</p>
@@ -918,7 +912,7 @@ watch(productId, () => {
         <div class="right-column">
           <article class="panel-card status-panel">
             <div class="panel-head">
-              <strong>状态与深层多角度图</strong>
+              <strong>{{ tr('autoUi.k_b81634cd96ef') }}</strong>
             </div>
             <div class="status-banner">
               <div class="status-banner__head">
@@ -927,25 +921,25 @@ watch(productId, () => {
                   <Sparkles v-else class="h-6 w-6" />
                 </div>
                 <div class="status-banner__copy">
-                  <strong>{{ `深层多角度图 ${canonicalStatusValue(analysisBoardStageStatus)} / Product DNA ${productAnalysisSnapshot ? '已生成' : '待生成'}` }}</strong>
-                  <p v-if="refreshingAnalysisBoard">正在生成深层多角度图，完成后自动补 Product DNA。</p>
-                  <p v-else-if="refreshingProductAnalysis">正在单独分析 Product DNA，本次不会重生成深层多角度图。</p>
-                  <p v-else-if="analysisBoardStageStatus === 'failed'">深层多角度图生成失败，可直接重试当前阶段。</p>
+                  <strong>{{ tr('autoUi.k_d64c41f40928', { p0: canonicalStatusValue(analysisBoardStageStatus), p1: productAnalysisSnapshot ? tr('autoUi.k_79c74f41ca9e') : tr('autoUi.k_aef4104370ae') }) }}</strong>
+                  <p v-if="refreshingAnalysisBoard">{{ tr('autoUi.k_c0b276ab6743') }}</p>
+                  <p v-else-if="refreshingProductAnalysis">{{ tr('autoUi.k_1e4ef108d9dc') }}</p>
+                  <p v-else-if="analysisBoardStageStatus === 'failed'">{{ tr('autoUi.k_c90e34c224cb') }}</p>
                   <p v-else>{{ canonicalStatusHint(analysisBoardStageStatus || canonicalStageStatus) }}</p>
                 </div>
               </div>
               <button class="status-banner__button" :disabled="refreshingAnalysisBoard || refreshingProductAnalysis || !hasImages" type="button" @click="refreshAnalysisBoard">
-                {{ refreshingAnalysisBoard ? '重新生成中...' : '重新生成深层多角度图' }}
+                {{ refreshingAnalysisBoard ? tr('autoUi.k_d4f52968578a') : tr('autoUi.k_dabe751bf59b') }}
               </button>
             </div>
 
             <div class="status-meta">
               <div class="status-meta__item">
-                <span>更新时间</span>
+                <span>{{ tr('autoUi.k_093dea88c930') }}</span>
                 <strong>{{ canonicalStatusValue(canonicalStageStatus) }}</strong>
               </div>
               <div class="status-meta__item">
-                <span>结果文件</span>
+                <span>{{ tr('autoUi.k_9190b6bf7713') }}</span>
                 <strong>{{ canonicalStatusValue(analysisBoardStageStatus) }}</strong>
               </div>
             </div>
@@ -954,37 +948,37 @@ watch(productId, () => {
           <div class="bottom-right-grid">
             <article class="panel-card log-panel">
               <div class="panel-head">
-                <strong>操作日志</strong>
+                <strong>{{ tr('autoUi.k_f4bc877cd282') }}</strong>
               </div>
               <div class="log-list">
                 <div class="log-row log-row--green">
                   <i></i>
                   <span>{{ formatDateTime(selected.updatedAt) }}</span>
-                  <p>图片已同步，共 {{ selectedImageCount }} 张。</p>
+                  <p>{{ tr('autoUi.k_4146b80a32a5') }} {{ selectedImageCount }} {{ tr('autoUi.k_2d45b5becee8') }}</p>
                 </div>
                 <div class="log-row log-row--cyan">
                   <i></i>
                   <span>{{ formatDateTime(selected.createdAt) }}</span>
-                  <p>商品已创建。</p>
+                  <p>{{ tr('autoUi.k_003e7f8e23fa') }}</p>
                 </div>
                 <div class="log-row log-row--yellow">
                   <i></i>
                   <span>{{ formatDateTime(selected.analysisBoardUpdatedAt || selected.canonicalSourceUpdatedAt || selected.createdAt) }}</span>
-                  <p>深层多角度图状态：{{ canonicalStatusValue(selected.analysisBoardStatus || selected.canonicalSourceStatus) }}。</p>
+                  <p>{{ tr('autoUi.k_adc25bacb2c8') }}{{ canonicalStatusValue(selected.analysisBoardStatus || selected.canonicalSourceStatus) }}。</p>
                 </div>
                 <div class="log-row log-row--red">
                   <i></i>
                   <span>{{ formatDateTime(selected.createdAt) }}</span>
-                  <p>商品信息可继续编辑和补充备注。</p>
+                  <p>{{ tr('autoUi.k_f7f2bec5ecdb') }}</p>
                 </div>
               </div>
-              <button class="text-link" type="button">查看全部日志</button>
+              <button class="text-link" type="button">{{ tr('autoUi.k_7707ca9a769a') }}</button>
             </article>
 
             <div class="stack-panel">
               <article class="panel-card remark-panel">
                 <div class="panel-head">
-                  <strong>商品说明</strong>
+                  <strong>{{ tr('autoUi.k_5b4af310d47c') }}</strong>
                   <button class="head-icon" type="button">
                     <Edit3 class="h-4 w-4" />
                   </button>
@@ -993,25 +987,25 @@ watch(productId, () => {
                   <textarea
                     v-model="remarkDraft"
                     class="remark-box__input"
-                    placeholder="记录商品卖点、来源说明或选图备注..."
+                    :placeholder="tr('autoUi.k_4f0c7877ed93')"
                     data-testid="product-remark-input"
                   ></textarea>
                   <button class="remark-box__button" :disabled="savingRemark" data-testid="product-remark-save-button" type="button" @click="saveRemark">
-                    {{ savingRemark ? '保存中...' : '保存备注' }}
+                    {{ savingRemark ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_606e82096d63') }}
                   </button>
                 </div>
               </article>
 
               <article class="panel-card rule-panel">
                 <div class="panel-head">
-                  <strong>使用规则</strong>
+                  <strong>{{ tr('autoUi.k_84bd36a8dda3') }}</strong>
                 </div>
                 <div class="rule-row">
                   <div class="rule-row__head">
                     <FileText class="h-4 w-4" />
-                    <span>当前链路说明</span>
+                    <span>{{ tr('autoUi.k_5404b48fd379') }}</span>
                   </div>
-                  <p>商品图片是主事实源，深层多角度图用于沉淀多角度结构共识，并辅助后续 AI 提示词描述。</p>
+                  <p>{{ tr('autoUi.k_df5b3cd5d128') }}</p>
                 </div>
               </article>
             </div>
@@ -1020,11 +1014,11 @@ watch(productId, () => {
           <article class="panel-card analysis-panel" data-testid="product-analysis-panel">
             <div class="panel-head">
               <div class="analysis-panel__head">
-                <strong>商品描述 / Product DNA</strong>
-                <span>{{ productAnalysisSections.length ? '基于深层多角度图生成' : '等待深层多角度图生成后分析' }}</span>
+                <strong>{{ tr('autoUi.k_a63100cd721e') }}</strong>
+                <span>{{ productAnalysisSections.length ? tr('autoUi.k_deb4673d0f5d') : tr('autoUi.k_aba8f1ef66ed') }}</span>
               </div>
               <button class="ghost-pill ghost-pill--accent" :disabled="refreshingProductAnalysis || refreshingAnalysisBoard || !hasImages" type="button" @click="refreshProductAnalysis">
-                {{ refreshingProductAnalysis ? '获取中...' : '获取产品 DNA' }}
+                {{ refreshingProductAnalysis ? tr('autoUi.k_e75aa98ee967') : tr('autoUi.k_bf0d744b504c') }}
               </button>
             </div>
             <div v-if="productAnalysisSnapshot" class="product-analysis-card">
@@ -1033,7 +1027,7 @@ watch(productId, () => {
                   <span>Summary</span>
                   <p v-if="productAnalysisSnapshot.summary" class="product-analysis-card__summary-text">{{ productAnalysisSnapshot.summary }}</p>
                   <span>Category</span>
-                  <strong>{{ productAnalysisSnapshot.category || '未识别' }}</strong>
+                  <strong>{{ productAnalysisSnapshot.category || tr('autoUi.k_face982a4aae') }}</strong>
                 </div>
                 <div v-if="productAnalysisSnapshot.matchingRules.length" class="product-analysis-card__rules">
                   <span>Matching Rules</span>
@@ -1060,8 +1054,8 @@ watch(productId, () => {
               </div>
             </div>
             <div v-else class="canonical-placeholder">
-              <strong>联合分析尚未生成</strong>
-              <p>生成或刷新商品深层多角度图后，系统会同步调用商品结构分析模型，并在这里显示基于上传图片归纳出的商品结构、材质、颜色、几何和匹配规则，供商品库与 /clone 直接复用。</p>
+              <strong>{{ tr('autoUi.k_233a0e76b7b5') }}</strong>
+              <p>{{ tr('autoUi.k_9f3fe6cd1003') }}</p>
             </div>
           </article>
         </div>
@@ -1069,7 +1063,7 @@ watch(productId, () => {
     </section>
 
     <section v-else class="missing-card">
-      <p>当前商品不存在，可能已经被删除。</p>
+      <p>{{ tr('autoUi.k_c2dcc0b6ff43') }}</p>
     </section>
   </div>
 

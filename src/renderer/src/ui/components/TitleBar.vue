@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { CheckCircle2, FolderOpen, ListChecks, Minus, RefreshCcw, Square, X } from 'lucide-vue-next'
 import brandIconAsset from '../../../../../resources/icon-brand-ui-v2.png'
 
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
 const router = useRouter()
 const maximized = ref(false)
 const refreshing = ref(false)
@@ -17,7 +17,7 @@ async function sync() {
 }
 
 function updateRefreshTime() {
-  refreshedAt.value = new Intl.DateTimeFormat('zh-CN', {
+  refreshedAt.value = new Intl.DateTimeFormat(String(i18nLocale.value), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -65,14 +65,14 @@ async function close() {
 <template>
   <header class="app-titlebar">
     <div class="app-titlebar__brand" style="-webkit-app-region: drag">
-      <img :src="brandIconAsset" alt="CreateCut" class="app-titlebar__logo" />
+      <img :src="brandIconAsset" alt="VideoGenerate" class="app-titlebar__logo" />
       <div class="app-titlebar__brand-copy">
         <div class="app-titlebar__brand-line">
-          <strong>CreateCut</strong>
+          <strong>VideoGenerate</strong>
           <span class="app-titlebar__ready-dot"></span>
           <span>{{ t('titleBar.ready') }}</span>
         </div>
-        <small>AI Editing Suite</small>
+        <small>{{ t('titleBar.productSubtitle') }}</small>
       </div>
     </div>
 

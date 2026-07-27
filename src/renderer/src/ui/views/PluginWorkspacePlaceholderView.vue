@@ -2,10 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, Wrench } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { webApiClient, type PluginDetail } from '@/lib/webApiClient'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const plugin = ref<PluginDetail | null>(null)
 const errorText = ref('')
 
@@ -25,7 +27,7 @@ onMounted(async () => {
     <section class="placeholder-card">
       <button class="ghost-button" type="button" @click="router.push('/plugins?tab=installed')">
         <ChevronLeft class="h-4 w-4" />
-        返回我的插件
+        {{ t('pluginPlaceholder.back') }}
       </button>
 
       <div class="placeholder-hero">
@@ -33,23 +35,23 @@ onMounted(async () => {
           <Wrench class="h-6 w-6" />
         </div>
         <div>
-          <h1>{{ plugin?.name || '插件工作台' }}</h1>
-          <p>{{ plugin?.description || '当前插件已接入入口，但暂未开放真实执行能力。' }}</p>
+          <h1>{{ plugin?.name || t('pluginPlaceholder.title') }}</h1>
+          <p>{{ plugin?.description || t('pluginPlaceholder.description') }}</p>
         </div>
       </div>
 
       <div class="placeholder-grid">
         <div class="placeholder-item">
-          <span>状态</span>
-          <strong>{{ plugin ? (plugin.enabled ? '已启用' : '已停用') : '未知' }}</strong>
+          <span>{{ t('pluginPlaceholder.status') }}</span>
+          <strong>{{ plugin ? (plugin.enabled ? t('pluginPlaceholder.enabled') : t('pluginPlaceholder.disabled')) : t('pluginPlaceholder.unknown') }}</strong>
         </div>
         <div class="placeholder-item">
-          <span>路由</span>
+          <span>{{ t('pluginPlaceholder.route') }}</span>
           <strong>{{ plugin?.workspacePath || route.path }}</strong>
         </div>
         <div class="placeholder-item">
-          <span>说明</span>
-          <strong>{{ plugin?.usageHint || '当前只完成入口闭环。' }}</strong>
+          <span>{{ t('pluginPlaceholder.notes') }}</span>
+          <strong>{{ plugin?.usageHint || t('pluginPlaceholder.notesFallback') }}</strong>
         </div>
       </div>
 

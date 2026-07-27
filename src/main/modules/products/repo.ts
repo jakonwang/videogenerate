@@ -522,25 +522,6 @@ export const productsRepo = {
   async ensureSeed() {
     const db = await readJsonFile<DbShape>(filePath(), { products: [] })
     if (db.products.length > 0) return
-    const ts = now()
-    db.products = [
-      {
-        id: randomUUID(),
-        name: '手机壳默认',
-        type: 'phone_case',
-        assets: emptyAssets() as any,
-        createdAt: ts,
-        updatedAt: ts,
-      },
-      {
-        id: randomUUID(),
-        name: '耳环默认',
-        type: 'earring',
-        assets: emptyAssets() as any,
-        createdAt: ts,
-        updatedAt: ts,
-      },
-    ]
-    await writeJsonFile(filePath(), db)
+    await writeJsonFile(filePath(), { products: [] })
   },
 }

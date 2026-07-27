@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import UiChip from '../components/UiChip.vue'
 
 type VideoTask = {
@@ -18,6 +19,7 @@ type Product = { id: string; name: string }
 type Template = { id: string; name: string }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const tasks = ref<VideoTask[]>([])
 const products = ref<Product[]>([])
 const templates = ref<Template[]>([])
@@ -43,7 +45,7 @@ const failCount = computed(() => tasks.value.filter((item) => item.status === 'e
 function formatTime(ts: number) {
   if (!ts) return '-'
   try {
-    return new Date(ts).toLocaleString('zh-CN', {
+    return new Date(ts).toLocaleString(locale.value, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -53,6 +55,10 @@ function formatTime(ts: number) {
   } catch {
     return '-'
   }
+}
+
+function statusLabel(status: VideoTask['status']) {
+  return t(`production.tasks.status.${status}`)
 }
 
 function resolveProductName(productId: string) {
@@ -112,41 +118,41 @@ onMounted(() => {
   <div class="tasks-page">
     <section class="tasks-hero">
       <div class="tasks-hero__copy">
-        <span class="tasks-hero__tag">生产 / 任务列表</span>
-        <h1>任务列表与失败筛选</h1>
-        <p>任务创建已统一进入新建任务页，这里只保留任务信息、状态筛选和进入详情的入口。</p>
+        <span class="tasks-hero__tag">{{ t('production.tasks.kicker') }}</span>
+        <h1>{{ t('production.tasks.title') }}</h1>
+        <p>{{ t('production.tasks.desc') }}</p>
       </div>
       <div class="tasks-hero__actions">
-        <button class="app-primary px-4 py-2 text-sm" @click="router.push('/production/create')">新建任务</button>
-        <button class="app-ghost px-4 py-2 text-sm" :disabled="loading" @click="refresh">刷新</button>
+        <button class="app-primary px-4 py-2 text-sm" @click="router.push('/production/create')">{{ t('production.tasks.create') }}</button>
+        <button class="app-ghost px-4 py-2 text-sm" :disabled="loading" @click="refresh">{{ t('common.refresh') }}</button>
       </div>
     </section>
 
     <section class="tasks-stats">
-      <div class="tasks-stat"><span>总任务</span><strong>{{ tasks.length }}</strong></div>
-      <div class="tasks-stat"><span>运行中</span><strong>{{ runningCount }}</strong></div>
-      <div class="tasks-stat"><span>已完成</span><strong>{{ doneCount }}</strong></div>
-      <div class="tasks-stat"><span>失败</span><strong>{{ failCount }}</strong></div>
+      <div class="tasks-stat"><span>{{ t('production.tasks.stats.total') }}</span><strong>{{ tasks.length }}</strong></div>
+      <div class="tasks-stat"><span>{{ t('production.tasks.stats.running') }}</span><strong>{{ runningCount }}</strong></div>
+      <div class="tasks-stat"><span>{{ t('production.tasks.stats.done') }}</span><strong>{{ doneCount }}</strong></div>
+      <div class="tasks-stat"><span>{{ t('production.tasks.stats.failed') }}</span><strong>{{ failCount }}</strong></div>
     </section>
 
     <section class="tasks-panel">
       <div class="tasks-toolbar">
         <div class="tasks-filters">
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'all' }" @click="statusFilter = 'all'">全部</button>
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'running' }" @click="statusFilter = 'running'">运行中</button>
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'done' }" @click="statusFilter = 'done'">已完成</button>
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'error' }" @click="statusFilter = 'error'">失败</button>
+          <button class="app-tab" :class="{ 'is-active': statusFilter === 'all' }" @click="statusFilter = 'all'">{{ t('common.all') }}</button>
+          <button class="app-tab" :class="{ 'is-active': statusFilter === 'running' }" @click="statusFilter = 'running'">{{ t('production.tasks.stats.running') }}</button>
+          <button class="app-tab" :class="{ 'is-active': statusFilter === 'done' }" @click="statusFilter = 'done'">{{ t('production.tasks.stats.done') }}</button>
+          <button class="app-tab" :class="{ 'is-active': statusFilter === 'error' }" @click="statusFilter = 'error'">{{ t('production.tasks.stats.failed') }}</button>
         </div>
         <div class="tasks-batch-actions">
-          <button class="app-ghost px-3 py-2 text-xs" :disabled="!runningCount || (stats?.paused ?? false)" @click="pause">暂停</button>
-          <button class="app-ghost px-3 py-2 text-xs" :disabled="!runningCount || !(stats?.paused ?? false)" @click="resume">继续</button>
-          <button class="app-ghost px-3 py-2 text-xs" :disabled="!tasks.length" @click="cancelAll">取消全部</button>
+          <button class="app-ghost px-3 py-2 text-xs" :disabled="!runningCount || (stats?.paused ?? false)" @click="pause">{{ t('production.tasks.pause') }}</button>
+          <button class="app-ghost px-3 py-2 text-xs" :disabled="!runningCount || !(stats?.paused ?? false)" @click="resume">{{ t('production.tasks.resume') }}</button>
+          <button class="app-ghost px-3 py-2 text-xs" :disabled="!tasks.length" @click="cancelAll">{{ t('production.tasks.cancelAll') }}</button>
         </div>
       </div>
 
       <div v-if="!filteredTasks.length" class="tasks-empty">
-        <strong>当前没有任务</strong>
-        <p>先去新建任务页创建任务，再回来查看执行情况。</p>
+        <strong>{{ t('production.tasks.emptyTitle') }}</strong>
+        <p>{{ t('production.tasks.emptyDesc') }}</p>
       </div>
 
       <div v-else class="tasks-list">
@@ -155,16 +161,16 @@ onMounted(() => {
             <div class="tasks-item__header">
               <strong>{{ task.id.slice(0, 8) }}</strong>
               <UiChip :tone="task.status === 'error' ? 'danger' : task.status === 'done' ? 'accent' : 'neutral'">
-                {{ task.status }}
+                {{ statusLabel(task.status) }}
               </UiChip>
             </div>
             <div class="tasks-item__meta-grid">
-              <span>商品：{{ resolveProductName(task.productId) }}</span>
-              <span>模板：{{ resolveTemplateName(task.templateId) }}</span>
-              <span>创建时间：{{ formatTime(task.createdAt) }}</span>
-              <span>进度：{{ Math.round((task.progress || 0) * 100) }}%</span>
+              <span>{{ t('production.tasks.product') }}: {{ resolveProductName(task.productId) }}</span>
+              <span>{{ t('production.tasks.template') }}: {{ resolveTemplateName(task.templateId) }}</span>
+              <span>{{ t('production.tasks.createdAt') }}: {{ formatTime(task.createdAt) }}</span>
+              <span>{{ t('production.tasks.progress') }}: {{ Math.round((task.progress || 0) * 100) }}%</span>
             </div>
-            <span class="tasks-item__path">{{ task.outPath || '未生成输出路径' }}</span>
+            <span class="tasks-item__path">{{ task.outPath || t('production.tasks.noOutput') }}</span>
             <span v-if="task.status === 'error' && task.error" class="tasks-item__error">{{ task.error }}</span>
           </div>
         </button>

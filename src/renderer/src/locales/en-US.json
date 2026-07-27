@@ -4,7 +4,12 @@
     "products": "Production",
     "templates": "Templates",
     "tasks": "Tasks",
-    "clone": "Clone"
+    "clone": "Clone",
+    "models": "Models",
+    "productLibrary": "Products",
+    "liveSlicer": "Slicer",
+    "plugins": "Plugins",
+    "settings": "Settings"
   },
   "common": {
     "confirm": "Confirm",
@@ -13,7 +18,9 @@
     "language": "Interface Language",
     "starting": "Starting...",
     "startGenerate": "Start Generate",
-    "remove": "Remove"
+    "remove": "Remove",
+    "refresh": "Refresh",
+    "all": "All"
   },
   "plugins": {
     "hero": {
@@ -69,9 +76,31 @@
       "desc": "Install a plugin from the market first, then come back here to use it.",
       "backToMarket": "Back To Market"
     },
+    "catalog": {
+      "product-image-materials": { "name": "Product Image Materials", "description": "Split videos into reusable product image materials with Qiniu upload and usage tracking." },
+      "live-photo-generator": { "name": "Live Photo Generator", "description": "Create Apple-compatible Live Photos from reference images or clone shots with preview and export tools." },
+      "tiktok-creative-studio": { "name": "TikTok Creative Studio", "description": "Read clone shots and prompts, then run creative video batches in an isolated workspace." },
+      "video-parser-download": { "name": "Video Parser Download", "description": "Parse short-video share links and download and manage source videos." },
+      "video-batch-watermark": { "name": "Video Batch Watermark", "description": "Configure watermark parameters and process video batches." },
+      "video-batch-subtitle": { "name": "Video Batch Subtitle", "description": "Recognize, style, burn in, and export video subtitles." },
+      "geelark-publisher": { "name": "Geelark Publisher", "description": "Submit clone outputs to Geelark cloud-phone publishing workflows from a dedicated workspace." }
+    },
     "detail": {
       "eyebrow": "Plugin Detail"
     }
+  },
+  "geelarkPublishCenter": { "hero": { "back": "Back To Plugin Market", "title": "Publishing Workspace", "desc": "Publish, manage, and track plugin tasks and configuration.", "loading": "Loading publishing center data..." }, "gate": { "error": "The GeeLark plugin is not installed and enabled.", "title": "Publishing Center Locked", "desc": "Return to plugin settings and complete a real GeeLark installation and activation first.", "back": "Back To Plugin Settings" } },
+  "geelarkPublisher": {
+    "hero": { "eyebrow": "GeeLark Publishing Settings", "title": "Configure the plugin and accounts before opening the publishing center", "desc": "This page manages plugin activation, API settings, and publishing accounts. Videos and publishing tasks are handled in a separate workspace." },
+    "loading": "Loading GeeLark settings...",
+    "stats": { "pluginStatus": "Plugin Status", "accounts": "Publishing Accounts", "accountsDesc": "Accounts currently available for publishing", "cloudPhones": "Cloud Phones", "cloudPhonesDesc": "Cloud phone devices loaded from GeeLark" },
+    "status": { "enabled": "Enabled", "disabled": "Disabled", "installed": "Plugin Installed", "notInstalled": "Plugin Not Installed", "saved": "Saved", "notSaved": "Not Saved", "notSelected": "Not Selected" },
+    "setup": { "eyebrow": "Plugin Setup", "title": "The GeeLark plugin is not enabled", "desc": "Install and enable the plugin before configuring the API, binding accounts, or opening the publishing center." },
+    "config": { "eyebrow": "API Configuration", "appIdPlaceholder": "Enter the GeeLark App ID", "timeout": "Request Timeout (ms)", "keepSecret": "Leave blank to keep the saved secret", "keepToken": "Optional. Leave blank to keep the saved token", "currentStatus": "Current Status" },
+    "center": { "eyebrow": "Publishing Entry", "title": "Publishing Center", "cardTitle": "Publishing now has a dedicated workspace", "desc": "Ready videos, AI titles, music presets, and recent publishing tasks are managed on a separate page." },
+    "accounts": { "eyebrow": "Account Binding", "title": "Publishing Accounts And Cloud Phones", "name": "Account Name", "namePlaceholder": "Example: TikTok US 01", "accountId": "GeeLark Account ID", "accountIdPlaceholder": "Optional account identifier", "bindPhone": "Bind Cloud Phone", "selectPhone": "Select a cloud phone", "status": "Status", "remark": "Notes", "remarkPlaceholder": "Record the account purpose, region, or product category", "currentDevice": "Current Device", "updatedAt": "Updated", "empty": "No publishing accounts yet. Add an account first." },
+    "actions": { "openCenter": "Open Publishing Center", "installEnable": "Install And Enable Plugin", "saveConfig": "Save Configuration", "enterCenter": "Enter Publishing Center", "refreshing": "Refreshing...", "refreshPhones": "Refresh Cloud Phones", "updateAccount": "Update Account", "addAccount": "Add Account", "cancelEdit": "Cancel Edit", "edit": "Edit", "delete": "Delete" },
+    "messages": { "pluginEnabled": "The GeeLark plugin is installed and enabled.", "configSaved": "GeeLark configuration saved.", "configSavedLocal": "GeeLark configuration saved locally.", "phonesRefreshed": "Cloud phone list refreshed.", "phonesUnavailable": "This runtime does not provide the cloud phone API.", "accountUpdated": "Publishing account updated.", "accountCreated": "Publishing account created.", "accountSavedLocal": "Publishing account saved locally.", "accountDeleted": "Publishing account deleted.", "accountDeletedLocal": "Publishing account removed locally." }
   },
   "livePhoto": {
     "hero": {
@@ -154,6 +183,81 @@
       "retried": "Live Photo item retried.",
       "regenerated": "Live Photo item regenerated.",
       "exportedCount": "Exported {count} item(s)."
+    },
+    "workspace": {
+      "hint": "Switch quickly between reference tasks, clone shots, and the library",
+      "referenceNote": "Create tasks in batches using the current aspect ratio",
+      "referenceUploadTitle": "Click to upload or drop images here",
+      "referenceUploadDesc": "Supports JPG, PNG, and WEBP. Images wider than 2000 px are recommended.",
+      "materialLibrarySelect": "Choose From Library",
+      "materialLibraryDesc": "Open the product image library and select unbound images in batches.",
+      "materialLibraryEmpty": "No unbound product images are available.",
+      "materialLibraryAddSelected": "Add References",
+      "selectAll": "Select All",
+      "clear": "Clear",
+      "previousPage": "Previous",
+      "nextPage": "Next",
+      "perPage": "Per Page",
+      "referenceQueuedSuffix": "image(s) queued. You can add more references.",
+      "pendingTasks": "Pending Tasks",
+      "referenceTaskList": "Reference Task List",
+      "missingImage": "Image is missing",
+      "createTaskPrefix": "Create Live Photo Tasks",
+      "referenceSafe": "The app reads product references, generates replacements, then continues with video and Live Photo outputs.",
+      "outputTitle": "Output Details",
+      "outputDesc": "Reference tasks generate replacement images, motion previews, and Live Photo results for unified export from the library.",
+      "previewStats": "Preview And Statistics",
+      "settingsTitle": "Generation Settings",
+      "standardPackage": "Apple Live Photo Standard Bundle",
+      "recommended": "Recommended",
+      "standardPackageDesc": "Generate standards-compatible JPG, MOV, and manifest files for preview and use on iOS devices.",
+      "resolution": "Resolution",
+      "frameRate": "Frame Rate",
+      "quality": "Quality",
+      "cloneRuleReuse": "Reuse clone structure and shot data to generate motion video assets.",
+      "cloneRuleAutoLive": "After video generation, write Live Photo assets and add them to the library.",
+      "cloneSafe": "The task reads existing storyboard and video data, then enters the Live Photo output flow.",
+      "itemUnit": "Items",
+      "filter": "Filter",
+      "referenceCreatedPrefix": "Created",
+      "referenceCreatedSuffix": "reference task(s).",
+      "runtimeLogTitle": "Runtime Log",
+      "primaryImage": "Live Photo Primary Image",
+      "primaryImageRequired": "This product has no Live Photo primary image, so a replacement task cannot be created.",
+      "qualityGateTitle": "Quality Gate And Prompt Versions",
+      "qualityGateDesc": "Pending tasks use the active version and enter video generation only after image validation passes.",
+      "passRate": "Pass Rate",
+      "averageScore": "Average Score",
+      "retryCount": "Retries",
+      "cacheHits": "Cache Hits",
+      "promptVersion": "Prompt Version",
+      "activeVersion": "Active",
+      "versionName": "Version Name",
+      "promptContent": "Prompt Content",
+      "updateVersion": "Update Version",
+      "copyVersion": "Copy As New",
+      "activateVersion": "Activate Version",
+      "rollbackVersion": "Create Rollback Copy",
+      "motionStrategy": "Motion Strategy",
+      "motionStrategyDesc": "These settings are stored and used by reference tasks, clone tasks, retries, and recovery.",
+      "referenceMotion": "Default Reference Motion",
+      "cloneMotion": "Default Clone Motion",
+      "exportSettingsDesc": "Export settings are stored and applied to resolution, frame rate, and compression during export.",
+      "saving": "Saving...",
+      "saveSettings": "Save Live Photo Settings",
+      "running": "Running",
+      "paused": "Paused",
+      "viewMode": "View Mode",
+      "gridView": "Grid View",
+      "listView": "List View",
+      "clearFiltered": "Clear Filtered Selection",
+      "selectFiltered": "Select Filtered Items",
+      "retryFailed": "Retry Failed",
+      "resumePaused": "Resume Paused",
+      "pauseRunning": "Pause Running",
+      "batchDelete": "Batch Delete",
+      "batchSubtitles": "Batch Subtitles",
+      "selectProduct": "Select Product"
     }
   },
   "auth": {
@@ -180,7 +284,13 @@
     "view": "View",
     "export": "Export",
     "openCloud": "Open Cloud Assets",
-    "quickExport": "Quick Export"
+    "quickExport": "Quick Export",
+    "localMode": "Local Mode",
+    "helpModels": "Manage reusable model identities and reference assets.",
+    "helpProducts": "Maintain product images, details, and canonical sources.",
+    "helpClone": "Bind models and products to generate scripts, storyboards, and videos.",
+    "helpProduction": "Create production tasks and review execution results.",
+    "helpSlicer": "Split long livestream videos into reusable media assets."
   },
   "cloneWorkflow": {
     "uploadReference": "Upload Viral Video",
@@ -218,6 +328,16 @@
     }
   },
   "tpl": {
+    "defaultName": "Default Template",
+    "newNamePh": "Enter a new template name",
+    "totalDur": "Total duration: {min}-{max}s",
+    "styleAnalyzeDone": "Analysis complete. A template was created.",
+    "styleAnalyzeFailed": "Analysis failed",
+    "newSegPrompt": "Enter a storyboard segment name",
+    "newSegDefault": "New segment",
+    "segDup": "That segment name already exists.",
+    "minTwoSeg": "A template must keep at least two segments.",
+    "segDur": "Duration {min}-{max}s",
     "navLibrary": "Template Library",
     "navStudio": "Template Studio",
     "navSubtitlePresets": "Subtitle Presets",
@@ -254,7 +374,8 @@
     "openDataDirectory": "Open Data Directory",
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "close": "Close"
+    "close": "Close",
+    "productSubtitle": "AI Video Production Workspace"
   },
   "settings": {
     "hero": {
@@ -637,6 +758,116 @@
       "modelLabel": "Model",
       "taskIdLabel": "Task ID"
     }
+  },
+  "billing": {
+    "title": "Membership And Wallet", "desc": "Manage membership, compute balance, orders, and charges. The current payment flow is a local demonstration.", "refresh": "Refresh Data", "currentAccount": "Current Account", "currentPlan": "Membership Plan", "balance": "Compute Balance", "notActive": "Not Active", "days": "{count} days", "creditCount": "{count} credits", "paying": "Paying...", "subscribe": "Subscribe", "recharging": "Recharging...", "recharge": "Recharge",
+    "plans": { "title": "Membership Plans", "desc": "Successful purchases activate the plan and add monthly compute credits.", "credits": "Includes {count} credits per period" },
+    "packs": { "title": "Compute Credit Packs", "desc": "Add credits for higher-cost generation actions.", "light": "For lightweight testing", "regular": "For regular production", "batch": "For frequent batch work" },
+    "order": { "title": "Orders", "desc": "This environment uses simulated payment callbacks.", "type": "Order Type", "amount": "Amount", "status": "Status", "time": "Time", "subscription": "Membership Order", "compute": "Credit Pack Order", "empty": "No orders yet" },
+    "transactions": { "title": "Credit Transactions", "desc": "Recent recharges and charges.", "empty": "No transactions yet" },
+    "notes": { "title": "Status Notes", "membership": "Membership provides feature access and base credits. Credit packs cover additional usage.", "payment": "The current payment flow is simulated locally and can be replaced with production callbacks." },
+    "messages": { "subscribed": "Membership activated and credits added.", "recharged": "Compute credits added." }
+  },
+  "cloneTasks": {
+    "title": "Viral Video Clone", "desc": "Clone reference videos and generate manageable project outputs.", "selectedCount": "{count} tasks selected", "materialCount": "{images} images / {videos} videos", "allMaterials": "All Materials",
+    "stats": { "all": "All Tasks", "allDesc": "Total tasks", "draft": "Drafts", "draftDesc": "Incomplete tasks", "running": "Running", "runningDesc": "Tasks in progress", "completed": "Completed", "completedDesc": "Completed tasks", "failed": "Failed", "failedDesc": "Failed tasks", "pendingOutput": "Waiting For Output", "pendingOutputDesc": "No final output yet" },
+    "groups": { "all": "All Tasks", "ungrouped": "Ungrouped", "more": "More Groups", "create": "Create Group" },
+    "steps": { "reference": "Reference Analysis", "script": "Script Generation", "identity": "Identity Grid", "storyboard": "Storyboard Design", "videos": "Shot Videos", "compose": "Final Composition", "pending": "Not Started" },
+    "status": { "draft": "Draft", "completed": "Completed", "failed": "Failed", "running": "Running", "review": "Needs Review" },
+    "runMode": { "auto": "Automatic", "manual": "Manual" },
+    "actions": { "exporting": "Exporting...", "batchExport": "Batch Export", "creating": "Creating...", "create": "Create Task", "deleting": "Deleting...", "batchDelete": "Batch Delete", "exportFinals": "Export Final Videos", "moveToGroup": "Move To Group", "batchSubtitle": "Add Subtitles In Batch", "more": "More Actions", "rename": "Rename", "delete": "Delete", "viewError": "View Error" },
+    "selection": { "exportable": "Exportable finals", "subtitleReady": "Subtitle ready" },
+    "sort": { "newest": "Newest", "oldest": "Oldest" },
+    "columns": { "preview": "Preview", "task": "Task", "stage": "Stage", "materials": "Materials", "progress": "Progress", "updated": "Updated", "actions": "Actions" },
+    "empty": { "loading": "Loading task list", "title": "No Clone Tasks Yet", "wait": "Please wait...", "desc": "Select Create Task in the upper-right to create the first clone project." },
+    "pagination": { "summary": "{count} total, showing {start}-{end}" }
+  },
+  "modelLibrary": {
+    "title": "Model Library", "desc": "Manage AI models, filter appearances and scenes, and bind them to clone projects.", "import": "Import Model", "create": "Create Model", "itemCount": "{count}", "perPage": "{count} per page", "modelsUnit": "models", "availableSummary": "Showing real model records", "searchPlaceholder": "Search model names or tags", "selectedCount": "{count} selected", "pageSelected": "Page selected", "selecting": "Selecting multiple", "unselectPage": "Unselect Page", "selectPage": "Select Page", "deleting": "Deleting", "batchDelete": "Delete {count}", "empty": "No models match the current filters", "totalCount": "{count} total", "unnamed": "Untitled Model", "modelProvider": "Generation Model", "defaultName": "AI Model {index}", "defaultDescription": "No description has been added for this model.",
+    "tabs": { "all": "All Models", "ready": "Ready" },
+    "filters": { "allStatuses": "All Statuses", "allAges": "All Ages", "allTags": "All Tags", "language": "Languages" },
+    "status": { "ready": "Ready", "generating": "Generating", "failed": "Generation Failed", "incomplete": "Incomplete" },
+    "styles": { "all": "All Styles", "urban": "Urban", "fashion": "Fashion", "girl": "Youthful", "general": "General Commercial" },
+    "profile": { "autoRecommendation": "If no settings are selected, the recommended profile for the current product type is used.", "identity": "Identity", "identityDesc": "Market, gender, and age range", "appearance": "Appearance", "appearanceDesc": "Face, hair, skin tone, and body type", "style": "Expression Style", "styleDesc": "Outfit, mood, language, and camera presence", "scene": "Scene Direction", "sceneDesc": "Scene and style priorities" },
+    "missingKey": { "atlas": "Configure the AtlasCloud API Key in Settings first", "grsai": "Configure the GRS.AI API Key in Settings first", "vector": "Configure the VectorEngine image API Key in Settings first", "image": "Configure an image generation API Key in Settings first" },
+    "typeTags": { "earrings": "Sweet", "phone_case": "Urban", "clothes": "Fashion", "toy": "Youthful", "general": "Lifestyle" },
+    "defaults": { "mood": "Mood Not Set", "scene": "Scene Not Set", "skin": "Skin Tone Not Set", "gender": "Gender Not Set" },
+    "actions": { "assign": "Set As Current Project Model", "rename": "Rename", "copyName": "Copy Name", "revealCover": "Reveal Cover File", "delete": "Delete Model", "use": "Use Model", "edit": "Edit Information", "openCover": "Open Cover Image" },
+    "details": { "tab": "Model Information", "basic": "Basic Information", "id": "Model ID", "createdAt": "Created", "updatedAt": "Updated", "generationStatus": "Generation Status", "tags": "Tags", "description": "Description", "preview": "Preview" },
+    "messages": { "idCopied": "Model ID copied", "nameCopied": "Model name copied", "promptCopied": "Prompt copied" },
+    "createDialog": { "title": "Create Model", "desc": "Set the model direction and upload one reference image.", "basic": "Basic Settings", "basicDesc": "Choose the main direction, then add details and a reference image.", "profile": "Model Profile", "summary": "Current Profile Summary", "summaryHint": "Updates with the options on the left", "batchCount": "Batch Count", "reference": "Model Reference Image", "referenceDesc": "Upload one reference image to constrain the overall appearance.", "uploadPanel": "Reference Upload", "uploadDesc": "A real thumbnail preview appears after upload.", "upload": "Upload Reference Image", "previewHint": "The reference preview appears here after upload", "currentTask": "Current Model Task", "promptTitle": "Prompt Preview", "promptDesc": "Shows the main prompt actually sent to the model", "viewPrompt": "View Prompt", "copyPrompt": "Copy Prompt", "unsetGender": "Gender Not Set", "unsetMarket": "Market Not Set", "unsetOutfit": "Outfit Not Set", "unsetScene": "Scene Not Set", "referenceCount": "{count} reference images", "promptEmpty": "View the prompt to copy the exact prompt used for model creation.", "generating": "Generating Model", "generate": "Generate New Model" },
+    "renameDialog": { "title": "Rename Model", "desc": "Renaming does not affect generated assets or historical project files.", "name": "Model Name", "placeholder": "Enter a new model name", "saving": "Saving", "save": "Save Name" },
+    "deleteDialog": { "title": "Delete Model", "desc": "Delete model \"{name}\"? This removes the model record and asset directory but keeps historical project outputs.", "confirm": "Delete" }
+  },
+  "productLibrary": {
+    "title": "Product Library", "desc": "Manage product images, analysis boards, and core data while keeping generation assets consistent.", "namePlaceholder": "Enter product name", "productType": "Product Type", "create": "Create Product", "unnamed": "Untitled Product", "confirmDelete": "Delete product \"{name}\"?", "statusLabel": "Status", "allTypes": "All Types", "allStatuses": "All Statuses", "filter": "Filter", "searchPlaceholder": "Search by product name, ID, type, or status", "analysisSummary": "Product Analysis Summary", "analysisEmpty": "Standard and multi-angle images are not ready. The Product DNA summary appears after product modeling.", "imageCount": "{count} images", "openDetail": "Open Details", "continue": "Continue", "moreActions": "More Actions", "delete": "Delete Product", "previous": "Previous", "next": "Next", "perPage": "per page",
+    "types": { "phone_case": "Phone Case", "earring": "Earrings", "necklace": "Necklace", "ring": "Ring", "bracelet": "Bracelet", "clothes": "Clothing", "bag": "Bag", "shoes": "Shoes", "toy": "Toy", "general": "General Product" },
+    "status": { "pending": "Pending", "processing": "Generating", "done": "Completed", "failed": "Issue" },
+    "dna": { "done": "DNA Ready", "pending": "DNA Pending" },
+    "stats": { "total": "Total Products", "allProducts": "All Products", "pendingDesc": "Pending or processing", "doneDesc": "Generation completed", "failedDesc": "Generation failed or no images", "recent": "Recently Updated", "recentDesc": "Edited within 7 days" },
+    "sort": { "updated": "Recently Updated", "name": "Product Name", "analysis": "Analysis Status" },
+    "empty": { "noMatch": "No Matching Products", "title": "No Products Yet", "noMatchDesc": "Adjust the search or filters and try again.", "desc": "Create a product and upload images to start maintaining its details." }
+  },
+  "mediaPreview": {
+    "close": "Close Preview",
+    "loading": "Loading local video...",
+    "errors": { "unavailable": "This video cannot be previewed here. Use the file open action to view the local video." }
+  },
+  "pluginPlaceholder": {
+    "back": "Back To My Plugins",
+    "title": "Plugin Workspace",
+    "description": "This plugin has a workspace entry, but its execution capability is not available yet.",
+    "status": "Status",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "unknown": "Unknown",
+    "route": "Route",
+    "notes": "Notes",
+    "notesFallback": "Only the workspace entry is available."
+  },
+  "production": {
+    "tabs": {
+      "ariaLabel": "Production navigation",
+      "products": { "label": "Product Library", "desc": "Select a product, then manage images and the canonical product source." },
+      "templates": { "label": "Template Center", "desc": "Manage template structure, subtitles, audio, and visual output rules." },
+      "tasks": { "label": "Task Center", "desc": "Review production progress, failures, and exported results." }
+    },
+    "home": {
+      "kicker": "Production",
+      "title": "Task Execution Center",
+      "desc": "Manage task creation, task lists, task details, and templates in one place.",
+      "taskCount": "{count} tasks",
+      "templateCount": "{count} templates",
+      "stats": { "totalTasks": "Total Tasks", "running": "Running", "failed": "Failed Tasks", "templates": "Templates" },
+      "entries": {
+        "create": { "title": "Create Task", "desc": "Create a production task from a product and template.", "metric": "Open Creator" },
+        "tasks": { "title": "Task List", "desc": "Review the queue, execution progress, and recent results." },
+        "templates": { "title": "Template Center", "desc": "Manage template structure, subtitles, audio, and output rules." }
+      },
+      "recent": { "title": "Recent Tasks", "desc": "Continue reviewing recent results or failed tasks.", "empty": "No tasks yet. Create a task first." },
+      "scope": { "title": "Module Scope", "desc": "Production manages tasks and templates. Product maintenance stays in the product library.", "productionTitle": "Production", "productionDesc": "Home, task creation, task list, task details, and template settings.", "productsTitle": "Product Library", "productsDesc": "Product data, images, covers, and canonical product source cache." },
+      "refreshing": "Refreshing production summary..."
+    },
+    "create": {
+      "kicker": "Production / Create Task", "title": "Create A Task From A Product And Template", "desc": "Create tasks here, then review logs and failures in task details.", "noProduct": "No Product Selected", "product": "Product", "template": "Template", "quantity": "Quantity", "outputDir": "Output Directory", "chooseDir": "Choose Directory", "currentProduct": "Current Product", "currentTemplate": "Current Template", "creating": "Creating...", "submit": "Create Task", "viewTasks": "View Task List", "pickOutputDir": "Choose Output Directory", "validation": "Select a product and template, then set an output directory.", "created": "Created {count} tasks.", "failed": "Failed to create tasks"
+    },
+    "tasks": {
+      "kicker": "Production / Task List", "title": "Task List And Failure Filters", "desc": "Review task information, filter execution states, and open task details.", "create": "Create Task", "pause": "Pause", "resume": "Resume", "cancelAll": "Cancel All", "emptyTitle": "No Tasks", "emptyDesc": "Create a task first, then return to review its execution.", "product": "Product", "template": "Template", "createdAt": "Created", "progress": "Progress", "noOutput": "No output path yet",
+      "stats": { "total": "Total", "running": "Running", "done": "Completed", "failed": "Failed" },
+      "status": { "queued": "Queued", "running": "Running", "paused": "Paused", "done": "Completed", "error": "Failed", "skipped": "Skipped", "cancelled": "Cancelled" }
+    },
+    "detail": {
+      "kicker": "Production / Task Details", "taskTitle": "Task {id}", "notFound": "Task Not Found", "desc": "Review task logs, failure details, output files, and reports.", "back": "Back To Task List", "status": "Status", "progress": "Progress", "outputDir": "Output Directory", "error": "Error Details", "locateOutput": "Reveal Output File", "openReport": "Open Report", "openOutputDir": "Open Output Directory", "logs": "Runtime Logs", "noLogs": "No logs yet", "missing": "This task does not exist. It may have been removed or not written to the local queue yet."
+    }
+  },
+  "slicer": {
+    "title": "Live Slicer", "desc": "Import a stream recording or long video, identify segments, and split it in one action.", "noVideo": "No Video Selected", "outputAfterSplit": "The output directory appears after slicing",
+    "phase": { "ffmpeg": "Slicing with FFmpeg", "collect": "Collecting output segments", "done": "Generated {count} segments", "failed": "Slicing failed", "ready": "Video imported and ready for analysis", "idle": "Waiting for import" },
+    "pickers": { "video": "Choose A Stream Recording Or Long Video", "outputDir": "Choose Slice Output Directory" },
+    "upload": { "title": "Import A Stream Recording Or Long Video", "formats": "Supports MP4 / MOV / MKV / WEBM", "sizeHint": "Recommended file size: under 10GB", "choose": "Choose Video File", "reselect": "Choose Another Video", "openOriginal": "Open Original Video" },
+    "results": { "title": "Slice Results", "count": "{count} segments", "openDir": "Open Directory", "empty": "Import a video and start analysis. Slice results will appear here." },
+    "analysis": { "title": "Analysis Settings", "recommended": "Recommended", "mode": "Detection Mode", "smart": "Smart Detection", "smartDesc": "Detect highlight segments automatically", "manual": "Manual Markers", "manualDesc": "Mark segments manually", "custom": "Custom", "customDesc": "Configure detection rules", "minDuration": "Minimum Segment Duration (seconds)", "maxDuration": "Maximum Segment Duration (seconds)", "durationHint": "Recommended: 15-60 seconds", "fixedDuration": "FFmpeg currently slices at a fixed duration", "working": "Analyzing...", "start": "Start Analysis" },
+    "export": { "title": "Export Settings", "format": "Output Format", "sourceFormat": "Source Format", "quality": "Quality", "sourceQuality": "Keep Source Quality", "outputDir": "Output Directory", "all": "Export All Segments", "currentDir": "Current Export Directory" }
   },
   "agentOs": {
     "businessCommandCatalog": { "scopeLabel": "Command categories", "scopes": { "recommended": "Recommended", "business": "App actions", "skill": "Skills", "workspace": "Pages", "management": "Settings" }, "categories": { "product": "Product management", "material": "Product materials", "sourceVideo": "Source videos", "clone": "Video cloning", "livePhoto": "Live Photo", "subtitle": "Subtitles and slicing", "listing": "Product listings", "creative": "Creative studio", "modelIdentity": "Model identities", "template": "Production templates", "production": "Production tasks", "publishing": "Video publishing", "artifact": "Artifacts" }, "descriptions": { "read": "Read current application data and status", "write": "Create or update business data through the application", "dangerous": "This action changes, deletes, or publishes data and requires confirmation" }, "prompts": { "read": "Please perform \"{action}\". Read the current application data first and ask me when the target is unclear.", "write": "Please perform \"{action}\". Check current data and required parameters, show the execution plan, and ask me for missing information.", "dangerous": "Prepare to perform \"{action}\". Verify the target, impact, and current state, list the exact changes, and wait for my explicit confirmation before causing irreversible or external effects." } },

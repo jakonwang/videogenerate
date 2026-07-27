@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
+  ArrowLeft,
   CheckCircle2,
   FolderOpen,
+  LockKeyhole,
   Play,
   LoaderCircle,
   Upload,
@@ -23,6 +27,9 @@ import {
   type CloneProjectSummary,
 } from '@/lib/webApiClient'
 
+const { t: tr } = useI18n()
+const router = useRouter()
+
 type SourceTab = 'upload' | 'clone'
 type RightTab = 'content' | 'style'
 type QueueTab = 'all' | 'processing' | 'completed'
@@ -39,6 +46,8 @@ const sourceTab = ref<SourceTab>('upload')
 const rightTab = ref<RightTab>('content')
 const queueTab = ref<QueueTab>('all')
 const loading = ref(false)
+const pluginChecking = ref(true)
+const pluginReady = ref(false)
 const runningJob = ref(false)
 const controllingJob = ref(false)
 const pushingToGeelark = ref(false)
@@ -98,16 +107,16 @@ function defaultLayoutPolicy(): BatchSubtitleLayoutPolicy {
   }
 }
 
-const captionTemplatePresets: Array<{
+const captionTemplatePresets = computed<Array<{
   id: CaptionTemplatePresetId
   name: string
   summary: string
   style: Partial<BatchSubtitleCaptionStyle>
-}> = [
+}>>(() => [
   {
     id: 'viral-hook',
-    name: '爆款钩子款',
-    summary: '适合前 3 秒抓停留，强对比、强情绪、强记忆点标题。',
+    name: tr('autoUi.k_469e324ba51b'),
+    summary: tr('autoUi.k_cee620d9318e'),
     style: {
       fontName: 'SimHei',
       fontSize: 68,
@@ -127,8 +136,8 @@ const captionTemplatePresets: Array<{
   },
   {
     id: 'deal-punch',
-    name: '促单成交款',
-    summary: '适合价格利益点、限时优惠、爆点卖点，电商转化感更强。',
+    name: tr('autoUi.k_16d824cf7aac'),
+    summary: tr('autoUi.k_5112ff1701be'),
     style: {
       fontName: 'Microsoft YaHei',
       fontSize: 64,
@@ -148,8 +157,8 @@ const captionTemplatePresets: Array<{
   },
   {
     id: 'premium-drop',
-    name: '高客单精致款',
-    summary: '适合饰品、美妆、质感单品，视觉更高级，更像高客单种草标题。',
+    name: tr('autoUi.k_995c4ae82e7f'),
+    summary: tr('autoUi.k_140953ff6916'),
     style: {
       fontName: 'Noto Sans SC',
       fontSize: 58,
@@ -170,7 +179,7 @@ const captionTemplatePresets: Array<{
   {
     id: 'vn-viral-bold',
     name: 'VN Viral Bold',
-    summary: '越南 TikTok 爆款标题，粗体大字、强描边、强停留感。',
+    summary: tr('autoUi.k_2ea22f84f8ed'),
     style: {
       fontName: 'Arial Black',
       fontSize: 78,
@@ -191,7 +200,7 @@ const captionTemplatePresets: Array<{
   {
     id: 'vn-viral-outline',
     name: 'VN Viral Outline',
-    summary: '越南电商短视频封面式标题，高对比红白字，符号感更强。',
+    summary: tr('autoUi.k_146e6100be2f'),
     style: {
       fontName: 'Arial Black',
       fontSize: 74,
@@ -209,7 +218,7 @@ const captionTemplatePresets: Array<{
       bottomMargin: 176,
     },
   },
-]
+])
 
 function defaultOverlayImageConfig(): BatchSubtitleOverlayImageConfig {
   const style = defaultCaptionStyle()
@@ -243,7 +252,7 @@ const draft = reactive<{
   captionStyle: BatchSubtitleCaptionStyle
   layoutPolicy: BatchSubtitleLayoutPolicy
 }>({
-  name: 'TikTok 批量字幕任务',
+  name: tr('autoUi.k_249cbc9f1c5b'),
   titleRenderMode: 'overlay_image',
   sourceItems: [],
   titleText: '',
@@ -345,7 +354,7 @@ const failedOutputSummary = computed(() =>
     .map((item) => ({
       id: item.id,
       fileName: shortFileName(item.sourceVideoPath),
-      reason: String(item.error || '渲染失败'),
+      reason: String(item.error || tr('autoUi.k_b164ae2aaa3b')),
     })),
 )
 const sourcePageCount = computed(() => Math.max(1, Math.ceil(draft.sourceItems.length / sourcePageSize)))
@@ -372,9 +381,9 @@ const stepStates = computed<Record<'source' | 'config' | 'preview' | 'render', S
   render: hasRenderedOutputs.value ? 'done' : hasPreviewReady.value ? 'active' : 'idle',
 }))
 const queueSummary = computed(() => [
-  { label: '草稿 / 全部任务', value: String(jobs.value.length).padStart(2, '0') },
-  { label: '处理中', value: String(processingCount.value).padStart(2, '0') },
-  { label: '成功输出', value: String(successfulOutputs.value.length).padStart(2, '0') },
+  { label: tr('autoUi.k_54a1d655a4e8'), value: String(jobs.value.length).padStart(2, '0') },
+  { label: tr('autoUi.k_fcb979ef0b91'), value: String(processingCount.value).padStart(2, '0') },
+  { label: tr('autoUi.k_62f0ff0f782b'), value: String(successfulOutputs.value.length).padStart(2, '0') },
 ])
 
 watch(
@@ -528,19 +537,19 @@ function formatTime(value?: number) {
 
 function describeJobBatchRuntime(job: BatchSubtitleJob) {
   const runtime = job.batchRuntime
-  if (!runtime) return '未启用批次调度'
+  if (!runtime) return tr('autoUi.k_7e011d485110')
   const totalBatches = Math.max(0, Number(runtime.totalBatches || 0))
   const completedBatches = Math.max(0, Number(runtime.completedBatches || 0))
   const nextSourceIndex = Math.max(0, Number(runtime.nextSourceIndex || 0))
-  if (!totalBatches) return '等待批次启动'
+  if (!totalBatches) return tr('autoUi.k_f6f70c3bafc0')
   if (job.status === 'completed' || job.status === 'partial_failed') {
-    return `已完成 ${completedBatches}/${totalBatches} 批`
+    return tr('autoUi.k_4400ca3308f1', { p0: completedBatches, p1: totalBatches })
   }
-  return `第 ${Math.min(totalBatches, completedBatches + 1)}/${totalBatches} 批 · 下一批从第 ${nextSourceIndex + 1} 条开始`
+  return tr('autoUi.k_b21b0dec05ed', { p0: Math.min(totalBatches, completedBatches + 1), p1: totalBatches, p2: nextSourceIndex + 1 })
 }
 
 function applyCaptionTemplatePreset(presetId: CaptionTemplatePresetId) {
-  const preset = captionTemplatePresets.find((item) => item.id === presetId)
+  const preset = captionTemplatePresets.value.find((item) => item.id === presetId)
   if (!preset) return
   selectedTemplatePreset.value = preset.id
   draft.captionStyle = {
@@ -572,12 +581,12 @@ function goSourcePageNext() {
 }
 
 function resolveJobStatusLabel(status: BatchSubtitleJob['status']) {
-  if (status === 'processing') return '处理中'
-  if (status === 'queued') return '排队中'
-  if (status === 'completed') return '已完成'
-  if (status === 'partial_failed') return '部分失败'
-  if (status === 'failed') return '失败'
-  return '草稿'
+  if (status === 'processing') return tr('autoUi.k_fcb979ef0b91')
+  if (status === 'queued') return tr('autoUi.k_4dcbbcfa6154')
+  if (status === 'completed') return tr('autoUi.k_e99b48a29bdf')
+  if (status === 'partial_failed') return tr('autoUi.k_7912043e5530')
+  if (status === 'failed') return tr('autoUi.k_3e3c8068bb0e')
+  return tr('autoUi.k_0f436818c0b4')
 }
 
 function buildTitleConfig() {
@@ -750,7 +759,17 @@ async function refreshFontOptions() {
 }
 
 async function ensurePluginReady() {
-  return true
+  pluginChecking.value = true
+  pluginReady.value = false
+  try {
+    const plugin = await webApiClient.getPlugin('video-batch-subtitle')
+    pluginReady.value = plugin.status === 'installed' && plugin.runtimeState === 'enabled'
+  } catch {
+    pluginReady.value = false
+  } finally {
+    pluginChecking.value = false
+  }
+  return pluginReady.value
 }
 
 async function loadAll() {
@@ -778,8 +797,8 @@ async function loadAll() {
 
 async function pickUploadVideos() {
   const picked = await window.api.pickFiles({
-    title: '选择视频',
-    filters: [{ name: '视频文件', extensions: ['mp4', 'mov', 'm4v', 'webm'] }],
+    title: tr('autoUi.k_f6bc7748ef45'),
+    filters: [{ name: tr('autoUi.k_436893584feb'), extensions: ['mp4', 'mov', 'm4v', 'webm'] }],
     multiple: true,
   })
   const unique = Array.from(new Set((picked || []).map((item: string) => String(item).trim()).filter(Boolean)))
@@ -811,7 +830,7 @@ async function pickUploadVideos() {
   if (items[0]) selectedPreviewId.value = items[0].id
   selectedJobId.value = ''
   sourcePage.value = sourcePageCount.value
-  notice.value = `已添加 ${items.length} 条本地素材。`
+  notice.value = tr('autoUi.k_5df58afa1877', { p0: items.length })
 }
 
 function startQueuePolling() {
@@ -852,7 +871,7 @@ function applyCloneSources() {
   if (sourceItems[0]) selectedPreviewId.value = sourceItems[0].id
   selectedJobId.value = ''
   sourcePage.value = sourcePageCount.value
-  notice.value = `已加入 ${sourceItems.length} 条成片库素材。`
+  notice.value = tr('autoUi.k_c2475b5d11a0', { p0: sourceItems.length })
   errorText.value = ''
 }
 
@@ -864,7 +883,7 @@ function removeSourceItem(id: string) {
 
 async function saveCurrentDraft() {
   if (!draft.sourceItems.length) {
-    errorText.value = '请先添加至少一条素材视频。'
+    errorText.value = tr('autoUi.k_690499d9b0d8')
     return null
   }
   const activeJobId =
@@ -895,7 +914,7 @@ async function saveCurrentDraft() {
       : await webApiClient.createBatchSubtitleJob(payload)
     loadJobIntoDraft(result)
     draftDirty.value = false
-    notice.value = '当前草稿已保存。'
+    notice.value = tr('autoUi.k_a2f12528a59d')
     await loadAll()
     return result
   } catch (error: any) {
@@ -906,7 +925,7 @@ async function saveCurrentDraft() {
 
 async function renderBatch() {
   if (!draft.sourceItems.length) {
-    errorText.value = '请先添加素材视频。'
+    errorText.value = tr('autoUi.k_ba9e2b6d74e8')
     return
   }
   if (!hasDraftTitles.value) {
@@ -915,12 +934,12 @@ async function renderBatch() {
   }
   runningJob.value = true
   errorText.value = ''
-  notice.value = '正在准备批量渲染任务…'
+  notice.value = tr('autoUi.k_df4d23490b1b')
   try {
     const ensuredJob = selectedJobId.value ? { id: selectedJobId.value } : await saveCurrentDraft()
     const jobId = String(ensuredJob?.id || selectedJobId.value || '').trim()
     if (!jobId) {
-      errorText.value = '保存任务失败，未生成可执行任务，请先点击保存配置后重试。'
+      errorText.value = tr('autoUi.k_b7e96207dceb')
       return
     }
     await webApiClient.updateBatchSubtitleDraft(jobId, {
@@ -938,7 +957,7 @@ async function renderBatch() {
     const result = await webApiClient.runBatchSubtitleJob(jobId)
     loadJobIntoDraft(result)
     draftDirty.value = false
-    notice.value = `批量渲染完成，共输出 ${result.outputCount} 条结果。`
+    notice.value = tr('autoUi.k_adb3a2a7ae93', { p0: result.outputCount })
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -954,7 +973,7 @@ async function pauseCurrentJob() {
   try {
     const result = await webApiClient.pauseBatchSubtitleJob(selectedJobId.value)
     loadJobIntoDraft(result)
-    notice.value = '任务已暂停，当前批次结束后停止继续处理。'
+    notice.value = tr('autoUi.k_fc125f7c529d')
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -971,7 +990,7 @@ async function resumeCurrentJob(retryFailedOnly = false) {
   try {
     const result = await webApiClient.resumeBatchSubtitleJob(selectedJobId.value, { retryFailedOnly })
     loadJobIntoDraft(result)
-    notice.value = retryFailedOnly ? '失败项重试完成。' : '任务已继续执行。'
+    notice.value = retryFailedOnly ? tr('autoUi.k_c4069ac52051') : tr('autoUi.k_19b0831feeb0')
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -994,10 +1013,10 @@ async function controlQueueJob(job: BatchSubtitleJob, action: 'pause' | 'resume'
     }
     notice.value =
       action === 'pause'
-        ? '队列任务已暂停。'
+        ? tr('autoUi.k_852b54e4bf6b')
         : action === 'retry_failed'
-          ? '队列任务失败项已开始重试。'
-          : '队列任务已继续执行。'
+          ? tr('autoUi.k_0da8369de465')
+          : tr('autoUi.k_4794c9f36f26')
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -1008,14 +1027,14 @@ async function controlQueueJob(job: BatchSubtitleJob, action: 'pause' | 'resume'
 
 async function pushToGeelark() {
   if (!selectedJobId.value) {
-    errorText.value = '请先选择一个已渲染完成的任务。'
+    errorText.value = tr('autoUi.k_3c87aaf622b1')
     return
   }
   pushingToGeelark.value = true
   errorText.value = ''
   try {
     const result = await webApiClient.pushBatchSubtitleOutputsToGeelarkPool(selectedJobId.value)
-    notice.value = `已将 ${result.outputCount} 条结果加入 GeeLark 发布池。`
+    notice.value = tr('autoUi.k_82a2909e8fe7', { p0: result.outputCount })
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -1054,11 +1073,11 @@ async function showOutputInFolder(item: BatchSubtitleOutputItem) {
 
 function openGuide() {
   notice.value =
-    '工作顺序：添加素材 -> 配置标题与样式 -> 预览真实叠加效果 -> 保存草稿 -> 批量渲染 -> 推入 GeeLark。'
+    tr('autoUi.k_6901d9336c6f')
 }
 
 onMounted(async () => {
-  await ensurePluginReady()
+  if (!(await ensurePluginReady())) return
   await refreshFontOptions()
   await loadAll()
   startQueuePolling()
@@ -1075,8 +1094,8 @@ onBeforeUnmount(() => {
   <div class="subtitle-workbench-page plugin-workspace-standard">
     <section class="hero-panel glass-panel hero-panel--compact">
       <div class="hero-copy hero-copy--compact">
-        <h1>视频批量加字幕</h1>
-        <p>批量导入素材，实时预览字幕效果并输出可发布成片。</p>
+        <h1>{{ tr('autoUi.k_3c2dba21dfac') }}</h1>
+        <p>{{ tr('autoUi.k_2ef208e0ed51') }}</p>
       </div>
 
       <div class="hero-actions hero-actions--compact">
@@ -1088,37 +1107,53 @@ onBeforeUnmount(() => {
         </div>
         <button class="ghost-button ghost-button--compact" type="button" @click="openGuide">
           <FolderOpen class="h-4 w-4" />
-          <span>教程与示例</span>
+          <span>{{ tr('autoUi.k_02b72c79047a') }}</span>
         </button>
       </div>
     </section>
 
+    <section v-if="pluginChecking" class="plugin-lock-panel glass-panel">
+      <LoaderCircle class="h-6 w-6 animate-spin" />
+      <strong>{{ tr('autoUi.k_ab033e36c756') }}</strong>
+    </section>
+
+    <section v-else-if="!pluginReady" class="plugin-lock-panel glass-panel">
+      <LockKeyhole class="h-8 w-8" />
+      <strong>{{ tr('autoUi.k_7659e21372a5') }}</strong>
+      <p>{{ tr('autoUi.k_a27ab48c49f9') }}</p>
+      <button class="ghost-button" type="button" @click="router.push('/plugins')">
+        <ArrowLeft class="h-4 w-4" />
+        <span>{{ tr('autoUi.k_ee7023263319') }}</span>
+      </button>
+    </section>
+
+    <template v-else>
     <section class="stepbar-panel glass-panel stepbar-panel--compact">
       <button class="step-chip step-chip--compact" :class="[`is-${stepStates.source}`]" type="button">
         <span class="step-chip__index">1</span>
         <span class="step-chip__copy">
-          <strong>选择素材</strong>
+          <strong>{{ tr('autoUi.k_2d9e0489e21f') }}</strong>
         </span>
         <CheckCircle2 v-if="stepStates.source === 'done'" class="step-chip__done h-4 w-4" />
       </button>
       <button class="step-chip step-chip--compact" :class="[`is-${stepStates.config}`]" type="button">
         <span class="step-chip__index">2</span>
         <span class="step-chip__copy">
-          <strong>配置标题</strong>
+          <strong>{{ tr('autoUi.k_251c613f509d') }}</strong>
         </span>
         <CheckCircle2 v-if="stepStates.config === 'done'" class="step-chip__done h-4 w-4" />
       </button>
       <button class="step-chip step-chip--compact" :class="[`is-${stepStates.preview}`]" type="button">
         <span class="step-chip__index">3</span>
         <span class="step-chip__copy">
-          <strong>实时预览</strong>
+          <strong>{{ tr('autoUi.k_f95aacf3bd60') }}</strong>
         </span>
         <CheckCircle2 v-if="stepStates.preview === 'done'" class="step-chip__done h-4 w-4" />
       </button>
       <button class="step-chip step-chip--compact" :class="[`is-${stepStates.render}`]" type="button">
         <span class="step-chip__index">4</span>
         <span class="step-chip__copy">
-          <strong>批量渲染</strong>
+          <strong>{{ tr('autoUi.k_64ffbf43808b') }}</strong>
         </span>
         <CheckCircle2 v-if="stepStates.render === 'done'" class="step-chip__done h-4 w-4" />
       </button>
@@ -1132,34 +1167,28 @@ onBeforeUnmount(() => {
         <div class="section-heading">
           <div>
             <span class="section-kicker">Source Intake</span>
-            <strong>素材选择</strong>
+            <strong>{{ tr('autoUi.k_aa0dfea4335b') }}</strong>
           </div>
-          <span class="section-note">支持大批量导入，首屏仅展示当前页素材</span>
+          <span class="section-note">{{ tr('autoUi.k_1bd9bfc383cf') }}</span>
         </div>
 
         <div class="segmented-tabs">
-          <button :class="{ 'is-active': sourceTab === 'upload' }" type="button" @click="sourceTab = 'upload'">
-            本地上传
-          </button>
-          <button :class="{ 'is-active': sourceTab === 'clone' }" type="button" @click="sourceTab = 'clone'">
-            成片库选择
-          </button>
+          <button :class="{ 'is-active': sourceTab === 'upload' }" type="button" @click="sourceTab = 'upload'"> {{ tr('autoUi.k_16367f3d8ae3') }} </button>
+          <button :class="{ 'is-active': sourceTab === 'clone' }" type="button" @click="sourceTab = 'clone'"> {{ tr('autoUi.k_8810731ffc4d') }} </button>
         </div>
 
         <div v-if="sourceTab === 'upload'" class="upload-zone" @click="pickUploadVideos">
           <div class="upload-zone__icon">
             <Upload class="h-7 w-7" />
           </div>
-          <strong>点击或拖拽视频到这里</strong>
-          <span>支持 mp4 / mov / m4v / webm，Windows 开发与 Linux 部署同链路可用</span>
+          <strong>{{ tr('autoUi.k_ce5318355f95') }}</strong>
+          <span>{{ tr('autoUi.k_0e8f11cc03f6') }}</span>
         </div>
 
         <div v-else class="clone-picker">
           <div class="picker-tip">
-            <p>从现有成片库复用素材，适合批量做统一封面标题字幕。</p>
-            <button class="minor-button minor-button--full" type="button" @click="applyCloneSources">
-              应用已选成片到当前任务
-            </button>
+            <p>{{ tr('autoUi.k_ac29877edcfd') }}</p>
+            <button class="minor-button minor-button--full" type="button" @click="applyCloneSources"> {{ tr('autoUi.k_49e222b27db2') }} </button>
           </div>
           <div class="clone-picker__list">
             <button
@@ -1173,17 +1202,15 @@ onBeforeUnmount(() => {
               <img v-if="mediaUrl(project.coverAssetPath)" :src="mediaUrl(project.coverAssetPath)" :alt="project.title" />
               <div class="clone-picker__copy">
                 <strong>{{ project.title }}</strong>
-                <small>{{ project.referenceVideoName || '未命名成片' }}</small>
+                <small>{{ project.referenceVideoName || tr('autoUi.k_d264f0c81078') }}</small>
               </div>
             </button>
           </div>
         </div>
 
         <div class="card-head">
-          <strong>已选视频 {{ draft.sourceItems.length }}</strong>
-          <button class="text-button" type="button" @click="draft.sourceItems = []; selectedPreviewId = ''">
-            清空
-          </button>
+          <strong>{{ tr('autoUi.k_917845a7389e') }} {{ draft.sourceItems.length }}</strong>
+          <button class="text-button" type="button" @click="draft.sourceItems = []; selectedPreviewId = ''"> {{ tr('autoUi.k_84fcd70d4280') }} </button>
         </div>
 
         <div class="sources-list">
@@ -1212,37 +1239,33 @@ onBeforeUnmount(() => {
 
         <div v-if="draft.sourceItems.length > sourcePageSize" class="source-pager">
           <div class="source-pager__meta">
-            <span>当前显示 {{ sourcePageRange }}</span>
-            <strong>第 {{ sourcePage }} / {{ sourcePageCount }} 页</strong>
+            <span>{{ tr('autoUi.k_8b8b664f5094') }} {{ sourcePageRange }}</span>
+            <strong>{{ tr('autoUi.k_dae828fe4fb7') }} {{ sourcePage }} / {{ sourcePageCount }} {{ tr('autoUi.k_73422182ab45') }}</strong>
           </div>
           <div class="source-pager__actions">
-            <button class="toolbar-pill" type="button" :disabled="!canSourcePagePrev" @click="goSourcePagePrev">
-              上一页
-            </button>
-            <button class="toolbar-pill" type="button" :disabled="!canSourcePageNext" @click="goSourcePageNext">
-              下一页
-            </button>
+            <button class="toolbar-pill" type="button" :disabled="!canSourcePagePrev" @click="goSourcePagePrev"> {{ tr('autoUi.k_b41561d80765') }} </button>
+            <button class="toolbar-pill" type="button" :disabled="!canSourcePageNext" @click="goSourcePageNext"> {{ tr('autoUi.k_67a246a344ae') }} </button>
           </div>
         </div>
 
         <div class="capacity-card">
           <div class="capacity-head">
-            <span>素材队列概览</span>
-            <strong>{{ draft.sourceItems.length }} 条</strong>
+            <span>{{ tr('autoUi.k_11895d0b9912') }}</span>
+            <strong>{{ draft.sourceItems.length }} {{ tr('autoUi.k_bce2ef61514a') }}</strong>
           </div>
           <div class="sources-progress__bar">
             <div class="sources-progress__fill" :style="{ width: `${sourceUsagePercent}%` }"></div>
           </div>
-          <p>预览与列表都只聚焦当前页和当前选中项，适合几百条素材连续排队渲染，避免界面一次性吃满资源。</p>
+          <p>{{ tr('autoUi.k_1e7860c88dd9') }}</p>
           <div v-if="selectedJobBatchSummary" class="batch-runtime-card">
             <div class="batch-runtime-card__head">
-              <span>批次进度</span>
+              <span>{{ tr('autoUi.k_dacdf7b9d85d') }}</span>
               <strong>{{ selectedJobBatchSummary.totalBatches ? `${selectedJobBatchSummary.currentBatch} / ${selectedJobBatchSummary.totalBatches}` : '--' }}</strong>
             </div>
             <div class="batch-runtime-card__meta">
-              <span>当前范围 {{ selectedJobBatchSummary.rangeStart }}-{{ selectedJobBatchSummary.rangeEnd }}</span>
-              <span>剩余 {{ selectedJobBatchSummary.remaining }} 条</span>
-              <span>每批 {{ selectedJobBatchSummary.batchSize }} 条</span>
+              <span>{{ tr('autoUi.k_96b029d1e14b') }} {{ selectedJobBatchSummary.rangeStart }}-{{ selectedJobBatchSummary.rangeEnd }}</span>
+              <span>{{ tr('autoUi.k_f37c034a97bb') }} {{ selectedJobBatchSummary.remaining }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
+              <span>{{ tr('autoUi.k_fd04697da61c') }} {{ selectedJobBatchSummary.batchSize }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
             </div>
           </div>
         </div>
@@ -1252,18 +1275,14 @@ onBeforeUnmount(() => {
         <div class="card-head">
           <div>
             <span class="section-kicker">Live Preview</span>
-            <strong>9:16 预览舞台</strong>
+            <strong>{{ tr('autoUi.k_3db769d9546e') }}</strong>
           </div>
           <div class="preview-toolbar">
             <span class="toolbar-pill is-active">9:16</span>
-            <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'fast' }" type="button" @click="setPreviewMode('fast')">
-              快速预览
-            </button>
-            <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'video' }" type="button" @click="setPreviewMode('video')">
-              真实视频预览
-            </button>
+            <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'fast' }" type="button" @click="setPreviewMode('fast')"> {{ tr('autoUi.k_94636f2c55e9') }} </button>
+            <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'video' }" type="button" @click="setPreviewMode('video')"> {{ tr('autoUi.k_c29bc057fcfc') }} </button>
             <button class="toolbar-pill" type="button" @click="scheduleAccuratePreview()">
-              {{ previewDirtySinceLastRender ? '刷新预览' : '重新生成' }}
+              {{ previewDirtySinceLastRender ? tr('autoUi.k_13191048151a') : tr('autoUi.k_2e19057052a3') }}
             </button>
           </div>
         </div>
@@ -1282,16 +1301,16 @@ onBeforeUnmount(() => {
             <img
               v-else-if="previewFrame?.previewImagePath"
               :src="mediaUrl(previewFrame.previewImagePath)"
-              alt="字幕预览"
+                    :alt="tr('autoUi.k_3b93fd2d045d')"
               class="preview-stage__video"
             />
             <div v-else class="preview-stage__empty">
-              <strong>等待生成预览</strong>
-              <span>先选中一个视频并输入标题，默认只生成轻量静帧预览，减少机器压力。</span>
+              <strong>{{ tr('autoUi.k_0d43ec255cb5') }}</strong>
+              <span>{{ tr('autoUi.k_72f847dd1821') }}</span>
             </div>
             <div v-if="previewFrameLoading" class="preview-stage__loading">
               <LoaderCircle class="h-4 w-4 animate-spin" />
-              <span>{{ previewMode === 'video' ? '正在生成真实视频预览…' : '正在生成快速预览…' }}</span>
+              <span>{{ previewMode === 'video' ? tr('autoUi.k_b9c55e9ffcb6') : tr('autoUi.k_ab62e9e1f4e5') }}</span>
             </div>
           </div>
         </div>
@@ -1337,30 +1356,24 @@ onBeforeUnmount(() => {
         <div class="preview-meta">
           <div>
             <span class="section-kicker">Preview Status</span>
-            <strong>{{ previewSource?.fileName || '尚未选择视频' }}</strong>
+            <strong>{{ previewSource?.fileName || tr('autoUi.k_4e810e74e284') }}</strong>
           </div>
-          <p>{{ previewMode === 'video' ? '当前为真实视频预览，修改标题或样式后请手动刷新，避免页面频繁卡顿。' : '当前为快速预览，优先保证大批量任务下的页面流畅度。' }}</p>
+          <p>{{ previewMode === 'video' ? tr('autoUi.k_878c3070dab2') : tr('autoUi.k_9dfec6f6a2e9') }}</p>
         </div>
 
         <div v-if="previewVideoError" class="preview-error">{{ previewVideoError }}</div>
 
         <div class="preview-footer">
           <div class="preview-footer__actions">
-            <button class="minor-button" type="button" @click="saveCurrentDraft">保存配置</button>
-            <button class="minor-button" type="button" :disabled="!canPauseSelectedJob || controllingJob" @click="pauseCurrentJob">
-              暂停
-            </button>
-            <button class="minor-button" type="button" :disabled="!canResumeSelectedJob || controllingJob" @click="resumeCurrentJob(false)">
-              继续
-            </button>
-            <button class="minor-button" type="button" :disabled="!canRetryFailedOnly || controllingJob" @click="resumeCurrentJob(true)">
-              重试失败
-            </button>
+            <button class="minor-button" type="button" @click="saveCurrentDraft">{{ tr('autoUi.k_817af1870ca0') }}</button>
+            <button class="minor-button" type="button" :disabled="!canPauseSelectedJob || controllingJob" @click="pauseCurrentJob"> {{ tr('autoUi.k_130448bce675') }} </button>
+            <button class="minor-button" type="button" :disabled="!canResumeSelectedJob || controllingJob" @click="resumeCurrentJob(false)"> {{ tr('autoUi.k_1fc1afc5c55e') }} </button>
+            <button class="minor-button" type="button" :disabled="!canRetryFailedOnly || controllingJob" @click="resumeCurrentJob(true)"> {{ tr('autoUi.k_8af761b2b4bf') }} </button>
           </div>
           <button class="primary-button" type="button" :disabled="runningJob" @click="renderBatch">
             <LoaderCircle v-if="runningJob" class="h-4 w-4 animate-spin" />
             <Play v-else class="h-4 w-4" />
-            <span>{{ runningJob ? '批量渲染中…' : `开始批量渲染（${draft.sourceItems.length || 0} 条）` }}</span>
+            <span>{{ runningJob ? tr('autoUi.k_12fefde201ec') : tr('autoUi.k_32dc2a3442fc', { p0: draft.sourceItems.length || 0 }) }}</span>
           </button>
         </div>
       </article>
@@ -1369,17 +1382,13 @@ onBeforeUnmount(() => {
         <div class="card-head">
           <div>
             <span class="section-kicker">Caption Control</span>
-            <strong>标题与样式面板</strong>
+            <strong>{{ tr('autoUi.k_437fa96dabb8') }}</strong>
           </div>
         </div>
 
         <div class="segmented-tabs">
-          <button :class="{ 'is-active': rightTab === 'content' }" type="button" @click="rightTab = 'content'">
-            字幕内容
-          </button>
-          <button :class="{ 'is-active': rightTab === 'style' }" type="button" @click="rightTab = 'style'">
-            样式设置
-          </button>
+          <button :class="{ 'is-active': rightTab === 'content' }" type="button" @click="rightTab = 'content'"> {{ tr('autoUi.k_696307182bc5') }} </button>
+          <button :class="{ 'is-active': rightTab === 'style' }" type="button" @click="rightTab = 'style'"> {{ tr('autoUi.k_8b52bd0a4bd6') }} </button>
         </div>
 
         <template v-if="rightTab === 'content'">
@@ -1387,17 +1396,17 @@ onBeforeUnmount(() => {
             <div class="section-heading">
               <div>
                 <span class="section-kicker">Title Mode</span>
-                <strong>标题配置</strong>
+                <strong>{{ tr('autoUi.k_7f39a0d9ffad') }}</strong>
               </div>
             </div>
             <div class="strategy-grid">
               <button class="strategy-card" :class="{ 'is-active': titleStrategy === 'single_for_all' }" type="button" @click="titleStrategy = 'single_for_all'">
-                <strong>统一标题</strong>
-                <small>整批视频共用同一条标题。</small>
+                <strong>{{ tr('autoUi.k_73e18b3f4a29') }}</strong>
+                <small>{{ tr('autoUi.k_35ea8ee71029') }}</small>
               </button>
               <button class="strategy-card" :class="{ 'is-active': titleStrategy === 'random_pool' }" type="button" @click="titleStrategy = 'random_pool'">
-                <strong>随机标题池</strong>
-                <small>每条视频从标题池中随机选择一条标题。</small>
+                <strong>{{ tr('autoUi.k_84ba3e6f5cfb') }}</strong>
+                <small>{{ tr('autoUi.k_5c5896230c71') }}</small>
               </button>
             </div>
             <div v-if="titleStrategy === 'single_for_all'">
@@ -1405,16 +1414,16 @@ onBeforeUnmount(() => {
                 v-model="draft.titleText"
                 class="dark-input"
                 type="text"
-                placeholder="输入统一标题"
+                :placeholder="tr('autoUi.k_84fa79965540')"
               />
             </div>
             <div v-else>
               <textarea
                 v-model="titlePoolText"
                 class="dark-textarea dark-textarea--compact"
-                placeholder="每行输入一条随机标题"
+                :placeholder="tr('autoUi.k_8b5a652b83d0')"
               ></textarea>
-              <p class="helper-copy helper-copy--tight">当前可用标题数：{{ titlePoolItems.length }}</p>
+              <p class="helper-copy helper-copy--tight">{{ tr('autoUi.k_829814eab6c6') }}{{ titlePoolItems.length }}</p>
             </div>
           </section>
 
@@ -1423,7 +1432,7 @@ onBeforeUnmount(() => {
             <div class="section-heading">
               <div>
                 <span class="section-kicker">Per Video Titles</span>
-                <strong>逐视频覆盖</strong>
+                <strong>{{ tr('autoUi.k_e2fd7c5ff973') }}</strong>
               </div>
             </div>
             <div class="title-item-list">
@@ -1435,10 +1444,10 @@ onBeforeUnmount(() => {
                 <textarea
                   class="dark-textarea dark-textarea--compact"
                   :value="resolveTitleTextForSource(item.id)"
-                  placeholder="为当前视频输入单独标题"
+                  :placeholder="tr('autoUi.k_70c4476bc64d')"
                   @input="updateTitleItem(item.id, ($event.target as HTMLTextAreaElement).value)"
                 ></textarea>
-                <p class="helper-copy helper-copy--tight">留空时会回退到统一标题。</p>
+                <p class="helper-copy helper-copy--tight">{{ tr('autoUi.k_3ff93f5971c0') }}</p>
               </div>
             </div>
           </section>
@@ -1448,7 +1457,7 @@ onBeforeUnmount(() => {
             <div class="section-heading">
               <div>
                 <span class="section-kicker">Typeface</span>
-                <strong>字体与模板</strong>
+                <strong>{{ tr('autoUi.k_1bc4ce5a7f47') }}</strong>
               </div>
             </div>
 
@@ -1465,35 +1474,35 @@ onBeforeUnmount(() => {
                 <span>{{ preset.summary }}</span>
               </button>
             </div>
-            <p class="helper-copy">这 3 套是偏热门 TikTok 标题的安全款：种草感、强卖点、商务转化。静态标题现已统一走 React + Remotion 渲染。</p>
+            <p class="helper-copy">{{ tr('autoUi.k_12a878360eaf') }}</p>
           </section>
 
           <section class="form-section">
             <div class="form-grid form-grid--triple">
               <label class="field-block field-block--wide">
-                <span>字体</span>
-                <input v-model="draft.captionStyle.fontName" class="dark-input" type="text" placeholder="例如：Noto Sans SC" />
+                <span>{{ tr('autoUi.k_b50d4d8352f5') }}</span>
+                <input v-model="draft.captionStyle.fontName" class="dark-input" type="text" :placeholder="tr('autoUi.k_92e18f5ddb71')" />
               </label>
               <label class="field-block">
-                <span>字号</span>
+                <span>{{ tr('autoUi.k_576ccdb1f1c7') }}</span>
                 <input v-model.number="draft.captionStyle.fontSize" class="dark-input" type="number" min="18" max="120" />
               </label>
               <label class="field-block">
-                <span>描边</span>
+                <span>{{ tr('autoUi.k_a48b15a6de71') }}</span>
                 <input v-model.number="draft.captionStyle.strokeWidth" class="dark-input" type="number" min="0" max="12" />
               </label>
             </div>
 
             <div class="form-grid form-grid--dual">
               <label class="field-block">
-                <span>文字颜色</span>
+                <span>{{ tr('autoUi.k_07f568dada4d') }}</span>
                 <div class="color-field">
                   <input v-model="draft.captionStyle.fontColor" class="dark-input dark-input--text" type="text" />
                   <input v-model="draft.captionStyle.fontColor" class="dark-input dark-input--color" type="color" />
                 </div>
               </label>
               <label class="field-block">
-                <span>描边颜色</span>
+                <span>{{ tr('autoUi.k_eaa98f95ba53') }}</span>
                 <div class="color-field">
                   <input v-model="draft.captionStyle.strokeColor" class="dark-input dark-input--text" type="text" />
                   <input v-model="draft.captionStyle.strokeColor" class="dark-input dark-input--color" type="color" />
@@ -1505,58 +1514,52 @@ onBeforeUnmount(() => {
           <section class="form-section">
             <div class="form-grid form-grid--dual">
               <label class="field-block">
-                <span>阴影颜色</span>
+                <span>{{ tr('autoUi.k_2dafdabeabf6') }}</span>
                 <div class="color-field">
                   <input v-model="draft.captionStyle.shadowColor" class="dark-input dark-input--text" type="text" />
                   <input v-model="draft.captionStyle.shadowColor" class="dark-input dark-input--color" type="color" />
                 </div>
               </label>
               <label class="field-block">
-                <span>阴影模糊</span>
+                <span>{{ tr('autoUi.k_7f36b37b3b4f') }}</span>
                 <input v-model.number="draft.captionStyle.shadowBlur" class="dark-input" type="number" min="0" max="40" />
               </label>
             </div>
 
             <div class="form-grid form-grid--quad">
               <label class="field-block">
-                <span>位置</span>
+                <span>{{ tr('autoUi.k_88c34452cc46') }}</span>
                 <select v-model="draft.captionStyle.position" class="dark-input">
-                  <option value="top">顶部</option>
-                  <option value="center">居中</option>
-                  <option value="bottom">底部</option>
+                  <option value="top">{{ tr('autoUi.k_a9d35ab0a675') }}</option>
+                  <option value="center">{{ tr('autoUi.k_5009324782b9') }}</option>
+                  <option value="bottom">{{ tr('autoUi.k_435b2d8982fd') }}</option>
                 </select>
               </label>
               <label class="field-block">
-                <span>安全边距</span>
+                <span>{{ tr('autoUi.k_6e081f6c8bae') }}</span>
                 <input v-model.number="draft.captionStyle.safeMargin" class="dark-input" type="number" min="0" max="40" />
               </label>
               <label class="field-block">
-                <span>最大行数</span>
+                <span>{{ tr('autoUi.k_3ca120ca0195') }}</span>
                 <input v-model.number="draft.captionStyle.maxLines" class="dark-input" type="number" min="1" max="6" />
               </label>
               <label class="field-block">
-                <span>对齐方式</span>
+                <span>{{ tr('autoUi.k_47b8b7519755') }}</span>
                 <div class="align-segment">
-                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'left' }" @click="draft.captionStyle.textAlign = 'left'">
-                    左
-                  </button>
-                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'center' }" @click="draft.captionStyle.textAlign = 'center'">
-                    中
-                  </button>
-                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'right' }" @click="draft.captionStyle.textAlign = 'right'">
-                    右
-                  </button>
+                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'left' }" @click="draft.captionStyle.textAlign = 'left'"> {{ tr('autoUi.k_df3ee667608c') }} </button>
+                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'center' }" @click="draft.captionStyle.textAlign = 'center'"> {{ tr('autoUi.k_0869071c92c0') }} </button>
+                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'right' }" @click="draft.captionStyle.textAlign = 'right'"> {{ tr('autoUi.k_851cdd609190') }} </button>
                 </div>
               </label>
             </div>
 
             <div class="form-grid form-grid--dual">
               <label class="field-block">
-                <span>最大宽度比例</span>
+                <span>{{ tr('autoUi.k_46b628553a32') }}</span>
                 <input v-model.number="draft.captionStyle.maxWidthRatio" class="dark-input" type="number" min="0.4" max="0.92" step="0.02" />
               </label>
               <label class="field-block">
-                <span>底部偏移</span>
+                <span>{{ tr('autoUi.k_d36447206aaa') }}</span>
                 <input v-model.number="draft.captionStyle.bottomMargin" class="dark-input" type="number" min="48" max="600" />
               </label>
             </div>
@@ -1570,17 +1573,14 @@ onBeforeUnmount(() => {
         <div class="card-head">
           <div>
             <span class="section-kicker">Render Queue</span>
-            <strong>任务队列</strong>
+            <strong>{{ tr('autoUi.k_83856208eaba') }}</strong>
           </div>
           <div class="segmented-tabs segmented-tabs--queue">
-            <button :class="{ 'is-active': queueTab === 'all' }" type="button" @click="queueTab = 'all'">
-              全部 {{ jobs.length }}
+            <button :class="{ 'is-active': queueTab === 'all' }" type="button" @click="queueTab = 'all'"> {{ tr('autoUi.k_778fc8f99453') }} {{ jobs.length }}
             </button>
-            <button :class="{ 'is-active': queueTab === 'processing' }" type="button" @click="queueTab = 'processing'">
-              处理中 {{ processingCount }}
+            <button :class="{ 'is-active': queueTab === 'processing' }" type="button" @click="queueTab = 'processing'"> {{ tr('autoUi.k_fcb979ef0b91') }} {{ processingCount }}
             </button>
-            <button :class="{ 'is-active': queueTab === 'completed' }" type="button" @click="queueTab = 'completed'">
-              已完成 {{ completedCount }}
+            <button :class="{ 'is-active': queueTab === 'completed' }" type="button" @click="queueTab = 'completed'"> {{ tr('autoUi.k_e99b48a29bdf') }} {{ completedCount }}
             </button>
           </div>
         </div>
@@ -1590,14 +1590,14 @@ onBeforeUnmount(() => {
             <div class="queue-card-item__top">
               <div class="queue-card-item__title">
                 <strong>{{ job.name }}</strong>
-                <small>{{ job.titleConfig?.singleText ? '单标题应用全部' : job.subtitleMode }}</small>
+                <small>{{ job.titleConfig?.singleText ? tr('autoUi.k_970dd864bf27') : job.subtitleMode }}</small>
               </div>
               <em class="status-chip" :class="`status-chip--${job.status}`">{{ resolveJobStatusLabel(job.status) }}</em>
             </div>
 
             <div class="queue-card-item__meta">
-              <span>素材 {{ job.sourceItems.length }}</span>
-              <span>输出 {{ job.outputCount }} / {{ job.sourceItems.length }}</span>
+              <span>{{ tr('autoUi.k_75e00c77cbfc') }} {{ job.sourceItems.length }}</span>
+              <span>{{ tr('autoUi.k_ded698ae1e7e') }} {{ job.outputCount }} / {{ job.sourceItems.length }}</span>
               <span>{{ formatTime(job.createdAt) }}</span>
             </div>
 
@@ -1612,21 +1612,15 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="queue-card-item__actions">
-              <button class="row-action" type="button" @click="loadJobIntoDraft(job)">载入</button>
-              <button class="row-action" type="button" :disabled="job.status !== 'processing' || controllingJob" @click="controlQueueJob(job, 'pause')">
-                暂停
-              </button>
-              <button class="row-action" type="button" :disabled="!(job.status === 'paused' || job.status === 'failed') || controllingJob" @click="controlQueueJob(job, 'resume')">
-                继续
-              </button>
+              <button class="row-action" type="button" @click="loadJobIntoDraft(job)">{{ tr('autoUi.k_da4738cea064') }}</button>
+              <button class="row-action" type="button" :disabled="job.status !== 'processing' || controllingJob" @click="controlQueueJob(job, 'pause')"> {{ tr('autoUi.k_130448bce675') }} </button>
+              <button class="row-action" type="button" :disabled="!(job.status === 'paused' || job.status === 'failed') || controllingJob" @click="controlQueueJob(job, 'resume')"> {{ tr('autoUi.k_1fc1afc5c55e') }} </button>
               <button
                 class="row-action"
                 type="button"
                 :disabled="!job.outputs.some((item) => item.renderStatus === 'failed') || controllingJob"
                 @click="controlQueueJob(job, 'retry_failed')"
-              >
-                重试失败
-              </button>
+              > {{ tr('autoUi.k_8af761b2b4bf') }} </button>
             </div>
           </article>
         </div>
@@ -1636,10 +1630,10 @@ onBeforeUnmount(() => {
         <div class="card-head">
           <div>
             <span class="section-kicker">Outputs</span>
-            <strong>输出结果</strong>
+            <strong>{{ tr('autoUi.k_7da807cf5fc2') }}</strong>
           </div>
           <button class="text-button" type="button" @click="showAllOutputs = !showAllOutputs">
-            {{ showAllOutputs ? '收起' : '全部查看' }}
+            {{ showAllOutputs ? tr('autoUi.k_5d5815647c76') : tr('autoUi.k_4bcc8fb67a77') }}
           </button>
         </div>
 
@@ -1661,23 +1655,19 @@ onBeforeUnmount(() => {
               <img
                 v-else-if="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
                 :src="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
-                :alt="item.selectedTitle || '输出结果'"
+                :alt="item.selectedTitle || tr('autoUi.k_7da807cf5fc2')"
               />
               <span class="result-thumb__badge" :class="{ 'is-failed': item.renderStatus === 'failed' }">
-                {{ item.renderStatus === 'success' ? '视频成片' : '失败' }}
+                {{ item.renderStatus === 'success' ? tr('autoUi.k_64ecc9a38864') : tr('autoUi.k_3e3c8068bb0e') }}
               </span>
             </div>
             <div class="result-thumb__copy">
               <strong>{{ shortFileName(item.outputVideoPath || item.sourceVideoPath) }}</strong>
-              <small>{{ item.selectedTitle || '未设置标题' }}</small>
+              <small>{{ item.selectedTitle || tr('autoUi.k_a72c844b7a6d') }}</small>
             </div>
             <div class="result-thumb__actions">
-              <button class="row-action" type="button" :disabled="item.renderStatus !== 'success'" @click="openOutputVideo(item)">
-                查看视频
-              </button>
-              <button class="row-action" type="button" :disabled="item.renderStatus !== 'success'" @click="showOutputInFolder(item)">
-                打开目录
-              </button>
+              <button class="row-action" type="button" :disabled="item.renderStatus !== 'success'" @click="openOutputVideo(item)"> {{ tr('autoUi.k_b75a14de021c') }} </button>
+              <button class="row-action" type="button" :disabled="item.renderStatus !== 'success'" @click="showOutputInFolder(item)"> {{ tr('autoUi.k_031c10557843') }} </button>
             </div>
           </article>
         </div>
@@ -1685,16 +1675,16 @@ onBeforeUnmount(() => {
         <button class="publish-button" type="button" :disabled="pushingToGeelark" @click="pushToGeelark">
           <LoaderCircle v-if="pushingToGeelark" class="h-4 w-4 animate-spin" />
           <Play v-else class="h-4 w-4" />
-          <span>{{ pushingToGeelark ? '推送中…' : `进入 GeeLark 发布池（${successfulOutputs.length}）` }}</span>
+          <span>{{ pushingToGeelark ? tr('autoUi.k_a2c7d6921412') : tr('autoUi.k_1e8bebacd67c', { p0: successfulOutputs.length }) }}</span>
         </button>
 
         <section v-if="failedOutputSummary.length" class="failed-summary">
           <div class="section-heading">
             <div>
               <span class="section-kicker">Failure Summary</span>
-              <strong>失败项汇总</strong>
+              <strong>{{ tr('autoUi.k_2a728505ce86') }}</strong>
             </div>
-            <span class="section-note">共 {{ failedOutputs.length }} 条</span>
+            <span class="section-note">{{ tr('autoUi.k_3b6ef811b85a') }} {{ failedOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
           </div>
           <div class="failed-summary__list">
             <article v-for="item in failedOutputSummary" :key="item.id" class="failed-summary__item">
@@ -1708,8 +1698,9 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="page-loading">
       <LoaderCircle class="h-4 w-4 animate-spin" />
-      <span>正在加载批量字幕工作台…</span>
+      <span>{{ tr('autoUi.k_cb59dd17afe4') }}</span>
     </div>
+    </template>
   </div>
 </template>
 
@@ -1735,6 +1726,22 @@ onBeforeUnmount(() => {
     radial-gradient(circle at 15% 18%, rgba(75, 127, 255, 0.12), transparent 22%),
     linear-gradient(180deg, #09111f 0%, #070d18 100%);
   overflow-y: auto;
+}
+
+.plugin-lock-panel {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 28px;
+  text-align: center;
+}
+
+.plugin-lock-panel p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .subtitle-workbench-page * {
