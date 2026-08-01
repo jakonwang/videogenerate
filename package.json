@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.72",
+  "version": "5.0.74",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -85,6 +85,13 @@
     "test:clone-shot-video-succeeded-url-downloads-from-retryable": "tsx test/clone-shot-video-succeeded-url-downloads-from-retryable.smoke.ts",
     "test:tiktok-listing-plugin": "tsx test/tiktok-listing-plugin.smoke.ts",
     "test:tiktok-creative-studio": "tsx test/tiktok-creative-studio-reference.smoke.ts",
+    "test:tiktok-gmv-max": "tsx test/tiktok-gmv-max-optimizer.smoke.ts",
+    "test:tiktok-gmv-max-decision": "tsx test/tiktok-gmv-max-decision-engine.smoke.ts",
+    "test:tiktok-gmv-max-decision-electron": "node test/tiktok-gmv-max-decision-electron.e2e.cjs",
+    "test:tiktok-gmv-max-sop": "tsx test/tiktok-gmv-max-sop.smoke.ts",
+    "test:tiktok-gmv-max-help": "tsx test/tiktok-gmv-max-help.smoke.ts",
+    "test:tiktok-gmv-max-help-electron": "node test/tiktok-gmv-max-help-electron.e2e.cjs",
+    "test:tiktok-gmv-max-electron": "node test/tiktok-gmv-max-electron.e2e.cjs",
     "test:live-photo-plugin": "tsx test/live-photo-plugin.smoke.ts",
     "test:live-photo-replace-guards": "tsx test/live-photo-replace-guards.smoke.ts",
     "test:live-photo-quality-pipeline": "tsx test/live-photo-quality-pipeline.smoke.ts",
@@ -212,7 +219,7 @@
     "afterPack": "scripts/after-pack-prune.cjs",
     "extraResources": [
       {
-        "from": "resources/icon-brand-ui-v2.png",
+        "from": "resources/icon-brand-green.png",
         "to": "icon-brand.png"
       },
       {
@@ -230,7 +237,7 @@
       "node_modules/ffprobe-static/bin/win32/x64/**"
     ],
     "win": {
-      "icon": "resources/icon-brand-ui-v2.png",
+      "icon": "resources/icon-brand-green.png",
       "target": [
         {
           "target": "nsis",

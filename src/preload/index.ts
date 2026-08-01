@@ -781,6 +781,88 @@ const api = {
     retryItem: (payload: { userId: string; id: string }) => ipcRenderer.invoke('plugin:videoParserDownload:retryItem', payload),
     deleteItem: (payload: { userId: string; id: string }) => ipcRenderer.invoke('plugin:videoParserDownload:deleteItem', payload),
   },
+  tiktokGmvMax: {
+    getDashboard: (payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getDashboard', payload),
+    getCampaignWorkspace: (payload: { campaignId: string; startDate?: string; endDate?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCampaignWorkspace', payload),
+    getCampaignPage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignType?: string; status?: string; pacingState?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; minUtilization?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCampaignPage', payload),
+    getCreativePage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; source?: string; state?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; maxCpa?: number; minCtr?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCreativePage', payload),
+    getProductPage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; state?: string; allocationState?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; minScore?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getProductPage', payload),
+    getProductCostPage: (payload?: { page?: number; pageSize?: number; storeId?: string; campaignId?: string; scope?: string; completeness?: string; search?: string; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getProductCostPage', payload),
+    getProductCost: (payload: { storeId: string; campaignId: string; productId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getProductCost', payload),
+    exportProductCosts: (payload?: { storeId?: string; campaignId?: string; search?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:exportProductCosts', payload),
+    importProductCosts: (payload: { csv: string; storeId?: string; campaignId?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:importProductCosts', payload),
+    getListEntryPage: (payload?: { page?: number; pageSize?: number; storeId?: string; campaignId?: string; mode?: string; entityType?: string; search?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getListEntryPage', payload),
+    getActionPage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; status?: string; actionType?: string; risk?: string; search?: string; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getActionPage', payload),
+    getOutcomePage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; successful?: boolean; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getOutcomePage', payload),
+    getAuditPage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; status?: string; action?: string; search?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getAuditPage', payload),
+    connect: (payload?: { name?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:connect', payload),
+    disconnect: (payload: { connectionId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:disconnect', payload),
+    reconnect: (payload: { connectionId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:reconnect', payload),
+    sync: () => ipcRenderer.invoke('plugin:tiktokGmvMax:sync'),
+    syncAccounts: () => ipcRenderer.invoke('plugin:tiktokGmvMax:syncAccounts'),
+    syncCampaigns: () => ipcRenderer.invoke('plugin:tiktokGmvMax:syncCampaigns'),
+    syncCatalogs: () => ipcRenderer.invoke('plugin:tiktokGmvMax:syncCatalogs'),
+    runSyncJob: (payload: { action: 'data' | 'catalog' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:runSyncJob', payload),
+    getSyncJob: (payload: { jobId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getSyncJob', payload),
+    onSyncProgress: (callback: (progress: import('../main/modules/tiktok-gmv-max/types').GmvMaxSyncProgress) => void) => {
+      const handler = (_event: unknown, progress: import('../main/modules/tiktok-gmv-max/types').GmvMaxSyncProgress) => callback(progress)
+      ipcRenderer.on('plugin:tiktokGmvMax:syncProgress', handler)
+      return () => ipcRenderer.off('plugin:tiktokGmvMax:syncProgress', handler)
+    },
+    getSopWorkspace: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getSopWorkspace'),
+    runSopAutomation: (payload?: { sopInstanceId?: string; force?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:runSopAutomation', payload),
+    startSop: (payload: { campaignId: string; productId?: string; productName?: string; startDate?: string; track?: 'new_product' | 'mature_product' | 'live'; trackOverrideReason?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:startSop', payload),
+    updateSop: (payload: { id: string; status?: 'active' | 'paused' | 'completed'; productName?: string; track?: 'new_product' | 'mature_product' | 'live'; trackOverrideReason?: string; clearTrackOverride?: boolean; automationEnabled?: boolean; automationMode?: 'diagnostic_only' | 'draft_actions' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:updateSop', payload),
+    completeSopTask: (payload: { id: string; evidence?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:completeSopTask', payload),
+    saveSupplementalMetrics: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveSupplementalMetrics', payload),
+    importSupplementalMetrics: (payload: { csv: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:importSupplementalMetrics', payload),
+    exportSupplementalMetricsTemplate: () => ipcRenderer.invoke('plugin:tiktokGmvMax:exportSupplementalMetricsTemplate'),
+    createSopInterventionDraft: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:createSopInterventionDraft', payload),
+    recordExternalSopIntervention: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:recordExternalSopIntervention', payload),
+    verifyExternalSopIntervention: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:verifyExternalSopIntervention', payload),
+    selectEvidenceAttachment: () => ipcRenderer.invoke('plugin:tiktokGmvMax:selectEvidenceAttachment'),
+    retryWinnerDraft: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:retryWinnerDraft', payload),
+    getReport: (payload: { campaignId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getReport', payload),
+    evaluate: (payload?: { campaignId?: string; scope?: 'all' | 'creative' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:evaluate', payload),
+    analyzeGrowth: () => ipcRenderer.invoke('plugin:tiktokGmvMax:analyzeGrowth'),
+    syncRealtime: () => ipcRenderer.invoke('plugin:tiktokGmvMax:syncRealtime'),
+    savePolicy: (payload: {
+      campaignId: string
+      preset?: 'roi_guard' | 'balanced_growth' | 'gmv_growth'
+      automationEnabled?: boolean
+      minRoi?: string
+      promotionAutoExecutionEnabled?: boolean
+      targetCpa?: string
+      creativeTestBudget?: string
+      profitSafetyMarginPercent?: number
+      budgetPermission?: boolean
+      roiPermission?: boolean
+      statusPermission?: boolean
+      creativePermission?: boolean
+      sessionPermission?: boolean
+      shadowMode?: boolean
+      pilotEnabled?: boolean
+      pauseOnZeroOrders?: boolean
+    }) => ipcRenderer.invoke('plugin:tiktokGmvMax:savePolicy', payload),
+    approve: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approve', payload),
+    approveBatch: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approveBatch', payload),
+    setEmergencyStop: (payload: { stopped: boolean; reason?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:setEmergencyStop', payload),
+    reject: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:reject', payload),
+    approvePortfolio: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approvePortfolio', payload),
+    rejectPortfolio: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:rejectPortfolio', payload),
+    saveStoreCost: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveStoreCost', payload),
+    saveProductCost: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveProductCost', payload),
+    removeProductCost: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:removeProductCost', payload),
+    saveRuleGroup: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveRuleGroup', payload),
+    removeRuleGroup: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:removeRuleGroup', payload),
+    bindRuleGroup: (payload: { campaignId: string; ruleGroupId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:bindRuleGroup', payload),
+    unbindRuleGroup: (payload: { campaignId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:unbindRuleGroup', payload),
+    saveListEntry: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveListEntry', payload),
+    removeListEntry: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:removeListEntry', payload),
+    backtest: (payload?: { campaignId?: string; days?: number }) => ipcRenderer.invoke('plugin:tiktokGmvMax:backtest', payload),
+    rollback: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:rollback', payload),
+    saveNotificationConfig: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveNotificationConfig', payload),
+  },
   tiktokListing: {
     list: () => ipcRenderer.invoke('plugin:tiktokListing:list'),
     getExportCategoryConfigs: () => ipcRenderer.invoke('plugin:tiktokListing:getExportCategoryConfigs'),

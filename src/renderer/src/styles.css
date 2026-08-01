@@ -17519,12 +17519,11 @@ html[data-app-theme]:not([data-app-theme='dark-teal'])
   color: var(--theme-text-secondary) !important;
 }
 
-html[data-app-theme]:not([data-app-theme='dark-teal']) .app-avatar {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--theme-accent) 88%, #000000),
-    color-mix(in srgb, var(--theme-accent) 78%, #ffffff)
-  ) !important;
+html[data-app-theme] .app-avatar {
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 72%, #ffffff) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--theme-accent) 24%, transparent) !important;
 }
 
 /* Apply the same interaction language inside plugin workspaces. */
@@ -19750,12 +19749,12 @@ html[data-app-theme] body #app .app-shell .materials-workbench .queue-stat__valu
 
 /* Sidebar and titlebar dimensions follow the workspace reference layout. */
 html[data-app-theme] body #app .app-shell .ds-shell {
-  grid-template-columns: 184px minmax(0, 1fr) !important;
+  grid-template-columns: var(--app-sidebar-width, 184px) minmax(0, 1fr) !important;
 }
 
 html[data-app-theme] body #app .app-shell .ds-sidebar {
-  width: 184px !important;
-  min-width: 184px !important;
+  width: var(--app-sidebar-width, 184px) !important;
+  min-width: var(--app-sidebar-width, 184px) !important;
   padding: 12px 10px 10px !important;
   background: var(--theme-sidebar) !important;
 }
@@ -20137,6 +20136,71 @@ html[data-app-theme] body #app .app-shell .ds-sidebar {
   border: 0 !important;
   border-right: 1px solid var(--theme-divider) !important;
   box-shadow: none !important;
+}
+
+/* Keep the responsive application sidebar icon-only at compact widths. */
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .app-shell .ds-shell {
+    grid-template-columns: 72px minmax(0, 1fr) !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .ds-sidebar {
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    align-items: center !important;
+    padding: 12px 8px 10px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .ds-sidebar__section-title,
+  html[data-app-theme] body #app .app-shell .ds-sidebar__item span,
+  html[data-app-theme] body #app .app-shell .app-sidebar-locale,
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action span,
+  html[data-app-theme] body #app .app-shell .app-sidebar-user .min-w-0,
+  html[data-app-theme] body #app .app-shell .app-sidebar-collapse span {
+    display: none !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .ds-sidebar__nav,
+  html[data-app-theme] body #app .app-shell .app-shell__sidebar-footer {
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+  }
+
+  html[data-app-theme] body #app .app-shell button.ds-sidebar__item,
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action,
+  html[data-app-theme] body #app .app-shell .app-sidebar-user,
+  html[data-app-theme] body #app .app-shell .app-sidebar-collapse {
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    padding-inline: 0 !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  html[data-app-theme] body #app .app-shell .ds-sidebar__item svg,
+  html[data-app-theme] body #app .app-shell .app-sidebar-footer-action svg,
+  html[data-app-theme] body #app .app-shell .app-sidebar-collapse svg {
+    flex: 0 0 18px !important;
+    width: 18px !important;
+    height: 18px !important;
+  }
+}
+
+html[data-app-theme] body #app .app-shell.is-sidebar-collapsed .app-sidebar-footer-action {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  padding-inline: 0 !important;
 }
 
 html[data-app-theme] body #app .app-shell .app-sidebar-user,

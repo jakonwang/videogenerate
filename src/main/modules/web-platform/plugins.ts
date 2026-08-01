@@ -2,6 +2,17 @@ import type { PluginDefinition, PluginDetail, PluginRecord, PluginSummary } from
 
 export const pluginDefinitions: PluginDefinition[] = [
   {
+    id: 'tiktok-gmv-max-optimizer',
+    name: 'TikTok GMV MAX Optimizer',
+    category: 'advertising_optimization',
+    description: 'Synchronize GMV MAX campaigns and produce guarded budget and target ROI recommendations through TikTok for Business MCP.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/tiktok-gmv-max-optimizer',
+    usageHint: 'Connect with TikTok OAuth, review complete-day evidence, and approve low-risk changes from the dedicated workspace.',
+    configSchema: [],
+  },
+  {
     id: 'product-image-materials',
     name: 'Product Image Materials',
     category: 'video_processing',

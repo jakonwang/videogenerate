@@ -22,6 +22,17 @@ const selectedPluginId = ref('')
 
 const fallbackPlugins: PluginSummary[] = [
   {
+    id: 'tiktok-gmv-max-optimizer',
+    name: 'TikTok GMV MAX Optimizer',
+    category: 'advertising_optimization',
+    description: 'Guarded GMV MAX campaign optimization through TikTok for Business MCP.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/tiktok-gmv-max-optimizer',
+    status: 'uninstalled',
+    enabled: false,
+  },
+  {
     id: 'product-image-materials',
     name: 'Product Image Materials',
     category: 'video_processing',
@@ -142,6 +153,7 @@ function pluginStatusText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-gmv-max-optimizer') return t('plugins.categories.advertisingOptimization')
   if (plugin.id === 'live-photo-generator') return t('plugins.categories.livePhoto')
   if (plugin.id === 'product-image-materials') return t('plugins.categories.videoProcessing')
   if (plugin.id === 'tiktok-creative-studio') return t('plugins.categories.creativeStudio')
@@ -151,6 +163,7 @@ function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginIconText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-gmv-max-optimizer') return 'GM'
   if (plugin.id === 'product-image-materials') return 'IM'
   if (plugin.id === 'live-photo-generator') return 'LP'
   if (plugin.id === 'tiktok-creative-studio') return 'TT'
@@ -162,6 +175,7 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCardTone(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === 'tiktok-gmv-max-optimizer') return 'tone-cyan'
   if (plugin.id === 'product-image-materials') return 'tone-blue'
   if (plugin.id === 'live-photo-generator') return 'tone-amber'
   if (plugin.id === 'tiktok-creative-studio') return 'tone-green'
@@ -172,7 +186,7 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 }
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return ['geelark-publisher', 'tiktok-creative-studio', 'live-photo-generator', 'product-image-materials', 'video-parser-download'].includes(plugin.id)
+  return ['geelark-publisher', 'tiktok-creative-studio', 'tiktok-gmv-max-optimizer', 'live-photo-generator', 'product-image-materials', 'video-parser-download'].includes(plugin.id)
 }
 
 function primaryActionText(plugin: PluginSummary) {

@@ -11,6 +11,8 @@ import {
   ScissorsLineDashed,
   Puzzle,
   Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import TitleBar from './components/TitleBar.vue'
@@ -24,8 +26,10 @@ import type { HermesWorkspaceAction } from '../../../shared/hermesWorkspace'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const APP_SIDEBAR_STORAGE_KEY = 'videogenerate:app-sidebar-collapsed:v1'
 const helpOpen = ref(false)
 const moreOpen = ref(false)
+const appSidebarCollapsed = ref(false)
 const cloneTopbar = useCloneTopbarStore()
 const designInspector = useDesignInspectorStore()
 const webSession = useWebSessionStore()
@@ -106,6 +110,11 @@ function requestCloneStage(key: string) {
   cloneTopbar.requestStage(key)
 }
 
+function toggleAppSidebar() {
+  appSidebarCollapsed.value = !appSidebarCollapsed.value
+  localStorage.setItem(APP_SIDEBAR_STORAGE_KEY, String(appSidebarCollapsed.value))
+}
+
 async function handleHermesWorkspaceAction(action: HermesWorkspaceAction) {
   const routeName = String(action?.route?.name || '').trim()
   if (!routeName) return
@@ -117,6 +126,7 @@ async function handleHermesWorkspaceAction(action: HermesWorkspaceAction) {
 }
 
 onMounted(() => {
+  appSidebarCollapsed.value = localStorage.getItem(APP_SIDEBAR_STORAGE_KEY) === 'true'
   unsubscribeHermesWorkspaceActions = window.api.hermes.subscribeWorkspaceActions((action) => {
     void handleHermesWorkspaceAction(action)
   })
@@ -129,7 +139,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="ui-app app-shell h-screen w-screen overflow-hidden">
+  <div :class="['ui-app app-shell h-screen w-screen overflow-hidden', { 'is-sidebar-collapsed': appSidebarCollapsed }]">
     <TitleBar />
     <div class="app-shell__body">
       <DsMainLayout
@@ -138,7 +148,8 @@ onUnmounted(() => {
         title=""
         subtitle=""
         :topbar-enabled="showCloneWorkflowTopbar"
-        :class="[{ 'models-route-shell': route.path.includes('/models') }, 'app-shell__layout']"
+        :sidebar-width="appSidebarCollapsed ? '72px' : undefined"
+        :class="[{ 'models-route-shell': route.path.includes('/models'), 'app-shell__layout--sidebar-collapsed': appSidebarCollapsed }, 'app-shell__layout']"
       >
         <template #sidebar-footer>
           <div class="app-shell__sidebar-footer">
@@ -155,6 +166,10 @@ onUnmounted(() => {
                 <div class="app-sidebar-user__name">{{ topUserName }}</div>
                 <div class="app-sidebar-user__meta">{{ topUserPlan }}</div>
               </div>
+            </button>
+            <button class="app-sidebar-collapse" data-testid="app-sidebar-toggle" type="button" :title="appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse')" :aria-label="appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse')" :aria-expanded="!appSidebarCollapsed" @click="toggleAppSidebar">
+              <component :is="appSidebarCollapsed ? PanelLeftOpen : PanelLeftClose" />
+              <span>{{ appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse') }}</span>
             </button>
           </div>
         </template>
@@ -230,7 +245,7 @@ onUnmounted(() => {
 }
 
 .app-shell :deep(.ds-shell) {
-  grid-template-columns: 184px minmax(0, 1fr) !important;
+  grid-template-columns: var(--app-sidebar-width, 184px) minmax(0, 1fr) !important;
   background: transparent;
 }
 
@@ -245,8 +260,8 @@ onUnmounted(() => {
   z-index: 30 !important;
   pointer-events: auto !important;
   height: 100% !important;
-  width: 184px !important;
-  min-width: 184px !important;
+  width: var(--app-sidebar-width, 184px) !important;
+  min-width: var(--app-sidebar-width, 184px) !important;
   min-height: 0 !important;
   padding: 12px 10px 10px !important;
   gap: 8px !important;
@@ -388,6 +403,29 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   box-shadow: none;
+}
+
+.app-sidebar-collapse {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+  background: rgba(13, 23, 41, 0.28);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.app-sidebar-collapse svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
 
 .app-sidebar-user {
@@ -610,7 +648,8 @@ onUnmounted(() => {
 }
 
 .app-sidebar-user:hover,
-.app-sidebar-footer-action:hover {
+.app-sidebar-footer-action:hover,
+.app-sidebar-collapse:hover {
   background: rgba(19, 31, 52, 0.82);
   border-color: rgba(148, 163, 184, 0.24);
   color: #fff;
@@ -629,12 +668,12 @@ onUnmounted(() => {
 
 @media (max-width: 1180px) {
   .app-shell :deep(.ds-shell) {
-    grid-template-columns: 92px minmax(0, 1fr) !important;
+    grid-template-columns: var(--app-sidebar-width, 92px) minmax(0, 1fr) !important;
   }
 
   .app-shell :deep(.ds-sidebar) {
-    width: 92px !important;
-    min-width: 92px !important;
+    width: var(--app-sidebar-width, 92px) !important;
+    min-width: var(--app-sidebar-width, 92px) !important;
     align-items: center !important;
     padding: 16px 10px !important;
   }
@@ -703,5 +742,47 @@ onUnmounted(() => {
     justify-content: center;
     padding: 0;
   }
+}
+
+.app-shell.is-sidebar-collapsed :deep(.ds-shell) {
+  grid-template-columns: 72px minmax(0, 1fr) !important;
+}
+
+.app-shell.is-sidebar-collapsed :deep(.ds-sidebar) {
+  width: 72px !important;
+  min-width: 72px !important;
+  max-width: 72px !important;
+  align-items: center !important;
+  padding: 12px 8px 10px !important;
+}
+
+.app-shell.is-sidebar-collapsed :deep(.ds-sidebar__nav) {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  justify-content: stretch !important;
+}
+
+.app-shell.is-sidebar-collapsed :deep(.ds-sidebar__section-title),
+.app-shell.is-sidebar-collapsed :deep(.ds-sidebar__item span),
+.app-shell.is-sidebar-collapsed .app-sidebar-locale,
+.app-shell.is-sidebar-collapsed .app-sidebar-footer-action span,
+.app-shell.is-sidebar-collapsed .app-sidebar-user .min-w-0,
+.app-shell.is-sidebar-collapsed .app-sidebar-collapse span {
+  display: none !important;
+}
+
+.app-shell.is-sidebar-collapsed :deep(.ds-sidebar__item),
+.app-shell.is-sidebar-collapsed .app-sidebar-footer-action,
+.app-shell.is-sidebar-collapsed .app-sidebar-user,
+.app-shell.is-sidebar-collapsed .app-sidebar-collapse {
+  width: 50px !important;
+  min-width: 50px !important;
+  justify-content: center !important;
+  padding-inline: 0 !important;
+}
+
+.app-shell.is-sidebar-collapsed .app-shell__sidebar-footer {
+  width: 50px;
 }
 </style>

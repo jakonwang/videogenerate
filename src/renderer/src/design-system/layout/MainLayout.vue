@@ -11,11 +11,12 @@ const props = defineProps<{
   title?: string
   subtitle?: string
   topbarEnabled?: boolean
+  sidebarWidth?: string
 }>()
 </script>
 
 <template>
-  <div class="ds-shell">
+  <div class="ds-shell" :style="{ '--app-sidebar-width': props.sidebarWidth || undefined }">
     <Sidebar :items="navItems" :sections="sections">
       <template #footer>
         <slot name="sidebar-footer" />
@@ -35,7 +36,7 @@ const props = defineProps<{
 <style scoped>
 .ds-shell {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: var(--app-sidebar-width, 248px) minmax(0, 1fr);
   min-height: 100%;
 }
 

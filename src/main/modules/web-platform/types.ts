@@ -35,7 +35,7 @@ export type CloneModelIdentitySummary = {
   updatedAt: number
 }
 
-export type PluginCategory = 'video_download' | 'video_processing' | 'ecommerce_listing'
+export type PluginCategory = 'video_download' | 'video_processing' | 'ecommerce_listing' | 'advertising_optimization'
 export type PluginEntryType = 'tool'
 
 export type PluginConfigFieldType = 'text' | 'textarea' | 'number' | 'boolean' | 'select'

@@ -42,6 +42,7 @@ import { registerVideoParserDownloadIpc } from './ipc/registerVideoParserDownloa
 import { registerAgentOsIpc } from './ipc/registerAgentOsIpc'
 import { registerHermesAgentIpc } from './ipc/registerHermesAgentIpc'
 import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
+import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
 import { agentOsService } from './modules/agent-os/service'
 import { hermesRuntime } from './modules/hermes/runtime'
 import { hermesManagement } from './modules/hermes/management'
@@ -53,6 +54,9 @@ import { tiktokCreativeStudioService } from './modules/tiktok-creative-studio/se
 import { livePhotoRepo } from './modules/live-photo/repo'
 import { videoParserDownloadService } from './modules/video-parser-download/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
+import { gmvMaxScheduler } from './modules/tiktok-gmv-max/scheduler'
+import { gmvMaxMcpClient } from './modules/tiktok-gmv-max/mcpClient'
+import { closeGmvMaxSqlite } from './modules/tiktok-gmv-max/sqlite'
 
 let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
@@ -70,6 +74,7 @@ function markStartupStage(stage: string, details: Record<string, unknown> = {}) 
 
 function createTrayIcon() {
   const candidates = [
+    join(process.cwd(), 'resources', 'icon-brand-green.png'),
     join(process.cwd(), 'resources', 'icon-brand.png'),
     join(process.resourcesPath, 'icon-brand.png'),
   ]
@@ -94,6 +99,8 @@ function ignoreBrokenPipeOnStdStreams() {
 
 configureWindowsStorageRoot()
 ignoreBrokenPipeOnStdStreams()
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
 const { cacheDir: electronCacheDir } = getAppPaths()
 app.commandLine.appendSwitch('disk-cache-dir', electronCacheDir)
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
@@ -205,6 +212,8 @@ function revealMainWindow() {
   mainWindow.focus()
 }
 
+app.on('second-instance', () => revealMainWindow())
+
 function hideMainWindowToTray() {
   if (!mainWindow) return
   mainWindow.hide()
@@ -274,6 +283,7 @@ function createWindow() {
   const { preload } = getAppPaths()
   ensureTray()
   const iconCandidates = [
+    join(process.cwd(), 'resources', 'icon-brand-green.png'),
     join(process.cwd(), 'resources', 'icon-brand.png'),
     join(process.resourcesPath, 'icon-brand.png'),
   ]
@@ -1579,9 +1589,11 @@ function wireIpc() {
   registerAgentOsIpc(ipcMain, () => mainWindow)
   registerHermesAgentIpc(ipcMain, () => mainWindow)
   registerStorageManagementIpc(ipcMain)
+  registerTiktokGmvMaxIpc(ipcMain)
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return
   markStartupStage('app-ready')
   mainUiLocale = normalizeAppLocale(app.getLocale())
   await migrateLegacyWindowsUserData()
@@ -1637,6 +1649,7 @@ app.whenReady().then(async () => {
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
         await livePhotoService.resumePendingTasksOnStartup()
         await tiktokCreativeStudioService.resumePending()
+        gmvMaxScheduler.start()
         markStartupStage('background-initialization-complete')
       } catch (error: any) {
         console.error('[app-startup] bootstrap-failed', {
@@ -1664,4 +1677,6 @@ app.on('before-quit', () => {
   void stopPreviewHttpServer()
   void stopWebApiServer()
   void hermesRuntime.stop()
+  gmvMaxScheduler.stop()
+  void gmvMaxMcpClient.closeAll().finally(() => closeGmvMaxSqlite())
 })

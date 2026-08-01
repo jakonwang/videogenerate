@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { CheckCircle2, FolderOpen, ListChecks, Minus, RefreshCcw, Square, X } from 'lucide-vue-next'
-import brandIconAsset from '../../../../../resources/icon-brand-ui-v2.png'
+import brandIconAsset from '../../../../../resources/icon-brand-green.png'
 
 const { t, locale: i18nLocale } = useI18n()
 const router = useRouter()
