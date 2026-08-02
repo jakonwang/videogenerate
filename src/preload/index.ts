@@ -810,6 +810,7 @@ const api = {
       return () => ipcRenderer.off('plugin:tiktokGmvMax:syncProgress', handler)
     },
     getSopWorkspace: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getSopWorkspace'),
+    getCommandCenter: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getCommandCenter'),
     runSopAutomation: (payload?: { sopInstanceId?: string; force?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:runSopAutomation', payload),
     startSop: (payload: { campaignId: string; productId?: string; productName?: string; startDate?: string; track?: 'new_product' | 'mature_product' | 'live'; trackOverrideReason?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:startSop', payload),
     updateSop: (payload: { id: string; status?: 'active' | 'paused' | 'completed'; productName?: string; track?: 'new_product' | 'mature_product' | 'live'; trackOverrideReason?: string; clearTrackOverride?: boolean; automationEnabled?: boolean; automationMode?: 'diagnostic_only' | 'draft_actions' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:updateSop', payload),

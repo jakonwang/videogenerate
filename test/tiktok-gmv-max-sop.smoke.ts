@@ -105,9 +105,12 @@ async function verifyExternalOperationAndInterruptedSyncIntegration() {
     assert.equal(verified.verificationStatus, 'verified')
     assert.equal(gmvMaxRepo.getSopTask('external-task')?.status, 'completed')
     assert.equal(gmvMaxRepo.getSopInstance('external-instance')?.observationLockUntil, 'three_complete_delivery_days')
-    gmvMaxRepo.saveSyncJob({ jobId: 'stale-sync', action: 'data', status: 'running', phase: 'delivery', message: 'Running', current: 1, total: 4, progress: 20, startedAt: now - 600_000, updatedAt: now - 600_000 })
+    gmvMaxRepo.saveSyncJob({ jobId: 'recent-sync', action: 'data', status: 'running', phase: 'delivery', message: 'Running', current: 1, total: 4, progress: 20, startedAt: now - 10_000, updatedAt: now })
+    const recoveredSync = await gmvMaxService.getSyncJob({ jobId: 'recent-sync' })
+    assert.equal(recoveredSync?.status, 'interrupted')
     const workspace = await gmvMaxService.getSopWorkspace()
     assert.equal(workspace.latestSyncJob?.status, 'interrupted')
+    assert.equal(workspace.latestSyncJob?.jobId, 'recent-sync')
   } finally {
     closeGmvMaxSqlite()
     delete process.env.VIDEOGENERATE_DATA_DIR
@@ -362,7 +365,8 @@ async function main() {
   const rendererSource = await readFile(path.join(process.cwd(), 'src/renderer/src/ui/views/TiktokGmvMaxOptimizerView.vue'), 'utf8')
   assert.match(rendererSource, /const sopCanStart = computed/)
   assert.match(rendererSource, /loadSopProductOptions[\s\S]*getProductPage/)
-  assert.match(rendererSource, /data-testid="gmv-sop-start-button" :disabled="!sopCanStart/)
+  assert.match(rendererSource, /data-testid="gmv-sop-start-button"/)
+  assert.match(rendererSource, /:disabled="!sopCanStart \|\| !!busyAction \|\| sopProductLoading"/)
   assert.match(rendererSource, /Hero SKU is required[\s\S]*gmvMaxSop\.start\.hint/)
   assert.match(rendererSource, /data-testid="gmv-sop-video-preview-button"/)
   assert.match(rendererSource, /data-testid="gmv-sop-video-sort"/)

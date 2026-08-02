@@ -163,6 +163,7 @@ type SopAutomationRun = { id: string; sopInstanceId: string; campaignId: string;
 type DecisionSnapshot = { id: string; sopInstanceId: string; campaignId: string; storeId: string; productId?: string; productName?: string; productImageUrl?: string; lifecycle: 'cold_start' | 'mature' | 'declining'; status: 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7'; priority: 'P0' | 'P1' | 'P2'; healthScore?: string; healthCoverage: string; targetRoi: string; actualRoi: string; breakEvenRoi: string; marginalRoi?: string; spend: string; grossRevenue: string; budgetUtilization?: string; spendVelocity?: string; creativeConcentration?: string; recommendedAction: string; reasonCodes: string[]; confidence: number; risk: 'low' | 'medium' | 'high'; ruleVersion: string; writeAllowed: boolean; blockedReasons: string[]; evaluatedAt: number }
 type Experiment = { id: string; sopInstanceId: string; campaignId: string; productId?: string; recommendationId?: string; rollbackRecommendationId?: string; state: string; baselineTargetRoi: string; currentTargetRoi: string; proposedTargetRoi: string; marginalRoi?: string; updatedAt: number }
 type SopWorkspace = { instances: SopInstance[]; tasks: SopTask[]; supplementalMetrics: SupplementalMetric[]; winnerDna: WinnerDna[]; creativeVideos: SopCreativeVideo[]; interventions: SopIntervention[]; automationRuns: SopAutomationRun[]; latestSyncJob?: SyncProgressState; issueQueue: SopIssueResolution[]; effectivenessSummary: { completed: number; improved: number; stable: number; declined: number; measured: number; improvementRate: number }; reminders: Array<{ id: string; kind: string; sopInstanceId: string; campaignId: string; message: string }>; freshnessSummary: { fresh: number; stale: number; missing: number }; autoOnboarding: { eligibleCampaigns: number; managedCampaigns: number; automaticInstances: number; waitingForSalesData: number }; decisions: DecisionSnapshot[]; experiments: Experiment[]; decisionSummary: { total: number; p0: number; p1: number; p2: number; writeBlocked: number; activeExperiments: number }; generatedAt: number }
+type CockpitTodayPlanItem = { task: SopTask; instance: SopInstance; decision?: DecisionSnapshot }
 type ActionOutcome = { id: string; recommendationId: string; campaignId: string; actionType: 'budget' | 'roi' | 'creative'; kind: string; preRoi: string; postRoi: string; preEstimatedProfit: string; postEstimatedProfit: string; roiDeltaPercent: string; profitDeltaPercent: string; successful: boolean; operation?: 'ADD' | 'REMOVE' | 'ROTATE'; primaryCreativeId?: string; comparisonCreativeId?: string; preOrders?: string; postOrders?: string; preCtr?: string; postCtr?: string; preConversionRate?: string; postConversionRate?: string; prePlayDepth?: string; postPlayDepth?: string; measuredAt: number }
 type StrategyCalibration = { campaignId: string; kind: 'scale_up' | 'scale_down'; source: 'campaign' | 'store' | 'preset' | 'none'; sampleCount: number; successCount: number; successRate: number; averageProfitDeltaPercent: string; budgetStepMultiplier: number; confidence: number; state: 'learning' | 'conservative' | 'neutral' | 'accelerating'; reason: string; analyzedAt: number }
 type DrawerState = { kind: 'campaign' | 'campaignRecommendations' | 'policy' | 'rule' | 'product' | 'store' | 'action' | null; id?: string }
@@ -205,7 +206,8 @@ const { t, te, locale } = useI18n()
 const FILTER_STORAGE_KEY = 'videogenerate:gmv-max:filters:v1'
 const NAV_STORAGE_KEY = 'videogenerate:gmv-max:nav-collapsed:v1'
 const SOP_SELECTION_STORAGE_KEY = 'videogenerate:gmv-max:sop-selection:v1'
-const activeTab = ref<TabId>('overview')
+const DECISION_PAGE_SIZE = 4
+const activeTab = ref<TabId>('sop')
 const helpFocusIssueCode = ref('')
 const featureNavCollapsed = ref(false)
 const loading = ref(false)
@@ -213,7 +215,12 @@ const busyAction = ref('')
 const syncProgress = ref<SyncProgressState | null>(null)
 const syncDisplayProgress = ref(0)
 const syncProgressDialog = ref<HTMLElement | null>(null)
+const syncDetailsOpen = ref(false)
 let syncProgressTimer: ReturnType<typeof setInterval> | null = null
+let syncProgressPollTimer: ReturnType<typeof setInterval> | null = null
+let syncProgressPollJobId = ''
+let syncProgressPollInFlight = false
+let syncCompletionHandledJobId = ''
 let removeSyncProgressListener: (() => void) | null = null
 const notice = ref('')
 const errorText = ref('')
@@ -238,11 +245,19 @@ const notificationDraft = ref({ enabled: false, target: '', dailySummaryEnabled:
 const sopWorkspace = ref<SopWorkspace>({ instances: [], tasks: [], supplementalMetrics: [], winnerDna: [], creativeVideos: [], interventions: [], automationRuns: [], issueQueue: [], effectivenessSummary: { completed: 0, improved: 0, stable: 0, declined: 0, measured: 0, improvementRate: 0 }, reminders: [], freshnessSummary: { fresh: 0, stale: 0, missing: 0 }, autoOnboarding: { eligibleCampaigns: 0, managedCampaigns: 0, automaticInstances: 0, waitingForSalesData: 0 }, decisions: [], experiments: [], decisionSummary: { total: 0, p0: 0, p1: 0, p2: 0, writeBlocked: 0, activeExperiments: 0 }, generatedAt: 0 })
 const sopLoading = ref(false)
 const sopRefreshing = ref(false)
+const decisionStoreFilter = ref('all')
+const decisionTypeFilter = ref<'all' | 'PRODUCT' | 'LIVE'>('all')
+const decisionStatusFilter = ref<'all' | 'enabled' | 'disabled'>('enabled')
+const decisionLifecycleFilter = ref<'all' | 'running' | 'paused' | 'closed' | 'exception'>('all')
+const decisionPriorityFilter = ref<'all' | 'P0' | 'P1' | 'P2'>('all')
+const decisionPage = ref(1)
 let sopWorkspaceRequestId = 0
 let sopLoadingWatchdog = 0
 const sopProductLoading = ref(false)
 const sopProductOptions = ref<ProductInsight[]>([])
 const selectedSopId = ref('')
+const sopDetailOpen = ref(false)
+const sopDetailTab = ref<'decision' | 'tasks' | 'metrics' | 'creative' | 'history'>('decision')
 const sopLaunchExpanded = ref(false)
 const sopPickerOpen = ref(false)
 const sopPickerQuery = ref('')
@@ -264,7 +279,6 @@ const sopVideoPageSize = ref(6)
 const sopCompletedTasksExpanded = ref(false)
 const externalOperationIssue = ref<SopIssueResolution | null>(null)
 const externalOperationDraft = ref<{ actualValue: string; startedDate: string; evidenceNote: string; screenshotRef: string; evidenceAttachment?: EvidenceAttachment }>({ actualValue: '', startedDate: new Date().toISOString().slice(0, 10), evidenceNote: '', screenshotRef: '' })
-const interruptedSyncSeenJobId = ref('')
 const sopStartDraft = ref({ campaignId: '', productId: '', productName: '', startDate: new Date().toISOString().slice(0, 10), track: '' as '' | SopTrack, trackOverrideReason: '' })
 const supplementalDraft = ref({ campaignId: '', productId: '', statDate: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10), refundAmount: '', netGmv: '', liveUv: '', liveStayRate: '', productClicks: '', addToCart: '', orders: '', paidOrders: '', productBudget: '', targetRoi: '', intradaySpend: '', deliveryMode: '', autoBudgetEnabled: '', inventoryReady: '', liveReady: '' })
 const selectedStore = ref('all')
@@ -414,6 +428,132 @@ const decisionRows = computed(() => sopWorkspace.value.decisions
     return priority[left.decision.priority] - priority[right.decision.priority]
       || (left.decision.productName || '').localeCompare(right.decision.productName || '')
   }))
+const decisionRowsByTypeAndStatus = computed(() => decisionRows.value.filter((item) => {
+  const enabled = isDecisionCampaignEnabled(item.instance.campaignOperationStatus)
+  const lifecycle = decisionLifecycle(item)
+  return (decisionTypeFilter.value === 'all' || item.instance.campaignType === decisionTypeFilter.value)
+    && (decisionStatusFilter.value === 'all'
+      || (decisionStatusFilter.value === 'enabled' ? enabled : !enabled))
+    && (decisionLifecycleFilter.value === 'all' || lifecycle === decisionLifecycleFilter.value)
+}))
+const decisionLifecycleCounts = computed(() => ({
+  running: decisionRows.value.filter((item) => decisionLifecycle(item) === 'running').length,
+  paused: decisionRows.value.filter((item) => decisionLifecycle(item) === 'paused').length,
+  closed: decisionRows.value.filter((item) => decisionLifecycle(item) === 'closed').length,
+  exception: decisionRows.value.filter((item) => decisionLifecycle(item) === 'exception').length,
+}))
+const decisionStoreOptions = computed(() => {
+  const stores = new Map<string, { id: string; name: string }>()
+  decisionRows.value.forEach(({ instance }) => {
+    if (!stores.has(instance.storeId)) stores.set(instance.storeId, { id: instance.storeId, name: instance.storeName })
+  })
+  return [...stores.values()]
+    .map((store) => ({
+      ...store,
+      count: decisionRowsByTypeAndStatus.value.filter((item) => item.instance.storeId === store.id).length,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+})
+const scopedDecisionRows = computed(() => decisionRowsByTypeAndStatus.value.filter((item) =>
+  decisionStoreFilter.value === 'all' || item.instance.storeId === decisionStoreFilter.value))
+const filteredDecisionRows = computed(() => decisionPriorityFilter.value === 'all'
+  ? scopedDecisionRows.value
+  : scopedDecisionRows.value.filter((item) => item.decision.priority === decisionPriorityFilter.value))
+const scopedDecisionSummary = computed(() => {
+  const instanceIds = new Set(scopedDecisionRows.value.map((item) => item.instance.id))
+  return {
+    p0: scopedDecisionRows.value.filter((item) => item.decision.priority === 'P0').length,
+    p1: scopedDecisionRows.value.filter((item) => item.decision.priority === 'P1').length,
+    p2: scopedDecisionRows.value.filter((item) => item.decision.priority === 'P2').length,
+    writeBlocked: scopedDecisionRows.value.filter((item) => !item.decision.writeAllowed).length,
+    activeExperiments: sopWorkspace.value.experiments.filter((item) =>
+      instanceIds.has(item.sopInstanceId)
+      && ['pending_approval', 'executing', 'observing', 'rollback_pending'].includes(item.state)).length,
+  }
+})
+const cockpitSummary = computed(() => ({
+  pending: scopedDecisionRows.value.filter((item) => item.decision.priority !== 'P2').length,
+  blocked: scopedDecisionRows.value.filter((item) => item.decision.blockedReasons.length > 0 || !item.decision.writeAllowed).length,
+  scaleReady: scopedDecisionRows.value.filter((item) => ['auto_budget', 'max_delivery', 'product_expansion', 'roi_unlock'].includes(item.decision.recommendedAction)).length,
+  stale: sopWorkspace.value.freshnessSummary.stale + sopWorkspace.value.freshnessSummary.missing,
+}))
+const cockpitStoreSummary = computed(() => decisionStoreOptions.value.map((store) => ({
+  ...store,
+  active: decisionRows.value.filter((item) => item.instance.storeId === store.id && isDecisionCampaignEnabled(item.instance.campaignOperationStatus)).length,
+  paused: decisionRows.value.filter((item) => item.instance.storeId === store.id && !isDecisionCampaignEnabled(item.instance.campaignOperationStatus)).length,
+})))
+const cockpitTodayPlan = computed<CockpitTodayPlanItem[]>(() => {
+  const scopedInstanceIds = new Set(scopedDecisionRows.value.map((item) => item.instance.id))
+  const instanceMap = new Map(sopWorkspace.value.instances.map((item) => [item.id, item]))
+  const decisionMap = new Map(sopWorkspace.value.decisions.map((item) => [item.sopInstanceId, item]))
+  const tasks = sopWorkspace.value.tasks
+    .filter((task) => task.status !== 'superseded' && scopedInstanceIds.has(task.sopInstanceId))
+    .map((task) => ({ task, instance: instanceMap.get(task.sopInstanceId), decision: decisionMap.get(task.sopInstanceId) }))
+    .filter((item): item is CockpitTodayPlanItem => Boolean(item.instance))
+  const latestDate = tasks.map((item) => item.task.localDate).sort().at(-1)
+  const priorityRank = { P0: 0, P1: 1, P2: 2 }
+  return tasks
+    .filter((item) => item.task.localDate === latestDate && item.task.status !== 'completed')
+    .sort((left, right) => {
+      const leftPriority = priorityRank[left.task.priority || left.decision?.priority || 'P2']
+      const rightPriority = priorityRank[right.task.priority || right.decision?.priority || 'P2']
+      return Number(right.task.status === 'blocked') - Number(left.task.status === 'blocked')
+        || leftPriority - rightPriority
+        || left.task.scheduledTime.localeCompare(right.task.scheduledTime)
+    })
+    .slice(0, 5)
+})
+const cockpitTodayPlanDate = computed(() => cockpitTodayPlan.value[0]?.task.localDate || '')
+const selectedDecisionRow = computed(() => decisionRows.value.find((item) => item.instance.id === selectedSopId.value) || null)
+const decisionPageCount = computed(() => Math.max(1, Math.ceil(filteredDecisionRows.value.length / DECISION_PAGE_SIZE)))
+const pagedDecisionRows = computed(() => filteredDecisionRows.value.slice(
+  (decisionPage.value - 1) * DECISION_PAGE_SIZE,
+  decisionPage.value * DECISION_PAGE_SIZE,
+))
+watch(() => filteredDecisionRows.value.length, () => {
+  decisionPage.value = Math.min(decisionPage.value, decisionPageCount.value)
+})
+
+function setDecisionPriorityFilter(priority: 'all' | 'P0' | 'P1' | 'P2') {
+  decisionPriorityFilter.value = priority
+  decisionPage.value = 1
+}
+
+function setDecisionStoreFilter(storeId: string) {
+  decisionStoreFilter.value = storeId
+  decisionPage.value = 1
+}
+
+function setDecisionTypeFilter(type: 'all' | 'PRODUCT' | 'LIVE') {
+  decisionTypeFilter.value = type
+  decisionPage.value = 1
+}
+
+function setDecisionStatusFilter(status: 'all' | 'enabled' | 'disabled') {
+  decisionStatusFilter.value = status
+  decisionPage.value = 1
+}
+
+function isDecisionCampaignEnabled(status?: string) {
+  return ['ENABLE', 'ENABLED', 'ACTIVE', 'RUNNING', 'LIVE'].includes(String(status || '').trim().toUpperCase())
+}
+
+function decisionLifecycle(item: { decision: DecisionSnapshot; instance: SopInstance }) {
+  if (item.decision.blockedReasons.length || item.instance.status === 'blocked') return 'exception' as const
+  const status = String(item.instance.campaignOperationStatus || '').trim().toUpperCase()
+  if (['PAUSE', 'PAUSED', 'SUSPENDED'].includes(status) || item.instance.status === 'paused') return 'paused' as const
+  if (isDecisionCampaignEnabled(status)) return 'running' as const
+  return 'closed' as const
+}
+
+function setDecisionLifecycleFilter(value: typeof decisionLifecycleFilter.value) {
+  decisionLifecycleFilter.value = value
+  decisionPage.value = 1
+}
+
+function changeDecisionPage(page: number) {
+  decisionPage.value = Math.max(1, Math.min(page, decisionPageCount.value))
+}
 const selectedSopIssues = computed(() => selectedSop.value?.issueResolutions || [])
 const helpCurrentObject = computed(() => ({
   product: selectedSop.value?.productName || selectedSop.value?.productId || '',
@@ -1395,9 +1535,25 @@ function closeSopPicker() {
   void nextTick(() => sopPickerTrigger?.focus())
 }
 
-function selectSopInstance(id: string) {
+function selectSopInstance(id: string, openDetail = true) {
   selectedSopId.value = id
+  if (openDetail) {
+    sopDetailOpen.value = true
+    sopDetailTab.value = 'decision'
+  }
   closeSopPicker()
+}
+
+function closeSopDetail() {
+  sopDetailOpen.value = false
+}
+
+function focusSopDetailSection(tab: typeof sopDetailTab.value) {
+  sopDetailTab.value = tab
+  void nextTick(() => {
+    const target = document.querySelector<HTMLElement>(`[data-sop-detail-section="${tab}"]`)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 function trapSopPickerFocus(event: KeyboardEvent) {
@@ -1514,9 +1670,14 @@ async function openCreativeVideoExternal() {
 }
 
 function handleWorkspaceKeydown(event: KeyboardEvent) {
-  if (syncProgress.value) {
+  if (event.key === 'Escape' && syncDetailsOpen.value) {
     event.preventDefault()
-    event.stopImmediatePropagation()
+    syncDetailsOpen.value = false
+    return
+  }
+  if (event.key === 'Escape' && sopDetailOpen.value) {
+    event.preventDefault()
+    closeSopDetail()
     return
   }
   if (event.key === 'Escape' && externalOperationIssue.value) {
@@ -1595,10 +1756,16 @@ async function loadSopWorkspace() {
     const workspace = await Promise.race([request, timeout])
     if (requestId !== sopWorkspaceRequestId) return
     sopWorkspace.value = workspace
-    const interrupted = sopWorkspace.value.latestSyncJob
-    if (interrupted?.status === 'interrupted' && interruptedSyncSeenJobId.value !== interrupted.jobId && !syncProgress.value) {
-      interruptedSyncSeenJobId.value = interrupted.jobId || `${interrupted.action}:${interrupted.updatedAt}`
-      syncProgress.value = interrupted
+    const latestSyncJob = sopWorkspace.value.latestSyncJob
+    const latestSyncJobAge = latestSyncJob?.updatedAt ? Date.now() - latestSyncJob.updatedAt : Number.POSITIVE_INFINITY
+    const restoreSyncJob = latestSyncJob && (
+      latestSyncJob.status === 'running'
+      || latestSyncJob.status === 'failed'
+      || latestSyncJob.status === 'interrupted'
+      || (latestSyncJob.status === 'completed' && latestSyncJobAge < 10 * 60_000)
+    )
+    if (restoreSyncJob && (!syncProgress.value || syncProgress.value.jobId !== latestSyncJob.jobId)) {
+      applySyncProgress(latestSyncJob)
       void nextTick(() => syncProgressDialog.value?.focus())
     }
     if (!selectedSopId.value || !sopWorkspace.value.instances.some((item) => item.id === selectedSopId.value)) {
@@ -1959,6 +2126,60 @@ function stopSyncProgressAnimation() {
   syncProgressTimer = null
 }
 
+function stopSyncProgressPolling() {
+  if (syncProgressPollTimer) clearInterval(syncProgressPollTimer)
+  syncProgressPollTimer = null
+  syncProgressPollJobId = ''
+  syncProgressPollInFlight = false
+}
+
+function applySyncProgress(progress: SyncProgressState) {
+  const previousJobId = syncProgress.value?.jobId
+  if (previousJobId && previousJobId !== progress.jobId) syncDisplayProgress.value = Number(progress.progress) || 0
+  syncProgress.value = progress
+  syncDisplayProgress.value = Math.max(syncDisplayProgress.value, Number(progress.progress) || 0)
+  if (progress.status === 'running') {
+    startSyncProgressAnimation()
+    if (progress.jobId) startSyncProgressPolling(progress.jobId)
+    return
+  }
+  stopSyncProgressAnimation()
+  stopSyncProgressPolling()
+  if (progress.status === 'completed' && progress.jobId && syncCompletionHandledJobId !== progress.jobId) {
+    syncCompletionHandledJobId = progress.jobId
+    void refreshWorkspace(false)
+    window.setTimeout(() => {
+      if (syncProgress.value?.jobId === progress.jobId && !syncDetailsOpen.value) {
+        syncProgress.value = null
+        syncDisplayProgress.value = 0
+      }
+    }, 2400)
+  }
+}
+
+async function pollSyncProgress() {
+  const jobId = syncProgress.value?.jobId
+  if (!jobId || syncProgressPollInFlight || syncProgress.value?.status !== 'running') return
+  syncProgressPollInFlight = true
+  try {
+    const progress = await window.api.tiktokGmvMax.getSyncJob({ jobId }) as SyncProgressState | null
+    if (progress?.jobId === jobId) applySyncProgress(progress)
+  } catch {
+    // The event channel remains authoritative when polling is temporarily unavailable.
+  } finally {
+    syncProgressPollInFlight = false
+  }
+}
+
+function startSyncProgressPolling(jobId: string) {
+  if (!jobId) return
+  if (syncProgressPollJobId === jobId && syncProgressPollTimer) return
+  stopSyncProgressPolling()
+  syncProgressPollJobId = jobId
+  void pollSyncProgress()
+  syncProgressPollTimer = setInterval(() => { void pollSyncProgress() }, 900)
+}
+
 function syncProgressCeiling(progress: number) {
   if (progress >= 100) return 100
   if (progress >= 90) return 98
@@ -1993,16 +2214,12 @@ async function runSyncAction(actionId: SyncActionId, message: string) {
   const action = actionId === 'sync-catalogs' ? 'catalog' : 'data'
   syncProgress.value = { action, status: 'running', phase: 'preparing', message: '', current: 0, total: 4, progress: 5 }
   syncDisplayProgress.value = 5
+  syncCompletionHandledJobId = ''
   startSyncProgressAnimation()
-  await nextTick()
-  syncProgressDialog.value?.focus()
   try {
-    await window.api.tiktokGmvMax.runSyncJob({ action })
-    await refreshWorkspace(false)
+    const started = await window.api.tiktokGmvMax.runSyncJob({ action }) as Partial<SyncProgressState> | undefined
+    if (started?.jobId) applySyncProgress({ ...syncProgress.value, ...started, action } as SyncProgressState)
     notice.value = message
-    await new Promise<void>((resolve) => setTimeout(resolve, 700))
-    syncProgress.value = null
-    stopSyncProgressAnimation()
     return true
   } catch (error: any) {
     errorText.value = error?.message || String(error)
@@ -2017,12 +2234,14 @@ async function runSyncAction(actionId: SyncActionId, message: string) {
 function dismissSyncFailure() {
   if (!syncNeedsRecovery.value) return
   stopSyncProgressAnimation()
+  stopSyncProgressPolling()
   syncProgress.value = null
 }
 
 function retrySync() {
   const actionId: SyncActionId = syncProgress.value?.action === 'catalog' ? 'sync-catalogs' : 'sync'
   stopSyncProgressAnimation()
+  stopSyncProgressPolling()
   syncProgress.value = null
   void runSyncAction(actionId, actionId === 'sync-catalogs' ? t('gmvMaxCatalog.synced') : t('gmvMax.messages.synced'))
 }
@@ -2578,16 +2797,15 @@ onMounted(() => {
   featureNavCollapsed.value = localStorage.getItem(NAV_STORAGE_KEY) === 'true'
   window.addEventListener('keydown', handleWorkspaceKeydown)
   removeSyncProgressListener = window.api.tiktokGmvMax.onSyncProgress((progress) => {
-    syncProgress.value = progress as SyncProgressState
-    syncDisplayProgress.value = Math.max(syncDisplayProgress.value, Number(progress.progress) || 0)
-    if (progress.status === 'completed' || progress.status === 'failed' || progress.status === 'interrupted') stopSyncProgressAnimation()
-    void nextTick(() => syncProgressDialog.value?.focus())
+    applySyncProgress(progress as SyncProgressState)
   })
   void loadDashboard()
+  void loadSopWorkspace()
 })
 onUnmounted(() => {
   if (sopLoadingWatchdog) window.clearTimeout(sopLoadingWatchdog)
   stopSyncProgressAnimation()
+  stopSyncProgressPolling()
   window.removeEventListener('keydown', handleWorkspaceKeydown)
   removeSyncProgressListener?.()
   removeSyncProgressListener = null
@@ -2770,38 +2988,149 @@ onUnmounted(() => {
         <div><span class="gmv-kicker">GMV MAX DECISION CENTER</span><h2>{{ t('gmvMaxDecision.title') }}</h2><p>{{ t('gmvMaxDecision.subtitle') }}</p></div>
         <div class="gmv-row__actions">
           <button class="gmv-icon-button" data-testid="gmv-sop-sync-catalogs" :title="t('gmvMaxCatalog.sync')" :disabled="!!busyAction" @click="syncCatalogs"><RefreshCw class="gmv-icon" /></button>
-          <button v-if="selectedSop" class="gmv-button gmv-button--secondary" :disabled="!!busyAction" @click="toggleSopStatus"><component :is="selectedSop.status === 'paused' ? PlayCircle : PauseCircle" class="gmv-icon" />{{ t(`gmvMaxSop.actions.${selectedSop.status === 'paused' ? 'resume' : 'pause'}`) }}</button>
-          <button v-if="selectedSop" class="gmv-button gmv-button--primary" data-testid="gmv-sop-toggle-start" :disabled="!!busyAction" @click="sopLaunchExpanded = !sopLaunchExpanded"><component :is="sopLaunchExpanded ? X : Plus" class="gmv-icon" />{{ sopLaunchExpanded ? t('common.cancel') : t('gmvMaxSop.actions.start') }}</button>
+          <button v-if="selectedSop" class="gmv-button gmv-button--secondary" data-testid="gmv-sop-toggle-status" :title="t(`gmvMaxSopActionLabels.${selectedSop.status === 'paused' ? 'resumeCurrentHint' : 'pauseCurrentHint'}`)" :disabled="!!busyAction" @click="toggleSopStatus"><component :is="selectedSop.status === 'paused' ? PlayCircle : PauseCircle" class="gmv-icon" />{{ t(`gmvMaxSopActionLabels.${selectedSop.status === 'paused' ? 'resumeCurrent' : 'pauseCurrent'}`) }}</button>
+          <button v-if="selectedSop" class="gmv-button gmv-button--primary" data-testid="gmv-sop-toggle-start" :title="t(sopLaunchExpanded ? 'common.cancel' : 'gmvMaxSopActionLabels.startCycleHint')" :disabled="!!busyAction" @click="sopLaunchExpanded = !sopLaunchExpanded"><component :is="sopLaunchExpanded ? X : Plus" class="gmv-icon" />{{ sopLaunchExpanded ? t('common.cancel') : t('gmvMaxSopActionLabels.startCycle') }}</button>
         </div>
       </div>
 
+      <section class="gmv-cockpit-scopebar" data-testid="gmv-cockpit-scopebar">
+        <div class="gmv-cockpit-scopebar__identity"><Store class="gmv-icon" /><span><small>{{ t('gmvMaxCockpit.scope') }}</small><strong>{{ decisionStoreFilter === 'all' ? t('gmvMaxConsole.allStores') : decisionStoreOptions.find((store) => store.id === decisionStoreFilter)?.name }}</strong><em>{{ scopedDecisionRows.length }} {{ t('gmvMaxDecisionScope.items') }}</em></span></div>
+        <div class="gmv-cockpit-scopebar__segments" role="group" :aria-label="t('gmvMax.fields.type')"><button type="button" :class="{ 'is-active': decisionTypeFilter === 'all' }" @click="setDecisionTypeFilter('all')">{{ t('gmvMaxConsole.allTypes') }}</button><button type="button" :class="{ 'is-active': decisionTypeFilter === 'PRODUCT' }" @click="setDecisionTypeFilter('PRODUCT')"><Package class="gmv-icon" />{{ t('gmvMax.types.product') }}</button><button type="button" :class="{ 'is-active': decisionTypeFilter === 'LIVE' }" @click="setDecisionTypeFilter('LIVE')"><Activity class="gmv-icon" />{{ t('gmvMax.types.live') }}</button></div>
+        <div class="gmv-cockpit-scopebar__lifecycle" role="group" :aria-label="t('gmvMaxCockpit.lifecycle')"><button type="button" :class="{ 'is-active': decisionLifecycleFilter === 'all' }" @click="setDecisionLifecycleFilter('all')">{{ t('gmvMaxConsole.status.all') }}</button><button type="button" class="is-running" :class="{ 'is-active': decisionLifecycleFilter === 'running' }" @click="setDecisionLifecycleFilter('running')"><CheckCircle2 class="gmv-icon" />{{ t('gmvMaxCockpit.running') }} <b>{{ decisionLifecycleCounts.running }}</b></button><button type="button" class="is-paused" :class="{ 'is-active': decisionLifecycleFilter === 'paused' }" @click="setDecisionLifecycleFilter('paused')"><PauseCircle class="gmv-icon" />{{ t('gmvMaxCockpit.paused') }} <b>{{ decisionLifecycleCounts.paused }}</b></button><button type="button" class="is-closed" :class="{ 'is-active': decisionLifecycleFilter === 'closed' }" @click="setDecisionLifecycleFilter('closed')"><X class="gmv-icon" />{{ t('gmvMaxCockpit.closed') }} <b>{{ decisionLifecycleCounts.closed }}</b></button><button type="button" class="is-exception" :class="{ 'is-active': decisionLifecycleFilter === 'exception' }" @click="setDecisionLifecycleFilter('exception')"><ShieldAlert class="gmv-icon" />{{ t('gmvMaxCockpit.exception') }} <b>{{ decisionLifecycleCounts.exception }}</b></button></div>
+        <div class="gmv-cockpit-scopebar__freshness"><span class="gmv-freshness-dot" :class="cockpitSummary.stale ? 'is-stale' : 'is-fresh'"></span><span><small>{{ t('gmvMaxCockpit.freshness') }}</small><strong>{{ cockpitSummary.stale ? t('gmvMaxCockpit.needsSync') : t('gmvMaxCockpit.fresh') }}</strong></span><em>{{ formatDate(sopWorkspace.generatedAt) }}</em></div>
+        <button type="button" class="gmv-button gmv-button--secondary gmv-cockpit-scopebar__sync" :disabled="!!busyAction" @click="syncData"><RefreshCw class="gmv-icon" />{{ t('gmvMax.actions.sync') }}</button>
+      </section>
+
       <section class="gmv-decision-center" data-testid="gmv-decision-center">
+        <section class="gmv-decision-scope" data-testid="gmv-decision-scope">
+          <div class="gmv-decision-scope__stores">
+            <div class="gmv-decision-scope__label"><Store /><span><strong>{{ t('gmvMaxConsole.storeControl') }}</strong><small>{{ decisionStoreOptions.length }} {{ t('gmvMaxOfficial.storeCount') }}</small></span></div>
+            <div class="gmv-decision-store-tabs" role="tablist" :aria-label="t('gmvMaxConsole.storeControl')">
+              <button type="button" role="tab" data-testid="gmv-decision-store-all" :aria-selected="decisionStoreFilter === 'all'" :class="{ 'is-active': decisionStoreFilter === 'all' }" @click="setDecisionStoreFilter('all')">
+                <Store /><span><strong>{{ t('gmvMaxConsole.allStores') }}</strong><small>{{ decisionRowsByTypeAndStatus.length }} {{ t('gmvMax.metrics.campaigns') }}</small></span>
+              </button>
+              <button v-for="store in decisionStoreOptions" :key="store.id" type="button" role="tab" :data-store-id="store.id" :aria-selected="decisionStoreFilter === store.id" :class="{ 'is-active': decisionStoreFilter === store.id }" @click="setDecisionStoreFilter(store.id)">
+                <Store /><span><strong>{{ store.name }}</strong><small>{{ store.count }} {{ t('gmvMax.metrics.campaigns') }}</small></span>
+              </button>
+            </div>
+          </div>
+          <div class="gmv-decision-scope__filters">
+            <div class="gmv-decision-scope-filter" data-testid="gmv-decision-type-filter">
+              <span>{{ t('gmvMax.fields.type') }}</span>
+              <div role="group" :aria-label="t('gmvMax.fields.type')">
+                <button type="button" data-type="all" :class="{ 'is-active': decisionTypeFilter === 'all' }" @click="setDecisionTypeFilter('all')"><Filter />{{ t('gmvMaxConsole.allTypes') }}</button>
+                <button type="button" data-type="PRODUCT" :class="{ 'is-active': decisionTypeFilter === 'PRODUCT' }" @click="setDecisionTypeFilter('PRODUCT')"><Package />{{ t('gmvMax.types.product') }}</button>
+                <button type="button" data-type="LIVE" :class="{ 'is-active': decisionTypeFilter === 'LIVE' }" @click="setDecisionTypeFilter('LIVE')"><Activity />{{ t('gmvMax.types.live') }}</button>
+              </div>
+            </div>
+            <div class="gmv-decision-scope-filter" data-testid="gmv-decision-status-filter">
+              <span>{{ t('gmvMax.fields.status') }}</span>
+              <div role="group" :aria-label="t('gmvMax.fields.status')">
+                <button type="button" data-status="all" :class="{ 'is-active': decisionStatusFilter === 'all' }" @click="setDecisionStatusFilter('all')">{{ t('gmvMaxConsole.status.all') }}</button>
+                <button type="button" data-status="enabled" class="is-enabled" :class="{ 'is-active': decisionStatusFilter === 'enabled' }" @click="setDecisionStatusFilter('enabled')"><CheckCircle2 />{{ t('gmvMaxConsole.enabled') }}</button>
+                <button type="button" data-status="disabled" class="is-disabled" :class="{ 'is-active': decisionStatusFilter === 'disabled' }" @click="setDecisionStatusFilter('disabled')"><PauseCircle />{{ t('gmvMaxOperationStatus.disable') }}</button>
+              </div>
+            </div>
+            <span class="gmv-decision-scope__total"><strong>{{ scopedDecisionRows.length }}</strong>{{ t('gmvMax.metrics.campaigns') }}</span>
+          </div>
+        </section>
         <div class="gmv-decision-summary">
-          <article class="is-p0"><span>{{ t('gmvMaxDecision.priority.p0') }}</span><strong>{{ sopWorkspace.decisionSummary.p0 }}</strong><small>{{ t('gmvMaxDecision.priority.p0Hint') }}</small></article>
-          <article class="is-p1"><span>{{ t('gmvMaxDecision.priority.p1') }}</span><strong>{{ sopWorkspace.decisionSummary.p1 }}</strong><small>{{ t('gmvMaxDecision.priority.p1Hint') }}</small></article>
-          <article class="is-p2"><span>{{ t('gmvMaxDecision.priority.p2') }}</span><strong>{{ sopWorkspace.decisionSummary.p2 }}</strong><small>{{ t('gmvMaxDecision.priority.p2Hint') }}</small></article>
-          <article><span>{{ t('gmvMaxDecision.activeExperiments') }}</span><strong>{{ sopWorkspace.decisionSummary.activeExperiments }}</strong><small>{{ sopWorkspace.decisionSummary.writeBlocked }} {{ t('gmvMaxDecision.writeBlocked') }}</small></article>
+          <article class="is-p0" data-summary="P0"><span>{{ t('gmvMaxDecision.priority.p0') }}</span><strong>{{ scopedDecisionSummary.p0 }}</strong><small>{{ t('gmvMaxDecision.priority.p0Hint') }}</small></article>
+          <article class="is-p1" data-summary="P1"><span>{{ t('gmvMaxDecision.priority.p1') }}</span><strong>{{ scopedDecisionSummary.p1 }}</strong><small>{{ t('gmvMaxDecision.priority.p1Hint') }}</small></article>
+          <article class="is-p2" data-summary="P2"><span>{{ t('gmvMaxDecision.priority.p2') }}</span><strong>{{ scopedDecisionSummary.p2 }}</strong><small>{{ t('gmvMaxDecision.priority.p2Hint') }}</small></article>
+          <article data-summary="experiments"><span>{{ t('gmvMaxDecision.activeExperiments') }}</span><strong>{{ scopedDecisionSummary.activeExperiments }}</strong><small>{{ scopedDecisionSummary.writeBlocked }} {{ t('gmvMaxDecision.writeBlocked') }}</small></article>
         </div>
+        <div class="gmv-decision-workbench">
         <div class="gmv-panel gmv-decision-table-panel">
-          <div class="gmv-panel__heading"><div><h2>{{ t('gmvMaxDecision.productDecisions') }}</h2><p>{{ t('gmvMaxDecision.productDecisionsHint') }}</p></div><span class="gmv-status is-blue">{{ decisionRows.length }} {{ t('gmvMaxDecision.products') }}</span></div>
-          <div v-if="decisionRows.length" class="gmv-table-wrap">
-            <table class="gmv-table gmv-decision-table">
-              <thead><tr><th>{{ t('gmvMaxDecision.product') }}</th><th>{{ t('gmvMaxDecision.statusLabel') }}</th><th>{{ t('gmvMaxDecision.health') }}</th><th>{{ t('gmvMaxDecision.roiSet') }}</th><th>{{ t('gmvMaxConsole.spend') }}</th><th>GMV</th><th>{{ t('gmvMaxDecision.velocity') }}</th><th>{{ t('gmvMaxDecision.todayAction') }}</th><th></th></tr></thead>
-              <tbody><tr v-for="item in decisionRows" :key="item.decision.id" :class="{ 'is-selected': item.instance.id === selectedSopId }">
-                <td><strong>{{ item.decision.productName || item.decision.productId || item.instance.campaignName }}</strong><small>{{ item.instance.storeName }} / {{ item.decision.lifecycle }}</small></td>
-                <td><span :class="['gmv-decision-status', `is-${item.decision.status.toLowerCase()}`]">{{ item.decision.status }} {{ t(`gmvMaxDecision.status.${item.decision.status}`) }}</span><small>{{ item.decision.priority }} / {{ formatPercent(item.decision.confidence, true) }}</small></td>
-                <td><strong>{{ item.decision.healthScore ? formatInteger(item.decision.healthScore) : t('gmvMaxSopUi.insufficientData') }}</strong><small>{{ formatPercent(item.decision.healthCoverage) }}</small></td>
-                <td><strong>{{ formatRoi(item.decision.actualRoi) }}</strong><small>{{ formatRoi(item.decision.targetRoi) }} / {{ formatRoi(item.decision.breakEvenRoi) }} / {{ item.decision.marginalRoi ? formatRoi(item.decision.marginalRoi) : '-' }}</small></td>
-                <td>{{ formatCny(item.decision.spend, item.decision.storeId) }}</td><td>{{ formatCny(item.decision.grossRevenue, item.decision.storeId) }}</td>
-                <td><strong>{{ item.decision.spendVelocity ? Number(item.decision.spendVelocity).toFixed(2) : '-' }}</strong><small>{{ item.decision.budgetUtilization ? formatPercent(item.decision.budgetUtilization) : '-' }}</small></td>
-                <td><span :class="['gmv-decision-action', `is-${item.decision.priority.toLowerCase()}`]">{{ t(`gmvMaxDecision.actions.${item.decision.recommendedAction}`) }}</span><small v-if="item.decision.blockedReasons.length">{{ t('gmvMaxDecision.diagnosisOnly') }}</small></td>
-                <td><button type="button" class="gmv-icon-button" :title="t('gmvMaxDecision.viewReason')" @click="selectSopInstance(item.instance.id)"><ChevronRight /></button></td>
-              </tr></tbody>
-            </table>
+          <div class="gmv-decision-panel-heading">
+            <div><h2>{{ t('gmvMaxDecisionScope.queue') }}</h2><p>{{ t('gmvMaxDecisionScope.queueHint') }}</p></div>
+            <div class="gmv-decision-filters" role="group" :aria-label="t('gmvMaxDecision.productDecisions')">
+              <button type="button" :class="{ 'is-active': decisionPriorityFilter === 'all' }" @click="setDecisionPriorityFilter('all')">{{ t('gmvMaxConsole.status.all') }}</button>
+              <button v-for="priority in (['P0', 'P1', 'P2'] as const)" :key="priority" type="button" :class="[`is-${priority.toLowerCase()}`, { 'is-active': decisionPriorityFilter === priority }]" @click="setDecisionPriorityFilter(priority)">{{ priority }}</button>
+              <span>{{ filteredDecisionRows.length }} {{ t('gmvMaxDecisionScope.items') }}</span>
+            </div>
+          </div>
+          <div v-if="pagedDecisionRows.length" class="gmv-decision-grid" data-testid="gmv-decision-grid">
+            <button v-for="item in pagedDecisionRows" :key="item.decision.id" type="button" :data-store-id="item.instance.storeId" :data-campaign-type="item.instance.campaignType" :data-campaign-enabled="isDecisionCampaignEnabled(item.instance.campaignOperationStatus)" :class="['gmv-decision-card', `is-${item.decision.priority.toLowerCase()}`, { 'is-selected': item.instance.id === selectedSopId }]" :title="t('gmvMaxDecision.viewReason')" @click="selectSopInstance(item.instance.id)">
+              <span class="gmv-decision-card__media">
+                <Package />
+                <img v-if="item.decision.productImageUrl" :src="item.decision.productImageUrl" :alt="item.decision.productName || item.decision.productId || item.instance.campaignName" loading="lazy" @error="hideBrokenSopImage" />
+                <i>{{ item.decision.priority }}</i>
+              </span>
+                <span class="gmv-decision-card__content">
+                  <span class="gmv-decision-card__identity">
+                    <span :class="['gmv-decision-status', `is-${item.decision.status.toLowerCase()}`]">{{ item.decision.status }} {{ t(`gmvMaxDecision.status.${item.decision.status}`) }}</span>
+                    <span class="gmv-decision-card__scope">
+                      <i class="is-type"><component :is="item.instance.campaignType === 'LIVE' ? Activity : Package" />{{ t(`gmvMax.types.${item.instance.campaignType.toLowerCase()}`) }}</i>
+                      <i :class="isDecisionCampaignEnabled(item.instance.campaignOperationStatus) ? 'is-enabled' : 'is-disabled'"><component :is="isDecisionCampaignEnabled(item.instance.campaignOperationStatus) ? CheckCircle2 : PauseCircle" />{{ operationStatusLabel(item.instance.campaignOperationStatus) }}</i>
+                    </span>
+                    <small><Store />{{ item.instance.storeName }}</small>
+                  </span>
+                  <strong class="gmv-decision-card__title">{{ item.decision.productName || item.decision.productId || item.instance.campaignName }}</strong>
+                  <span class="gmv-decision-card__metrics">
+                  <span><small>ROI</small><strong>{{ formatRoi(item.decision.actualRoi) }}</strong><em>{{ formatRoi(item.decision.targetRoi) }} / {{ formatRoi(item.decision.breakEvenRoi) }}</em></span>
+                  <span><small>{{ t('gmvMaxConsole.spend') }}</small><strong>{{ formatCny(item.decision.spend, item.decision.storeId) }}</strong><em>{{ item.decision.budgetUtilization ? formatPercent(item.decision.budgetUtilization) : '-' }}</em></span>
+                  <span><small>GMV</small><strong>{{ formatCny(item.decision.grossRevenue, item.decision.storeId) }}</strong><em>{{ item.decision.spendVelocity ? Number(item.decision.spendVelocity).toFixed(2) : '-' }}</em></span>
+                  <span><small>{{ t('gmvMax.fields.orders') }}</small><strong>{{ formatInteger(item.instance.metrics.orders) }}</strong><em>{{ t('gmvMaxDecision.health') }} {{ item.decision.healthScore ? formatInteger(item.decision.healthScore) : '-' }}</em></span>
+                </span>
+                <span class="gmv-decision-card__action"><span :class="['gmv-decision-action', `is-${item.decision.priority.toLowerCase()}`]">{{ t(`gmvMaxDecision.actions.${item.decision.recommendedAction}`) }}</span><small v-if="item.decision.blockedReasons.length">{{ t('gmvMaxDecision.diagnosisOnly') }}</small></span>
+              </span>
+              <ChevronRight class="gmv-decision-card__arrow" />
+            </button>
+          </div>
+          <div v-if="filteredDecisionRows.length" class="gmv-decision-pagination">
+            <span>{{ t('gmvMaxData.pageSummary', { current: decisionPage, total: decisionPageCount, count: filteredDecisionRows.length }) }}</span>
+            <div><button type="button" :title="t('gmvMaxData.previous')" :disabled="decisionPage <= 1" @click="changeDecisionPage(decisionPage - 1)"><ChevronRight /></button><button type="button" :title="t('gmvMaxData.next')" :disabled="decisionPage >= decisionPageCount" @click="changeDecisionPage(decisionPage + 1)"><ChevronRight /></button></div>
           </div>
           <div v-else class="gmv-empty gmv-empty--small">{{ t('gmvMaxDecision.empty') }}</div>
+       </div>
+        <aside class="gmv-panel gmv-today-plan" data-testid="gmv-today-plan">
+          <header class="gmv-today-plan__header">
+            <div><span class="gmv-kicker">{{ t('gmvMaxDetailDrawer.todayPlan') }}</span><h2>{{ cockpitTodayPlan.length }} {{ t('gmvMaxSopUi.itemsPending') }}</h2><p>{{ t('gmvMaxDecision.productDecisionsHint') }}</p></div>
+            <span class="gmv-today-plan__date"><CalendarRange />{{ cockpitTodayPlanDate || t('gmvMaxSopUi.notAvailable') }}</span>
+          </header>
+          <div v-if="cockpitTodayPlan.length" class="gmv-today-plan__list">
+            <button v-for="item in cockpitTodayPlan" :key="item.task.id" type="button" :data-sop-instance-id="item.instance.id" :class="[`is-${item.task.priority || item.decision?.priority || 'P2'}`]" @click="selectSopInstance(item.instance.id)">
+              <span class="gmv-today-plan__priority">{{ item.task.priority || item.decision?.priority || 'P2' }}</span>
+              <span class="gmv-today-plan__copy"><small>{{ item.task.scheduledTime }} / {{ item.instance.storeName }}</small><strong>{{ sopTaskTitle(item.task) }}</strong><em>{{ item.instance.productName || item.instance.productId || item.instance.campaignName }}</em></span>
+              <ChevronRight />
+            </button>
+          </div>
+          <div v-else class="gmv-empty gmv-empty--small">{{ t('gmvMaxSopUi.todayComplete') }}</div>
+        </aside>
         </div>
       </section>
+
+      <Teleport to="body">
+        <div v-if="selectedSop && sopDetailOpen" class="gmv-command-drawer-backdrop" data-testid="gmv-command-center-drawer-backdrop" @click.self="closeSopDetail">
+          <aside class="gmv-command-drawer" data-testid="gmv-command-center-drawer" role="dialog" aria-modal="true" :aria-label="t('gmvMaxDetailDrawer.title')">
+            <header class="gmv-command-drawer__header">
+              <div class="gmv-command-drawer__identity">
+                <span class="gmv-command-drawer__image"><Package /><img v-if="selectedSop.productImageUrl" :src="selectedSop.productImageUrl" :alt="selectedSop.productName || selectedSop.productId || selectedSop.campaignName" @error="hideBrokenSopImage" /></span>
+                <span><small>{{ selectedSop.storeName }} / {{ t(`gmvMax.types.${selectedSop.campaignType.toLowerCase()}`) }}</small><strong :title="selectedSop.productName || selectedSop.productId || selectedSop.campaignName">{{ selectedSop.productName || selectedSop.productId || t('gmvMaxSop.liveScope') }}</strong><em :title="selectedSop.campaignName">{{ selectedSop.campaignName }}</em></span>
+              </div>
+              <button type="button" class="gmv-icon-button" :title="t('gmvMaxDetailDrawer.close')" @click="closeSopDetail"><X /></button>
+            </header>
+            <div class="gmv-command-drawer__context"><span :class="['gmv-status', selectedSop.status === 'blocked' ? 'is-danger' : selectedSop.status === 'paused' ? 'is-warning' : 'is-success']">{{ t(`gmvMaxSop.status.${selectedSop.status}`) }}</span><span :class="['gmv-status', isDecisionCampaignEnabled(selectedSop.campaignOperationStatus) ? 'is-success' : 'is-neutral']">{{ operationStatusLabel(selectedSop.campaignOperationStatus) }}</span><span>{{ t('gmvMaxSop.currentDay') }} {{ selectedSop.currentDay }}</span><span>{{ t('gmvMaxCockpit.freshness') }} {{ selectedSop.dataFreshness || t('gmvMaxSopUi.notAvailable') }}</span></div>
+            <nav class="gmv-command-drawer__tabs" role="tablist" :aria-label="t('gmvMaxDetailDrawer.tabsLabel')">
+              <button v-for="tab in ([['decision','decision'],['tasks','tasks'],['metrics','metrics'],['creative','creative'],['history','history']] as const)" :key="tab[0]" type="button" role="tab" :aria-selected="sopDetailTab === tab[0]" :class="{ 'is-active': sopDetailTab === tab[0] }" @click="sopDetailTab = tab[0]">{{ t(`gmvMaxDetailDrawer.tabs.${tab[1]}`) }}</button>
+            </nav>
+            <div class="gmv-command-drawer__body">
+              <section v-if="sopDetailTab === 'decision'" class="gmv-command-drawer__section">
+                <span class="gmv-kicker">{{ t('gmvMaxDetailDrawer.systemJudgement') }}</span><h3>{{ selectedSop.track === 'mature_product' && selectedSop.matureAssessment ? t(`gmvMaxMature.states.${selectedSop.matureAssessment.state}`) : t(`gmvMaxSop.phases.${selectedSop.phase}`) }}</h3><p>{{ primarySopIssue ? issueText(primarySopIssue, 'reason') : t('gmvMaxDetailDrawer.noIssue') }}</p>
+                <div v-if="primarySopIssue" class="gmv-command-drawer__issue"><ShieldAlert /><span><strong>{{ issueText(primarySopIssue, 'title') }}</strong><small>{{ primarySopIssue.blockedReasons?.join(' / ') || issueText(primarySopIssue, 'solution') }}</small></span></div>
+                <div class="gmv-command-drawer__facts"><span><small>ROI</small><strong>{{ formatRoi(selectedSop.metrics.roi) }}</strong><em>{{ t('gmvMaxDetailDrawer.target') }} {{ formatRoi(selectedSop.targetRoi) }}</em></span><span><small>{{ t('gmvMaxSop.metrics.gmv') }}</small><strong>{{ formatCny(selectedSop.metrics.gmv, selectedSop.storeId) }}</strong><em>{{ t('gmvMaxSop.metrics.orders') }} {{ selectedSop.metrics.orders }}</em></span><span><small>{{ t('gmvMaxSopUi.profitFloorLabel') }}</small><strong>{{ formatRoi(selectedSop.profitFloor) }}</strong><em>{{ t('gmvMaxDetailDrawer.freshness') }} {{ selectedSop.dataFreshness || t('gmvMaxSopUi.notAvailable') }}</em></span></div>
+                <button v-if="primarySopIssue" type="button" class="gmv-button gmv-button--primary gmv-command-drawer__primary" @click="handleSopIssue(primarySopIssue)"><ArrowUpRight class="gmv-icon" />{{ t('gmvMaxDetailDrawer.handleIssue') }}</button>
+              </section>
+              <section v-else-if="sopDetailTab === 'tasks'" class="gmv-command-drawer__section"><div class="gmv-command-drawer__section-heading"><span><span class="gmv-kicker">{{ t('gmvMaxDetailDrawer.todayPlan') }}</span><h3>{{ selectedSopPendingTasks.length }} {{ t('gmvMaxSopUi.itemsPending') }}</h3></span><small>{{ selectedSopTaskDate || t('gmvMaxSopUi.notAvailable') }}</small></div><div class="gmv-command-timeline"><article v-for="task in selectedSopTasks.slice(0, 8)" :key="task.id" :class="[`is-${task.status}`]"><span class="gmv-command-timeline__dot"><Check v-if="task.status === 'completed'" /><Clock3 v-else /></span><div><small>{{ task.scheduledTime }} / {{ task.executionMode === 'manual_external' ? t('gmvMaxSopUi.sellerCenterRequired') : task.priority || 'P2' }}</small><strong>{{ sopTaskTitle(task) }}</strong><p>{{ sopTaskDescription(task) }}</p><button v-if="['pending','blocked'].includes(task.status)" type="button" class="gmv-button gmv-button--secondary" :disabled="!!busyAction" @click="completeSopTask(task)">{{ t('gmvMaxSopUi.markComplete') }}</button></div></article><div v-if="!selectedSopTasks.length" class="gmv-empty gmv-empty--small">{{ t('gmvMaxSopUi.todayComplete') }}</div></div></section>
+              <section v-else-if="sopDetailTab === 'metrics'" class="gmv-command-drawer__section"><span class="gmv-kicker">{{ t('gmvMaxDetailDrawer.metricsTitle') }}</span><h3>{{ t('gmvMaxDetailDrawer.metricsSubtitle') }}</h3><div class="gmv-command-metrics"><span v-for="metric in sopKeyMetricCards" :key="metric.key"><small>{{ te(`gmvMaxSop.metrics.${metric.key}`) ? t(`gmvMaxSop.metrics.${metric.key}`) : metric.key }}</small><strong>{{ metric.value }}</strong><em>{{ t('gmvMaxDetailDrawer.metricSignal') }}</em></span></div><div class="gmv-command-drawer__freshness"><Clock3 /><span><strong>{{ t('gmvMaxDetailDrawer.dataFreshness') }}</strong><small>{{ selectedSop.lastDeliveryDate || t('gmvMaxSopUi.noActiveDelivery') }} / {{ selectedSop.dataFreshness || t('gmvMaxSopUi.notAvailable') }}</small></span></div></section>
+              <section v-else-if="sopDetailTab === 'creative'" class="gmv-command-drawer__section"><span class="gmv-kicker">{{ t('gmvMaxDetailDrawer.creativeTitle') }}</span><h3>{{ selectedSopCreativeVideos.length }} {{ t('gmvMaxSopVideo.videoList') }}</h3><div class="gmv-command-creative-grid"><article v-for="video in selectedSopCreativeVideos.slice(0, 6)" :key="video.id"><span class="gmv-command-creative-grid__cover"><img v-if="video.coverUrl" :src="video.coverUrl" :alt="video.name" @error="hideBrokenSopVideoCover(video)" /><Film v-else /><i v-if="!video.coverUrl">{{ t(`gmvMaxSopVideo.freshness.${video.freshness}`) }}</i></span><strong :title="video.name">{{ video.name }}</strong><small>{{ video.grade }} / {{ video.performance.roi ? formatRoi(video.performance.roi) : t('gmvMaxSopVideo.noData') }}</small></article><div v-if="!selectedSopCreativeVideos.length" class="gmv-empty gmv-empty--small">{{ t('gmvMaxSopVideo.empty') }}</div></div></section>
+              <section v-else class="gmv-command-drawer__section"><span class="gmv-kicker">{{ t('gmvMaxDetailDrawer.historyTitle') }}</span><h3>{{ t('gmvMaxDetailDrawer.historySubtitle') }}</h3><div class="gmv-command-history"><article v-for="run in sopWorkspace.automationRuns.filter((item) => item.sopInstanceId === selectedSop.id).slice(0, 8)" :key="run.id"><span>{{ formatDate(run.updatedAt) }}</span><strong>{{ run.action }}</strong><small>{{ run.message }}</small><b :class="`is-${run.status}`">{{ run.status }}</b></article><div v-if="!sopWorkspace.automationRuns.some((item) => item.sopInstanceId === selectedSop.id)" class="gmv-empty gmv-empty--small">{{ t('gmvMaxDetailDrawer.noHistory') }}</div></div></section>
+            </div>
+            <footer class="gmv-command-drawer__footer"><button type="button" class="gmv-button gmv-button--secondary" :disabled="!!busyAction" @click="toggleSopStatus"><component :is="selectedSop.status === 'paused' ? PlayCircle : PauseCircle" class="gmv-icon" />{{ selectedSop.status === 'paused' ? t('gmvMaxSopActionLabels.resumeCurrent') : t('gmvMaxSopActionLabels.pauseCurrent') }}</button><button type="button" class="gmv-button gmv-button--primary" :disabled="!!busyAction" @click="sopLaunchExpanded = true; closeSopDetail()"><Plus class="gmv-icon" />{{ t('gmvMaxSopActionLabels.startCycle') }}</button></footer>
+          </aside>
+        </div>
+      </Teleport>
 
       <section v-if="selectedSop" class="gmv-sop-object-bar" data-testid="gmv-sop-current-object">
         <button type="button" class="gmv-sop-object-bar__selector" data-testid="gmv-sop-open-picker" @click="openSopPicker">
@@ -2837,7 +3166,7 @@ onUnmounted(() => {
             <label><span>{{ t('gmvMaxMature.track') }}</span><select v-model="sopStartDraft.track"><option value="">{{ t('gmvMaxMature.autoTrack') }}</option><option value="new_product">{{ t('gmvMaxMature.tracks.new_product') }}</option><option value="mature_product">{{ t('gmvMaxMature.tracks.mature_product') }}</option><option value="live">{{ t('gmvMaxMature.tracks.live') }}</option></select></label>
             <label v-if="sopStartDraft.track"><span>{{ t('gmvMaxMature.overrideReason') }}</span><input v-model="sopStartDraft.trackOverrideReason" /></label>
           </div>
-          <div class="gmv-sop-launch__footer"><span :class="{ 'is-ready': sopCanStart }"><CheckCircle2 v-if="sopCanStart" /><ShieldAlert v-else />{{ sopStartRequirement }}</span><button class="gmv-button gmv-button--primary" data-testid="gmv-sop-start-button" :disabled="!sopCanStart || !!busyAction || sopProductLoading" @click="startSop"><Rocket class="gmv-icon" />{{ t('gmvMaxSop.actions.start') }}</button></div>
+           <div class="gmv-sop-launch__footer"><span :class="{ 'is-ready': sopCanStart }"><CheckCircle2 v-if="sopCanStart" /><ShieldAlert v-else />{{ sopStartRequirement }}</span><button class="gmv-button gmv-button--primary" data-testid="gmv-sop-start-button" :title="t('gmvMaxSopActionLabels.startCycleHint')" :disabled="!sopCanStart || !!busyAction || sopProductLoading" @click="startSop"><Rocket class="gmv-icon" />{{ t('gmvMaxSopActionLabels.startCycle') }}</button></div>
         </div>
       </section>
 
@@ -3444,44 +3773,31 @@ onUnmounted(() => {
       </div>
     </Teleport>
     <Teleport to="body">
-      <div v-if="syncProgress" class="gmv-sync-overlay" data-testid="gmv-sync-progress-overlay" @wheel.prevent @touchmove.prevent>
-        <section
-          ref="syncProgressDialog"
-          class="gmv-sync-dialog"
-          data-testid="gmv-sync-progress-dialog"
-          role="alertdialog"
-          aria-modal="true"
-          aria-busy="true"
-          :aria-label="syncProgressTitle"
-          tabindex="0"
-          @keydown.prevent.stop
-        >
-          <div class="gmv-sync-dialog__accent"></div>
-          <header class="gmv-sync-dialog__header">
-            <div :class="['gmv-sync-dialog__signal', { 'is-complete': syncProgress.status === 'completed', 'is-failed': syncNeedsRecovery }]">
-              <Check v-if="syncProgress.status === 'completed'" />
-              <X v-else-if="syncNeedsRecovery" />
-              <Activity v-else />
-            </div>
-            <div>
-              <span>{{ t('gmvMaxSyncProgress.eyebrow') }}</span>
-              <h2>{{ syncProgressTitle }}</h2>
-              <p>{{ syncProgressDescription }}</p>
-            </div>
-            <strong>{{ syncVisibleProgress }}%</strong>
-          </header>
-          <div class="gmv-sync-dialog__track" role="progressbar" :aria-valuenow="syncVisibleProgress" aria-valuemin="0" aria-valuemax="100">
-            <span :class="{ 'is-failed': syncNeedsRecovery, 'is-running': syncProgress.status === 'running' }" :style="{ width: `${syncVisibleProgress}%` }"></span>
+      <div v-if="syncProgress" class="gmv-sync-status" data-testid="gmv-sync-progress-overlay">
+        <button class="gmv-sync-status__main" type="button" data-testid="gmv-sync-progress-dialog" :aria-label="syncProgressTitle" @click="syncDetailsOpen = true">
+          <span :class="['gmv-sync-status__signal', { 'is-complete': syncProgress.status === 'completed', 'is-failed': syncNeedsRecovery }]">
+            <Check v-if="syncProgress.status === 'completed'" />
+            <X v-else-if="syncNeedsRecovery" />
+            <Activity v-else />
+          </span>
+          <span class="gmv-sync-status__copy"><strong>{{ syncProgressTitle }}</strong><small>{{ syncProgressDescription }}</small></span>
+          <span class="gmv-sync-status__progress"><b>{{ syncVisibleProgress }}%</b><i><em :class="{ 'is-failed': syncNeedsRecovery, 'is-running': syncProgress.status === 'running' }" :style="{ width: `${syncVisibleProgress}%` }"></em></i></span>
+          <ChevronRight class="gmv-icon" />
+        </button>
+        <button v-if="syncNeedsRecovery" class="gmv-sync-status__retry" type="button" :title="t('gmvMaxSop.actions.retry')" @click="retrySync"><RotateCcw class="gmv-icon" /></button>
+      </div>
+      <div v-if="syncDetailsOpen && syncProgress" class="gmv-sync-detail-backdrop" data-testid="gmv-sync-detail-backdrop" @click.self="syncDetailsOpen = false">
+        <aside ref="syncProgressDialog" class="gmv-sync-detail" role="dialog" aria-modal="true" :aria-label="syncProgressTitle">
+          <header><div><span>{{ t('gmvMaxSyncProgress.eyebrow') }}</span><h2>{{ syncProgressTitle }}</h2><p>{{ syncProgressDescription }}</p></div><button class="gmv-icon-button" type="button" :title="t('common.cancel')" @click="syncDetailsOpen = false"><X /></button></header>
+          <div class="gmv-sync-detail__body">
+            <div class="gmv-sync-detail__percent"><strong>{{ syncVisibleProgress }}%</strong><span>{{ syncProgress.message || syncProgressDescription }}</span></div>
+            <div class="gmv-sync-dialog__track" role="progressbar" :aria-valuenow="syncVisibleProgress" aria-valuemin="0" aria-valuemax="100"><span :class="{ 'is-failed': syncNeedsRecovery, 'is-running': syncProgress.status === 'running' }" :style="{ width: `${syncVisibleProgress}%` }"></span></div>
+            <div class="gmv-sync-dialog__steps"><div v-for="(step, index) in syncProgressSteps" :key="step" :class="syncStepClass(index)"><span><Check v-if="syncStepClass(index) === 'is-complete'" /><X v-else-if="syncStepClass(index) === 'is-failed'" /><Clock3 v-else /></span><div><small>{{ String(index + 1).padStart(2, '0') }}</small><strong>{{ step }}</strong></div></div></div>
+            <div v-if="syncNeedsRecovery" class="gmv-sync-dialog__error"><ShieldAlert /><span>{{ syncProgress.error || errorText }}</span></div>
+            <dl class="gmv-sync-detail__meta"><div><dt>{{ t('gmvMaxSyncProgress.currentObject') }}</dt><dd>{{ syncProgress.message || t('gmvMaxSopUi.notAvailable') }}</dd></div><div><dt>{{ t('gmvMaxSyncProgress.lastUpdated') }}</dt><dd>{{ formatDate(syncProgress.updatedAt) }}</dd></div><div><dt>{{ t('gmvMaxSyncProgress.jobId') }}</dt><dd>{{ syncProgress.jobId || t('gmvMaxSopUi.notAvailable') }}</dd></div></dl>
           </div>
-          <div class="gmv-sync-dialog__steps">
-            <div v-for="(step, index) in syncProgressSteps" :key="step" :class="syncStepClass(index)">
-              <span><Check v-if="syncStepClass(index) === 'is-complete'" /><X v-else-if="syncStepClass(index) === 'is-failed'" /><Clock3 v-else /></span>
-              <div><small>{{ String(index + 1).padStart(2, '0') }}</small><strong>{{ step }}</strong></div>
-            </div>
-          </div>
-          <div v-if="syncNeedsRecovery" class="gmv-sync-dialog__error"><ShieldAlert /><span>{{ syncProgress.error || errorText }}</span></div>
-          <footer><LockKeyhole /><span>{{ syncNeedsRecovery ? t('gmvMaxSyncProgress.failedAccess') : t('gmvMaxSyncProgress.blocked') }}</span><small v-if="!syncNeedsRecovery">{{ t('gmvMaxSyncProgress.keepOpen') }}</small><div v-else><button class="gmv-button gmv-button--secondary" @click="dismissSyncFailure">{{ t('gmvMaxSyncProgress.dismiss') }}</button><button class="gmv-button gmv-button--primary" @click="retrySync"><RotateCcw class="gmv-icon" />{{ t('gmvMaxSop.actions.retry') }}</button></div></footer>
-        </section>
+          <footer><span><LockKeyhole />{{ syncNeedsRecovery ? t('gmvMaxSyncProgress.failedAccess') : t('gmvMaxSyncProgress.backgroundHint') }}</span><div><button v-if="syncNeedsRecovery" class="gmv-button gmv-button--secondary" @click="dismissSyncFailure">{{ t('gmvMaxSyncProgress.dismiss') }}</button><button v-if="syncNeedsRecovery" class="gmv-button gmv-button--primary" @click="retrySync"><RotateCcw class="gmv-icon" />{{ t('gmvMaxSop.actions.retry') }}</button></div></footer>
+        </aside>
       </div>
     </Teleport>
     <Teleport to="body">
@@ -3564,16 +3880,57 @@ onUnmounted(() => {
 .gmv-sop-heading .gmv-kicker { display: none; }
 .gmv-sop-heading h2 { margin: 0 0 5px; font-size: 22px; }
 .gmv-sop-heading p { max-width: 720px; font-size: 12px; line-height: 1.55; }
-.gmv-decision-center { display: grid; gap: 12px; }
+.gmv-decision-center { display: grid; gap: 10px; }
+.gmv-decision-scope { min-width: 0; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 7px; background: color-mix(in srgb, var(--theme-panel) 90%, var(--theme-root)); }
+.gmv-decision-scope__stores { min-width: 0; padding: 7px 12px; display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.gmv-decision-scope__label { min-width: 0; padding: 0 12px 0 2px; display: flex; align-items: center; gap: 9px; border-right: 1px solid var(--theme-divider); color: var(--theme-text-secondary); }.gmv-decision-scope__label > svg { width: 18px; height: 18px; color: var(--theme-accent); }.gmv-decision-scope__label span,.gmv-decision-scope__label strong,.gmv-decision-scope__label small { min-width: 0; display: block; }.gmv-decision-scope__label strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.gmv-decision-scope__label small { margin-top: 3px; color: var(--theme-text-muted); font-size: 8px; }
+.gmv-decision-store-tabs { min-width: 0; display: grid; grid-auto-columns: minmax(132px, 1fr); grid-auto-flow: column; gap: 5px; overflow-x: auto; scrollbar-width: thin; }.gmv-decision-store-tabs button { min-width: 0; height: 38px; padding: 0 10px; display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 7px; align-items: center; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--theme-text-muted); font: inherit; text-align: left; cursor: pointer; }.gmv-decision-store-tabs button:hover { background: var(--theme-control-hover); color: var(--theme-text-secondary); }.gmv-decision-store-tabs button.is-active { border-color: color-mix(in srgb, var(--theme-accent) 40%, var(--theme-border-control)); background: color-mix(in srgb, var(--theme-accent) 9%, var(--theme-control-selected)); color: var(--theme-text); box-shadow: inset 0 -2px 0 var(--theme-accent); }.gmv-decision-store-tabs button > svg { width: 15px; height: 15px; }.gmv-decision-store-tabs button.is-active > svg { color: var(--theme-accent); }.gmv-decision-store-tabs button span,.gmv-decision-store-tabs button strong,.gmv-decision-store-tabs button small { min-width: 0; display: block; }.gmv-decision-store-tabs button strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.gmv-decision-store-tabs button small { margin-top: 2px; color: var(--theme-text-muted); font-size: 8px; white-space: nowrap; }
+.gmv-decision-scope__filters { min-width: 0; min-height: 42px; padding: 5px 12px; display: flex; align-items: center; gap: 18px; border-top: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--theme-input) 42%, transparent); }.gmv-decision-scope-filter { min-width: 0; display: flex; align-items: center; gap: 8px; }.gmv-decision-scope-filter > span { color: var(--theme-text-muted); font-size: 9px; white-space: nowrap; }.gmv-decision-scope-filter > div { padding: 2px; display: flex; gap: 3px; border: 1px solid var(--theme-border-control); border-radius: 5px; background: var(--theme-input); }.gmv-decision-scope-filter button { min-width: 58px; height: 26px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 3px; background: transparent; color: var(--theme-text-muted); font-size: 9px; font-weight: 700; cursor: pointer; white-space: nowrap; }.gmv-decision-scope-filter button:hover { color: var(--theme-text); background: var(--theme-control-hover); }.gmv-decision-scope-filter button.is-active { color: var(--theme-text); background: var(--theme-control-selected); box-shadow: inset 0 0 0 1px var(--theme-border-control); }.gmv-decision-scope-filter button.is-enabled.is-active { color: #57d6a0; }.gmv-decision-scope-filter button.is-disabled.is-active { color: #ff8798; }.gmv-decision-scope-filter button svg { width: 12px; height: 12px; }.gmv-decision-scope__total { margin-left: auto; display: inline-flex; align-items: baseline; gap: 5px; color: var(--theme-text-muted); font-size: 9px; white-space: nowrap; }.gmv-decision-scope__total strong { color: var(--theme-text); font-size: 18px; }
 .gmv-decision-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.gmv-decision-summary article { min-width: 0; min-height: 92px; padding: 14px 16px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; border: 1px solid var(--theme-border); border-left: 3px solid var(--theme-border-control); border-radius: 7px; background: var(--theme-panel); }
+.gmv-decision-summary article { min-width: 0; min-height: 68px; padding: 8px 14px; display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: center; border: 1px solid var(--theme-border); border-left: 3px solid var(--theme-border-control); border-radius: 7px; background: var(--theme-panel); }
 .gmv-decision-summary article.is-p0 { border-left-color: #ff5573; }.gmv-decision-summary article.is-p1 { border-left-color: #f2bd58; }.gmv-decision-summary article.is-p2 { border-left-color: #57d6a0; }
 .gmv-decision-summary span,.gmv-decision-summary small { color: var(--theme-text-muted); font-size: 10px; }.gmv-decision-summary strong { grid-row: 1 / 3; grid-column: 2; font-size: 24px; }.gmv-decision-summary small { line-height: 1.4; }
-.gmv-decision-table-panel { min-width: 0; }.gmv-decision-table { min-width: 1180px; }.gmv-decision-table tbody tr.is-selected { background: var(--theme-panel-hover); }.gmv-decision-table td strong,.gmv-decision-table td small { display: block; }.gmv-decision-table td small { margin-top: 4px; color: var(--theme-text-muted); font-size: 9px; }
+.gmv-decision-workbench { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .36fr); gap: 10px; align-items: start; }
+.gmv-decision-table-panel { min-width: 0; overflow: hidden; }
+.gmv-today-plan { min-width: 0; overflow: hidden; }
+.gmv-today-plan__header { min-width: 0; padding: 15px 16px 13px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--theme-divider); }
+.gmv-today-plan__header > div { min-width: 0; }
+.gmv-today-plan__header h2 { margin: 4px 0 0; color: var(--theme-text); font-size: 18px; }
+.gmv-today-plan__header p { margin: 5px 0 0; color: var(--theme-text-muted); font-size: 10px; line-height: 1.45; }
+.gmv-today-plan__date { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; color: var(--theme-text-muted); font-size: 10px; white-space: nowrap; }
+.gmv-today-plan__date svg { width: 13px; color: var(--theme-accent); }
+.gmv-today-plan__list { display: grid; gap: 1px; background: var(--theme-divider); }
+.gmv-today-plan__list button { min-width: 0; padding: 12px 11px; display: grid; grid-template-columns: 30px minmax(0, 1fr) 14px; gap: 9px; align-items: center; border: 0; background: var(--theme-panel); color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; }
+.gmv-today-plan__list button:hover { background: color-mix(in srgb, var(--theme-accent) 8%, var(--theme-panel)); }
+.gmv-today-plan__list button > svg { width: 14px; color: var(--theme-text-muted); }
+.gmv-today-plan__priority { width: 28px; height: 24px; display: grid; place-items: center; border: 1px solid var(--theme-border-control); border-radius: 4px; color: var(--theme-text-muted); font-size: 10px; font-weight: 800; }
+.gmv-today-plan__list button.is-P0 .gmv-today-plan__priority { border-color: #ff5573; color: #ff8296; background: rgba(255, 85, 115, .08); }
+.gmv-today-plan__list button.is-P1 .gmv-today-plan__priority { border-color: #f2bd58; color: #f5ce75; background: rgba(242, 189, 88, .08); }
+.gmv-today-plan__list button.is-P2 .gmv-today-plan__priority { border-color: #57d6a0; color: #72e5b3; background: rgba(87, 214, 160, .08); }
+.gmv-today-plan__copy { min-width: 0; display: grid; gap: 3px; }
+.gmv-today-plan__copy small,.gmv-today-plan__copy strong,.gmv-today-plan__copy em { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-today-plan__copy small { color: var(--theme-text-muted); font-size: 9px; }
+.gmv-today-plan__copy strong { color: var(--theme-text); font-size: 12px; }
+.gmv-today-plan__copy em { color: var(--theme-text-secondary); font-size: 10px; font-style: normal; }
+.gmv-decision-panel-heading { min-height: 60px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--theme-divider); }
+.gmv-decision-panel-heading h2 { margin: 0; font-size: 15px; }.gmv-decision-panel-heading p { margin: 5px 0 0; color: var(--theme-text-muted); font-size: 10px; }
+.gmv-decision-filters { flex: 0 0 auto; padding: 3px; display: flex; align-items: center; gap: 3px; border: 1px solid var(--theme-border-control); border-radius: 6px; background: var(--theme-input); }
+.gmv-decision-filters button { min-width: 38px; height: 30px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: var(--theme-text-muted); font-size: 10px; font-weight: 750; cursor: pointer; }.gmv-decision-filters button:hover { color: var(--theme-text); background: var(--theme-control-hover); }.gmv-decision-filters button.is-active { color: var(--theme-text); background: var(--theme-control-selected); box-shadow: inset 0 0 0 1px var(--theme-border-control); }.gmv-decision-filters button.is-p0.is-active { color: #ff7288; }.gmv-decision-filters button.is-p1.is-active { color: #f2bd58; }.gmv-decision-filters button.is-p2.is-active { color: #57d6a0; }
+.gmv-decision-filters > span { min-width: 72px; padding: 0 8px; color: var(--theme-text-muted); font-size: 10px; text-align: center; white-space: nowrap; }
+.gmv-decision-grid { padding: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gmv-decision-card { position: relative; min-width: 0; min-height: 156px; padding: 10px 36px 10px 10px; display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 11px; overflow: hidden; border: 1px solid var(--theme-border); border-left: 3px solid var(--theme-border-control); border-radius: 7px; background: color-mix(in srgb, var(--theme-panel) 88%, var(--theme-panel-soft)); color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background-color .15s ease, transform .15s ease; }.gmv-decision-card:hover { border-color: color-mix(in srgb, var(--theme-accent) 45%, var(--theme-border)); background: color-mix(in srgb, var(--theme-accent) 6%, var(--theme-panel)); transform: translateY(-1px); }.gmv-decision-card.is-selected { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 42%, transparent); }.gmv-decision-card.is-p0 { border-left-color: #ff5573; }.gmv-decision-card.is-p1 { border-left-color: #f2bd58; }.gmv-decision-card.is-p2 { border-left-color: #57d6a0; }
+.gmv-decision-card__media { position: relative; width: 76px; height: 96px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--theme-border-control); border-radius: 6px; background: #f6f7f9; color: #8490a0; }.gmv-decision-card__media > svg { width: 24px; height: 24px; }.gmv-decision-card__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #f6f7f9; }.gmv-decision-card__media i { position: absolute; left: 5px; top: 5px; min-width: 27px; height: 20px; display: grid; place-items: center; border-radius: 3px; background: rgba(9, 14, 22, .82); color: #fff; font-size: 9px; font-style: normal; font-weight: 800; backdrop-filter: blur(4px); }
+.gmv-decision-card__content { min-width: 0; display: grid; grid-template-rows: auto auto 1fr auto; gap: 4px; }.gmv-decision-card__identity { min-width: 0; display: flex; align-items: center; gap: 6px; }.gmv-decision-card__identity > small { min-width: 0; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; color: var(--theme-text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.gmv-decision-card__identity > small svg { width: 11px; height: 11px; flex: 0 0 11px; }.gmv-decision-card__title { min-height: 30px; display: -webkit-box; overflow: hidden; font-size: 12px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.gmv-decision-card__scope { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; }.gmv-decision-card__scope i { min-width: 0; height: 19px; padding: 0 5px; display: inline-flex; align-items: center; gap: 3px; overflow: hidden; border: 1px solid var(--theme-border-control); border-radius: 3px; color: var(--theme-text-muted); font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }.gmv-decision-card__scope i.is-type { color: var(--theme-text-secondary); }.gmv-decision-card__scope i.is-enabled { border-color: color-mix(in srgb, #57d6a0 38%, var(--theme-border-control)); color: #57d6a0; }.gmv-decision-card__scope i.is-disabled { border-color: color-mix(in srgb, #ff7288 32%, var(--theme-border-control)); color: #ff8798; }.gmv-decision-card__scope svg { width: 10px; height: 10px; flex: 0 0 10px; }
+.gmv-decision-card__metrics { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--theme-divider); border-radius: 5px; background: color-mix(in srgb, var(--theme-input) 70%, transparent); }.gmv-decision-card__metrics > span { min-width: 0; padding: 4px 6px; border-right: 1px solid var(--theme-divider); }.gmv-decision-card__metrics > span:nth-child(2n) { border-right: 0; }.gmv-decision-card__metrics > span:nth-child(-n+2) { border-bottom: 1px solid var(--theme-divider); }.gmv-decision-card__metrics small,.gmv-decision-card__metrics strong,.gmv-decision-card__metrics em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.gmv-decision-card__metrics small { color: var(--theme-text-muted); font-size: 8px; }.gmv-decision-card__metrics strong { margin-top: 2px; font-size: 11px; }.gmv-decision-card__metrics em { margin-top: 1px; color: var(--theme-text-muted); font-size: 8px; font-style: normal; }
+.gmv-decision-card__action { min-width: 0; display: flex; align-items: center; gap: 8px; }.gmv-decision-card__action > small { overflow: hidden; color: var(--theme-text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.gmv-decision-card__arrow { position: absolute; right: 12px; top: 50%; width: 17px; height: 17px; color: var(--theme-text-muted); transform: translateY(-50%); }
+.gmv-decision-card .gmv-decision-status,.gmv-decision-card .gmv-decision-action { min-height: 21px; padding: 2px 6px; }
+.gmv-decision-pagination { min-height: 44px; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--theme-divider); color: var(--theme-text-muted); font-size: 10px; }.gmv-decision-pagination > div { display: flex; gap: 5px; }.gmv-decision-pagination button { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--theme-border-control); border-radius: 4px; background: var(--theme-control); color: var(--theme-text-secondary); cursor: pointer; }.gmv-decision-pagination button:first-child svg { transform: rotate(180deg); }.gmv-decision-pagination button:disabled { cursor: default; opacity: .35; }.gmv-decision-pagination svg { width: 14px; }
 .gmv-decision-status,.gmv-decision-action { display: inline-flex; min-height: 24px; align-items: center; padding: 3px 7px; border: 1px solid var(--theme-border-control); border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; }.gmv-decision-status.is-s3,.gmv-decision-status.is-s4,.gmv-decision-action.is-p0 { border-color: #b7465d; color: #ff7288; }.gmv-decision-status.is-s5,.gmv-decision-status.is-s6,.gmv-decision-status.is-s7,.gmv-decision-action.is-p1 { border-color: #8d6b2b; color: #f2bd58; }.gmv-decision-status.is-s2,.gmv-decision-action.is-p2 { border-color: #278b69; color: #57d6a0; }
 .gmv-task-priority { margin-right: 7px; padding: 2px 5px; border-radius: 3px; background: var(--theme-panel-soft); font-size: 9px; }.gmv-task-priority.is-p0 { color: #ff7288; }.gmv-task-priority.is-p1 { color: #f2bd58; }.gmv-task-priority.is-p2 { color: #57d6a0; }
-@media (max-width: 1100px) { .gmv-decision-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .gmv-decision-summary { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .gmv-decision-scope__stores { grid-template-columns: 112px minmax(0, 1fr); }.gmv-decision-scope__filters { gap: 10px; }.gmv-decision-scope-filter { gap: 5px; }.gmv-decision-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.gmv-decision-panel-heading { align-items: flex-start; flex-direction: column; }.gmv-decision-filters { align-self: stretch; }.gmv-decision-filters > span { margin-left: auto; }.gmv-decision-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1350px) { .gmv-decision-workbench { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .gmv-decision-scope__stores { grid-template-columns: 1fr; }.gmv-decision-scope__label { padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--theme-divider); }.gmv-decision-scope__filters { align-items: flex-start; flex-direction: column; }.gmv-decision-scope__total { margin-left: 0; }.gmv-decision-summary { grid-template-columns: 1fr; }.gmv-decision-card { grid-template-columns: 68px minmax(0, 1fr); }.gmv-decision-card__media { width: 68px; height: 92px; }.gmv-decision-card__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.gmv-decision-card__metrics > span:nth-child(2) { border-right: 0; }.gmv-decision-card__metrics > span:nth-child(-n+2) { border-bottom: 1px solid var(--theme-divider); } }
 .gmv-sop-instance-select { flex: 1 1 360px; width: auto; max-width: 620px; min-width: 280px; }
 .gmv-sop-context { flex: 0 1 auto; display: flex; align-items: center; border: 1px solid var(--theme-border); border-radius: 5px; overflow: hidden; background: var(--theme-panel-soft); }
 .gmv-sop-context span { padding: 8px 11px; color: var(--theme-text-muted); font-size: 9px; white-space: nowrap; }
@@ -4465,4 +4822,251 @@ onUnmounted(() => {
 @media (max-width: 620px) { .gmv-sync-overlay { padding: 12px; } .gmv-sync-dialog__header { padding: 22px 20px 18px; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; } .gmv-sync-dialog__signal { width: 46px; height: 46px; } .gmv-sync-dialog__header h2 { font-size: 17px; } .gmv-sync-dialog__track { margin: 0 20px; } .gmv-sync-dialog__steps { padding: 20px; grid-template-columns: 1fr; gap: 12px; } .gmv-sync-dialog__steps > div:not(:last-child) { padding: 0 0 12px; border-right: 0; border-bottom: 1px solid #26313e; } .gmv-sync-dialog__steps > div:not(:first-child) { padding-left: 0; } .gmv-sync-dialog > footer { padding: 0 20px; } .gmv-sync-dialog > footer small { display: none; } }
 @media (max-width: 1100px) { .gmv-sop-picker > header { align-items: stretch; flex-direction: column; gap: 16px; }.gmv-sop-picker__header-side { justify-content: space-between; }.gmv-sop-picker__summary { flex: 1 1 auto; }.gmv-sop-picker__item { grid-template-columns: 52px minmax(0, .9fr) minmax(0, 1.1fr) 16px; }.gmv-sop-picker__image { width: 50px; height: 50px; } }
 @media (max-width: 780px) { .gmv-sop-picker-overlay { padding: 10px; }.gmv-sop-picker { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }.gmv-sop-picker > header { min-height: 0; padding: 16px; }.gmv-sop-picker__heading h2 { font-size: 18px; }.gmv-sop-picker__header-side { align-items: stretch; }.gmv-sop-picker__summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }.gmv-sop-picker__summary span { min-height: 48px; padding: 7px 8px; border: 1px solid var(--theme-divider); font-size: 8px; }.gmv-sop-picker__summary strong { font-size: 15px; }.gmv-sop-picker__toolbar { padding: 10px; grid-template-columns: 1fr; }.gmv-sop-picker__toolbar > span { grid-column: auto; }.gmv-sop-picker__list { max-height: none; padding: 10px; }.gmv-sop-picker__list article { grid-template-columns: minmax(0, 1fr) 38px; }.gmv-sop-picker__item { grid-template-columns: 46px minmax(0, 1fr) 14px; gap: 10px; padding: 12px; }.gmv-sop-picker__image { width: 44px; height: 44px; }.gmv-sop-picker__campaign { grid-column: 2; }.gmv-sop-picker__item > svg { grid-column: 3; grid-row: 1 / 3; }.gmv-sop-picker__copy { width: 38px; } }
+.gmv-sop {
+  --theme-text-muted: #a9b6c7;
+  --theme-text-secondary: #d1dae6;
+}
+.gmv-sop-heading h2 { font-size: 24px; }
+.gmv-sop-heading p { color: var(--theme-text-muted); font-size: 13px; }
+.gmv-sop-heading .gmv-button { min-height: 44px; padding: 0 14px; font-size: 13px; }
+.gmv-sop .gmv-panel__heading h2 { font-size: 18px; }
+.gmv-sop .gmv-panel__heading p { font-size: 12px; }
+.gmv-sop .gmv-status { font-size: 11px; }
+.gmv-decision-scope__label strong { font-size: 12px; }
+.gmv-decision-scope__label small { color: var(--theme-text-muted); font-size: 10px; }
+.gmv-decision-store-tabs button strong { font-size: 12px; }
+.gmv-decision-store-tabs button small { color: var(--theme-text-muted); font-size: 10px; }
+.gmv-decision-scope-filter > span { color: var(--theme-text-secondary); font-size: 11px; }
+.gmv-decision-scope-filter button { font-size: 11px; }
+.gmv-decision-scope__total { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-decision-summary span,.gmv-decision-summary small { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-decision-summary strong { font-size: 26px; }
+.gmv-decision-panel-heading h2 { font-size: 18px; }
+.gmv-decision-panel-heading p { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-decision-filters button,.gmv-decision-filters > span { font-size: 11px; }
+.gmv-decision-card__identity > small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-decision-card__title { font-size: 14px; }
+.gmv-decision-card__scope i { font-size: 10px; }
+.gmv-decision-card__metrics small { color: var(--theme-text-muted); font-size: 10px; }
+.gmv-decision-card__metrics strong { font-size: 13px; }
+.gmv-decision-card__metrics em { color: var(--theme-text-muted); font-size: 10px; }
+.gmv-decision-card .gmv-decision-status,.gmv-decision-card .gmv-decision-action { font-size: 10px; }
+.gmv-decision-card__action > small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-decision-pagination { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-object-bar__copy > small,
+.gmv-sop-object-bar__copy > span:not(.gmv-sop-object-bar__meta),
+.gmv-sop-object-bar__copy b,
+.gmv-sop-object-bar__change { font-size: 12px; }
+.gmv-sop-object-bar__copy > strong { font-size: 20px; }
+.gmv-sop-object-bar__meta i { color: var(--theme-text-secondary); font-size: 11px; }
+.gmv-sop-launch__eyebrow small { font-size: 11px; }
+.gmv-sop-launch__eyebrow strong { font-size: 19px; }
+.gmv-sop-launch__route > p { color: var(--theme-text-muted); font-size: 13px; }
+.gmv-sop-launch__phases strong { font-size: 11px; }
+.gmv-sop-launch__phases small { font-size: 10px; }
+.gmv-sop-launch__form > header div > span { font-size: 11px; }
+.gmv-sop-launch__form > header div > strong { font-size: 16px; }
+.gmv-sop-launch__fields label > span { color: var(--theme-text-secondary); font-size: 11px; }
+.gmv-sop-launch__footer > span { font-size: 12px; }
+.gmv-sop-decision__main > span { color: var(--theme-text-secondary); font-size: 12px; }
+.gmv-sop-decision__main h3 { font-size: 26px; }
+.gmv-sop-decision__main p { color: var(--theme-text-secondary); font-size: 13px; line-height: 1.6; }
+.gmv-sop-decision__main > div small { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-sop-decision__automation strong { font-size: 14px; }
+.gmv-sop-decision__automation small { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-sop-decision__settings label span,.gmv-sop-decision__settings > small { font-size: 11px; }
+.gmv-sop-resolution > header small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-resolution__main h3 { font-size: 19px; }
+.gmv-sop-resolution__main p { color: var(--theme-text-secondary); font-size: 13px; }
+.gmv-sop-resolution dt { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-resolution dd { font-size: 13px; }
+.gmv-sop-resolution__solution strong { font-size: 12px; }
+.gmv-sop-resolution__solution span { font-size: 13px; }
+.gmv-sop-resolution__solution small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-resolution details summary { font-size: 12px; }
+.gmv-sop-resolution-groups > section > header strong,.gmv-sop-resolution-list strong { font-size: 12px; }
+.gmv-sop-resolution-groups > section > header small,.gmv-sop-resolution-list small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-resolution-item__body > p { color: var(--theme-text-secondary); font-size: 12px; }
+.gmv-sop-task-list time { font-size: 14px; }
+.gmv-sop-task-list time small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-task-list strong { font-size: 14px; }
+.gmv-sop-task-list p { color: var(--theme-text-muted); font-size: 12px; line-height: 1.6; }
+.gmv-sop-task-list div > span { font-size: 11px; }
+.gmv-sop-metrics span { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-sop-metrics strong { font-size: 21px; }
+.gmv-sop-key-section header span,.gmv-sop-phase-section header span { font-size: 11px; }
+.gmv-sop-key-section header strong,.gmv-sop-phase-section header strong { font-size: 14px; }
+.gmv-sop-disclosure__header strong { font-size: 15px; }
+.gmv-sop-disclosure__header small { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-sop-input__fields label span,.gmv-sop-input__controls label span { font-size: 12px; }
+.gmv-sop-source-note { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-video-grades span { font-size: 12px; }
+.gmv-sop-video-sort span,.gmv-sop-video-sort select { font-size: 12px; }
+.gmv-sop-video-list__copy strong { font-size: 13px; }
+.gmv-sop-video-list__copy small,.gmv-sop-video-list__copy em { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-video-pagination { color: var(--theme-text-muted); font-size: 12px; }
+.gmv-sop-video-detail__preview > div { font-size: 12px; }
+.gmv-sop-video-detail__preview > div small,.gmv-sop-video-detail__duration { font-size: 11px; }
+.gmv-sop-video-detail__content > header span:first-child,.gmv-sop-video-detail__content header p { font-size: 11px; }
+.gmv-sop-video-detail__content h3 { font-size: 19px; }
+.gmv-sop-video-meta dt,.gmv-sop-video-primary-metrics span,.gmv-sop-video-secondary-metrics small { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-video-meta dd,.gmv-sop-video-secondary-metrics strong { font-size: 12px; }
+.gmv-sop-video-primary-metrics strong { font-size: 16px; }
+.gmv-sop-video-actions strong,.gmv-sop-video-analysis header strong { font-size: 13px; }
+.gmv-sop-video-actions span,.gmv-sop-video-analysis header span,.gmv-sop-video-analysis ul,.gmv-sop-video-evidence summary,.gmv-sop-video-evidence dt,.gmv-sop-video-evidence dd { color: var(--theme-text-muted); font-size: 11px; }
+.gmv-sop-video-analysis ul { color: var(--theme-text-secondary); line-height: 1.7; }
+.gmv-sop-video-actions .gmv-button { font-size: 12px; }
+.gmv-sop .gmv-button--secondary,.gmv-sop .gmv-button--primary,.gmv-sop .gmv-button--ghost { font-size: 13px; }
+
+.gmv-feature-content { background: #0b1118; }
+.gmv-feature-nav { background: #0a1017; border-right-color: #202b38; }
+.gmv-header { min-height: 76px; padding: 10px 0 18px; border-bottom: 1px solid #202b38; }
+.gmv-header h1 { font-size: 30px; font-weight: 760; letter-spacing: 0; }
+.gmv-header p { max-width: 760px; color: #aeb9c7; font-size: 13px; }
+.gmv-cockpit-scopebar { position: sticky; top: 8px; z-index: 20; min-width: 0; padding: 10px 12px; display: grid; grid-template-columns: minmax(170px, 1.05fr) minmax(190px, 1.2fr) minmax(370px, 2.25fr) minmax(150px, .9fr) auto; gap: 10px; align-items: center; border: 1px solid #2b3948; border-radius: 8px; background: rgba(18, 27, 38, .96); box-shadow: 0 14px 32px rgba(0, 0, 0, .24); backdrop-filter: blur(14px); }
+.gmv-cockpit-scopebar__identity,.gmv-cockpit-scopebar__freshness { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.gmv-cockpit-scopebar__identity > svg { width: 20px; color: #55d6c2; }
+.gmv-cockpit-scopebar__identity span,.gmv-cockpit-scopebar__freshness span { min-width: 0; display: grid; gap: 2px; }
+.gmv-cockpit-scopebar small { color: #8998aa; font-size: 10px; }
+.gmv-cockpit-scopebar strong { overflow: hidden; color: #f3f6fa; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-cockpit-scopebar em { overflow: hidden; color: #a4b2c2; font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-cockpit-scopebar__segments,.gmv-cockpit-scopebar__lifecycle { min-width: 0; padding: 3px; display: flex; gap: 3px; overflow-x: auto; border: 1px solid #304052; border-radius: 6px; background: #101923; scrollbar-width: thin; }
+.gmv-cockpit-scopebar__segments button,.gmv-cockpit-scopebar__lifecycle button { min-height: 30px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 0 0 auto; border: 0; border-radius: 4px; background: transparent; color: #9eacbd; font: inherit; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.gmv-cockpit-scopebar__segments button:hover,.gmv-cockpit-scopebar__lifecycle button:hover { background: #1c2a38; color: #f3f6fa; }
+.gmv-cockpit-scopebar__segments button.is-active,.gmv-cockpit-scopebar__lifecycle button.is-active { background: #233544; color: #f4f7fb; box-shadow: inset 0 -2px #55d6c2; }
+.gmv-cockpit-scopebar__segments svg,.gmv-cockpit-scopebar__lifecycle svg { width: 14px; height: 14px; }
+.gmv-cockpit-scopebar__lifecycle button.is-running.is-active { color: #6fe3ae; box-shadow: inset 0 -2px #6fe3ae; }
+.gmv-cockpit-scopebar__lifecycle button.is-paused.is-active { color: #f3c665; box-shadow: inset 0 -2px #f3c665; }
+.gmv-cockpit-scopebar__lifecycle button.is-closed.is-active { color: #b4c0ce; box-shadow: inset 0 -2px #8290a3; }
+.gmv-cockpit-scopebar__lifecycle button.is-exception.is-active { color: #ff8296; box-shadow: inset 0 -2px #ff8296; }
+.gmv-cockpit-scopebar__lifecycle b { color: inherit; font-size: 10px; }
+.gmv-cockpit-scopebar__freshness { padding-left: 9px; border-left: 1px solid #304052; }
+.gmv-freshness-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #65dfa7; box-shadow: 0 0 0 4px rgba(101, 223, 167, .12); }
+.gmv-freshness-dot.is-stale { background: #f4c45d; box-shadow: 0 0 0 4px rgba(244, 196, 93, .12); }
+.gmv-cockpit-scopebar__sync { min-height: 34px; white-space: nowrap; }
+.gmv-cockpit-scopebar__sync svg { width: 15px; }
+.gmv-sop-heading { margin-bottom: 8px; }
+.gmv-sop-heading h2 { font-size: 25px; font-weight: 760; }
+.gmv-sop-heading p { font-size: 13px; color: #aeb9c7; }
+.gmv-decision-center { gap: 12px; }
+.gmv-decision-scope { border-color: #2b3948; background: #121c27; }
+.gmv-decision-summary article { min-height: 78px; background: #111b26; border-color: #2a3949; }
+.gmv-decision-summary strong { font-size: 28px; }
+.gmv-decision-table-panel { border-color: #2a3949; background: #0f1822; }
+.gmv-decision-panel-heading { min-height: 70px; padding: 14px 18px; }
+.gmv-decision-panel-heading h2 { font-size: 19px; }
+.gmv-decision-panel-heading p { font-size: 12px; color: #9eacbd; }
+.gmv-decision-card { min-height: 170px; padding: 12px 40px 12px 12px; border-color: #2a3949; background: #15202c; }
+.gmv-decision-card__media { width: 82px; height: 106px; border-color: #405164; }
+.gmv-decision-card__title { font-size: 15px; }
+.gmv-decision-card__metrics small { font-size: 10px; }
+.gmv-decision-card__metrics strong { font-size: 14px; }
+.gmv-decision-card__metrics em { font-size: 10px; }
+.gmv-decision-card__scope i { height: 23px; font-size: 10px; }
+.gmv-decision-card .gmv-decision-status,.gmv-decision-card .gmv-decision-action { font-size: 11px; }
+
+.gmv-command-drawer-backdrop { position: fixed; inset: 0; z-index: 9900; display: flex; justify-content: flex-end; background: rgba(3, 7, 12, .54); backdrop-filter: blur(3px); pointer-events: auto; }
+.gmv-command-drawer { width: min(700px, 100vw); height: 100vh; min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; border-left: 1px solid #3a4b5e; background: #101923; color: #f3f6fa; box-shadow: -24px 0 68px rgba(0, 0, 0, .46); pointer-events: auto; }
+.gmv-command-drawer__header { min-width: 0; padding: 18px 20px 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 1px solid #2b3948; background: #131e2a; }
+.gmv-command-drawer__identity { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.gmv-command-drawer__identity > span:last-child { min-width: 0; display: grid; gap: 3px; }
+.gmv-command-drawer__identity small { color: #6fd6c5; font-size: 10px; font-weight: 750; }
+.gmv-command-drawer__identity strong { overflow: hidden; color: #f4f7fb; font-size: 18px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-command-drawer__identity em { overflow: hidden; color: #aeb9c7; font-size: 11px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-command-drawer__image { position: relative; width: 58px; height: 58px; flex: 0 0 58px; display: grid; place-items: center; overflow: hidden; border: 1px solid #425569; border-radius: 7px; background: #1c2936; color: #8ea1b5; }
+.gmv-command-drawer__image svg { width: 22px; }
+.gmv-command-drawer__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.gmv-command-drawer__context { min-width: 0; padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 7px; border-bottom: 1px solid #273646; background: #0e1721; color: #aeb9c7; font-size: 11px; }
+.gmv-command-drawer__context > span:not(.gmv-status) { padding: 4px 8px; border: 1px solid #314153; border-radius: 4px; }
+.gmv-command-drawer__tabs { min-width: 0; padding: 0 12px; display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid #2b3948; background: #111b26; scrollbar-width: thin; }
+.gmv-command-drawer__tabs button { min-height: 46px; padding: 0 10px; flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #8e9daf; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.gmv-command-drawer__tabs button:hover { color: #e8eef5; }
+.gmv-command-drawer__tabs button.is-active { border-bottom-color: #55d6c2; color: #f4f7fb; }
+.gmv-command-drawer__body { min-height: 0; overflow-y: auto; padding: 20px; scrollbar-gutter: stable; }
+.gmv-command-drawer__section { display: grid; gap: 12px; }
+.gmv-command-drawer__section h3 { margin: 0; color: #f4f7fb; font-size: 22px; line-height: 1.25; }
+.gmv-command-drawer__section > p { margin: 0; color: #c0ccd9; font-size: 13px; line-height: 1.65; }
+.gmv-command-drawer__section .gmv-kicker { color: #6fd6c5; font-size: 10px; font-weight: 800; }
+.gmv-command-drawer__issue { padding: 13px 14px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(255, 109, 132, .38); border-left: 3px solid #ff6d84; border-radius: 6px; background: rgba(255, 109, 132, .08); }
+.gmv-command-drawer__issue > svg { width: 18px; flex: 0 0 18px; color: #ff8296; }
+.gmv-command-drawer__issue strong,.gmv-command-drawer__issue small { display: block; }
+.gmv-command-drawer__issue strong { color: #ffb2bf; font-size: 13px; }
+.gmv-command-drawer__issue small { margin-top: 5px; color: #cbd6e2; font-size: 11px; line-height: 1.5; }
+.gmv-command-drawer__facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #2c3c4e; border-radius: 6px; background: #15212d; }
+.gmv-command-drawer__facts > span { min-width: 0; padding: 13px; border-right: 1px solid #2c3c4e; }
+.gmv-command-drawer__facts > span:last-child { border-right: 0; }
+.gmv-command-drawer__facts small,.gmv-command-drawer__facts strong,.gmv-command-drawer__facts em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-command-drawer__facts small { color: #96a5b6; font-size: 10px; }
+.gmv-command-drawer__facts strong { margin-top: 7px; color: #f2f6fa; font-size: 18px; }
+.gmv-command-drawer__facts em { margin-top: 4px; color: #91a0b1; font-size: 10px; font-style: normal; }
+.gmv-command-drawer__primary { min-height: 42px; justify-content: center; }
+.gmv-command-drawer__section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.gmv-command-drawer__section-heading > span { display: grid; gap: 4px; }
+.gmv-command-drawer__section-heading small { color: #9eacbd; font-size: 11px; }
+.gmv-command-timeline { position: relative; display: grid; gap: 0; }
+.gmv-command-timeline::before { content: ''; position: absolute; left: 9px; top: 15px; bottom: 15px; width: 1px; background: #3a4a5c; }
+.gmv-command-timeline article { position: relative; min-width: 0; padding: 0 0 18px 32px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.gmv-command-timeline__dot { position: absolute; left: 0; top: 2px; width: 19px; height: 19px; display: grid; place-items: center; border: 1px solid #53677c; border-radius: 50%; background: #14202c; color: #9aabba; }
+.gmv-command-timeline article.is-completed .gmv-command-timeline__dot { border-color: #5fdca8; color: #5fdca8; }
+.gmv-command-timeline__dot svg { width: 11px; }
+.gmv-command-timeline article small,.gmv-command-timeline article strong,.gmv-command-timeline article p { display: block; }
+.gmv-command-timeline article small { color: #93a3b5; font-size: 10px; }
+.gmv-command-timeline article strong { color: #f1f5f9; font-size: 13px; }
+.gmv-command-timeline article p { margin: 0; color: #b5c1cf; font-size: 11px; line-height: 1.5; }
+.gmv-command-timeline article .gmv-button { justify-self: start; min-height: 32px; margin-top: 3px; font-size: 11px; }
+.gmv-command-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #2d3e50; border-radius: 6px; background: #15212d; }
+.gmv-command-metrics > span { min-width: 0; padding: 14px; border-right: 1px solid #2d3e50; border-bottom: 1px solid #2d3e50; }
+.gmv-command-metrics > span:nth-child(2n) { border-right: 0; }
+.gmv-command-metrics > span:nth-last-child(-n+2) { border-bottom: 0; }
+.gmv-command-metrics small,.gmv-command-metrics strong,.gmv-command-metrics em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-command-metrics small { color: #97a6b7; font-size: 10px; }
+.gmv-command-metrics strong { margin-top: 7px; color: #f4f7fb; font-size: 18px; }
+.gmv-command-metrics em { margin-top: 4px; color: #8f9eaf; font-size: 10px; font-style: normal; }
+.gmv-command-drawer__freshness { padding: 13px; display: flex; align-items: center; gap: 10px; border: 1px solid #2d3e50; border-radius: 6px; background: #15212d; }
+.gmv-command-drawer__freshness > svg { width: 18px; color: #55d6c2; }
+.gmv-command-drawer__freshness strong,.gmv-command-drawer__freshness small { display: block; }
+.gmv-command-drawer__freshness strong { color: #edf3f9; font-size: 12px; }
+.gmv-command-drawer__freshness small { margin-top: 3px; color: #9cabbc; font-size: 11px; }
+.gmv-command-creative-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gmv-command-creative-grid article { min-width: 0; padding: 9px; display: grid; gap: 7px; border: 1px solid #2d3e50; border-radius: 6px; background: #15212d; }
+.gmv-command-creative-grid__cover { position: relative; height: 128px; display: grid; place-items: center; overflow: hidden; border-radius: 4px; background: #1a2734; color: #8fa2b6; }
+.gmv-command-creative-grid__cover img { width: 100%; height: 100%; object-fit: cover; }
+.gmv-command-creative-grid__cover svg { width: 24px; }
+.gmv-command-creative-grid__cover i { position: absolute; left: 6px; bottom: 6px; padding: 3px 5px; border-radius: 3px; background: rgba(8, 13, 20, .84); color: #f3c862; font-size: 9px; font-style: normal; }
+.gmv-command-creative-grid strong { overflow: hidden; color: #eef3f8; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-command-creative-grid small { color: #9cabbc; font-size: 10px; }
+.gmv-command-history { display: grid; gap: 1px; border: 1px solid #2d3e50; border-radius: 6px; overflow: hidden; background: #2d3e50; }
+.gmv-command-history article { min-width: 0; padding: 12px; display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 7px 10px; align-items: center; background: #15212d; }
+.gmv-command-history article span,.gmv-command-history article small { color: #98a7b8; font-size: 10px; }
+.gmv-command-history article strong { min-width: 0; overflow: hidden; color: #edf3f8; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-command-history article b { padding: 3px 5px; border: 1px solid #405367; border-radius: 3px; color: #a9bacb; font-size: 9px; font-weight: 700; }
+.gmv-command-history article b.is-completed { border-color: #3c8a6b; color: #6fe3ae; }
+.gmv-command-history article b.is-failed { border-color: #914b5a; color: #ff8296; }
+.gmv-command-drawer__footer { min-height: 70px; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #2b3948; background: #0d151e; }
+.gmv-command-drawer__footer .gmv-button { min-height: 42px; }
+
+.gmv-sync-status { position: fixed; top: 16px; right: 20px; z-index: 9800; width: min(470px, calc(100vw - 32px)); display: flex; align-items: stretch; border: 1px solid #385268; border-radius: 7px; background: #12202d; box-shadow: 0 16px 42px rgba(0, 0, 0, .35); }
+.gmv-sync-status__main { min-width: 0; flex: 1 1 auto; padding: 9px 10px; display: grid; grid-template-columns: 30px minmax(0, 1fr) 82px 16px; gap: 9px; align-items: center; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.gmv-sync-status__main:hover { background: #182b3b; }
+.gmv-sync-status__signal { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #3e6f77; border-radius: 5px; color: #62dfcc; }
+.gmv-sync-status__signal svg { width: 16px; animation: gmv-sync-pulse 1.4s ease-in-out infinite; }
+.gmv-sync-status__signal.is-complete { border-color: #3f8e6f; color: #6fe3ae; }.gmv-sync-status__signal.is-failed { border-color: #955265; color: #ff8296; }.gmv-sync-status__signal.is-complete svg,.gmv-sync-status__signal.is-failed svg { animation: none; }
+.gmv-sync-status__copy,.gmv-sync-status__copy strong,.gmv-sync-status__copy small { min-width: 0; display: block; }
+.gmv-sync-status__copy strong { overflow: hidden; color: #eef3f8; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-sync-status__copy small { margin-top: 3px; overflow: hidden; color: #a1b0c0; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.gmv-sync-status__progress { display: grid; gap: 4px; text-align: right; }.gmv-sync-status__progress b { color: #d9f9f4; font-size: 12px; font-variant-numeric: tabular-nums; }.gmv-sync-status__progress i { width: 82px; height: 4px; display: block; overflow: hidden; border-radius: 3px; background: #273847; }.gmv-sync-status__progress em { display: block; height: 100%; border-radius: inherit; background: #4fd5c2; transition: width .3s ease; }.gmv-sync-status__progress em.is-failed { background: #ef6079; }.gmv-sync-status__progress em.is-running { position: relative; overflow: hidden; }.gmv-sync-status__progress em.is-running::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .36), transparent); animation: gmv-sync-progress-shimmer 1.35s linear infinite; }
+.gmv-sync-status__main > svg { width: 15px; color: #91a3b6; }
+.gmv-sync-status__retry { width: 38px; flex: 0 0 38px; display: grid; place-items: center; border: 0; border-left: 1px solid #385268; background: rgba(255, 109, 132, .08); color: #ff8296; cursor: pointer; }.gmv-sync-status__retry svg { width: 15px; }
+.gmv-sync-detail-backdrop { position: fixed; inset: 0; z-index: 10000; display: flex; justify-content: flex-end; background: rgba(3, 7, 12, .38); }
+.gmv-sync-detail { width: min(520px, 100vw); height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border-left: 1px solid #3a4b5e; background: #101923; box-shadow: -20px 0 54px rgba(0, 0, 0, .4); }
+.gmv-sync-detail > header { padding: 20px; display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #2b3948; background: #131e2a; }.gmv-sync-detail > header span { color: #6fd6c5; font-size: 10px; font-weight: 800; }.gmv-sync-detail > header h2 { margin: 5px 0 0; color: #f4f7fb; font-size: 20px; }.gmv-sync-detail > header p { margin: 6px 0 0; color: #aeb9c7; font-size: 11px; line-height: 1.5; }
+.gmv-sync-detail__body { min-height: 0; overflow-y: auto; padding: 20px; }.gmv-sync-detail__percent { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }.gmv-sync-detail__percent strong { color: #eaf4f5; font-size: 30px; }.gmv-sync-detail__percent span { color: #aeb9c7; font-size: 11px; text-align: right; }.gmv-sync-detail .gmv-sync-dialog__track { margin: 14px 0 0; }.gmv-sync-detail .gmv-sync-dialog__steps { padding: 22px 0; }.gmv-sync-detail__meta { margin: 0; display: grid; gap: 1px; border: 1px solid #2d3e50; border-radius: 6px; overflow: hidden; background: #2d3e50; }.gmv-sync-detail__meta > div { padding: 11px 12px; background: #15212d; }.gmv-sync-detail__meta dt { color: #91a1b3; font-size: 10px; }.gmv-sync-detail__meta dd { margin: 4px 0 0; overflow-wrap: anywhere; color: #e6edf3; font-size: 11px; line-height: 1.45; }.gmv-sync-detail > footer { min-height: 62px; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #2b3948; background: #0d151e; color: #aeb9c7; font-size: 11px; }.gmv-sync-detail > footer > span { display: flex; align-items: center; gap: 7px; }.gmv-sync-detail > footer > span svg { width: 14px; color: #6fd6c5; }.gmv-sync-detail > footer > div { display: flex; gap: 7px; }
+
+.gmv-sop-tasks--focus > .gmv-sop-task-list:not(.is-completed-list) { max-height: none; overflow: visible; padding-right: 0; }
+.gmv-sop-video-list { max-height: none; overflow: visible; }
+.gmv-sop-video-list__items { max-height: none; overflow: visible; }
+
+@media (max-width: 1250px) { .gmv-cockpit-scopebar { grid-template-columns: minmax(160px, 1fr) minmax(190px, 1.1fr) minmax(260px, 1.6fr) auto; }.gmv-cockpit-scopebar__freshness { grid-column: 1 / 3; border-left: 0; padding-left: 0; }.gmv-cockpit-scopebar__sync { grid-column: 4; grid-row: 2; } }
+@media (max-width: 900px) { .gmv-cockpit-scopebar { position: static; grid-template-columns: 1fr 1fr; }.gmv-cockpit-scopebar__identity,.gmv-cockpit-scopebar__freshness { grid-column: 1 / -1; }.gmv-cockpit-scopebar__segments,.gmv-cockpit-scopebar__lifecycle { min-width: 0; }.gmv-cockpit-scopebar__sync { grid-column: auto; grid-row: auto; }.gmv-command-drawer { width: min(620px, 100vw); } }
+@media (max-width: 620px) { .gmv-header { align-items: stretch; flex-direction: column; }.gmv-header__actions { justify-content: flex-start; flex-wrap: wrap; }.gmv-cockpit-scopebar { grid-template-columns: 1fr; gap: 8px; }.gmv-cockpit-scopebar__sync { width: 100%; justify-content: center; }.gmv-command-drawer__header { padding: 14px; }.gmv-command-drawer__body { padding: 15px; }.gmv-command-drawer__footer { padding: 10px 14px; flex-direction: column; }.gmv-command-drawer__footer .gmv-button { width: 100%; justify-content: center; }.gmv-command-drawer__facts { grid-template-columns: 1fr; }.gmv-command-drawer__facts > span { border-right: 0; border-bottom: 1px solid #2c3c4e; }.gmv-command-drawer__facts > span:last-child { border-bottom: 0; }.gmv-command-creative-grid { grid-template-columns: 1fr; }.gmv-sync-status { top: 8px; right: 8px; width: calc(100vw - 16px); }.gmv-sync-status__main { grid-template-columns: 30px minmax(0, 1fr) 58px 14px; gap: 7px; }.gmv-sync-status__progress i { width: 58px; } }
 </style>

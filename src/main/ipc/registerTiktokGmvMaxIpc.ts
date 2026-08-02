@@ -33,14 +33,31 @@ export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokGmvMax:syncAccounts', async () => await gmvMaxService.syncAccountsAndStores())
   ipcMain.handle('plugin:tiktokGmvMax:syncCampaigns', async () => await gmvMaxService.syncCampaigns())
   ipcMain.handle('plugin:tiktokGmvMax:syncCatalogs', async () => await gmvMaxService.syncCatalogs())
-  ipcMain.handle('plugin:tiktokGmvMax:runSyncJob', async (event, payload: { action?: 'data' | 'catalog' }) => await gmvMaxService.runSyncJob(
-    { action: payload?.action === 'catalog' ? 'catalog' : 'data' },
-    (progress) => {
-      if (!event.sender.isDestroyed()) event.sender.send('plugin:tiktokGmvMax:syncProgress', progress)
-    },
-  ))
+  ipcMain.handle('plugin:tiktokGmvMax:runSyncJob', async (event, payload: { action?: 'data' | 'catalog' }) => {
+    const action = payload?.action === 'catalog' ? 'catalog' : 'data'
+    void gmvMaxService.runSyncJob(
+      { action },
+      (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send('plugin:tiktokGmvMax:syncProgress', progress)
+      },
+    ).catch(() => undefined)
+    const started = await gmvMaxService.getLatestSyncJob()
+    return started?.action === action ? started : { action, status: 'running' as const }
+  })
   ipcMain.handle('plugin:tiktokGmvMax:getSyncJob', async (_event, payload: { jobId: string }) => await gmvMaxService.getSyncJob(payload))
   ipcMain.handle('plugin:tiktokGmvMax:getSopWorkspace', async () => await gmvMaxService.getSopWorkspace())
+  ipcMain.handle('plugin:tiktokGmvMax:getCommandCenter', async () => {
+    const workspace = await gmvMaxService.getSopWorkspace()
+    const stores = [...new Map(workspace.instances.map((item) => [item.storeId, item.storeName])).entries()].map(([id, name]) => ({ id, name }))
+    return {
+      stores,
+      decisions: workspace.decisions,
+      decisionSummary: workspace.decisionSummary,
+      freshness: workspace.freshnessSummary,
+      latestSyncJob: workspace.latestSyncJob,
+      generatedAt: workspace.generatedAt,
+    }
+  })
   ipcMain.handle('plugin:tiktokGmvMax:runSopAutomation', async (_event, payload?: Parameters<typeof gmvMaxService.runSopAutomation>[0]) => await gmvMaxService.runSopAutomation(payload))
   ipcMain.handle('plugin:tiktokGmvMax:startSop', async (_event, payload: Parameters<typeof gmvMaxService.startSop>[0]) => await gmvMaxService.startSop(payload))
   ipcMain.handle('plugin:tiktokGmvMax:updateSop', async (_event, payload: Parameters<typeof gmvMaxService.updateSop>[0]) => await gmvMaxService.updateSop(payload))

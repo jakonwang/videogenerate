@@ -111,9 +111,9 @@ function saveSchedulerState(state: GmvMaxSchedulerState, patch: Partial<GmvMaxSc
 }
 
 function recoverInterruptedSyncJobs(now = Date.now()) {
-  const staleBefore = now - 2 * 60_000
   for (const job of gmvMaxRepo.listSyncJobs()) {
-    if (job.status !== 'running' || syncJobs.has(job.action) || job.updatedAt > staleBefore) continue
+    // A running job without an in-memory worker belongs to a previous process or renderer.
+    if (job.status !== 'running' || syncJobs.has(job.action)) continue
     gmvMaxRepo.saveSyncJob({
       ...job,
       status: 'interrupted',
@@ -3478,7 +3478,13 @@ export const gmvMaxService = {
   },
 
   async getSyncJob(input: { jobId: string }) {
+    recoverInterruptedSyncJobs()
     return gmvMaxRepo.getSyncJob(text(input?.jobId))
+  },
+
+  async getLatestSyncJob() {
+    recoverInterruptedSyncJobs()
+    return gmvMaxRepo.listSyncJobs().sort((a, b) => b.updatedAt - a.updatedAt)[0]
   },
 
   async runSyncJob(input: { action: GmvMaxSyncAction }, emit?: (progress: GmvMaxSyncProgress) => void) {
