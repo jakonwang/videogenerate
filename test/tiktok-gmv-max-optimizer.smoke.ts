@@ -1560,6 +1560,7 @@ async function main() {
       hasGmvMaxCampaignControlSnapshot,
       promoteGmvMaxRecommendationToLive,
       selectUniqueGmvMaxActiveBindings,
+      shouldReleaseGmvMaxActionLock,
     } = await import('../src/main/modules/tiktok-gmv-max/service')
     assert.equal(hasGmvMaxCampaignControlSnapshot({ budget: '100', roas_bid: '2', operation_status: 'ACTIVE' }), true)
     assert.equal(hasGmvMaxCampaignControlSnapshot({ budget: '100', operation_status: 'ACTIVE' }), false)
@@ -1581,6 +1582,11 @@ async function main() {
     assert.equal(promotedRecommendation.shadow, false)
     assert.equal(promotedRecommendation.originatedFromShadow, true)
     assert.equal(promotedRecommendation.writeAttempted, false)
+    const pendingCreativeRecommendation = { ...promotedRecommendation, actionType: 'creative' as const, status: 'executed' as const, platformStateVerified: false, createdAt: now }
+    assert.equal(shouldReleaseGmvMaxActionLock('creative', pendingCreativeRecommendation, now + 2 * 60 * 60_000 - 1), false)
+    assert.equal(shouldReleaseGmvMaxActionLock('creative', pendingCreativeRecommendation, now + 2 * 60 * 60_000), true)
+    assert.equal(shouldReleaseGmvMaxActionLock('creative', { ...pendingCreativeRecommendation, platformStateVerified: true }, now + 1), true)
+    assert.equal(shouldReleaseGmvMaxActionLock('session', { ...pendingCreativeRecommendation, actionType: 'session' }, now + 60 * 60_000), true)
     await gmvMaxService.setEmergencyStop({ stopped: true, reason: 'Smoke test' })
     assert.equal(gmvMaxRepo.getRuntimeState()?.emergencyStopped, true)
     await gmvMaxService.setEmergencyStop({ stopped: false })

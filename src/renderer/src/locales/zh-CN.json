@@ -389,7 +389,10 @@
   },
   "gmvMaxRuntime": {
     "workspaceTimeout": "SOP 数据刷新超时，已保留当前数据。请稍后重试。",
-    "shadowDaysRequired": "影子运行已完成 {completed} 天，还需 {remaining} 天后才能启用正式自动执行。"
+    "shadowDaysRequired": "影子运行已完成 {completed} 天，还需 {remaining} 天后才能启用正式自动执行。",
+    "creativeVerificationPending": "该推广系列已有素材调整正在验证。请等待验证完成后再操作。",
+    "sessionVerificationPending": "该推广系列已有素材加热正在验证。请等待验证完成后再操作。",
+    "actionVerificationPending": "该推广系列已有调整正在验证。请等待验证完成后再操作。"
   },
   "gmvMaxIssueResolutions": {
     "severity": {

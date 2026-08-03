@@ -87,6 +87,8 @@ const executingRecommendationIds = new Set<string>()
 const executingPortfolioIds = new Set<string>()
 const actionLocks = new Set<string>()
 const syncJobs = new Map<GmvMaxSyncAction, Promise<unknown>>()
+const CREATIVE_VERIFICATION_TIMEOUT_MS = 2 * 60 * 60_000
+const SESSION_VERIFICATION_TIMEOUT_MS = 60 * 60_000
 let schedulerStateLoaded = false
 let sopRecalculationPromise: Promise<void> | undefined
 let sopRecalculationRequested = false
@@ -1750,14 +1752,56 @@ export function promoteGmvMaxRecommendationToLive(item: GmvMaxRecommendation, no
   }
 }
 
+export function shouldReleaseGmvMaxActionLock(
+  actionType: GmvMaxActionType,
+  recommendation: GmvMaxRecommendation | undefined,
+  now = Date.now(),
+) {
+  if (!recommendation) return true
+  if (recommendation.platformStateVerified || recommendation.status === 'rejected') return true
+  const timeout = actionType === 'creative'
+    ? CREATIVE_VERIFICATION_TIMEOUT_MS
+    : actionType === 'session'
+      ? SESSION_VERIFICATION_TIMEOUT_MS
+      : 0
+  return timeout > 0
+    && ['executed', 'failed'].includes(recommendation.status)
+    && now - recommendation.createdAt >= timeout
+}
+
+function releaseStaleActionLock(
+  actionType: GmvMaxActionType,
+  recommendation: GmvMaxRecommendation | undefined,
+  campaignId: string,
+  now = Date.now(),
+) {
+  if (!shouldReleaseGmvMaxActionLock(actionType, recommendation, now)) return false
+  if (recommendation && !recommendation.platformStateVerified && recommendation.status !== 'rejected') {
+    gmvMaxRepo.saveRecommendation({
+      ...recommendation,
+      status: 'failed',
+      retryAllowed: true,
+      lastError: recommendation.lastError || 'Platform verification did not complete within the allowed time.',
+      updatedAt: now,
+    })
+  }
+  gmvMaxRepo.removeActionLock(campaignId, actionType)
+  return true
+}
+
 async function executeRecommendation(item: GmvMaxRecommendation) {
   if (gmvMaxService.schedulerState.emergencyStopped) throw new Error('GMV MAX write operations are paused by the emergency stop.')
   if (executingRecommendationIds.has(item.id)) return gmvMaxRepo.getRecommendation(item.id) || item
   const actionType = item.actionType || 'budget'
   const lockKey = `${item.campaignId}:${actionType}`
-  const persistedLock = gmvMaxRepo.getActionLock(item.campaignId, actionType)
+  let persistedLock = gmvMaxRepo.getActionLock(item.campaignId, actionType)
+  if (persistedLock && persistedLock.idempotencyKey !== item.idempotencyKey) {
+    const linkedRecommendation = gmvMaxRepo.listRecommendations()
+      .find((entry) => entry.idempotencyKey === persistedLock?.idempotencyKey)
+    if (releaseStaleActionLock(actionType, linkedRecommendation, item.campaignId)) persistedLock = null
+  }
   if (actionLocks.has(lockKey) || (persistedLock && (actionType === 'creative' || actionType === 'session' || persistedLock.expiresAt > Date.now()) && persistedLock.idempotencyKey !== item.idempotencyKey)) {
-    throw new Error(`Another ${actionType} action is still pending verification.`)
+    throw new Error(`GMV_MAX_ACTION_PENDING_VERIFICATION:${actionType}`)
   }
   executingRecommendationIds.add(item.id)
   actionLocks.add(lockKey)
@@ -4194,6 +4238,10 @@ export const gmvMaxService = {
       const campaign = gmvMaxRepo.listCampaigns().find((item) => item.id === lock.campaignId)
       const binding = campaign && gmvMaxRepo.listBindings().find((item) => item.id === campaign.bindingId)
       if (!recommendation || !campaign || !binding) { gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType); continue }
+      if (recommendation.platformStateVerified || recommendation.status === 'rejected') {
+        gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType)
+        continue
+      }
       if (['rejected', 'executed'].includes(recommendation.status) && lock.actionType !== 'creative' && lock.actionType !== 'session') {
         gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType)
         continue
@@ -4279,9 +4327,9 @@ export const gmvMaxService = {
             continue
           }
           const message = verification.state === 'pending' ? 'TikTok creative delivery status did not stabilize within two hours.' : verification.reason
-          gmvMaxRepo.saveRecommendation({ ...recommendation, status: 'failed', lastError: message, updatedAt: now })
+          gmvMaxRepo.saveRecommendation({ ...recommendation, status: 'failed', retryAllowed: true, lastError: message, updatedAt: now })
           if (audit) gmvMaxRepo.saveAudit({ ...audit, status: 'failed', responseSummary: { ...(audit.responseSummary || {}), deliveryVerification: verification }, error: message, completedAt: now })
-          gmvMaxRepo.saveActionLock({ ...lock, expiresAt: now + 30 * 60_000, updatedAt: now })
+          gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType)
           continue
         }
         if (lock.actionType === 'session') {
@@ -4316,13 +4364,18 @@ export const gmvMaxService = {
             gmvMaxRepo.saveActionLock({ ...lock, expiresAt: now + 10 * 60_000, updatedAt: now })
             continue
           }
-          gmvMaxRepo.saveRecommendation({ ...recommendation, status: 'failed', lastError: verification.reason, updatedAt: now })
+          gmvMaxRepo.saveRecommendation({ ...recommendation, status: 'failed', retryAllowed: true, lastError: verification.reason, updatedAt: now })
           if (audit) gmvMaxRepo.saveAudit({ ...audit, status: 'failed', responseSummary: { ...(audit.responseSummary || {}), sessionVerification: verification, sessionId }, error: verification.reason, completedAt: now })
-          gmvMaxRepo.saveActionLock({ ...lock, expiresAt: now + 30 * 60_000, updatedAt: now })
+          gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType)
           continue
         }
         gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType)
-      } catch (error) { compatibilityAudit(binding, `${lock.actionType}_action_verification`, error) }
+      } catch (error) {
+        compatibilityAudit(binding, `${lock.actionType}_action_verification`, error)
+        if (shouldReleaseGmvMaxActionLock(lock.actionType, recommendation, now)) {
+          releaseStaleActionLock(lock.actionType, recommendation, lock.campaignId, now)
+        }
+      }
     }
   },
 

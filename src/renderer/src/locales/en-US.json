@@ -389,7 +389,10 @@
   },
   "gmvMaxRuntime": {
     "workspaceTimeout": "The SOP refresh timed out. Current data was preserved. Try again shortly.",
-    "shadowDaysRequired": "Shadow mode has completed {completed} day(s). {remaining} more day(s) are required before live automation can be enabled."
+    "shadowDaysRequired": "Shadow mode has completed {completed} day(s). {remaining} more day(s) are required before live automation can be enabled.",
+    "creativeVerificationPending": "A creative change for this campaign is being verified. Wait for verification to finish before trying again.",
+    "sessionVerificationPending": "A creative boost for this campaign is being verified. Wait for verification to finish before trying again.",
+    "actionVerificationPending": "A change for this campaign is being verified. Wait for verification to finish before trying again."
   },
   "gmvMaxIssueResolutions": {
     "severity": {

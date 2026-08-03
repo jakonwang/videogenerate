@@ -4962,6 +4962,16 @@ async function runAction(
 
 function readableError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
+  const pendingVerification = message.match(/GMV_MAX_ACTION_PENDING_VERIFICATION:(\w+)/i);
+  if (pendingVerification) {
+    const actionType = pendingVerification[1].toLowerCase();
+    const key = actionType === "creative"
+      ? "gmvMaxRuntime.creativeVerificationPending"
+      : actionType === "session"
+        ? "gmvMaxRuntime.sessionVerificationPending"
+        : "gmvMaxRuntime.actionVerificationPending";
+    return t(key);
+  }
   const shadowDays = message.match(/GMV_MAX_SHADOW_DAYS_REQUIRED:(\d+):(\d+)/i);
   if (shadowDays) {
     return t("gmvMaxRuntime.shadowDaysRequired", {

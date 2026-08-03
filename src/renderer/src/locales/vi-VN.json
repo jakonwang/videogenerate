@@ -416,7 +416,10 @@
   },
   "gmvMaxRuntime": {
     "workspaceTimeout": "Lam moi SOP da het thoi gian. Du lieu hien tai duoc giu lai. Hay thu lai sau.",
-    "shadowDaysRequired": "Che do chay bong da hoan thanh {completed} ngay. Can them {remaining} ngay truoc khi bat tu dong hoa truc tiep."
+    "shadowDaysRequired": "Che do chay bong da hoan thanh {completed} ngay. Can them {remaining} ngay truoc khi bat tu dong hoa truc tiep.",
+    "creativeVerificationPending": "Thay doi noi dung cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai.",
+    "sessionVerificationPending": "Tang cuong noi dung cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai.",
+    "actionVerificationPending": "Thay doi cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai."
   },
   "gmvMaxOperations": {
     "storeIssues": "Trung tam van de cua hang",
