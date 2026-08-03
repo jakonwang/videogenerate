@@ -5370,11 +5370,15 @@ function saveProductCost() {
     t("gmvMax.messages.policySaved"),
   );
 }
+function plainRuleGroupPayload(rule: RuleGroup) {
+  return JSON.parse(JSON.stringify(rule)) as RuleGroup;
+}
 function saveRuleGroup() {
   if (!newRule.value.name) return;
+  const payload = plainRuleGroupPayload(newRule.value);
   void runAction(
     "rule-group",
-    () => window.api.tiktokGmvMax.saveRuleGroup(newRule.value as any),
+    () => window.api.tiktokGmvMax.saveRuleGroup(payload as any),
     t("gmvMax.messages.policySaved"),
   );
 }
@@ -5674,9 +5678,10 @@ function removeProductVariant(index: number) {
 
 function saveRuleDraft() {
   if (!ruleDraft.value.name.trim()) return;
+  const payload = plainRuleGroupPayload(ruleDraft.value);
   void runAction(
     "rule-draft",
-    () => window.api.tiktokGmvMax.saveRuleGroup(ruleDraft.value as any),
+    () => window.api.tiktokGmvMax.saveRuleGroup(payload as any),
     t("gmvMax.messages.policySaved"),
   ).then(closeDrawer);
 }

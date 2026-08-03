@@ -153,6 +153,14 @@ async function main() {
     await page.locator('[data-testid="gmv-tab-rules"]').click()
     await page.locator('[data-testid="gmv-protection-goals"]').waitFor({ state: 'visible' })
     assert.equal(await page.locator('[data-testid="gmv-backtest-results"]').getAttribute('open'), null)
+    const ruleName = `QA rule ${Date.now()}`
+    await page.locator('.gmv-rule-card--add').click()
+    const ruleDrawer = page.locator('[data-testid="gmv-drawer"]')
+    await ruleDrawer.waitFor({ state: 'visible' })
+    await ruleDrawer.locator('input').first().fill(ruleName)
+    await ruleDrawer.locator('footer .gmv-button--primary').click()
+    await page.getByText(ruleName, { exact: true }).waitFor({ state: 'visible' })
+    assert.equal(await page.locator('.gmv-alert--danger').count(), 0)
 
     await page.locator('[data-testid="gmv-tab-audit"]').click()
     await page.locator('[data-testid="gmv-audit-workspace"]').waitFor({ state: 'visible' })
