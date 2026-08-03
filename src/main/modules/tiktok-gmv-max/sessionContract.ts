@@ -1,4 +1,4 @@
-import type { GmvMaxCampaign, GmvMaxSessionSnapshot } from './types'
+import type { GmvMaxCampaign, GmvMaxCreativeAsset, GmvMaxSessionSnapshot } from './types'
 
 function valueText(value: unknown) {
   return String(value ?? '').trim()
@@ -44,7 +44,35 @@ export function refreshGmvMaxCreativeBoostSchedule(input: {
 }
 
 export function isGmvMaxSessionInputRejection(message: unknown) {
-  return /campaign_gmv_max_session_(?:create|update).*code=40002/i.test(valueText(message))
+  return /campaign_gmv_max_session_(?:create|update).*code=40002|GMV_MAX_SESSION_(?:ITEM_UNSUPPORTED|IDENTITY_REQUIRED)/i.test(valueText(message))
+}
+
+export function enrichGmvMaxSessionActionIdentity(
+  actionPayload: Record<string, unknown>,
+  assets: GmvMaxCreativeAsset[],
+) {
+  if (actionPayload.itemIdentity || actionPayload.item_identity) return actionPayload
+  const itemId = valueText(actionPayload.itemId || actionPayload.item_id || actionPayload.creativeId)
+  if (!itemId || itemId === '-1' || valueText(actionPayload.creativeId).startsWith('product-card:')) return actionPayload
+  const video = assets.find((asset) => asset.kind === 'video'
+    && (asset.creativeId === itemId || valueText(asset.raw.item_id) === itemId))
+  const identityInfo = video?.raw.identity_info
+  if (!identityInfo || typeof identityInfo !== 'object' || Array.isArray(identityInfo)) return actionPayload
+  const identity = identityInfo as Record<string, unknown>
+  const identityId = valueText(identity.identity_id)
+  const identityType = valueText(identity.identity_type)
+  if (!identityId || !identityType) return actionPayload
+  const identityAsset = assets.find((asset) => asset.kind === 'identity'
+    && valueText(asset.raw.identity_id) === identityId)
+  const identityAuthorizedBcId = valueText(identity.identity_authorized_bc_id || identityAsset?.raw.identity_authorized_bc_id)
+  return {
+    ...actionPayload,
+    itemIdentity: {
+      identityId,
+      identityType,
+      ...(identityAuthorizedBcId ? { identityAuthorizedBcId } : {}),
+    },
+  }
 }
 
 export function buildGmvMaxSessionToolCall(input: {
@@ -61,6 +89,13 @@ export function buildGmvMaxSessionToolCall(input: {
   }
   const itemId = valueText(input.actionPayload.itemId || input.actionPayload.item_id || input.actionPayload.creativeId)
   const spuId = valueText(input.actionPayload.spuId || input.actionPayload.spu_id)
+  const itemIdentity = input.actionPayload.itemIdentity || input.actionPayload.item_identity
+  const identity = itemIdentity && typeof itemIdentity === 'object' && !Array.isArray(itemIdentity)
+    ? itemIdentity as Record<string, unknown>
+    : {}
+  const identityId = valueText(identity.identityId || identity.identity_id)
+  const identityType = valueText(identity.identityType || identity.identity_type)
+  const identityAuthorizedBcId = valueText(identity.identityAuthorizedBcId || identity.identity_authorized_bc_id)
   const budget = valueText(input.actionPayload.budget)
   const endTime = valueText(input.actionPayload.scheduleEndTime || input.actionPayload.schedule_end_time)
   const scheduleType = valueText(input.actionPayload.scheduleType || input.actionPayload.schedule_type || 'SCHEDULE_START_END').toUpperCase()
@@ -86,7 +121,9 @@ export function buildGmvMaxSessionToolCall(input: {
   }
   if (operation !== 'create') throw new Error(`Unsupported TikTok session operation: ${operation}`)
   if (input.campaign.campaignType !== 'PRODUCT') throw new Error('Creative boost sessions are only enabled for Product GMV MAX campaigns.')
+  if (itemId === '-1' || valueText(input.actionPayload.creativeId).startsWith('product-card:')) throw new Error('GMV_MAX_SESSION_ITEM_UNSUPPORTED')
   if (!itemId || !spuId) throw new Error('TikTok creative boost session requires one item and one SPU.')
+  if (!identityId || !identityType) throw new Error('GMV_MAX_SESSION_IDENTITY_REQUIRED')
   return {
     tool: 'campaign_gmv_max_session_create',
     args: {
@@ -97,6 +134,13 @@ export function buildGmvMaxSessionToolCall(input: {
         bid_type: 'CREATIVE_NO_BID',
         product_list: [{ spu_id: spuId }],
         item_id: itemId,
+        item_identity: {
+          [itemId]: {
+            identity_id: identityId,
+            identity_type: identityType,
+            ...(identityAuthorizedBcId ? { identity_authorized_bc_id: identityAuthorizedBcId } : {}),
+          },
+        },
         budget: Number(budget),
         ...schedule,
       },

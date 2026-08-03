@@ -24,7 +24,7 @@ import { evaluateGmvMaxDecision, resolveGmvMaxDecisionRules } from './decisionEn
 import { buildGmvMaxRoiUnlockExperiment, evaluateGmvMaxRoiUnlockExperiment } from './experimentEngine'
 import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, parseGmvMaxRemoteCampaignState } from './executionState'
 import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery, type GmvMaxCreativeTarget } from './creativeContract'
-import { buildGmvMaxSessionToolCall, isGmvMaxSessionInputRejection, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from './sessionContract'
+import { buildGmvMaxSessionToolCall, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from './sessionContract'
 import { assertGmvMaxPortfolioEvidenceFresh } from './portfolioFreshness'
 import { gmvMaxRepo } from './sqlite'
 import { sendHermesMessage } from '../hermes/messaging'
@@ -1874,7 +1874,11 @@ async function executeRecommendation(item: GmvMaxRecommendation) {
         const targets = creativeTargetsForAction(campaign, current.actionPayload)
         if (targets.length === 1) args = buildGmvMaxCreativeUpdateArgs({ advertiserId: binding.advertiserId, campaign, target: targets[0] })
       } else if (actionType === 'session') {
-        const sessionCall = buildGmvMaxSessionToolCall({ advertiserId: binding.advertiserId, storeId: binding.storeId, campaign, actionPayload: current.actionPayload || {} })
+        const actionPayload = enrichGmvMaxSessionActionIdentity(
+          current.actionPayload || {},
+          gmvMaxRepo.listCreativeAssetsForScope({ storeIds: [campaign.storeId], campaignIds: [campaign.id] }),
+        )
+        const sessionCall = buildGmvMaxSessionToolCall({ advertiserId: binding.advertiserId, storeId: binding.storeId, campaign, actionPayload })
         tool = sessionCall.tool
         args = sessionCall.args
       }
@@ -1998,7 +2002,7 @@ async function executeRecommendation(item: GmvMaxRecommendation) {
   } finally {
     executingRecommendationIds.delete(item.id)
     actionLocks.delete(lockKey)
-    if (rejectedWithoutMutation || (actionType !== 'creative' && actionType !== 'session' && !retainLockForVerification)) gmvMaxRepo.removeActionLock(item.campaignId, actionType)
+    if (!writeAttempted || rejectedWithoutMutation || (actionType !== 'creative' && actionType !== 'session' && !retainLockForVerification)) gmvMaxRepo.removeActionLock(item.campaignId, actionType)
   }
 }
 
@@ -4459,7 +4463,15 @@ export const gmvMaxService = {
             metrics: creativeMetrics,
             listEntries: gmvMaxRepo.listListEntriesForScope([campaign.storeId], [campaign.id]), now,
           }).filter((item) => !rotatingIds.has(text(item.actionPayload?.creativeId)))
-          const creativeCandidates = [...rotationPlans, ...creativeGuards, evaluateGmvMaxSessionGuard({ campaign, policy, profitGuard, metrics: creativeMetrics, sessions: gmvMaxRepo.listSessions().filter((item) => item.campaignId === campaign.id), now })]
+          const creativeCandidates = [...rotationPlans, ...creativeGuards, evaluateGmvMaxSessionGuard({
+            campaign,
+            policy,
+            profitGuard,
+            metrics: creativeMetrics,
+            assets: gmvMaxRepo.listCreativeAssetsForScope({ storeIds: [campaign.storeId], campaignIds: [campaign.id] }),
+            sessions: gmvMaxRepo.listSessions().filter((item) => item.campaignId === campaign.id),
+            now,
+          })]
           const candidates = (scope === 'creative' ? creativeCandidates : [recommendation, ...creativeCandidates])
             .filter((item): item is GmvMaxRecommendation => Boolean(item))
             .filter((item) => !existing.has(item.id))

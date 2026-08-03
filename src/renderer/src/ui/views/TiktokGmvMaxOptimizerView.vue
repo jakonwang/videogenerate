@@ -4962,6 +4962,8 @@ async function runAction(
 
 function readableError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
+  if (/GMV_MAX_SESSION_ITEM_UNSUPPORTED/i.test(message)) return t("gmvMaxRuntime.sessionItemUnsupported");
+  if (/GMV_MAX_SESSION_IDENTITY_REQUIRED|Nil item_identity map/i.test(message)) return t("gmvMaxRuntime.sessionIdentityRequired");
   const pendingVerification = message.match(/GMV_MAX_ACTION_PENDING_VERIFICATION:(\w+)/i);
   if (pendingVerification) {
     const actionType = pendingVerification[1].toLowerCase();

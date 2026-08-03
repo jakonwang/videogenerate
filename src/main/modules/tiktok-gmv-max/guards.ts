@@ -413,6 +413,7 @@ export function evaluateGmvMaxSessionGuard(input: {
   policy: GmvMaxPolicy
   profitGuard: GmvMaxProfitGuard
   metrics: GmvMaxCreativeMetric[]
+  assets?: GmvMaxCreativeAsset[]
   sessions: GmvMaxSessionSnapshot[]
   now?: number
 }): GmvMaxRecommendation | null {
@@ -422,7 +423,7 @@ export function evaluateGmvMaxSessionGuard(input: {
   const floor = gmvMaxDecimal.parse(input.profitGuard.effectiveRoiFloor)
   const grouped = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.metrics) {
-    if (!metric.itemId || !metric.itemGroupId) continue
+    if (!metric.itemId || metric.itemId === '-1' || metric.creativeId.startsWith('product-card:') || !metric.itemGroupId) continue
     const key = `${metric.creativeId}:${metric.itemGroupId}`
     grouped.set(key, [...(grouped.get(key) || []), metric])
   }
@@ -445,6 +446,17 @@ export function evaluateGmvMaxSessionGuard(input: {
       && item.orders >= BigInt(input.policy.minOrders) * 10_000n)
     .sort((a, b) => a.roi === b.roi ? 0 : a.roi > b.roi ? -1 : 1)[0]
   if (!winner) return null
+  const videoAsset = input.assets?.find((asset) => asset.kind === 'video'
+    && (asset.creativeId === winner.itemId || String(asset.raw.item_id || '').trim() === winner.itemId))
+  const identityInfo = videoAsset?.raw.identity_info
+  if (!identityInfo || typeof identityInfo !== 'object' || Array.isArray(identityInfo)) return null
+  const identity = identityInfo as Record<string, unknown>
+  const identityId = String(identity.identity_id || '').trim()
+  const identityType = String(identity.identity_type || '').trim()
+  if (!identityId || !identityType) return null
+  const identityAsset = input.assets?.find((asset) => asset.kind === 'identity'
+    && String(asset.raw.identity_id || '').trim() === identityId)
+  const identityAuthorizedBcId = String(identity.identity_authorized_bc_id || identityAsset?.raw.identity_authorized_bc_id || '').trim()
   const now = input.now ?? Date.now()
   let window: ReturnType<typeof buildGmvMaxSessionWindow>
   try {
@@ -468,6 +480,11 @@ export function evaluateGmvMaxSessionGuard(input: {
       creativeId: winner.creativeId,
       itemId: winner.itemId,
       spuId: winner.spuId,
+      itemIdentity: {
+        identityId,
+        identityType,
+        ...(identityAuthorizedBcId ? { identityAuthorizedBcId } : {}),
+      },
       budget: gmvMaxDecimal.format(sessionBudget),
       scheduleStartTime: window.startTime,
       scheduleEndTime: window.endTime,

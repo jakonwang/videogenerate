@@ -392,7 +392,9 @@
     "shadowDaysRequired": "影子运行已完成 {completed} 天，还需 {remaining} 天后才能启用正式自动执行。",
     "creativeVerificationPending": "该推广系列已有素材调整正在验证。请等待验证完成后再操作。",
     "sessionVerificationPending": "该推广系列已有素材加热正在验证。请等待验证完成后再操作。",
-    "actionVerificationPending": "该推广系列已有调整正在验证。请等待验证完成后再操作。"
+    "actionVerificationPending": "该推广系列已有调整正在验证。请等待验证完成后再操作。",
+    "sessionItemUnsupported": "商品卡不能执行素材加热。请选择包含有效视频编号的素材。",
+    "sessionIdentityRequired": "该视频缺少 TikTok 授权身份信息，暂时不能执行素材加热。请先同步素材授权数据。"
   },
   "gmvMaxIssueResolutions": {
     "severity": {

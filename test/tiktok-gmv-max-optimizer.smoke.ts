@@ -25,7 +25,7 @@ import { buildGmvMaxVideoIdentity, resolveGmvMaxCreativeAsset } from '../src/mai
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from '../src/main/modules/tiktok-gmv-max/automation'
 import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, parseGmvMaxRemoteCampaignState } from '../src/main/modules/tiktok-gmv-max/executionState'
 import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery } from '../src/main/modules/tiktok-gmv-max/creativeContract'
-import { buildGmvMaxSessionToolCall, buildGmvMaxSessionWindow, isGmvMaxSessionInputRejection, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from '../src/main/modules/tiktok-gmv-max/sessionContract'
+import { buildGmvMaxSessionToolCall, buildGmvMaxSessionWindow, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from '../src/main/modules/tiktok-gmv-max/sessionContract'
 import { assertGmvMaxPortfolioEvidenceFresh, previousCompleteDate } from '../src/main/modules/tiktok-gmv-max/portfolioFreshness'
 import { mergeGmvMaxAccountMetadata, resolveGmvMaxAccountMetadata, resolveGmvMaxAccountMetadataRequest } from '../src/main/modules/tiktok-gmv-max/accountMetadata'
 import { convertGmvMaxMoneyToCny, createGmvMaxExchangeRateLoader, fetchGmvMaxCnyExchangeRate, normalizeGmvMaxExchangeRate, parseGmvMaxExchangeRate } from '../src/main/modules/tiktok-gmv-max/exchangeRate'
@@ -238,12 +238,12 @@ async function main() {
   assert.equal(sessionWindow.endTime, '2026-07-28 12:00:00')
   const sessionCall = buildGmvMaxSessionToolCall({
     advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign,
-    actionPayload: { operation: 'create', itemId: 'video-1', spuId: 'product-1', budget: '10', scheduleStartTime: sessionWindow.startTime, scheduleEndTime: sessionWindow.endTime },
+    actionPayload: { operation: 'create', itemId: 'video-1', spuId: 'product-1', itemIdentity: { identityId: 'identity-1', identityType: 'AUTH_CODE' }, budget: '10', scheduleStartTime: sessionWindow.startTime, scheduleEndTime: sessionWindow.endTime },
   })
   assert.equal(sessionCall.tool, 'campaign_gmv_max_session_create')
   assert.deepEqual(sessionCall.args, {
     advertiser_id: 'advertiser-1', campaign_id: candidateCampaign.id, store_id: 'store-1',
-    session: { bid_type: 'CREATIVE_NO_BID', product_list: [{ spu_id: 'product-1' }], item_id: 'video-1', budget: 10, schedule_type: 'SCHEDULE_START_END', schedule_end_time: sessionWindow.endTime },
+    session: { bid_type: 'CREATIVE_NO_BID', product_list: [{ spu_id: 'product-1' }], item_id: 'video-1', item_identity: { 'video-1': { identity_id: 'identity-1', identity_type: 'AUTH_CODE' } }, budget: 10, schedule_type: 'SCHEDULE_START_END', schedule_end_time: sessionWindow.endTime },
   })
   assert.equal('schedule_start_time' in sessionCall.args.session, false)
   assert.deepEqual(buildGmvMaxSessionToolCall({ advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign, actionPayload: { operation: 'delete', sessionId: 'session-1' } }), {
@@ -260,9 +260,16 @@ async function main() {
   assert.deepEqual(sessionUpdateCall.args.session, { budget: 12, schedule_type: 'SCHEDULE_START_END', schedule_end_time: sessionWindow.endTime })
   const continuousSessionCall = buildGmvMaxSessionToolCall({
     advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign,
-    actionPayload: { operation: 'create', itemId: 'video-1', spuId: 'product-1', budget: '10', scheduleType: 'SCHEDULE_FROM_NOW' },
+    actionPayload: { operation: 'create', itemId: 'video-1', spuId: 'product-1', itemIdentity: { identityId: 'identity-1', identityType: 'AUTH_CODE' }, budget: '10', scheduleType: 'SCHEDULE_FROM_NOW' },
   })
-  assert.deepEqual(continuousSessionCall.args.session, { bid_type: 'CREATIVE_NO_BID', product_list: [{ spu_id: 'product-1' }], item_id: 'video-1', budget: 10, schedule_type: 'SCHEDULE_FROM_NOW' })
+  assert.deepEqual(continuousSessionCall.args.session, { bid_type: 'CREATIVE_NO_BID', product_list: [{ spu_id: 'product-1' }], item_id: 'video-1', item_identity: { 'video-1': { identity_id: 'identity-1', identity_type: 'AUTH_CODE' } }, budget: 10, schedule_type: 'SCHEDULE_FROM_NOW' })
+  assert.throws(() => buildGmvMaxSessionToolCall({ advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign, actionPayload: { operation: 'create', creativeId: 'product-card:product-1', itemId: '-1', spuId: 'product-1', budget: '10', scheduleType: 'SCHEDULE_FROM_NOW' } }), /GMV_MAX_SESSION_ITEM_UNSUPPORTED/)
+  assert.throws(() => buildGmvMaxSessionToolCall({ advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign, actionPayload: { operation: 'create', itemId: 'video-1', spuId: 'product-1', budget: '10', scheduleType: 'SCHEDULE_FROM_NOW' } }), /GMV_MAX_SESSION_IDENTITY_REQUIRED/)
+  const identityAssets = [
+    { id: 'video-asset', storeId: 'store-1', creativeId: 'video-1', kind: 'video' as const, raw: { item_id: 'video-1', identity_info: { identity_id: 'identity-1', identity_type: 'BC_AUTH_TT' } }, syncedAt: now },
+    { id: 'identity-asset', storeId: 'store-1', creativeId: 'identity-1', kind: 'identity' as const, raw: { identity_id: 'identity-1', identity_authorized_bc_id: 'bc-1' }, syncedAt: now },
+  ]
+  assert.deepEqual(enrichGmvMaxSessionActionIdentity({ itemId: 'video-1' }, identityAssets), { itemId: 'video-1', itemIdentity: { identityId: 'identity-1', identityType: 'BC_AUTH_TT', identityAuthorizedBcId: 'bc-1' } })
   assert.deepEqual(refreshGmvMaxCreativeBoostSchedule({
     campaign: sessionCampaign,
     actionPayload: { scheduleStartTime: '2026-07-20 00:00:00', scheduleEndTime: '2026-07-21 00:00:00', budget: '10' },
@@ -283,10 +290,31 @@ async function main() {
       { ...creativeReportMetric, id: 'session-metric-1', campaignId: candidateCampaign.id, statDate: '2026-07-26', orders: '2', roi: '3', grossRevenue: '30', cost: '10' },
       { ...creativeReportMetric, id: 'session-metric-2', campaignId: candidateCampaign.id, statDate: '2026-07-27', orders: '2', roi: '3', grossRevenue: '30', cost: '10' },
     ],
-    sessions: [], now,
+    assets: identityAssets, sessions: [], now,
   })
   assert.equal(sessionRecommendation?.actionPayload?.spuId, 'product-1')
   assert.equal(sessionRecommendation?.actionPayload?.itemId, 'video-1')
+  assert.deepEqual(sessionRecommendation?.actionPayload?.itemIdentity, { identityId: 'identity-1', identityType: 'BC_AUTH_TT', identityAuthorizedBcId: 'bc-1' })
+  assert.equal(evaluateGmvMaxSessionGuard({
+    campaign: sessionCampaign,
+    policy: { ...defaultGmvMaxPolicy(candidateCampaign.id), minOrders: 1, sessionPermission: true },
+    profitGuard: { complete: true, contributionMarginRate: '0.5', breakEvenRoi: '2', effectiveRoiFloor: '2' },
+    metrics: [
+      { ...creativeReportMetric, id: 'missing-identity-1', campaignId: candidateCampaign.id, statDate: '2026-07-26', orders: '2', roi: '3', grossRevenue: '30', cost: '10' },
+      { ...creativeReportMetric, id: 'missing-identity-2', campaignId: candidateCampaign.id, statDate: '2026-07-27', orders: '2', roi: '3', grossRevenue: '30', cost: '10' },
+    ],
+    assets: [], sessions: [], now,
+  }), null)
+  assert.equal(evaluateGmvMaxSessionGuard({
+    campaign: sessionCampaign,
+    policy: { ...defaultGmvMaxPolicy(candidateCampaign.id), minOrders: 1, sessionPermission: true },
+    profitGuard: { complete: true, contributionMarginRate: '0.5', breakEvenRoi: '2', effectiveRoiFloor: '2' },
+    metrics: [
+      { ...creativeReportMetric, id: 'product-card-session-1', creativeId: 'product-card:product-1', itemId: '-1', itemGroupId: 'product-1', campaignId: candidateCampaign.id, statDate: '2026-07-26', orders: '2', roi: '3', grossRevenue: '30', cost: '10' },
+      { ...creativeReportMetric, id: 'product-card-session-2', creativeId: 'product-card:product-1', itemId: '-1', itemGroupId: 'product-1', campaignId: candidateCampaign.id, statDate: '2026-07-27', orders: '2', roi: '3', grossRevenue: '30', cost: '10' },
+    ],
+    assets: identityAssets, sessions: [], now,
+  }), null)
   assert.equal(evaluateGmvMaxSessionGuard({ campaign: campaign('LIVE'), policy: defaultGmvMaxPolicy('campaign-live'), profitGuard: { complete: true, contributionMarginRate: '0.5', breakEvenRoi: '2', effectiveRoiFloor: '2' }, metrics: [], sessions: [], now }), null)
 
   const freshnessBinding = { id: 'fresh-binding', connectionId: 'connection-1', advertiserId: 'advertiser-1', advertiserName: 'Advertiser', storeId: 'store-1', storeName: 'Store', campaignType: 'PRODUCT' as const, active: true, timezone: 'Asia/Shanghai', updatedAt: now }

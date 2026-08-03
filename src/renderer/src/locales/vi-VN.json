@@ -419,7 +419,9 @@
     "shadowDaysRequired": "Che do chay bong da hoan thanh {completed} ngay. Can them {remaining} ngay truoc khi bat tu dong hoa truc tiep.",
     "creativeVerificationPending": "Thay doi noi dung cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai.",
     "sessionVerificationPending": "Tang cuong noi dung cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai.",
-    "actionVerificationPending": "Thay doi cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai."
+    "actionVerificationPending": "Thay doi cua chien dich nay dang duoc xac minh. Hay doi xac minh hoan tat truoc khi thu lai.",
+    "sessionItemUnsupported": "The san pham khong the tang cuong nhu noi dung video. Hay chon noi dung co ma video hop le.",
+    "sessionIdentityRequired": "Video nay thieu thong tin uy quyen danh tinh TikTok va chua the tang cuong. Hay dong bo du lieu uy quyen noi dung truoc."
   },
   "gmvMaxOperations": {
     "storeIssues": "Trung tam van de cua hang",

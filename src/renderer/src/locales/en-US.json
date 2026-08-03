@@ -392,7 +392,9 @@
     "shadowDaysRequired": "Shadow mode has completed {completed} day(s). {remaining} more day(s) are required before live automation can be enabled.",
     "creativeVerificationPending": "A creative change for this campaign is being verified. Wait for verification to finish before trying again.",
     "sessionVerificationPending": "A creative boost for this campaign is being verified. Wait for verification to finish before trying again.",
-    "actionVerificationPending": "A change for this campaign is being verified. Wait for verification to finish before trying again."
+    "actionVerificationPending": "A change for this campaign is being verified. Wait for verification to finish before trying again.",
+    "sessionItemUnsupported": "Product cards cannot be boosted as creatives. Select a creative with a valid video item ID.",
+    "sessionIdentityRequired": "This video is missing TikTok identity authorization and cannot be boosted yet. Sync creative authorization data first."
   },
   "gmvMaxIssueResolutions": {
     "severity": {
