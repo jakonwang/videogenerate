@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { gmvMaxDecimal } from './optimizer'
+import { getGmvMaxShadowReadiness, gmvMaxDecimal } from './optimizer'
 import type {
   GmvMaxCampaign,
   GmvMaxCreativeAsset,
@@ -293,8 +293,7 @@ export function evaluateGmvMaxCreativeRotationPlan(input: {
   const autoExecutable = input.policy.automationEnabled
     && input.policy.pilotEnabled
     && !input.policy.shadowMode
-    && input.policy.shadowStartedAt !== undefined
-    && now - input.policy.shadowStartedAt >= 7 * 24 * 60 * 60 * 1000
+    && getGmvMaxShadowReadiness(input.policy, now).ready
     && input.policy.creativePermission
     && input.lifecycle.confidence >= 60
   const retiring = [...input.insights]

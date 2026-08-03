@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import * as XLSX from 'xlsx'
 import { gmvMaxAuthStore } from './authStore'
 import { gmvMaxMcpClient } from './mcpClient'
-import { defaultGmvMaxPolicy, evaluateGmvMaxCampaign, gmvMaxDecimal } from './optimizer'
+import { defaultGmvMaxPolicy, evaluateGmvMaxCampaign, getGmvMaxShadowReadiness, gmvMaxDecimal, resolveGmvMaxShadowStartedAt } from './optimizer'
 import { buildGmvMaxCreativeExperiment, evaluateGmvMaxCreativeGuard, evaluateGmvMaxCreativeRotationPlan, evaluateGmvMaxPacingDiagnostic, evaluateGmvMaxRealtimeGuard, evaluateGmvMaxSessionGuard } from './guards'
 import { calculateGmvMaxCampaignProfitGuard, calculateGmvMaxConfiguredProductProfitGuard, deriveGmvMaxObservedSellingPrice, selectGmvMaxCampaignProductCosts } from './profit'
 import { analyzeGmvMaxLifecycle } from './learning'
@@ -880,7 +880,14 @@ function latestExecutedAt(campaignId: string) {
 }
 
 function policyFor(campaignId: string) {
-  return { ...defaultGmvMaxPolicy(campaignId), ...gmvMaxRepo.getPolicy(campaignId) }
+  const defaults = defaultGmvMaxPolicy(campaignId)
+  const stored = gmvMaxRepo.getPolicy(campaignId)
+  if (!stored) return defaults
+  return {
+    ...defaults,
+    ...stored,
+    shadowStartedAt: resolveGmvMaxShadowStartedAt(stored, defaults.shadowStartedAt),
+  }
 }
 
 function productIdsForCampaign(campaign: GmvMaxCampaign) {
@@ -4452,9 +4459,14 @@ export const gmvMaxService = {
 
   async savePolicy(input: { campaignId: string; preset?: GmvMaxPolicyPreset; automationEnabled?: boolean; minRoi?: string; minOrders?: number; minCompleteDays?: number; cooldownHours?: number; dailyBudgetChangeLimitPercent?: number; promotionAutoExecutionEnabled?: boolean; targetCpa?: string; creativeTestBudget?: string; creativeExplorationSharePercent?: number; minExplorationCreatives?: number; winnerTrafficCapPercent?: number; profitSafetyMarginPercent?: number; budgetPermission?: boolean; roiPermission?: boolean; statusPermission?: boolean; creativePermission?: boolean; sessionPermission?: boolean; shadowMode?: boolean; pilotEnabled?: boolean; pauseOnZeroOrders?: boolean; decisionRules?: Partial<GmvMaxDecisionRuleConfig> }) {
     const current = policyFor(input.campaignId)
-    if (input.shadowMode === false && Date.now() - Number(current.shadowStartedAt || Date.now()) < 7 * 24 * 60 * 60 * 1000) {
-      throw new Error('Seven complete shadow days are required before live automation can be enabled.')
+    const now = Date.now()
+    const shadowReadiness = getGmvMaxShadowReadiness(current, now)
+    if (current.shadowMode && input.shadowMode === false && !shadowReadiness.ready) {
+      throw new Error(
+        `GMV_MAX_SHADOW_DAYS_REQUIRED:${shadowReadiness.completedDays}:${shadowReadiness.remainingDays}`,
+      )
     }
+    const restartingShadowMode = !current.shadowMode && input.shadowMode === true
     const next: GmvMaxPolicy = {
       ...current, ...input,
       minRoi: numberText(input.minRoi ?? current.minRoi, current.minRoi),
@@ -4476,10 +4488,11 @@ export const gmvMaxService = {
       creativePermission: input.creativePermission ?? current.creativePermission,
       sessionPermission: input.sessionPermission ?? current.sessionPermission,
       shadowMode: input.shadowMode ?? current.shadowMode,
+      shadowStartedAt: restartingShadowMode ? now : shadowReadiness.shadowStartedAt,
       pilotEnabled: input.pilotEnabled ?? current.pilotEnabled,
       pauseOnZeroOrders: input.pauseOnZeroOrders ?? current.pauseOnZeroOrders,
       decisionRules: input.decisionRules ? resolveGmvMaxDecisionRules(input.decisionRules) : current.decisionRules,
-      updatedAt: Date.now(),
+      updatedAt: now,
     }
     return gmvMaxRepo.savePolicy(next)
   },

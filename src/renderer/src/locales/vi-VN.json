@@ -415,7 +415,8 @@
     }
   },
   "gmvMaxRuntime": {
-    "workspaceTimeout": "Lam moi SOP da het thoi gian. Du lieu hien tai duoc giu lai. Hay thu lai sau."
+    "workspaceTimeout": "Lam moi SOP da het thoi gian. Du lieu hien tai duoc giu lai. Hay thu lai sau.",
+    "shadowDaysRequired": "Che do chay bong da hoan thanh {completed} ngay. Can them {remaining} ngay truoc khi bat tu dong hoa truc tiep."
   },
   "gmvMaxOperations": {
     "storeIssues": "Trung tam van de cua hang",

@@ -45,6 +45,34 @@ function presetLimits(preset: GmvMaxPolicyPreset) {
   return { increase: 10, decrease: 10, roasStep: 0n }
 }
 
+const SHADOW_PERIOD_DAYS = 3
+const DAY_MS = 24 * 60 * 60 * 1000
+
+export function resolveGmvMaxShadowStartedAt(
+  policy: Pick<GmvMaxPolicy, 'shadowStartedAt' | 'updatedAt'>,
+  fallbackNow = Date.now(),
+) {
+  const startedAt = Number(policy.shadowStartedAt)
+  if (Number.isFinite(startedAt) && startedAt > 0) return startedAt
+  const updatedAt = Number(policy.updatedAt)
+  if (Number.isFinite(updatedAt) && updatedAt > 0) return updatedAt
+  return fallbackNow
+}
+
+export function getGmvMaxShadowReadiness(
+  policy: Pick<GmvMaxPolicy, 'shadowStartedAt' | 'updatedAt'>,
+  now = Date.now(),
+) {
+  const shadowStartedAt = resolveGmvMaxShadowStartedAt(policy, now)
+  const completedDays = Math.max(0, Math.floor((now - shadowStartedAt) / DAY_MS))
+  return {
+    shadowStartedAt,
+    completedDays,
+    remainingDays: Math.max(0, SHADOW_PERIOD_DAYS - completedDays),
+    ready: completedDays >= SHADOW_PERIOD_DAYS,
+  }
+}
+
 export function defaultGmvMaxPolicy(campaignId: string): GmvMaxPolicy {
   return {
     campaignId,

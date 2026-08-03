@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { gmvMaxDecimal } from './optimizer'
+import { getGmvMaxShadowReadiness, gmvMaxDecimal } from './optimizer'
 import type {
   GmvMaxCampaign,
   GmvMaxCreativeInsight,
@@ -244,8 +244,7 @@ export function buildGmvMaxPortfolioPlans(input: {
     const evidenceAligned = Boolean(donorEvidenceEndDate && donorEvidenceEndDate === receiverEvidenceEndDate)
     const status = permissionsReady && projectedProfitDelta > 0n && evidenceAligned ? 'proposed' : 'blocked'
     const shadowComplete = [donor.policy, receiver.policy].every((policy) => !policy.shadowMode
-      && policy.shadowStartedAt !== undefined
-      && analyzedAt - policy.shadowStartedAt >= 7 * 24 * 60 * 60 * 1000)
+      && getGmvMaxShadowReadiness(policy, analyzedAt).ready)
     const autoExecutable = status === 'proposed'
       && shadowComplete
       && donor.policy.automationEnabled && receiver.policy.automationEnabled

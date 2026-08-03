@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
-import { evaluateGmvMaxCampaign, defaultGmvMaxPolicy } from '../src/main/modules/tiktok-gmv-max/optimizer'
+import { evaluateGmvMaxCampaign, defaultGmvMaxPolicy, getGmvMaxShadowReadiness, resolveGmvMaxShadowStartedAt } from '../src/main/modules/tiktok-gmv-max/optimizer'
 import { GMV_MAX_CAPABILITY_TOOLS, GMV_MAX_REQUIRED_TOOLS, type GmvMaxCampaign, type GmvMaxDailyMetric, type GmvMaxPolicyPreset, type GmvMaxProductInsight } from '../src/main/modules/tiktok-gmv-max/types'
 import { validateGmvMaxOAuthCallback } from '../src/main/modules/tiktok-gmv-max/oauth'
 import { createGmvMaxMcpClient, parseGmvMaxMcpContent } from '../src/main/modules/tiktok-gmv-max/mcpClient'
@@ -75,6 +75,41 @@ function evaluate(preset: GmvMaxPolicyPreset, direction: 'high' | 'low', type: '
 }
 
 async function main() {
+  const legacyShadowPolicy = {
+    ...defaultGmvMaxPolicy('legacy-shadow-policy'),
+    shadowStartedAt: undefined,
+    updatedAt: now - 8 * 24 * 60 * 60 * 1000,
+  }
+  assert.equal(resolveGmvMaxShadowStartedAt(legacyShadowPolicy, now), legacyShadowPolicy.updatedAt)
+  assert.deepEqual(getGmvMaxShadowReadiness(legacyShadowPolicy, now), {
+    shadowStartedAt: legacyShadowPolicy.updatedAt,
+    completedDays: 8,
+    remainingDays: 0,
+    ready: true,
+  })
+  const incompleteShadowPolicy = {
+    ...defaultGmvMaxPolicy('incomplete-shadow-policy'),
+    shadowStartedAt: now - 2 * 24 * 60 * 60 * 1000,
+    updatedAt: now,
+  }
+  assert.deepEqual(getGmvMaxShadowReadiness(incompleteShadowPolicy, now), {
+    shadowStartedAt: incompleteShadowPolicy.shadowStartedAt,
+    completedDays: 2,
+    remainingDays: 1,
+    ready: false,
+  })
+  const completeShadowPolicy = {
+    ...defaultGmvMaxPolicy('complete-shadow-policy'),
+    shadowStartedAt: now - 3 * 24 * 60 * 60 * 1000,
+    updatedAt: now,
+  }
+  assert.deepEqual(getGmvMaxShadowReadiness(completeShadowPolicy, now), {
+    shadowStartedAt: completeShadowPolicy.shadowStartedAt,
+    completedDays: 3,
+    remainingDays: 0,
+    ready: true,
+  })
+
   const remoteState = parseGmvMaxRemoteCampaignState({ data: { campaign: { budget: '0100.00', roas_bid: '2.5000', operation_status: 'ACTIVE' } }, status: 'success' })
   assert.deepEqual(remoteState, { budget: '100', roasBid: '2.5', operationStatus: 'ACTIVE' })
   assert.doesNotThrow(() => assertGmvMaxRemoteCampaignState({ actionType: 'budget', actual: remoteState, expectedBudget: '100.0', expectedRoasBid: '2.50', phase: 'before' }))
@@ -1005,8 +1040,8 @@ async function main() {
     storeId: baseCampaign.storeId,
     campaigns: [donorCampaign, receiverCampaign],
     policies: {
-      [donorCampaign.id]: { ...basePolicy, campaignId: donorCampaign.id, budgetPermission: true, automationEnabled: true, pilotEnabled: true, shadowMode: false, shadowStartedAt: now - 8 * 24 * 60 * 60 * 1000 },
-      [receiverCampaign.id]: { ...basePolicy, campaignId: receiverCampaign.id, budgetPermission: true, automationEnabled: true, pilotEnabled: true, shadowMode: false, shadowStartedAt: now - 8 * 24 * 60 * 60 * 1000 },
+      [donorCampaign.id]: { ...basePolicy, campaignId: donorCampaign.id, budgetPermission: true, automationEnabled: true, pilotEnabled: true, shadowMode: false, shadowStartedAt: now - 3 * 24 * 60 * 60 * 1000 },
+      [receiverCampaign.id]: { ...basePolicy, campaignId: receiverCampaign.id, budgetPermission: true, automationEnabled: true, pilotEnabled: true, shadowMode: false, shadowStartedAt: now - 3 * 24 * 60 * 60 * 1000 },
     },
     learning: {
       [donorCampaign.id]: { ...decliningLifecycle, campaignId: donorCampaign.id, stage: 'declining', score: 25, confidence: 80 },
@@ -1189,7 +1224,7 @@ async function main() {
   assert.equal(evaluateGmvMaxCreativeRotationPlan({ campaign: baseCampaign, policy: basePolicy, profitGuard: lifecycleGuard, lifecycle: scalingLifecycle, insights: fatigueInsight, assets: [replacementAsset], listEntries: [{ id: 'protect-fatigue', storeId: baseCampaign.storeId, entityType: 'creative', entityId: 'fatigue-video', mode: 'allow', updatedAt: now }], now }).length, 0)
   const supplyPlans = evaluateGmvMaxCreativeRotationPlan({
     campaign: baseCampaign,
-    policy: { ...basePolicy, automationEnabled: true, pilotEnabled: true, shadowMode: false, shadowStartedAt: now - 8 * 24 * 60 * 60 * 1000, creativePermission: true, creativeTestBudget: '50' },
+    policy: { ...basePolicy, automationEnabled: true, pilotEnabled: true, shadowMode: false, shadowStartedAt: now - 3 * 24 * 60 * 60 * 1000, creativePermission: true, creativeTestBudget: '50' },
     profitGuard: lifecycleGuard,
     lifecycle: { ...validationLifecycle, stage: 'validation', confidence: 75 },
     insights: [], assets: [replacementAsset], listEntries: [], now,

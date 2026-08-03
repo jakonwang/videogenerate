@@ -388,7 +388,8 @@
     }
   },
   "gmvMaxRuntime": {
-    "workspaceTimeout": "SOP 数据刷新超时，已保留当前数据。请稍后重试。"
+    "workspaceTimeout": "SOP 数据刷新超时，已保留当前数据。请稍后重试。",
+    "shadowDaysRequired": "影子运行已完成 {completed} 天，还需 {remaining} 天后才能启用正式自动执行。"
   },
   "gmvMaxIssueResolutions": {
     "severity": {

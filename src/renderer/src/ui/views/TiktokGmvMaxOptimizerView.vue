@@ -4962,6 +4962,13 @@ async function runAction(
 
 function readableError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
+  const shadowDays = message.match(/GMV_MAX_SHADOW_DAYS_REQUIRED:(\d+):(\d+)/i);
+  if (shadowDays) {
+    return t("gmvMaxRuntime.shadowDaysRequired", {
+      completed: Number(shadowDays[1]),
+      remaining: Number(shadowDays[2]),
+    });
+  }
   if (/Hero SKU is required/i.test(message)) return t("gmvMaxSop.start.hint");
   if (/campaign does not exist/i.test(message))
     return t("gmvMaxSop.errors.campaignRequired");
@@ -5322,14 +5329,15 @@ function rejectPortfolio(id: string) {
   );
 }
 
-function savePolicy(campaignId: string) {
+async function savePolicy(campaignId: string) {
   const draft = policyDrafts.value[campaignId];
   if (!draft) return;
-  void runAction(
+  const saved = await runAction(
     `policy:${campaignId}`,
     () => window.api.tiktokGmvMax.savePolicy({ ...draft }),
     t("gmvMax.messages.policySaved"),
   );
+  if (saved) closeDrawer();
 }
 
 function saveStoreCost(storeId: string) {
@@ -14840,10 +14848,7 @@ onUnmounted(() => {
                 {{ t("gmvMax.actions.reject") }}</button
               ><button
                 class="gmv-button gmv-button--primary"
-                @click="
-                  savePolicy(selectedPolicyCampaign.id);
-                  closeDrawer();
-                "
+                @click="savePolicy(selectedPolicyCampaign.id)"
               >
                 <Save class="gmv-icon" />{{ t("gmvMax.actions.save") }}
               </button>

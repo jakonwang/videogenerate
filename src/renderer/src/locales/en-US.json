@@ -388,7 +388,8 @@
     }
   },
   "gmvMaxRuntime": {
-    "workspaceTimeout": "The SOP refresh timed out. Current data was preserved. Try again shortly."
+    "workspaceTimeout": "The SOP refresh timed out. Current data was preserved. Try again shortly.",
+    "shadowDaysRequired": "Shadow mode has completed {completed} day(s). {remaining} more day(s) are required before live automation can be enabled."
   },
   "gmvMaxIssueResolutions": {
     "severity": {
