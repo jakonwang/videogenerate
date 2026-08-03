@@ -25,7 +25,7 @@ import { buildGmvMaxVideoIdentity, resolveGmvMaxCreativeAsset } from '../src/mai
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from '../src/main/modules/tiktok-gmv-max/automation'
 import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, parseGmvMaxRemoteCampaignState } from '../src/main/modules/tiktok-gmv-max/executionState'
 import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery } from '../src/main/modules/tiktok-gmv-max/creativeContract'
-import { buildGmvMaxSessionToolCall, buildGmvMaxSessionWindow, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from '../src/main/modules/tiktok-gmv-max/sessionContract'
+import { buildGmvMaxSessionToolCall, buildGmvMaxSessionWindow, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, isUnsupportedGmvMaxSessionAction, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from '../src/main/modules/tiktok-gmv-max/sessionContract'
 import { assertGmvMaxPortfolioEvidenceFresh, previousCompleteDate } from '../src/main/modules/tiktok-gmv-max/portfolioFreshness'
 import { mergeGmvMaxAccountMetadata, resolveGmvMaxAccountMetadata, resolveGmvMaxAccountMetadataRequest } from '../src/main/modules/tiktok-gmv-max/accountMetadata'
 import { convertGmvMaxMoneyToCny, createGmvMaxExchangeRateLoader, fetchGmvMaxCnyExchangeRate, normalizeGmvMaxExchangeRate, parseGmvMaxExchangeRate } from '../src/main/modules/tiktok-gmv-max/exchangeRate'
@@ -264,6 +264,8 @@ async function main() {
   })
   assert.deepEqual(continuousSessionCall.args.session, { bid_type: 'CREATIVE_NO_BID', product_list: [{ spu_id: 'product-1' }], item_id: 'video-1', item_identity: { 'video-1': { identity_id: 'identity-1', identity_type: 'AUTH_CODE' } }, budget: 10, schedule_type: 'SCHEDULE_FROM_NOW' })
   assert.throws(() => buildGmvMaxSessionToolCall({ advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign, actionPayload: { operation: 'create', creativeId: 'product-card:product-1', itemId: '-1', spuId: 'product-1', budget: '10', scheduleType: 'SCHEDULE_FROM_NOW' } }), /GMV_MAX_SESSION_ITEM_UNSUPPORTED/)
+  assert.equal(isUnsupportedGmvMaxSessionAction({ creativeId: 'product-card:product-1', itemId: '-1' }), true)
+  assert.equal(isUnsupportedGmvMaxSessionAction({ creativeId: 'video-1', itemId: 'video-1' }), false)
   assert.throws(() => buildGmvMaxSessionToolCall({ advertiserId: 'advertiser-1', storeId: 'store-1', campaign: sessionCampaign, actionPayload: { operation: 'create', itemId: 'video-1', spuId: 'product-1', budget: '10', scheduleType: 'SCHEDULE_FROM_NOW' } }), /GMV_MAX_SESSION_IDENTITY_REQUIRED/)
   const identityAssets = [
     { id: 'video-asset', storeId: 'store-1', creativeId: 'video-1', kind: 'video' as const, raw: { item_id: 'video-1', identity_info: { identity_id: 'identity-1', identity_type: 'BC_AUTH_TT' } }, syncedAt: now },

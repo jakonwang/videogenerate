@@ -47,6 +47,12 @@ export function isGmvMaxSessionInputRejection(message: unknown) {
   return /campaign_gmv_max_session_(?:create|update).*code=40002|GMV_MAX_SESSION_(?:ITEM_UNSUPPORTED|IDENTITY_REQUIRED)/i.test(valueText(message))
 }
 
+export function isUnsupportedGmvMaxSessionAction(actionPayload: Record<string, unknown> | undefined) {
+  const payload = actionPayload || {}
+  const itemId = valueText(payload.itemId || payload.item_id)
+  return itemId === '-1' || valueText(payload.creativeId).startsWith('product-card:')
+}
+
 export function enrichGmvMaxSessionActionIdentity(
   actionPayload: Record<string, unknown>,
   assets: GmvMaxCreativeAsset[],
@@ -121,7 +127,7 @@ export function buildGmvMaxSessionToolCall(input: {
   }
   if (operation !== 'create') throw new Error(`Unsupported TikTok session operation: ${operation}`)
   if (input.campaign.campaignType !== 'PRODUCT') throw new Error('Creative boost sessions are only enabled for Product GMV MAX campaigns.')
-  if (itemId === '-1' || valueText(input.actionPayload.creativeId).startsWith('product-card:')) throw new Error('GMV_MAX_SESSION_ITEM_UNSUPPORTED')
+  if (isUnsupportedGmvMaxSessionAction(input.actionPayload)) throw new Error('GMV_MAX_SESSION_ITEM_UNSUPPORTED')
   if (!itemId || !spuId) throw new Error('TikTok creative boost session requires one item and one SPU.')
   if (!identityId || !identityType) throw new Error('GMV_MAX_SESSION_IDENTITY_REQUIRED')
   return {

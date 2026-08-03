@@ -24,7 +24,7 @@ import { evaluateGmvMaxDecision, resolveGmvMaxDecisionRules } from './decisionEn
 import { buildGmvMaxRoiUnlockExperiment, evaluateGmvMaxRoiUnlockExperiment } from './experimentEngine'
 import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, parseGmvMaxRemoteCampaignState } from './executionState'
 import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery, type GmvMaxCreativeTarget } from './creativeContract'
-import { buildGmvMaxSessionToolCall, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from './sessionContract'
+import { buildGmvMaxSessionToolCall, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, isUnsupportedGmvMaxSessionAction, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from './sessionContract'
 import { assertGmvMaxPortfolioEvidenceFresh } from './portfolioFreshness'
 import { gmvMaxRepo } from './sqlite'
 import { sendHermesMessage } from '../hermes/messaging'
@@ -879,6 +879,24 @@ function latestExecutedAt(campaignId: string) {
   return gmvMaxRepo.listRecommendations()
     .filter((item) => item.campaignId === campaignId && item.status === 'executed')
     .reduce((latest, item) => Math.max(latest, Number(item.executedAt || 0)), 0) || undefined
+}
+
+function expireUnsupportedSessionRecommendations(now = Date.now()) {
+  for (const recommendation of gmvMaxRepo.listRecommendations()) {
+    if (recommendation.actionType !== 'session'
+      || !['pending', 'approved', 'failed'].includes(recommendation.status)
+      || !isUnsupportedGmvMaxSessionAction(recommendation.actionPayload)) continue
+    gmvMaxRepo.removeActionLock(recommendation.campaignId, 'session')
+    gmvMaxRepo.saveRecommendation({
+      ...recommendation,
+      status: 'expired',
+      retryAllowed: false,
+      platformStateVerified: true,
+      lastError: 'GMV_MAX_SESSION_ITEM_UNSUPPORTED',
+      updatedAt: now,
+    })
+    cancelSopInterventionForRecommendation(recommendation.id, now)
+  }
 }
 
 function policyFor(campaignId: string) {
@@ -3284,6 +3302,7 @@ export const gmvMaxService = {
   },
 
   async getSopWorkspace() {
+    expireUnsupportedSessionRecommendations()
     return await sopWorkspace()
   },
 
@@ -3796,6 +3815,7 @@ export const gmvMaxService = {
 
   async getDashboard(input?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) {
     ensureSchedulerStateLoaded(this.schedulerState)
+    expireUnsupportedSessionRecommendations()
     const connections = gmvMaxRepo.listConnections()
     const campaigns = gmvMaxRepo.listCampaigns()
     const range = dashboardDateRange(input, 7)
@@ -3851,6 +3871,7 @@ export const gmvMaxService = {
   },
 
   async getCampaignWorkspace(input: { campaignId: string; startDate?: string; endDate?: string }) {
+    expireUnsupportedSessionRecommendations()
     const campaignId = text(input?.campaignId)
     const campaign = gmvMaxRepo.listCampaigns().find((item) => item.id === campaignId)
     if (!campaign) throw new Error('GMV MAX campaign does not exist.')
@@ -4045,6 +4066,7 @@ export const gmvMaxService = {
   },
 
   async getActionPage(input?: Parameters<typeof actionPage>[0]) {
+    expireUnsupportedSessionRecommendations()
     return actionPage(input)
   },
 
@@ -4053,6 +4075,7 @@ export const gmvMaxService = {
   },
 
   async getCommandCenter() {
+    expireUnsupportedSessionRecommendations()
     const workspace = await this.getSopWorkspace()
     return buildGmvMaxCommandCenter({
       workspace,
@@ -4817,6 +4840,10 @@ export const gmvMaxService = {
   async approveRecommendation(id: string) {
     const item = gmvMaxRepo.getRecommendation(id)
     if (!item) throw new Error('GMV MAX recommendation does not exist.')
+    if (item.actionType === 'session' && isUnsupportedGmvMaxSessionAction(item.actionPayload)) {
+      expireUnsupportedSessionRecommendations()
+      throw new Error('GMV_MAX_SESSION_ITEM_UNSUPPORTED')
+    }
     if (item.status === 'executed') return item
     if (!['pending', 'approved'].includes(item.status) && !(item.status === 'failed' && item.retryAllowed)) throw new Error(`Recommendation cannot be approved from status ${item.status}.`)
     const now = Date.now()
@@ -4831,6 +4858,7 @@ export const gmvMaxService = {
   },
 
   async approveRecommendations(input: { ids: string[] }) {
+    expireUnsupportedSessionRecommendations()
     if (this.schedulerState.emergencyStopped) throw new Error('GMV MAX write operations are paused by the emergency stop.')
     const ids = [...new Set((input?.ids || []).map((item) => text(item)).filter(Boolean))]
     if (!ids.length || ids.length > 25) throw new Error('Select between 1 and 25 recommendations for batch approval.')
