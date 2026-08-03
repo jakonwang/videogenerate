@@ -46,18 +46,10 @@ export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
   })
   ipcMain.handle('plugin:tiktokGmvMax:getSyncJob', async (_event, payload: { jobId: string }) => await gmvMaxService.getSyncJob(payload))
   ipcMain.handle('plugin:tiktokGmvMax:getSopWorkspace', async () => await gmvMaxService.getSopWorkspace())
-  ipcMain.handle('plugin:tiktokGmvMax:getCommandCenter', async () => {
-    const workspace = await gmvMaxService.getSopWorkspace()
-    const stores = [...new Map(workspace.instances.map((item) => [item.storeId, item.storeName])).entries()].map(([id, name]) => ({ id, name }))
-    return {
-      stores,
-      decisions: workspace.decisions,
-      decisionSummary: workspace.decisionSummary,
-      freshness: workspace.freshnessSummary,
-      latestSyncJob: workspace.latestSyncJob,
-      generatedAt: workspace.generatedAt,
-    }
-  })
+  ipcMain.handle('plugin:tiktokGmvMax:getCoachWorkspace', async () => await gmvMaxService.getCoachWorkspace())
+  ipcMain.handle('plugin:tiktokGmvMax:refreshCoachDecision', async (_event, payload?: Parameters<typeof gmvMaxService.refreshCoachDecision>[0]) => await gmvMaxService.refreshCoachDecision(payload))
+  ipcMain.handle('plugin:tiktokGmvMax:getCoachRun', async (_event, payload: { id: string }) => await gmvMaxService.getCoachRun(String(payload?.id || '')))
+  ipcMain.handle('plugin:tiktokGmvMax:getCommandCenter', async () => await gmvMaxService.getCommandCenter())
   ipcMain.handle('plugin:tiktokGmvMax:runSopAutomation', async (_event, payload?: Parameters<typeof gmvMaxService.runSopAutomation>[0]) => await gmvMaxService.runSopAutomation(payload))
   ipcMain.handle('plugin:tiktokGmvMax:startSop', async (_event, payload: Parameters<typeof gmvMaxService.startSop>[0]) => await gmvMaxService.startSop(payload))
   ipcMain.handle('plugin:tiktokGmvMax:updateSop', async (_event, payload: Parameters<typeof gmvMaxService.updateSop>[0]) => await gmvMaxService.updateSop(payload))

@@ -1494,8 +1494,8 @@ onBeforeUnmount(() => {
 
 .capability-card__icon.is-violet,
 .nav-item__icon {
-  background: rgba(109, 93, 255, 0.16);
-  color: #d8deff;
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent);
 }
 
 .capability-card__icon.is-cyan {
@@ -1589,11 +1589,20 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 24%, var(--theme-border));
+  background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-panel));
+  color: var(--theme-accent);
 }
 
 .nav-item.active {
   border-color: color-mix(in srgb, var(--theme-accent, #14b8a6) 42%, var(--theme-border));
   background: color-mix(in srgb, var(--theme-accent, #14b8a6) 12%, var(--theme-panel-soft));
+}
+
+.nav-item.active .nav-item__icon {
+  border-color: color-mix(in srgb, var(--theme-accent) 52%, var(--theme-border));
+  background: var(--theme-accent-soft);
+  color: var(--theme-control-selected-text);
 }
 
 .nav-item strong {

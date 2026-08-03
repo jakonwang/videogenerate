@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage, screen, crashReporter } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { createReadStream, existsSync } from 'node:fs'
@@ -62,7 +62,10 @@ let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
 let appTray: Tray | null = null
 let isAppQuitting = false
+let rendererRecoveryTimestamps: number[] = []
 const appStartupStartedAt = performance.now()
+const RENDERER_RECOVERY_WINDOW_MS = 60_000
+const MAX_RENDERER_RECOVERIES = 2
 
 function markStartupStage(stage: string, details: Record<string, unknown> = {}) {
   console.log('[startup-performance]', {
@@ -70,6 +73,66 @@ function markStartupStage(stage: string, details: Record<string, unknown> = {}) 
     elapsedMs: Math.round(performance.now() - appStartupStartedAt),
     ...details,
   })
+}
+
+async function persistRendererDiagnostic(event: string, details: Record<string, unknown> = {}) {
+  try {
+    const diagnosticsDir = join(getAppPaths().dataDir, 'diagnostics')
+    await mkdir(diagnosticsDir, { recursive: true })
+    const metrics = app.getAppMetrics().map((metric) => ({
+      pid: metric.pid,
+      type: metric.type,
+      cpuPercent: metric.cpu.percentCPUUsage,
+      workingSetSizeKb: metric.memory.workingSetSize,
+      peakWorkingSetSizeKb: metric.memory.peakWorkingSetSize,
+      privateBytesKb: metric.memory.privateBytes,
+    }))
+    const recordedAt = new Date().toISOString()
+    const payload = JSON.stringify({ recordedAt, event, details, metrics }, null, 2)
+    await Promise.all([
+      writeFile(join(diagnosticsDir, 'renderer-latest.json'), payload, 'utf8'),
+      writeFile(
+        join(diagnosticsDir, `renderer-${Date.now()}.json`),
+        payload,
+        'utf8',
+      ),
+    ])
+  } catch (error) {
+    console.error('[window] failed to persist renderer diagnostic', error)
+  }
+}
+
+function recoverRendererAfterCrash(details: Electron.RenderProcessGoneDetails) {
+  if (isAppQuitting || !mainWindow || mainWindow.isDestroyed()) return
+  if (details.reason === 'clean-exit' || details.reason === 'killed') return
+
+  const now = Date.now()
+  rendererRecoveryTimestamps = rendererRecoveryTimestamps.filter(
+    (timestamp) => now - timestamp < RENDERER_RECOVERY_WINDOW_MS,
+  )
+  if (rendererRecoveryTimestamps.length >= MAX_RENDERER_RECOVERIES) {
+    console.error('[window] renderer recovery limit reached')
+    return
+  }
+
+  rendererRecoveryTimestamps.push(now)
+  const crashedWindow = mainWindow
+  const recoveryUrl = crashedWindow.webContents.getURL()
+  setTimeout(() => {
+    if (isAppQuitting || mainWindow !== crashedWindow) return
+    console.warn('[window] recreating renderer after crash')
+    crashedWindow.destroy()
+    mainWindow = null
+    createWindow(recoveryUrl)
+  }, 750)
+}
+
+function loadRendererContent(window: BrowserWindow, initialUrl = '') {
+  if (initialUrl) return window.loadURL(initialUrl)
+  const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL
+  return devUrl
+    ? window.loadURL(devUrl)
+    : window.loadFile(join(getAppPaths().rendererDist, 'index.html'))
 }
 
 function createTrayIcon() {
@@ -279,7 +342,7 @@ function setupCloneDebugConsoleBridge() {
   }
 }
 
-function createWindow() {
+function createWindow(initialUrl = '') {
   const { preload } = getAppPaths()
   ensureTray()
   const iconCandidates = [
@@ -303,6 +366,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   })
+  const createdWindow = mainWindow
 
   mainWindow.center()
   const revealFallbackTimer = setTimeout(() => {
@@ -321,7 +385,7 @@ function createWindow() {
   })
   mainWindow.on('closed', () => {
     clearTimeout(revealFallbackTimer)
-    mainWindow = null
+    if (mainWindow === createdWindow) mainWindow = null
   })
   mainWindow.webContents.on('did-finish-load', () => {
     clearTimeout(revealFallbackTimer)
@@ -343,20 +407,21 @@ function createWindow() {
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     clearTimeout(revealFallbackTimer)
     console.error('[window] render-process-gone', details)
+    void persistRendererDiagnostic('render-process-gone', { ...details })
     revealMainWindow()
+    recoverRendererAfterCrash(details)
   })
   mainWindow.webContents.on('unresponsive', () => {
     clearTimeout(revealFallbackTimer)
     console.error('[window] renderer unresponsive')
+    void persistRendererDiagnostic('renderer-unresponsive')
     revealMainWindow()
   })
+  mainWindow.webContents.on('responsive', () => {
+    console.info('[window] renderer responsive')
+  })
 
-  const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL
-  if (devUrl) {
-    mainWindow.loadURL(devUrl)
-  } else {
-    mainWindow.loadFile(join(getAppPaths().rendererDist, 'index.html'))
-  }
+  void loadRendererContent(mainWindow, initialUrl)
   markStartupStage('window-created')
 }
 
@@ -1599,6 +1664,16 @@ app.whenReady().then(async () => {
   await migrateLegacyWindowsUserData()
   markStartupStage('legacy-storage-migrated')
   await ensureAppDirs()
+  const crashDumpsDir = join(getAppPaths().dataDir, 'crashDumps')
+  await mkdir(crashDumpsDir, { recursive: true })
+  app.setPath('crashDumps', crashDumpsDir)
+  crashReporter.start({
+    productName: 'VideoGenerate',
+    companyName: 'VideoGenerate',
+    submitURL: '',
+    uploadToServer: false,
+    compress: false,
+  })
   // Keep startup paths ready before renderer IPC requests begin.
   wireIpc()
   await wireMediaProtocol()

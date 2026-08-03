@@ -39,6 +39,8 @@ import type {
   GmvMaxSyncProgress,
   GmvMaxDecisionSnapshot,
   GmvMaxExperiment,
+  GmvMaxProductProfile,
+  GmvMaxCoachRun,
 } from './types'
 
 type Statement = { run(...params: unknown[]): unknown; get(...params: unknown[]): unknown; all(...params: unknown[]): unknown[] }
@@ -82,6 +84,8 @@ CREATE TABLE IF NOT EXISTS gmv_sop_tasks (id TEXT PRIMARY KEY, sop_instance_id T
 CREATE TABLE IF NOT EXISTS gmv_supplemental_metrics (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, stat_date TEXT NOT NULL, source TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_decision_snapshots (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, sop_instance_id TEXT NOT NULL, priority TEXT NOT NULL, evaluated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_experiments (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, sop_instance_id TEXT NOT NULL, state TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS gmv_product_profiles (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, store_id TEXT NOT NULL, product_id TEXT, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS gmv_coach_runs (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, sop_instance_id TEXT, status TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_winner_dna (id TEXT PRIMARY KEY, sop_instance_id TEXT NOT NULL, campaign_id TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_sync_jobs (id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
@@ -108,12 +112,15 @@ CREATE INDEX IF NOT EXISTS idx_gmv_supplemental_campaign_date ON gmv_supplementa
 CREATE INDEX IF NOT EXISTS idx_gmv_decisions_instance_date ON gmv_decision_snapshots(sop_instance_id, evaluated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmv_decisions_priority_date ON gmv_decision_snapshots(priority, evaluated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmv_experiments_instance_state ON gmv_experiments(sop_instance_id, state, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gmv_profiles_campaign_product ON gmv_product_profiles(campaign_id, product_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gmv_coach_runs_campaign_date ON gmv_coach_runs(campaign_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmv_winner_dna_campaign ON gmv_winner_dna(campaign_id, updated_at DESC);
 `
 
 const CREATIVE_RATE_RATIO_MIGRATION = '2026-07-29-creative-rate-ratios'
 const CREATIVE_METRIC_QUERY_COLUMNS_MIGRATION = '2026-07-31-creative-metric-query-columns'
 const CREATIVE_METRIC_AGGREGATE_COLUMNS_MIGRATION = '2026-07-31-creative-metric-aggregate-columns'
+const COACH_TABLES_MIGRATION = '2026-08-03-gmv-coach-tables'
 
 function migrateCreativeRatesToRatios(db: Database) {
   const applied = db.prepare('SELECT id FROM gmv_schema_migrations WHERE id = ?').get(CREATIVE_RATE_RATIO_MIGRATION)
@@ -219,6 +226,23 @@ function migrateCreativeMetricAggregateColumns(db: Database) {
   }
 }
 
+function migrateCoachTables(db: Database) {
+  const applied = db.prepare('SELECT id FROM gmv_schema_migrations WHERE id = ?').get(COACH_TABLES_MIGRATION)
+  if (applied) return
+  db.exec('BEGIN IMMEDIATE;')
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS gmv_product_profiles (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, store_id TEXT NOT NULL, product_id TEXT, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);')
+    db.exec('CREATE TABLE IF NOT EXISTS gmv_coach_runs (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, sop_instance_id TEXT, status TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gmv_profiles_campaign_product ON gmv_product_profiles(campaign_id, product_id, updated_at DESC);')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gmv_coach_runs_campaign_date ON gmv_coach_runs(campaign_id, updated_at DESC);')
+    db.prepare('INSERT INTO gmv_schema_migrations (id, applied_at) VALUES (?, ?)').run(COACH_TABLES_MIGRATION, Date.now())
+    db.exec('COMMIT;')
+  } catch (error) {
+    db.exec('ROLLBACK;')
+    throw error
+  }
+}
+
 function getDatabase() {
   if (database) return database
   const dbDir = getAppPaths().dbDir
@@ -236,6 +260,7 @@ function getDatabase() {
   migrateCreativeRatesToRatios(database)
   migrateCreativeMetricQueryColumns(database)
   migrateCreativeMetricAggregateColumns(database)
+  migrateCoachTables(database)
   return database
 }
 
@@ -909,6 +934,12 @@ export const gmvMaxRepo = {
   listExperiments: () => list<GmvMaxExperiment>('gmv_experiments', 'updated_at DESC'),
   getExperiment(id: string) { const row = getDatabase().prepare('SELECT payload FROM gmv_experiments WHERE id = ?').get(id) as any; return row ? JSON.parse(String(row.payload)) as GmvMaxExperiment : null },
   saveExperiment(item: GmvMaxExperiment) { upsert('gmv_experiments', ['id', 'campaign_id', 'sop_instance_id', 'state', 'updated_at'], [item.id, item.campaignId, item.sopInstanceId, item.state, item.updatedAt], item); return item },
+  listProductProfiles: () => list<GmvMaxProductProfile>('gmv_product_profiles', 'updated_at DESC'),
+  getProductProfile(id: string) { const row = getDatabase().prepare('SELECT payload FROM gmv_product_profiles WHERE id = ?').get(id) as any; return row ? JSON.parse(String(row.payload)) as GmvMaxProductProfile : null },
+  saveProductProfile(item: GmvMaxProductProfile) { upsert('gmv_product_profiles', ['id', 'campaign_id', 'store_id', 'product_id', 'updated_at'], [item.id, item.campaignId, item.storeId, item.productId || '', item.updatedAt], item); return item },
+  listCoachRuns: () => list<GmvMaxCoachRun>('gmv_coach_runs', 'updated_at DESC'),
+  getCoachRun(id: string) { const row = getDatabase().prepare('SELECT payload FROM gmv_coach_runs WHERE id = ?').get(id) as any; return row ? JSON.parse(String(row.payload)) as GmvMaxCoachRun : null },
+  saveCoachRun(item: GmvMaxCoachRun) { upsert('gmv_coach_runs', ['id', 'campaign_id', 'sop_instance_id', 'status', 'updated_at'], [item.id, item.campaignId, item.sopInstanceId || '', item.status, item.updatedAt], item); return item },
   listWinnerDna: () => list<GmvMaxWinnerDna>('gmv_winner_dna'),
   getWinnerDna(id: string) { const row = getDatabase().prepare('SELECT payload FROM gmv_winner_dna WHERE id = ?').get(id) as any; return row ? JSON.parse(String(row.payload)) as GmvMaxWinnerDna : null },
   saveWinnerDna(item: GmvMaxWinnerDna) { upsert('gmv_winner_dna', ['id', 'sop_instance_id', 'campaign_id', 'updated_at'], [item.id, item.sopInstanceId, item.campaignId, item.updatedAt], item); return item },

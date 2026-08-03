@@ -29,6 +29,8 @@ import { assertGmvMaxPortfolioEvidenceFresh } from './portfolioFreshness'
 import { gmvMaxRepo } from './sqlite'
 import { sendHermesMessage } from '../hermes/messaging'
 import { cloneService } from '../clone/service'
+import { cloneRepo } from '../clone/repo'
+import { generateChatCompletion } from '../clone/unifiedChat'
 import { advanceGmvMaxSopInterventionObservation, buildGmvMaxAutomaticSopInstance, buildGmvMaxDailySopTasks, buildGmvMaxMatureAssessment, buildGmvMaxProductDailyMetrics, buildGmvMaxSopAutomationRunId, buildGmvMaxSopInterventionOutcome, buildGmvMaxSopMetricSummary, classifyGmvMaxCreativeGrade, completeEvidenceBackedGmvMaxSopTasks, countGmvMaxObservedDeliveryDays, detectGmvMaxSopTrack, evaluateGmvMaxSopInstance, GMV_MAX_SOP_AUTOMATION_RETRY_MS, GMV_MAX_WINNER_DRAFT_RETRY_MS, planGmvMaxSopAutomation, selectGmvMaxAutomaticSopProductCandidate, shouldCreateGmvMaxSopRollback, shouldRunGmvMaxSopAutomation, supersedeExpiredGmvMaxSopTasks, supersedeGmvMaxSopAutomationTasks } from './sop'
 import { buildGmvMaxSopIssueResolutions, isGmvMaxSopTaskApplicable } from './resolutions'
 import {
@@ -72,7 +74,13 @@ import {
   type GmvMaxExperiment,
   type GmvMaxDecisionRuleConfig,
   type GmvMaxSopTask,
+  type GmvMaxSopInstanceView,
+  type GmvMaxCoachDecision,
+  type GmvMaxCoachRun,
+  type GmvMaxProductProfile,
 } from './types'
+import { buildFallbackCoachDecision, buildGmvMaxProductProfile, coachInputHash, validateCoachDecision } from './coach'
+import { buildGmvMaxCommandCenter } from './commandCenter'
 
 const REPORT_METRICS = ['cost', 'gross_revenue', 'roi', 'orders']
 const executingRecommendationIds = new Set<string>()
@@ -2842,6 +2850,139 @@ function buildSopCreativeVideos(
     }))
 }
 
+function parseCoachJson(content: string) {
+  const normalized = String(content || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const start = normalized.indexOf('{')
+  const end = normalized.lastIndexOf('}')
+  if (start < 0 || end <= start) throw new Error('AI coach response did not contain JSON.')
+  return JSON.parse(normalized.slice(start, end + 1)) as unknown
+}
+
+function coachOutputContract(stage: GmvMaxProductProfile['stage']) {
+  return {
+    diagnosis: 'Non-empty string.',
+    stage,
+    action: 'One of: hold, roi_change, budget_change, profit_protection, creative_test, manual_external.',
+    targetRoi: 'Optional decimal string. Omit when action does not change ROI.',
+    budget: 'Optional decimal string. Omit when action does not change budget.',
+    evidence: [{ metric: 'Non-empty string.', value: 'Non-empty string.', comparison: 'Non-empty string.', meaning: 'Non-empty string.' }],
+    plan: [
+      { day: 1, action: 'Simplified Chinese operation sentence. Do not use enum tokens.', objective: 'Non-empty Simplified Chinese string.', trigger: 'Optional Simplified Chinese string.' },
+      { day: 2, action: 'Simplified Chinese operation sentence. Do not use enum tokens.', objective: 'Non-empty Simplified Chinese string.', trigger: 'Optional Simplified Chinese string.' },
+      { day: 3, action: 'Simplified Chinese operation sentence. Do not use enum tokens.', objective: 'Non-empty Simplified Chinese string.', trigger: 'Optional Simplified Chinese string.' },
+    ],
+    guardrails: ['At least one safety constraint.'],
+  }
+}
+
+function coachPrompt(input: { profile: GmvMaxProductProfile; ruleDecision?: GmvMaxDecisionSnapshot; instance: GmvMaxSopInstanceView; planDate: string }) {
+  return JSON.stringify({
+    task: 'Analyze one GMV MAX product and produce a guarded three-day operating plan.',
+    output: {
+      format: 'Return one JSON object only. Do not use Markdown or omit required fields.',
+      language: 'Write diagnosis, evidence text, plan text, and guardrails in Simplified Chinese. Keep JSON keys and action enum values in English.',
+      contract: coachOutputContract(input.profile.stage),
+    },
+    constraints: {
+      stage: 'Use the supplied stage and do not invent a new stage.',
+      approval: 'All changes require approval. Never claim that a platform write already happened.',
+      changeBudget: { maxRoiDelta: 0.2, maxBudgetIncreasePercent: 20, observationDays: 3 },
+      evidence: 'Use only supplied evidence. Do not infer missing metrics.',
+    },
+    planDate: input.planDate,
+    profile: input.profile,
+    currentRuleDecision: input.ruleDecision || null,
+    currentObject: {
+      id: input.instance.id,
+      campaignName: input.instance.campaignName,
+      productName: input.instance.productName,
+      targetRoi: input.instance.targetRoi,
+      profitFloor: input.instance.profitFloor,
+      metrics: input.instance.metrics,
+      phase: input.instance.phase,
+      matureState: input.instance.matureState,
+      observationDaysRemaining: input.instance.observationDaysRemaining,
+    },
+  })
+}
+
+function coachRepairPrompt(input: { originalPrompt: string; invalidOutput: string; validationError: string; stage: GmvMaxProductProfile['stage'] }) {
+  return JSON.stringify({
+    task: 'Repair the invalid GMV MAX coach response.',
+    instruction: 'Return one complete JSON object only. Preserve valid analysis, add every missing required field, use only supplied input evidence, and write all human-readable text in Simplified Chinese.',
+    validationError: input.validationError,
+    contract: coachOutputContract(input.stage),
+    originalInput: JSON.parse(input.originalPrompt),
+    invalidOutput: input.invalidOutput.slice(0, 12_000),
+  })
+}
+
+async function generateCoachForInstance(instance: GmvMaxSopInstanceView, ruleDecision?: GmvMaxDecisionSnapshot, now = Date.now()) {
+  const metrics = gmvMaxRepo.listMetrics().filter((item) => item.campaignId === instance.campaignId && (!instance.productId || !item.raw?.product_id || String(item.raw.product_id) === instance.productId))
+  const profile = buildGmvMaxProductProfile({
+    campaignId: instance.campaignId,
+    storeId: instance.storeId,
+    productId: instance.productId,
+    productName: instance.productName,
+    metrics,
+    breakEvenRoi: instance.profitFloor,
+    now,
+  })
+  gmvMaxRepo.saveProductProfile(profile)
+  const prompt = coachPrompt({ profile, ruleDecision, instance, planDate: new Date(now).toISOString().slice(0, 10) })
+  const inputHash = coachInputHash(prompt)
+  const runId = createHash('sha256').update(`${instance.id}:${inputHash}`).digest('hex').slice(0, 32)
+  const baseRun: GmvMaxCoachRun = {
+    id: runId,
+    campaignId: instance.campaignId,
+    sopInstanceId: instance.id,
+    productId: instance.productId,
+    inputHash,
+    promptVersion: 'gmv-max-coach-v1',
+    status: 'failed',
+    createdAt: now,
+    updatedAt: now,
+  }
+  let model: string | undefined
+  let rawOutput: string | undefined
+  try {
+    const credentials = await cloneRepo.getCredentials()
+    let response = await generateChatCompletion({
+      credentials,
+      system: 'You are the GMV MAX AI investment coach. Return one strict JSON object that follows the supplied contract and every safety constraint. Write all human-readable content in Simplified Chinese.',
+      prompt,
+      timeoutMs: 60_000,
+    })
+    model = response.model
+    rawOutput = response.content
+    const currentBudget = gmvMaxRepo.listCampaigns().find((item) => item.id === instance.campaignId)?.budget || instance.metrics.spend
+    let decision: GmvMaxCoachDecision
+    try {
+      decision = validateCoachDecision({ value: parseCoachJson(response.content), profile, currentTargetRoi: instance.targetRoi, currentBudget, ruleDecisionId: ruleDecision?.id, now })
+    } catch (error) {
+      const validationError = error instanceof Error ? error.message : String(error)
+      response = await generateChatCompletion({
+        credentials,
+        system: 'Repair the response into one strict JSON object. Write all human-readable content in Simplified Chinese. Do not add Markdown or unsupported facts.',
+        prompt: coachRepairPrompt({ originalPrompt: prompt, invalidOutput: response.content, validationError, stage: profile.stage }),
+        timeoutMs: 60_000,
+      })
+      model = response.model
+      rawOutput = response.content
+      decision = validateCoachDecision({ value: parseCoachJson(response.content), profile, currentTargetRoi: instance.targetRoi, currentBudget, ruleDecisionId: ruleDecision?.id, now })
+    }
+    const run: GmvMaxCoachRun = { ...baseRun, model, rawOutput: rawOutput.slice(0, 12_000), status: 'completed', decision, updatedAt: now }
+    gmvMaxRepo.saveCoachRun(run)
+    return { profile, run, decision }
+  } catch (error) {
+    const errorText = error instanceof Error ? error.message : String(error)
+    const decision = buildFallbackCoachDecision({ profile, ruleDecisionId: ruleDecision?.id, error: errorText, now })
+    const run: GmvMaxCoachRun = { ...baseRun, model, rawOutput: rawOutput?.slice(0, 12_000), status: errorText.includes('AI coach') ? 'invalid' : 'failed', decision, error: errorText, updatedAt: now }
+    gmvMaxRepo.saveCoachRun(run)
+    return { profile, run, decision }
+  }
+}
+
 async function sopWorkspace() {
   recoverInterruptedSyncJobs()
   const storedInstances = gmvMaxRepo.listSopInstances()
@@ -2945,6 +3086,26 @@ async function sopWorkspace() {
   const latestDecisionByInstance = new Map<string, (typeof decisionSnapshots)[number]>()
   for (const item of decisionSnapshots) if (!latestDecisionByInstance.has(item.sopInstanceId)) latestDecisionByInstance.set(item.sopInstanceId, item)
   const latestDecisions = [...latestDecisionByInstance.values()]
+  const storedProfiles = gmvMaxRepo.listProductProfiles()
+  const profileByKey = new Map(storedProfiles.map((item) => [`${item.campaignId}:${item.productId || ''}`, item]))
+  for (const instance of instances) {
+    const key = `${instance.campaignId}:${instance.productId || ''}`
+    if (profileByKey.has(key)) continue
+    const metrics = gmvMaxRepo.listMetrics().filter((item) => item.campaignId === instance.campaignId && (!instance.productId || !item.raw?.product_id || String(item.raw.product_id) === instance.productId))
+    const profile = buildGmvMaxProductProfile({ campaignId: instance.campaignId, storeId: instance.storeId, productId: instance.productId, productName: instance.productName, metrics, breakEvenRoi: instance.profitFloor })
+    gmvMaxRepo.saveProductProfile(profile)
+    profileByKey.set(key, profile)
+  }
+  const productProfiles = [...profileByKey.values()]
+  const coachRuns = gmvMaxRepo.listCoachRuns()
+  const latestCoachByInstance = new Map<string, GmvMaxCoachRun>()
+  for (const item of coachRuns) if (item.sopInstanceId && !latestCoachByInstance.has(item.sopInstanceId)) latestCoachByInstance.set(item.sopInstanceId, item)
+  const coachSummary = {
+    normal: instances.filter((item) => latestCoachByInstance.get(item.id)?.decision?.action === 'hold').length,
+    observing: instances.filter((item) => latestCoachByInstance.get(item.id)?.decision?.stage === 'stable' || latestCoachByInstance.get(item.id)?.decision?.stage === 'recovery').length,
+    actionRequired: instances.filter((item) => ['profit_protection', 'declining'].includes(latestCoachByInstance.get(item.id)?.decision?.stage || '')).length,
+    suggestedActions: [...latestCoachByInstance.values()].filter((item) => item.decision && item.decision.action !== 'hold').length,
+  }
   return {
     instances,
     tasks,
@@ -2972,6 +3133,9 @@ async function sopWorkspace() {
     },
     decisions: latestDecisions,
     experiments,
+    productProfiles,
+    coachRuns,
+    coachSummary,
     decisionSummary: {
       total: latestDecisions.length,
       p0: latestDecisions.filter((item) => item.priority === 'P0').length,
@@ -3066,6 +3230,36 @@ export const gmvMaxService = {
 
   async getSopWorkspace() {
     return await sopWorkspace()
+  },
+
+  async getCoachWorkspace() {
+    const workspace = await sopWorkspace()
+    const latestRuns = new Map<string, GmvMaxCoachRun>()
+    for (const run of workspace.coachRuns) if (run.sopInstanceId && !latestRuns.has(run.sopInstanceId)) latestRuns.set(run.sopInstanceId, run)
+    return {
+      ...workspace,
+      coachItems: workspace.instances.map((instance) => ({
+        instanceId: instance.id,
+        profile: workspace.productProfiles.find((item) => item.campaignId === instance.campaignId && item.productId === instance.productId),
+        run: latestRuns.get(instance.id),
+      })),
+    }
+  },
+
+  async refreshCoachDecision(input?: { sopInstanceId?: string; force?: boolean }) {
+    await recalculateSop(true)
+    const workspace = await sopWorkspace()
+    const instances = workspace.instances.filter((item) => !input?.sopInstanceId || item.id === text(input.sopInstanceId))
+    const results: Array<{ instanceId: string; profile: GmvMaxProductProfile; run: GmvMaxCoachRun; decision: GmvMaxCoachDecision }> = []
+    for (const instance of instances) {
+      const latest = workspace.decisions.find((item) => item.sopInstanceId === instance.id)
+      results.push({ instanceId: instance.id, ...(await generateCoachForInstance(instance, latest)) })
+    }
+    return { results, generatedAt: Date.now() }
+  },
+
+  async getCoachRun(id: string) {
+    return gmvMaxRepo.getCoachRun(text(id))
   },
 
   async runSopAutomation(input?: { sopInstanceId?: string; force?: boolean }) {
@@ -3801,6 +3995,17 @@ export const gmvMaxService = {
 
   async getOutcomePage(input?: Parameters<typeof outcomePage>[0]) {
     return outcomePage(input)
+  },
+
+  async getCommandCenter() {
+    const workspace = await this.getSopWorkspace()
+    return buildGmvMaxCommandCenter({
+      workspace,
+      recommendations: gmvMaxRepo.listRecommendations(),
+      outcomes: gmvMaxRepo.listActionOutcomes(),
+      campaigns: gmvMaxRepo.listCampaigns(),
+      bindings: gmvMaxRepo.listBindings(),
+    })
   },
 
   async getAuditPage(input?: Parameters<typeof auditPage>[0]) {

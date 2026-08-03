@@ -62,6 +62,92 @@ export type GmvMaxDecisionPriority = 'P0' | 'P1' | 'P2'
 export type GmvMaxDecisionAction = 'collect_data' | 'hold' | 'roi_unlock' | 'stop_scaling' | 'creative_expansion' | 'conversion_repair' | 'product_expansion' | 'auto_budget' | 'max_delivery' | 'profit_protection' | 'rollback_roi'
 export type GmvMaxExperimentState = 'draft' | 'pending_approval' | 'executing' | 'observing' | 'success' | 'failed' | 'neutral' | 'rollback_pending' | 'rolled_back' | 'cancelled'
 
+export type GmvMaxCoachAction = 'hold' | 'roi_change' | 'budget_change' | 'profit_protection' | 'creative_test' | 'manual_external'
+export type GmvMaxCoachRunStatus = 'completed' | 'invalid' | 'failed'
+export type GmvMaxCoachStage = 'new_product' | 'cold_start' | 'stable' | 'declining' | 'recovery' | 'second_scale' | 'scaling' | 'profit_protection'
+
+export type GmvMaxChangeBudget = {
+  maxRoiDelta: string
+  maxBudgetIncreasePercent: string
+  observationDays: number
+}
+
+export type GmvMaxProductProfile = {
+  id: string
+  campaignId: string
+  storeId: string
+  productId?: string
+  productName?: string
+  firstDeliveryDate?: string
+  historicalPeakGmv: string
+  historicalPeakRoi: string
+  recentBaselineGmv: string
+  recentBaselineRoi: string
+  currentGmv: string
+  currentRoi: string
+  breakEvenRoi: string
+  stage: GmvMaxCoachStage
+  stageLabel: string
+  recoveryRate?: string
+  recoveryScore?: string
+  scalePotential?: string
+  budgetUtilization?: string
+  roiTrendPercent?: string
+  stableDays: number
+  anomalyDays: number
+  declineDate?: string
+  recoveryDate?: string
+  restartDate?: string
+  source: 'derived'
+  updatedAt: number
+}
+
+export type GmvMaxCoachEvidence = {
+  metric: string
+  value: string
+  comparison: string
+  meaning: string
+}
+
+export type GmvMaxCoachPlanDay = {
+  day: 1 | 2 | 3
+  action: string
+  objective: string
+  targetRoi?: string
+  budget?: string
+  trigger?: string
+}
+
+export type GmvMaxCoachDecision = {
+  diagnosis: string
+  stage: GmvMaxCoachStage
+  action: GmvMaxCoachAction
+  targetRoi?: string
+  budget?: string
+  evidence: GmvMaxCoachEvidence[]
+  plan: GmvMaxCoachPlanDay[]
+  guardrails: string[]
+  aiAvailable: boolean
+  ruleDecisionId?: string
+  generatedAt: number
+}
+
+export type GmvMaxCoachRun = {
+  id: string
+  campaignId: string
+  sopInstanceId?: string
+  productId?: string
+  inputHash: string
+  model?: string
+  promptVersion: string
+  status: GmvMaxCoachRunStatus
+  decision?: GmvMaxCoachDecision
+  rawOutput?: string
+  error?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export type GmvMaxDecisionRuleConfig = {
   version: string
   highRoiMultiplier: number
@@ -546,7 +632,76 @@ export type GmvMaxSopWorkspace = {
   freshnessSummary: { fresh: number; stale: number; missing: number }
   decisions: GmvMaxDecisionSnapshot[]
   experiments: GmvMaxExperiment[]
+  productProfiles: GmvMaxProductProfile[]
+  coachRuns: GmvMaxCoachRun[]
+  coachSummary: { normal: number; observing: number; actionRequired: number; suggestedActions: number }
   decisionSummary: { total: number; p0: number; p1: number; p2: number; writeBlocked: number; activeExperiments: number }
+  generatedAt: number
+}
+
+export type GmvMaxCommandCenterAction = {
+  id: string
+  source: 'issue' | 'recommendation'
+  campaignId: string
+  sopInstanceId?: string
+  storeId: string
+  storeName: string
+  currency: string
+  campaignName: string
+  productId?: string
+  productName?: string
+  severity: 'must_fix' | 'recommended' | 'observing'
+  category: 'high_risk' | 'high_opportunity' | 'optimization' | 'observing'
+  priority?: GmvMaxDecisionPriority
+  score: number
+  reasonCode: string
+  reason: string
+  actionTarget: GmvMaxSopIssueResolution['actionTarget']
+  currentValue?: string
+  targetValue?: string
+  projectedGmvDelta?: string
+  projectedNetProfitDelta?: string
+  projectionSource: 'modeled' | 'unavailable'
+  confidence?: number
+  status: 'needs_action' | 'pending_approval' | 'failed' | 'blocked' | 'observing' | 'completed'
+  blockedReasons: string[]
+  recommendationId?: string
+  taskId?: string
+  interventionId?: string
+  outcomeId?: string
+  observationDaysRemaining: number
+  evaluatedAt: number
+}
+
+export type GmvMaxCommandCenter = {
+  stores: Array<{ id: string; name: string }>
+  decisions: GmvMaxDecisionSnapshot[]
+  decisionSummary: GmvMaxSopWorkspace['decisionSummary']
+  freshness: GmvMaxSopWorkspace['freshnessSummary']
+  latestSyncJob?: GmvMaxSyncProgress
+  topActions: GmvMaxCommandCenterAction[]
+  actionSummary: {
+    mustFix: number
+    recommended: number
+    observing: number
+    pendingApproval: number
+    failed: number
+    total: number
+  }
+  impactSummaryByCurrency: Array<{
+    currency: string
+    actionCount: number
+    projectedGmvDelta: string
+    projectedNetProfitDelta: string
+  }>
+  resultSummary: {
+    observing: number
+    improved: number
+    stable: number
+    declined: number
+    measured: number
+    waitingData: number
+  }
   generatedAt: number
 }
 

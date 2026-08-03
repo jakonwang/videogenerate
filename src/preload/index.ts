@@ -810,6 +810,9 @@ const api = {
       return () => ipcRenderer.off('plugin:tiktokGmvMax:syncProgress', handler)
     },
     getSopWorkspace: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getSopWorkspace'),
+    getCoachWorkspace: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getCoachWorkspace'),
+    refreshCoachDecision: (payload?: { sopInstanceId?: string; force?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:refreshCoachDecision', payload),
+    getCoachRun: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCoachRun', payload),
     getCommandCenter: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getCommandCenter'),
     runSopAutomation: (payload?: { sopInstanceId?: string; force?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:runSopAutomation', payload),
     startSop: (payload: { campaignId: string; productId?: string; productName?: string; startDate?: string; track?: 'new_product' | 'mature_product' | 'live'; trackOverrideReason?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:startSop', payload),
