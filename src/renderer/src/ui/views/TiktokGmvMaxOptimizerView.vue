@@ -177,6 +177,28 @@ type PacingDiagnostic = {
   dataStable: boolean;
   reason: string;
   evaluatedAt: number;
+  realtimeSignal?: {
+    windowKey: string;
+    windowIndex: 0 | 1 | 2 | 3;
+    elapsedRatio: string;
+    currentCost: string;
+    currentGrossRevenue: string;
+    currentOrders: string;
+    currentRoi: string;
+    baselineCost: string;
+    baselineGrossRevenue: string;
+    baselineOrders: string;
+    baselineRoi: string;
+    spendPaceRatio: string;
+    revenuePaceRatio: string;
+    orderPaceRatio: string;
+    state: string;
+    confirmedState: string;
+    consecutiveSamples: number;
+    confirmationRequired: number;
+    stateConfirmed: boolean;
+    dataFreshness: "fresh" | "stale" | "missing";
+  };
 };
 type Policy = {
   campaignId: string;
@@ -10075,6 +10097,10 @@ onUnmounted(() => {
                       ><small
                         >{{ campaign.pacing.localTime }}
                         {{ campaign.pacing.timezone }}</small
+                      ><small v-if="campaign.pacing.realtimeSignal"
+                        >{{ t("gmvMaxPacing.window") }} {{ campaign.pacing.realtimeSignal.windowIndex + 1 }} · {{ percentage(campaign.pacing.realtimeSignal.elapsedRatio) }} {{ t("gmvMaxPacing.windowProgress") }}</small
+                      ><small v-if="campaign.pacing.realtimeSignal"
+                        >{{ t("gmvMaxPacing.signal") }}: {{ t(`gmvMaxPacing.signalState.${campaign.pacing.realtimeSignal.confirmedState}`) }} · {{ campaign.pacing.realtimeSignal.consecutiveSamples }}/{{ campaign.pacing.realtimeSignal.confirmationRequired }} {{ t("gmvMaxPacing.samplesConfirmed") }}</small
                       ></template
                     ><template v-else>-</template>
                   </td>
@@ -11871,7 +11897,7 @@ onUnmounted(() => {
             </div>
           </section>
           </details>
-          <div class="gmv-rule-grid">
+          <div v-if="dashboard.ruleGroups.length" class="gmv-rule-grid">
             <article
               v-for="group in dashboard.ruleGroups"
               :key="group.id"
@@ -11926,12 +11952,6 @@ onUnmounted(() => {
                 {{ t("gmvMaxConsole.boundCampaigns") }}
               </footer>
             </article>
-            <button
-              class="gmv-rule-card gmv-rule-card--add"
-              @click="openRule()"
-            >
-              <Plus /><span>{{ t("gmvMaxConsole.createRule") }}</span>
-            </button>
           </div>
           <div class="gmv-subheading">
             <div>
@@ -21890,18 +21910,6 @@ onUnmounted(() => {
   margin-top: 12px;
   color: #8b97a8;
   font-size: 10px;
-}
-.gmv-rule-card--add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-style: dashed;
-  color: #8f9bad;
-  cursor: pointer;
-}
-.gmv-rule-card--add svg {
-  width: 20px;
 }
 .gmv-subheading {
   margin: 6px 0 10px;

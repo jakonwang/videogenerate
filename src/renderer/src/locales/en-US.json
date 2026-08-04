@@ -1251,6 +1251,20 @@
   "gmvMaxPacing": {
     "allStates": "All Pacing States",
     "actualExpected": "actual / expected",
+    "window": "6-hour window",
+    "windowProgress": "complete",
+    "signal": "Realtime signal",
+    "samplesConfirmed": "samples confirmed",
+    "signalState": {
+      "insufficient_data": "Insufficient data",
+      "stale_data": "Stale data",
+      "single_point_anomaly": "Single-point anomaly, observing",
+      "normal": "Normal",
+      "under_delivery": "Under-delivering",
+      "over_delivery": "Over-delivering",
+      "roi_decay": "ROI decay",
+      "recovering": "Recovering"
+    },
     "state": {
       "normal": "On Pace",
       "overspend": "Front-loaded",

@@ -942,6 +942,62 @@ export type GmvMaxRealtimeSample = {
   orders: string
   grossRevenue: string
   syncedAt: number
+  sampledAt?: number
+  localDate?: string
+  localTime?: string
+  windowKey?: string
+  windowIndex?: 0 | 1 | 2 | 3
+  cumulativeCost?: string
+  cumulativeGrossRevenue?: string
+  cumulativeOrders?: string
+  deltaCost?: string
+  deltaGrossRevenue?: string
+  deltaOrders?: string
+  dataFreshness?: 'fresh' | 'stale' | 'invalid'
+}
+
+export type GmvMaxRealtimeWindowSummary = {
+  id: string
+  campaignId: string
+  localDate: string
+  windowKey: string
+  windowIndex: 0 | 1 | 2 | 3
+  sampleCount: number
+  firstSampleAt: number
+  lastSampleAt: number
+  deltaCost: string
+  deltaGrossRevenue: string
+  deltaOrders: string
+  dataFreshness: 'complete' | 'invalid'
+  createdAt: number
+}
+
+export type GmvMaxRealtimeSignalState = 'insufficient_data' | 'stale_data' | 'single_point_anomaly' | 'normal' | 'under_delivery' | 'over_delivery' | 'roi_decay' | 'recovering'
+
+export type GmvMaxRealtimeSignal = {
+  campaignId: string
+  localDate: string
+  windowKey: string
+  windowIndex: 0 | 1 | 2 | 3
+  elapsedRatio: string
+  currentCost: string
+  currentGrossRevenue: string
+  currentOrders: string
+  currentRoi: string
+  baselineCost: string
+  baselineGrossRevenue: string
+  baselineOrders: string
+  baselineRoi: string
+  spendPaceRatio: string
+  revenuePaceRatio: string
+  orderPaceRatio: string
+  state: GmvMaxRealtimeSignalState
+  confirmedState: GmvMaxRealtimeSignalState
+  consecutiveSamples: number
+  confirmationRequired: number
+  stateConfirmed: boolean
+  dataFreshness: 'fresh' | 'stale' | 'missing'
+  evaluatedAt: number
 }
 
 export type GmvMaxPacingState = 'normal' | 'overspend' | 'underspend' | 'unstable'
@@ -962,6 +1018,7 @@ export type GmvMaxPacingDiagnostic = {
   dataStable: boolean
   reason: 'insufficient_samples' | 'sample_date_mismatch' | 'metrics_regressed' | 'sample_interval_invalid' | 'ahead_of_curve' | 'behind_curve' | 'within_curve'
   evaluatedAt: number
+  realtimeSignal?: GmvMaxRealtimeSignal
 }
 
 export type GmvMaxRuleGroup = {

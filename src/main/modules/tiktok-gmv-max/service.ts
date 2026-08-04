@@ -18,7 +18,7 @@ import { convertGmvMaxMoneyToCny, createGmvMaxExchangeRateLoader, parseGmvMaxExc
 import { buildGmvMaxStrategyCalibrations } from './calibration'
 import { analyzeGmvMaxProductIntelligence } from './productIntelligence'
 import { resolveGmvMaxProductCostScope, validateGmvMaxCostInput, validateGmvMaxOptionalCostInput, validateGmvMaxProductSellingPrice } from './costValidation'
-import { buildGmvMaxVideoIdentity, resolveGmvMaxCreativeAsset } from './creativeAssets'
+import { buildGmvMaxVideoIdentity, extractGmvMaxCampaignIdentityRows, mergeGmvMaxIdentityRows, resolveGmvMaxCreativeAsset } from './creativeAssets'
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from './automation'
 import { evaluateGmvMaxDecision, resolveGmvMaxDecisionRules } from './decisionEngine'
 import { buildGmvMaxRoiUnlockExperiment, evaluateGmvMaxRoiUnlockExperiment } from './experimentEngine'
@@ -26,6 +26,8 @@ import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, pars
 import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery, type GmvMaxCreativeTarget } from './creativeContract'
 import { buildGmvMaxSessionToolCall, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, isUnsupportedGmvMaxSessionAction, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from './sessionContract'
 import { assertGmvMaxPortfolioEvidenceFresh } from './portfolioFreshness'
+import { buildGmvMaxRealtimeDeltas, buildGmvMaxRealtimeWindowSummary, getGmvMaxSixHourWindow } from './realtimeWindow'
+import { evaluateGmvMaxRealtimeSignal } from './realtimeSignals'
 import { gmvMaxRepo } from './sqlite'
 import { sendHermesMessage } from '../hermes/messaging'
 import { cloneService } from '../clone/service'
@@ -89,6 +91,7 @@ const actionLocks = new Set<string>()
 const syncJobs = new Map<GmvMaxSyncAction, Promise<unknown>>()
 const CREATIVE_VERIFICATION_TIMEOUT_MS = 2 * 60 * 60_000
 const SESSION_VERIFICATION_TIMEOUT_MS = 60 * 60_000
+const REALTIME_RAW_RETENTION_MS = 14 * 24 * 60 * 60_000
 let schedulerStateLoaded = false
 let sopRecalculationPromise: Promise<void> | undefined
 let sopRecalculationRequested = false
@@ -136,6 +139,45 @@ function recoverInterruptedSyncJobs(now = Date.now()) {
 
 function hash(...parts: unknown[]) {
   return createHash('sha256').update(parts.map((item) => String(item ?? '')).join(':')).digest('hex').slice(0, 32)
+}
+
+function compactExpiredRealtimeSamples(now = Date.now()) {
+  const cutoff = now - REALTIME_RAW_RETENTION_MS
+  const expired = gmvMaxRepo.listRealtimeSamples().filter((sample) => sample.syncedAt < cutoff)
+  const groups = new Map<string, typeof expired>()
+  for (const sample of expired) {
+    if (!sample.campaignId || !sample.localDate || !sample.windowKey || sample.windowIndex === undefined) continue
+    const key = `${sample.campaignId}:${sample.localDate}:${sample.windowKey}`
+    const current = groups.get(key) || []
+    current.push(sample)
+    groups.set(key, current)
+  }
+  let summariesSaved = 0
+  for (const samples of groups.values()) {
+    const summary = buildGmvMaxRealtimeWindowSummary(samples)
+    if (!summary) continue
+    gmvMaxRepo.saveRealtimeWindowSummary({
+      ...summary,
+      id: hash('realtime-window', summary.campaignId, summary.localDate, summary.windowKey),
+      createdAt: now,
+    })
+    summariesSaved += 1
+  }
+  const samplesRemoved = gmvMaxRepo.removeRealtimeSamplesBefore(cutoff)
+  return { cutoff, samplesRemoved, summariesSaved }
+}
+
+function realtimeHistoricalSummaries(campaignId: string, localDate: string) {
+  const samples = gmvMaxRepo.listRealtimeSamples(campaignId).filter((sample) => sample.localDate && sample.windowKey && sample.windowIndex !== undefined && sample.localDate !== localDate)
+  const groups = new Map<string, typeof samples>()
+  for (const sample of samples) {
+    const key = `${sample.localDate}:${sample.windowKey}`
+    const group = groups.get(key) || []
+    group.push(sample)
+    groups.set(key, group)
+  }
+  const summaries = [...groups.values()].map((group) => buildGmvMaxRealtimeWindowSummary(group)).filter((item): item is NonNullable<typeof item> => Boolean(item))
+  return summaries.map((item) => ({ ...item, id: hash('realtime-window-memory', item.campaignId, item.localDate, item.windowKey), createdAt: Date.now() }))
 }
 
 function repeatedPage(rows: any[], fingerprints: Set<string>) {
@@ -626,9 +668,35 @@ async function syncMetricsForBinding(binding: GmvMaxAccountBinding, campaigns: G
         if (!campaign || !statDate) continue
         const cost = numberText(metrics.cost)
         if (realtime) {
+          const local = zonedDateParts(binding.timezone, now)
+          const window = getGmvMaxSixHourWindow(local.date, local.hour)
+          const previous = gmvMaxRepo.listRealtimeSamples(campaign.id)
+            .filter((item) => item.localDate === local.date && item.windowKey === window.key)
+            .sort((left, right) => (left.sampledAt || left.syncedAt) - (right.sampledAt || right.syncedAt))
+            .at(-1)
+          const cumulative = {
+            cost,
+            grossRevenue: numberText(metrics.gross_revenue),
+            orders: numberText(metrics.orders),
+          }
+          const deltas = buildGmvMaxRealtimeDeltas(cumulative, previous ? {
+            cost: previous.cumulativeCost || previous.cost,
+            grossRevenue: previous.cumulativeGrossRevenue || previous.grossRevenue,
+            orders: previous.cumulativeOrders || previous.orders,
+          } : undefined)
           gmvMaxRepo.saveRealtimeSample({
             id: hash(campaign.id, statDate, now), campaignId: campaign.id, statDate, cost,
-            orders: numberText(metrics.orders), grossRevenue: numberText(metrics.gross_revenue), syncedAt: now,
+            orders: cumulative.orders, grossRevenue: cumulative.grossRevenue, syncedAt: now,
+            sampledAt: now,
+            localDate: local.date,
+            localTime: `${String(local.hour).padStart(2, '0')}:${String(local.minute).padStart(2, '0')}`,
+            windowKey: window.key,
+            windowIndex: window.index,
+            cumulativeCost: cumulative.cost,
+            cumulativeGrossRevenue: cumulative.grossRevenue,
+            cumulativeOrders: cumulative.orders,
+            ...deltas,
+            dataFreshness: deltas.resetDetected ? 'invalid' : 'fresh',
           })
           continue
         }
@@ -746,7 +814,21 @@ async function syncCreativeAssetsForBinding(binding: GmvMaxAccountBinding) {
     }
   } catch (error) { compatibilityAudit(binding, 'gmv_max_identity_get', error) }
 
-  const identityList = identityRows
+  const mergedIdentityRows = mergeGmvMaxIdentityRows([
+    ...identityRows,
+    ...extractGmvMaxCampaignIdentityRows(gmvMaxRepo.listCampaigns(), binding.storeId),
+  ])
+  for (const row of mergedIdentityRows) {
+    const creativeId = text(row.identity_id || row.id)
+    if (!creativeId) continue
+    gmvMaxRepo.saveCreativeAsset({
+      id: hash(binding.storeId, 'identity', creativeId), storeId: binding.storeId,
+      creativeId, kind: 'identity', name: text(row.display_name || row.identity_name || row.name) || undefined,
+      status: text(row.status || row.operation_status) || undefined, raw: row, syncedAt: Date.now(),
+    })
+  }
+
+  const identityList = mergedIdentityRows
     .map((row) => buildGmvMaxVideoIdentity(row, binding.storeId))
     .filter((item) => item.identity_id && item.identity_type)
   const savedVideoIds = new Set<string>()
@@ -1065,7 +1147,7 @@ function pacingDiagnostics(campaigns: GmvMaxCampaign[], now = Date.now()) {
     const binding = bindings.get(campaign.bindingId)
     const timezone = binding?.timezone || 'UTC'
     const local = zonedDateParts(timezone, now)
-    return evaluateGmvMaxPacingDiagnostic({
+    const pacing = evaluateGmvMaxPacingDiagnostic({
       campaign,
       samples: gmvMaxRepo.listRealtimeSamples(campaign.id),
       timezone,
@@ -1074,6 +1156,18 @@ function pacingDiagnostics(campaigns: GmvMaxCampaign[], now = Date.now()) {
       localMinute: local.minute,
       now,
     })
+    const window = getGmvMaxSixHourWindow(local.date, local.hour)
+    const signal = evaluateGmvMaxRealtimeSignal({
+      campaignId: campaign.id,
+      localDate: local.date,
+      windowKey: window.key,
+      windowIndex: window.index,
+      windowStartAt: now - (((local.hour % 6) * 60 + local.minute) * 60_000),
+      now,
+      samples: gmvMaxRepo.listRealtimeSamples(campaign.id),
+      historicalSummaries: [...gmvMaxRepo.listRealtimeWindowSummaries(campaign.id), ...realtimeHistoricalSummaries(campaign.id, local.date)],
+    })
+    return { ...pacing, realtimeSignal: signal }
   })
 }
 
@@ -4224,6 +4318,10 @@ export const gmvMaxService = {
       }
     }
     if (!synchronizedBindings && firstError) throw firstError
+    const compacted = compactExpiredRealtimeSamples()
+    if (compacted.samplesRemoved > 0) {
+      console.info('[GMV MAX] compacted expired realtime samples', compacted)
+    }
     return await this.runRealtimeProtection()
   },
 

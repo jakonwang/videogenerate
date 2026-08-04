@@ -23,6 +23,7 @@ import type {
   GmvMaxNotificationConfig,
   GmvMaxNotificationRecord,
   GmvMaxRealtimeSample,
+  GmvMaxRealtimeWindowSummary,
   GmvMaxCreativeAsset,
   GmvMaxLearningSnapshot,
   GmvMaxActionOutcome,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS gmv_product_costs (id TEXT PRIMARY KEY, store_id TEXT
 CREATE TABLE IF NOT EXISTS gmv_creative_metrics (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, stat_date TEXT NOT NULL, synced_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_creative_assets (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, synced_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_realtime_samples (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, stat_date TEXT NOT NULL, synced_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS gmv_realtime_window_summaries (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, local_date TEXT NOT NULL, window_key TEXT NOT NULL, created_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_rule_groups (id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_rule_bindings (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gmv_list_entries (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
@@ -98,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_gmv_product_costs_store ON gmv_product_costs(stor
 CREATE INDEX IF NOT EXISTS idx_gmv_creative_metrics_campaign_date ON gmv_creative_metrics(campaign_id, stat_date DESC);
 CREATE INDEX IF NOT EXISTS idx_gmv_creative_metrics_normalized_date ON gmv_creative_metrics(substr(stat_date, 1, 10), campaign_id);
 CREATE INDEX IF NOT EXISTS idx_gmv_realtime_campaign_date ON gmv_realtime_samples(campaign_id, stat_date, synced_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gmv_realtime_summary_campaign_window ON gmv_realtime_window_summaries(campaign_id, local_date, window_key);
 CREATE INDEX IF NOT EXISTS idx_gmv_notifications_created ON gmv_notification_records(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmv_learning_campaign_date ON gmv_learning_snapshots(campaign_id, analyzed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gmv_outcomes_campaign_date ON gmv_action_outcomes(campaign_id, measured_at DESC);
@@ -119,6 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_gmv_winner_dna_campaign ON gmv_winner_dna(campaig
 
 const CREATIVE_RATE_RATIO_MIGRATION = '2026-07-29-creative-rate-ratios'
 const CREATIVE_METRIC_QUERY_COLUMNS_MIGRATION = '2026-07-31-creative-metric-query-columns'
+const REALTIME_WINDOW_SUMMARY_MIGRATION = '2026-08-04-realtime-window-summaries'
 const CREATIVE_METRIC_AGGREGATE_COLUMNS_MIGRATION = '2026-07-31-creative-metric-aggregate-columns'
 const COACH_TABLES_MIGRATION = '2026-08-03-gmv-coach-tables'
 
@@ -243,6 +247,21 @@ function migrateCoachTables(db: Database) {
   }
 }
 
+function migrateRealtimeWindowSummaryTables(db: Database) {
+  const applied = db.prepare('SELECT id FROM gmv_schema_migrations WHERE id = ?').get(REALTIME_WINDOW_SUMMARY_MIGRATION)
+  if (applied) return
+  db.exec('BEGIN IMMEDIATE;')
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS gmv_realtime_window_summaries (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, local_date TEXT NOT NULL, window_key TEXT NOT NULL, created_at INTEGER NOT NULL, payload TEXT NOT NULL);')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gmv_realtime_summary_campaign_window ON gmv_realtime_window_summaries(campaign_id, local_date, window_key);')
+    db.prepare('INSERT INTO gmv_schema_migrations (id, applied_at) VALUES (?, ?)').run(REALTIME_WINDOW_SUMMARY_MIGRATION, Date.now())
+    db.exec('COMMIT;')
+  } catch (error) {
+    db.exec('ROLLBACK;')
+    throw error
+  }
+}
+
 function getDatabase() {
   if (database) return database
   const dbDir = getAppPaths().dbDir
@@ -261,6 +280,7 @@ function getDatabase() {
   migrateCreativeMetricQueryColumns(database)
   migrateCreativeMetricAggregateColumns(database)
   migrateCoachTables(database)
+  migrateRealtimeWindowSummaryTables(database)
   return database
 }
 
@@ -755,6 +775,21 @@ export const gmvMaxRepo = {
     return getDatabase().prepare('SELECT payload FROM gmv_realtime_samples WHERE campaign_id = ? ORDER BY synced_at ASC').all(campaignId).map((row: any) => JSON.parse(String(row.payload)) as GmvMaxRealtimeSample)
   },
   saveRealtimeSample(item: GmvMaxRealtimeSample) { upsert('gmv_realtime_samples', ['id', 'campaign_id', 'stat_date', 'synced_at'], [item.id, item.campaignId, item.statDate, item.syncedAt], item); return item },
+  listRealtimeWindowSummaries(campaignId?: string) {
+    const query = campaignId
+      ? 'SELECT payload FROM gmv_realtime_window_summaries WHERE campaign_id = ? ORDER BY local_date ASC, window_key ASC'
+      : 'SELECT payload FROM gmv_realtime_window_summaries ORDER BY local_date ASC, window_key ASC'
+    const rows = campaignId ? getDatabase().prepare(query).all(campaignId) : getDatabase().prepare(query).all()
+    return rows.map((row: any) => JSON.parse(String(row.payload)) as GmvMaxRealtimeWindowSummary)
+  },
+  saveRealtimeWindowSummary(item: GmvMaxRealtimeWindowSummary) {
+    upsert('gmv_realtime_window_summaries', ['id', 'campaign_id', 'local_date', 'window_key', 'created_at'], [item.id, item.campaignId, item.localDate, item.windowKey, item.createdAt], item)
+    return item
+  },
+  removeRealtimeSamplesBefore(cutoff: number) {
+    const result = getDatabase().prepare('DELETE FROM gmv_realtime_samples WHERE synced_at < ?').run(cutoff) as { changes?: number }
+    return Number(result?.changes || 0)
+  },
   listRuleGroups: () => list<GmvMaxRuleGroup>('gmv_rule_groups'),
   saveRuleGroup(item: GmvMaxRuleGroup) { upsert('gmv_rule_groups', ['id', 'updated_at'], [item.id, item.updatedAt], item); return item },
   removeRuleGroup(id: string) { getDatabase().prepare('DELETE FROM gmv_rule_groups WHERE id = ?').run(id); getDatabase().prepare('DELETE FROM gmv_rule_bindings WHERE payload LIKE ?').run(`%\"ruleGroupId\":\"${id}\"%`) },

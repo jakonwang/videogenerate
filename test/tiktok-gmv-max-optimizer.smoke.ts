@@ -21,7 +21,7 @@ import { replayGmvMaxStrategy } from '../src/main/modules/tiktok-gmv-max/backtes
 import { buildGmvMaxStrategyCalibrations } from '../src/main/modules/tiktok-gmv-max/calibration'
 import { analyzeGmvMaxProductIntelligence } from '../src/main/modules/tiktok-gmv-max/productIntelligence'
 import { resolveGmvMaxProductCostScope, validateGmvMaxCostInput, validateGmvMaxOptionalCostInput, validateGmvMaxProductSellingPrice } from '../src/main/modules/tiktok-gmv-max/costValidation'
-import { buildGmvMaxVideoIdentity, resolveGmvMaxCreativeAsset } from '../src/main/modules/tiktok-gmv-max/creativeAssets'
+import { buildGmvMaxVideoIdentity, extractGmvMaxCampaignIdentityRows, mergeGmvMaxIdentityRows, resolveGmvMaxCreativeAsset } from '../src/main/modules/tiktok-gmv-max/creativeAssets'
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from '../src/main/modules/tiktok-gmv-max/automation'
 import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, parseGmvMaxRemoteCampaignState } from '../src/main/modules/tiktok-gmv-max/executionState'
 import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery } from '../src/main/modules/tiktok-gmv-max/creativeContract'
@@ -29,6 +29,8 @@ import { buildGmvMaxSessionToolCall, buildGmvMaxSessionWindow, enrichGmvMaxSessi
 import { assertGmvMaxPortfolioEvidenceFresh, previousCompleteDate } from '../src/main/modules/tiktok-gmv-max/portfolioFreshness'
 import { mergeGmvMaxAccountMetadata, resolveGmvMaxAccountMetadata, resolveGmvMaxAccountMetadataRequest } from '../src/main/modules/tiktok-gmv-max/accountMetadata'
 import { convertGmvMaxMoneyToCny, createGmvMaxExchangeRateLoader, fetchGmvMaxCnyExchangeRate, normalizeGmvMaxExchangeRate, parseGmvMaxExchangeRate } from '../src/main/modules/tiktok-gmv-max/exchangeRate'
+import { buildGmvMaxRealtimeDeltas, buildGmvMaxRealtimeWindowSummary, getGmvMaxSixHourWindow } from '../src/main/modules/tiktok-gmv-max/realtimeWindow'
+import { evaluateGmvMaxRealtimeSignal } from '../src/main/modules/tiktok-gmv-max/realtimeSignals'
 
 const now = Date.UTC(2026, 6, 27, 12, 0, 0)
 
@@ -341,6 +343,63 @@ async function main() {
     identity_type: 'BC_AUTH_TT',
     identity_authorized_bc_id: 'bc-1',
   })
+  const campaignIdentityRows = extractGmvMaxCampaignIdentityRows([
+    {
+      ...campaign(),
+      raw: {
+        campaign: {
+          identity_list: [
+            { identity_id: 'shop-identity', identity_type: 'TTS_TT', store_id: 'store-1' },
+            { identity_id: 'campaign-only-identity', identity_type: 'TTS_TT', store_id: 'store-1' },
+          ],
+        },
+      },
+    },
+    { ...campaign(), id: 'other-store-campaign', storeId: 'store-2', raw: { campaign: { identity_list: [{ identity_id: 'other-store-identity', identity_type: 'TTS_TT' }] } } },
+  ], 'store-1')
+  assert.equal(campaignIdentityRows.length, 2)
+  assert.deepEqual(mergeGmvMaxIdentityRows([
+    { identity_id: 'shop-identity', identity_type: 'TTS_TT', display_name: 'Shop identity' },
+    ...campaignIdentityRows,
+  ]), [
+    { identity_id: 'shop-identity', identity_type: 'TTS_TT', display_name: 'Shop identity', store_id: 'store-1' },
+    { identity_id: 'campaign-only-identity', identity_type: 'TTS_TT', store_id: 'store-1' },
+  ])
+  assert.deepEqual(getGmvMaxSixHourWindow('2026-08-04', 0), { index: 0, key: '2026-08-04:window-1', startHour: 0, endHour: 6 })
+  assert.deepEqual(getGmvMaxSixHourWindow('2026-08-04', 5), { index: 0, key: '2026-08-04:window-1', startHour: 0, endHour: 6 })
+  assert.deepEqual(getGmvMaxSixHourWindow('2026-08-04', 6), { index: 1, key: '2026-08-04:window-2', startHour: 6, endHour: 12 })
+  assert.deepEqual(getGmvMaxSixHourWindow('2026-08-04', 23), { index: 3, key: '2026-08-04:window-4', startHour: 18, endHour: 24 })
+  assert.deepEqual(buildGmvMaxRealtimeDeltas({ cost: '250', grossRevenue: '900', orders: '8' }, { cost: '100', grossRevenue: '400', orders: '3' }), {
+    deltaCost: '150', deltaGrossRevenue: '500', deltaOrders: '5', resetDetected: false,
+  })
+  assert.deepEqual(buildGmvMaxRealtimeDeltas({ cost: '90', grossRevenue: '300', orders: '2' }, { cost: '100', grossRevenue: '400', orders: '3' }), {
+    deltaCost: '90', deltaGrossRevenue: '300', deltaOrders: '2', resetDetected: true,
+  })
+  const realtimeSummary = buildGmvMaxRealtimeWindowSummary([
+    { id: 'sample-1', campaignId: 'campaign-one', statDate: '2026-08-04', syncedAt: now - 2, sampledAt: now - 2, localDate: '2026-08-04', localTime: '08:00', windowKey: '2026-08-04:window-2', windowIndex: 1, cost: '12', grossRevenue: '30', orders: '2', deltaCost: '5', deltaGrossRevenue: '12', deltaOrders: '1', dataFreshness: 'fresh' },
+    { id: 'sample-2', campaignId: 'campaign-one', statDate: '2026-08-04', syncedAt: now - 1, sampledAt: now - 1, localDate: '2026-08-04', localTime: '09:00', windowKey: '2026-08-04:window-2', windowIndex: 1, cost: '17', grossRevenue: '44', orders: '3', deltaCost: '7', deltaGrossRevenue: '18', deltaOrders: '2', dataFreshness: 'fresh' },
+  ])
+  assert.equal(realtimeSummary?.sampleCount, 2)
+  assert.equal(realtimeSummary?.deltaCost, '12')
+  assert.equal(realtimeSummary?.deltaGrossRevenue, '30')
+  assert.equal(realtimeSummary?.deltaOrders, '3')
+  assert.equal(buildGmvMaxRealtimeWindowSummary([{ id: 'legacy', campaignId: 'campaign-one', statDate: '2026-08-04', syncedAt: now, cost: '1', grossRevenue: '1', orders: '1' }]), null)
+  const signalSamples = [1, 2, 3].map((index) => ({
+    id: `signal-${index}`, campaignId: 'campaign-one', statDate: '2026-08-04', syncedAt: now + index * 60_000, sampledAt: now + index * 60_000,
+    localDate: '2026-08-04', localTime: `08:0${index}`, windowKey: '2026-08-04:window-2', windowIndex: 1 as const,
+    cost: String(index * 10), grossRevenue: String(index * 20), orders: String(index), deltaCost: '10', deltaGrossRevenue: '20', deltaOrders: '1', dataFreshness: 'fresh' as const,
+  }))
+  const signal = evaluateGmvMaxRealtimeSignal({
+    campaignId: 'campaign-one', localDate: '2026-08-04', windowKey: '2026-08-04:window-2', windowIndex: 1,
+    windowStartAt: now - 60 * 60_000, now: now + 3 * 60_000, samples: signalSamples,
+    historicalSummaries: [
+      { id: 'history-1', campaignId: 'campaign-one', localDate: '2026-08-03', windowKey: '2026-08-03:window-2', windowIndex: 1, sampleCount: 12, firstSampleAt: now - 86_400_000, lastSampleAt: now - 86_300_000, deltaCost: '100', deltaGrossRevenue: '200', deltaOrders: '10', dataFreshness: 'complete', createdAt: now - 86_000_000 },
+    ],
+  })
+  assert.equal(signal.state, 'normal')
+  assert.equal(signal.currentCost, '30')
+  assert.equal(signal.baselineRoi, '2')
+  assert.equal(signal.dataFreshness, 'fresh')
 
   const roiGuardUp = evaluate('roi_guard', 'high')
   assert.equal(roiGuardUp?.proposedBudget, '110')
@@ -1778,7 +1837,7 @@ async function main() {
     assert.ok(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'gmv_optimization_runs'").get())
     assert.ok(database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_gmv_metrics_normalized_date'").get())
     assert.ok(database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_gmv_creative_metrics_normalized_date'").get())
-    for (const table of ['gmv_store_costs', 'gmv_product_costs', 'gmv_creative_metrics', 'gmv_creative_assets', 'gmv_realtime_samples', 'gmv_rule_groups', 'gmv_list_entries', 'gmv_session_snapshots', 'gmv_action_locks', 'gmv_backtest_results', 'gmv_notification_records', 'gmv_learning_snapshots', 'gmv_action_outcomes', 'gmv_creative_insights', 'gmv_portfolio_plans', 'gmv_runtime_state']) {
+    for (const table of ['gmv_store_costs', 'gmv_product_costs', 'gmv_creative_metrics', 'gmv_creative_assets', 'gmv_realtime_samples', 'gmv_realtime_window_summaries', 'gmv_rule_groups', 'gmv_list_entries', 'gmv_session_snapshots', 'gmv_action_locks', 'gmv_backtest_results', 'gmv_notification_records', 'gmv_learning_snapshots', 'gmv_action_outcomes', 'gmv_creative_insights', 'gmv_portfolio_plans', 'gmv_runtime_state']) {
       assert.ok(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table), table)
     }
     database.close()

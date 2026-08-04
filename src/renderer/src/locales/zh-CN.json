@@ -1243,6 +1243,20 @@
   "gmvMaxPacing": {
     "allStates": "全部流速状态",
     "actualExpected": "实际 / 预期",
+    "window": "六小时窗口",
+    "windowProgress": "已完成",
+    "signal": "实时判断",
+    "samplesConfirmed": "样本确认",
+    "signalState": {
+      "insufficient_data": "数据不足",
+      "stale_data": "数据过期",
+      "single_point_anomaly": "单点异常，继续观察",
+      "normal": "正常",
+      "under_delivery": "低于预期交付",
+      "over_delivery": "高于预期交付",
+      "roi_decay": "ROI 衰退",
+      "recovering": "恢复中"
+    },
     "state": {
       "normal": "流速正常",
       "overspend": "提前透支",
