@@ -27,6 +27,7 @@ const router = createRouter({
         { path: 'plugins/geelark-publisher', name: 'plugin-geelark-publisher', component: () => import('@/ui/views/GeelarkPublisherView.vue') },
         { path: 'plugins/live-photo-generator', name: 'plugin-live-photo-generator', component: () => import('@/ui/views/LivePhotoGeneratorView.vue') },
         { path: 'plugins/product-image-materials', name: 'plugin-product-image-materials', component: () => import('@/ui/views/ProductImageMaterialsView.vue') },
+        { path: 'plugins/dianxiaomi-inventory', name: 'plugin-dianxiaomi-inventory', component: () => import('@/ui/views/DianxiaomiInventoryView.vue') },
         { path: 'plugins/tiktok-creative-studio', name: 'plugin-tiktok-creative-studio', component: () => import('@/ui/views/TiktokCreativeStudioView.vue') },
         { path: 'plugins/tiktok-listing-helper', name: 'plugin-tiktok-listing-helper', component: () => import('@/ui/views/TiktokListingHelperView.vue') },
         { path: 'plugins/tiktok-gmv-max-optimizer', name: 'plugin-tiktok-gmv-max-optimizer', component: () => import('@/ui/views/TiktokGmvMaxOptimizerView.vue') },

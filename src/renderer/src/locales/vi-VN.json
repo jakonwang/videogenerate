@@ -1437,6 +1437,7 @@
       "livePhoto": "Live Photo",
       "creativeStudio": "Creative Studio",
       "publishing": "Dang bai",
+      "inventoryAnalysis": "Phan tich ton kho",
       "download": "Tai xuong",
       "videoProcessing": "Xu ly video"
     },
@@ -1470,6 +1471,10 @@
       "backToMarket": "Quay lai cho plugin"
     },
     "catalog": {
+      "dianxiaomi-inventory": {
+        "name": "Phan tich ton kho Dianxiaomi",
+        "description": "Theo doi SKU, dong bo so luong da giao va du bao rui ro can nhap hang."
+      },
       "product-image-materials": {
         "name": "Tai nguyen anh san pham",
         "description": "Cat video thanh tai nguyen anh co the tai su dung, ho tro tai len Qiniu va theo doi trang thai."
@@ -2934,6 +2939,87 @@
       "useApplicationModel": "Dung mo hinh hien tai cua ung dung",
       "applicationModelApplied": "Mo hinh da xac minh cua ung dung dang duoc Hermes su dung.",
       "fixNow": "Sua ngay"
+    }
+  },
+  "dianxiaomiInventory": {
+    "title": "Phan tich ton kho Dianxiaomi",
+    "subtitle": "Theo doi so luong da giao va du bao thoi diem can nhap hang cho tung SKU.",
+    "back": "Quay lai plugin",
+    "refresh": "Lam moi",
+    "login": "Dang nhap Dianxiaomi",
+    "logout": "Dang xuat",
+    "sync": "Dong bo giao hang",
+    "addSku": "Them SKU",
+    "connected": "Dianxiaomi da ket noi",
+    "notConnected": "Can dang nhap Dianxiaomi",
+    "authHint": "Mo cua so Dianxiaomi, dang nhap, sau do quay lai day de dong bo.",
+    "summary": {
+      "trackedSkus": "SKU dang theo doi",
+      "currentStock": "Tong ton kho hien tai",
+      "outOfStock": "Het hang",
+      "outOfStockHint": "SKU can xu ly ngay",
+      "reorder": "Can nhap hang",
+      "reorderHint": "SKU trong nguong can nhap hang",
+      "windowShipments": "So luong da giao",
+      "shipmentHint": "Tong da giao trong cua so du bao",
+      "lastSync": "Dong bo gan nhat"
+    },
+    "form": {
+      "addTitle": "Them SKU ton kho",
+      "editTitle": "Sua SKU ton kho",
+      "sku": "SKU",
+      "baselineDate": "Ngay ton kho goc",
+      "baselineStock": "Ton kho goc",
+      "forecastWindow": "Cua so du bao (ngay)",
+      "warningDays": "Nguong nhap hang (ngay)",
+      "save": "Luu SKU",
+      "cancel": "Huy"
+    },
+    "table": {
+      "title": "Chi tiet ton kho",
+      "priorityHint": "SKU rui ro cao duoc danh dau",
+      "sku": "SKU",
+      "baseline": "Ton kho goc",
+      "currentStock": "Ton kho hien tai",
+      "dailyAverage": "Trung binh ngay",
+      "stockout": "Het hang sau",
+      "risk": "Rui ro",
+      "lastSync": "Dong bo gan nhat",
+      "actions": "Thao tac",
+      "details": "Chi tiet",
+      "edit": "Sua",
+      "remove": "Xoa",
+      "empty": "Chua co SKU nao duoc theo doi."
+    },
+    "risk": {
+      "not_synced": "Chua dong bo",
+      "out_of_stock": "Het hang",
+      "reorder": "Can nhap hang",
+      "healthy": "Ton kho tot",
+      "no_sales": "Chua co ban hang gan day"
+    },
+    "detail": {
+      "title": "Chi tiet SKU",
+      "dailyShipments": "Giao hang moi ngay",
+      "date": "Ngay",
+      "quantity": "So luong",
+      "orders": "Don hang",
+      "baselineHistory": "Lich su ton kho goc",
+      "from": "Cu",
+      "to": "Moi",
+      "noData": "Khong co du lieu giao hang trong khoang nay."
+    },
+    "messages": {
+      "saved": "Da luu SKU.",
+      "removed": "Da xoa SKU.",
+      "synced": "Da dong bo du lieu giao hang.",
+      "partialSync": "Mot so SKU dong bo that bai.",
+      "loggedOut": "Da xoa phien Dianxiaomi.",
+      "confirmRemove": "Xoa SKU nay va lich su giao hang cuc bo?"
+    },
+    "errors": {
+      "auth": "Can dang nhap Dianxiaomi truoc khi dong bo.",
+      "generic": "Yeu cau ton kho that bai."
     }
   },
   "gmvMaxV2": {

@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.83",
+  "version": "5.0.84",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -95,6 +95,7 @@
     "test:tiktok-gmv-max-help": "tsx test/tiktok-gmv-max-help.smoke.ts",
     "test:tiktok-gmv-max-help-electron": "node test/tiktok-gmv-max-help-electron.e2e.cjs",
     "test:tiktok-gmv-max-electron": "node test/tiktok-gmv-max-electron.e2e.cjs",
+    "test:dianxiaomi-inventory": "tsx test/dianxiaomi-inventory.smoke.ts",
     "test:live-photo-plugin": "tsx test/live-photo-plugin.smoke.ts",
     "test:live-photo-replace-guards": "tsx test/live-photo-replace-guards.smoke.ts",
     "test:live-photo-quality-pipeline": "tsx test/live-photo-quality-pipeline.smoke.ts",

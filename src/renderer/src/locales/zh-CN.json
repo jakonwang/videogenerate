@@ -2616,6 +2616,7 @@
       "creativeStudio": "创意视频",
       "publishing": "发布",
       "advertisingOptimization": "广告优化",
+      "inventoryAnalysis": "库存分析",
       "download": "下载",
       "videoProcessing": "视频处理"
     },
@@ -2656,6 +2657,10 @@
       "product-image-materials": {
         "name": "商品图片素材",
         "description": "批量切分视频并生成可复用商品图片素材，支持七牛上传和使用状态管理。"
+      },
+      "dianxiaomi-inventory": {
+        "name": "店小秘库存分析",
+        "description": "跟踪 SKU 库存基准，同步发货数量，预测备货风险。"
       },
       "live-photo-generator": {
         "name": "动态照片生成器",
@@ -4112,6 +4117,87 @@
       "useApplicationModel": "使用软件当前模型",
       "applicationModelApplied": "已验证的软件模型现在已应用到 Hermes。",
       "fixNow": "立即修复"
+    }
+  },
+  "dianxiaomiInventory": {
+    "title": "店小秘库存分析",
+    "subtitle": "跟踪发货数量并预测每个 SKU 的备货时间。",
+    "back": "返回插件",
+    "refresh": "刷新",
+    "login": "登录店小秘",
+    "logout": "退出登录",
+    "sync": "同步发货",
+    "addSku": "添加 SKU",
+    "connected": "店小秘已连接",
+    "notConnected": "需要登录店小秘",
+    "authHint": "打开店小秘窗口完成登录, 然后返回此页面同步。",
+    "summary": {
+      "trackedSkus": "跟踪 SKU",
+      "currentStock": "当前总库存",
+      "outOfStock": "已缺货",
+      "outOfStockHint": "需要立即处理的 SKU",
+      "reorder": "需要备货",
+      "reorderHint": "已进入备货预警区间",
+      "windowShipments": "窗口发货量",
+      "shipmentHint": "预测窗口内累计发货",
+      "lastSync": "最近同步"
+    },
+    "form": {
+      "addTitle": "添加库存 SKU",
+      "editTitle": "编辑库存 SKU",
+      "sku": "SKU",
+      "baselineDate": "库存基准日期",
+      "baselineStock": "基准库存",
+      "forecastWindow": "预测窗口天数",
+      "warningDays": "备货阈值天数",
+      "save": "保存 SKU",
+      "cancel": "取消"
+    },
+    "table": {
+      "title": "库存明细",
+      "priorityHint": "高风险 SKU 已优先标记",
+      "sku": "SKU",
+      "baseline": "库存基准",
+      "currentStock": "当前库存",
+      "dailyAverage": "日均发货",
+      "stockout": "预计售罄",
+      "risk": "风险",
+      "lastSync": "最近同步",
+      "actions": "操作",
+      "details": "详情",
+      "edit": "编辑",
+      "remove": "移除",
+      "empty": "还没有跟踪 SKU。"
+    },
+    "risk": {
+      "not_synced": "待同步",
+      "out_of_stock": "已缺货",
+      "reorder": "需要备货",
+      "healthy": "库存健康",
+      "no_sales": "近期无销量"
+    },
+    "detail": {
+      "title": "SKU 详情",
+      "dailyShipments": "每日发货",
+      "date": "日期",
+      "quantity": "数量",
+      "orders": "订单数",
+      "baselineHistory": "库存基准变更",
+      "from": "原值",
+      "to": "新值",
+      "noData": "此范围暂无发货数据。"
+    },
+    "messages": {
+      "saved": "SKU 已保存。",
+      "removed": "SKU 已移除。",
+      "synced": "发货数据已同步。",
+      "partialSync": "部分 SKU 同步失败。",
+      "loggedOut": "店小秘登录态已清除。",
+      "confirmRemove": "确定移除这个 SKU 及其本地发货历史吗?"
+    },
+    "errors": {
+      "auth": "同步前需要登录店小秘。",
+      "generic": "库存请求失败。"
     }
   },
   "gmvMaxV2": {

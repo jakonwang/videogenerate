@@ -2058,6 +2058,7 @@
       "creativeStudio": "Creative Studio",
       "publishing": "Publishing",
       "advertisingOptimization": "Advertising Optimization",
+      "inventoryAnalysis": "Inventory Analytics",
       "download": "Download",
       "videoProcessing": "Video Processing"
     },
@@ -2098,6 +2099,10 @@
       "product-image-materials": {
         "name": "Product Image Materials",
         "description": "Split videos into reusable product image materials with Qiniu upload and usage tracking."
+      },
+      "dianxiaomi-inventory": {
+        "name": "Dianxiaomi Inventory Analytics",
+        "description": "Track SKU baselines, sync shipped quantities, and forecast reorder risk."
       },
       "live-photo-generator": {
         "name": "Live Photo Generator",
@@ -4139,6 +4144,87 @@
       "useApplicationModel": "Use current app model",
       "applicationModelApplied": "The verified application model is now active in Hermes.",
       "fixNow": "Fix now"
+    }
+  },
+  "dianxiaomiInventory": {
+    "title": "Dianxiaomi Inventory Analytics",
+    "subtitle": "Track shipped quantities and forecast when each SKU needs replenishment.",
+    "back": "Back to plugins",
+    "refresh": "Refresh",
+    "login": "Sign in to Dianxiaomi",
+    "logout": "Sign out",
+    "sync": "Sync shipments",
+    "addSku": "Add SKU",
+    "connected": "Dianxiaomi connected",
+    "notConnected": "Dianxiaomi login required",
+    "authHint": "Open the Dianxiaomi window, finish login, then return here to sync.",
+    "summary": {
+      "trackedSkus": "Tracked SKUs",
+      "currentStock": "Total current stock",
+      "outOfStock": "Out of stock",
+      "outOfStockHint": "SKUs requiring immediate action",
+      "reorder": "Reorder soon",
+      "reorderHint": "SKUs inside the reorder window",
+      "windowShipments": "Window shipments",
+      "shipmentHint": "Total shipped in forecast windows",
+      "lastSync": "Last sync"
+    },
+    "form": {
+      "addTitle": "Add inventory SKU",
+      "editTitle": "Edit inventory SKU",
+      "sku": "SKU",
+      "baselineDate": "Baseline date",
+      "baselineStock": "Baseline stock",
+      "forecastWindow": "Forecast window (days)",
+      "warningDays": "Reorder threshold (days)",
+      "save": "Save SKU",
+      "cancel": "Cancel"
+    },
+    "table": {
+      "title": "Inventory details",
+      "priorityHint": "High-risk SKUs are highlighted",
+      "sku": "SKU",
+      "baseline": "Baseline",
+      "currentStock": "Current stock",
+      "dailyAverage": "Daily average",
+      "stockout": "Stockout in",
+      "risk": "Risk",
+      "lastSync": "Last sync",
+      "actions": "Actions",
+      "details": "Details",
+      "edit": "Edit",
+      "remove": "Remove",
+      "empty": "No SKUs are being tracked yet."
+    },
+    "risk": {
+      "not_synced": "Not synced",
+      "out_of_stock": "Out of stock",
+      "reorder": "Reorder soon",
+      "healthy": "Healthy",
+      "no_sales": "No recent sales"
+    },
+    "detail": {
+      "title": "SKU details",
+      "dailyShipments": "Daily shipments",
+      "date": "Date",
+      "quantity": "Quantity",
+      "orders": "Orders",
+      "baselineHistory": "Baseline changes",
+      "from": "From",
+      "to": "To",
+      "noData": "No shipment data in this range."
+    },
+    "messages": {
+      "saved": "SKU saved.",
+      "removed": "SKU removed.",
+      "synced": "Shipment data synced.",
+      "partialSync": "Some SKUs could not be synced.",
+      "loggedOut": "Dianxiaomi session cleared.",
+      "confirmRemove": "Remove this SKU and its local shipment history?"
+    },
+    "errors": {
+      "auth": "Dianxiaomi login is required before syncing.",
+      "generic": "The inventory request failed."
     }
   },
   "gmvMaxV2": {

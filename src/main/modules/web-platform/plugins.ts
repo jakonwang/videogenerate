@@ -39,6 +39,17 @@ export const pluginDefinitions: PluginDefinition[] = [
     ],
   },
   {
+    id: 'dianxiaomi-inventory',
+    name: 'Dianxiaomi Inventory Analytics',
+    category: 'inventory_analysis',
+    description: 'Track SKU baselines, sync shipped quantities from Dianxiaomi, forecast stockout dates, and surface reorder risks.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/dianxiaomi-inventory',
+    usageHint: 'Sign in to Dianxiaomi, add a SKU baseline, then sync shipped quantities and review the reorder forecast.',
+    configSchema: [],
+  },
+  {
     id: 'live-photo-generator',
     name: 'Live Photo Generator',
     category: 'video_processing',

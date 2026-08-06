@@ -43,6 +43,7 @@ import { registerAgentOsIpc } from './ipc/registerAgentOsIpc'
 import { registerHermesAgentIpc } from './ipc/registerHermesAgentIpc'
 import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
 import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
+import { registerDianxiaomiInventoryIpc } from './ipc/registerDianxiaomiInventoryIpc'
 import { agentOsService } from './modules/agent-os/service'
 import { hermesRuntime } from './modules/hermes/runtime'
 import { hermesManagement } from './modules/hermes/management'
@@ -1655,6 +1656,7 @@ function wireIpc() {
   registerHermesAgentIpc(ipcMain, () => mainWindow)
   registerStorageManagementIpc(ipcMain)
   registerTiktokGmvMaxIpc(ipcMain)
+  registerDianxiaomiInventoryIpc(ipcMain, () => mainWindow)
 }
 
 app.whenReady().then(async () => {

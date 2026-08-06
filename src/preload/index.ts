@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
 import type { HermesWorkspaceAction } from '../shared/hermesWorkspace'
 import { storageCleanupConfirmation, type StorageCategoryId } from '../shared/storageManagement'
+import type {
+  InventoryDashboard,
+  InventoryDetail,
+  InventorySyncResult,
+  SaveInventorySkuInput,
+} from '../main/modules/dianxiaomi-inventory/types'
 
 function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) {
   return {
@@ -780,6 +786,17 @@ const api = {
     importShareUrls: (payload: { userId: string; shareUrls: string[] }) => ipcRenderer.invoke('plugin:videoParserDownload:importShareUrls', payload),
     retryItem: (payload: { userId: string; id: string }) => ipcRenderer.invoke('plugin:videoParserDownload:retryItem', payload),
     deleteItem: (payload: { userId: string; id: string }) => ipcRenderer.invoke('plugin:videoParserDownload:deleteItem', payload),
+  },
+  dianxiaomiInventory: {
+    getDashboard: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:getDashboard') as Promise<InventoryDashboard>,
+    getDetail: (payload: { skuId: string; startDate?: string; endDate?: string }) =>
+      ipcRenderer.invoke('plugin:dianxiaomiInventory:getDetail', payload) as Promise<InventoryDetail>,
+    saveSku: (payload: SaveInventorySkuInput) => ipcRenderer.invoke('plugin:dianxiaomiInventory:saveSku', payload),
+    removeSku: (id: string) => ipcRenderer.invoke('plugin:dianxiaomiInventory:removeSku', id),
+    sync: (payload?: { skuId?: string }) => ipcRenderer.invoke('plugin:dianxiaomiInventory:sync', payload) as Promise<InventorySyncResult>,
+    getAuthStatus: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:getAuthStatus'),
+    openLogin: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:openLogin'),
+    logout: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:logout'),
   },
   tiktokGmvMax: {
     getDashboard: (payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getDashboard', payload),

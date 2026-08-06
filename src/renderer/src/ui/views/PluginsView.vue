@@ -44,6 +44,17 @@ const fallbackPlugins: PluginSummary[] = [
     enabled: false,
   },
   {
+    id: 'dianxiaomi-inventory',
+    name: 'Dianxiaomi Inventory Analytics',
+    category: 'inventory_analysis',
+    description: 'Track SKU baselines, sync shipped quantities, forecast stockout dates, and surface reorder risks.',
+    version: '0.1.0',
+    entryType: 'tool',
+    workspacePath: '/plugins/dianxiaomi-inventory',
+    status: 'uninstalled',
+    enabled: false,
+  },
+  {
     id: 'live-photo-generator',
     name: 'Live Photo Generator',
     category: 'video_processing',
@@ -154,6 +165,7 @@ function pluginStatusText(plugin: PluginSummary | PluginDetail) {
 
 function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === 'tiktok-gmv-max-optimizer') return t('plugins.categories.advertisingOptimization')
+  if (plugin.id === 'dianxiaomi-inventory') return t('plugins.categories.inventoryAnalysis')
   if (plugin.id === 'live-photo-generator') return t('plugins.categories.livePhoto')
   if (plugin.id === 'product-image-materials') return t('plugins.categories.videoProcessing')
   if (plugin.id === 'tiktok-creative-studio') return t('plugins.categories.creativeStudio')
@@ -164,6 +176,7 @@ function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
 
 function pluginIconText(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === 'tiktok-gmv-max-optimizer') return 'GM'
+  if (plugin.id === 'dianxiaomi-inventory') return 'IA'
   if (plugin.id === 'product-image-materials') return 'IM'
   if (plugin.id === 'live-photo-generator') return 'LP'
   if (plugin.id === 'tiktok-creative-studio') return 'TT'
@@ -176,6 +189,7 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
 
 function pluginCardTone(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === 'tiktok-gmv-max-optimizer') return 'tone-cyan'
+  if (plugin.id === 'dianxiaomi-inventory') return 'tone-green'
   if (plugin.id === 'product-image-materials') return 'tone-blue'
   if (plugin.id === 'live-photo-generator') return 'tone-amber'
   if (plugin.id === 'tiktok-creative-studio') return 'tone-green'
@@ -186,7 +200,7 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 }
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return ['geelark-publisher', 'tiktok-creative-studio', 'tiktok-gmv-max-optimizer', 'live-photo-generator', 'product-image-materials', 'video-parser-download'].includes(plugin.id)
+  return ['geelark-publisher', 'tiktok-creative-studio', 'tiktok-gmv-max-optimizer', 'live-photo-generator', 'product-image-materials', 'video-parser-download', 'dianxiaomi-inventory'].includes(plugin.id)
 }
 
 function primaryActionText(plugin: PluginSummary) {
@@ -280,6 +294,10 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
   }
   if (plugin.id === 'video-parser-download') {
     void router.push('/plugins/video-parser-download')
+    return
+  }
+  if (plugin.id === 'dianxiaomi-inventory') {
+    void router.push('/plugins/dianxiaomi-inventory')
     return
   }
   void router.push(plugin.workspacePath)
