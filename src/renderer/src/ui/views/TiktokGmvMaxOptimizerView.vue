@@ -421,6 +421,11 @@ type ProductInsight = {
   protected: boolean;
   signals: string[];
   analyzedAt: number;
+  promotionSeries?: Array<{
+    campaignId: string;
+    campaignName: string;
+    state: ProductInsight["state"];
+  }>;
 };
 type ProductPage = {
   items: ProductInsight[];
@@ -6254,8 +6259,14 @@ onUnmounted(() => {
               <p>{{ pageMeta.subtitle }}</p>
             </div>
           </div>
-          <div class="gmv-header__actions">
+          <div
+            :class="[
+              'gmv-header__actions',
+              { 'is-sop-header-actions': activeTab === 'sop' },
+            ]"
+          >
             <button
+              v-if="activeTab !== 'sop'"
               type="button"
               class="gmv-v2-scope-button"
               data-testid="gmv-global-filter-toggle"
@@ -6433,8 +6444,11 @@ onUnmounted(() => {
         </section>
 
         <section
-          v-if="activeTab !== 'help' && globalFiltersExpanded"
-          class="gmv-commandbar"
+          v-if="activeTab !== 'help' && activeTab !== 'sop' && globalFiltersExpanded"
+          :class="[
+            'gmv-commandbar',
+            { 'gmv-commandbar--campaigns': activeTab === 'campaigns' },
+          ]"
           data-testid="gmv-global-filters"
         >
           <div class="gmv-search">
@@ -6453,11 +6467,15 @@ onUnmounted(() => {
               {{ store.storeName }}
             </option>
           </select>
-          <label class="gmv-date-field"
+          <label
+            class="gmv-date-field"
+            :title="t('gmvMaxData.startDate')"
             ><span>{{ t("gmvMaxData.startDate") }}</span
             ><input v-model="startDate" type="date" :max="endDate"
           /></label>
-          <label class="gmv-date-field"
+          <label
+            class="gmv-date-field"
+            :title="t('gmvMaxData.endDate')"
             ><span>{{ t("gmvMaxData.endDate") }}</span
             ><input v-model="endDate" type="date" :min="startDate"
           /></label>
@@ -6564,7 +6582,9 @@ onUnmounted(() => {
         </details>
 
         <section
-          v-if="taskSummary.length"
+          v-if="
+            taskSummary.length && activeTab !== 'growth' && activeTab !== 'campaigns'
+          "
           class="gmv-task-summary"
           data-testid="gmv-task-summary"
         >
@@ -6962,6 +6982,19 @@ onUnmounted(() => {
           data-testid="gmv-sop-workspace"
         >
           <div class="gmv-growth-cycle-actions">
+            <div class="gmv-growth-cycle-actions__context">
+              <span class="gmv-kicker">{{ t("gmvMaxCockpit.lifecycle") }}</span>
+              <strong>{{
+                selectedSop
+                  ? selectedSop.productName ||
+                    selectedSop.productId ||
+                    t("gmvMaxSop.liveScope")
+                  : t("gmvMaxSop.empty")
+              }}</strong>
+              <small v-if="selectedSop"
+                >{{ selectedSop.storeName }} / {{ selectedSop.campaignName }}</small
+              ><small v-else>{{ t("gmvMaxSop.emptyHint") }}</small>
+            </div>
             <div class="gmv-row__actions">
               <button
                 v-if="selectedSop"
@@ -9743,111 +9776,131 @@ onUnmounted(() => {
           </template>
         </section>
 
-        <section v-else-if="activeTab === 'campaigns'" class="gmv-section">
-          <div class="gmv-section__heading">
-            <div>
-              <h2>{{ t("gmvMax.campaigns.title") }}</h2>
-              <p>
-                {{ campaignDataPage.total }} / {{ dashboard.campaigns.length }}
-                {{ t("gmvMax.campaigns.subtitle") }}
-              </p>
+        <section
+          v-else-if="activeTab === 'campaigns'"
+          class="gmv-section gmv-campaigns-section"
+        >
+          <div class="gmv-campaign-command" data-testid="gmv-campaign-command">
+            <div class="gmv-campaign-command__identity">
+              <div class="gmv-campaign-command__mark" aria-hidden="true">
+                <BarChart3 class="gmv-icon" />
+              </div>
+              <div>
+                <span class="gmv-campaign-command__eyebrow">GMV MAX</span>
+                <h2>{{ t("gmvMax.campaigns.title") }}</h2>
+                <p>
+                  {{ campaignDataPage.total }} / {{ dashboard.campaigns.length }}
+                  {{ t("gmvMax.campaigns.subtitle") }}
+                </p>
+              </div>
             </div>
+            <div class="gmv-campaign-command__summary">
+              <article
+                v-for="item in taskSummary"
+                :key="item.label"
+                :class="`is-${item.tone}`"
+                :title="item.hint"
+              >
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <small>{{ item.hint }}</small>
+              </article>
+            </div>
+            <div class="gmv-campaign-tools" data-testid="gmv-campaign-tools">
+              <div
+                class="gmv-pacing-overview"
+                data-testid="gmv-pacing-overview"
+                :aria-label="t('gmvMaxTaskUi.details.health')"
+              >
+                <article
+                  v-for="state in pacingStates"
+                  :key="state"
+                  :class="`is-${state}`"
+                  :title="t(`gmvMaxPacing.hint.${state}`)"
+                >
+                  <span>{{ t(`gmvMaxPacing.state.${state}`) }}</span>
+                  <strong>{{ pacingSummary[state] }}</strong>
+                  <small>{{ t(`gmvMaxPacing.hint.${state}`) }}</small>
+                </article>
+              </div>
+            </div>
+            <details class="gmv-campaign-filter-toggle">
+              <summary :title="t('gmvMaxTaskUi.details.metricFiltersHint')">
+                <Filter class="gmv-icon" />
+                <span>
+                  <strong>{{ t("gmvMaxTaskUi.details.metricFilters") }}</strong>
+                  <small>{{ t("gmvMaxTaskUi.details.metricFiltersHint") }}</small>
+                </span>
+                <ChevronDown class="gmv-icon" />
+              </summary>
+              <div class="gmv-filter-panel">
+                <select v-model="campaignStatus">
+                  <option value="all">{{ t("gmvMaxData.allStatuses") }}</option>
+                  <option
+                    v-for="status in campaignStatuses"
+                    :key="status"
+                    :value="status"
+                  >
+                    {{ operationStatusLabel(status) }}
+                  </option>
+                </select>
+                <select v-model="campaignPacingState">
+                  <option value="all">{{ t("gmvMaxPacing.allStates") }}</option>
+                  <option
+                    v-for="state in pacingStates"
+                    :key="state"
+                    :value="state"
+                  >
+                    {{ t(`gmvMaxPacing.state.${state}`) }}
+                  </option>
+                </select>
+                <label
+                  ><span
+                    >{{ t("gmvMaxData.minSpend") }} ({{
+                      t("gmvMaxCurrency.cnyUnit")
+                    }})</span
+                  ><input
+                    v-model.number="minCampaignSpend"
+                    type="number"
+                    min="0"
+                    :disabled="moneyFilterDisabled()"
+                /></label>
+                <label
+                  ><span>{{ t("gmvMaxData.minOrders") }}</span
+                  ><input
+                    v-model.number="minCampaignOrders"
+                    type="number"
+                    min="0"
+                /></label>
+                <label
+                  ><span>{{ t("gmvMaxData.minRoi") }}</span
+                  ><input
+                    v-model.number="minCampaignRoi"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                /></label>
+                <label
+                  ><span>{{ t("gmvMaxData.minUtilization") }}</span
+                  ><input
+                    v-model.number="minCampaignUtilization"
+                    type="number"
+                    min="0"
+                    max="100"
+                /></label>
+                <button
+                  class="gmv-button gmv-button--secondary"
+                  :disabled="campaignDataLoading"
+                  @click="loadCampaignPage(1)"
+                >
+                  <Filter class="gmv-icon" />{{ t("gmvMaxData.applyMetrics") }}
+                </button>
+              </div>
+            </details>
             <button class="gmv-button gmv-button--secondary" @click="evaluate">
               <Zap class="gmv-icon" />{{ t("gmvMax.actions.evaluate") }}
             </button>
           </div>
-          <details class="gmv-advanced-details">
-            <summary>
-              <BarChart3 /><span
-                ><strong>{{ t("gmvMaxTaskUi.details.health") }}</strong
-                ><small>{{ t("gmvMaxTaskUi.details.healthHint") }}</small></span
-              ><ChevronDown />
-            </summary>
-            <div class="gmv-pacing-overview" data-testid="gmv-pacing-overview">
-              <article
-                v-for="state in pacingStates"
-                :key="state"
-                :class="`is-${state}`"
-              >
-                <span>{{ t(`gmvMaxPacing.state.${state}`) }}</span>
-                <strong>{{ pacingSummary[state] }}</strong>
-                <small>{{ t(`gmvMaxPacing.hint.${state}`) }}</small>
-              </article>
-            </div>
-          </details>
-          <details class="gmv-advanced-details">
-            <summary>
-              <Filter /><span
-                ><strong>{{ t("gmvMaxTaskUi.details.metricFilters") }}</strong
-                ><small>{{
-                  t("gmvMaxTaskUi.details.metricFiltersHint")
-                }}</small></span
-              ><ChevronDown />
-            </summary>
-            <div class="gmv-filter-panel">
-              <select v-model="campaignStatus">
-                <option value="all">{{ t("gmvMaxData.allStatuses") }}</option>
-                <option
-                  v-for="status in campaignStatuses"
-                  :key="status"
-                  :value="status"
-                >
-                  {{ operationStatusLabel(status) }}
-                </option>
-              </select>
-              <select v-model="campaignPacingState">
-                <option value="all">{{ t("gmvMaxPacing.allStates") }}</option>
-                <option
-                  v-for="state in pacingStates"
-                  :key="state"
-                  :value="state"
-                >
-                  {{ t(`gmvMaxPacing.state.${state}`) }}
-                </option>
-              </select>
-              <label
-                ><span
-                  >{{ t("gmvMaxData.minSpend") }} ({{
-                    t("gmvMaxCurrency.cnyUnit")
-                  }})</span
-                ><input
-                  v-model.number="minCampaignSpend"
-                  type="number"
-                  min="0"
-                  :disabled="moneyFilterDisabled()"
-              /></label>
-              <label
-                ><span>{{ t("gmvMaxData.minOrders") }}</span
-                ><input
-                  v-model.number="minCampaignOrders"
-                  type="number"
-                  min="0"
-              /></label>
-              <label
-                ><span>{{ t("gmvMaxData.minRoi") }}</span
-                ><input
-                  v-model.number="minCampaignRoi"
-                  type="number"
-                  min="0"
-                  step="0.01"
-              /></label>
-              <label
-                ><span>{{ t("gmvMaxData.minUtilization") }}</span
-                ><input
-                  v-model.number="minCampaignUtilization"
-                  type="number"
-                  min="0"
-                  max="100"
-              /></label>
-              <button
-                class="gmv-button gmv-button--secondary"
-                :disabled="campaignDataLoading"
-                @click="loadCampaignPage(1)"
-              >
-                <Filter class="gmv-icon" />{{ t("gmvMaxData.applyMetrics") }}
-              </button>
-            </div>
-          </details>
           <div class="gmv-table-wrap">
             <table class="gmv-table gmv-table--campaigns">
               <thead>
@@ -9984,6 +10037,11 @@ onUnmounted(() => {
                         'gmv-lifecycle',
                         `is-${campaign.learning.stage}`,
                       ]"
+                      :title="
+                        t(
+                          `gmvMaxLearning.stageHint.${campaign.learning.stage}`,
+                        )
+                      "
                       >{{
                         t(`gmvMaxLearning.stages.${campaign.learning.stage}`)
                       }}</span
@@ -10238,138 +10296,10 @@ onUnmounted(() => {
           class="gmv-section"
           data-testid="gmv-growth-workspace"
         >
-          <div class="gmv-section__heading">
-            <div>
-              <h2>{{ t("gmvMaxLearning.title") }}</h2>
-              <p>{{ t("gmvMaxLearning.subtitle") }}</p>
-            </div>
-            <button
-              class="gmv-button gmv-button--primary"
-              :disabled="!!busyAction"
-              @click="analyzeGrowth"
-            >
-              <Activity class="gmv-icon" />{{ t("gmvMaxLearning.analyze") }}
-            </button>
-          </div>
-          <details
-            class="gmv-advanced-details"
-            data-testid="gmv-growth-stage-details"
-          >
-            <summary>
-              <TrendingUp /><span
-                ><strong>{{ t("gmvMaxTaskUi.details.growthStages") }}</strong
-                ><small>{{
-                  t("gmvMaxTaskUi.details.growthStagesHint")
-                }}</small></span
-              ><ChevronDown />
-            </summary>
-            <div class="gmv-lifecycle-pipeline">
-              <article
-                v-for="item in lifecycleStages"
-                :key="item.stage"
-                :class="['gmv-phase-card', `is-${item.stage}`]"
-              >
-                <span>{{ t(`gmvMaxLearning.stages.${item.stage}`) }}</span
-                ><strong>{{ item.count }}</strong
-                ><small>{{
-                  t(`gmvMaxLearning.stageHint.${item.stage}`)
-                }}</small>
-              </article>
-            </div>
-            <div class="gmv-learning-summary">
-              <article>
-                <span>{{ t("gmvMaxLearning.coverage") }}</span
-                ><strong>{{
-                  dashboard.campaigns.length
-                    ? `${Math.round((dashboard.learningSnapshots.length / dashboard.campaigns.length) * 100)}%`
-                    : "0%"
-                }}</strong
-                ><small
-                  >{{ dashboard.learningSnapshots.length }} /
-                  {{ dashboard.campaigns.length }}</small
-                >
-              </article>
-              <article>
-                <span>{{ t("gmvMaxLearning.readyToScale") }}</span
-                ><strong>{{
-                  filteredLearning.filter(
-                    (item) => item.snapshot.stage === "scaling",
-                  ).length
-                }}</strong
-                ><small>{{ t("gmvMaxLearning.profitAndPacingPassed") }}</small>
-              </article>
-              <article>
-                <span>{{ t("gmvMaxLearning.creativeGap") }}</span
-                ><strong>{{
-                  filteredLearning.filter((item) =>
-                    item.snapshot.signals.includes("creative_winner_missing"),
-                  ).length
-                }}</strong
-                ><small>{{ t("gmvMaxLearning.needsWinner") }}</small>
-              </article>
-              <article>
-                <span>{{ t("gmvMaxLearning.riskQueue") }}</span
-                ><strong>{{
-                  filteredLearning.filter((item) =>
-                    ["declining", "blocked"].includes(item.snapshot.stage),
-                  ).length
-                }}</strong
-                ><small>{{ t("gmvMaxLearning.recoveryFirst") }}</small>
-              </article>
-              <article>
-                <span>{{ t("gmvMaxLearningFeedback.actionLearning") }}</span
-                ><strong>{{
-                  outcomePage.total
-                    ? `${Math.round(outcomePage.summary.successRate * 100)}%`
-                    : "-"
-                }}</strong
-                ><small
-                  >{{ outcomePage.total }}
-                  {{ t("gmvMaxLearningFeedback.measuredActions") }}</small
-                >
-              </article>
-              <article>
-                <span>{{ t("gmvMaxIntelligence.transferReady") }}</span
-                ><strong>{{ proposedPortfolioPlans.length }}</strong
-                ><small
-                  >{{
-                    proposedPortfolioPlans.every(
-                      (item) => storeCnyRate(item.storeId) !== null,
-                    )
-                      ? formatCny(
-                          proposedPortfolioPlans.reduce(
-                            (sum, item) =>
-                              sum +
-                              (convertToCny(
-                                item.transferAmount,
-                                item.storeId,
-                              ) || 0),
-                            0,
-                          ),
-                          undefined,
-                          true,
-                        )
-                      : t("gmvMaxCurrency.pending")
-                  }}
-                  {{ t("gmvMaxIntelligence.protectedCapital") }}</small
-                >
-              </article>
-            </div>
-          </details>
           <section
             class="gmv-panel gmv-product-lab"
             data-testid="gmv-product-lab"
           >
-            <div class="gmv-panel__heading">
-              <div>
-                <h2>{{ t("gmvMaxProductLab.title") }}</h2>
-                <p>{{ t("gmvMaxProductLab.subtitle") }}</p>
-              </div>
-              <span class="gmv-status is-blue"
-                >{{ productPage.total }}
-                {{ t("gmvMaxProductLab.products") }}</span
-              >
-            </div>
             <details
               class="gmv-advanced-details gmv-advanced-details--embedded"
             >
@@ -10655,7 +10585,17 @@ onUnmounted(() => {
                       </div>
                     </td>
                     <td>
-                      <strong>{{ campaignName(item.campaignId) }}</strong
+                      <div
+                        v-if="item.promotionSeries?.length"
+                        class="gmv-product-series"
+                      >
+                        <strong
+                          v-for="series in item.promotionSeries"
+                          :key="series.campaignId"
+                          >{{ series.campaignName }}</strong
+                        >
+                      </div>
+                      <strong v-else>{{ campaignName(item.campaignId) }}</strong
                       ><small>{{
                         uniqueStores.find(
                           (store) => store.storeId === item.storeId,
@@ -11094,6 +11034,9 @@ onUnmounted(() => {
                   <td>
                     <span
                       :class="['gmv-lifecycle', `is-${item.snapshot.stage}`]"
+                      :title="
+                        t(`gmvMaxLearning.stageHint.${item.snapshot.stage}`)
+                      "
                       >{{
                         t(`gmvMaxLearning.stages.${item.snapshot.stage}`)
                       }}</span
@@ -16387,13 +16330,45 @@ onUnmounted(() => {
   gap: 10px;
 }
 .gmv-growth-cycle-actions {
-  min-height: 44px;
-  margin-bottom: 10px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 12px;
   display: flex;
+  align-items: center;
+  gap: 16px;
   justify-content: flex-end;
+  border: 1px solid var(--theme-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--theme-panel) 90%, var(--theme-root));
+}
+.gmv-growth-cycle-actions__context {
+  min-width: 0;
+  margin-right: auto;
+  display: grid;
+  gap: 2px;
+}
+.gmv-growth-cycle-actions__context .gmv-kicker {
+  margin: 0;
+}
+.gmv-growth-cycle-actions__context strong,
+.gmv-growth-cycle-actions__context small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-growth-cycle-actions__context strong {
+  color: var(--theme-text);
+  font-size: 12px;
+}
+.gmv-growth-cycle-actions__context small {
+  color: var(--theme-text-muted);
+  font-size: 9px;
 }
 .gmv-growth-cycle-actions .gmv-row__actions {
+  min-width: 0;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .gmv-decision-scope {
   min-width: 0;
@@ -22531,6 +22506,19 @@ onUnmounted(() => {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+.gmv-product-series {
+  max-height: 112px;
+  display: grid;
+  gap: 4px;
+  overflow-y: auto;
+}
+.gmv-table--products .gmv-product-series strong {
+  display: block;
+  overflow: visible;
+  line-height: 1.35;
+  white-space: normal;
+  -webkit-line-clamp: unset;
+}
 .gmv-table--products td:last-child .gmv-button {
   padding: 0 10px;
   white-space: nowrap;
@@ -24396,6 +24384,16 @@ onUnmounted(() => {
   .gmv-sop-heading {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+  .gmv-growth-cycle-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .gmv-growth-cycle-actions__context {
+    margin-right: 0;
+  }
+  .gmv-growth-cycle-actions .gmv-row__actions {
+    justify-content: flex-start;
   }
   .gmv-sop-heading .gmv-row__actions {
     justify-content: flex-start;
@@ -26854,6 +26852,9 @@ onUnmounted(() => {
   padding-inline: 14px;
   border-left: 1px solid var(--theme-border-control);
 }
+.gmv-task-header .gmv-header__actions.is-sop-header-actions .gmv-v2-freshness {
+  border-left: 0;
+}
 .gmv-task-header .gmv-v2-scope-button small,
 .gmv-task-header .gmv-v2-freshness small {
   color: var(--theme-text-muted);
@@ -27015,6 +27016,356 @@ onUnmounted(() => {
   border-left: 0 !important;
   box-shadow: none;
 }
+
+/* Keep the promotion workspace focused on one compact operating surface. */
+.gmv-campaigns-section {
+  padding-top: 0;
+}
+.gmv-campaign-command {
+  min-width: 0;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(250px, 1.15fr) minmax(390px, 2fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--gmv-border-strong, #304052);
+  border-left: 3px solid var(--theme-accent, #20bfa9);
+  border-radius: 8px;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--theme-panel, #111823) 96%, #0d2c2b),
+    var(--theme-panel, #111823)
+  );
+}
+.gmv-campaign-command__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gmv-campaign-command__mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--theme-accent, #20bfa9) 48%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--theme-accent, #20bfa9) 14%, transparent);
+  color: var(--theme-accent, #55d6c2);
+}
+.gmv-campaign-command__identity > div:last-child {
+  min-width: 0;
+}
+.gmv-campaign-command__eyebrow {
+  display: block;
+  color: var(--theme-accent, #55d6c2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.gmv-campaign-command h2 {
+  margin: 2px 0 2px;
+  overflow: hidden;
+  color: var(--theme-text, #eef2f7);
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-campaign-command p {
+  overflow: hidden;
+  color: var(--theme-text-muted, #8c99ac);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-campaign-command__summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  border: 1px solid var(--theme-border, #293341);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-root, #0a1018) 28%, transparent);
+}
+.gmv-campaign-command__summary article {
+  min-width: 0;
+  min-height: 46px;
+  padding: 6px 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+.gmv-campaign-command__summary article + article {
+  border-left: 1px solid var(--theme-border, #293341);
+}
+.gmv-campaign-command__summary span,
+.gmv-campaign-command__summary small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--theme-text-muted, #8c99ac);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-campaign-command__summary span {
+  font-size: 10px;
+  font-weight: 700;
+}
+.gmv-campaign-command__summary strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: var(--theme-text, #eef2f7);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.gmv-campaign-command__summary small {
+  font-size: 9px;
+}
+.gmv-campaign-command__summary article.is-danger span {
+  color: #ff899d;
+}
+.gmv-campaign-command__summary article.is-warning span {
+  color: #f4ca69;
+}
+.gmv-campaign-command__summary article.is-success span {
+  color: #65dba8;
+}
+.gmv-campaign-command > .gmv-button {
+  min-height: 36px;
+  padding-inline: 12px;
+}
+.gmv-campaign-tools {
+  min-width: 0;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid var(--theme-border, #293341);
+  border-radius: 8px;
+  background: var(--theme-panel, #111823);
+}
+.gmv-campaign-tools__health {
+  min-width: 0;
+  min-height: 62px;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: minmax(185px, 0.8fr) minmax(0, 2fr);
+  gap: 12px;
+  align-items: center;
+}
+.gmv-campaign-tools__label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.gmv-campaign-tools__label > svg {
+  color: var(--theme-accent, #55d6c2);
+}
+.gmv-campaign-tools__label span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.gmv-campaign-tools__label strong,
+.gmv-campaign-tools__label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-campaign-tools__label strong {
+  color: var(--theme-text, #eef2f7);
+  font-size: 12px;
+}
+.gmv-campaign-tools__label small {
+  color: var(--theme-text-muted, #8c99ac);
+  font-size: 9px;
+}
+.gmv-campaign-tools .gmv-pacing-overview {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(78px, 1fr));
+  gap: 6px;
+}
+.gmv-campaign-tools .gmv-pacing-overview article {
+  min-width: 0;
+  min-height: 42px;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1px 6px;
+  align-items: center;
+  border: 1px solid var(--theme-border, #293341);
+  border-left: 2px solid #6e7b8e;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--theme-root, #0a1018) 24%, transparent);
+}
+.gmv-campaign-tools .gmv-pacing-overview article span,
+.gmv-campaign-tools .gmv-pacing-overview article small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-campaign-tools .gmv-pacing-overview article span {
+  color: var(--theme-text-muted, #8c99ac);
+  font-size: 9px;
+  font-weight: 700;
+}
+.gmv-campaign-tools .gmv-pacing-overview article strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: var(--theme-text, #eef2f7);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.gmv-campaign-tools .gmv-pacing-overview article small {
+  color: var(--theme-text-muted, #748297);
+  font-size: 8px;
+}
+.gmv-campaign-tools .gmv-pacing-overview article.is-normal {
+  border-left-color: #57d6a0;
+}
+.gmv-campaign-tools .gmv-pacing-overview article.is-overspend {
+  border-left-color: #ff6078;
+}
+.gmv-campaign-tools .gmv-pacing-overview article.is-underspend {
+  border-left-color: #f2b84b;
+}
+.gmv-campaign-tools .gmv-pacing-overview article.is-unstable {
+  border-left-color: #72a7ff;
+}
+.gmv-campaign-filter-toggle {
+  border-top: 1px solid var(--theme-border, #293341);
+}
+.gmv-campaign-filter-toggle > summary {
+  min-height: 42px;
+  padding: 6px 12px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  gap: 9px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.gmv-campaign-filter-toggle > summary::-webkit-details-marker {
+  display: none;
+}
+.gmv-campaign-filter-toggle > summary > svg:first-child {
+  color: var(--theme-accent, #55d6c2);
+}
+.gmv-campaign-filter-toggle > summary > svg:last-child {
+  color: var(--theme-text-muted, #8c99ac);
+  transition: transform 0.18s ease;
+}
+.gmv-campaign-filter-toggle[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.gmv-campaign-filter-toggle summary span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.gmv-campaign-filter-toggle summary strong,
+.gmv-campaign-filter-toggle summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gmv-campaign-filter-toggle summary strong {
+  color: var(--theme-text, #eef2f7);
+  font-size: 11px;
+}
+.gmv-campaign-filter-toggle summary small {
+  color: var(--theme-text-muted, #8c99ac);
+  font-size: 9px;
+}
+.gmv-campaign-filter-toggle > .gmv-filter-panel {
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 0 !important;
+  border-top: 1px solid var(--theme-border, #293341) !important;
+  background: transparent !important;
+}
+.gmv-commandbar--campaigns {
+  display: grid;
+  grid-template-columns:
+    minmax(200px, 1.4fr) minmax(128px, 0.75fr)
+    repeat(2, minmax(145px, 0.8fr)) auto auto auto minmax(100px, 0.5fr);
+  gap: 7px;
+  padding: 6px 8px;
+}
+.gmv-commandbar--campaigns .gmv-search {
+  min-width: 0;
+  flex: none;
+}
+.gmv-commandbar--campaigns > select,
+.gmv-commandbar--campaigns > .gmv-date-field,
+.gmv-commandbar--campaigns > .gmv-segments,
+.gmv-commandbar--campaigns > .gmv-button,
+.gmv-commandbar--campaigns > .gmv-icon-button,
+.gmv-commandbar--campaigns > .gmv-live {
+  min-width: 0;
+}
+.gmv-commandbar--campaigns > .gmv-live {
+  justify-self: end;
+}
+@media (max-width: 1200px) {
+  .gmv-campaign-command {
+    grid-template-columns: minmax(220px, 1fr) minmax(340px, 1.4fr) auto;
+    gap: 10px;
+  }
+  .gmv-commandbar--campaigns {
+    grid-template-columns:
+      minmax(180px, 1.2fr) minmax(120px, 0.7fr)
+      repeat(2, minmax(130px, 0.8fr)) auto auto auto;
+  }
+  .gmv-commandbar--campaigns > .gmv-live {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+@media (max-width: 900px) {
+  .gmv-campaign-command {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .gmv-campaign-command__summary {
+    grid-column: 1 / -1;
+  }
+  .gmv-campaign-tools__health {
+    grid-template-columns: 1fr;
+  }
+  .gmv-commandbar--campaigns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gmv-commandbar--campaigns .gmv-search,
+  .gmv-commandbar--campaigns .gmv-segments,
+  .gmv-commandbar--campaigns .gmv-live {
+    grid-column: 1 / -1;
+  }
+  .gmv-commandbar--campaigns > .gmv-live {
+    justify-self: start;
+  }
+}
+@media (max-width: 620px) {
+  .gmv-campaign-command {
+    grid-template-columns: 1fr;
+  }
+  .gmv-campaign-command > .gmv-button {
+    justify-self: start;
+  }
+  .gmv-campaign-command__summary {
+    grid-template-columns: 1fr;
+  }
+  .gmv-campaign-command__summary article + article {
+    border-top: 1px solid var(--theme-border, #293341);
+    border-left: 0;
+  }
+  .gmv-campaign-tools .gmv-pacing-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 1350px) {
   .gmv-task-header {
     grid-template-columns: minmax(0, 1fr);
@@ -27022,6 +27373,170 @@ onUnmounted(() => {
   }
   .gmv-task-header .gmv-header__actions {
     width: 100%;
+  }
+}
+
+/* Keep promotion status, pacing, filters, and the primary action in one rail. */
+.gmv-campaign-command {
+  grid-template-columns:
+    minmax(165px, 1.05fr) minmax(214px, 1.15fr)
+    minmax(242px, 1.6fr) minmax(92px, auto) auto;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+.gmv-campaign-command__identity {
+  gap: 8px;
+}
+.gmv-campaign-command__mark {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+}
+.gmv-campaign-command h2 {
+  margin: 1px 0;
+  font-size: 15px;
+}
+.gmv-campaign-command p {
+  font-size: 9px;
+}
+.gmv-campaign-command__summary {
+  border: 0;
+  background: transparent;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.gmv-campaign-command__summary article {
+  min-height: 38px;
+  padding: 4px 6px;
+}
+.gmv-campaign-command__summary span {
+  font-size: 9px;
+}
+.gmv-campaign-command__summary strong {
+  font-size: 18px;
+}
+.gmv-campaign-command__summary small,
+.gmv-campaign-tools .gmv-pacing-overview article small {
+  display: none;
+}
+.gmv-campaign-tools {
+  min-width: 0;
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.gmv-campaign-tools .gmv-pacing-overview {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(50px, 1fr));
+  gap: 4px;
+}
+.gmv-campaign-tools .gmv-pacing-overview article {
+  min-width: 0;
+  min-height: 38px;
+  padding: 4px 6px;
+  gap: 1px 4px;
+}
+.gmv-campaign-tools .gmv-pacing-overview article span {
+  font-size: 8px;
+}
+.gmv-campaign-tools .gmv-pacing-overview article strong {
+  font-size: 16px;
+}
+.gmv-campaign-filter-toggle {
+  min-width: 0;
+  border: 1px solid var(--theme-border, #293341);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-root, #0a1018) 22%, transparent);
+}
+.gmv-campaign-filter-toggle > summary {
+  min-height: 38px;
+  padding: 4px 7px;
+  grid-template-columns: 16px minmax(0, 1fr) 16px;
+  gap: 6px;
+}
+.gmv-campaign-filter-toggle summary strong {
+  font-size: 10px;
+}
+.gmv-campaign-filter-toggle summary small {
+  display: none;
+}
+.gmv-campaign-filter-toggle[open] {
+  grid-column: 1 / -1;
+}
+.gmv-campaign-filter-toggle > .gmv-filter-panel {
+  margin: 0;
+  padding: 8px 10px;
+}
+.gmv-campaign-filter-toggle[open] + .gmv-button {
+  grid-column: 5;
+  justify-self: end;
+}
+.gmv-campaign-command > .gmv-button {
+  min-height: 36px;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+.gmv-commandbar--campaigns > .gmv-date-field {
+  min-width: 0;
+  padding-inline: 5px;
+  gap: 4px;
+}
+.gmv-commandbar--campaigns > .gmv-date-field > span {
+  width: 32px;
+  flex: 0 0 32px;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+.gmv-commandbar--campaigns > .gmv-date-field input {
+  min-width: 0;
+  width: 100%;
+}
+@media (max-width: 1100px) {
+  .gmv-campaign-command {
+    grid-template-columns:
+      minmax(150px, 1fr) minmax(200px, 1.25fr)
+      minmax(220px, 1.5fr) minmax(84px, auto) auto;
+  }
+}
+@media (max-width: 900px) {
+  .gmv-campaign-command {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .gmv-campaign-command__identity,
+  .gmv-campaign-command__summary,
+  .gmv-campaign-tools {
+    grid-column: 1 / -1;
+  }
+  .gmv-campaign-filter-toggle {
+    grid-column: 1;
+  }
+}
+@media (max-width: 620px) {
+  .gmv-campaign-command {
+    grid-template-columns: 1fr;
+  }
+  .gmv-campaign-command__summary {
+    grid-template-columns: 1fr;
+  }
+  .gmv-campaign-command__summary article + article {
+    border-top: 1px solid var(--theme-border, #293341);
+    border-left: 0;
+  }
+  .gmv-campaign-tools .gmv-pacing-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gmv-campaign-filter-toggle,
+  .gmv-campaign-command > .gmv-button {
+    grid-column: 1;
+  }
+  .gmv-campaign-filter-toggle[open] + .gmv-button {
+    grid-column: 1;
+    justify-self: start;
   }
 }
 </style>

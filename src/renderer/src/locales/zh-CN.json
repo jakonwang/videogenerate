@@ -12,7 +12,7 @@
       },
       "growth": {
         "title": "商品增长",
-        "subtitle": "先处理受阻商品，再查看增长机会和完整商品列表。"
+        "subtitle": "直接筛选商品，按推广系列查看合并后的经营数据。"
       },
       "creatives": {
         "title": "素材优化",
@@ -1726,7 +1726,7 @@
       "scaling": "放量期",
       "mature": "成熟期",
       "declining": "衰退期",
-      "blocked": "已阻断"
+      "blocked": "需补全利润数据"
     },
     "stageHint": {
       "cold_start": "初始化成本与投放证据",
@@ -1735,7 +1735,7 @@
       "scaling": "按受保护幅度增加预算",
       "mature": "保持利润并持续更新素材",
       "declining": "恢复回报并减少浪费",
-      "blocked": "补全必要的利润输入"
+      "blocked": "成本、售价或汇率数据不完整，暂不判断生命周期；补全后请重新同步。"
     },
     "focus": {
       "collect_data": "积累完整数据",

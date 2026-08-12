@@ -19,7 +19,7 @@ import { buildGmvMaxCreativeMetricId, buildGmvMaxCreativeReportRequest, buildGmv
 import { buildGmvMaxStoreProfitSummaries } from '../src/main/modules/tiktok-gmv-max/storeProfit'
 import { replayGmvMaxStrategy } from '../src/main/modules/tiktok-gmv-max/backtest'
 import { buildGmvMaxStrategyCalibrations } from '../src/main/modules/tiktok-gmv-max/calibration'
-import { analyzeGmvMaxProductIntelligence } from '../src/main/modules/tiktok-gmv-max/productIntelligence'
+import { analyzeGmvMaxProductIntelligence, mergeGmvMaxProductInsights } from '../src/main/modules/tiktok-gmv-max/productIntelligence'
 import { resolveGmvMaxProductCostScope, validateGmvMaxCostInput, validateGmvMaxOptionalCostInput, validateGmvMaxProductSellingPrice } from '../src/main/modules/tiktok-gmv-max/costValidation'
 import { buildGmvMaxVideoIdentity, extractGmvMaxCampaignIdentityRows, mergeGmvMaxIdentityRows, resolveGmvMaxCreativeAsset } from '../src/main/modules/tiktok-gmv-max/creativeAssets'
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from '../src/main/modules/tiktok-gmv-max/automation'
@@ -591,6 +591,27 @@ async function main() {
   const winningProduct = productInsights.find((item) => item.productId === 'product-winner')
   const losingProduct = productInsights.find((item) => item.productId === 'product-losing')
   assert.equal(winningProduct?.state, 'scale_ready')
+  const mergedProductRows = mergeGmvMaxProductInsights([
+    winningProduct!,
+    {
+      ...winningProduct!,
+      id: 'product-winner-second-series',
+      campaignId: 'campaign-second-series',
+      spend: '50',
+      grossRevenue: '100',
+      orders: '2',
+    },
+    { ...winningProduct!, id: 'product-winner-other-store', storeId: 'store-2', campaignId: 'campaign-other-store' },
+  ], [
+    { id: baseCampaign.id, name: 'Primary promotion series' },
+    { id: 'campaign-second-series', name: 'Second promotion series' },
+    { id: 'campaign-other-store', name: 'Other store series' },
+  ])
+  assert.equal(mergedProductRows.length, 2)
+  const mergedProduct = mergedProductRows.find((item) => item.storeId === baseCampaign.storeId)!
+  assert.equal(mergedProduct.spend, String(Number(winningProduct!.spend) + 50))
+  assert.deepEqual(mergedProduct.promotionSeries?.map((item) => item.campaignName), ['Primary promotion series', 'Second promotion series'])
+  assert.equal(mergedProduct.promotionSeries?.length, 2)
   const inconsistentDirectionProduct = analyzeGmvMaxProductIntelligence({
     campaign: baseCampaign,
     policy: productPolicy,

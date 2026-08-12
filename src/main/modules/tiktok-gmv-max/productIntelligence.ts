@@ -8,6 +8,7 @@ import type {
   GmvMaxPolicy,
   GmvMaxProductCost,
   GmvMaxProductInsight,
+  GmvMaxProductPromotionSeries,
   GmvMaxStoreCost,
 } from './types'
 
@@ -59,6 +60,115 @@ function configuredSellingPriceRange(configured?: GmvMaxProductCost) {
     actualSellingPriceMin: prices[0] || fallback,
     actualSellingPriceMax: prices.at(-1) || fallback,
   }
+}
+
+const PRODUCT_STATE_PRIORITY: Record<GmvMaxProductInsight['state'], number> = {
+  blocked: 8,
+  losing: 7,
+  declining: 6,
+  cold_start: 5,
+  testing: 4,
+  stable: 3,
+  winner: 2,
+  scale_ready: 1,
+}
+
+const PRODUCT_ALLOCATION_PRIORITY: Record<GmvMaxProductInsight['allocationState'], number> = {
+  blocked: 4,
+  overfunded: 3,
+  starved: 2,
+  balanced: 1,
+}
+
+function sumProductMetric(rows: GmvMaxProductInsight[], key: 'spend' | 'grossRevenue' | 'orders' | 'estimatedProfit') {
+  return sum(rows.map((item) => gmvMaxDecimal.parse(item[key])))
+}
+
+function weightedProductMetric(rows: GmvMaxProductInsight[], key: 'recentRoi' | 'previousRoi' | 'spendShare' | 'revenueShare', weightKey: 'spend' | 'grossRevenue') {
+  const totalWeight = sum(rows.map((item) => gmvMaxDecimal.parse(item[weightKey])))
+  if (totalWeight > 0n) {
+    return rows.reduce((total, item) => total + gmvMaxDecimal.parse(item[key]) * gmvMaxDecimal.parse(item[weightKey]), 0n) / totalWeight
+  }
+  return rows.length ? sum(rows.map((item) => gmvMaxDecimal.parse(item[key]))) / BigInt(rows.length) : 0n
+}
+
+function weightedProductScore(rows: GmvMaxProductInsight[]) {
+  const totalSpend = sum(rows.map((item) => gmvMaxDecimal.parse(item.spend)))
+  if (totalSpend <= 0n) return rows.length ? Math.round(rows.reduce((total, item) => total + item.score, 0) / rows.length) : 0
+  return Number(rows.reduce((total, item) => total + BigInt(item.score) * gmvMaxDecimal.parse(item.spend), 0n) / totalSpend)
+}
+
+function aggregateProductState(rows: GmvMaxProductInsight[]) {
+  return rows.reduce((state, item) => PRODUCT_STATE_PRIORITY[item.state] > PRODUCT_STATE_PRIORITY[state] ? item.state : state, rows[0].state)
+}
+
+function aggregateProductAllocation(rows: GmvMaxProductInsight[]) {
+  return rows.reduce((state, item) => PRODUCT_ALLOCATION_PRIORITY[item.allocationState] > PRODUCT_ALLOCATION_PRIORITY[state] ? item.allocationState : state, rows[0].allocationState)
+}
+
+export function mergeGmvMaxProductInsights(
+  rows: GmvMaxProductInsight[],
+  campaigns: Pick<GmvMaxCampaign, 'id' | 'name'>[],
+) {
+  const campaignNames = new Map(campaigns.map((item) => [item.id, item.name]))
+  const grouped = new Map<string, GmvMaxProductInsight[]>()
+  for (const item of rows) {
+    const key = `${item.storeId}:${item.productId || item.productName || item.id}`
+    grouped.set(key, [...(grouped.get(key) || []), item])
+  }
+
+  return [...grouped.values()].map((group) => {
+    const ordered = [...group].sort((left, right) => {
+      const revenueDelta = gmvMaxDecimal.parse(right.grossRevenue) - gmvMaxDecimal.parse(left.grossRevenue)
+      if (revenueDelta !== 0n) return revenueDelta > 0n ? 1 : -1
+      const spendDelta = gmvMaxDecimal.parse(right.spend) - gmvMaxDecimal.parse(left.spend)
+      if (spendDelta !== 0n) return spendDelta > 0n ? 1 : -1
+      return left.campaignId.localeCompare(right.campaignId)
+    })
+    const representative = ordered[0]
+    const state = aggregateProductState(ordered)
+    const allocationState = aggregateProductAllocation(ordered)
+    const spend = sumProductMetric(ordered, 'spend')
+    const grossRevenue = sumProductMetric(ordered, 'grossRevenue')
+    const orders = sumProductMetric(ordered, 'orders')
+    const recentRoi = weightedProductMetric(ordered, 'recentRoi', 'spend')
+    const previousRoi = weightedProductMetric(ordered, 'previousRoi', 'spend')
+    const roiTrendPercent = previousRoi > 0n ? ((recentRoi - previousRoi) * 100n * SCALE) / previousRoi : 0n
+    const profitEstimateAvailable = ordered.every((item) => item.profitEstimateAvailable)
+    const promotionSeries: GmvMaxProductPromotionSeries[] = ordered.map((item) => ({
+      campaignId: item.campaignId,
+      campaignName: campaignNames.get(item.campaignId) || item.campaignId,
+      state: item.state,
+    }))
+    const recommended = ordered.find((item) => item.state === state)?.recommendedAction || representative.recommendedAction
+    const profitFloor = ordered.reduce((max, item) => Math.max(max, Number(item.profitFloor) || 0), 0)
+    return {
+      ...representative,
+      id: stableId(['product', representative.storeId, representative.productId]),
+      spend: gmvMaxDecimal.format(spend),
+      grossRevenue: gmvMaxDecimal.format(grossRevenue),
+      orders: gmvMaxDecimal.format(orders, 0),
+      roi: gmvMaxDecimal.format(grossRevenue > 0n && spend > 0n ? (grossRevenue * SCALE) / spend : 0n, 4),
+      recentRoi: gmvMaxDecimal.format(recentRoi, 4),
+      previousRoi: gmvMaxDecimal.format(previousRoi, 4),
+      roiTrendPercent: gmvMaxDecimal.format(roiTrendPercent, 2),
+      score: weightedProductScore(ordered),
+      daysObserved: Math.max(...ordered.map((item) => item.daysObserved)),
+      creativeCount: ordered.reduce((total, item) => total + item.creativeCount, 0),
+      profitEstimateAvailable,
+      estimatedProfit: profitEstimateAvailable ? gmvMaxDecimal.format(sumProductMetric(ordered, 'estimatedProfit')) : '-',
+      profitFloor: gmvMaxDecimal.format(gmvMaxDecimal.parse(String(profitFloor)), 4),
+      spendShare: gmvMaxDecimal.format(weightedProductMetric(ordered, 'spendShare', 'spend'), 4),
+      revenueShare: gmvMaxDecimal.format(weightedProductMetric(ordered, 'revenueShare', 'grossRevenue'), 4),
+      state,
+      allocationState,
+      recommendedAction: recommended,
+      protected: ordered.some((item) => item.protected),
+      signals: [...new Set(ordered.flatMap((item) => item.signals))],
+      analyzedAt: Math.max(...ordered.map((item) => item.analyzedAt)),
+      promotionSeries,
+    }
+  })
 }
 
 export function analyzeGmvMaxProductIntelligence(input: {

@@ -16,7 +16,7 @@ import { replayGmvMaxStrategy } from './backtest'
 import { mergeGmvMaxAccountMetadata, resolveGmvMaxAccountMetadata, resolveGmvMaxAccountMetadataRequest } from './accountMetadata'
 import { convertGmvMaxMoneyToCny, createGmvMaxExchangeRateLoader, parseGmvMaxExchangeRate } from './exchangeRate'
 import { buildGmvMaxStrategyCalibrations } from './calibration'
-import { analyzeGmvMaxProductIntelligence } from './productIntelligence'
+import { analyzeGmvMaxProductIntelligence, mergeGmvMaxProductInsights } from './productIntelligence'
 import { resolveGmvMaxProductCostScope, validateGmvMaxCostInput, validateGmvMaxOptionalCostInput, validateGmvMaxProductSellingPrice } from './costValidation'
 import { buildGmvMaxVideoIdentity, extractGmvMaxCampaignIdentityRows, mergeGmvMaxIdentityRows, resolveGmvMaxCreativeAsset } from './creativeAssets'
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from './automation'
@@ -1534,9 +1534,10 @@ function productPage(input?: {
   const campaignMap = new Map(campaigns.map((item) => [item.id, item]))
   const profitData = profitDataSnapshot(range, campaigns.map((item) => item.id))
   const query = String(input?.search || '').trim().toLowerCase()
-  const rows = analyzeProductIntelligence(campaigns, Date.now(), profitData).filter((item) => {
+  const rows = mergeGmvMaxProductInsights(analyzeProductIntelligence(campaigns, Date.now(), profitData), campaigns).filter((item) => {
     const campaign = campaignMap.get(item.campaignId)
-    const haystack = `${item.productName || ''} ${item.productId} ${item.categoryName || ''} ${item.catalogStatus || ''} ${item.gmvMaxAdsStatus || ''} ${campaign?.name || ''} ${item.campaignId} ${item.storeId}`.toLowerCase()
+    const seriesNames = (item.promotionSeries || []).map((series) => series.campaignName).join(' ')
+    const haystack = `${item.productName || ''} ${item.productId} ${item.categoryName || ''} ${item.catalogStatus || ''} ${item.gmvMaxAdsStatus || ''} ${campaign?.name || ''} ${seriesNames} ${item.campaignId} ${item.storeId}`.toLowerCase()
     if (query && !haystack.includes(query)) return false
     if (input?.state && input.state !== 'all' && item.state !== input.state) return false
     if (input?.allocationState && input.allocationState !== 'all' && item.allocationState !== input.allocationState) return false

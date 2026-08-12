@@ -1222,6 +1222,11 @@ export type GmvMaxCreativeExperiment = {
   evaluatedAt: number
 }
 export type GmvMaxProductState = 'blocked' | 'cold_start' | 'testing' | 'winner' | 'scale_ready' | 'stable' | 'declining' | 'losing'
+export type GmvMaxProductPromotionSeries = {
+  campaignId: string
+  campaignName: string
+  state: GmvMaxProductState
+}
 export type GmvMaxProductInsight = {
   id: string
   campaignId: string
@@ -1259,6 +1264,7 @@ export type GmvMaxProductInsight = {
   protected: boolean
   signals: string[]
   analyzedAt: number
+  promotionSeries?: GmvMaxProductPromotionSeries[]
 }
 export type GmvMaxPortfolioPlan = {
   id: string
