@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
-import sharp from 'sharp'
+import { join } from 'node:path'
+
+async function getSharp(): Promise<any> {
+  const module = await import('sharp')
+  return module.default || module
+}
 
 const TIKTOK_IMAGE_WIDTH = 720
 const TIKTOK_IMAGE_HEIGHT = 1280
@@ -20,12 +25,19 @@ export async function normalizeTiktokPreparedImageAspect(
   sourcePath: string,
   outputDir: string,
 ): Promise<TiktokImageAspectResult> {
+  const sharp = await getSharp()
   const metadata = await sharp(sourcePath).metadata()
   const sourceWidth = Number(metadata.width || 0)
   const sourceHeight = Number(metadata.height || 0)
   if (!sourceWidth || !sourceHeight) throw new Error('TikTok prepared image dimensions are unavailable')
 
-  if (Math.abs(sourceWidth / sourceHeight - TIKTOK_IMAGE_ASPECT_RATIO) <= ASPECT_RATIO_TOLERANCE) {
+  // Keep the upload payload bounded. A source can have the right aspect ratio
+  // while still being an extremely large image (for example 4000x7111).
+  if (
+    sourceWidth === TIKTOK_IMAGE_WIDTH &&
+    sourceHeight === TIKTOK_IMAGE_HEIGHT &&
+    Math.abs(sourceWidth / sourceHeight - TIKTOK_IMAGE_ASPECT_RATIO) <= ASPECT_RATIO_TOLERANCE
+  ) {
     return {
       path: sourcePath,
       width: sourceWidth,
@@ -37,8 +49,7 @@ export async function normalizeTiktokPreparedImageAspect(
   }
 
   await mkdir(outputDir, { recursive: true })
-  const sourceName = basename(sourcePath, extname(sourcePath))
-  const outputPath = join(outputDir, `tiktok-9x16-${Date.now()}-${sourceName}.png`)
+  const outputPath = join(outputDir, `tiktok-9x16-${Date.now()}-${randomUUID()}.png`)
   await sharp(sourcePath)
     .resize(TIKTOK_IMAGE_WIDTH, TIKTOK_IMAGE_HEIGHT, {
       fit: 'cover',

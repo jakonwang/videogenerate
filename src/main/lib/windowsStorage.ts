@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, accessSync, constants } from 'node:fs'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { configureAppPathRuntime, getAppPaths } from './paths'
 
@@ -19,9 +19,14 @@ function resolveWindowsUserDataRoot() {
   const explicitRoot = String(process.env.VIDEOGENERATE_WINDOWS_STORAGE_ROOT || '').trim()
   if (explicitRoot) return join(explicitRoot, 'userData')
 
-  const preferredDriveRoot = 'E:\\'
-  if (existsSync(preferredDriveRoot)) {
-    return join(preferredDriveRoot, 'VideoGenerate', 'userData')
+  const preferredRoot = 'E:\\VideoGenerate'
+  try {
+    if (existsSync(preferredRoot)) {
+      accessSync(preferredRoot, constants.W_OK)
+      return join(preferredRoot, 'userData')
+    }
+  } catch {
+    // Fall back to the per-user application data directory when E: is unavailable.
   }
 
   return join(app.getPath('appData'), 'VideoGenerate')

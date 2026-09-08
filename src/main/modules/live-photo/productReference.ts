@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import sharp from 'sharp'
+let sharp: any
+async function ensureSharp() {
+  if (!sharp) {
+    const module = await import('sharp')
+    sharp = module.default || module
+  }
+  return sharp
+}
 
 export type LivePhotoProductReferenceVariant = 'primary' | 'structure_retry'
 
@@ -309,6 +316,7 @@ export async function prepareLivePhotoProductReference(input: {
   variant: LivePhotoProductReferenceVariant
   hint?: ProductReferenceHint
 }): Promise<PreparedProductReference> {
+  await ensureSharp()
   const sourcePath = String(input.sourcePath || '').trim()
   if (!sourcePath || !existsSync(sourcePath)) throw new Error('Selected product does not have a usable reference image')
 

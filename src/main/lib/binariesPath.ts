@@ -1,7 +1,12 @@
 import { existsSync } from 'node:fs'
 import { app } from 'electron'
-import ffmpegStatic from 'ffmpeg-static'
-import ffprobeStatic from 'ffprobe-static'
+let ffmpegStatic: any
+let ffprobeStatic: any
+function loadStaticBinaries() {
+  if (ffmpegStatic !== undefined) return
+  ffmpegStatic = require('ffmpeg-static')
+  ffprobeStatic = require('ffprobe-static')
+}
 
 /**
  * electron-builder 将 ffmpeg/ffprobe 解包到 app.asar.unpacked，但 *-static 包用 __dirname 拼路径仍落在 app.asar 下，
@@ -24,6 +29,7 @@ let cachedFfprobe: string | null = null
 let cachedFfmpeg: string | null = null
 
 export function getFfprobeExecutable(): string {
+  loadStaticBinaries()
   if (cachedFfprobe && existsSync(cachedFfprobe)) return cachedFfprobe
   const raw = typeof ffprobeStatic === 'string' ? ffprobeStatic : String(ffprobeStatic?.path ?? '')
   const p = resolveAsarUnpackedPath(raw)
@@ -35,6 +41,7 @@ export function getFfprobeExecutable(): string {
 }
 
 export function getFfmpegExecutable(): string {
+  loadStaticBinaries()
   if (cachedFfmpeg && existsSync(cachedFfmpeg)) return cachedFfmpeg
   const raw =
     typeof ffmpegStatic === 'string'

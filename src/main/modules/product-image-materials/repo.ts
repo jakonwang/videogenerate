@@ -149,6 +149,13 @@ export const productImageMaterialsRepo = {
     const db = await this.readDb()
     const next = normalizeMaterial({
       ...input,
+      localImagePath: await materializeManagedAsset({
+        sourcePath: input.localImagePath,
+        module: 'product-materials',
+        ownerId: input.batchId,
+        assetId: `material-${input.id}-image`,
+        forceManagedCopy: true,
+      }),
       sourceVideoPath: await materializeManagedAsset({
         sourcePath: input.sourceVideoPath,
         module: 'product-materials',
@@ -189,6 +196,13 @@ export const productImageMaterialsRepo = {
       const current = db.materials[materialIndex]
       const next = normalizeMaterial({
         ...current,
+        localImagePath: await materializeManagedAsset({
+          sourcePath: current.localImagePath,
+          module: 'product-materials',
+          ownerId: current.batchId,
+          assetId: `material-${current.id}-image`,
+          forceManagedCopy: true,
+        }),
         sourceVideoPath: await materializeManagedAsset({
           sourcePath: current.sourceVideoPath,
           module: 'product-materials',

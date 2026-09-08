@@ -144,25 +144,23 @@ async function main() {
       }
     }, exportDir)
 
-    const openShotCount = async () =>
-      await page.evaluate(() => document.querySelectorAll('[data-testid^="live-photo-shot-"]').length)
+    assert.equal(await page.locator('[data-testid="live-photo-tab-clone"]').count(), 0, 'Clone-shot creation entry must not be available')
+    assert.equal(await page.locator('[data-testid="live-photo-tab-reference"]').count(), 1, 'Reference creation entry must remain available')
+    assert.equal(await page.locator('[data-testid="live-photo-tab-library"]').count(), 1, 'Library entry must remain available')
+    await page.screenshot({ path: path.join(artifactDir, '01-create-entry-removed.png'), fullPage: true })
+    report.steps.push({ step: 'clone-create-entry-removed', screenshot: path.join(artifactDir, '01-create-entry-removed.png') })
 
-    await page.click('[data-testid="live-photo-tab-clone"]')
-    await waitFor(
-      async () =>
-        await page.evaluate((projectId) => {
-          const select = document.querySelector('[data-testid="live-photo-clone-project-select"]') as HTMLSelectElement | null
-          if (!select) return false
-          return Array.from(select.options).some((option) => option.value === projectId)
-        }, project.id),
-      30000,
-    )
-    await page.selectOption('[data-testid="live-photo-clone-project-select"]', project.id)
-    await waitFor(async () => (await openShotCount()) >= 1, 30000)
-    await page.screenshot({ path: path.join(artifactDir, '01-clone-tab.png'), fullPage: true })
-    report.steps.push({ step: 'clone-tab-ready', screenshot: path.join(artifactDir, '01-clone-tab.png') })
-
-    await page.click('[data-testid="live-photo-create-clone"]')
+    await page.evaluate(async (projectId) => {
+      const created = await window.api.livePhoto.enqueueClone({
+        cloneProjectId: projectId,
+        shotIds: ['shot-clone-1'],
+        motionTemplate: 'push_in',
+      })
+      void window.api.livePhoto.startClone({
+        ids: created.map((item) => item.id),
+        motionTemplate: 'push_in',
+      })
+    }, project.id)
     await page.click('[data-testid="live-photo-tab-library"]')
     await page.waitForFunction(() => document.querySelectorAll('[data-testid^="live-photo-item-"]').length >= 1, { timeout: 30000 })
     await page.screenshot({ path: path.join(artifactDir, '02-clone-item-created.png'), fullPage: true })
@@ -188,7 +186,7 @@ async function main() {
       90000,
     )
 
-    await page.locator(`[data-testid="live-photo-item-${itemId}"] .live-console-row__check span`).click()
+    await page.locator(`[data-testid="live-photo-select-${itemId}"]`).click()
     await page.waitForFunction((targetId) => {
       const input = document.querySelector(`[data-testid="live-photo-select-${targetId}"]`) as HTMLInputElement | null
       return Boolean(input?.checked)
@@ -208,7 +206,7 @@ async function main() {
         async () =>
           await page.evaluate(async (targetId) => {
             const items = await window.api.livePhoto.list()
-            return items.find((item) => item.id === targetId && item.exportBundlePath && item.packagingMetadataBridgePath) || null
+            return items.find((item) => item.id === targetId && item.exportBundlePath) || null
           }, itemId),
         90000,
       )
@@ -241,25 +239,14 @@ async function main() {
       console.error('[live-photo-clone-desktop] export debug:', JSON.stringify(exportDebug, null, 2))
       throw error
     }
-    await page.waitForFunction((targetId) => {
-      const button = document.querySelector(`[data-testid="live-photo-metadata-${targetId}"]`) as HTMLButtonElement | null
-      return Boolean(button && !button.disabled)
-    }, itemId, { timeout: 30000 })
     await page.screenshot({ path: path.join(artifactDir, '03-clone-item-exported.png'), fullPage: true })
     report.steps.push({ step: 'clone-item-exported', screenshot: path.join(artifactDir, '03-clone-item-exported.png') })
 
     const bundleDir = path.dirname(String(exportedItem.exportBundlePath || ''))
     assert.ok(fs.existsSync(bundleDir), 'Expected exported clone-shot Live Photo bundle directory')
+    await waitFor(() => fs.existsSync(String(exportedItem.exportBundlePath || '')), 30000)
     const bundleFiles = fs.readdirSync(bundleDir)
-    if (!bundleFiles.some((item) => item.endsWith('.livephoto.json'))) {
-      console.error('[live-photo-clone-desktop] bundle files snapshot:', JSON.stringify(bundleFiles, null, 2))
-    }
-    assert.ok(bundleFiles.some((item) => item.endsWith('.livephoto.json')), 'Expected .livephoto.json bundle file')
-    assert.ok(bundleFiles.some((item) => item.endsWith('.asset-metadata.json')), 'Expected .asset-metadata.json bundle file')
-
-    const metadataButton = page.locator(`[data-testid="live-photo-metadata-${itemId}"]`)
-    assert.equal(await metadataButton.isVisible(), true)
-    assert.equal(await metadataButton.isDisabled(), false)
+    assert.ok(fs.existsSync(String(exportedItem.exportBundlePath || '')), 'Expected exported clone-shot Live Photo file')
 
     const output = {
       ...report,

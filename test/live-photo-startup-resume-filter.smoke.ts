@@ -65,10 +65,26 @@ async function main() {
         currentStage: 'image_generation',
       },
     } as any)
+    await livePhotoRepo.upsert({
+      ...baseItem,
+      id: 'exhausted-with-remote-task',
+      packagingStatus: 'failed',
+      imageTaskId: 'exhausted-remote-image-task',
+      autoFlowStatus: {
+        enabled: true,
+        status: 'failed_terminal',
+        paused: true,
+        retryLimit: 2,
+        retryCount: 2,
+        currentStage: 'image_validation',
+        lastError: '[image_validation_failed] simulated rejection',
+      },
+    } as any)
 
     const resumed = await livePhotoService.resumePendingTasksOnStartup()
-    assert.equal(resumed.resumableCount, 0)
-    assert.deepEqual(resumed.itemIds, [])
+    assert.equal(resumed.resumableCount, 1)
+    assert.deepEqual(resumed.itemIds, ['running-with-remote-task'])
+    assert.equal(resumed.itemIds.includes('exhausted-with-remote-task'), false)
 
     console.log('live photo startup resume filter smoke test passed')
   } finally {

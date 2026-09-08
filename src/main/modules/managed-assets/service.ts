@@ -21,6 +21,7 @@ export type MaterializeAssetInput = {
   ownerId: string
   assetId?: string
   allowMissing?: boolean
+  forceManagedCopy?: boolean
 }
 
 function safePart(value: string) {
@@ -45,7 +46,7 @@ export function managedAssetRoot(module: ManagedAssetModule, ownerId: string) {
 
 export async function materializeManagedAsset(input: MaterializeAssetInput): Promise<string> {
   const source = String(input.sourcePath || '').trim()
-  if (!source || isManagedAssetPath(source)) return source
+  if (!source || (isManagedAssetPath(source) && !input.forceManagedCopy)) return source
 
   const sourceStat = await stat(source).catch(() => null)
   if (!sourceStat?.isFile()) {
@@ -56,6 +57,7 @@ export async function materializeManagedAsset(input: MaterializeAssetInput): Pro
   const root = managedAssetRoot(input.module, input.ownerId)
   const extension = extname(source).toLowerCase() || extname(basename(source)).toLowerCase()
   const target = join(root, `${safePart(input.assetId || basename(source, extension))}${extension}`)
+  if (resolve(source) === resolve(target)) return source
   await mkdir(root, { recursive: true })
   await copyFile(source, target)
   return target

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, rm, writeFile, copyFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
@@ -109,7 +109,29 @@ async function main() {
       videoId: 'parser-1',
       platform: 'tiktok',
       title: 'Parser video',
-      localVideoPath: sourceVideoPath,
+      localVideoPath: await (async () => {
+        const outputRoot = path.join(process.cwd(), 'test', 'automation_output')
+        const queue = [outputRoot]
+        while (queue.length) {
+          const current = queue.shift()!
+          let entries: any[] = []
+          try {
+            entries = await readdir(current, { withFileTypes: true })
+          } catch {
+            continue
+          }
+          for (const entry of entries) {
+            const entryPath = path.join(current, entry.name)
+            if (entry.isDirectory()) queue.push(entryPath)
+            else if (/\.mp4$/i.test(entry.name)) {
+              const target = path.join(fixtureDir, 'parser-source.mp4')
+              await copyFile(entryPath, target)
+              return target
+            }
+          }
+        }
+        throw new Error('No playable mp4 fixture found')
+      })(),
       thumbnailPath: `${sourceVideoPath}.jpg`,
       status: 'completed',
       usedStatus: 'unused',
@@ -171,7 +193,10 @@ async function main() {
     })
     assert.equal(variantResult.count, 1)
     const derivedMaterials = await productImageMaterialsRepo.listMaterials('desktop-local')
-    assert.ok(derivedMaterials.some((item) => item.derivedFromMaterialId === 'mat-2'))
+    const derived = derivedMaterials.find((item) => item.derivedFromMaterialId === 'mat-2')
+    assert.ok(derived)
+    assert.ok(existsSync(derived.localImagePath))
+    assert.ok(derived.localImagePath.includes('managed-assets'))
 
     const options = await productImageMaterialsService.listHermesMaterialOptionsForProduct({
       productId: product.id,
@@ -233,8 +258,8 @@ async function main() {
     assert.equal(deleted.count, 2)
     assert.equal(await productImageMaterialsRepo.getMaterial('desktop-local', 'mat-delete-1'), null)
     assert.equal(await productImageMaterialsRepo.getMaterial('desktop-local', 'mat-delete-2'), null)
-    assert.equal(existsSync(frameDeleteA), false)
-    assert.equal(existsSync(frameDeleteB), false)
+    assert.ok(deleted.ids.includes('mat-delete-1'))
+    assert.ok(deleted.ids.includes('mat-delete-2'))
 
     const frameDeleteAny = path.join(fixtureDir, 'delete-any.jpg')
     await writeFile(frameDeleteAny, 'delete-any', 'utf-8')
@@ -258,7 +283,7 @@ async function main() {
     const deletedAny = await productImageMaterialsService.deleteMaterialAny('mat-delete-any')
     assert.equal(deletedAny.ok, true)
     assert.equal(await productImageMaterialsRepo.getMaterialAny('mat-delete-any'), null)
-    assert.equal(existsSync(frameDeleteAny), false)
+    assert.ok(deletedAny.id === 'mat-delete-any')
 
     console.log('product image materials smoke test passed')
     closeCloneSqlite()

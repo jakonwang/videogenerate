@@ -65,6 +65,8 @@ export type TiktokCreativeShotTask = {
   imagePreparation?: ExternalReferenceImagePreparationState
   imageRetryCount?: number
   imageRetryLimit?: number
+  imageRetryMode?: 'auto' | 'manual_once'
+  imageValidationBypassed?: boolean
   accountId?: string
   officialTaskId?: string
   officialVideoId?: string
@@ -77,6 +79,8 @@ export type TiktokCreativeShotTask = {
   subtitleCoverImagePath?: string
   subtitleJobId?: string
   subtitleAppliedAt?: number
+  exportedAt?: number
+  exportedVideoPath?: string
 }
 
 export type TiktokCreativeTask = {

@@ -2024,6 +2024,7 @@
     "models": "Models",
     "productLibrary": "Products",
     "liveSlicer": "Slicer",
+    "publish": "Publish",
     "plugins": "Plugins",
     "settings": "Settings"
   },
@@ -2106,7 +2107,7 @@
       },
       "live-photo-generator": {
         "name": "Live Photo Generator",
-        "description": "Create Apple-compatible Live Photos from reference images or clone shots with preview and export tools."
+        "description": "Create Apple-compatible Live Photos from product reference images with preview and export tools."
       },
       "tiktok-creative-studio": {
         "name": "TikTok Creative Studio",
@@ -2233,14 +2234,13 @@
     "hero": {
       "back": "Back To Plugins",
       "eyebrow": "Live Photo Plugin",
-      "title": "Generate export-ready Live Photo assets from product references or clone shots.",
+      "title": "Generate export-ready Live Photo assets from product references.",
       "desc": "Use the dedicated plugin workspace to create previewable motion pairs, inspect prompt locks, export Apple-style bundles, and open local outputs.",
       "refresh": "Refresh",
       "completed": "Completed"
     },
     "tabs": {
       "reference": "Create From Reference",
-      "clone": "Create From Clone Shots",
       "library": "Library / Exports"
     },
     "reference": {
@@ -2261,18 +2261,10 @@
         "package": "Convert the generated video into a Live Photo, then package `.jpg + .mov + manifest` into the output bundle."
       }
     },
-    "clone": {
-      "title": "Clone Project",
-      "lock": "Read-only asset import",
-      "project": "Project",
-      "summaryTitle": "Project Summary",
-      "eligibleShots": "Eligible Shots",
-      "selected": "Selected"
-    },
     "library": {
       "title": "Library And Exports",
       "emptyTitle": "No Live Photo items yet.",
-      "emptyDesc": "Create one from a reference image or clone shot assets first.",
+      "emptyDesc": "Create one from a product reference image first.",
       "packagingMetadata": "Packaging Metadata",
       "preview": "Preview",
       "metadata": "Metadata",
@@ -2284,7 +2276,6 @@
     "actions": {
       "creating": "Creating...",
       "createLivePhoto": "Create Live Photo",
-      "createFromSelectedShots": "Create From Selected Shots",
       "exporting": "Exporting...",
       "exportSelected": "Export Selected"
     },
@@ -2306,13 +2297,12 @@
     },
     "messages": {
       "referenceCreated": "Reference Live Photo item created.",
-      "cloneCreated": "Clone shot Live Photo items created.",
       "retried": "Live Photo item retried.",
       "regenerated": "Live Photo item regenerated.",
       "exportedCount": "Exported {count} item(s)."
     },
     "workspace": {
-      "hint": "Switch quickly between reference tasks, clone shots, and the library",
+      "hint": "Switch quickly between reference tasks and the library",
       "referenceNote": "Create tasks in batches using the current aspect ratio",
       "referenceUploadTitle": "Click to upload or drop images here",
       "referenceUploadDesc": "Supports JPG, PNG, and WEBP. Images wider than 2000 px are recommended.",
@@ -2320,6 +2310,7 @@
       "materialLibraryDesc": "Open the product image library and select unbound images in batches.",
       "materialLibraryEmpty": "No unbound product images are available.",
       "materialLibraryAddSelected": "Add References",
+      "selected": "Selected",
       "selectAll": "Select All",
       "clear": "Clear",
       "previousPage": "Previous",
@@ -2341,9 +2332,6 @@
       "resolution": "Resolution",
       "frameRate": "Frame Rate",
       "quality": "Quality",
-      "cloneRuleReuse": "Reuse clone structure and shot data to generate motion video assets.",
-      "cloneRuleAutoLive": "After video generation, write Live Photo assets and add them to the library.",
-      "cloneSafe": "The task reads existing storyboard and video data, then enters the Live Photo output flow.",
       "itemUnit": "Items",
       "filter": "Filter",
       "referenceCreatedPrefix": "Created",
@@ -2366,9 +2354,8 @@
       "activateVersion": "Activate Version",
       "rollbackVersion": "Create Rollback Copy",
       "motionStrategy": "Motion Strategy",
-      "motionStrategyDesc": "These settings are stored and used by reference tasks, clone tasks, retries, and recovery.",
+      "motionStrategyDesc": "This setting is stored and used by reference tasks, retries, and recovery.",
       "referenceMotion": "Default Reference Motion",
-      "cloneMotion": "Default Clone Motion",
       "exportSettingsDesc": "Export settings are stored and applied to resolution, frame rate, and compression during export.",
       "saving": "Saving...",
       "saveSettings": "Save Live Photo Settings",
@@ -2384,8 +2371,46 @@
       "pauseRunning": "Pause Running",
       "batchDelete": "Batch Delete",
       "batchSubtitles": "Batch Subtitles",
-      "selectProduct": "Select Product"
+      "selectProduct": "Select Product",
+      "retryGuard": "Retry Guard",
+      "retrySettingsTitle": "Image Retry Guard",
+      "retrySettingsDesc": "Set the maximum automatic retries for image preparation quality checks.",
+      "retryAutomaticRecovery": "Automatic recovery",
+      "retryAttemptUnit": "attempt(s)",
+      "retryManualOnly": "Set to 0 for manual recovery only.",
+      "retryMaximum": "Maximum retries",
+      "retryRangeHint": "Choose a value from 0 to 20. This applies to newly started and manually retried image tasks.",
+      "retrySave": "Save guard",
+      "retrySettingsSaved": "Retry settings saved",
+      "continueWithVideo": "Skip image review and continue video generation",
+      "continueWithVideoStarted": "Image review skipped; video generation started",
+      "revertSubtitles": "Revert subtitles",
+      "materialUsed": "Used",
+      "materialUnused": "Unused",
+      "materialDerived": "Derived"
     }
+  },
+  "tiktokCreative": {
+    "retry": {
+      "guard": "Retry Guard",
+      "title": "Image Retry Guard",
+      "description": "Set the maximum automatic retries for image preparation quality checks.",
+      "automaticRecovery": "Automatic recovery",
+      "attemptUnit": "attempt(s)",
+      "manualOnly": "Set to 0 for manual recovery only.",
+      "maximum": "Maximum retries",
+      "rangeHint": "Choose a value from 0 to 20. This applies to newly started and manually retried image tasks.",
+      "save": "Save guard",
+      "saving": "Saving...",
+      "saved": "Retry settings saved",
+      "continueWithVideo": "Skip image review and continue video generation",
+      "continueWithVideoStarted": "Image review skipped; video generation started"
+    },
+    "material": {
+      "derivedOnly": "Only derived images are available to protect source material compliance.",
+      "empty": "No derived images are available."
+    },
+    "revertSubtitles": "Revert subtitles"
   },
   "auth": {
     "title": "License Activation",

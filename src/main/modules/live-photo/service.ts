@@ -56,6 +56,7 @@ import {
 import {
   LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
   LIVE_PHOTO_IMAGE_RETRY_LIMIT,
+  resolveLivePhotoImageRetryFailure,
   resolveLivePhotoRetryLimit,
 } from './retryPolicy'
 import type {
@@ -96,6 +97,11 @@ type LivePhotoServiceDependencies = {
 }
 
 const LIVE_PHOTO_SUBTITLE_USER_ID = 'desktop-live-photo'
+async function getConfiguredLivePhotoRetryLimit() {
+  const settings = await livePhotoRepo.getSettings()
+  const value = Number(settings.retryLimit)
+  return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : LIVE_PHOTO_DEFAULT_RETRY_LIMIT
+}
 
 type LivePhotoVisualReviewResult = {
   passed: boolean
@@ -802,7 +808,8 @@ function ensureAutoFlowStatus(item: LivePhotoItem) {
         ? current.status
         : 'idle',
     paused: Boolean(current.paused),
-    retryLimit: Number(current.retryLimit ?? LIVE_PHOTO_DEFAULT_RETRY_LIMIT) || LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
+    imageRetryMode: current.imageRetryMode === 'manual_once' ? 'manual_once' : 'auto',
+    retryLimit: Math.max(0, Math.min(20, Math.floor(Number(current.retryLimit ?? LIVE_PHOTO_DEFAULT_RETRY_LIMIT) || 0))),
     retryCount: Math.max(0, Number(current.retryCount ?? 0) || 0),
     currentStage: current.currentStage || 'queued',
     lastStartedAt: Number(current.lastStartedAt ?? 0) || undefined,
@@ -3811,6 +3818,21 @@ async function clearMaterializedArtifactsForImageRetry(itemId: string) {
   )
 }
 
+async function clearMaterializedArtifactsForVideoRetry(itemId: string) {
+  const root = livePhotoRoot(itemId)
+  await Promise.all(
+    [
+      'poster.jpg',
+      'preview.mp4',
+      'live-photo.jpg',
+      'live-photo.mov',
+      'live-photo.json',
+      'motion.mp4',
+      'motion.mov',
+    ].map((fileName) => rm(join(root, fileName), { force: true })),
+  )
+}
+
 async function restoreCompletedMaterializedItem(item: LivePhotoItem, logMessage: string) {
   const materialized = readExistingMaterializedArtifacts(item.id)
   if (!materialized) return null
@@ -4364,7 +4386,7 @@ async function finalizeReferenceItem(input: {
     workflow: patchWorkflow(patchWorkflow(input.item.workflow, 'image_validation', 'image_validation', 'done'), 'video_generation', 'image_generation', 'done'),
     autoFlowStatus: {
       ...patchAutoFlowStatus(input.item, 'video_generation', 'running'),
-      retryLimit: LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
+      retryLimit: ensureAutoFlowStatus(input.item).retryLimit,
       retryCount: 0,
     },
     updatedAt: now(),
@@ -4606,15 +4628,25 @@ async function runLivePhotoItemAutoFlow(
       currentStage,
       normalizeLivePhotoFailureReasonSafe(String(error?.message || error || 'Unknown error'), currentStage),
     )
-    const retryLimit = resolveLivePhotoRetryLimit(currentStage)
+    const retryLimit = resolveLivePhotoRetryLimit(currentStage, current.retryLimit)
     const regionRequired = reason.includes('[replacement_region_required]')
-    const nextRetryCount = regionRequired
-      ? Number(current.retryCount ?? 0)
-      : Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
-    const terminalByStage = shouldForceTerminalLivePhotoFailure(currentStage, reason)
-    const terminal = terminalByStage || nextRetryCount >= retryLimit
     const imageValidationFailure =
       (currentStage === 'image_generation' || currentStage === 'image_validation') && isLivePhotoImageValidationFailure(reason)
+    const manualImageAttempt = current.imageRetryMode === 'manual_once' &&
+      (currentStage === 'image_generation' || currentStage === 'image_validation')
+    const imageRetryDecision = resolveLivePhotoImageRetryFailure({
+      retryCount: current.retryCount,
+      retryLimit,
+      retryMode: current.imageRetryMode,
+    })
+    const canAutoRetryImage = imageValidationFailure && imageRetryDecision.shouldRetry
+    const nextRetryCount = regionRequired || manualImageAttempt
+      ? Number(current.retryCount ?? 0)
+      : canAutoRetryImage
+        ? imageRetryDecision.nextRetryCount
+        : Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
+    const terminalByStage = shouldForceTerminalLivePhotoFailure(currentStage, reason)
+    const terminal = manualImageAttempt || terminalByStage || (imageValidationFailure ? !canAutoRetryImage : nextRetryCount >= retryLimit)
     if (reason.includes('[remote_pending]')) {
       const remoteTaskId = extractTaskIdFromText(reason)
       const pending = await livePhotoRepo.upsert({
@@ -4664,7 +4696,7 @@ async function runLivePhotoItemAutoFlow(
         ),
       ]),
       packagingStatus: 'failed',
-      generatedStillPath: imageValidationFailure ? undefined : latestPersisted.generatedStillPath,
+      generatedStillPath: canAutoRetryImage ? undefined : latestPersisted.generatedStillPath,
       imageTaskId: imageValidationFailure ? undefined : latestPersisted.imageTaskId,
       imageTaskProvider: imageValidationFailure ? undefined : latestPersisted.imageTaskProvider,
       imageTaskModel: imageValidationFailure ? undefined : latestPersisted.imageTaskModel,
@@ -4675,6 +4707,7 @@ async function runLivePhotoItemAutoFlow(
         retryLimit,
         retryCount: nextRetryCount,
         status: terminal ? 'failed_terminal' : 'failed_retryable',
+        paused: (imageValidationFailure || manualImageAttempt) && terminal ? true : current.paused,
         currentStage,
         lastError: reason,
       },
@@ -4755,12 +4788,25 @@ function enqueueLivePhotoAutoFlow(
         currentStage,
         normalizeLivePhotoFailureReason(String(error?.message || error || 'Unknown error'), currentStage),
       )
-      const retryLimit = resolveLivePhotoRetryLimit(currentStage)
+      const retryLimit = resolveLivePhotoRetryLimit(currentStage, current.retryLimit)
       const regionRequired = reason.includes('[replacement_region_required]')
-      const nextRetryCount = regionRequired
+      const imageValidationFailure =
+        (currentStage === 'image_generation' || currentStage === 'image_validation') && isLivePhotoImageValidationFailure(reason)
+      const manualImageAttempt = current.imageRetryMode === 'manual_once' &&
+        (currentStage === 'image_generation' || currentStage === 'image_validation')
+      const imageRetryDecision = resolveLivePhotoImageRetryFailure({
+        retryCount: current.retryCount,
+        retryLimit,
+        retryMode: current.imageRetryMode,
+      })
+      const canAutoRetryImage = imageValidationFailure && imageRetryDecision.shouldRetry
+      const nextRetryCount = regionRequired || manualImageAttempt
         ? Number(current.retryCount ?? 0)
-        : Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
-      const terminal = shouldForceTerminalLivePhotoFailure(currentStage, reason) || nextRetryCount >= retryLimit
+        : canAutoRetryImage
+          ? imageRetryDecision.nextRetryCount
+          : Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
+      const terminal = manualImageAttempt || shouldForceTerminalLivePhotoFailure(currentStage, reason) ||
+        (imageValidationFailure ? !canAutoRetryImage : nextRetryCount >= retryLimit)
       await livePhotoRepo.upsert({
         ...appendLivePhotoLogs(latest, [
           buildLivePhotoLog(`[live-photo] queue-level failure: ${reason}`, 'error'),
@@ -4771,6 +4817,7 @@ function enqueueLivePhotoAutoFlow(
           retryLimit,
           retryCount: nextRetryCount,
           status: terminal ? 'failed_terminal' : 'failed_retryable',
+          paused: (imageValidationFailure || manualImageAttempt) && terminal ? true : current.paused,
           currentStage,
           lastError: reason,
         },
@@ -4803,6 +4850,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
   const promptVersion = livePhotoPromptVersionService.getActive()
   ensureLivePhotoStrictImageEditProvider(credentials)
   const motionTemplate = input.motionTemplate || 'push_in'
+  const retryLimit = await getConfiguredLivePhotoRetryLimit()
   await productImageMaterialsService.markMaterialsUsedByLocalImagePaths(referenceImagePaths)
   const created: LivePhotoItem[] = []
   for (const referenceImagePath of referenceImagePaths) {
@@ -4842,7 +4890,11 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
         credentials,
       }),
       workflow: buildDefaultWorkflow(),
-      autoFlowStatus: buildDefaultAutoFlowStatus(),
+      autoFlowStatus: {
+        ...buildDefaultAutoFlowStatus(),
+        retryLimit,
+        imageRetryMode: 'auto',
+      },
       logs: [
         buildLivePhotoLog('[live-photo] reference task created'),
         buildLivePhotoLog(`[live-photo] reference image selected: ${referenceImagePath}`),
@@ -5149,10 +5201,10 @@ export const livePhotoService = {
     return items.map((item) => hydrateLivePhotoArtifactPaths(item))
   },
 
-  async listSummaries(input?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' }) {
+  async listSummaries(input?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled' }) {
     const page = Math.max(1, Number(input?.page || 1) || 1)
     const pageSize = Math.max(1, Math.min(200, Number(input?.pageSize || 24) || 24))
-    const filter = input?.filter === 'failed' || input?.filter === 'running' || input?.filter === 'paused' ? input.filter : 'all'
+    const filter = ['failed', 'running', 'paused', 'success_not_exported', 'success_exported', 'success_not_subtitled'].includes(String(input?.filter)) ? input?.filter as string : 'all'
     const allItems = await livePhotoRepo.list()
     const items =
       filter === 'failed'
@@ -5166,6 +5218,12 @@ export const livePhotoService = {
           ? allItems.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running')
           : filter === 'paused'
             ? allItems.filter((item) => Boolean(item.autoFlowStatus?.paused))
+            : filter === 'success_exported'
+              ? allItems.filter((item) => item.packagingStatus === 'completed' && Boolean(item.exportBundlePath))
+              : filter === 'success_not_exported'
+                ? allItems.filter((item) => item.packagingStatus === 'completed' && !item.exportBundlePath)
+                : filter === 'success_not_subtitled'
+                  ? allItems.filter((item) => item.packagingStatus === 'completed' && !item.subtitleOverlay?.active)
             : allItems
     const total = items.length
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -5472,6 +5530,13 @@ export const livePhotoService = {
     }
     return saved
   },
+  async revertSubtitleVideosFromItems(input: { ids: string[] }) {
+    const results = []
+    for (const id of Array.isArray(input.ids) ? input.ids : []) {
+      try { results.push(await this.revertSubtitleVideoFromItem({ id })) } catch { /* continue */ }
+    }
+    return { reverted: results.length, items: results }
+  },
 
   async generateSubtitleVideosForItems(input: {
     name: string
@@ -5566,6 +5631,8 @@ export const livePhotoService = {
     if (!id) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
     const existing = await livePhotoRepo.get(id)
     if (!existing) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
+    const imageRetryMode = input.retryMode === 'manual_once' ? 'manual_once' : 'auto'
+    const existingAutoFlowStatus = ensureAutoFlowStatus(existing)
     const manualReplacementRegion = input.replacementRegion
       ? normalizeLivePhotoReplacementRegion({
           ...input.replacementRegion,
@@ -5644,6 +5711,7 @@ export const livePhotoService = {
       updatedAt: now(),
     }
     if (canRetryFromVideoStage) {
+      await clearMaterializedArtifactsForVideoRetry(existing.id)
       processingItem.generatedStillPath = preservedStillPath
       processingItem.originalMotionVideoPath = undefined
       processingItem.motionVideoPath = undefined
@@ -5668,8 +5736,9 @@ export const livePhotoService = {
         enabled: true,
         status: 'idle',
         paused: false,
-        retryCount: 0,
-        retryLimit: LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
+        retryCount: ensureAutoFlowStatus(existing).retryCount,
+        retryLimit: ensureAutoFlowStatus(existing).retryLimit,
+        imageRetryMode: canRetryFromVideoStage ? 'auto' : imageRetryMode,
         currentStage: 'video_generation',
         lastStartedAt: undefined,
         lastCompletedAt: undefined,
@@ -5704,9 +5773,10 @@ export const livePhotoService = {
         enabled: true,
         status: 'idle',
         paused: false,
-        retryCount: 0,
-        retryLimit: LIVE_PHOTO_IMAGE_RETRY_LIMIT,
+        retryCount: imageRetryMode === 'manual_once' ? existingAutoFlowStatus.retryCount : 0,
+        retryLimit: existingAutoFlowStatus.retryLimit,
         currentStage: 'queued',
+        imageRetryMode,
       }
       processingItem.logs = [
         ...(Array.isArray(existing.logs) ? existing.logs : []),
@@ -5763,12 +5833,15 @@ export const livePhotoService = {
       })
     }
     const normalizedItems = await livePhotoRepo.list()
-    const resumable: LivePhotoItem[] = []
+    const resumable = normalizedItems.filter((item) =>
+      canResumeLivePhotoAutoFlow(item) &&
+      Boolean(String(item.imageTaskId || '').trim() || String(item.videoTaskId || '').trim()),
+    )
     console.log('[live-photo-debug] startup-resume-scan', {
       totalItemCount: normalizedItems.length,
       resumableCount: resumable.length,
       itemIds: resumable.map((item) => item.id),
-      autoResumeDisabled: true,
+      autoResumeDisabled: false,
     })
     resumable.forEach((item, index) => {
       const delayMs = Math.min(index, 6) * 900
@@ -5824,6 +5897,51 @@ export const livePhotoService = {
         { bypassCooldown: true },
       )
     }
+    return next
+  },
+
+  async continueWithVideo(input: { id: string; motionTemplate?: LivePhotoMotionTemplate }) {
+    const id = String(input.id || '').trim()
+    if (!id) throw new Error('Live Photo item id is required')
+    const existing = await livePhotoRepo.get(id)
+    if (!existing) throw new Error('Live Photo item not found')
+    const current = ensureAutoFlowStatus(existing)
+    const reason = String(current.lastError || existing.error || '').trim()
+    const retryLimit = Number(current.retryLimit || 0)
+    const retryCount = Number(current.retryCount || 0)
+    if (!isLivePhotoImageValidationFailure(reason) || (current.imageRetryMode !== 'manual_once' && retryCount < retryLimit) || !current.paused) {
+      throw new Error('This item is not paused after image validation retries')
+    }
+    const stillPath = String(existing.generatedStillPath || '').trim()
+    if (!stillPath || !existsSync(stillPath)) throw new Error('The generated image is no longer available')
+    const next = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(existing, [
+        buildLivePhotoLog('[live-photo] image validation bypassed by user; continuing with video generation', 'info'),
+      ]),
+      packagingStatus: 'processing',
+      error: undefined,
+      autoFlowStatus: {
+        ...current,
+        paused: false,
+        status: 'running',
+        currentStage: 'video_generation',
+        imageValidationBypassed: true,
+        lastError: '',
+      },
+      workflow: patchWorkflow(
+        patchWorkflow(existing.workflow, 'image_validation', 'image_validation', 'failed', reason),
+        'video_generation',
+        'video_generation',
+        'running',
+      ),
+      updatedAt: now(),
+    })
+    enqueueLivePhotoAutoFlow(
+      next.id,
+      input.motionTemplate || (next.sourceType === 'reference_replace' ? 'push_in' : 'ambient_sway'),
+      'manual_continue_with_video',
+      { bypassCooldown: true },
+    )
     return next
   },
 

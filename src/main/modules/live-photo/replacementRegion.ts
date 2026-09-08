@@ -1,4 +1,13 @@
-import sharp from 'sharp'
+import { mkdir } from 'node:fs/promises'
+import { dirname } from 'node:path'
+let sharp: any
+async function ensureSharp() {
+  if (!sharp) {
+    const module = await import('sharp')
+    sharp = module.default || module
+  }
+  return sharp
+}
 
 import type { LivePhotoReplacementRegion } from './types'
 
@@ -143,6 +152,7 @@ export async function prepareLivePhotoReplacementCrop(input: {
   outputPath: string
   region: LivePhotoReplacementRegion
 }) {
+  await ensureSharp()
   try {
     const metadata = await sharp(input.scenePath, { failOn: 'error' }).rotate().metadata()
     if (!metadata.width || !metadata.height) throw new Error('scene dimensions are unavailable')
@@ -151,6 +161,7 @@ export async function prepareLivePhotoReplacementCrop(input: {
       imageWidth: metadata.width,
       imageHeight: metadata.height,
     })
+    await mkdir(dirname(input.outputPath), { recursive: true })
     await sharp(input.scenePath, { failOn: 'error' })
       .rotate()
       .extract(geometry.context)
@@ -203,6 +214,7 @@ export async function compositeLivePhotoReplacementCrop(input: {
   outputPath: string
   geometry: LivePhotoReplacementGeometry
 }) {
+  await ensureSharp()
   try {
     const { context, target, writeback } = input.geometry
     const relative = {
@@ -234,6 +246,7 @@ export async function compositeLivePhotoReplacementCrop(input: {
     const overlay = await sharp(rgba, {
       raw: { width: writeback.width, height: writeback.height, channels: 4 },
     }).png().toBuffer()
+    await mkdir(dirname(input.outputPath), { recursive: true })
     await sharp(input.scenePath, { failOn: 'error' })
       .rotate()
       .composite([{ input: overlay, left: writeback.left, top: writeback.top }])

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { tiktokCreativeStudioRepo } from './repo'
@@ -13,11 +14,24 @@ import type { TiktokCreativePromptVersion } from './promptVersions'
 import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/batchSubtitle'
 import { webPlatformRepo } from '../web-platform/repo'
 import { normalizeTiktokPreparedImageAspect } from './imageAspect'
+import { resolveTiktokImageRetryFailure } from './retryPolicy'
 import { runFfmpeg } from '../ffmpeg/runner'
 import { probeMedia } from '../ffmpeg/probe'
 import type { TiktokCreativeAccount, TiktokCreativeShotTask, TiktokCreativeTask, TiktokCreativeTaskLog } from './types'
 
+// Keep paid image retries bounded. The limit counts automatic retries after
+// the initial image generation attempt.
 const TIKTOK_IMAGE_RETRY_LIMIT = 2
+async function getTiktokImageRetryLimit() {
+  const plugin = await webPlatformRepo.ensurePluginRecord('desktop-tiktok-creative-studio', 'tiktok-creative-studio')
+  const value = Number((plugin.config || {}).imageRetryLimit)
+  return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : TIKTOK_IMAGE_RETRY_LIMIT
+}
+
+function normalizeTiktokImageRetryLimit(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(20, Math.floor(parsed))) : TIKTOK_IMAGE_RETRY_LIMIT
+}
 
 function now() {
   return Date.now()
@@ -320,6 +334,8 @@ async function processReferenceShot(taskId: string, shotId: string) {
       return
     }
 
+    const configuredImageRetryLimit = await getTiktokImageRetryLimit()
+    const imageRetryLimit = Math.max(0, Math.min(20, Math.floor(Number(shot.imageRetryLimit ?? configuredImageRetryLimit) || 0)))
     const activePromptVersion = await tiktokCreativePromptVersions.getActive()
     const promptVersion = shot.imagePreparation?.promptVersionId
       ? {
@@ -329,14 +345,21 @@ async function processReferenceShot(taskId: string, shotId: string) {
           promptHash: shot.imagePreparation.promptHash || activePromptVersion.promptHash,
         }
       : activePromptVersion
-    const prepared = await prepareReferenceImageForExternalWorkflow({
-      workflowId: `${taskId}-${shotId}`,
-      referenceImagePath: shot.referenceImagePath || shot.imagePath,
-      productId: String(task.productId || '').trim(),
-      outputRoot: await defaultShotRoot(taskId, shotId),
-      state: shot.imagePreparation,
-      promptVersion,
-    })
+    const bypassedImagePath = shot.imageValidationBypassed
+      ? [shot.preparedImagePath, shot.imagePreparation?.generatedStillPath, shot.referenceImagePath, shot.imagePath]
+          .map((value) => String(value || '').trim())
+          .find((value) => value && existsSync(value))
+      : undefined
+    const prepared = bypassedImagePath
+      ? { pending: false, failed: false, error: undefined, preparedImagePath: bypassedImagePath, state: shot.imagePreparation || {} }
+      : await prepareReferenceImageForExternalWorkflow({
+          workflowId: `${taskId}-${shotId}`,
+          referenceImagePath: shot.referenceImagePath || shot.imagePath,
+          productId: String(task.productId || '').trim(),
+          outputRoot: await defaultShotRoot(taskId, shotId),
+          state: shot.imagePreparation,
+          promptVersion,
+        })
     await persistShot(taskId, shotId, (current) => ({
       ...current,
       imagePreparation: prepared.state,
@@ -346,8 +369,10 @@ async function processReferenceShot(taskId: string, shotId: string) {
     }))
     if (prepared.failed) {
       const retryCount = Math.max(0, Number(shot.imageRetryCount || 0) || 0)
-      if (retryCount < TIKTOK_IMAGE_RETRY_LIMIT) {
-        const nextRetryCount = retryCount + 1
+      const qualityDecision = prepared.state.qualityReport?.decision
+      const retryDecision = resolveTiktokImageRetryFailure({ retryCount, retryLimit: imageRetryLimit, retryMode: shot.imageRetryMode, qualityDecision })
+      if (retryDecision.shouldRetry) {
+        const nextRetryCount = retryDecision.nextRetryCount
         await persistShot(taskId, shotId, (current) => ({
           ...current,
           imagePreparation: {
@@ -363,14 +388,15 @@ async function processReferenceShot(taskId: string, shotId: string) {
           },
           preparedImagePath: undefined,
           imageRetryCount: nextRetryCount,
-          imageRetryLimit: TIKTOK_IMAGE_RETRY_LIMIT,
+          imageRetryLimit,
+          imageRetryMode: 'auto',
           status: 'running',
           remoteStatus: 'queued',
           lastError: prepared.error,
           updatedAt: now(),
           logs: [
             ...(current.logs || []),
-            buildLog(`[tiktok-creative] image quality failed; automatic retry ${nextRetryCount}/${TIKTOK_IMAGE_RETRY_LIMIT}`),
+            buildLog(`[tiktok-creative] image quality failed; automatic retry ${nextRetryCount}/${imageRetryLimit}`),
           ].slice(-200),
         }))
         scheduleShot(taskId, shotId, 1000)
@@ -491,8 +517,39 @@ async function syncPendingPromptVersion(promptVersion: TiktokCreativePromptVersi
 }
 
 export const tiktokCreativeStudioService = {
+  async getSettings() {
+    return { imageRetryLimit: await getTiktokImageRetryLimit() }
+  },
+
+  async saveSettings(input: { imageRetryLimit?: number }) {
+    const plugin = await webPlatformRepo.ensurePluginRecord('desktop-tiktok-creative-studio', 'tiktok-creative-studio')
+    const imageRetryLimit = normalizeTiktokImageRetryLimit(input?.imageRetryLimit)
+    await webPlatformRepo.upsertPluginRecord({
+      ...plugin,
+      config: { ...(plugin.config || {}), imageRetryLimit },
+    })
+    return { imageRetryLimit }
+  },
+
   async list() {
-    return await tiktokCreativeStudioRepo.list()
+    const tasks = await tiktokCreativeStudioRepo.list()
+    return tasks.map((task): TiktokCreativeTask => ({
+      ...task,
+      shots: task.shots.map((shot): TiktokCreativeShotTask => {
+        const preparedImagePath = String(shot.preparedImagePath || '').trim()
+        const generatedStillPath = String(shot.imagePreparation?.generatedStillPath || '').trim()
+        return {
+          ...shot,
+          preparedImagePath: preparedImagePath && existsSync(preparedImagePath) ? preparedImagePath : undefined,
+          imagePreparation: shot.imagePreparation
+            ? {
+                ...shot.imagePreparation,
+                generatedStillPath: generatedStillPath && existsSync(generatedStillPath) ? generatedStillPath : undefined,
+              }
+            : undefined,
+        }
+      }),
+    }))
   },
 
   async listAccounts() {
@@ -561,6 +618,7 @@ export const tiktokCreativeStudioService = {
     const product = (await productsRepo.list()).find((item) => item.id === productId)
     if (!product) throw new Error('Product does not exist')
     const timestamp = now()
+    const imageRetryLimit = await getTiktokImageRetryLimit()
     const promptVersion = await tiktokCreativePromptVersions.getActive()
     const shots: TiktokCreativeShotTask[] = referenceImagePaths.map((referenceImagePath, index) => ({
       id: randomUUID(),
@@ -580,7 +638,8 @@ export const tiktokCreativeStudioService = {
         replacementPrompt: promptVersion.prompt,
       },
       imageRetryCount: 0,
-      imageRetryLimit: TIKTOK_IMAGE_RETRY_LIMIT,
+      imageRetryLimit,
+      imageRetryMode: 'auto',
       logs: [buildLog('[tiktok-creative] reference image task created')],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -633,6 +692,7 @@ export const tiktokCreativeStudioService = {
     id: string
     shotId: string
     replacementRegion?: { x: number; y: number; width: number; height: number }
+    retryMode?: 'auto' | 'manual_once'
   }) {
     const task = await tiktokCreativeStudioRepo.get(String(input.id || '').trim())
     if (!task) throw new Error('Task not found')
@@ -652,6 +712,9 @@ export const tiktokCreativeStudioService = {
       : null
     if (input.replacementRegion && !manualReplacementRegion) throw new Error('Invalid replacement region')
     const promptVersion = await tiktokCreativePromptVersions.getActive()
+    const configuredImageRetryLimit = await getTiktokImageRetryLimit()
+    const imageRetryLimit = Math.max(0, Math.min(20, Math.floor(Number(existingShot.imageRetryLimit ?? configuredImageRetryLimit) || 0)))
+    const imageRetryMode = input.retryMode === 'manual_once' ? 'manual_once' : 'auto'
     const updated = await tiktokCreativeStudioRepo.upsert(updateShot(task, shotId, (shot) => ({
       ...shot,
       status: 'running',
@@ -675,21 +738,117 @@ export const tiktokCreativeStudioService = {
             imageTaskEndpointStyle: undefined,
           },
       preparedImagePath: shot.officialTaskId ? shot.preparedImagePath : undefined,
-      imageRetryCount: shot.officialTaskId ? shot.imageRetryCount : 0,
-      imageRetryLimit: TIKTOK_IMAGE_RETRY_LIMIT,
+      imageRetryCount: shot.officialTaskId || imageRetryMode === 'manual_once' ? shot.imageRetryCount : 0,
+      imageRetryLimit,
+      imageRetryMode: shot.officialTaskId ? shot.imageRetryMode : imageRetryMode,
       lastError: undefined,
       updatedAt: now(),
       logs: [
         ...(shot.logs || []),
         buildLog(
           manualReplacementRegion
-            ? `[tiktok-creative] replacement region corrected manually; revision=${manualReplacementRegion.revision}; image retries reset to 0/${TIKTOK_IMAGE_RETRY_LIMIT}`
-            : `[tiktok-creative] task retried; image retries reset to 0/${TIKTOK_IMAGE_RETRY_LIMIT}`,
+            ? `[tiktok-creative] replacement region corrected manually; revision=${manualReplacementRegion.revision}; one image attempt queued`
+            : imageRetryMode === 'manual_once'
+              ? '[tiktok-creative] one manual image attempt queued'
+              : '[tiktok-creative] task retry queued with automatic image retries',
         ),
       ].slice(-200),
     })))
     scheduleShot(updated.id, shotId)
     return updated
+  },
+
+  async continueWithVideo(input: { id: string; shotId: string }) {
+    const task = await tiktokCreativeStudioRepo.get(String(input.id || '').trim())
+    if (!task) throw new Error('Task not found')
+    const shotId = String(input.shotId || '').trim()
+    const target = task.shots.find((item) => item.shotId === shotId)
+    if (!target) throw new Error('Shot task not found')
+    const retryLimit = Number(target.imageRetryLimit ?? await getTiktokImageRetryLimit())
+    const retryCount = Number(target.imageRetryCount || 0)
+    if (
+      target.status !== 'requires_manual' ||
+      (target.imageRetryMode !== 'manual_once' && retryCount < retryLimit) ||
+      !String(target.lastError || '').includes('[image_retry_exhausted]') ||
+      target.officialTaskId
+    ) {
+      throw new Error('This shot is not paused after image validation retries')
+    }
+    const imagePath = [target.preparedImagePath, target.imagePreparation?.generatedStillPath]
+      .map((value) => String(value || '').trim())
+      .find((value) => value && existsSync(value))
+    if (!imagePath) throw new Error('The image for this shot is unavailable')
+    await persistShot(task.id, shotId, (current) => ({
+      ...current,
+      imageValidationBypassed: true,
+      status: 'running',
+      remoteStatus: 'queued',
+      lastError: undefined,
+      updatedAt: now(),
+      logs: [...(current.logs || []), buildLog('[tiktok-creative] image validation bypassed by user; continuing with video generation', 'info')].slice(-200),
+    }))
+    const latestTask = await tiktokCreativeStudioRepo.get(task.id)
+    const latestShot = latestTask?.shots.find((item) => item.shotId === shotId)
+    if (!latestTask || !latestShot) throw new Error('Shot task disappeared')
+    try {
+      await withAccountLock('__account_scheduler__', async () => {
+        const selected = await chooseAccount(taskCreditCost(latestShot.durationSec || 5))
+        try {
+          await withAccountLock(selected.account.id, async () => {
+          let created: Awaited<ReturnType<TiktokOfficialClient['createTask']>>
+          try {
+            created = await selected.client.createTask({
+              imagePaths: [imagePath],
+              prompt: latestShot.prompt || DEFAULT_PROMPT,
+              durationSec: latestShot.durationSec || 5,
+            })
+          } catch (error) {
+            const message = getErrorMessage(error, 'Official task creation failed')
+            throw new Error(`[official_create_unconfirmed] ${message}`)
+          }
+          await persistShot(task.id, shotId, (current) => ({
+            ...current,
+            accountId: selected.account.id,
+            officialTaskId: created.taskId,
+            officialVideoId: created.videoId,
+            requestTrace: created.requestTrace,
+            remoteStatus: created.videoUrl ? 'completed' : 'processing',
+            remoteStatusUpdatedAt: now(),
+            updatedAt: now(),
+            logs: [...(current.logs || []), buildLog(`[tiktok-creative] official task created from bypassed image: ${created.taskId}`, 'success')].slice(-200),
+          }))
+          if (created.videoUrl) {
+            const downloaded = await downloadResult({ taskId: task.id, shotId, client: selected.client, videoUrl: created.videoUrl, posterUrl: created.posterUrl })
+            await persistShot(task.id, shotId, (current) => ({
+              ...current,
+              status: 'completed',
+              remoteStatus: 'completed',
+              resultVideoPath: downloaded.videoPath,
+              posterPath: downloaded.posterPath,
+              downloadDir: downloaded.dir,
+              updatedAt: now(),
+            }))
+          } else {
+            scheduleShot(task.id, shotId, 10000)
+          }
+          })
+        } finally {
+          await selected.client.close()
+        }
+      })
+    } catch (error) {
+      const message = getErrorMessage(error, 'Official task creation failed')
+      await persistShot(task.id, shotId, (current) => ({
+        ...current,
+        status: 'requires_manual',
+        remoteStatus: 'paused_error',
+        lastError: message,
+        updatedAt: now(),
+        logs: [...(current.logs || []), buildLog(`[tiktok-creative] ${message}`, 'error')].slice(-200),
+      })).catch(() => undefined)
+      throw error
+    }
+    return await tiktokCreativeStudioRepo.get(task.id)
   },
 
   async exportItems(input: { taskId: string; shotIds: string[]; outputDir: string }) {
@@ -701,6 +860,7 @@ export const tiktokCreativeStudioService = {
     await mkdir(outputDir, { recursive: true })
     const exported: Array<{ shotId: string; videoPath: string }> = []
     const skipped: Array<{ shotId: string; reason: string }> = []
+    const exportedByShotId = new Map<string, { videoPath: string; exportedAt: number }>()
     for (const shot of task.shots.filter((item) => !ids.size || ids.has(item.shotId))) {
       const sourceVideoPath = shot.subtitleVideoPath || shot.resultVideoPath
       if (shot.status !== 'completed' || !sourceVideoPath) {
@@ -711,6 +871,17 @@ export const tiktokCreativeStudioService = {
       const outputPath = join(outputDir, `${task.productName || 'tiktok'}-${shot.shotIndex + 1}-${shot.shotId.slice(0, 8)}${extension}`)
       await copyFile(sourceVideoPath, outputPath)
       exported.push({ shotId: shot.shotId, videoPath: outputPath })
+      exportedByShotId.set(shot.shotId, { videoPath: outputPath, exportedAt: now() })
+    }
+    if (exportedByShotId.size) {
+      await tiktokCreativeStudioRepo.upsert(applyTaskSummary({
+        ...task,
+        shots: task.shots.map((shot) => {
+          const exportInfo = exportedByShotId.get(shot.shotId)
+          return exportInfo ? { ...shot, exportedAt: exportInfo.exportedAt, exportedVideoPath: exportInfo.videoPath } : shot
+        }),
+        updatedAt: now(),
+      }))
     }
     return { outputDir, exported, skipped, total: ids.size || task.shots.length }
   },
@@ -822,6 +993,13 @@ export const tiktokCreativeStudioService = {
     if (subtitleVideoPath) await rm(subtitleVideoPath, { force: true }).catch(() => undefined)
     if (subtitleCoverImagePath) await rm(subtitleCoverImagePath, { force: true }).catch(() => undefined)
     return saved
+  },
+  async revertSubtitlesBatch(input: { items: Array<{ taskId: string; shotId: string }> }) {
+    const results = []
+    for (const item of Array.isArray(input.items) ? input.items : []) {
+      try { results.push(await this.revertSubtitles(item)) } catch { /* continue */ }
+    }
+    return { reverted: results.length, items: results }
   },
 
   async createDraftsFromCloneProjects(input: { cloneProjectIds: string[] }) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterView, useRoute, useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   House,
   Sparkles,
@@ -9,137 +9,214 @@ import {
   Rocket,
   FolderOpen,
   ScissorsLineDashed,
+  Send,
   Puzzle,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
-} from 'lucide-vue-next'
-import { storeToRefs } from 'pinia'
-import TitleBar from './components/TitleBar.vue'
-import UiLocaleSelect from './components/UiLocaleSelect.vue'
-import DsMainLayout from '../design-system/layout/MainLayout.vue'
-import { useCloneTopbarStore } from '@/stores/cloneTopbar'
-import { useDesignInspectorStore } from '@/stores/designInspector'
-import { useWebSessionStore } from '@/stores/webSession'
-import type { HermesWorkspaceAction } from '../../../shared/hermesWorkspace'
+} from "lucide-vue-next";
+import { storeToRefs } from "pinia";
+import TitleBar from "./components/TitleBar.vue";
+import UiLocaleSelect from "./components/UiLocaleSelect.vue";
+import DsMainLayout from "../design-system/layout/MainLayout.vue";
+import { useCloneTopbarStore } from "@/stores/cloneTopbar";
+import { useDesignInspectorStore } from "@/stores/designInspector";
+import { useWebSessionStore } from "@/stores/webSession";
+import type { HermesWorkspaceAction } from "../../../shared/hermesWorkspace";
 
-const route = useRoute()
-const router = useRouter()
-const { t } = useI18n()
-const APP_SIDEBAR_STORAGE_KEY = 'videogenerate:app-sidebar-collapsed:v1'
-const helpOpen = ref(false)
-const moreOpen = ref(false)
-const appSidebarCollapsed = ref(false)
-const cloneTopbar = useCloneTopbarStore()
-const designInspector = useDesignInspectorStore()
-const webSession = useWebSessionStore()
-const { visible: cloneTopbarVisible, items: cloneTopbarItems } = storeToRefs(cloneTopbar)
-const { enabled: designInspectorEnabled } = storeToRefs(designInspector)
-const showDesignInspectorToggle = computed(() => import.meta.env.DEV)
-const showCloneWorkflowTopbar = computed(() => route.path.includes('/clone/') && cloneTopbarVisible.value && cloneTopbarItems.value.length > 0)
-const topUserName = computed(() => 'VideoGenerate')
-const topUserPlan = computed(() => t('shell.localMode'))
-let unsubscribeHermesWorkspaceActions: (() => void) | null = null
+const route = useRoute();
+const router = useRouter();
+const { t } = useI18n();
+const APP_SIDEBAR_STORAGE_KEY = "videogenerate:app-sidebar-collapsed:v1";
+const helpOpen = ref(false);
+const moreOpen = ref(false);
+const appSidebarCollapsed = ref(false);
+const cloneTopbar = useCloneTopbarStore();
+const designInspector = useDesignInspectorStore();
+const webSession = useWebSessionStore();
+const { visible: cloneTopbarVisible, items: cloneTopbarItems } =
+  storeToRefs(cloneTopbar);
+const { enabled: designInspectorEnabled } = storeToRefs(designInspector);
+const showDesignInspectorToggle = computed(() => import.meta.env.DEV);
+const showCloneWorkflowTopbar = computed(
+  () =>
+    route.path.includes("/clone/") &&
+    cloneTopbarVisible.value &&
+    cloneTopbarItems.value.length > 0,
+);
+const topUserName = computed(() => "VideoGenerate");
+const topUserPlan = computed(() => t("shell.localMode"));
+let unsubscribeHermesWorkspaceActions: (() => void) | null = null;
 
 const navItems = computed(() => [
-  { to: '/home', icon: House, label: t('nav.home'), active: route.path.includes('/home') },
-  { to: '/models', icon: Sparkles, label: t('nav.models'), active: route.path.includes('/models') },
-  { to: '/products', icon: FolderOpen, label: t('nav.productLibrary'), active: route.path.includes('/products') },
-  { to: '/clone', icon: CopyPlus, label: t('nav.clone'), active: route.path.includes('/clone') },
   {
-    to: '/production',
-    icon: Rocket,
-    label: t('nav.products'),
-    active: route.path.includes('/production') || route.path.includes('/tasks') || route.path.includes('/templates'),
+    to: "/home",
+    icon: House,
+    label: t("nav.home"),
+    active: route.path.includes("/home"),
   },
-  { to: '/live-slicer', icon: ScissorsLineDashed, label: t('nav.liveSlicer'), active: route.path.includes('/live-slicer') },
-])
+  {
+    to: "/models",
+    icon: Sparkles,
+    label: t("nav.models"),
+    active: route.path.includes("/models"),
+  },
+  {
+    to: "/products",
+    icon: FolderOpen,
+    label: t("nav.productLibrary"),
+    active: route.path.includes("/products"),
+  },
+  {
+    to: "/clone",
+    icon: CopyPlus,
+    label: t("nav.clone"),
+    active: route.path.includes("/clone"),
+  },
+  {
+    to: "/production",
+    icon: Rocket,
+    label: t("nav.products"),
+    active:
+      route.path.includes("/production") ||
+      route.path.includes("/tasks") ||
+      route.path.includes("/templates"),
+  },
+  {
+    to: "/live-slicer",
+    icon: ScissorsLineDashed,
+    label: t("nav.liveSlicer"),
+    active: route.path.includes("/live-slicer"),
+  },
+  {
+    to: "/publish",
+    icon: Send,
+    label: t("nav.publish"),
+    active: route.path.includes("/publish"),
+  },
+]);
 
 const helpItems = computed(() => [
-  { to: '/models', title: t('nav.models'), desc: t('shell.helpModels') },
-  { to: '/products', title: t('nav.productLibrary'), desc: t('shell.helpProducts') },
-  { to: '/clone', title: t('nav.clone'), desc: t('shell.helpClone') },
-  { to: '/production', title: t('nav.products'), desc: t('shell.helpProduction') },
-  { to: '/live-slicer', title: t('nav.liveSlicer'), desc: t('shell.helpSlicer') },
-])
+  { to: "/models", title: t("nav.models"), desc: t("shell.helpModels") },
+  {
+    to: "/products",
+    title: t("nav.productLibrary"),
+    desc: t("shell.helpProducts"),
+  },
+  { to: "/clone", title: t("nav.clone"), desc: t("shell.helpClone") },
+  {
+    to: "/production",
+    title: t("nav.products"),
+    desc: t("shell.helpProduction"),
+  },
+  {
+    to: "/live-slicer",
+    title: t("nav.liveSlicer"),
+    desc: t("shell.helpSlicer"),
+  },
+  { to: "/publish", title: t("nav.publish"), desc: t("nav.publish") },
+]);
 
 const sidebarSections = computed(() => [
   {
-    title: t('nav.plugins'),
+    title: t("nav.plugins"),
     items: [
-      { to: '/plugins', icon: Puzzle, label: t('plugins.tabs.market'), active: route.path.includes('/plugins') && !route.query.tab },
-      { to: '/plugins?tab=installed', icon: Puzzle, label: t('plugins.tabs.installed'), active: route.path.includes('/plugins') && route.query.tab === 'installed' },
+      {
+        to: "/plugins",
+        icon: Puzzle,
+        label: t("plugins.tabs.market"),
+        active: route.path.includes("/plugins") && !route.query.tab,
+      },
+      {
+        to: "/plugins?tab=installed",
+        icon: Puzzle,
+        label: t("plugins.tabs.installed"),
+        active:
+          route.path.includes("/plugins") && route.query.tab === "installed",
+      },
     ],
   },
-])
+]);
 
 function go(path: string, query?: Record<string, string>) {
-  void router.push({ path, query })
+  void router.push({ path, query });
 }
 
 function openCloudWorkspace() {
-  go('/production')
+  go("/production");
 }
 
 function quickExport() {
-  go('/production/tasks', { ws: 'media', quickStart: String(Date.now()) })
+  go("/production/tasks", { ws: "media", quickStart: String(Date.now()) });
 }
 
 function openHelpModal() {
-  helpOpen.value = true
+  helpOpen.value = true;
 }
 
 function onTopMenuClick(key: string) {
-  moreOpen.value = false
-  if (key === 'project') {
-    go('/products')
-    return
+  moreOpen.value = false;
+  if (key === "project") {
+    go("/products");
+    return;
   }
-  if (key === 'edit') {
-    go('/production')
-    return
+  if (key === "edit") {
+    go("/production");
+    return;
   }
-  if (key === 'view') {
-    go('/production')
-    return
+  if (key === "view") {
+    go("/production");
+    return;
   }
-  if (key === 'export') quickExport()
+  if (key === "export") quickExport();
 }
 
 function requestCloneStage(key: string) {
-  cloneTopbar.requestStage(key)
+  cloneTopbar.requestStage(key);
 }
 
 function toggleAppSidebar() {
-  appSidebarCollapsed.value = !appSidebarCollapsed.value
-  localStorage.setItem(APP_SIDEBAR_STORAGE_KEY, String(appSidebarCollapsed.value))
+  appSidebarCollapsed.value = !appSidebarCollapsed.value;
+  localStorage.setItem(
+    APP_SIDEBAR_STORAGE_KEY,
+    String(appSidebarCollapsed.value),
+  );
 }
 
 async function handleHermesWorkspaceAction(action: HermesWorkspaceAction) {
-  const routeName = String(action?.route?.name || '').trim()
-  if (!routeName) return
-  await router.push({
-    name: routeName,
-    ...(action.route.params ? { params: action.route.params } : {}),
-    ...(action.route.query ? { query: action.route.query } : {}),
-  }).catch(() => undefined)
+  const routeName = String(action?.route?.name || "").trim();
+  if (!routeName) return;
+  await router
+    .push({
+      name: routeName,
+      ...(action.route.params ? { params: action.route.params } : {}),
+      ...(action.route.query ? { query: action.route.query } : {}),
+    })
+    .catch(() => undefined);
 }
 
 onMounted(() => {
-  appSidebarCollapsed.value = localStorage.getItem(APP_SIDEBAR_STORAGE_KEY) === 'true'
-  unsubscribeHermesWorkspaceActions = window.api.hermes.subscribeWorkspaceActions((action) => {
-    void handleHermesWorkspaceAction(action)
-  })
-})
+  appSidebarCollapsed.value =
+    localStorage.getItem(APP_SIDEBAR_STORAGE_KEY) === "true";
+  unsubscribeHermesWorkspaceActions =
+    window.api.hermes.subscribeWorkspaceActions((action) => {
+      void handleHermesWorkspaceAction(action);
+    });
+});
 
 onUnmounted(() => {
-  unsubscribeHermesWorkspaceActions?.()
-  unsubscribeHermesWorkspaceActions = null
-})
+  unsubscribeHermesWorkspaceActions?.();
+  unsubscribeHermesWorkspaceActions = null;
+});
 </script>
 
 <template>
-  <div :class="['ui-app app-shell h-screen w-screen overflow-hidden', { 'is-sidebar-collapsed': appSidebarCollapsed }]">
+  <div
+    :class="[
+      'ui-app app-shell h-screen w-screen overflow-hidden',
+      { 'is-sidebar-collapsed': appSidebarCollapsed },
+    ]"
+  >
     <TitleBar />
     <div class="app-shell__body">
       <DsMainLayout
@@ -149,27 +226,61 @@ onUnmounted(() => {
         subtitle=""
         :topbar-enabled="showCloneWorkflowTopbar"
         :sidebar-width="appSidebarCollapsed ? '72px' : undefined"
-        :class="[{ 'models-route-shell': route.path.includes('/models'), 'app-shell__layout--sidebar-collapsed': appSidebarCollapsed }, 'app-shell__layout']"
+        :class="[
+          {
+            'models-route-shell': route.path.includes('/models'),
+            'app-shell__layout--sidebar-collapsed': appSidebarCollapsed,
+          },
+          'app-shell__layout',
+        ]"
       >
         <template #sidebar-footer>
           <div class="app-shell__sidebar-footer">
             <div class="app-sidebar-locale">
               <UiLocaleSelect />
             </div>
-            <button class="app-sidebar-footer-action" type="button" @click="go('/settings')">
+            <button
+              class="app-sidebar-footer-action"
+              type="button"
+              @click="go('/settings')"
+            >
               <Settings class="h-4 w-4" />
-              <span>{{ t('nav.settings') }}</span>
+              <span>{{ t("nav.settings") }}</span>
             </button>
             <button class="app-sidebar-user" type="button">
-              <div class="app-avatar">{{ topUserName.slice(0, 1).toUpperCase() }}</div>
+              <div class="app-avatar">
+                {{ topUserName.slice(0, 1).toUpperCase() }}
+              </div>
               <div class="min-w-0">
                 <div class="app-sidebar-user__name">{{ topUserName }}</div>
                 <div class="app-sidebar-user__meta">{{ topUserPlan }}</div>
               </div>
             </button>
-            <button class="app-sidebar-collapse" data-testid="app-sidebar-toggle" type="button" :title="appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse')" :aria-label="appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse')" :aria-expanded="!appSidebarCollapsed" @click="toggleAppSidebar">
-              <component :is="appSidebarCollapsed ? PanelLeftOpen : PanelLeftClose" />
-              <span>{{ appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse') }}</span>
+            <button
+              class="app-sidebar-collapse"
+              data-testid="app-sidebar-toggle"
+              type="button"
+              :title="
+                appSidebarCollapsed
+                  ? t('appNavigation.expand')
+                  : t('appNavigation.collapse')
+              "
+              :aria-label="
+                appSidebarCollapsed
+                  ? t('appNavigation.expand')
+                  : t('appNavigation.collapse')
+              "
+              :aria-expanded="!appSidebarCollapsed"
+              @click="toggleAppSidebar"
+            >
+              <component
+                :is="appSidebarCollapsed ? PanelLeftOpen : PanelLeftClose"
+              />
+              <span>{{
+                appSidebarCollapsed
+                  ? t("appNavigation.expand")
+                  : t("appNavigation.collapse")
+              }}</span>
             </button>
           </div>
         </template>
@@ -178,17 +289,27 @@ onUnmounted(() => {
           <div class="app-topbar-shell has-clone-workflow">
             <div class="app-topbar-clone">
               <div class="app-topbar-clone__nav">
-                <template v-for="(item, index) in cloneTopbarItems" :key="item.key">
+                <template
+                  v-for="(item, index) in cloneTopbarItems"
+                  :key="item.key"
+                >
                   <button
                     class="app-topbar-clone__step"
                     :class="{ 'is-done': item.done, 'is-active': item.active }"
                     type="button"
                     @click="requestCloneStage(item.key)"
                   >
-                    <span class="app-topbar-clone__index">{{ item.done ? '✓' : index + 1 }}</span>
-                    <span class="app-topbar-clone__label">{{ item.title }}</span>
+                    <span class="app-topbar-clone__index">{{
+                      item.done ? "✓" : index + 1
+                    }}</span>
+                    <span class="app-topbar-clone__label">{{
+                      item.title
+                    }}</span>
                   </button>
-                  <span v-if="index < cloneTopbarItems.length - 1" class="app-topbar-clone__arrow"></span>
+                  <span
+                    v-if="index < cloneTopbarItems.length - 1"
+                    class="app-topbar-clone__arrow"
+                  ></span>
                 </template>
               </div>
             </div>
@@ -199,29 +320,50 @@ onUnmounted(() => {
       </DsMainLayout>
     </div>
 
-    <div v-if="helpOpen" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4" @click.self="helpOpen = false">
-      <div class="w-full max-w-md rounded-xl border border-white/10 bg-[#18181B] p-4 shadow-2xl shadow-black/50" @click.stop>
-        <div class="text-sm font-semibold text-white/90">{{ t('shell.helpTitle') }}</div>
-        <div class="mt-1 text-[11px] leading-relaxed text-white/50">{{ t('shell.helpDesc') }}</div>
+    <div
+      v-if="helpOpen"
+      class="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4"
+      @click.self="helpOpen = false"
+    >
+      <div
+        class="w-full max-w-md rounded-xl border border-white/10 bg-[#18181B] p-4 shadow-2xl shadow-black/50"
+        @click.stop
+      >
+        <div class="text-sm font-semibold text-white/90">
+          {{ t("shell.helpTitle") }}
+        </div>
+        <div class="mt-1 text-[11px] leading-relaxed text-white/50">
+          {{ t("shell.helpDesc") }}
+        </div>
         <div class="mt-4 grid gap-2">
           <button
             v-for="item in helpItems"
             :key="item.to"
             class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left transition hover:bg-white/[0.06]"
-            @click="helpOpen = false; go(item.to)"
+            @click="
+              helpOpen = false;
+              go(item.to);
+            "
           >
-            <strong class="block text-sm text-white/88">{{ item.title }}</strong>
-            <span class="mt-1 block text-[11px] leading-relaxed text-white/50">{{ item.desc }}</span>
+            <strong class="block text-sm text-white/88">{{
+              item.title
+            }}</strong>
+            <span
+              class="mt-1 block text-[11px] leading-relaxed text-white/50"
+              >{{ item.desc }}</span
+            >
           </button>
         </div>
         <div class="mt-4 flex justify-end">
-          <button class="rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/75 transition hover:bg-white/[0.06]" @click="helpOpen = false">
-            {{ t('common.cancel') }}
+          <button
+            class="rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/75 transition hover:bg-white/[0.06]"
+            @click="helpOpen = false"
+          >
+            {{ t("common.cancel") }}
           </button>
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -245,7 +387,10 @@ onUnmounted(() => {
 }
 
 .app-shell :deep(.ds-shell) {
-  grid-template-columns: var(--app-sidebar-width, 184px) minmax(0, 1fr) !important;
+  grid-template-columns: var(--app-sidebar-width, 184px) minmax(
+      0,
+      1fr
+    ) !important;
   background: transparent;
 }
 
@@ -268,8 +413,11 @@ onUnmounted(() => {
   align-items: stretch !important;
   overflow: hidden !important;
   border-right: 1px solid rgba(148, 163, 184, 0.08) !important;
-  background:
-    linear-gradient(180deg, rgba(8, 12, 22, 0.98), rgba(6, 11, 20, 0.98)) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 12, 22, 0.98),
+    rgba(6, 11, 20, 0.98)
+  ) !important;
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
 }
 
@@ -345,15 +493,18 @@ onUnmounted(() => {
 }
 
 .app-shell :deep(.ds-sidebar__item.is-active) {
-  background:
-    linear-gradient(90deg, rgba(76, 57, 142, 0.82), rgba(82, 61, 143, 0.7)) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(76, 57, 142, 0.82),
+    rgba(82, 61, 143, 0.7)
+  ) !important;
   border-color: rgba(139, 92, 246, 0.16) !important;
   color: #ffffff !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
 }
 
 .app-shell :deep(.ds-sidebar__item.is-active::before) {
-  content: '';
+  content: "";
   position: absolute;
   left: -10px;
   top: 7px;
@@ -499,7 +650,11 @@ onUnmounted(() => {
   border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(11, 18, 31, 0.98), rgba(7, 13, 24, 0.98)),
-    radial-gradient(circle at top left, rgba(109, 93, 255, 0.1), transparent 34%);
+    radial-gradient(
+      circle at top left,
+      rgba(109, 93, 255, 0.1),
+      transparent 34%
+    );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
     0 14px 28px rgba(0, 0, 0, 0.22);
@@ -539,12 +694,16 @@ onUnmounted(() => {
   position: relative;
   width: 18px;
   height: 1px;
-  background: linear-gradient(90deg, rgba(89, 182, 255, 0.14), rgba(111, 88, 255, 0.58));
+  background: linear-gradient(
+    90deg,
+    rgba(89, 182, 255, 0.14),
+    rgba(111, 88, 255, 0.58)
+  );
   flex: 0 0 auto;
 }
 
 .app-topbar-clone__arrow::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 0;
   top: 50%;
@@ -587,12 +746,22 @@ onUnmounted(() => {
 .app-topbar-clone__step.is-active .app-topbar-clone__index {
   color: #ffffff;
   border-color: rgba(109, 93, 255, 0.42);
-  background: linear-gradient(135deg, rgba(111, 88, 255, 0.2), rgba(89, 182, 255, 0.14));
+  background: linear-gradient(
+    135deg,
+    rgba(111, 88, 255, 0.2),
+    rgba(89, 182, 255, 0.14)
+  );
 }
 
 .app-topbar-clone__step.is-active .app-topbar-clone__index {
-  background: linear-gradient(135deg, rgba(111, 88, 255, 0.96), rgba(89, 182, 255, 0.88));
-  box-shadow: 0 0 0 3px rgba(111, 88, 255, 0.08), 0 0 18px rgba(111, 88, 255, 0.26);
+  background: linear-gradient(
+    135deg,
+    rgba(111, 88, 255, 0.96),
+    rgba(89, 182, 255, 0.88)
+  );
+  box-shadow:
+    0 0 0 3px rgba(111, 88, 255, 0.08),
+    0 0 18px rgba(111, 88, 255, 0.26);
 }
 
 .app-topbar-clone__step.is-done .app-topbar-clone__label {
@@ -668,7 +837,10 @@ onUnmounted(() => {
 
 @media (max-width: 1180px) {
   .app-shell :deep(.ds-shell) {
-    grid-template-columns: var(--app-sidebar-width, 92px) minmax(0, 1fr) !important;
+    grid-template-columns: var(--app-sidebar-width, 92px) minmax(
+        0,
+        1fr
+      ) !important;
   }
 
   .app-shell :deep(.ds-sidebar) {

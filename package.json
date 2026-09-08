@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.85",
+  "version": "5.0.104",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -233,10 +233,16 @@
       {
         "from": "resources/hermes",
         "to": "hermes"
+      },
+      {
+        "from": "tmp/creatok-cli/win/package/bin/creatok.exe",
+        "to": "creatok/creatok.exe"
       }
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/build/Release/*.node",
+      "node_modules/sharp/**",
+      "node_modules/@img/sharp-win32-x64/**",
       "node_modules/ffmpeg-static/**",
       "node_modules/ffprobe-static/bin/win32/x64/**"
     ],

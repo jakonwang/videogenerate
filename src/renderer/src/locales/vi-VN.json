@@ -805,6 +805,7 @@
     "models": "Nguoi mau",
     "productLibrary": "San pham",
     "liveSlicer": "Cat video",
+    "publish": "Dang bai",
     "plugins": "Plugin",
     "settings": "Cai dat"
   },
@@ -1481,7 +1482,7 @@
       },
       "live-photo-generator": {
         "name": "Trinh tao Live Photo",
-        "description": "Tao Live Photo tu anh tham chieu hoac canh sao chep, kem xem truoc va xuat."
+        "description": "Tao Live Photo tu anh tham chieu san pham, kem xem truoc va xuat."
       },
       "tiktok-creative-studio": {
         "name": "TikTok Creative Studio",
@@ -1610,14 +1611,13 @@
     "hero": {
       "back": "Quay lai plugin",
       "eyebrow": "Plugin Live Photo",
-      "title": "Tao tai nguyen Live Photo san sang xuat tu anh san pham hoac canh sao chep.",
+      "title": "Tao tai nguyen Live Photo san sang xuat tu anh tham chieu san pham.",
       "desc": "Tao cap anh dong co the xem truoc, kiem tra quy tac, xuat goi tuong thich Apple va mo ket qua cuc bo.",
       "refresh": "Lam moi",
       "completed": "Hoan thanh"
     },
     "tabs": {
       "reference": "Tao tu anh tham chieu",
-      "clone": "Tao tu canh sao chep",
       "library": "Thu vien / Xuat"
     },
     "reference": {
@@ -1638,18 +1638,10 @@
         "package": "Chuyen video thanh Live Photo, sau do dong goi .jpg, .mov va manifest vao thu muc xuat."
       }
     },
-    "clone": {
-      "title": "Du an sao chep",
-      "lock": "Nhap tai nguyen chi doc",
-      "project": "Du an",
-      "summaryTitle": "Tom tat du an",
-      "eligibleShots": "Canh hop le",
-      "selected": "Da chon"
-    },
     "library": {
       "title": "Thu vien va xuat",
       "emptyTitle": "Chua co Live Photo.",
-      "emptyDesc": "Hay tao mot muc tu anh tham chieu hoac canh sao chep.",
+      "emptyDesc": "Hay tao mot muc tu anh tham chieu san pham truoc.",
       "packagingMetadata": "Thong tin dong goi",
       "preview": "Xem truoc",
       "metadata": "Thong tin",
@@ -1661,7 +1653,6 @@
     "actions": {
       "creating": "Dang tao...",
       "createLivePhoto": "Tao Live Photo",
-      "createFromSelectedShots": "Tao tu canh da chon",
       "exporting": "Dang xuat...",
       "exportSelected": "Xuat muc da chon"
     },
@@ -1683,13 +1674,12 @@
     },
     "messages": {
       "referenceCreated": "Da tao tac vu Live Photo tu anh tham chieu.",
-      "cloneCreated": "Da tao tac vu Live Photo tu canh da chon.",
       "retried": "Da thu lai tac vu Live Photo.",
       "regenerated": "Da tao lai tac vu Live Photo.",
       "exportedCount": "Da xuat {count} muc."
     },
     "workspace": {
-      "hint": "Chuyen nhanh giua tac vu tham chieu, canh sao chep va thu vien",
+      "hint": "Chuyen nhanh giua tac vu tham chieu va thu vien",
       "referenceNote": "Tao tac vu hang loat theo ty le hien tai",
       "referenceUploadTitle": "Bam de tai len hoac tha anh vao day",
       "referenceUploadDesc": "Ho tro JPG, PNG va WEBP. Nen dung anh rong hon 2000 px.",
@@ -1697,6 +1687,7 @@
       "materialLibraryDesc": "Mo thu vien anh san pham va chon hang loat anh chua lien ket.",
       "materialLibraryEmpty": "Khong co anh san pham chua lien ket.",
       "materialLibraryAddSelected": "Them Anh Tham Chieu",
+      "selected": "Da chon",
       "selectAll": "Chon Tat Ca",
       "clear": "Xoa Lua Chon",
       "previousPage": "Trang Truoc",
@@ -1718,9 +1709,6 @@
       "resolution": "Do Phan Giai",
       "frameRate": "Toc Do Khung Hinh",
       "quality": "Chat Luong",
-      "cloneRuleReuse": "Tai su dung cau truc va du lieu canh de tao tai nguyen video chuyen dong.",
-      "cloneRuleAutoLive": "Sau khi tao video, ghi tai nguyen Live Photo va dua vao thu vien.",
-      "cloneSafe": "Tac vu doc du lieu storyboard va video hien co, sau do tao dau ra Live Photo.",
       "itemUnit": "Muc",
       "filter": "Loc",
       "referenceCreatedPrefix": "Da tao",
@@ -1743,9 +1731,8 @@
       "activateVersion": "Kich Hoat Phien Ban",
       "rollbackVersion": "Tao Ban Khoi Phuc",
       "motionStrategy": "Chien Luoc Chuyen Dong",
-      "motionStrategyDesc": "Cac cai dat nay duoc luu va dung cho tac vu tham chieu, sao chep, thu lai va khoi phuc.",
+      "motionStrategyDesc": "Cai dat nay duoc luu va dung cho tac vu tham chieu, thu lai va khoi phuc.",
       "referenceMotion": "Chuyen Dong Anh Tham Chieu",
-      "cloneMotion": "Chuyen Dong Canh Sao Chep",
       "exportSettingsDesc": "Cai dat xuat duoc luu va ap dung cho do phan giai, toc do khung hinh va nen.",
       "saving": "Dang luu...",
       "saveSettings": "Luu Cai Dat Live Photo",
@@ -1761,8 +1748,46 @@
       "pauseRunning": "Tam Dung Muc Dang Chay",
       "batchDelete": "Xoa Hang Loat",
       "batchSubtitles": "Phu De Hang Loat",
-      "selectProduct": "Chon San Pham"
+      "selectProduct": "Chon San Pham",
+      "retryGuard": "Bao Ve Thu Lai",
+      "retrySettingsTitle": "Cai Dat Thu Lai Anh",
+      "retrySettingsDesc": "Dat so lan thu lai tu dong toi da cho kiem tra chat luong anh.",
+      "retryAutomaticRecovery": "Khoi phuc tu dong",
+      "retryAttemptUnit": "lan",
+      "retryManualOnly": "Dat 0 de chi khoi phuc thu cong.",
+      "retryMaximum": "So lan thu lai toi da",
+      "retryRangeHint": "Chon gia tri tu 0 den 20. Ap dung cho tac vu anh moi va thu lai thu cong.",
+      "retrySave": "Luu cai dat",
+      "retrySettingsSaved": "Da luu cai dat thu lai",
+      "continueWithVideo": "Bo qua kiem tra anh va tiep tuc tao video",
+      "continueWithVideoStarted": "Da bo qua kiem tra anh; bat dau tao video",
+      "revertSubtitles": "Khoi phuc phu de goc",
+      "materialUsed": "Da dung",
+      "materialUnused": "Chua dung",
+      "materialDerived": "Anh phai sinh"
     }
+  },
+  "tiktokCreative": {
+    "retry": {
+      "guard": "Bao Ve Thu Lai",
+      "title": "Cai Dat Thu Lai Anh",
+      "description": "Dat so lan thu lai tu dong toi da cho kiem tra chat luong anh.",
+      "automaticRecovery": "Khoi phuc tu dong",
+      "attemptUnit": "lan",
+      "manualOnly": "Dat 0 de chi khoi phuc thu cong.",
+      "maximum": "So lan thu lai toi da",
+      "rangeHint": "Chon gia tri tu 0 den 20. Ap dung cho tac vu anh moi va thu lai thu cong.",
+      "save": "Luu cai dat",
+      "saving": "Dang luu...",
+      "saved": "Da luu cai dat thu lai",
+      "continueWithVideo": "Bo qua kiem tra anh va tiep tuc tao video",
+      "continueWithVideoStarted": "Da bo qua kiem tra anh; bat dau tao video"
+    },
+    "material": {
+      "derivedOnly": "Chi co the chon anh phai sinh de bao ve tuan thu cua anh nguon.",
+      "empty": "Khong co anh phai sinh kha dung."
+    },
+    "revertSubtitles": "Khoi phuc phu de goc"
   },
   "billing": {
     "title": "Hoi vien va vi",

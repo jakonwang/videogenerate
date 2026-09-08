@@ -20,6 +20,9 @@ export function registerProductImageMaterialsIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:productImageMaterials:listMaterials', async (_e, payload: any) =>
     await productImageMaterialsService.listMaterials(payload.userId, payload.filters),
   )
+  ipcMain.handle('plugin:productImageMaterials:resolveMaterialImages', async (_e, payload: any) =>
+    await productImageMaterialsService.resolveMaterialImages(payload),
+  )
   ipcMain.handle('plugin:productImageMaterials:updateUsageStatus', async (_e, payload: any) =>
     await productImageMaterialsService.updateMaterialUsageStatus(payload),
   )

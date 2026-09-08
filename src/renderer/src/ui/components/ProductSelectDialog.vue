@@ -6,6 +6,10 @@ type ProductOption = {
   id: string
   name: string
   coverImagePath?: string
+  imageUrl?: string
+  image?: string
+  cover_url?: string
+  image_url?: string
   livePhotoReferenceImagePath?: string
   analysisBoardPath?: string
 }
@@ -43,7 +47,13 @@ watch(() => props.open, (open) => {
 
 function previewSrc(path?: string) {
   const value = String(path || '').trim()
-  return value ? `vg://file?path=${encodeURIComponent(value)}` : ''
+  if (!value) return ''
+  if (/^(https?:|data:|blob:|vg:)/i.test(value)) return value
+  return `vg://file?path=${encodeURIComponent(value)}`
+}
+
+function productImage(product: ProductOption) {
+  return product.coverImagePath || product.imageUrl || product.image || product.cover_url || product.image_url || ''
 }
 
 function selectProduct(id: string) {
@@ -79,7 +89,7 @@ function selectProduct(id: string) {
           @click="selectProduct(product.id)"
         >
           <div class="product-dialog__cover">
-            <img v-if="product.coverImagePath" :src="previewSrc(product.coverImagePath)" alt="product cover" />
+            <img v-if="productImage(product)" :src="previewSrc(productImage(product))" alt="product cover" />
             <Package v-else class="h-6 w-6" />
             <span v-if="selectedId === product.id" class="product-dialog__selected"><Check class="h-3 w-3" />{{ labels.selected }}</span>
           </div>

@@ -26,6 +26,15 @@ function normalizeLogs(logs: TiktokCreativeTaskLog[] | undefined) {
 }
 
 function normalizeShotTask(shot: TiktokCreativeShotTask): TiktokCreativeShotTask {
+  const imageRetryLimit = Math.max(0, Math.min(20, Math.floor(Number(shot.imageRetryLimit ?? 1) || 0)))
+  const imageRetryCount = Math.min(imageRetryLimit, Math.max(0, Number(shot.imageRetryCount || 0) || 0))
+  const lastError = String(shot.lastError || '').trim() || undefined
+  const imageQualityFailed = Boolean(
+    lastError?.includes('[image_retry_exhausted]') ||
+    shot.imagePreparation?.qualityReport?.decision === 'retry' ||
+    shot.imagePreparation?.qualityReport?.decision === 'reject',
+  )
+  const exhaustedImageRetry = !shot.officialTaskId && imageQualityFailed && Number(shot.imageRetryCount || 0) >= imageRetryLimit
   return {
     ...shot,
     shotId: String(shot.shotId || '').trim(),
@@ -36,7 +45,7 @@ function normalizeShotTask(shot: TiktokCreativeShotTask): TiktokCreativeShotTask
     durationSec: Math.max(3, Number(shot.durationSec || 5) || 5),
     downloadDir: String(shot.downloadDir || '').trim() || undefined,
     resultVideoPath: String(shot.resultVideoPath || '').trim() || undefined,
-    lastError: String(shot.lastError || '').trim() || undefined,
+    lastError,
     logs: normalizeLogs(shot.logs),
     sourceType: shot.sourceType || (shot.shotId ? 'legacy_clone_shot' : 'reference_image'),
     referenceImagePath: String(shot.referenceImagePath || '').trim() || undefined,
@@ -44,15 +53,19 @@ function normalizeShotTask(shot: TiktokCreativeShotTask): TiktokCreativeShotTask
     imagePreparation: shot.imagePreparation && typeof shot.imagePreparation === 'object'
       ? { ...shot.imagePreparation }
       : undefined,
-    imageRetryCount: Math.max(0, Number(shot.imageRetryCount || 0) || 0),
-    imageRetryLimit: Math.max(1, Number(shot.imageRetryLimit || 2) || 2),
+    imageRetryCount,
+    imageRetryLimit,
+    imageRetryMode: shot.imageRetryMode === 'manual_once' ? 'manual_once' : 'auto',
     accountId: String(shot.accountId || '').trim() || undefined,
     officialTaskId: String(shot.officialTaskId || '').trim() || undefined,
     officialVideoId: String(shot.officialVideoId || '').trim() || undefined,
-    remoteStatus: shot.remoteStatus,
+    status: exhaustedImageRetry ? 'requires_manual' : shot.status,
+    remoteStatus: exhaustedImageRetry ? 'paused_error' : shot.remoteStatus,
     remoteStatusUpdatedAt: Number(shot.remoteStatusUpdatedAt || 0) || undefined,
     posterPath: String(shot.posterPath || '').trim() || undefined,
     pollAttempts: Math.max(0, Number(shot.pollAttempts || 0) || 0),
+    exportedAt: Number(shot.exportedAt || 0) || undefined,
+    exportedVideoPath: String(shot.exportedVideoPath || '').trim() || undefined,
   }
 }
 

@@ -66,20 +66,6 @@ type ProductImageMaterialOption = {
   createdAt: number
 }
 
-type CloneProjectSummary = {
-  id: string
-  title: string
-  updatedAt: number
-}
-
-type CloneProjectDetail = {
-  id: string
-  title: string
-  storyboardFrames?: Array<{ shotId: string; imagePath?: string }>
-  shotVideoOutputs?: Array<{ shotId: string; videoPath?: string; localPath?: string }>
-  blueprint?: { shots?: Array<{ id: string; scriptText?: string; scriptRole?: string }> }
-}
-
 type LivePhotoItem = {
   id: string
   sourceType: 'reference_replace' | 'clone_shot'
@@ -151,10 +137,12 @@ type LivePhotoItem = {
     paused?: boolean
     retryLimit: number
     retryCount: number
+    imageRetryMode?: 'auto' | 'manual_once'
     currentStage: 'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed'
     lastStartedAt?: number
     lastCompletedAt?: number
     lastError?: string
+    imageValidationBypassed?: boolean
   }
   promptVersionId?: string
   promptVersion?: number
@@ -190,13 +178,13 @@ type LivePhotoItem = {
 
 type LivePhotoSettings = {
   referenceMotionTemplate: 'push_in' | 'push_out' | 'ambient_sway'
-  cloneMotionTemplate: 'push_in' | 'push_out' | 'ambient_sway'
   outputResolution: '1080x1440' | '2160x2880' | '3024x4032'
   frameRate: '24' | '30'
   quality: 'medium' | 'high'
   qualityCheckerEnabled?: boolean
   qualityPassThreshold?: number
   qualityRetryFloor?: number
+  retryLimit?: number
   updatedAt: number
 }
 
@@ -267,7 +255,6 @@ const uiText = computed(() => ({
   heroDesc: t('livePhoto.hero.desc'),
   completed: t('livePhoto.hero.completed'),
   tabReference: t('livePhoto.tabs.reference'),
-  tabClone: t('livePhoto.tabs.clone'),
   tabLibrary: t('livePhoto.tabs.library'),
   referenceTitle: t('livePhoto.reference.title'),
   referenceNote: t('livePhoto.workspace.referenceNote'),
@@ -278,7 +265,7 @@ const uiText = computed(() => ({
   materialLibraryDesc: t('livePhoto.workspace.materialLibraryDesc'),
   materialLibraryClose: t('common.close'),
   materialLibraryEmpty: t('livePhoto.workspace.materialLibraryEmpty'),
-  materialLibrarySelected: t('livePhoto.clone.selected'),
+  materialLibrarySelected: t('livePhoto.workspace.selected'),
   materialLibraryAddSelected: t('livePhoto.workspace.materialLibraryAddSelected'),
   materialLibrarySelectAll: t('livePhoto.workspace.selectAll'),
   materialLibraryClear: t('livePhoto.workspace.clear'),
@@ -301,13 +288,6 @@ const uiText = computed(() => ({
   rulePackage: t('livePhoto.rules.items.package'),
   outputTitle: t('livePhoto.workspace.outputTitle'),
   outputDesc: t('livePhoto.workspace.outputDesc'),
-  cloneProject: t('livePhoto.clone.title'),
-  cloneReadonly: t('livePhoto.clone.lock'),
-  cloneCreateSelected: t('livePhoto.actions.createFromSelectedShots'),
-  previewStats: t('livePhoto.workspace.previewStats'),
-  summary: t('livePhoto.clone.summaryTitle'),
-  eligibleShots: t('livePhoto.clone.eligibleShots'),
-  selectedShots: t('livePhoto.clone.selected'),
   settingsTitle: t('livePhoto.workspace.settingsTitle'),
   standardPackage: t('livePhoto.workspace.standardPackage'),
   recommended: t('livePhoto.workspace.recommended'),
@@ -315,10 +295,6 @@ const uiText = computed(() => ({
   resolution: t('livePhoto.workspace.resolution'),
   frameRate: t('livePhoto.workspace.frameRate'),
   quality: t('livePhoto.workspace.quality'),
-  cloneRuleReuse: t('livePhoto.workspace.cloneRuleReuse'),
-  cloneRuleAutoLive: t('livePhoto.workspace.cloneRuleAutoLive'),
-  createNow: t('livePhoto.actions.createLivePhoto'),
-  cloneSafe: t('livePhoto.workspace.cloneSafe'),
   libraryTitle: t('livePhoto.library.title'),
   itemUnit: t('livePhoto.workspace.itemUnit'),
   filter: t('livePhoto.workspace.filter'),
@@ -335,11 +311,10 @@ const uiText = computed(() => ({
 
 const loading = ref(false)
 const creatingReference = ref(false)
-const creatingCloneShots = ref(false)
 const exporting = ref(false)
 const notice = ref('')
 const errorText = ref('')
-const activeTab = ref<'reference' | 'clone' | 'library'>('reference')
+const activeTab = ref<'reference' | 'library'>('reference')
 const items = ref<LivePhotoItem[]>([])
 const libraryPage = ref(1)
 const libraryPageSize = ref(24)
@@ -348,20 +323,18 @@ const libraryTotalPages = ref(1)
 const libraryViewMode = ref<'grid' | 'list'>('grid')
 const products = ref<Product[]>([])
 const productImageMaterials = ref<ProductImageMaterialOption[]>([])
-const cloneProjects = ref<CloneProjectSummary[]>([])
-const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused'>('all')
+const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled'>('all')
+function setLibraryFilter(value: string) { if (['all', 'failed', 'running', 'paused', 'success_not_exported', 'success_exported', 'success_not_subtitled'].includes(value)) libraryFilter.value = value as typeof libraryFilter.value }
 const selectedProductId = ref('')
 const productPickerOpen = ref(false)
 const referenceImagePaths = ref<string[]>([])
 const referenceMissingPaths = ref<string[]>([])
 const referenceMaterialIds = ref<string[]>([])
 const materialPickerOpen = ref(false)
+const livePhotoRetrySettingsOpen = ref(false)
 const selectedMaterialImageIds = ref<string[]>([])
 const materialPickerPage = ref(1)
 const materialPickerPageSize = ref(12)
-const selectedCloneProjectId = ref('')
-const cloneProjectDetail = ref<CloneProjectDetail | null>(null)
-const selectedShotIds = ref<string[]>([])
 const selectedLibraryIds = ref<string[]>([])
 const batchDeleteOpen = ref(false)
 const batchDeleteBusy = ref(false)
@@ -405,13 +378,13 @@ const subtitleDialogItem = ref<LivePhotoItem | null>(null)
 const videoDialogItemId = ref('')
 const livePhotoSettings = ref<LivePhotoSettings>({
   referenceMotionTemplate: 'push_in',
-  cloneMotionTemplate: 'ambient_sway',
   outputResolution: '2160x2880',
   frameRate: '30',
   quality: 'high',
   qualityCheckerEnabled: true,
   qualityPassThreshold: 0.88,
   qualityRetryFloor: 0.65,
+  retryLimit: 2,
   updatedAt: 0,
 })
 
@@ -452,7 +425,7 @@ const referenceCreatedItems = computed(() =>
   items.value.filter((item) => item.sourceType === 'reference_replace').slice(0, 8),
 )
 const unboundMaterialOptions = computed(() =>
-  productImageMaterials.value.filter((item) => !String(item.boundProductId || '').trim() && String(item.localImagePath || '').trim()),
+  productImageMaterials.value.filter((item) => item.materialOrigin === 'derived' && String(item.localImagePath || '').trim()),
 )
 const materialPickerTotalPages = computed(() => Math.max(1, Math.ceil(unboundMaterialOptions.value.length / materialPickerPageSize.value)))
 const pagedMaterialOptions = computed(() => {
@@ -464,29 +437,6 @@ const selectedMaterialOptions = computed(() =>
   unboundMaterialOptions.value.filter((item) => selectedMaterialImageIds.value.includes(item.id)),
 )
 
-const cloneShotRows = computed(() => {
-  const project = cloneProjectDetail.value
-  if (!project) return []
-  const shots = Array.isArray(project.blueprint?.shots) ? project.blueprint.shots : []
-  const frames = Array.isArray(project.storyboardFrames) ? project.storyboardFrames : []
-  const videos = Array.isArray(project.shotVideoOutputs) ? project.shotVideoOutputs : []
-  return shots
-    .map((shot) => {
-      const frame = frames.find((item) => item.shotId === shot.id)
-      const video = videos.find((item) => item.shotId === shot.id)
-      const imagePath = String(frame?.imagePath || '').trim()
-      const videoPath = String(video?.videoPath || video?.localPath || '').trim()
-      return {
-        shotId: shot.id,
-        label: [String(shot.scriptRole || '').trim(), String(shot.scriptText || '').trim()].filter(Boolean).join(' - ') || shot.id,
-        imagePath,
-        videoPath,
-        eligible: Boolean(imagePath || videoPath),
-      }
-    })
-    .filter((item) => item.eligible)
-})
-
 const todayCreatedCount = computed(() => {
   const start = new Date()
   start.setHours(0, 0, 0, 0)
@@ -495,8 +445,6 @@ const todayCreatedCount = computed(() => {
 
 const filteredLibraryItems = computed(() => items.value)
 
-const selectedCloneRows = computed(() => cloneShotRows.value.filter((item) => selectedShotIds.value.includes(item.shotId)))
-const featuredCloneRow = computed(() => selectedCloneRows.value[0] || cloneShotRows.value[0] || null)
 const livePhotoSteps = ['queued', 'image_generation', 'image_validation', 'video_generation', 'live_photo_packaging', 'completed'] as const
 const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
@@ -534,13 +482,6 @@ let lastLibraryRefreshAt = 0
 
 const LIBRARY_REFRESH_INTERVAL_MS = 6000
 const LIBRARY_REFRESH_DEDUP_WINDOW_MS = 1500
-
-const cloneProjectUpdatedText = computed(() => {
-  const hit = cloneProjects.value.find((item) => item.id === selectedCloneProjectId.value)
-  if (!hit?.updatedAt) return '--'
-  const date = new Date(hit.updatedAt)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-})
 
 function formatTime(value?: number) {
   if (!value) return '--'
@@ -949,6 +890,7 @@ function openSingleSubtitleDialog(item: LivePhotoItem) {
   }
   subtitleDialogOpen.value = true
 }
+async function revertSelectedSubtitles() { const ids = subtitleEligibleSelectedItems.value.filter(itemHasAppliedSubtitle).map((item) => item.id); if (!ids.length || !window.confirm(t('autoUi.k_ceb6710c577d'))) return; subtitleDialogBusy.value = true; try { const result = await window.api.livePhoto.revertSubtitleVideosFromItems({ ids }); selectedLibraryIds.value = selectedLibraryIds.value.filter((id) => !ids.includes(id)); await loadAll(); notice.value = `${Number(result?.reverted || 0)} subtitles reverted` } catch (error: any) { errorText.value = error?.message ?? String(error) } finally { subtitleDialogBusy.value = false } }
 
 async function revertSubtitleFromItem(item: LivePhotoItem) {
   if (!item?.id) return
@@ -1196,12 +1138,6 @@ function referenceMotionTemplateLabel(value: LivePhotoSettings['referenceMotionT
   return t('autoUi.k_1e4c40cf5d5f')
 }
 
-function cloneMotionTemplateLabel(value: LivePhotoSettings['cloneMotionTemplate']) {
-  if (value === 'push_in') return t('autoUi.k_1e4c40cf5d5f')
-  if (value === 'push_out') return t('autoUi.k_1e4c40cf5d5f')
-  return t('autoUi.k_e95355896fde')
-}
-
 async function loadLivePhotoSettings() {
   try {
     const next = await window.api.livePhoto.getSettings()
@@ -1216,16 +1152,20 @@ async function loadLivePhotoSettings() {
   }
 }
 
-async function saveLivePhotoSettings() {
+async function saveLivePhotoSettings(closeRetrySettings = false) {
   livePhotoSettingsBusy.value = true
   errorText.value = ''
   try {
+    livePhotoSettings.value.retryLimit = Math.max(0, Math.min(20, Math.floor(Number(livePhotoSettings.value.retryLimit) || 0)))
     const next = await window.api.livePhoto.saveSettings(livePhotoSettings.value)
     livePhotoSettings.value = {
       ...livePhotoSettings.value,
       ...next,
     }
-    notice.value = t('autoUi.k_9e5018e7d5b4')
+    notice.value = closeRetrySettings
+      ? t('livePhoto.workspace.retrySettingsSaved')
+      : t('autoUi.k_9e5018e7d5b4')
+    if (closeRetrySettings) livePhotoRetrySettingsOpen.value = false
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -1378,7 +1318,7 @@ async function refreshLibraryItems(force = false) {
         page: libraryPage.value,
         pageSize: libraryPageSize.value,
         filter: libraryFilter.value,
-      }) as Promise<{ items: LivePhotoItem[]; filter: 'all' | 'failed' | 'running' | 'paused'; page: number; pageSize: number; total: number; totalPages: number }>,
+      }) as Promise<{ items: LivePhotoItem[]; filter: string; page: number; pageSize: number; total: number; totalPages: number }>,
       4000,
     )
     const normalizedItems = Array.isArray(nextPage?.items) ? nextPage.items : []
@@ -1442,18 +1382,11 @@ async function loadAll() {
       // Keep previous products when the companion query is slow.
     }
     try {
-      const nextProjects = await loadWithTimeout(window.api.clone.listProjectSummaries() as Promise<CloneProjectSummary[]>, 4000)
-      cloneProjects.value = Array.isArray(nextProjects) ? nextProjects : []
-    } catch {
-      // Keep previous project summaries when the companion query is slow.
-    }
-    try {
       await refreshProductImageMaterials()
     } catch {
       // Keep previous material options when the companion query is slow.
     }
     if (!selectedProductId.value && products.value[0]) selectedProductId.value = products.value[0].id
-    if (!selectedCloneProjectId.value && cloneProjects.value[0]) selectedCloneProjectId.value = cloneProjects.value[0].id
     try {
       await loadPromptManagement()
     } catch {
@@ -1534,7 +1467,15 @@ function materialIdsFromPaths(paths: string[]) {
 }
 
 async function appendMaterialImagesAsReferences() {
-  const selectedPaths = selectedMaterialOptions.value.map((item) => String(item.localImagePath || '').trim()).filter(Boolean)
+  const selectedIds = selectedMaterialOptions.value.map((item) => item.id)
+  if (!selectedIds.length) return
+  const resolved = await window.api.productImageMaterials.resolveMaterialImages({
+    userId: 'desktop-local',
+    materialIds: selectedIds,
+  }) as ProductImageMaterialOption[]
+  const resolvedById = new Map(resolved.map((item) => [item.id, item]))
+  productImageMaterials.value = productImageMaterials.value.map((item) => resolvedById.get(item.id) || item)
+  const selectedPaths = selectedIds.map((id) => String(resolvedById.get(id)?.localImagePath || '').trim()).filter(Boolean)
   if (!selectedPaths.length) return
   const mergedPaths = dedupePaths([...referenceImagePaths.value, ...selectedPaths])
   const { existingPaths, missingPaths } = await splitExistingReferencePaths(mergedPaths)
@@ -1630,56 +1571,6 @@ async function createReferenceItem() {
     errorText.value = error?.message ?? String(error)
   }
   creatingReference.value = false
-}
-
-async function loadCloneProjectDetail() {
-  const cloneProjectId = String(selectedCloneProjectId.value || '').trim()
-  if (!cloneProjectId) {
-    cloneProjectDetail.value = null
-    selectedShotIds.value = []
-    return
-  }
-  cloneProjectDetail.value = (await window.api.clone.getProject({ cloneProjectId })) as CloneProjectDetail
-  selectedShotIds.value = cloneShotRows.value.slice(0, 1).map((item) => item.shotId)
-}
-
-async function createCloneShotItems() {
-  if (!selectedCloneProjectId.value || !selectedShotIds.value.length) return
-  creatingCloneShots.value = true
-  errorText.value = ''
-  notice.value = ''
-  try {
-    activeTab.value = 'library'
-    await nextTick()
-    const cloneProjectIdSnapshot = selectedCloneProjectId.value
-    const shotIdsSnapshot = [...selectedShotIds.value]
-    notice.value = t('livePhoto.messages.cloneCreated')
-    await loadCloneProjectDetail()
-    creatingCloneShots.value = false
-    void (async () => {
-      const created = await window.api.livePhoto.enqueueClone({
-        cloneProjectId: cloneProjectIdSnapshot,
-        shotIds: shotIdsSnapshot,
-        motionTemplate: livePhotoSettings.value.cloneMotionTemplate,
-      })
-      const createdItems = (Array.isArray(created) ? created : []).filter(Boolean) as LivePhotoItem[]
-      mergeLivePhotoItems(createdItems)
-      await window.api.livePhoto.startClone({
-        ids: createdItems.map((item) => item.id),
-        motionTemplate: livePhotoSettings.value.cloneMotionTemplate,
-      })
-    })()
-      .catch((error: any) => {
-        errorText.value = error?.message ?? String(error)
-      })
-      .finally(() => {
-        void refreshLibraryItems()
-      })
-    return
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  }
-  creatingCloneShots.value = false
 }
 
 async function exportSelected() {
@@ -1925,6 +1816,7 @@ async function saveReplacementRegionAndRetry() {
     await window.api.livePhoto.retry({
       id: item.id,
       motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+      retryMode: 'manual_once',
       replacementRegion: { ...replacementRegionDraft },
     })
     notice.value = t('autoUi.k_24ad33fba50a')
@@ -1946,7 +1838,8 @@ async function retryItem(item: LivePhotoItem) {
   try {
     await window.api.livePhoto.retry({
       id: item.id,
-      motionTemplate: item.sourceType === 'clone_shot' ? livePhotoSettings.value.cloneMotionTemplate : livePhotoSettings.value.referenceMotionTemplate,
+      motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+      retryMode: 'manual_once',
     })
     notice.value = item.packagingStatus === 'failed' ? t('livePhoto.messages.retried') : t('livePhoto.messages.regenerated')
     await loadAll()
@@ -1965,7 +1858,8 @@ async function retryFailedItems() {
       targets.map((item) =>
         window.api.livePhoto.retry({
           id: item.id,
-          motionTemplate: item.sourceType === 'clone_shot' ? livePhotoSettings.value.cloneMotionTemplate : livePhotoSettings.value.referenceMotionTemplate,
+          motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+          retryMode: 'manual_once',
         }),
       ),
     )
@@ -1998,7 +1892,7 @@ async function resumePausedItems() {
       targets.map((item) =>
         window.api.livePhoto.resumeAutoFlow({
           id: item.id,
-          motionTemplate: item.sourceType === 'clone_shot' ? livePhotoSettings.value.cloneMotionTemplate : livePhotoSettings.value.referenceMotionTemplate,
+          motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
         }),
       ),
     )
@@ -2034,9 +1928,42 @@ async function resumeItemAutoFlow(item: LivePhotoItem) {
   try {
     await window.api.livePhoto.resumeAutoFlow({
       id: item.id,
-      motionTemplate: item.sourceType === 'clone_shot' ? livePhotoSettings.value.cloneMotionTemplate : livePhotoSettings.value.referenceMotionTemplate,
+      motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
     })
     await refreshLibraryItems()
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  }
+}
+
+function canContinueWithVideo(item: LivePhotoItem) {
+  const status = item.autoFlowStatus
+  const reason = String(status?.lastError || item.error || '')
+  return Boolean(
+    item.sourceType === 'reference_replace' &&
+      status?.paused &&
+      status.status === 'failed_terminal' &&
+      (status.imageRetryMode === 'manual_once' || Number(status.retryCount || 0) >= Number(status.retryLimit || 0)) &&
+      reason.includes('[image_validation_failed]') &&
+      item.generatedStillPath,
+  )
+}
+
+function canRetryImageOnce(item: LivePhotoItem) {
+  const status = item.autoFlowStatus
+  const reason = String(status?.lastError || item.error || '')
+  return Boolean(item.sourceType === 'reference_replace' && status?.paused && status.status === 'failed_terminal' && reason.includes('[image_validation_failed]') && item.referenceImagePath)
+}
+
+async function continueWithVideo(item: LivePhotoItem) {
+  errorText.value = ''
+  try {
+    await window.api.livePhoto.continueWithVideo({
+      id: item.id,
+      motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+    })
+    notice.value = t('livePhoto.workspace.continueWithVideoStarted')
+    await refreshLibraryItemsWithWarmup()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   }
@@ -2047,15 +1974,9 @@ function toggleLibrarySelection(id: string) {
   else selectedLibraryIds.value = [...selectedLibraryIds.value, id]
 }
 
-function toggleShot(shotId: string) {
-  if (selectedShotIds.value.includes(shotId)) selectedShotIds.value = selectedShotIds.value.filter((item) => item !== shotId)
-  else selectedShotIds.value = [...selectedShotIds.value, shotId]
-}
-
 onMounted(async () => {
   await loadAll()
   await loadLivePhotoSettings()
-  await loadCloneProjectDetail()
   window.addEventListener('focus', refreshLibraryItemsWithWarmup)
   document.addEventListener('visibilitychange', handleVisibilityRefresh)
 })
@@ -2083,9 +2004,6 @@ watch(activeTab, async (tab) => {
   if (tab === 'library') {
     await refreshLibraryItemsWithWarmup()
     return
-  }
-  if (tab === 'clone') {
-    await loadCloneProjectDetail()
   }
 })
 
@@ -2140,14 +2058,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <ImagePlus class="h-4 w-4" />
           <span>{{ uiText.tabReference }}</span>
         </button>
-        <button class="tab-button" data-testid="live-photo-tab-clone" :class="{ active: activeTab === 'clone' }" type="button" @click="activeTab = 'clone'">
-          <Play class="h-4 w-4" />
-          <span>{{ uiText.tabClone }}</span>
-        </button>
         <button class="tab-button" data-testid="live-photo-tab-library" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
           <FolderOpen class="h-4 w-4" />
           <span>{{ uiText.tabLibrary }}</span>
           <span class="live-tab-count">{{ todayCreatedCount }}</span>
+        </button>
+        <button class="tab-button" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
+          <Settings class="h-4 w-4" />
+          <span>{{ t('livePhoto.workspace.retryGuard') }}</span>
+          <span class="live-tab-count">{{ livePhotoSettings.retryLimit ?? 0 }}</span>
         </button>
       </section>
     </section>
@@ -2352,207 +2271,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </article>
     </section>
 
-    <section v-else-if="activeTab === 'clone'" class="clone-layout">
-      <div class="clone-top-grid">
-        <article class="panel-card clone-project-card">
-          <div class="panel-head">
-            <div class="panel-title-wrap">
-              <div class="step-badge">1</div>
-              <strong>{{ uiText.cloneProject }}</strong>
-            </div>
-            <span class="panel-head-note">{{ uiText.cloneReadonly }}</span>
-          </div>
-          <div class="field-stack">
-            <label class="field">
-              <span>{{ t('livePhoto.clone.project') }}</span>
-              <div class="project-picker">
-                <select v-model="selectedCloneProjectId" data-testid="live-photo-clone-project-select" @change="loadCloneProjectDetail">
-                  <option v-for="project in cloneProjects" :key="project.id" :value="project.id">{{ project.title }}</option>
-                </select>
-                <ChevronDown class="picker-arrow h-4 w-4" />
-              </div>
-            </label>
-            <div class="clone-shot-list">
-              <label v-for="row in cloneShotRows" :key="row.shotId" class="clone-shot-row" :class="{ active: selectedShotIds.includes(row.shotId) }" :data-testid="`live-photo-shot-${row.shotId}`">
-                <input type="checkbox" :checked="selectedShotIds.includes(row.shotId)" @change="toggleShot(row.shotId)" />
-                <div class="clone-shot-copy">
-                  <strong>{{ row.label }}</strong>
-                  <small>{{ row.videoPath || row.imagePath }}</small>
-                </div>
-              </label>
-            </div>
-            <button class="secondary-create-button" data-testid="live-photo-create-clone-top" type="button" :disabled="creatingCloneShots || !selectedShotIds.length" @click="createCloneShotItems">
-              {{ uiText.cloneCreateSelected }}
-            </button>
-          </div>
-        </article>
-
-        <article class="panel-card clone-preview-card">
-          <div class="panel-head">
-            <div class="panel-title-wrap">
-              <div class="step-badge">2</div>
-              <strong>{{ uiText.previewStats }}</strong>
-            </div>
-            <div class="clone-summary-head">
-              <span class="panel-head-note">{{ uiText.summary }}</span>
-              <strong>{{ cloneProjectUpdatedText }}</strong>
-            </div>
-          </div>
-          <div class="clone-preview-main">
-            <div class="clone-preview-frame">
-              <img v-if="featuredCloneRow?.imagePath" :src="previewSrc(featuredCloneRow.imagePath)" alt="selected shot preview" />
-              <div v-else class="preview-fallback clone-fallback">
-                <Play class="h-6 w-6" />
-              </div>
-              <button class="preview-play" type="button" :disabled="!featuredCloneRow?.videoPath" @click="openPath(featuredCloneRow?.videoPath)">
-                <Play class="h-4 w-4" />
-              </button>
-            </div>
-            <div class="clone-stat-stack">
-              <div class="clone-stat-card">
-                <span>{{ uiText.eligibleShots }}</span>
-                <strong>{{ cloneShotRows.length }}</strong>
-              </div>
-              <div class="clone-stat-card">
-                <span>{{ uiText.selectedShots }}</span>
-                <strong>{{ selectedShotIds.length }}</strong>
-              </div>
-            </div>
-          </div>
-          <div class="clone-thumb-section">
-            <div class="clone-thumb-head">
-              <strong>{{ uiText.eligibleShots }}</strong>
-              <div class="clone-thumb-tools">
-                <button class="thumb-tool" type="button"><List class="h-4 w-4" /></button>
-                <button class="thumb-tool" type="button"><LayoutGrid class="h-4 w-4" /></button>
-              </div>
-            </div>
-            <div class="clone-thumb-grid">
-              <button v-for="(row, index) in cloneShotRows" :key="`thumb-${row.shotId}`" class="clone-thumb-card" :class="{ active: selectedShotIds.includes(row.shotId) }" type="button" @click="toggleShot(row.shotId)">
-                <img v-if="row.imagePath" :src="previewSrc(row.imagePath)" :alt="row.label" />
-                <div v-else class="clone-thumb-fallback">{{ String(index + 1).padStart(2, '0') }}</div>
-                <span class="clone-thumb-index">{{ String(index + 1).padStart(2, '0') }}</span>
-              </button>
-            </div>
-          </div>
-          <div class="clone-selected-section">
-            <strong>{{ uiText.selectedShots }}</strong>
-            <div class="clone-selected-grid">
-              <article v-for="row in selectedCloneRows" :key="`selected-${row.shotId}`" class="clone-selected-card">
-                <img v-if="row.imagePath" :src="previewSrc(row.imagePath)" :alt="row.label" />
-                <div class="clone-selected-meta">
-                  <span>{{ String(cloneShotRows.findIndex((item) => item.shotId === row.shotId) + 1).padStart(2, '0') }}</span>
-                  <small>{{ row.label }}</small>
-                </div>
-              </article>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div class="clone-bottom-grid">
-        <article class="panel-card clone-settings-card">
-          <div class="panel-head">
-            <div class="panel-title-wrap">
-              <div class="step-badge">3</div>
-              <strong>{{ uiText.settingsTitle }}</strong>
-            </div>
-          </div>
-          <div class="settings-grid">
-            <div class="format-card format-card-active">
-              <div class="format-card-head">
-                <div class="format-card-title">
-                  <Sparkles class="h-4 w-4" />
-                  <strong>{{ uiText.standardPackage }}</strong>
-                </div>
-                <span class="format-tag">{{ uiText.recommended }}</span>
-              </div>
-              <p>{{ uiText.standardPackageDesc }}</p>
-            </div>
-            <div class="format-card">
-              <div class="format-card-head">
-                <div class="format-card-title">
-                  <Settings class="h-4 w-4" />
-                  <strong>{{ t('livePhoto.workspace.motionStrategy') }}</strong>
-                </div>
-              </div>
-              <p>{{ t('livePhoto.workspace.motionStrategyDesc') }}</p>
-              <div class="field-stack">
-                <label class="field">
-                  <span>{{ t('livePhoto.workspace.referenceMotion') }}</span>
-                  <select v-model="livePhotoSettings.referenceMotionTemplate">
-                    <option value="push_in">{{ referenceMotionTemplateLabel('push_in') }}</option>
-                    <option value="push_out">{{ referenceMotionTemplateLabel('push_out') }}</option>
-                    <option value="ambient_sway">{{ referenceMotionTemplateLabel('ambient_sway') }}</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>{{ t('livePhoto.workspace.cloneMotion') }}</span>
-                  <select v-model="livePhotoSettings.cloneMotionTemplate">
-                    <option value="ambient_sway">{{ cloneMotionTemplateLabel('ambient_sway') }}</option>
-                    <option value="push_in">{{ cloneMotionTemplateLabel('push_in') }}</option>
-                    <option value="push_out">{{ cloneMotionTemplateLabel('push_out') }}</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="export-grid">
-            <label class="metadata-card metadata-card-select">
-              <strong>{{ uiText.resolution }}</strong>
-              <select v-model="livePhotoSettings.outputResolution">
-                <option v-for="option in resolutionOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
-              <small>{{ resolutionOptions.find((item) => item.value === livePhotoSettings.outputResolution)?.note }}</small>
-            </label>
-            <label class="metadata-card metadata-card-select">
-              <strong>{{ uiText.frameRate }}</strong>
-              <select v-model="livePhotoSettings.frameRate">
-                <option v-for="option in frameRateOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
-              <small>{{ frameRateOptions.find((item) => item.value === livePhotoSettings.frameRate)?.note }}</small>
-            </label>
-            <label class="metadata-card metadata-card-select">
-              <strong>{{ uiText.quality }}</strong>
-              <select v-model="livePhotoSettings.quality">
-                <option v-for="option in qualityOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
-              <small>{{ qualityOptions.find((item) => item.value === livePhotoSettings.quality)?.note }}</small>
-            </label>
-          </div>
-          <div class="panel-head">
-            <span class="panel-head-note">{{ t('livePhoto.workspace.exportSettingsDesc') }}</span>
-            <button class="ghost-button small" type="button" :disabled="livePhotoSettingsBusy" @click="saveLivePhotoSettings">
-              {{ livePhotoSettingsBusy ? t('livePhoto.workspace.saving') : t('livePhoto.workspace.saveSettings') }}
-            </button>
-          </div>
-        </article>
-
-        <article class="panel-card clone-rule-card">
-          <div class="panel-head">
-            <strong>{{ uiText.rulesTitle }}</strong>
-          </div>
-          <div class="rules-compact">
-            <div class="compact-row"><span class="compact-dot">1</span><p>{{ uiText.ruleIdentity }}</p></div>
-            <div class="compact-row"><span class="compact-dot">2</span><p>{{ uiText.ruleReplace }}</p></div>
-            <div class="compact-row"><span class="compact-dot">3</span><p>{{ uiText.cloneRuleReuse }}</p></div>
-            <div class="compact-row"><span class="compact-dot">4</span><p>{{ uiText.cloneRuleAutoLive }}</p></div>
-          </div>
-        </article>
-      </div>
-
-      <div class="clone-footer-actions">
-        <button class="primary-button clone-generate-button" data-testid="live-photo-create-clone" type="button" :disabled="creatingCloneShots || !selectedShotIds.length" @click="createCloneShotItems">
-          <Sparkles class="h-4 w-4" />
-          {{ creatingCloneShots ? t('livePhoto.actions.creating') : uiText.createNow }}
-        </button>
-        <div class="safe-note clone-safe-note">
-          <ShieldCheck class="h-4 w-4" />
-          <span>{{ uiText.cloneSafe }}</span>
-        </div>
-      </div>
-    </section>
-
     <section v-else class="library-layout">
       <div class="library-headline">
         <div class="library-summary-row">
@@ -2575,7 +2293,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <strong>{{ pausedLibraryItems.length }}</strong>
               </div>
               <div class="library-overview__card is-selected">
-                <span>{{ t('livePhoto.clone.selected') }}</span>
+                <span>{{ t('livePhoto.workspace.selected') }}</span>
                 <strong>{{ selectedLibraryItems.length }}</strong>
               </div>
             </div>
@@ -2613,6 +2331,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               </button>
             </div>
           </div>
+        </div>
+        <div class="status-filter-tabs">
+          <button v-for="filterItem in [{ key: 'all', label: '全部' }, { key: 'failed', label: '失败' }, { key: 'success_not_exported', label: '成功未导出' }, { key: 'success_exported', label: '成功已导出' }, { key: 'success_not_subtitled', label: '成功未加字幕' }]" :key="filterItem.key" type="button" :class="{ active: libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
         </div>
         <div class="library-toolbar">
           <div class="library-action-group">
@@ -2659,6 +2380,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <Sparkles class="h-4 w-4" />
               {{ t('livePhoto.workspace.batchSubtitles') }} {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
             </button>
+            <button class="toolbar-button" type="button" :disabled="!subtitleEligibleSelectedCount" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
             <button
               class="toolbar-button feishu-send-button"
               data-testid="live-photo-send-feishu"
@@ -2811,13 +2533,21 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   <ScanLine class="h-4 w-4" />
                 </button>
                 <button
+                  v-if="canContinueWithVideo(item)"
+                  class="live-console-row__link live-console-row__link--primary"
+                  type="button"
+                  @click.stop="continueWithVideo(item)"
+                >
+                  <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideo') }}
+                </button>
+                <button
                   :data-testid="`live-photo-retry-${item.id}`"
-                  class="live-console-row__action"
+                  :class="canRetryImageOnce(item) ? 'live-console-row__link' : 'live-console-row__action'"
                   type="button"
                   :disabled="item.packagingStatus === 'processing'"
                   @click.stop="retryItem(item)"
                 >
-                  <RefreshCcw class="h-4 w-4" />
+                  <RefreshCcw class="h-4 w-4" /><template v-if="canRetryImageOnce(item)"> {{ t('autoUi.k_031c7e12ddae') }}</template>
                 </button>
                 <button
                   class="live-console-row__action"
@@ -2970,13 +2700,21 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <ScanLine class="h-4 w-4" />
               </button>
               <button
+                v-if="canContinueWithVideo(item)"
+                class="live-console-row__link live-console-row__link--primary"
+                type="button"
+                @click.stop="continueWithVideo(item)"
+              >
+                <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideo') }}
+              </button>
+              <button
                 :data-testid="`live-photo-retry-${item.id}`"
-                class="live-console-row__action"
+                :class="canRetryImageOnce(item) ? 'live-console-row__link' : 'live-console-row__action'"
                 type="button"
                 :disabled="item.packagingStatus === 'processing'"
                 @click.stop="retryItem(item)"
               >
-                <RefreshCcw class="h-4 w-4" />
+                <RefreshCcw class="h-4 w-4" /><template v-if="canRetryImageOnce(item)"> {{ t('autoUi.k_031c7e12ddae') }}</template>
               </button>
               <button
                 class="live-console-row__action"
@@ -3059,8 +2797,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <div class="reference-material-card__copy">
               <strong>{{ fileNameOf(material.localImagePath) }}</strong>
               <small>
-                {{ material.usageStatus === 'used' ? 'Used' : 'Unused' }}
-                <span v-if="material.materialOrigin === 'derived'"> · Derived</span>
+                {{ material.usageStatus === 'used' ? t('livePhoto.workspace.materialUsed') : t('livePhoto.workspace.materialUnused') }}
+                <span v-if="material.materialOrigin === 'derived'"> · {{ t('livePhoto.workspace.materialDerived') }}</span>
               </small>
             </div>
           </label>
@@ -3081,6 +2819,43 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           </button>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="livePhotoRetrySettingsOpen"
+      class="live-subtitle-dialog"
+      @click.self="!livePhotoSettingsBusy && (livePhotoRetrySettingsOpen = false)"
+    >
+      <section class="live-subtitle-dialog__panel live-photo-retry-settings-panel" role="dialog" aria-modal="true" aria-labelledby="live-photo-retry-settings-title">
+        <div class="live-subtitle-dialog__head">
+          <div class="live-subtitle-dialog__titleblock">
+            <strong id="live-photo-retry-settings-title">{{ t('livePhoto.workspace.retrySettingsTitle') }}</strong>
+            <p>{{ t('livePhoto.workspace.retrySettingsDesc') }}</p>
+          </div>
+          <button class="live-subtitle-dialog__close" type="button" :disabled="livePhotoSettingsBusy" :aria-label="t('common.close')" @click="livePhotoRetrySettingsOpen = false">
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <div class="live-photo-retry-settings-hero">
+          <div class="live-photo-retry-settings-icon"><RefreshCcw class="h-5 w-5" /></div>
+          <div>
+            <span>{{ t('livePhoto.workspace.retryAutomaticRecovery') }}</span>
+            <strong>{{ livePhotoSettings.retryLimit ?? 0 }} {{ t('livePhoto.workspace.retryAttemptUnit') }}</strong>
+          </div>
+          <small>{{ t('livePhoto.workspace.retryManualOnly') }}</small>
+        </div>
+        <label class="live-photo-retry-settings-field">
+          <span>{{ t('livePhoto.workspace.retryMaximum') }}</span>
+          <input v-model.number="livePhotoSettings.retryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
+          <small>{{ t('livePhoto.workspace.retryRangeHint') }}</small>
+        </label>
+        <div class="live-subtitle-dialog__actions live-photo-retry-settings-actions">
+          <button class="ghost-button" type="button" :disabled="livePhotoSettingsBusy" @click="livePhotoRetrySettingsOpen = false">{{ t('common.cancel') }}</button>
+          <button class="primary-button" type="button" :disabled="livePhotoSettingsBusy" @click="saveLivePhotoSettings(true)">
+            {{ livePhotoSettingsBusy ? t('livePhoto.workspace.saving') : t('livePhoto.workspace.retrySave') }}
+          </button>
+        </div>
+      </section>
     </div>
 
     <div v-if="detailDialogOpen && detailDialogItem" class="live-detail-dialog" @click.self="closeTaskDetail">
@@ -3943,6 +3718,73 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   border-top: 1px solid rgba(111, 123, 170, 0.12);
 }
 .live-subtitle-dialog__actions .ghost-button, .live-subtitle-dialog__actions .primary-button { min-width: 124px; }
+.live-photo-retry-settings-panel {
+  width: min(500px, 100%);
+}
+.live-photo-retry-settings-hero {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(115, 212, 199, 0.26);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(35, 102, 104, 0.32), rgba(49, 42, 110, 0.4));
+}
+.live-photo-retry-settings-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(109, 232, 212, 0.14);
+  color: #7ee5d5;
+}
+.live-photo-retry-settings-hero div:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+.live-photo-retry-settings-hero span,
+.live-photo-retry-settings-hero small,
+.live-photo-retry-settings-field small {
+  color: #9fb1d8;
+  font-size: 11px;
+}
+.live-photo-retry-settings-hero strong {
+  color: #f3f6ff;
+  font-size: 17px;
+}
+.live-photo-retry-settings-field {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(111, 123, 170, 0.2);
+  border-radius: 14px;
+  background: rgba(18, 23, 38, 0.74);
+  color: #dce5f6;
+  font-size: 12px;
+  font-weight: 700;
+}
+.live-photo-retry-settings-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid rgba(115, 212, 199, 0.34);
+  border-radius: 11px;
+  outline: 0;
+  background: rgba(9, 16, 27, 0.78);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+}
+.live-photo-retry-settings-field input:focus {
+  border-color: #70e2d0;
+  box-shadow: 0 0 0 3px rgba(112, 226, 208, 0.12);
+}
+.live-photo-retry-settings-actions {
+  padding-top: 2px;
+}
 .product-picker { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 12px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
 .product-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; }
 .project-picker { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
@@ -4096,6 +3938,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 10px;
   flex-wrap: wrap;
 }
+.status-filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.status-filter-tabs button { min-height: 30px; padding: 0 11px; border: 1px solid rgba(111,123,170,.22); border-radius: 999px; background: rgba(18,23,38,.8); color: #b9c5df; font-size: 11px; font-weight: 700; }
+.status-filter-tabs button.active { border-color: rgba(119,92,255,.6); background: rgba(85,68,167,.7); color: #fff; }
 .library-action-group,
 .library-output-actions,
 .library-head-tools,

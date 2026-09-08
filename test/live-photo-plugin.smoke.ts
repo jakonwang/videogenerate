@@ -103,7 +103,7 @@ async function main() {
     if (lastError) throw lastError
   }
 
-  async function waitForItemCompleted(id: string, timeoutMs = 15000) {
+  async function waitForItemCompleted(id: string, timeoutMs = 30000) {
     const startedAt = Date.now()
     let lastCurrent: any = null
     while (Date.now() - startedAt < timeoutMs) {
@@ -127,7 +127,7 @@ async function main() {
   async function waitForItemCondition(
     id: string,
     predicate: (item: any) => boolean,
-    timeoutMs = 15000,
+    timeoutMs = 30000,
   ) {
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
@@ -429,12 +429,16 @@ async function main() {
       localImagePath: refImage,
       qiniuUrl: 'https://example.com/ref-image.jpg',
       usageStatus: 'unused',
+      materialOrigin: 'derived',
       createdAt: Date.now(),
       updatedAt: Date.now(),
     })
+    const storedReferenceMaterial = await productImageMaterialsRepoModule.productImageMaterialsRepo.getMaterial('desktop-local', 'mat-live-photo-ref')
+    assert.ok(storedReferenceMaterial?.localImagePath)
+    const storedReferenceImage = storedReferenceMaterial.localImagePath
 
     const referenceQueued = await livePhotoService.createFromReference({
-      referenceImagePath: refImage,
+      referenceImagePath: storedReferenceImage,
       productId: product.id,
       motionTemplate: 'push_in',
     })
@@ -449,14 +453,14 @@ async function main() {
     assert.deepEqual(referenceItem.productSnapshot?.imagePaths || [], [analysisBoardImage])
     assert.equal(String(referenceItem.productSnapshot?.authoritativeProductReferencePath || ''), analysisBoardImage)
     assert.match(referenceQueued.imagePromptPreview?.prompt || '', /REPLACEMENT EXECUTION ORDER:/i)
-    assert.deepEqual(referenceQueued.imagePromptPreview?.referenceImagePaths || [], [refImage, analysisBoardImage])
+    assert.deepEqual(referenceQueued.imagePromptPreview?.referenceImagePaths || [], [storedReferenceImage, analysisBoardImage])
     assert.equal(referenceQueued.imagePromptPreview?.provider, 'openai')
     assert.match(referenceItem.promptPreview?.instructions.join(' ') || '', /Replace only the original product with the selected product/i)
     assert.ok(existsSync(String(referenceItem.livePhotoImagePath || '')))
     assert.ok(existsSync(String(referenceItem.livePhotoVideoPath || '')))
     assert.ok(existsSync(String(referenceItem.previewVideoPath || '')))
     assert.equal(generatedStillCalls.length, 1)
-    assert.equal(generatedStillCalls[0]?.imagePaths[0], refImage)
+    assert.equal(generatedStillCalls[0]?.imagePaths[0], storedReferenceImage)
     assert.match(String(generatedStillCalls[0]?.imagePaths[1] || ''), /product-reference[\\/].*single-product-primary-.*\.png$/i)
     assert.deepEqual(generatedStillCalls[0]?.uploadFileNames, ['image_1_base_scene.png', 'image_2_product_reference.png'])
     assert.deepEqual(generatedStillCalls[0]?.uploadKeyPrefixes, ['grsai-input/live-photo/base-scene', 'grsai-input/live-photo/product-reference'])

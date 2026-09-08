@@ -16,9 +16,9 @@ async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'videogen-live-photo-region-'))
   try {
     const scenePath = path.join(root, 'scene.png')
-    const cropPath = path.join(root, 'crop.png')
+    const cropPath = path.join(root, 'generated-still', 'crops', 'crop.png')
     const generatedPath = path.join(root, 'generated.png')
-    const outputPath = path.join(root, 'output.png')
+    const outputPath = path.join(root, 'generated-still', 'localized-replacement.png')
     await sharp({ create: { width: 400, height: 300, channels: 3, background: '#e52f42' } }).png().toFile(scenePath)
     await sharp({ create: { width: 1024, height: 1024, channels: 3, background: '#2357df' } }).png().toFile(generatedPath)
 

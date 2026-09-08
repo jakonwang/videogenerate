@@ -769,6 +769,8 @@ const api = {
         boundProductId?: string
       }
     }) => ipcRenderer.invoke('plugin:productImageMaterials:listMaterials', payload),
+    resolveMaterialImages: (payload: { userId: string; materialIds: string[] }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:resolveMaterialImages', payload),
     updateUsageStatus: (payload: { userId: string; materialId: string; usageStatus: 'unused' | 'used' }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:updateUsageStatus', payload),
     bindProduct: (payload: { userId: string; materialId: string; productId?: string }) =>
@@ -895,6 +897,8 @@ const api = {
   },
   tiktokCreative: {
     list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),
+    getSettings: () => ipcRenderer.invoke('plugin:tiktokCreative:getSettings'),
+    saveSettings: (payload: { imageRetryLimit?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:saveSettings', payload),
     listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreative:listAccounts'),
     listPromptVersions: () => ipcRenderer.invoke('plugin:tiktokCreative:listPromptVersions'),
     createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createPromptVersion', payload),
@@ -910,16 +914,36 @@ const api = {
       id: string
       shotId: string
       replacementRegion?: { x: number; y: number; width: number; height: number }
+      retryMode?: 'auto' | 'manual_once'
     }) => ipcRenderer.invoke('plugin:tiktokCreative:retryShot', payload),
+    continueWithVideo: (payload: { id: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:continueWithVideo', payload),
     exportItems: (payload: { taskId: string; shotIds: string[]; outputDir: string }) => ipcRenderer.invoke('plugin:tiktokCreative:exportItems', payload),
     removeShot: (payload: { taskId: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:removeShot', payload),
     generateSubtitles: (payload: { items: Array<{ taskId: string; shotId: string }>; titleText?: string; titleConfig?: { strategy?: 'single_for_all' | 'random_pool'; singleText?: string; titlePool?: string[] }; captionStyle?: Record<string, unknown>; overlayImageConfig?: Record<string, unknown>; layoutPolicy?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreative:generateSubtitles', payload),
     revertSubtitles: (payload: { taskId: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:revertSubtitles', payload),
+    revertSubtitlesBatch: (payload: { items: Array<{ taskId: string; shotId: string }> }) => ipcRenderer.invoke('plugin:tiktokCreative:revertSubtitlesBatch', payload),
     remove: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:remove', id),
+  },
+  tiktokPublisher: {
+    credentialStatus: () => ipcRenderer.invoke('plugin:tiktokPublisher:credentialStatus'),
+    saveCredential: (key: string) => ipcRenderer.invoke('plugin:tiktokPublisher:saveCredential', key),
+    clearCredential: () => ipcRenderer.invoke('plugin:tiktokPublisher:clearCredential'),
+    testCredential: () => ipcRenderer.invoke('plugin:tiktokPublisher:testCredential'),
+    connections: () => ipcRenderer.invoke('plugin:tiktokPublisher:connections'),
+    products: (connection?: string) => ipcRenderer.invoke('plugin:tiktokPublisher:products', connection),
+    music: (query: string, connection?: string) => ipcRenderer.invoke('plugin:tiktokPublisher:music', query, connection),
+    listTasks: () => ipcRenderer.invoke('plugin:tiktokPublisher:listTasks'),
+    removeTask: (id: string) => ipcRenderer.invoke('plugin:tiktokPublisher:removeTask', id),
+    updateTask: (id: string, patch: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokPublisher:updateTask', id, patch),
+    createDrafts: (payload: { items: Array<{ taskId: string; shotId: string }>; defaults?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokPublisher:createDrafts', payload),
+    createDraftsFromPaths: (payload: { paths: string[]; defaults?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokPublisher:createDraftsFromPaths', payload),
+    precheck: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:precheck', ids),
+    submit: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:submit', ids),
+    refresh: () => ipcRenderer.invoke('plugin:tiktokPublisher:refresh'),
   },
   livePhoto: {
     list: () => ipcRenderer.invoke('plugin:livePhoto:list'),
-    listSummaries: (payload?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' }) => ipcRenderer.invoke('plugin:livePhoto:listSummaries', payload),
+    listSummaries: (payload?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled' }) => ipcRenderer.invoke('plugin:livePhoto:listSummaries', payload),
     get: (id: string) => ipcRenderer.invoke('plugin:livePhoto:get', id),
     getSettings: () => ipcRenderer.invoke('plugin:livePhoto:getSettings'),
     saveSettings: (payload: {
@@ -931,6 +955,7 @@ const api = {
       qualityCheckerEnabled?: boolean
       qualityPassThreshold?: number
       qualityRetryFloor?: number
+      retryLimit?: number
     }) => ipcRenderer.invoke('plugin:livePhoto:saveSettings', payload),
     listPromptVersions: () => ipcRenderer.invoke('plugin:livePhoto:listPromptVersions'),
     createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:livePhoto:createPromptVersion', payload),
@@ -953,6 +978,7 @@ const api = {
     applySubtitleVideoToItem: (payload: { id: string; subtitleVideoPath: string; subtitleCoverImagePath?: string }) =>
       ipcRenderer.invoke('plugin:livePhoto:applySubtitleVideoToItem', payload),
     revertSubtitleVideoFromItem: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:revertSubtitleVideoFromItem', payload),
+    revertSubtitleVideosFromItems: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:livePhoto:revertSubtitleVideosFromItems', payload),
     generateSubtitleVideosForItems: (payload: {
       name: string
       sourceItems: Array<{
@@ -1019,6 +1045,7 @@ const api = {
       id: string
       motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
       replacementRegion?: { x: number; y: number; width: number; height: number }
+      retryMode?: 'auto' | 'manual_once'
     }) =>
       ipcRenderer.invoke('plugin:livePhoto:retry', payload),
     exportItems: (payload: {
@@ -1037,6 +1064,8 @@ const api = {
     pauseAutoFlow: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:pauseAutoFlow', payload),
     resumeAutoFlow: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:resumeAutoFlow', payload),
+    continueWithVideo: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:continueWithVideo', payload),
   },
   hermes: {
     livePhoto: {

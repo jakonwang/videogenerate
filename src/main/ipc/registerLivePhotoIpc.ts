@@ -6,7 +6,7 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:livePhoto:list', async () => await livePhotoService.list())
   ipcMain.handle(
     'plugin:livePhoto:listSummaries',
-    async (_e, payload?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' }) =>
+    async (_e, payload?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled' }) =>
       await livePhotoService.listSummaries(payload),
   )
   ipcMain.handle('plugin:livePhoto:get', async (_e, id: string) => await livePhotoService.get(id))
@@ -33,6 +33,7 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
     'plugin:livePhoto:revertSubtitleVideoFromItem',
     async (_e, payload: { id: string }) => await livePhotoService.revertSubtitleVideoFromItem(payload),
   )
+  ipcMain.handle('plugin:livePhoto:revertSubtitleVideosFromItems', async (_e, payload: { ids: string[] }) => await livePhotoService.revertSubtitleVideosFromItems(payload))
   ipcMain.handle(
     'plugin:livePhoto:generateSubtitleVideosForItems',
     async (_e, payload) => await livePhotoService.generateSubtitleVideosForItems(payload),
@@ -73,5 +74,8 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
     'plugin:livePhoto:resumeAutoFlow',
     async (_e, payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       await livePhotoService.resumeAutoFlow(payload),
+  )
+  ipcMain.handle('plugin:livePhoto:continueWithVideo', async (_e, payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    await livePhotoService.continueWithVideo(payload),
   )
 }

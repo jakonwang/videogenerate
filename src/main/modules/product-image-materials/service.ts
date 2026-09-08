@@ -1,6 +1,6 @@
-import { access, copyFile, mkdir, rm } from 'node:fs/promises'
+import { access, copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { constants as fsConstants } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { runFfmpeg } from '../ffmpeg/runner'
@@ -76,6 +76,29 @@ function materialRoot(batchId: string) {
 
 function dedupePaths(input: string[]) {
   return Array.from(new Set((input || []).map((item) => String(item || '').trim()).filter(Boolean)))
+}
+
+async function restoreMaterialImage(item: ProductImageMaterialItem) {
+  const localImagePath = String(item.localImagePath || '').trim()
+  if (localImagePath) {
+    try {
+      await access(localImagePath, fsConstants.R_OK)
+      return item
+    } catch {
+      // Restore the local material from its public copy below.
+    }
+  }
+  const remoteUrl = String(item.qiniuUrl || '').trim()
+  if (!/^https?:\/\//i.test(remoteUrl)) {
+    throw new Error(`Material image is unavailable: ${basename(localImagePath || item.id)}`)
+  }
+  const response = await fetch(remoteUrl, { signal: AbortSignal.timeout(15_000) })
+  if (!response.ok) throw new Error(`Material image restore failed: ${basename(localImagePath || item.id)}`)
+  const extension = extname(new URL(remoteUrl).pathname) || extname(localImagePath) || '.png'
+  const restoredPath = join(getAppPaths().dataDir, 'product-image-materials', 'restored', item.id, `${item.id}${extension}`)
+  await mkdir(dirname(restoredPath), { recursive: true })
+  await writeFile(restoredPath, Buffer.from(await response.arrayBuffer()))
+  return await productImageMaterialsRepo.upsertMaterial({ ...item, localImagePath: restoredPath })
 }
 
 function sourceItemOf(videoPath: string, parserVideoId?: string): ProductImageMaterialSourceItem {
@@ -658,6 +681,16 @@ export const productImageMaterialsService = {
 
   async listMaterials(userId: string, filters?: ProductImageMaterialListFilters) {
     return await productImageMaterialsRepo.listMaterials(userId, filters)
+  },
+
+  async resolveMaterialImages(input: { userId: string; materialIds: string[] }) {
+    const userId = String(input.userId || '').trim()
+    const materialIds = Array.from(new Set((input.materialIds || []).map((item) => String(item || '').trim()).filter(Boolean)))
+    if (!userId) throw new Error('userId is required')
+    const materials = await productImageMaterialsRepo.listMaterials(userId)
+    const selected = materialIds.map((id) => materials.find((item) => item.id === id)).filter(Boolean) as ProductImageMaterialItem[]
+    if (selected.length !== materialIds.length) throw new Error('Selected material does not exist')
+    return await Promise.all(selected.map(restoreMaterialImage))
   },
 
   async updateMaterialUsageStatus(input: {

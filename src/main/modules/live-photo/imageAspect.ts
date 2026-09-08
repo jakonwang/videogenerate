@@ -1,6 +1,10 @@
 import { mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import sharp from 'sharp'
+
+async function getSharp(): Promise<any> {
+  const module = await import('sharp')
+  return module.default || module
+}
 
 const LIVE_PHOTO_IMAGE_WIDTH = 720
 const LIVE_PHOTO_IMAGE_HEIGHT = 1280
@@ -20,6 +24,7 @@ export async function normalizeLivePhotoGeneratedImageAspect(
   sourcePath: string,
   outputDir: string,
 ): Promise<LivePhotoImageAspectResult> {
+  const sharp = await getSharp()
   const metadata = await sharp(sourcePath).metadata()
   const sourceWidth = Number(metadata.width || 0)
   const sourceHeight = Number(metadata.height || 0)

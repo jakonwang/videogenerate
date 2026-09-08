@@ -1986,6 +1986,7 @@
     "models": "模特",
     "productLibrary": "商品",
     "liveSlicer": "切片",
+    "publish": "发布",
     "plugins": "插件",
     "settings": "设置"
   },
@@ -2664,7 +2665,7 @@
       },
       "live-photo-generator": {
         "name": "动态照片生成器",
-        "description": "根据参考图片或复刻镜头创建兼容 Apple 的动态照片，并提供预览和导出。"
+        "description": "根据商品参考图片创建兼容 Apple 的动态照片，并提供预览和导出。"
       },
       "tiktok-creative-studio": {
         "name": "TikTok 创意工作室",
@@ -2791,14 +2792,13 @@
     "hero": {
       "back": "返回插件",
       "eyebrow": "动态照片插件",
-      "title": "从商品参考图或复刻镜头生成可直接导出的动态照片素材。",
+      "title": "从商品参考图生成可直接导出的动态照片素材。",
       "desc": "在专用插件工作台中创建可预览的动图组合，检查提示词锁定，导出 Apple 风格素材包并打开本地输出。",
       "refresh": "刷新",
       "completed": "已完成"
     },
     "tabs": {
       "reference": "从参考图创建",
-      "clone": "从复刻镜头创建",
       "library": "库 / 导出"
     },
     "reference": {
@@ -2819,18 +2819,10 @@
         "package": "将生成结果整理为图片、视频和清单文件，并输出到导出包中。"
       }
     },
-    "clone": {
-      "title": "复刻项目",
-      "lock": "只读素材导入",
-      "project": "项目",
-      "summaryTitle": "项目摘要",
-      "eligibleShots": "可用镜头",
-      "selected": "已选择"
-    },
     "library": {
       "title": "库与导出",
       "emptyTitle": "还没有动态照片任务。",
-      "emptyDesc": "请先从参考图或复刻镜头素材创建任务。",
+      "emptyDesc": "请先从商品参考图创建任务。",
       "packagingMetadata": "打包元数据",
       "preview": "预览",
       "metadata": "元数据",
@@ -2842,7 +2834,6 @@
     "actions": {
       "creating": "创建中...",
       "createLivePhoto": "创建动态照片",
-      "createFromSelectedShots": "从选中镜头创建",
       "exporting": "导出中...",
       "exportSelected": "导出选中项"
     },
@@ -2864,13 +2855,12 @@
     },
     "messages": {
       "referenceCreated": "参考图动态照片任务已创建。",
-      "cloneCreated": "复刻镜头动态照片任务已创建。",
       "retried": "动态照片任务已重试。",
       "regenerated": "动态照片任务已重新生成。",
       "exportedCount": "已导出 {count} 个项目。"
     },
     "workspace": {
-      "hint": "在参考图任务、复刻镜头与素材库之间快速切换",
+      "hint": "在参考图任务与素材库之间快速切换",
       "referenceNote": "按当前比例批量创建任务",
       "referenceUploadTitle": "点击上传或拖拽图片到此处",
       "referenceUploadDesc": "支持 JPG、PNG、WEBP，建议宽度 2000 像素以上，可连续追加多张图片。",
@@ -2878,6 +2868,7 @@
       "materialLibraryDesc": "打开商品图片素材库，批量选择未绑定商品的图片。",
       "materialLibraryEmpty": "当前没有可用的未绑定商品素材图片。",
       "materialLibraryAddSelected": "加入参考图",
+      "selected": "已选择",
       "selectAll": "全选",
       "clear": "清空",
       "previousPage": "上一页",
@@ -2899,9 +2890,6 @@
       "resolution": "分辨率",
       "frameRate": "帧率",
       "quality": "质量",
-      "cloneRuleReuse": "复用复刻任务的结构和镜头信息，自动生成动态视频素材。",
-      "cloneRuleAutoLive": "视频生成后继续写出动态照片资源，完成后进入素材库。",
-      "cloneSafe": "任务会读取现有分镜和视频数据，完成后进入动态照片输出流程。",
       "itemUnit": "项目",
       "filter": "筛选",
       "referenceCreatedPrefix": "已创建",
@@ -2924,9 +2912,8 @@
       "activateVersion": "启用版本",
       "rollbackVersion": "回滚副本",
       "motionStrategy": "动作策略",
-      "motionStrategyDesc": "这两项会写入数据库，并作用于参考图任务、复刻镜头任务、失败重试和恢复执行。",
+      "motionStrategyDesc": "该设置会写入数据库，并作用于参考图任务、失败重试和恢复执行。",
       "referenceMotion": "参考图默认动作",
-      "cloneMotion": "复刻镜头默认动作",
       "exportSettingsDesc": "当前导出规格会写入数据库，并在导出阶段参与分辨率、帧率和压缩质量处理。",
       "saving": "保存中...",
       "saveSettings": "保存动态照片设置",
@@ -2942,8 +2929,46 @@
       "pauseRunning": "暂停运行",
       "batchDelete": "批量删除",
       "batchSubtitles": "批量字幕",
-      "selectProduct": "选择商品"
+      "selectProduct": "选择商品",
+      "retryGuard": "重试保护",
+      "retrySettingsTitle": "图片重试设置",
+      "retrySettingsDesc": "设置图片准备质量检查的最大自动重试次数。",
+      "retryAutomaticRecovery": "自动恢复",
+      "retryAttemptUnit": "次",
+      "retryManualOnly": "设为 0 时仅可手动恢复。",
+      "retryMaximum": "最大重试次数",
+      "retryRangeHint": "请输入 0 到 20。该设置将应用于新建和手动重试的图片任务。",
+      "retrySave": "保存设置",
+      "retrySettingsSaved": "重试设置已保存",
+      "continueWithVideo": "跳过图片审核，继续生成视频",
+      "continueWithVideoStarted": "已跳过图片审核，正在生成视频",
+      "revertSubtitles": "恢复原字幕",
+      "materialUsed": "已使用",
+      "materialUnused": "未使用",
+      "materialDerived": "衍生图"
     }
+  },
+  "tiktokCreative": {
+    "retry": {
+      "guard": "重试保护",
+      "title": "图片重试设置",
+      "description": "设置图片准备质量检查的最大自动重试次数。",
+      "automaticRecovery": "自动恢复",
+      "attemptUnit": "次",
+      "manualOnly": "设为 0 时仅可手动恢复。",
+      "maximum": "最大重试次数",
+      "rangeHint": "请输入 0 到 20。该设置将应用于新建和手动重试的图片任务。",
+      "save": "保存设置",
+      "saving": "保存中...",
+      "saved": "重试设置已保存",
+      "continueWithVideo": "跳过图片审核，继续生成视频",
+      "continueWithVideoStarted": "已跳过图片审核，正在生成视频"
+    },
+    "material": {
+      "derivedOnly": "仅可选择衍生图，以保护来源素材合规。",
+      "empty": "暂无可用衍生图。"
+    },
+    "revertSubtitles": "恢复原字幕"
   },
   "billing": {
     "title": "会员与钱包中心",

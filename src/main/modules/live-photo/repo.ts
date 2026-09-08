@@ -43,6 +43,7 @@ function defaultSettings(): LivePhotoSettings {
     qualityCheckerEnabled: true,
     qualityPassThreshold: 0.88,
     qualityRetryFloor: 0.65,
+    retryLimit: 2,
     updatedAt: Date.now(),
   }
 }
@@ -72,6 +73,20 @@ function normalizeWorkflow(workflow?: LivePhotoWorkflow): LivePhotoWorkflow | un
 }
 
 function normalizeItem(item: LivePhotoItem): LivePhotoItem {
+  const retryLimit = Math.max(0, Math.min(20, Math.floor(Number(item.autoFlowStatus?.retryLimit ?? 2) || 0)))
+  const autoFlowStatus = item.autoFlowStatus
+    ? {
+        ...item.autoFlowStatus,
+        retryLimit,
+        retryCount: Math.min(retryLimit, Math.max(0, Number(item.autoFlowStatus.retryCount || 0) || 0)),
+        imageRetryMode: item.autoFlowStatus.imageRetryMode === 'manual_once' ? 'manual_once' as const : 'auto' as const,
+        ...(item.autoFlowStatus.status === 'failed_retryable' &&
+        String(item.autoFlowStatus.lastError || item.error || '').includes('[image_validation_failed]') &&
+        Number(item.autoFlowStatus.retryCount || 0) >= retryLimit
+          ? { status: 'failed_terminal' as const, paused: true }
+          : {}),
+      }
+    : undefined
   return {
     ...item,
     workflow: normalizeWorkflow(item.workflow),
@@ -79,6 +94,7 @@ function normalizeItem(item: LivePhotoItem): LivePhotoItem {
     replacementRegion: normalizeLivePhotoReplacementRegion(item.replacementRegion) || undefined,
     sceneInteraction: normalizeLivePhotoSceneInteraction(item.sceneInteraction) || undefined,
     cacheHit: Boolean(item.cacheHit),
+    autoFlowStatus,
     usageStatus: item.usageStatus === 'used' ? 'used' : 'unused',
     usedAt: Number(item.usedAt || 0) || undefined,
     usedChannel: String(item.usedChannel || '').trim() || undefined,
@@ -196,6 +212,7 @@ export const livePhotoRepo = {
       qualityCheckerEnabled: input.qualityCheckerEnabled !== false,
       qualityPassThreshold: Math.max(0.5, Math.min(1, Number(input.qualityPassThreshold ?? current.qualityPassThreshold ?? 0.88))),
       qualityRetryFloor: Math.max(0, Math.min(0.95, Number(input.qualityRetryFloor ?? current.qualityRetryFloor ?? 0.65))),
+      retryLimit: Math.max(0, Math.min(20, Math.floor(Number(input.retryLimit ?? current.retryLimit ?? 2) || 0))),
       updatedAt: Date.now(),
     }
     await ensureLivePhotoSqliteReady()

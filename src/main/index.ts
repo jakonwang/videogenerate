@@ -59,10 +59,29 @@ import { gmvMaxScheduler } from './modules/tiktok-gmv-max/scheduler'
 import { gmvMaxMcpClient } from './modules/tiktok-gmv-max/mcpClient'
 import { closeGmvMaxSqlite } from './modules/tiktok-gmv-max/sqlite'
 
+// Keep fatal startup errors available before Electron app paths are initialized.
+const earlyDiagnosticPath = join(process.env.TEMP || process.cwd(), 'VideoGenerate-startup.log')
+function writeEarlyDiagnostic(event: string, error: unknown) {
+  try {
+    const value = error instanceof Error ? `${error.stack || error.message}` : String(error)
+    require('node:fs').appendFileSync(
+      earlyDiagnosticPath,
+      `[${new Date().toISOString()}] ${event}: ${value}\n`,
+      'utf8',
+    )
+  } catch {
+    // Diagnostics must never interfere with application startup.
+  }
+}
+
+process.on('uncaughtException', (error) => writeEarlyDiagnostic('uncaughtException', error))
+process.on('unhandledRejection', (reason) => writeEarlyDiagnostic('unhandledRejection', reason))
+
 let mainWindow: BrowserWindow | null = null
 let restoreConsoleBridge: (() => void) | null = null
 let appTray: Tray | null = null
 let isAppQuitting = false
+let pendingWindowReveal = false
 let rendererRecoveryTimestamps: number[] = []
 const appStartupStartedAt = performance.now()
 const RENDERER_RECOVERY_WINDOW_MS = 60_000
@@ -163,6 +182,18 @@ function ignoreBrokenPipeOnStdStreams() {
 
 configureWindowsStorageRoot()
 ignoreBrokenPipeOnStdStreams()
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  // Some Windows machines fail to load Electron's GPU subprocess DLLs.
+  // Keep rendering in the browser process so the desktop app can still open.
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+  app.commandLine.appendSwitch('in-process-gpu')
+  // The packaged app runs in environments where Chromium's sandbox broker
+  // cannot create a renderer process (exit code 49). Disable it on Windows so
+  // the renderer can start consistently.
+  app.commandLine.appendSwitch('no-sandbox')
+}
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 const { cacheDir: electronCacheDir } = getAppPaths()
@@ -257,7 +288,20 @@ async function wireMediaProtocol() {
 
 function revealMainWindow() {
   if (!mainWindow) return
-  const bounds = mainWindow.getBounds()
+  let bounds = mainWindow.getBounds()
+  if (bounds.width < 640 || bounds.height < 480) {
+    const display = screen.getDisplayMatching(bounds)
+    const workArea = display?.workArea
+    const width = Math.min(1080, workArea?.width || 1080)
+    const height = Math.min(720, workArea?.height || 720)
+    mainWindow.setBounds({
+      x: workArea ? workArea.x + Math.max(0, Math.floor((workArea.width - width) / 2)) : 100,
+      y: workArea ? workArea.y + Math.max(0, Math.floor((workArea.height - height) / 2)) : 100,
+      width,
+      height,
+    })
+    bounds = mainWindow.getBounds()
+  }
   const display = screen.getDisplayMatching(bounds)
   const workArea = display?.workArea
   const isOffScreen =
@@ -276,7 +320,12 @@ function revealMainWindow() {
   mainWindow.focus()
 }
 
-app.on('second-instance', () => revealMainWindow())
+app.on('second-instance', () => {
+  // The first instance may still be initializing its BrowserWindow when the
+  // second launch arrives. Defer the reveal instead of dropping the request.
+  pendingWindowReveal = true
+  revealMainWindow()
+})
 
 function hideMainWindowToTray() {
   if (!mainWindow) return
@@ -358,6 +407,7 @@ function createWindow(initialUrl = '') {
     width: 1080,
     height: 720,
     show: false,
+    backgroundColor: '#070910',
     frame: false,
     titleBarStyle: 'hidden',
     ...(windowIcon && !windowIcon.isEmpty() ? { icon: windowIcon } : {}),
@@ -374,7 +424,7 @@ function createWindow(initialUrl = '') {
     console.warn('[window] reveal fallback triggered')
     markStartupStage('window-reveal-fallback')
     revealMainWindow()
-  }, 4000)
+  }, 15000)
   mainWindow.once('ready-to-show', () => {
     markStartupStage('window-ready-to-show')
     revealMainWindow()
@@ -424,6 +474,10 @@ function createWindow(initialUrl = '') {
 
   void loadRendererContent(mainWindow, initialUrl)
   markStartupStage('window-created')
+  if (pendingWindowReveal) {
+    pendingWindowReveal = false
+    revealMainWindow()
+  }
 }
 
 function wireIpc() {
@@ -1666,20 +1720,26 @@ app.whenReady().then(async () => {
   await migrateLegacyWindowsUserData()
   markStartupStage('legacy-storage-migrated')
   await ensureAppDirs()
+  markStartupStage('app-directories-ready')
   const crashDumpsDir = join(getAppPaths().dataDir, 'crashDumps')
   await mkdir(crashDumpsDir, { recursive: true })
   app.setPath('crashDumps', crashDumpsDir)
-  crashReporter.start({
-    productName: 'VideoGenerate',
-    companyName: 'VideoGenerate',
-    submitURL: '',
-    uploadToServer: false,
-    compress: false,
-  })
   // Keep startup paths ready before renderer IPC requests begin.
   wireIpc()
   await wireMediaProtocol()
   createWindow()
+  markStartupStage('window-created')
+  try {
+    crashReporter.start({
+      productName: 'VideoGenerate',
+      companyName: 'VideoGenerate',
+      submitURL: '',
+      uploadToServer: false,
+      compress: false,
+    })
+  } catch (error) {
+    console.warn('[startup] crash reporter unavailable', error)
+  }
   registerUpdaterIpc(() => mainWindow)
   setupAutoUpdater(() => mainWindow)
 
@@ -1725,7 +1785,10 @@ app.whenReady().then(async () => {
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
         await livePhotoService.resumePendingTasksOnStartup()
-        await tiktokCreativeStudioService.resumePending()
+        // Do not auto-resume TikTok tasks during startup. A malformed task created
+        // by a previous batch upload must not prevent the application from opening.
+        // Tasks remain persisted and can be retried manually from the TikTok page.
+        markStartupStage('tiktok-creative-auto-resume-skipped')
         gmvMaxScheduler.start()
         markStartupStage('background-initialization-complete')
       } catch (error: any) {

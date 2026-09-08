@@ -27,6 +27,7 @@ audit-*.png
 .git-backups
 .tmp
 test/artifacts
+test-artifacts/
 video
 automation/hermes-agent/config.local.json
 automation/hermes-agent/*.local.json

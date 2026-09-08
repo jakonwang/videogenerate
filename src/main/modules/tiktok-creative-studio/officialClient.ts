@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import type { TiktokCookie } from './accounts'
 import type { TiktokCreativeRequestTrace } from './types'
 
@@ -14,6 +15,24 @@ const TIER_URL = `${BASE_URL}/CreativeOne/SymphonyPlatform/QueryCreditTierCredit
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
 
 type ClientOptions = { cookies: TiktokCookie[]; accountId: string }
+
+function findBrowserExecutable(playwrightExecutablePath: string) {
+  const configuredPath = String(process.env.PLAYWRIGHT_EXECUTABLE_PATH || '').trim()
+  const roots = [
+    process.env.LOCALAPPDATA,
+    process.env.PROGRAMFILES,
+    process.env['PROGRAMFILES(X86)'],
+  ].filter((value): value is string => Boolean(value))
+  const candidates = [
+    configuredPath,
+    playwrightExecutablePath,
+    ...roots.flatMap((root) => [
+      join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    ]),
+  ]
+  return candidates.find((candidate) => candidate && existsSync(candidate))
+}
 
 function findValue(value: unknown, keys: string[]): string {
   if (!value || typeof value !== 'object') return ''
@@ -37,7 +56,11 @@ function findNumber(value: unknown, keys: string[]): number | undefined {
 
 async function launchPage(cookies: TiktokCookie[]) {
   const { chromium } = await import('playwright')
-  const browser = await chromium.launch({ headless: false, args: ['--window-position=-32000,-32000'] })
+  const executablePath = findBrowserExecutable(chromium.executablePath())
+  if (!executablePath) {
+    throw new Error('A supported browser was not found. Install Microsoft Edge or Google Chrome and try again.')
+  }
+  const browser = await chromium.launch({ executablePath, headless: false, args: ['--window-position=-32000,-32000'] })
   const context = await browser.newContext({ userAgent: USER_AGENT, extraHTTPHeaders: { Referer: BASE_URL } })
   await context.addCookies(
     cookies.map((cookie) => ({
@@ -270,26 +293,28 @@ export class TiktokOfficialClient {
 
   private async uploadImage(imagePath: string) {
     const bytes = await readFile(imagePath)
-    const payload = JSON.stringify({
+    const payload = {
       base64: bytes.toString('base64'),
       fileName: basename(imagePath),
       mimeType: imageMimeType(imagePath),
-    })
-    const uploadResult = await this.page.evaluate(`(async () => {
-      const { base64, fileName, mimeType } = ${payload}
-      const pageWindow = window
+    }
+    // Pass the image as a structured argument. Interpolating base64 into the
+    // JavaScript source creates a huge script and can crash Chromium on large
+    // uploads.
+    const uploadResult = await this.page.evaluate(async ({ base64, fileName, mimeType }: typeof payload) => {
+      const pageWindow = window as any
       const chunkKey = Object.keys(pageWindow).find((key) => key.startsWith('@creative-ai/cue:') && Array.isArray(pageWindow[key]))
       if (!chunkKey) throw new Error('TikTok uploader runtime is unavailable')
 
-      let webpackRequire
+      let webpackRequire: any
       pageWindow[chunkKey].push([
         ['videogenerate-' + Date.now()],
         {},
-        (runtime) => { webpackRequire = runtime },
+        (runtime: any) => { webpackRequire = runtime },
       ])
       if (!webpackRequire?.m) throw new Error('TikTok module runtime is unavailable')
 
-      const findModule = (text) => Object.keys(webpackRequire.m)
+      const findModule = (text: string) => Object.keys(webpackRequire.m)
         .find((id) => String(webpackRequire.m[id]).includes(text))
       const uploadModuleId = findModule('UploadConfig must provide getUploadToken or uploader')
       const tokenModuleId = findModule('/creative_bff_i18n/api/cue/upload')
@@ -309,7 +334,7 @@ export class TiktokOfficialClient {
         fromModule: 'CreativeStudio/MiniApp/ImageToVideo',
         getUploadToken: () => tokenModule.getToken({}),
       })
-    })()`)
+    }, payload)
     if (!uploadResult?.imageUrl) throw new Error('TikTok image upload did not return an image URL')
     return {
       imageUrl: String(uploadResult.imageUrl),

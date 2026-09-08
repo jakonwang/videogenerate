@@ -152,6 +152,8 @@ export type LivePhotoAutoFlowStatus = {
   enabled: boolean
   status: 'idle' | 'running' | 'done' | 'failed_retryable' | 'failed_terminal'
   paused?: boolean
+  imageValidationBypassed?: boolean
+  imageRetryMode?: 'auto' | 'manual_once'
   retryLimit: number
   retryCount: number
   currentStage: LivePhotoWorkflowStep
@@ -263,6 +265,7 @@ export type RetryLivePhotoItemInput = {
   id: string
   motionTemplate?: LivePhotoMotionTemplate
   replacementRegion?: Pick<LivePhotoReplacementRegion, 'x' | 'y' | 'width' | 'height'>
+  retryMode?: 'auto' | 'manual_once'
 }
 
 export type ExportLivePhotoItemsResult = {
@@ -284,6 +287,7 @@ export type LivePhotoSettings = {
   qualityCheckerEnabled?: boolean
   qualityPassThreshold?: number
   qualityRetryFloor?: number
+  retryLimit?: number
   updatedAt: number
 }
 
