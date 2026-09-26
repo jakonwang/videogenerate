@@ -26,3 +26,25 @@ export function resolveLivePhotoImageRetryFailure(input: {
     nextRetryCount: shouldRetry ? retryCount + 1 : retryCount,
   }
 }
+
+export function resolveLivePhotoStage(input: {
+  failedStage?: 'image' | 'video'
+  currentStage?: LivePhotoWorkflowStep
+  imageTaskId?: string
+  videoTaskId?: string
+}): 'image' | 'video' {
+  if (input.failedStage) return input.failedStage
+  if (String(input.videoTaskId || '').trim()) return 'video'
+  if (String(input.imageTaskId || '').trim()) return 'image'
+  return input.currentStage === 'video_generation' || input.currentStage === 'live_photo_packaging' ? 'video' : 'image'
+}
+
+export function resolveLivePhotoStageRetryCount(status: {
+  stage: 'image' | 'video'
+  retryCount?: number
+  imageRetryCount?: number
+  videoRetryCount?: number
+}) {
+  const value = status.stage === 'video' ? status.videoRetryCount : status.imageRetryCount
+  return Math.max(0, Number(value ?? status.retryCount ?? 0) || 0)
+}

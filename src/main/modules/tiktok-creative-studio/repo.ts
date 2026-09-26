@@ -139,7 +139,13 @@ async function materializeTaskAssets(task: TiktokCreativeTask): Promise<TiktokCr
 export const tiktokCreativeStudioRepo = {
   async list(): Promise<TiktokCreativeTask[]> {
     const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
-    return [...db.tasks].map(normalizeTask).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+    return [...db.tasks]
+      .map(normalizeTask)
+      .sort(
+        (a, b) =>
+          Number(b.createdAt || 0) - Number(a.createdAt || 0) ||
+          String(b.id).localeCompare(String(a.id)),
+      )
   },
 
   async get(id: string) {

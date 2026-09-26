@@ -4,6 +4,8 @@ import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT, hashLivePhotoPrompt } from '../live-photo/promptVersions'
 
+export const DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT = 'Create a smooth ten-second product showcase with gentle natural motion and stable product identity.'
+
 export type TiktokCreativePromptVersion = {
   id: string
   name: string
@@ -42,8 +44,8 @@ async function readDb() {
     id: randomUUID(),
     name: 'TikTok Product Replacement',
     version: 1,
-    prompt: DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT,
-    promptHash: hashLivePhotoPrompt(DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT),
+    prompt: DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT,
+    promptHash: hashLivePhotoPrompt(DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT),
     active: true,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -65,7 +67,16 @@ export const tiktokCreativePromptVersions = {
 
   async getActive() {
     const versions = await this.list()
-    return versions.find((item) => item.active) || versions[0]!
+    const active = versions.find((item) => item.active) || versions[0]!
+    // Migrate the old shared Live Photo replacement seed to a valid R2V motion prompt.
+    if (active.promptHash === hashLivePhotoPrompt(DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT)) {
+      return await this.save({
+        id: active.id,
+        name: 'TikTok Reference to Video',
+        prompt: DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT,
+      })
+    }
+    return active
   },
 
   async save(input: { id?: string; name: string; prompt: string }) {

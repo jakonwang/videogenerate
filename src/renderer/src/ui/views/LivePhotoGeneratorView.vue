@@ -15,7 +15,6 @@ import {
   ChevronRight,
   Clock3,
   FileImage,
-  Filter,
   FolderOpen,
   Grid2x2,
   ImagePlus,
@@ -30,7 +29,6 @@ import {
   Play,
   RefreshCcw,
   ScanLine,
-  Send,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -320,11 +318,21 @@ const libraryPage = ref(1)
 const libraryPageSize = ref(24)
 const libraryTotal = ref(0)
 const libraryTotalPages = ref(1)
+const libraryStats = ref({ total: 0, running: 0, failed: 0, paused: 0 })
 const libraryViewMode = ref<'grid' | 'list'>('grid')
 const products = ref<Product[]>([])
 const productImageMaterials = ref<ProductImageMaterialOption[]>([])
 const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled'>('all')
 function setLibraryFilter(value: string) { if (['all', 'failed', 'running', 'paused', 'success_not_exported', 'success_exported', 'success_not_subtitled'].includes(value)) libraryFilter.value = value as typeof libraryFilter.value }
+const libraryStatusFilters = computed(() => [
+  { key: 'all', label: t('common.all') },
+  { key: 'running', label: t('livePhoto.workspace.running') },
+  { key: 'failed', label: t('livePhoto.status.failed') },
+  { key: 'paused', label: t('livePhoto.workspace.paused') },
+  { key: 'success_not_exported', label: t('livePhoto.workspace.successNotExported') },
+  { key: 'success_exported', label: t('livePhoto.workspace.successExported') },
+  { key: 'success_not_subtitled', label: t('livePhoto.workspace.successNotSubtitled') },
+])
 const selectedProductId = ref('')
 const productPickerOpen = ref(false)
 const referenceImagePaths = ref<string[]>([])
@@ -338,7 +346,6 @@ const materialPickerPageSize = ref(12)
 const selectedLibraryIds = ref<string[]>([])
 const batchDeleteOpen = ref(false)
 const batchDeleteBusy = ref(false)
-const sendingToFeishu = ref(false)
 const runtimeDialogOpen = ref(false)
 const runtimeLogs = ref<Array<{ id: string; level: 'info' | 'success' | 'error'; message: string; time: number }>>([])
 const runtimeDialogTitle = ref('')
@@ -437,12 +444,6 @@ const selectedMaterialOptions = computed(() =>
   unboundMaterialOptions.value.filter((item) => selectedMaterialImageIds.value.includes(item.id)),
 )
 
-const todayCreatedCount = computed(() => {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  return items.value.filter((item) => Number(item.updatedAt || 0) >= start.getTime()).length
-})
-
 const filteredLibraryItems = computed(() => items.value)
 
 const livePhotoSteps = ['queued', 'image_generation', 'image_validation', 'video_generation', 'live_photo_packaging', 'completed'] as const
@@ -450,13 +451,10 @@ const livePhotoRetryLimitFallback = 2
 const selectedLibraryItems = computed(() => filteredLibraryItems.value.filter((item) => selectedLibraryIds.value.includes(item.id)))
 const subtitleEligibleSelectedItems = computed(() => selectedLibraryItems.value.filter((item) => Boolean(livePhotoDisplayVideoPath(item))))
 const subtitleEligibleSelectedCount = computed(() => subtitleEligibleSelectedItems.value.length)
-const videoDialogItem = computed(() => items.value.find((item) => item.id === videoDialogItemId.value) || null)
-const feishuEligibleSelectedItems = computed(() =>
-  selectedLibraryItems.value.filter((item) => item.packagingStatus === 'completed' && Boolean(livePhotoDisplayVideoPath(item))),
+const subtitleRevertEligibleSelectedCount = computed(() =>
+  selectedLibraryItems.value.filter((item) => Boolean(item.subtitleOverlay?.active)).length,
 )
-const feishuEligibleSelectedCount = computed(() => feishuEligibleSelectedItems.value.length)
-const feishuBatchLabel = computed(() => t('autoUi.k_47e9e6b9f0c7'))
-const feishuSendingLabel = computed(() => t('autoUi.k_a1121121b1f7'))
+const videoDialogItem = computed(() => items.value.find((item) => item.id === videoDialogItemId.value) || null)
 const pagedLibraryItems = computed(() => filteredLibraryItems.value)
 const runningLibraryItems = computed(() =>
   items.value.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running'),
@@ -630,7 +628,15 @@ function liveTaskErrorSummary(item: LivePhotoItem) {
     const taskId = extractLivePhotoTaskId(item)
     return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
   }
-  return sanitizeVisibleText(text, t('autoUi.k_160f09e2ed5d'))
+  const stage = item.autoFlowStatus?.failedStage === 'video'
+    ? 'video_generation'
+    : item.autoFlowStatus?.failedStage === 'image'
+      ? 'image_validation'
+      : item.workflow?.currentStep
+  const summary = sanitizeVisibleText(text, t('autoUi.k_160f09e2ed5d'))
+  return stage === 'video_generation' || stage === 'image_validation'
+    ? `${workflowStepLabel(stage)}: ${summary}`
+    : summary
 }
 
 function liveTaskAutoSummary(item: LivePhotoItem) {
@@ -1157,7 +1163,18 @@ async function saveLivePhotoSettings(closeRetrySettings = false) {
   errorText.value = ''
   try {
     livePhotoSettings.value.retryLimit = Math.max(0, Math.min(20, Math.floor(Number(livePhotoSettings.value.retryLimit) || 0)))
-    const next = await window.api.livePhoto.saveSettings(livePhotoSettings.value)
+    const settingsSnapshot: LivePhotoSettings = {
+      referenceMotionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+      outputResolution: livePhotoSettings.value.outputResolution,
+      frameRate: livePhotoSettings.value.frameRate,
+      quality: livePhotoSettings.value.quality,
+      qualityCheckerEnabled: livePhotoSettings.value.qualityCheckerEnabled,
+      qualityPassThreshold: livePhotoSettings.value.qualityPassThreshold,
+      qualityRetryFloor: livePhotoSettings.value.qualityRetryFloor,
+      retryLimit: livePhotoSettings.value.retryLimit,
+      updatedAt: livePhotoSettings.value.updatedAt,
+    }
+    const next = await window.api.livePhoto.saveSettings(settingsSnapshot)
     livePhotoSettings.value = {
       ...livePhotoSettings.value,
       ...next,
@@ -1291,7 +1308,11 @@ function mergeLivePhotoItems(nextItems: LivePhotoItem[]) {
   for (const item of nextItems) {
     if (item?.id) map.set(item.id, item)
   }
-  items.value = Array.from(map.values()).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+  items.value = Array.from(map.values()).sort(
+    (a, b) =>
+      Number(b.createdAt || 0) - Number(a.createdAt || 0) ||
+      String(b.id).localeCompare(String(a.id)),
+  )
 }
 
 async function loadWithTimeout<T>(promise: Promise<T>, timeoutMs: number) {
@@ -1318,7 +1339,15 @@ async function refreshLibraryItems(force = false) {
         page: libraryPage.value,
         pageSize: libraryPageSize.value,
         filter: libraryFilter.value,
-      }) as Promise<{ items: LivePhotoItem[]; filter: string; page: number; pageSize: number; total: number; totalPages: number }>,
+      }) as Promise<{
+        items: LivePhotoItem[]
+        filter: string
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+        stats?: { total?: number; running?: number; failed?: number; paused?: number }
+      }>,
       4000,
     )
     const normalizedItems = Array.isArray(nextPage?.items) ? nextPage.items : []
@@ -1327,6 +1356,12 @@ async function refreshLibraryItems(force = false) {
     libraryPageSize.value = Math.max(1, Number(nextPage?.pageSize || 24) || 24)
     libraryTotal.value = Math.max(0, Number(nextPage?.total || 0) || 0)
     libraryTotalPages.value = Math.max(1, Number(nextPage?.totalPages || 1) || 1)
+    libraryStats.value = {
+      total: Math.max(0, Number(nextPage?.stats?.total || 0) || 0),
+      running: Math.max(0, Number(nextPage?.stats?.running || 0) || 0),
+      failed: Math.max(0, Number(nextPage?.stats?.failed || 0) || 0),
+      paused: Math.max(0, Number(nextPage?.stats?.paused || 0) || 0),
+    }
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   }
@@ -1668,41 +1703,6 @@ async function confirmBatchDelete() {
   }
 }
 
-async function sendSelectedToFeishu() {
-  if (!feishuEligibleSelectedCount.value || sendingToFeishu.value) return
-  sendingToFeishu.value = true
-  errorText.value = ''
-  notice.value = ''
-  try {
-    const result = await window.api.livePhoto.sendItemsToFeishu({
-      ids: feishuEligibleSelectedItems.value.map((item) => item.id),
-    })
-    const sent = Array.isArray(result?.sent) ? result.sent : []
-    const skipped = Array.isArray(result?.skipped) ? result.skipped : []
-    if (sent.length) {
-      notice.value = t('autoUi.k_96fafeafd6c2', { p0: sent.length })
-      selectedLibraryIds.value = selectedLibraryIds.value.filter(
-        (id) => !sent.some((item: { id?: string }) => String(item?.id || '') === id),
-      )
-    }
-    if (skipped.length) {
-      const reason = skipped
-        .map((item: { reason?: string }) => String(item?.reason || '').trim())
-        .filter(Boolean)
-        .slice(0, 2)
-        .join('; ')
-      const detail = t('autoUi.k_aa14a3234b05', { p0: skipped.length, p1: reason ? `: ${reason}` : '\u3002' })
-      if (sent.length) notice.value = `${notice.value} ${detail}`
-      else errorText.value = detail
-    }
-    await refreshLibraryItems()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    sendingToFeishu.value = false
-  }
-}
-
 function clampRegionValue(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value))
 }
@@ -1940,7 +1940,9 @@ function canContinueWithVideo(item: LivePhotoItem) {
   const status = item.autoFlowStatus
   const reason = String(status?.lastError || item.error || '')
   return Boolean(
-    item.sourceType === 'reference_replace' &&
+      item.sourceType === 'reference_replace' &&
+      status?.failedStage !== 'video' &&
+      status?.retryScope !== 'video' &&
       status?.paused &&
       status.status === 'failed_terminal' &&
       (status.imageRetryMode === 'manual_once' || Number(status.retryCount || 0) >= Number(status.retryLimit || 0)) &&
@@ -1952,7 +1954,7 @@ function canContinueWithVideo(item: LivePhotoItem) {
 function canRetryImageOnce(item: LivePhotoItem) {
   const status = item.autoFlowStatus
   const reason = String(status?.lastError || item.error || '')
-  return Boolean(item.sourceType === 'reference_replace' && status?.paused && status.status === 'failed_terminal' && reason.includes('[image_validation_failed]') && item.referenceImagePath)
+  return Boolean(item.sourceType === 'reference_replace' && status?.failedStage !== 'video' && status?.retryScope !== 'video' && status?.paused && status.status === 'failed_terminal' && reason.includes('[image_validation_failed]') && item.referenceImagePath)
 }
 
 async function continueWithVideo(item: LivePhotoItem) {
@@ -2061,7 +2063,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         <button class="tab-button" data-testid="live-photo-tab-library" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
           <FolderOpen class="h-4 w-4" />
           <span>{{ uiText.tabLibrary }}</span>
-          <span class="live-tab-count">{{ todayCreatedCount }}</span>
+          <span class="live-tab-count">{{ libraryStats.total }}</span>
         </button>
         <button class="tab-button" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
           <Settings class="h-4 w-4" />
@@ -2277,20 +2279,20 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <div class="library-heading-cluster">
             <div class="library-title-row">
               <strong>{{ uiText.libraryTitle }}</strong>
-              <span class="library-count">{{ libraryTotal }} {{ uiText.itemUnit }}</span>
+              <span class="library-count">{{ libraryStats.total }} {{ uiText.itemUnit }}</span>
             </div>
             <div class="library-overview">
               <div class="library-overview__card is-running">
                 <span>{{ t('livePhoto.workspace.running') }}</span>
-                <strong>{{ runningLibraryItems.length }}</strong>
+                <strong>{{ libraryStats.running }}</strong>
               </div>
               <div class="library-overview__card is-failed">
                 <span>{{ t('livePhoto.status.failed') }}</span>
-                <strong>{{ failedLibraryItems.length }}</strong>
+                <strong>{{ libraryStats.failed }}</strong>
               </div>
               <div class="library-overview__card is-paused">
                 <span>{{ t('livePhoto.workspace.paused') }}</span>
-                <strong>{{ pausedLibraryItems.length }}</strong>
+                <strong>{{ libraryStats.paused }}</strong>
               </div>
               <div class="library-overview__card is-selected">
                 <span>{{ t('livePhoto.workspace.selected') }}</span>
@@ -2333,20 +2335,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           </div>
         </div>
         <div class="status-filter-tabs">
-          <button v-for="filterItem in [{ key: 'all', label: '全部' }, { key: 'failed', label: '失败' }, { key: 'success_not_exported', label: '成功未导出' }, { key: 'success_exported', label: '成功已导出' }, { key: 'success_not_subtitled', label: '成功未加字幕' }]" :key="filterItem.key" type="button" :class="{ active: libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
+          <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" :class="{ active: libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
         </div>
         <div class="library-toolbar">
           <div class="library-action-group">
-            <button class="toolbar-button" type="button" @click="libraryFilter = libraryFilter === 'all' ? 'failed' : libraryFilter === 'failed' ? 'running' : libraryFilter === 'running' ? 'paused' : 'all'">
-              <Filter class="h-4 w-4" />
-              {{ uiText.filter }} {{ libraryFilter === 'all' ? t('common.all') : libraryFilter === 'failed' ? t('livePhoto.status.failed') : libraryFilter === 'running' ? t('livePhoto.workspace.running') : t('livePhoto.workspace.paused') }}
-            </button>
             <button class="toolbar-button" type="button" :disabled="!filteredLibraryItems.length" @click="toggleSelectAllFiltered">
               <CheckCircle2 class="h-4 w-4" />
               {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? t('livePhoto.workspace.clearFiltered') : t('livePhoto.workspace.selectFiltered') }}
             </button>
           </div>
-          <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-divider"></div>
           <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-group library-task-actions">
             <button v-if="retryableFailedLibraryItems.length" class="toolbar-button" type="button" @click="retryFailedItems">
               <RefreshCcw class="h-4 w-4" />
@@ -2361,11 +2358,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               {{ t('livePhoto.workspace.pauseRunning') }} {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
             </button>
           </div>
-          <div class="library-output-actions">
+          <div v-if="selectedLibraryIds.length" class="library-output-actions">
             <button
               class="toolbar-button batch-delete-button"
               type="button"
-              :disabled="!selectedLibraryIds.length"
               @click="openBatchDelete"
             >
               <Trash2 class="h-4 w-4" />
@@ -2380,19 +2376,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <Sparkles class="h-4 w-4" />
               {{ t('livePhoto.workspace.batchSubtitles') }} {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
             </button>
-            <button class="toolbar-button" type="button" :disabled="!subtitleEligibleSelectedCount" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
-            <button
-              class="toolbar-button feishu-send-button"
-              data-testid="live-photo-send-feishu"
-              type="button"
-              :disabled="sendingToFeishu || !feishuEligibleSelectedCount"
-              @click="sendSelectedToFeishu"
-            >
-              <LoaderCircle v-if="sendingToFeishu" class="h-4 w-4 animate-spin" />
-              <Send v-else class="h-4 w-4" />
-              {{ sendingToFeishu ? feishuSendingLabel : `${feishuBatchLabel} (${feishuEligibleSelectedCount})` }}
-            </button>
-            <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
+            <button v-if="subtitleRevertEligibleSelectedCount" class="toolbar-button" type="button" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
+            <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting" @click="exportSelected">
               <Package class="h-4 w-4" />
               {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
             </button>
@@ -2532,22 +2517,37 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 >
                   <ScanLine class="h-4 w-4" />
                 </button>
+                <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
+                  <button
+                    v-if="canRetryImageOnce(item)"
+                    :data-testid="`live-photo-retry-${item.id}`"
+                    class="image-retry-decision__button"
+                    :title="t('autoUi.k_031c7e12ddae')"
+                    type="button"
+                    :disabled="item.packagingStatus === 'processing'"
+                    @click.stop="retryItem(item)"
+                  >
+                    <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_031c7e12ddae') }}
+                  </button>
+                  <button
+                    v-if="canContinueWithVideo(item)"
+                    class="image-retry-decision__button image-retry-decision__button--primary"
+                    :title="t('livePhoto.workspace.continueWithVideo')"
+                    type="button"
+                    @click.stop="continueWithVideo(item)"
+                  >
+                    <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideoShort') }}
+                  </button>
+                </div>
                 <button
-                  v-if="canContinueWithVideo(item)"
-                  class="live-console-row__link live-console-row__link--primary"
-                  type="button"
-                  @click.stop="continueWithVideo(item)"
-                >
-                  <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideo') }}
-                </button>
-                <button
+                  v-if="!canRetryImageOnce(item)"
                   :data-testid="`live-photo-retry-${item.id}`"
-                  :class="canRetryImageOnce(item) ? 'live-console-row__link' : 'live-console-row__action'"
+                  class="live-console-row__action"
                   type="button"
                   :disabled="item.packagingStatus === 'processing'"
                   @click.stop="retryItem(item)"
                 >
-                  <RefreshCcw class="h-4 w-4" /><template v-if="canRetryImageOnce(item)"> {{ t('autoUi.k_031c7e12ddae') }}</template>
+                  <RefreshCcw class="h-4 w-4" />
                 </button>
                 <button
                   class="live-console-row__action"
@@ -2699,22 +2699,37 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               >
                 <ScanLine class="h-4 w-4" />
               </button>
+              <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
+                <button
+                  v-if="canRetryImageOnce(item)"
+                  :data-testid="`live-photo-retry-${item.id}`"
+                  class="image-retry-decision__button"
+                  :title="t('autoUi.k_031c7e12ddae')"
+                  type="button"
+                  :disabled="item.packagingStatus === 'processing'"
+                  @click.stop="retryItem(item)"
+                >
+                  <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_031c7e12ddae') }}
+                </button>
+                <button
+                  v-if="canContinueWithVideo(item)"
+                  class="image-retry-decision__button image-retry-decision__button--primary"
+                  :title="t('livePhoto.workspace.continueWithVideo')"
+                  type="button"
+                  @click.stop="continueWithVideo(item)"
+                >
+                  <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideoShort') }}
+                </button>
+              </div>
               <button
-                v-if="canContinueWithVideo(item)"
-                class="live-console-row__link live-console-row__link--primary"
-                type="button"
-                @click.stop="continueWithVideo(item)"
-              >
-                <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideo') }}
-              </button>
-              <button
+                v-if="!canRetryImageOnce(item)"
                 :data-testid="`live-photo-retry-${item.id}`"
-                :class="canRetryImageOnce(item) ? 'live-console-row__link' : 'live-console-row__action'"
+                class="live-console-row__action"
                 type="button"
                 :disabled="item.packagingStatus === 'processing'"
                 @click.stop="retryItem(item)"
               >
-                <RefreshCcw class="h-4 w-4" /><template v-if="canRetryImageOnce(item)"> {{ t('autoUi.k_031c7e12ddae') }}</template>
+                <RefreshCcw class="h-4 w-4" />
               </button>
               <button
                 class="live-console-row__action"
@@ -2841,13 +2856,25 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <div>
             <span>{{ t('livePhoto.workspace.retryAutomaticRecovery') }}</span>
             <strong>{{ livePhotoSettings.retryLimit ?? 0 }} {{ t('livePhoto.workspace.retryAttemptUnit') }}</strong>
+            <small>{{ t('livePhoto.workspace.retryManualOnly') }}</small>
           </div>
-          <small>{{ t('livePhoto.workspace.retryManualOnly') }}</small>
         </div>
         <label class="live-photo-retry-settings-field">
-          <span>{{ t('livePhoto.workspace.retryMaximum') }}</span>
-          <input v-model.number="livePhotoSettings.retryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
-          <small>{{ t('livePhoto.workspace.retryRangeHint') }}</small>
+          <div>
+            <span>{{ t('livePhoto.workspace.retryMaximum') }}</span>
+            <small>{{ t('livePhoto.workspace.retryRangeHint') }}</small>
+          </div>
+          <div class="live-photo-retry-settings-input">
+            <input v-model.number="livePhotoSettings.retryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
+            <span>{{ t('livePhoto.workspace.retryAttemptUnit') }}</span>
+          </div>
+        </label>
+        <label class="live-photo-retry-settings-field">
+          <div>
+            <span>{{ t('livePhoto.workspace.qualityChecker') }}</span>
+            <small>{{ t('livePhoto.workspace.qualityCheckerDesc') }}</small>
+          </div>
+          <input v-model="livePhotoSettings.qualityCheckerEnabled" type="checkbox" />
         </label>
         <div class="live-subtitle-dialog__actions live-photo-retry-settings-actions">
           <button class="ghost-button" type="button" :disabled="livePhotoSettingsBusy" @click="livePhotoRetrySettingsOpen = false">{{ t('common.cancel') }}</button>
@@ -3719,30 +3746,31 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-subtitle-dialog__actions .ghost-button, .live-subtitle-dialog__actions .primary-button { min-width: 124px; }
 .live-photo-retry-settings-panel {
-  width: min(500px, 100%);
+  width: min(460px, 100%);
+  gap: 18px;
 }
 .live-photo-retry-settings-hero {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-  padding: 14px;
-  border: 1px solid rgba(115, 212, 199, 0.26);
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(35, 102, 104, 0.32), rgba(49, 42, 110, 0.4));
+  padding: 12px 14px;
+  border: 1px solid rgba(111, 123, 170, 0.16);
+  border-radius: 8px;
+  background: rgba(18, 23, 38, 0.62);
 }
 .live-photo-retry-settings-icon {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  border-radius: 12px;
-  background: rgba(109, 232, 212, 0.14);
-  color: #7ee5d5;
+  border-radius: 8px;
+  background: rgba(85, 223, 202, 0.1);
+  color: #70e2d0;
 }
 .live-photo-retry-settings-hero div:nth-child(2) {
   display: grid;
-  gap: 3px;
+  gap: 2px;
 }
 .live-photo-retry-settings-hero span,
 .live-photo-retry-settings-hero small,
@@ -3752,30 +3780,43 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-photo-retry-settings-hero strong {
   color: #f3f6ff;
-  font-size: 17px;
+  font-size: 15px;
 }
 .live-photo-retry-settings-field {
-  display: grid;
-  gap: 7px;
-  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
   border: 1px solid rgba(111, 123, 170, 0.2);
-  border-radius: 14px;
-  background: rgba(18, 23, 38, 0.74);
+  border-width: 1px 0;
   color: #dce5f6;
   font-size: 12px;
   font-weight: 700;
 }
+.live-photo-retry-settings-field > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.live-photo-retry-settings-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: #9fb1d8;
+  font-size: 12px;
+}
 .live-photo-retry-settings-field input {
-  width: 100%;
+  width: 88px;
   box-sizing: border-box;
-  min-height: 46px;
-  padding: 9px 12px;
-  border: 1px solid rgba(115, 212, 199, 0.34);
-  border-radius: 11px;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid rgba(111, 123, 170, 0.3);
+  border-radius: 8px;
   outline: 0;
-  background: rgba(9, 16, 27, 0.78);
+  background: rgba(9, 16, 27, 0.9);
   color: #ffffff;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
 }
 .live-photo-retry-settings-field input:focus {
@@ -3783,7 +3824,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   box-shadow: 0 0 0 3px rgba(112, 226, 208, 0.12);
 }
 .live-photo-retry-settings-actions {
-  padding-top: 2px;
+  padding-top: 0;
 }
 .product-picker { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 12px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
 .product-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; }
@@ -3887,8 +3928,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .library-layout { display: grid; gap: 14px; }
 .library-headline {
   display: grid;
-  gap: 18px;
-  padding: 8px 0 16px;
+  gap: 12px;
+  padding: 8px 0 14px;
   border-bottom: 1px solid rgba(111, 123, 170, 0.14);
 }
 .library-summary-row {
@@ -3935,12 +3976,39 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .library-toolbar {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   flex-wrap: wrap;
+  min-height: 44px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(111, 123, 170, 0.1);
 }
-.status-filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.status-filter-tabs button { min-height: 30px; padding: 0 11px; border: 1px solid rgba(111,123,170,.22); border-radius: 999px; background: rgba(18,23,38,.8); color: #b9c5df; font-size: 11px; font-weight: 700; }
-.status-filter-tabs button.active { border-color: rgba(119,92,255,.6); background: rgba(85,68,167,.7); color: #fff; }
+.status-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  padding: 3px;
+  overflow-x: auto;
+  border: 1px solid rgba(111, 123, 170, 0.12);
+  border-radius: 9px;
+  background: rgba(111, 123, 170, 0.05);
+}
+.status-filter-tabs button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8999b7;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.status-filter-tabs button:hover { color: #dce6f8; background: rgba(111, 123, 170, 0.08); }
+.status-filter-tabs button.active { background: rgba(13, 148, 136, 0.2); color: #70e2d0; }
 .library-action-group,
 .library-output-actions,
 .library-head-tools,
@@ -3953,11 +4021,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   margin-left: auto;
   justify-content: flex-end;
   flex-wrap: wrap;
-}
-.library-action-divider {
-  width: 1px;
-  height: 24px;
-  background: rgba(111, 123, 170, 0.14);
 }
 .library-head-tools {
   flex: 0 0 auto;
@@ -4037,7 +4100,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .toolbar-icon { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; }
 .toolbar-icon:hover { background: rgba(111, 123, 170, 0.12); }
 .toolbar-icon.active { background: rgba(13, 148, 136, 0.2); color: #70e2d0; }
-.feishu-send-button:not(:disabled) { border-color: rgba(96, 165, 250, 0.2); color: #bfdbfe; background: rgba(59, 130, 246, 0.08); }
 .export-selected-button { min-width: 132px; min-height: 36px; }
 .empty-card { min-height: 140px; place-items: center; text-align: center; }
 .metadata-card-select {
@@ -4436,6 +4498,87 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .live-console-row__stepbadge.tone-done { color: #86efac; }
 .live-console-row__updated-inline { display: flex; align-items: center; gap: 6px; color: #92a5ca; font-size: 11px; }
 .live-console-row__actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.image-retry-decision {
+  display: flex;
+  gap: 0;
+  width: 100%;
+  min-height: 34px;
+  overflow: hidden;
+  border: 1px solid rgba(126, 143, 178, 0.2);
+  border-radius: 9px;
+  background: rgba(13, 19, 31, 0.72);
+}
+.image-retry-decision__button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #aebbd0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease;
+}
+.image-retry-decision__button:only-child {
+  flex-basis: 100%;
+}
+.image-retry-decision__button:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: #f4f7fc;
+}
+.image-retry-decision__button--primary {
+  flex-grow: 1.12;
+  border-left: 1px solid rgba(126, 143, 178, 0.16);
+  background: linear-gradient(90deg, rgba(38, 150, 130, 0.1), rgba(38, 150, 130, 0.18));
+  color: #79e5d2;
+}
+.image-retry-decision__button--primary:hover {
+  background: linear-gradient(90deg, rgba(38, 150, 130, 0.16), rgba(38, 150, 130, 0.25));
+  color: #a0f3e5;
+}
+.live-console-grid .image-retry-decision {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 7px;
+  min-height: 38px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.live-console-grid .image-retry-decision__button {
+  min-height: 38px;
+  border: 1px solid rgba(126, 143, 178, 0.22);
+  border-radius: 10px;
+  background: rgba(20, 27, 42, 0.8);
+}
+.live-console-grid .image-retry-decision__button:not(.image-retry-decision__button--primary) {
+  padding: 0;
+  font-size: 0;
+}
+.live-console-grid .image-retry-decision__button--primary {
+  border: 1px solid rgba(77, 218, 194, 0.42);
+  background: linear-gradient(135deg, #197f72, #12645f);
+  box-shadow: 0 7px 18px rgba(5, 57, 52, 0.22), inset 0 1px 0 rgba(210, 255, 247, 0.1);
+  color: #f3fffc;
+}
+.live-console-grid .image-retry-decision__button--primary:hover {
+  background: linear-gradient(135deg, #1b8e7e, #157069);
+  color: #ffffff;
+}
+.live-console-grid .live-console-row__actions {
+  width: 100%;
+}
 .live-console-row__action {
   width: 36px;
   height: 36px;
@@ -4865,7 +5008,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   .library-task-actions,
   .library-output-actions { width: 100%; }
   .library-action-group { flex-wrap: wrap; }
-  .library-action-divider { display: none; }
   .library-output-actions { margin-left: 0; justify-content: flex-start; }
   .reference-source-grid { grid-template-columns: 1fr; }
   .live-console-row {

@@ -46,15 +46,15 @@ export function createCreatokClient(apiKey: string, runner: Runner = runCreatokC
   const operation = () => randomUUID()
   return {
     doctor: () => call(['doctor']),
-    connections: (capability = 'publish_shoppable_video') => call(['publish', 'connections', ...(capability ? ['--capability', capability] : []), '--operation-id', operation()]),
-    capabilities: (connection: string) => call(['publish', 'capabilities', '--connection', connection, '--operation-id', operation()]),
-    products: (connection?: string) => call(['publish', 'products', ...(connection ? ['--connection', connection] : []), '--operation-id', operation()]),
-    music: (query: string, connection?: string) => call(['publish', 'music', ...(connection ? ['--connection', connection] : []), ...(query.startsWith('https://www.tiktok.com/music/') || query.startsWith('https://tiktok.com/music/') ? ['--url', query] : ['--keyword', query]), '--operation-id', operation()]),
+    connections: (capability = 'publish_shoppable_video') => call(['publish', 'connection', 'list', ...(capability ? ['--capability', capability] : []), '--operation-id', operation()]),
+    capabilities: (connection: string) => call(['publish', 'connection', 'capabilities', connection, '--operation-id', operation()]),
+    products: (connection?: string) => call(['publish', 'product', 'list', ...(connection ? ['--connection', connection] : []), '--operation-id', operation()]),
+    music: (query: string, connection?: string) => call(['publish', 'music', query.startsWith('https://www.tiktok.com/music/') || query.startsWith('https://tiktok.com/music/') ? 'resolve' : 'search', ...(connection ? ['--connection', connection] : []), query.startsWith('https://www.tiktok.com/music/') || query.startsWith('https://tiktok.com/music/') ? '--url' : '--query', query, '--operation-id', operation()]),
     asset: (file: string) => call(['assets', 'create', '--type', 'video', '--file', file]),
-    prepareVideo: (connection: string, assetJson: string, operationId: string) => call(['publish', 'prepare-video', '--connection', connection, '--json', assetJson, '--operation-id', operationId]),
-    precheck: (payload: string, operationId: string) => call(['publish', 'submit', '--dry-run', '--json', payload, '--operation-id', operationId]),
-    submit: (payload: string, operationId: string) => call(['publish', 'submit', '--json', payload, '--operation-id', operationId]),
-    status: (jobId: string, operationId?: string) => call(['publish', 'status', '--job-id', jobId, ...(operationId ? ['--operation-id', operationId] : [])]),
+    prepareVideo: (connection: string, assetJson: string, operationId: string) => call(['publish', 'video', 'prepare', '--connection', connection, '--json', assetJson, '--operation-id', operationId]),
+    precheck: (payload: string, operationId: string) => call(['publish', 'job', 'submit', '--json', payload, '--operation-id', operationId]),
+    submit: (payload: string, operationId: string) => call(['publish', 'job', 'submit', '--json', payload, '--operation-id', operationId]),
+    status: (jobId: string, operationId?: string) => call(['publish', 'job', 'get', jobId, ...(operationId ? ['--operation-id', operationId] : [])]),
   }
 }
 

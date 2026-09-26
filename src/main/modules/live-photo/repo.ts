@@ -5,6 +5,7 @@ import { readJsonFile } from '../../lib/storeJson'
 import type { LivePhotoItem, LivePhotoSettings, LivePhotoWorkflow, LivePhotoWorkflowStep } from './types'
 import { normalizeLivePhotoReplacementRegion } from './replacementRegion'
 import { normalizeLivePhotoSceneInteraction } from './sceneInteraction'
+import { resolveLivePhotoStage } from './retryPolicy'
 import { materializeManagedAsset } from '../managed-assets/service'
 import {
   canInitializeLivePhotoSqlite,
@@ -79,7 +80,20 @@ function normalizeItem(item: LivePhotoItem): LivePhotoItem {
         ...item.autoFlowStatus,
         retryLimit,
         retryCount: Math.min(retryLimit, Math.max(0, Number(item.autoFlowStatus.retryCount || 0) || 0)),
+        imageRetryCount: Math.max(0, Number(item.autoFlowStatus.imageRetryCount ?? item.autoFlowStatus.retryCount ?? 0) || 0),
+        videoRetryCount: Math.max(0, Number(item.autoFlowStatus.videoRetryCount ?? 0) || 0),
         imageRetryMode: item.autoFlowStatus.imageRetryMode === 'manual_once' ? 'manual_once' as const : 'auto' as const,
+        ...(item.autoFlowStatus.status === 'failed_retryable' || item.autoFlowStatus.status === 'failed_terminal'
+          ? (() => {
+              const stage = resolveLivePhotoStage({
+                failedStage: item.autoFlowStatus.failedStage,
+                currentStage: item.autoFlowStatus.currentStage || item.workflow?.currentStep,
+                imageTaskId: item.imageTaskId,
+                videoTaskId: item.videoTaskId,
+              })
+              return { failedStage: stage, retryScope: stage }
+            })()
+          : {}),
         ...(item.autoFlowStatus.status === 'failed_retryable' &&
         String(item.autoFlowStatus.lastError || item.error || '').includes('[image_validation_failed]') &&
         Number(item.autoFlowStatus.retryCount || 0) >= retryLimit

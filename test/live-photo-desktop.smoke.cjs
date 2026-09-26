@@ -178,7 +178,8 @@ async function main() {
       };
     }, exportDir);
 
-    await page.selectOption('[data-testid="live-photo-product-select"]', report.createdProductId);
+    await page.click('[data-testid="live-photo-product-select"]');
+    await page.locator('.product-dialog__card').filter({ hasText: report.createdProductId }).click();
     await page.click('[data-testid="live-photo-pick-reference"]');
     await page.waitForFunction(() => {
       const input = document.querySelector('[data-testid="live-photo-reference-path"]');
@@ -186,7 +187,7 @@ async function main() {
     }, { timeout: 30000 });
     report.steps.push({ step: 'reference-picked', screenshot: await screenshot(page, '02-reference-picked') });
 
-    await page.click('[data-testid="live-photo-create-reference"]');
+    await page.click('[data-testid="live-photo-create-reference"]', { force: true });
     await page.click('[data-testid="live-photo-tab-library"]');
     await page.waitForFunction(() => {
       return document.querySelectorAll('[data-testid^="live-photo-item-"]').length >= 1;
@@ -217,10 +218,6 @@ async function main() {
     }, firstItemId, { timeout: 30000 });
     await page.waitForFunction(() => {
       const button = document.querySelector('[data-testid="live-photo-export-selected"]');
-      return Boolean(button && !button.disabled);
-    }, { timeout: 30000 });
-    await page.waitForFunction(() => {
-      const button = document.querySelector('[data-testid="live-photo-send-feishu"]');
       return Boolean(button && !button.disabled);
     }, { timeout: 30000 });
     await page.evaluate(() => {

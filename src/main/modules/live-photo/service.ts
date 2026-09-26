@@ -37,7 +37,6 @@ import {
 import { buildLivePhotoQualityCacheKey, livePhotoQualityCache } from './qualityCache'
 import { LIVE_PHOTO_QUALITY_CHECKER_VERSION, runLocalLivePhotoQualityCheck } from './qualityChecker'
 import { submitLivePhotoImageGeneration, type LivePhotoImageProviderAdapter } from './imageGenerationAdapter'
-import { normalizeLivePhotoGeneratedImageAspect } from './imageAspect'
 import { resolveAuthoritativeProductReferencePath } from './productInput'
 import { bindLivePhotoReplacementInputs, normalizeLivePhotoScenePaths } from './sceneInput'
 import { buildLivePhotoReplacementPrompt } from './promptBuilder'
@@ -58,6 +57,8 @@ import {
   LIVE_PHOTO_IMAGE_RETRY_LIMIT,
   resolveLivePhotoImageRetryFailure,
   resolveLivePhotoRetryLimit,
+  resolveLivePhotoStage,
+  resolveLivePhotoStageRetryCount,
 } from './retryPolicy'
 import type {
   CreateCloneShotLivePhotosInput,
@@ -791,6 +792,8 @@ function buildDefaultAutoFlowStatus(): LivePhotoAutoFlowStatus {
     status: 'idle',
     retryLimit: LIVE_PHOTO_DEFAULT_RETRY_LIMIT,
     retryCount: 0,
+    imageRetryCount: 0,
+    videoRetryCount: 0,
     currentStage: 'queued',
     lastError: '',
   }
@@ -811,6 +814,10 @@ function ensureAutoFlowStatus(item: LivePhotoItem) {
     imageRetryMode: current.imageRetryMode === 'manual_once' ? 'manual_once' : 'auto',
     retryLimit: Math.max(0, Math.min(20, Math.floor(Number(current.retryLimit ?? LIVE_PHOTO_DEFAULT_RETRY_LIMIT) || 0))),
     retryCount: Math.max(0, Number(current.retryCount ?? 0) || 0),
+    imageRetryCount: Math.max(0, Number(current.imageRetryCount ?? current.retryCount ?? 0) || 0),
+    videoRetryCount: Math.max(0, Number(current.videoRetryCount ?? 0) || 0),
+    failedStage: current.failedStage === 'video' ? 'video' : current.failedStage === 'image' ? 'image' : undefined,
+    retryScope: current.retryScope === 'video' ? 'video' : current.retryScope === 'image' ? 'image' : undefined,
     currentStage: current.currentStage || 'queued',
     lastStartedAt: Number(current.lastStartedAt ?? 0) || undefined,
     lastCompletedAt: Number(current.lastCompletedAt ?? 0) || undefined,
@@ -2000,6 +2007,23 @@ async function validateGeneratedStillWithPipeline(input: {
   }
 }): Promise<LivePhotoQualityReport> {
   const settings = input.qualitySettings || await livePhotoRepo.getSettings()
+  const qualityCheckerEnabled = (settings as { qualityCheckerEnabled?: boolean }).qualityCheckerEnabled !== false
+  if (!qualityCheckerEnabled) {
+    return {
+      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+      mode: 'remote_fallback',
+      decision: 'pass',
+      score: 1,
+      threshold: 1,
+      retryFloor: 0,
+      components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: 1, textConsistency: 1 },
+      hardFailures: [],
+      notes: ['quality_checker_disabled'],
+      fallbackReason: 'quality_checker_disabled',
+      durationMs: 0,
+      checkedAt: now(),
+    } satisfies LivePhotoQualityReport
+  }
   const passThreshold = Math.max(0.5, Math.min(1, Number(settings.qualityPassThreshold ?? 0.88)))
   const retryFloor = Math.max(0, Math.min(passThreshold, Number(settings.qualityRetryFloor ?? 0.65)))
   const rawProductPath = resolveAuthoritativeProductReferencePath(input.product)
@@ -2012,7 +2036,7 @@ async function validateGeneratedStillWithPipeline(input: {
       })
     : null
   const productPath = preparedProduct?.path || rawProductPath
-  if (settings.qualityCheckerEnabled !== false && productPath) {
+  if (qualityCheckerEnabled && productPath) {
     const local = await livePhotoDeps.runLocalQualityCheck({
       scenePath: input.scenePath,
       productPath,
@@ -2111,7 +2135,7 @@ async function validateGeneratedStillWithPipeline(input: {
     components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: score, textConsistency: score },
     hardFailures: [...(fallback.negativeSignals || []), ...(fallback.visualReview?.failures || [])],
     notes: fallback.visualReview?.notes || [],
-    fallbackReason: settings.qualityCheckerEnabled === false ? 'local_checker_disabled' : 'product_reference_missing',
+    fallbackReason: !qualityCheckerEnabled ? 'local_checker_disabled' : 'product_reference_missing',
     durationMs: 0,
     checkedAt: now(),
   } satisfies LivePhotoQualityReport
@@ -3750,8 +3774,14 @@ function shouldUpgradeFailedItemToTerminal(item: LivePhotoItem) {
 }
 
 function resolveLivePhotoFailureStage(item: LivePhotoItem, fallback: LivePhotoWorkflowStep): LivePhotoWorkflowStep {
-  if (String(item.videoTaskId || '').trim()) return 'video_generation'
-  if (String(item.imageTaskId || '').trim()) return 'image_generation'
+  const explicitStage = resolveLivePhotoStage({
+    failedStage: item.autoFlowStatus?.failedStage,
+    currentStage: item.autoFlowStatus?.currentStage || fallback,
+    imageTaskId: item.imageTaskId,
+    videoTaskId: item.videoTaskId,
+  })
+  if (explicitStage === 'video') return 'video_generation'
+  if (explicitStage === 'image') return 'image_generation'
   return fallback
 }
 
@@ -4022,6 +4052,7 @@ async function finalizeReferenceItem(input: {
     const imageDoneItem: LivePhotoItem = {
       ...input.item,
       productSnapshot: input.product,
+      error: undefined,
       workflow: patchWorkflow(input.item.workflow, 'video_generation', 'video_generation', 'running'),
       autoFlowStatus: patchAutoFlowStatus(input.item, 'video_generation', 'running'),
       updatedAt: now(),
@@ -4337,24 +4368,8 @@ async function finalizeReferenceItem(input: {
     }
     if (cacheKey) await livePhotoQualityCache.put({ key: cacheKey, sourcePath: generated.stillPath, quality: qualityReport })
   }
-  if (livePhotoDeps.generateGptShotFrameImage === generateGptShotFrameImage) {
-    const aspectResult = await normalizeLivePhotoGeneratedImageAspect(
-      generated.stillPath,
-      join(livePhotoRoot(input.item.id), 'generated-still'),
-    )
-    generated = {
-      ...generated,
-      stillPath: aspectResult.path,
-    }
-    if (aspectResult.normalized) {
-      autoFlowLogs.push(
-        buildLivePhotoLog(
-          `[live-photo] image aspect normalized: ${aspectResult.sourceWidth}x${aspectResult.sourceHeight} -> ${aspectResult.width}x${aspectResult.height} (9:16)`,
-          'success',
-        ),
-      )
-    }
-  }
+  // Preserve the provider output dimensions. Video packaging handles the
+  // target frame independently and must not rewrite the returned still.
   const imageDoneItem: LivePhotoItem = {
     ...appendLivePhotoLogs(input.item, [
       ...autoFlowLogs,
@@ -4363,6 +4378,7 @@ async function finalizeReferenceItem(input: {
       buildLivePhotoLog('[live-photo] stage video_generation started'),
     ]),
     generatedStillPath: generated.stillPath,
+    error: undefined,
     qualityReport,
     generationAttempts,
     cacheKey,
@@ -4388,6 +4404,10 @@ async function finalizeReferenceItem(input: {
       ...patchAutoFlowStatus(input.item, 'video_generation', 'running'),
       retryLimit: ensureAutoFlowStatus(input.item).retryLimit,
       retryCount: 0,
+      imageRetryCount: ensureAutoFlowStatus(input.item).imageRetryCount,
+      videoRetryCount: ensureAutoFlowStatus(input.item).videoRetryCount,
+      failedStage: undefined,
+      retryScope: 'video',
     },
     updatedAt: now(),
   }
@@ -4578,6 +4598,8 @@ async function runLivePhotoItemAutoFlow(
           ...ensureAutoFlowStatus(next),
           status: 'done',
           currentStage: 'completed',
+          failedStage: undefined,
+          retryScope: undefined,
           lastCompletedAt: now(),
           lastError: '',
         },
@@ -4605,6 +4627,8 @@ async function runLivePhotoItemAutoFlow(
         ...ensureAutoFlowStatus(next),
         status: 'done',
         currentStage: 'completed',
+        failedStage: undefined,
+        retryScope: undefined,
         lastCompletedAt: now(),
         lastError: '',
       },
@@ -4629,22 +4653,29 @@ async function runLivePhotoItemAutoFlow(
       normalizeLivePhotoFailureReasonSafe(String(error?.message || error || 'Unknown error'), currentStage),
     )
     const retryLimit = resolveLivePhotoRetryLimit(currentStage, current.retryLimit)
+    const failureStage = currentStage === 'image_generation' || currentStage === 'image_validation' ? 'image' as const : 'video' as const
+    const stageRetryCount = resolveLivePhotoStageRetryCount({
+      stage: failureStage,
+      retryCount: current.retryCount,
+      imageRetryCount: current.imageRetryCount,
+      videoRetryCount: current.videoRetryCount,
+    })
     const regionRequired = reason.includes('[replacement_region_required]')
     const imageValidationFailure =
       (currentStage === 'image_generation' || currentStage === 'image_validation') && isLivePhotoImageValidationFailure(reason)
     const manualImageAttempt = current.imageRetryMode === 'manual_once' &&
       (currentStage === 'image_generation' || currentStage === 'image_validation')
     const imageRetryDecision = resolveLivePhotoImageRetryFailure({
-      retryCount: current.retryCount,
+      retryCount: stageRetryCount,
       retryLimit,
       retryMode: current.imageRetryMode,
     })
     const canAutoRetryImage = imageValidationFailure && imageRetryDecision.shouldRetry
     const nextRetryCount = regionRequired || manualImageAttempt
-      ? Number(current.retryCount ?? 0)
+      ? stageRetryCount
       : canAutoRetryImage
         ? imageRetryDecision.nextRetryCount
-        : Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
+        : Math.min(retryLimit, stageRetryCount + 1)
     const terminalByStage = shouldForceTerminalLivePhotoFailure(currentStage, reason)
     const terminal = manualImageAttempt || terminalByStage || (imageValidationFailure ? !canAutoRetryImage : nextRetryCount >= retryLimit)
     if (reason.includes('[remote_pending]')) {
@@ -4669,6 +4700,8 @@ async function runLivePhotoItemAutoFlow(
           ...current,
           status: 'running',
           currentStage,
+          failedStage: undefined,
+          retryScope: undefined,
           lastError: reason,
         },
         workflow: patchWorkflow(
@@ -4706,6 +4739,10 @@ async function runLivePhotoItemAutoFlow(
         ...current,
         retryLimit,
         retryCount: nextRetryCount,
+        imageRetryCount: failureStage === 'image' ? nextRetryCount : current.imageRetryCount,
+        videoRetryCount: failureStage === 'video' ? nextRetryCount : current.videoRetryCount,
+        failedStage: failureStage,
+        retryScope: failureStage,
         status: terminal ? 'failed_terminal' : 'failed_retryable',
         paused: (imageValidationFailure || manualImageAttempt) && terminal ? true : current.paused,
         currentStage,
@@ -4716,9 +4753,11 @@ async function runLivePhotoItemAutoFlow(
         currentStage,
         currentStage,
         'failed',
-        terminal ? `[retry_limit] ${reason}` : reason,
+        terminal && !regionRequired ? `[retry_limit] ${reason}` : reason,
       ),
-      error: terminal ? `[retry_limit] Live Photo auto retry reached ${retryLimit} times. Please check the source material and retry manually.` : reason,
+      error: terminal && !regionRequired
+        ? `[retry_limit] ${failureStage === 'video' ? 'Video generation' : 'Image generation'} retry limit reached after ${retryLimit} attempts. ${reason}`
+        : reason,
       updatedAt: now(),
     })
     const restoredAfterFailure = await restoreCompletedMaterializedItem(
@@ -4789,22 +4828,29 @@ function enqueueLivePhotoAutoFlow(
         normalizeLivePhotoFailureReason(String(error?.message || error || 'Unknown error'), currentStage),
       )
       const retryLimit = resolveLivePhotoRetryLimit(currentStage, current.retryLimit)
+      const failureStage = currentStage === 'image_generation' || currentStage === 'image_validation' ? 'image' as const : 'video' as const
+      const stageRetryCount = resolveLivePhotoStageRetryCount({
+        stage: failureStage,
+        retryCount: current.retryCount,
+        imageRetryCount: current.imageRetryCount,
+        videoRetryCount: current.videoRetryCount,
+      })
       const regionRequired = reason.includes('[replacement_region_required]')
       const imageValidationFailure =
         (currentStage === 'image_generation' || currentStage === 'image_validation') && isLivePhotoImageValidationFailure(reason)
       const manualImageAttempt = current.imageRetryMode === 'manual_once' &&
         (currentStage === 'image_generation' || currentStage === 'image_validation')
       const imageRetryDecision = resolveLivePhotoImageRetryFailure({
-        retryCount: current.retryCount,
+        retryCount: stageRetryCount,
         retryLimit,
         retryMode: current.imageRetryMode,
       })
       const canAutoRetryImage = imageValidationFailure && imageRetryDecision.shouldRetry
       const nextRetryCount = regionRequired || manualImageAttempt
-        ? Number(current.retryCount ?? 0)
+        ? stageRetryCount
         : canAutoRetryImage
           ? imageRetryDecision.nextRetryCount
-          : Math.min(retryLimit, Number(current.retryCount ?? 0) + 1)
+          : Math.min(retryLimit, stageRetryCount + 1)
       const terminal = manualImageAttempt || shouldForceTerminalLivePhotoFailure(currentStage, reason) ||
         (imageValidationFailure ? !canAutoRetryImage : nextRetryCount >= retryLimit)
       await livePhotoRepo.upsert({
@@ -4816,13 +4862,19 @@ function enqueueLivePhotoAutoFlow(
           ...current,
           retryLimit,
           retryCount: nextRetryCount,
+          imageRetryCount: failureStage === 'image' ? nextRetryCount : current.imageRetryCount,
+          videoRetryCount: failureStage === 'video' ? nextRetryCount : current.videoRetryCount,
+          failedStage: failureStage,
+          retryScope: failureStage,
           status: terminal ? 'failed_terminal' : 'failed_retryable',
           paused: (imageValidationFailure || manualImageAttempt) && terminal ? true : current.paused,
           currentStage,
           lastError: reason,
         },
         error: terminal
-          ? `[retry_limit] Live Photo auto retry reached ${retryLimit} times. Please check the source material and retry manually.`
+          ? (regionRequired
+            ? reason
+            : `[retry_limit] ${failureStage === 'video' ? 'Video generation' : 'Image generation'} retry limit reached after ${retryLimit} attempts. ${reason}`)
           : reason,
         updatedAt: now(),
       })
@@ -4939,6 +4991,7 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     prompt: string
     promptHash: string
   }
+  qualityCheckerEnabled?: boolean
 }) {
   const timestamp = now()
   const product = input.state?.productSnapshot || await buildProductSnapshot(String(input.productId || '').trim())
@@ -4994,12 +5047,37 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     imageTaskBaseUrl: current.imageTaskBaseUrl,
     imageTaskEndpointStyle: current.imageTaskEndpointStyle,
   })
-  if (item.generatedStillPath && existsSync(item.generatedStillPath) && item.qualityReport?.decision === 'pass') {
+  if (item.generatedStillPath && existsSync(item.generatedStillPath) && (input.qualityCheckerEnabled === false || item.qualityReport?.decision === 'pass')) {
     return { pending: false, preparedImagePath: item.generatedStillPath, state: toState(item) }
   }
   if (!item.replacementRegion || !item.sceneInteraction) {
-    const located = await locateLivePhotoReplacementRegion({ item, product, scenePath: input.referenceImagePath })
-    item = { ...item, replacementRegion: located.region, sceneInteraction: located.sceneInteraction, updatedAt: now() }
+    if (input.qualityCheckerEnabled === false) {
+      // Quality scoring off also disables optional AI localization.
+      const fallbackRegion = item.replacementRegion || {
+        x: 0.25,
+        y: 0.25,
+        width: 0.5,
+        height: 0.5,
+        source: 'auto' as const,
+        confidence: 0,
+        revision: 1,
+        updatedAt: now(),
+      }
+      item = {
+        ...item,
+        replacementRegion: fallbackRegion,
+        sceneInteraction: item.sceneInteraction || {
+          mode: 'unknown',
+          confidence: 0,
+          revision: fallbackRegion.revision,
+          updatedAt: now(),
+        },
+        updatedAt: now(),
+      }
+    } else {
+      const located = await locateLivePhotoReplacementRegion({ item, product, scenePath: input.referenceImagePath })
+      item = { ...item, replacementRegion: located.region, sceneInteraction: located.sceneInteraction, updatedAt: now() }
+    }
   }
   let generatedPath = ''
   if (item.imageTaskId) {
@@ -5051,18 +5129,15 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     generatedCropPath: generatedPath,
     outputRoot: input.outputRoot,
   })
-  const qualityReport = await validateGeneratedStillWithPipeline({
-    item,
-    product,
-    scenePath: input.referenceImagePath,
-    stillPath: preparedImagePath,
-    outputRoot: input.outputRoot,
-    qualitySettings: {
-      qualityCheckerEnabled: true,
-      qualityPassThreshold: 0.88,
-      qualityRetryFloor: 0.65,
-    },
-  })
+  const qualityReport = input.qualityCheckerEnabled === false
+    ? undefined
+    : await validateGeneratedStillWithPipeline({
+        item,
+        product,
+        scenePath: input.referenceImagePath,
+        stillPath: preparedImagePath,
+        outputRoot: input.outputRoot,
+      })
   const attempt: LivePhotoGenerationAttempt = {
     id: randomUUID(),
     index: (item.generationAttempts || []).length + 1,
@@ -5086,10 +5161,10 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
   return {
     pending: false,
     preparedImagePath,
-    failed: qualityReport.decision !== 'pass',
-    error: qualityReport.decision === 'pass'
-      ? undefined
-      : `[image_validation_failed] ${qualityReport.decision}: ${qualityReport.hardFailures.join(', ') || `quality score ${qualityReport.score}`}`,
+    failed: qualityReport ? qualityReport.decision !== 'pass' : false,
+    error: qualityReport && qualityReport.decision !== 'pass'
+      ? `[image_validation_failed] ${qualityReport.decision}: ${qualityReport.hardFailures.join(', ') || `quality score ${qualityReport.score}`}`
+      : undefined,
     state: toState(item),
   }
 }
@@ -5206,18 +5281,26 @@ export const livePhotoService = {
     const pageSize = Math.max(1, Math.min(200, Number(input?.pageSize || 24) || 24))
     const filter = ['failed', 'running', 'paused', 'success_not_exported', 'success_exported', 'success_not_subtitled'].includes(String(input?.filter)) ? input?.filter as string : 'all'
     const allItems = await livePhotoRepo.list()
+    const isFailed = (item: LivePhotoItem) =>
+      item.packagingStatus === 'failed' ||
+      item.autoFlowStatus?.status === 'failed_retryable' ||
+      item.autoFlowStatus?.status === 'failed_terminal'
+    const isRunning = (item: LivePhotoItem) =>
+      item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running'
+    const isPaused = (item: LivePhotoItem) => Boolean(item.autoFlowStatus?.paused)
+    const stats = {
+      total: allItems.length,
+      running: allItems.filter(isRunning).length,
+      failed: allItems.filter(isFailed).length,
+      paused: allItems.filter(isPaused).length,
+    }
     const items =
       filter === 'failed'
-        ? allItems.filter(
-            (item) =>
-              item.packagingStatus === 'failed' ||
-              item.autoFlowStatus?.status === 'failed_retryable' ||
-              item.autoFlowStatus?.status === 'failed_terminal',
-          )
+        ? allItems.filter(isFailed)
         : filter === 'running'
-          ? allItems.filter((item) => item.packagingStatus === 'processing' || item.autoFlowStatus?.status === 'running')
+          ? allItems.filter(isRunning)
           : filter === 'paused'
-            ? allItems.filter((item) => Boolean(item.autoFlowStatus?.paused))
+            ? allItems.filter(isPaused)
             : filter === 'success_exported'
               ? allItems.filter((item) => item.packagingStatus === 'completed' && Boolean(item.exportBundlePath))
               : filter === 'success_not_exported'
@@ -5231,7 +5314,7 @@ export const livePhotoService = {
     const sortedItems = items.slice().sort((a, b) => {
       const delta = Number(b.createdAt || 0) - Number(a.createdAt || 0)
       if (delta) return delta
-      return Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+      return String(b.id).localeCompare(String(a.id))
     })
     const start = (safePage - 1) * pageSize
     const pagedItems = sortedItems.slice(start, start + pageSize)
@@ -5247,6 +5330,7 @@ export const livePhotoService = {
       pageSize,
       total,
       totalPages,
+      stats,
     }
   },
 
@@ -5648,9 +5732,19 @@ export const livePhotoService = {
         String(existing.promptHash || '').trim() !== activePromptVersion.promptHash,
     )
     const preservedStillPath = String(existing.generatedStillPath || '').trim()
+    const persistedStage = resolveLivePhotoStage({
+      failedStage: existingAutoFlowStatus.failedStage,
+      currentStage: existingAutoFlowStatus.currentStage || existing.workflow?.currentStep,
+      imageTaskId: existing.imageTaskId,
+      videoTaskId: existing.videoTaskId,
+    })
+    if (existingAutoFlowStatus.failedStage === 'video' && (!preservedStillPath || !existsSync(preservedStillPath))) {
+      throw new Error('The validated still image is missing; regenerate the image before retrying video.')
+    }
     const canRetryFromVideoStage = Boolean(
       !manualReplacementRegion &&
       !promptChanged &&
+      persistedStage === 'video' &&
       preservedStillPath &&
         existsSync(preservedStillPath) &&
         (String(existing.videoTaskId || '').trim() ||
@@ -5737,9 +5831,13 @@ export const livePhotoService = {
         status: 'idle',
         paused: false,
         retryCount: ensureAutoFlowStatus(existing).retryCount,
+        imageRetryCount: ensureAutoFlowStatus(existing).imageRetryCount,
+        videoRetryCount: ensureAutoFlowStatus(existing).videoRetryCount,
         retryLimit: ensureAutoFlowStatus(existing).retryLimit,
         imageRetryMode: canRetryFromVideoStage ? 'auto' : imageRetryMode,
         currentStage: 'video_generation',
+        failedStage: undefined,
+        retryScope: 'video',
         lastStartedAt: undefined,
         lastCompletedAt: undefined,
         lastError: '',
@@ -5774,8 +5872,12 @@ export const livePhotoService = {
         status: 'idle',
         paused: false,
         retryCount: imageRetryMode === 'manual_once' ? existingAutoFlowStatus.retryCount : 0,
+        imageRetryCount: imageRetryMode === 'manual_once' ? existingAutoFlowStatus.imageRetryCount : 0,
+        videoRetryCount: existingAutoFlowStatus.videoRetryCount,
         retryLimit: existingAutoFlowStatus.retryLimit,
         currentStage: 'queued',
+        failedStage: undefined,
+        retryScope: 'image',
         imageRetryMode,
       }
       processingItem.logs = [
@@ -5783,7 +5885,9 @@ export const livePhotoService = {
         buildLivePhotoLog(
           manualReplacementRegion
             ? `[live-photo] replacement region corrected manually: revision=${manualReplacementRegion.revision}`
-            : '[live-photo] manual retry restarted from image_generation stage',
+            : persistedStage === 'video'
+              ? '[live-photo] manual retry preserved generated still and restarted from video_generation stage; legacy still missing, regenerated image'
+              : '[live-photo] manual retry restarted from image_generation stage',
         ),
       ].slice(-200)
     }
@@ -5811,8 +5915,30 @@ export const livePhotoService = {
     }
     const repairedItems = await livePhotoRepo.list()
     for (const item of repairedItems) {
-      if (!shouldUpgradeFailedItemToTerminal(item)) continue
       const current = ensureAutoFlowStatus(item)
+      const inferredStage = resolveLivePhotoStage({
+        failedStage: current.failedStage,
+        currentStage: current.currentStage || item.workflow?.currentStep,
+        imageTaskId: item.imageTaskId,
+        videoTaskId: item.videoTaskId,
+      })
+      const rawStatus = item.autoFlowStatus
+      const needsStageBackfill = item.packagingStatus === 'failed' &&
+        (!rawStatus?.failedStage || !rawStatus?.retryScope || rawStatus.imageRetryCount === undefined || rawStatus.videoRetryCount === undefined)
+      if (needsStageBackfill) {
+        await livePhotoRepo.upsert({
+          ...item,
+          autoFlowStatus: {
+            ...current,
+            failedStage: inferredStage,
+            retryScope: inferredStage,
+            imageRetryCount: current.imageRetryCount ?? (inferredStage === 'image' ? current.retryCount : 0),
+            videoRetryCount: current.videoRetryCount ?? (inferredStage === 'video' ? current.retryCount : 0),
+          },
+          updatedAt: now(),
+        })
+      }
+      if (!shouldUpgradeFailedItemToTerminal(item)) continue
       await livePhotoRepo.upsert({
         ...appendLivePhotoLogs(item, [
           buildLivePhotoLog('[live-photo] startup normalized failed video task to terminal state'),
@@ -5908,8 +6034,13 @@ export const livePhotoService = {
     const current = ensureAutoFlowStatus(existing)
     const reason = String(current.lastError || existing.error || '').trim()
     const retryLimit = Number(current.retryLimit || 0)
-    const retryCount = Number(current.retryCount || 0)
-    if (!isLivePhotoImageValidationFailure(reason) || (current.imageRetryMode !== 'manual_once' && retryCount < retryLimit) || !current.paused) {
+    const retryCount = resolveLivePhotoStageRetryCount({
+      stage: 'image',
+      retryCount: current.retryCount,
+      imageRetryCount: current.imageRetryCount,
+      videoRetryCount: current.videoRetryCount,
+    })
+    if (current.failedStage === 'video' || current.retryScope === 'video' || !isLivePhotoImageValidationFailure(reason) || (current.imageRetryMode !== 'manual_once' && retryCount < retryLimit) || !current.paused) {
       throw new Error('This item is not paused after image validation retries')
     }
     const stillPath = String(existing.generatedStillPath || '').trim()
@@ -5925,6 +6056,8 @@ export const livePhotoService = {
         paused: false,
         status: 'running',
         currentStage: 'video_generation',
+        failedStage: undefined,
+        retryScope: 'video',
         imageValidationBypassed: true,
         lastError: '',
       },

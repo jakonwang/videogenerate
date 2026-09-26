@@ -1738,6 +1738,9 @@
       "saveSettings": "Luu Cai Dat Live Photo",
       "running": "Dang Chay",
       "paused": "Tam Dung",
+      "successNotExported": "Chua Xuat",
+      "successExported": "Da Xuat",
+      "successNotSubtitled": "Chua Co Phu De",
       "viewMode": "Che Do Xem",
       "gridView": "Dang Luoi",
       "listView": "Dang Danh Sach",
@@ -1760,6 +1763,7 @@
       "retrySave": "Luu cai dat",
       "retrySettingsSaved": "Da luu cai dat thu lai",
       "continueWithVideo": "Bo qua kiem tra anh va tiep tuc tao video",
+      "continueWithVideoShort": "Tiep tuc tao video",
       "continueWithVideoStarted": "Da bo qua kiem tra anh; bat dau tao video",
       "revertSubtitles": "Khoi phuc phu de goc",
       "materialUsed": "Da dung",
@@ -1781,6 +1785,7 @@
       "saving": "Dang luu...",
       "saved": "Da luu cai dat thu lai",
       "continueWithVideo": "Bo qua kiem tra anh va tiep tuc tao video",
+      "continueWithVideoShort": "Tiep tuc tao video",
       "continueWithVideoStarted": "Da bo qua kiem tra anh; bat dau tao video"
     },
     "material": {

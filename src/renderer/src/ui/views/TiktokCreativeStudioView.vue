@@ -138,7 +138,7 @@ type Shot = {
     promptHash?: string;
     imagePromptPreview?: unknown;
     replacementRegion?: ReplacementRegion;
-    generationAttempts?: unknown[];
+    generationAttempts?: Array<{ outputPath?: string }>;
     qualityReport?: QualityReport;
     generatedStillPath?: string;
   };
@@ -204,7 +204,7 @@ const accountDialogOpen = ref(false);
 const materialDialogOpen = ref(false);
 const retrySettingsOpen = ref(false);
 const retrySettingsBusy = ref(false);
-const creativeSettings = ref({ imageRetryLimit: 2 });
+const creativeSettings = ref({ imageRetryLimit: 2, qualityCheckerEnabled: true });
 const accountName = ref("");
 const accountCookieJson = ref("");
 const editingAccountId = ref("");
@@ -242,6 +242,7 @@ const publisherSelectedMusic = ref<any | null>(null);
 const publisherMusicLibraryOpen = ref(false);
 const publisherMusicPlayingId = ref("");
 let publisherMusicAudio: HTMLAudioElement | null = null;
+const publisherBrokenMusicCovers = ref(new Set<string>());
 const publisherEditId = ref("");
 const publisherBusy = ref(false);
 const publisherLoadedAt = ref(0);
@@ -374,6 +375,7 @@ const runtimeDialogOpen = computed({
   },
 });
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
+let taskRefreshBusy = false;
 
 const selectedProduct = computed(() =>
   products.value.find((item) => item.id === selectedProductId.value),
@@ -392,12 +394,10 @@ const allShots = computed(() =>
     .flatMap((task) => task.shots.map((shot) => ({ task, shot })))
     .sort(
       (a, b) =>
-        Number(b.shot.createdAt || b.shot.updatedAt || b.task.updatedAt || 0) -
-          Number(
-            a.shot.createdAt || a.shot.updatedAt || a.task.updatedAt || 0,
-          ) ||
-        Number(b.shot.updatedAt || b.task.updatedAt || 0) -
-          Number(a.shot.updatedAt || a.task.updatedAt || 0) ||
+        Number(b.shot.createdAt || b.task.createdAt || 0) -
+          Number(a.shot.createdAt || a.task.createdAt || 0) ||
+        Number(b.task.createdAt || 0) - Number(a.task.createdAt || 0) ||
+        Number(b.shot.shotIndex || 0) - Number(a.shot.shotIndex || 0) ||
         String(b.shot.shotId).localeCompare(String(a.shot.shotId)),
     ),
 );
@@ -550,17 +550,18 @@ const publisherProductItem = computed(() =>
   publisherProducts.value.find((item) => item.id === publisherProduct.value),
 );
 const publisherMusicItems = computed(() => {
-  const items = [...publisherFavoriteMusic.value, ...publisherMusic.value];
-  const uniqueItems = items.filter(
-    (item, index) =>
-      items.findIndex((candidate) => String(candidate.id) === String(item.id)) ===
-      index,
+  const favoriteIds = new Set(
+    publisherFavoriteMusic.value.map((item) => String(item.id)),
   );
-  return uniqueItems.filter((item) =>
-    `${item.title || ""} ${item.author || ""}`
+  const query = publisherSelectorQuery.value.trim().toLowerCase();
+  const searchItems = publisherMusic.value.filter((item) => {
+    if (favoriteIds.has(String(item.id))) return false;
+    if (!query) return true;
+    return `${item.title || ""} ${item.author || ""}`
       .toLowerCase()
-      .includes(publisherSelectorQuery.value.toLowerCase()),
-  );
+      .includes(query);
+  });
+  return [...publisherFavoriteMusic.value, ...searchItems];
 });
 const publisherFilteredConnections = computed(() =>
   publisherConnections.value.filter((item) =>
@@ -785,6 +786,29 @@ function previewSrc(path?: string) {
   if (/^(https?:|data:|blob:|vg:)/i.test(value)) return value;
   return `vg://file?path=${encodeURIComponent(value)}`;
 }
+function generatedImagePath(shot?: Shot) {
+  if (!shot) return "";
+  const attempts = [...(shot.imagePreparation?.generationAttempts || [])].reverse();
+  return String(
+    shot.preparedImagePath ||
+      shot.imagePreparation?.generatedStillPath ||
+      attempts.find((attempt) => String(attempt?.outputPath || "").trim())?.outputPath ||
+      "",
+  ).trim();
+}
+function shotPreviewPath(shot?: Shot) {
+  if (!shot) return "";
+  const generatedPath = generatedImagePath(shot);
+  if (shot.status === "requires_manual" && generatedPath) return generatedPath;
+  return String(
+    shot.subtitleCoverImagePath ||
+      shot.posterPath ||
+      generatedPath ||
+      shot.referenceImagePath ||
+      shot.imagePath ||
+      "",
+  ).trim();
+}
 function publisherPosterSrc(item: any) {
   const poster = String(item?.posterPath || '').trim()
   return poster ? previewSrc(poster) : ''
@@ -959,6 +983,7 @@ async function refresh(silent = false) {
       0,
       Math.min(20, Math.floor(Number(settings?.imageRetryLimit) || 0)),
     );
+    creativeSettings.value.qualityCheckerEnabled = settings?.qualityCheckerEnabled !== false;
     if (!selectedProductId.value && products.value[0])
       selectedProductId.value = products.value[0].id;
     if (!selectedPromptVersionId.value && promptVersions.value[0]) {
@@ -974,6 +999,21 @@ async function refresh(silent = false) {
     if (!silent) errorText.value = error?.message || String(error);
   } finally {
     if (!silent) loading.value = false;
+  }
+}
+async function refreshTaskRows() {
+  if (taskRefreshBusy || document.hidden) return;
+  taskRefreshBusy = true;
+  try {
+    const taskRows = await window.api.tiktokCreative.list();
+    tasks.value = Array.isArray(taskRows) ? taskRows : [];
+    syncRuntimeSelection();
+    if (libraryPage.value > totalPages.value)
+      libraryPage.value = totalPages.value;
+  } catch {
+    // Background refresh failures remain silent until the next user action.
+  } finally {
+    taskRefreshBusy = false;
   }
 }
 async function loadMaterials() {
@@ -1026,8 +1066,9 @@ async function saveRetrySettings() {
       0,
       Math.min(20, Math.floor(Number(creativeSettings.value.imageRetryLimit) || 0)),
     );
-    const saved = await window.api.tiktokCreative.saveSettings({ imageRetryLimit });
+    const saved = await window.api.tiktokCreative.saveSettings({ imageRetryLimit, qualityCheckerEnabled: creativeSettings.value.qualityCheckerEnabled });
     creativeSettings.value.imageRetryLimit = Number(saved?.imageRetryLimit) || 0;
+    creativeSettings.value.qualityCheckerEnabled = saved?.qualityCheckerEnabled !== false;
     retrySettingsOpen.value = false;
     notice.value = tr("tiktokCreative.retry.saved");
   } catch (error: any) {
@@ -1051,6 +1092,7 @@ async function createTasks() {
     await window.api.tiktokCreative.createFromReference({
       referenceImagePaths: imagePaths,
       productId: selectedProductId.value,
+      prompt: promptEditorText.value.trim(),
       durationSec: 10,
     });
     notice.value = tr("autoUi.k_43510a9cf14d", { p0: imagePaths.length });
@@ -1208,9 +1250,8 @@ function canContinueWithVideo(shot: Shot) {
   return Boolean(
     shot.status === 'requires_manual' &&
       !shot.officialTaskId &&
-      (shot.imageRetryMode === 'manual_once' || Number(shot.imageRetryCount || 0) >= Number(shot.imageRetryLimit || 0)) &&
       String(shot.lastError || '').includes('[image_retry_exhausted]') &&
-      (shot.preparedImagePath || shot.imagePreparation?.generatedStillPath),
+      generatedImagePath(shot),
   );
 }
 function canRetryImageOnce(shot: Shot) {
@@ -2114,7 +2155,36 @@ function togglePublisherMusicFavorite(item: any) {
   persistPublisherFavoriteMusic();
 }
 function publisherMusicUrl(item: any) {
-  return String(item?.play_url || item?.url || item?.preview_url || "").trim();
+  return String(
+    item?.play_url ||
+      item?.play_uri ||
+      item?.playUrl ||
+      item?.preview_url ||
+      item?.preview_uri ||
+      item?.previewUrl ||
+      item?.audio_url ||
+      item?.audio_uri ||
+      item?.audioUrl ||
+      item?.music_url ||
+      item?.music_uri ||
+      item?.musicUrl ||
+      item?.stream_url ||
+      item?.stream_uri ||
+      item?.streamUrl ||
+      item?.url ||
+      "",
+  ).trim();
+}
+function hideBrokenPublisherMusicCover(event: Event) {
+  const image = event.currentTarget;
+  if (image instanceof HTMLImageElement) {
+    const id = image.dataset.musicId;
+    if (id) publisherBrokenMusicCovers.value = new Set(publisherBrokenMusicCovers.value).add(id);
+    image.style.display = "none";
+  }
+}
+function hasPublisherMusicCover(item: any) {
+  return Boolean(item?.cover_url) && !publisherBrokenMusicCovers.value.has(String(item?.id || ""));
 }
 async function togglePublisherMusicPlayback(item: any) {
   const id = String(item?.id || "");
@@ -2134,6 +2204,7 @@ async function togglePublisherMusicPlayback(item: any) {
   }
   try {
     const audio = new Audio(url);
+    audio.preload = "auto";
     publisherMusicAudio = audio;
     publisherMusicPlayingId.value = id;
     audio.addEventListener("ended", () => {
@@ -2141,6 +2212,23 @@ async function togglePublisherMusicPlayback(item: any) {
         publisherMusicAudio = null;
         publisherMusicPlayingId.value = "";
       }
+    });
+    await new Promise<void>((resolve, reject) => {
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error("音乐试听地址不可用或格式不受支持"));
+      };
+      const cleanup = () => {
+        audio.removeEventListener("canplay", onReady);
+        audio.removeEventListener("error", onError);
+      };
+      audio.addEventListener("canplay", onReady, { once: true });
+      audio.addEventListener("error", onError, { once: true });
+      audio.load();
     });
     await audio.play();
     publisherSyncError.value = "";
@@ -2214,6 +2302,7 @@ function openPublisherSelector(
   publisherSelectorAfterAccount.value = "";
   publisherSelector.value = kind;
   publisherSelectorQuery.value = "";
+  if (kind === "music") restorePublisherFavoriteMusic();
   if (kind === "product" && publisherConnection.value)
     void loadPublisherProducts();
 }
@@ -2656,8 +2745,8 @@ onMounted(async () => {
       void refreshPublisherTasks();
       return;
     }
-    void refresh(true);
-  }, 5000);
+    void refreshTaskRows();
+  }, 10000);
 });
 onBeforeUnmount(() => {
   document.removeEventListener("click", handlePublishUiClick);
@@ -4502,7 +4591,7 @@ onBeforeUnmount(() => {
                 :key="`favorite-${item.id}`"
                 class="publisher-music-row"
               >
-                <img v-if="item.cover_url" :src="item.cover_url" alt="music" />
+                <img v-if="hasPublisherMusicCover(item)" :data-music-id="item.id" :src="item.cover_url" alt="music" @error="hideBrokenPublisherMusicCover" />
                 <span v-else class="publisher-music-cover"><Music2 class="h-4 w-4" /></span>
                 <span class="publisher-music-meta">
                   <strong>{{ item.title }}</strong>
@@ -4538,7 +4627,7 @@ onBeforeUnmount(() => {
                 :key="`result-${item.id}`"
                 class="publisher-music-row"
               >
-                <img v-if="item.cover_url" :src="item.cover_url" alt="music" />
+                <img v-if="hasPublisherMusicCover(item)" :data-music-id="item.id" :src="item.cover_url" alt="music" @error="hideBrokenPublisherMusicCover" />
                 <span v-else class="publisher-music-cover"><Music2 class="h-4 w-4" /></span>
                 <span class="publisher-music-meta">
                   <strong>{{ item.title }}</strong>
@@ -4700,7 +4789,7 @@ onBeforeUnmount(() => {
               type="button"
               @click="choosePublisherMusic(item)"
             >
-              <img v-if="item.cover_url" :src="item.cover_url" alt="music" />
+                  <img v-if="hasPublisherMusicCover(item)" :data-music-id="item.id" :src="item.cover_url" alt="music" @error="hideBrokenPublisherMusicCover" />
               <span v-else class="publisher-option-icon">
                 <Music2 class="h-5 w-5" />
               </span>
@@ -5306,20 +5395,8 @@ onBeforeUnmount(() => {
           >
             <div class="live-console-row__thumb">
               <img
-                v-if="
-                  shot.subtitleCoverImagePath ||
-                  shot.posterPath ||
-                  shot.preparedImagePath ||
-                  shot.referenceImagePath
-                "
-                :src="
-                  previewSrc(
-                    shot.subtitleCoverImagePath ||
-                      shot.posterPath ||
-                      shot.preparedImagePath ||
-                      shot.referenceImagePath,
-                  )
-                "
+                v-if="shotPreviewPath(shot)"
+                :src="previewSrc(shotPreviewPath(shot))"
                 alt="poster"
               />
               <div v-else class="live-console-row__thumb-empty">
@@ -5410,22 +5487,26 @@ onBeforeUnmount(() => {
               "
             >
               <Play class="h-4 w-4" /></button
-            ><button
-              v-if="canContinueWithVideo(shot)"
-              class="live-console-row__link live-console-row__link--primary"
-              :title="tr('tiktokCreative.retry.continueWithVideo')"
-              type="button"
-              @click.stop="continueWithVideo(task, shot)"
-            >
-              <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideo') }}</button
-            ><button
-              v-if="canRetryImageOnce(shot)"
-              class="live-console-row__link"
-              type="button"
-              @click.stop="retryShot(task, shot)"
-            >
-              <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}</button
-            ><button
+            ><div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision">
+              <button
+                v-if="canRetryImageOnce(shot)"
+                class="image-retry-decision__button"
+                :title="tr('autoUi.k_031c7e12ddae')"
+                type="button"
+                @click.stop="retryShot(task, shot)"
+              >
+                <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}
+              </button>
+              <button
+                v-if="canContinueWithVideo(shot)"
+                class="image-retry-decision__button image-retry-decision__button--primary"
+                :title="tr('tiktokCreative.retry.continueWithVideo')"
+                type="button"
+                @click.stop="continueWithVideo(task, shot)"
+              >
+                <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}
+              </button>
+            </div><button
               v-if="canCorrectRegion(shot)"
               class="live-console-row__action live-console-row__action--region"
               :title="tr('autoUi.k_323968104a8c')"
@@ -5468,20 +5549,8 @@ onBeforeUnmount(() => {
           <div class="live-console-row__preview">
             <div class="live-console-row__thumb">
               <img
-                v-if="
-                  shot.subtitleCoverImagePath ||
-                  shot.posterPath ||
-                  shot.preparedImagePath ||
-                  shot.referenceImagePath
-                "
-                :src="
-                  previewSrc(
-                    shot.subtitleCoverImagePath ||
-                      shot.posterPath ||
-                      shot.preparedImagePath ||
-                      shot.referenceImagePath,
-                  )
-                "
+                v-if="shotPreviewPath(shot)"
+                :src="previewSrc(shotPreviewPath(shot))"
                 alt="poster"
               /><FileImage v-else class="h-5 w-5" />
             </div>
@@ -5591,22 +5660,26 @@ onBeforeUnmount(() => {
                 "
               >
                 <Play class="h-4 w-4" /></button
-              ><button
-                v-if="canContinueWithVideo(shot)"
-                class="live-console-row__link live-console-row__link--primary"
-                :title="tr('tiktokCreative.retry.continueWithVideo')"
-                type="button"
-                @click.stop="continueWithVideo(task, shot)"
-              >
-                <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideo') }}</button
-              ><button
-                v-if="canRetryImageOnce(shot)"
-                class="live-console-row__link"
-                type="button"
-                @click.stop="retryShot(task, shot)"
-              >
-                <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}</button
-              ><button
+              ><div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision">
+                <button
+                  v-if="canRetryImageOnce(shot)"
+                  class="image-retry-decision__button"
+                  :title="tr('autoUi.k_031c7e12ddae')"
+                  type="button"
+                  @click.stop="retryShot(task, shot)"
+                >
+                  <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}
+                </button>
+                <button
+                  v-if="canContinueWithVideo(shot)"
+                  class="image-retry-decision__button image-retry-decision__button--primary"
+                  :title="tr('tiktokCreative.retry.continueWithVideo')"
+                  type="button"
+                  @click.stop="continueWithVideo(task, shot)"
+                >
+                  <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}
+                </button>
+              </div><button
                 v-if="canCorrectRegion(shot)"
                 class="live-console-row__action live-console-row__action--region"
                 :title="tr('autoUi.k_323968104a8c')"
@@ -5849,13 +5922,25 @@ onBeforeUnmount(() => {
           <div>
             <span>{{ tr("tiktokCreative.retry.automaticRecovery") }}</span>
             <strong>{{ creativeSettings.imageRetryLimit }} {{ tr("tiktokCreative.retry.attemptUnit") }}</strong>
+            <small>{{ tr("tiktokCreative.retry.manualOnly") }}</small>
           </div>
-          <small>{{ tr("tiktokCreative.retry.manualOnly") }}</small>
         </div>
         <label class="retry-settings-field">
-          <span>{{ tr("tiktokCreative.retry.maximum") }}</span>
-          <input v-model.number="creativeSettings.imageRetryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
-          <small>{{ tr("tiktokCreative.retry.rangeHint") }}</small>
+          <div>
+            <span>{{ tr("tiktokCreative.retry.maximum") }}</span>
+            <small>{{ tr("tiktokCreative.retry.rangeHint") }}</small>
+          </div>
+          <div class="retry-settings-input">
+            <input v-model.number="creativeSettings.imageRetryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
+            <span>{{ tr("tiktokCreative.retry.attemptUnit") }}</span>
+          </div>
+        </label>
+        <label class="retry-settings-field">
+          <div>
+            <span>{{ tr("tiktokCreative.retry.qualityChecker") }}</span>
+            <small>{{ tr("tiktokCreative.retry.qualityCheckerDesc") }}</small>
+          </div>
+          <input v-model="creativeSettings.qualityCheckerEnabled" type="checkbox" />
         </label>
         <div class="dialog-actions retry-settings-actions">
           <button class="ghost-button" type="button" :disabled="retrySettingsBusy" @click="retrySettingsOpen = false">{{ tr("common.cancel") }}</button>
@@ -5904,14 +5989,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="detailTab === 'overview'" class="detail-shot">
           <img
-            :src="
-              previewSrc(
-                detailShot.subtitleCoverImagePath ||
-                  detailShot.posterPath ||
-                  detailShot.preparedImagePath ||
-                  detailShot.referenceImagePath,
-              )
-            "
+            :src="previewSrc(shotPreviewPath(detailShot))"
             alt="shot"
           />
           <div class="detail-grid">
@@ -7579,6 +7657,54 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   padding: 0 10px 10px;
 }
+.image-retry-decision {
+  display: flex;
+  gap: 0;
+  width: 100%;
+  min-height: 34px;
+  overflow: hidden;
+  border: 1px solid rgba(126, 143, 178, 0.2);
+  border-radius: 9px;
+  background: rgba(13, 19, 31, 0.72);
+}
+.image-retry-decision__button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #aebbd0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease;
+}
+.image-retry-decision__button:only-child {
+  flex-basis: 100%;
+}
+.image-retry-decision__button:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: #f4f7fc;
+}
+.image-retry-decision__button--primary {
+  flex-grow: 1.12;
+  border-left: 1px solid rgba(126, 143, 178, 0.16);
+  background: linear-gradient(90deg, rgba(38, 150, 130, 0.1), rgba(38, 150, 130, 0.18));
+  color: #79e5d2;
+}
+.image-retry-decision__button--primary:hover {
+  background: linear-gradient(90deg, rgba(38, 150, 130, 0.16), rgba(38, 150, 130, 0.25));
+  color: #a0f3e5;
+}
 .live-console-row__link,
 .live-console-row__action {
   display: inline-flex;
@@ -7855,30 +7981,31 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 .retry-settings-panel {
-  width: min(500px, 100%);
+  width: min(460px, 100%);
+  gap: 18px;
 }
 .retry-settings-hero {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-  padding: 14px;
-  border: 1px solid rgba(115, 212, 199, 0.26);
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(35, 102, 104, 0.32), rgba(49, 42, 110, 0.4));
+  padding: 12px 14px;
+  border: 1px solid rgba(111, 123, 170, 0.16);
+  border-radius: 8px;
+  background: rgba(18, 23, 38, 0.62);
 }
 .retry-settings-icon {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  border-radius: 12px;
-  background: rgba(109, 232, 212, 0.14);
-  color: #7ee5d5;
+  border-radius: 8px;
+  background: rgba(85, 223, 202, 0.1);
+  color: #70e2d0;
 }
 .retry-settings-hero div:nth-child(2) {
   display: grid;
-  gap: 3px;
+  gap: 2px;
 }
 .retry-settings-hero span,
 .retry-settings-hero small,
@@ -7888,30 +8015,43 @@ onBeforeUnmount(() => {
 }
 .retry-settings-hero strong {
   color: #f3f6ff;
-  font-size: 17px;
+  font-size: 15px;
 }
 .retry-settings-field {
-  display: grid;
-  gap: 7px;
-  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
   border: 1px solid rgba(111, 123, 170, 0.2);
-  border-radius: 14px;
-  background: rgba(18, 23, 38, 0.74);
+  border-width: 1px 0;
   color: #dce5f6;
   font-size: 12px;
   font-weight: 700;
 }
+.retry-settings-field > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.retry-settings-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: #9fb1d8;
+  font-size: 12px;
+}
 .retry-settings-field input {
-  width: 100%;
+  width: 88px;
   box-sizing: border-box;
-  min-height: 46px;
-  padding: 9px 12px;
-  border: 1px solid rgba(115, 212, 199, 0.34);
-  border-radius: 11px;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid rgba(111, 123, 170, 0.3);
+  border-radius: 8px;
   outline: 0;
-  background: rgba(9, 16, 27, 0.78);
+  background: rgba(9, 16, 27, 0.9);
   color: #ffffff;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
 }
 .retry-settings-field input:focus {
@@ -7919,7 +8059,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 3px rgba(112, 226, 208, 0.12);
 }
 .retry-settings-actions {
-  padding-top: 2px;
+  padding-top: 0;
 }
 .detail-shot {
   display: grid;
@@ -9495,6 +9635,37 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
   padding: 0;
+}
+.live-console-grid .image-retry-decision {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 7px;
+  min-height: 38px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.live-console-grid .image-retry-decision__button {
+  min-height: 38px;
+  border: 1px solid rgba(126, 143, 178, 0.22);
+  border-radius: 10px;
+  background: rgba(20, 27, 42, 0.8);
+}
+.live-console-grid .image-retry-decision__button:not(.image-retry-decision__button--primary) {
+  padding: 0;
+  font-size: 0;
+}
+.live-console-grid .image-retry-decision__button--primary {
+  border: 1px solid rgba(77, 218, 194, 0.42);
+  background: linear-gradient(135deg, #197f72, #12645f);
+  box-shadow: 0 7px 18px rgba(5, 57, 52, 0.22), inset 0 1px 0 rgba(210, 255, 247, 0.1);
+  color: #f3fffc;
+}
+.live-console-grid .image-retry-decision__button--primary:hover {
+  background: linear-gradient(135deg, #1b8e7e, #157069);
+  color: #ffffff;
 }
 .live-console-grid .live-console-row__link,
 .live-console-grid .live-console-row__action {

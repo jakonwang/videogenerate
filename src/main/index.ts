@@ -1785,10 +1785,13 @@ app.whenReady().then(async () => {
         await ensureWebApiServer()
         await cloneService.resumePendingRemoteStoryboardVideosOnStartup()
         await livePhotoService.resumePendingTasksOnStartup()
-        // Do not auto-resume TikTok tasks during startup. A malformed task created
-        // by a previous batch upload must not prevent the application from opening.
-        // Tasks remain persisted and can be retried manually from the TikTok page.
-        markStartupStage('tiktok-creative-auto-resume-skipped')
+        try {
+          const resumedTiktokTasks = await tiktokCreativeStudioService.resumePending()
+          markStartupStage('tiktok-creative-auto-resume-complete', resumedTiktokTasks)
+        } catch (error) {
+          console.error('[tiktok-creative] startup resume failed', error)
+          markStartupStage('tiktok-creative-auto-resume-failed')
+        }
         gmvMaxScheduler.start()
         markStartupStage('background-initialization-complete')
       } catch (error: any) {

@@ -176,7 +176,7 @@ async function main() {
     assert.equal(remoteImageSubmitCount, 1)
 
     const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.equal(resumeRemote.itemIds.includes(created.id), false)
+    assert.equal(resumeRemote.itemIds.includes(created.id), true)
 
     const resumedSnapshot = await waitForItemCondition(
       created.id,

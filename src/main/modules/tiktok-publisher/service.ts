@@ -40,7 +40,19 @@ function queuePosterGeneration(tasks: CreatokPublishTask[]) {
 function payload<T extends Record<string, any>>(result: T) { return (result?.data && typeof result.data === 'object' ? result.data : result) as T }
 function listFrom(result: any, ...keys: string[]) {
   const data = payload(result)
-  for (const source of [data, result, data?.data]) for (const key of keys) if (Array.isArray(source?.[key])) return source[key]
+  const seen = new Set<any>()
+  const visit = (source: any): any[] | undefined => {
+    if (!source || typeof source !== 'object' || seen.has(source)) return undefined
+    seen.add(source)
+    for (const key of keys) if (Array.isArray(source[key])) return source[key]
+    for (const value of Object.values(source)) {
+      const found = visit(value)
+      if (found) return found
+    }
+    return undefined
+  }
+  const found = visit(data) || visit(result)
+  if (found) return found
   return []
 }
 function normalizeConnection(item: any) { return { ...item, uid: String(item?.uid || item?.id || item?.connection_uid || ''), name: String(item?.name || item?.title || item?.display_name || item?.username || item?.uid || item?.id || 'Unnamed account'), timezone: item?.timezone || item?.time_zone } }
@@ -52,6 +64,43 @@ function normalizeProduct(item: any) {
     title: String(item?.title || item?.name || item?.product_title || item?.id || 'Unnamed product'),
     imageUrl: String(imageUrl || ''),
     image: String(item?.image || imageUrl || ''),
+  }
+}
+function mediaUrl(value: any): string {
+  if (typeof value === 'string') {
+    const text = value.trim()
+    return /^(?:https?:|data:|blob:|file:)/i.test(text) ? text : text.startsWith('//') ? `https:${text}` : ''
+  }
+  if (Array.isArray(value)) return mediaUrl(value[0])
+  if (!value || typeof value !== 'object') return ''
+  for (const key of ['url', 'uri', 'src', 'href', 'download_url', 'downloadUrl', 'play_url', 'playUrl', 'play_uri', 'playUri', 'preview_url', 'previewUrl', 'preview_uri', 'previewUri', 'audio_url', 'audioUrl', 'audio_uri', 'audioUri', 'music_url', 'musicUrl', 'music_uri', 'musicUri', 'stream_url', 'streamUrl', 'stream_uri', 'streamUri']) {
+    const result = mediaUrl(value[key])
+    if (result) return result
+  }
+  return ''
+}
+function firstValue(value: any, keys: string[]): any {
+  if (!value || typeof value !== 'object') return undefined
+  for (const key of keys) if (value[key] !== undefined && value[key] !== null && value[key] !== '') return value[key]
+  for (const child of Object.values(value)) {
+    const found = firstValue(child, keys)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+function normalizeMusic(item: any) {
+  const id = firstValue(item, ['id', 'music_id', 'musicId', 'song_id', 'songId', 'sound_id', 'soundId'])
+  const source = item?.music && typeof item.music === 'object' ? { ...item.music, ...item } : item
+  const cover = mediaUrl(firstValue(source, ['cover_url', 'coverUrl', 'cover_uri', 'coverUri', 'music_cover_url', 'musicCoverUrl', 'cover_image_url', 'coverImageUrl', 'artwork_url', 'artworkUrl', 'image_url', 'imageUrl', 'cover', 'thumbnail_url', 'thumbnail', 'image']))
+  const play = mediaUrl(firstValue(source, ['play_url', 'playUrl', 'music_play_url', 'musicPlayUrl', 'preview_url', 'previewUrl', 'audio_url', 'audioUrl', 'music_url', 'musicUrl', 'stream_url', 'streamUrl', 'url']))
+  return {
+    ...source,
+    id: String(id || ''),
+    title: String(firstValue(source, ['title', 'name', 'music_title', 'musicTitle', 'music_name', 'musicName', 'sound_name', 'soundName']) || id || 'Unnamed music'),
+    ...(firstValue(source, ['author', 'artist', 'creator', 'music_author', 'musicAuthor']) ? { author: String(firstValue(source, ['author', 'artist', 'creator', 'music_author', 'musicAuthor'])) } : {}),
+    ...(firstValue(source, ['duration', 'duration_sec', 'durationSec']) !== undefined ? { duration: firstValue(source, ['duration', 'duration_sec', 'durationSec']) } : {}),
+    ...(cover ? { cover_url: cover } : {}),
+    ...(play ? { play_url: play } : {}),
   }
 }
 async function getKey() { const data = await readJsonFile<{ value?: string }>(credentialPath(), {}); return data.value ? decryptRuntimeString(data.value) : null }
@@ -159,7 +208,7 @@ export const creatokPublisherService = {
     }
   },
   async products(connection?: string) { const key = await getKey(); if (!key) throw new Error('Creatok API key is not configured'); if (!connection) return []; const result = await createCreatokClient(key).products(connection); return listFrom(result, 'products', 'items').map(normalizeProduct).filter((item: any) => item.id) },
-  async music(query: string, connection?: string) { const key = await getKey(); if (!key) throw new Error('Creatok API key is not configured'); if (!connection) return []; const result = await createCreatokClient(key).music(query, connection); return listFrom(result, 'music', 'items') },
+  async music(query: string, connection?: string) { const key = await getKey(); if (!key) throw new Error('Creatok API key is not configured'); if (!connection) return []; const result = await createCreatokClient(key).music(query, connection); return listFrom(result, 'music', 'items', 'results', 'music_items', 'musicItems', 'music_results', 'musicResults').map(normalizeMusic).filter((item: any) => item.id) },
   async listTasks() { const tasks = await creatokPublisherRepo.list(); queuePosterGeneration(tasks); return tasks },
   async removeTask(id: string) {
     const normalizedId = String(id || '').trim()

@@ -154,8 +154,12 @@ export type LivePhotoAutoFlowStatus = {
   paused?: boolean
   imageValidationBypassed?: boolean
   imageRetryMode?: 'auto' | 'manual_once'
+  failedStage?: 'image' | 'video'
+  retryScope?: 'image' | 'video'
   retryLimit: number
   retryCount: number
+  imageRetryCount?: number
+  videoRetryCount?: number
   currentStage: LivePhotoWorkflowStep
   lastStartedAt?: number
   lastCompletedAt?: number

@@ -117,7 +117,7 @@ export function isLivePhotoSqliteEmpty() {
 export function readLivePhotoItemsFromSqlite(): LivePhotoItem[] {
   const database = initializeLivePhotoSqlite()
   const rows = database
-    .prepare('SELECT payload FROM live_photo_items ORDER BY updated_at DESC, created_at DESC')
+    .prepare('SELECT payload FROM live_photo_items ORDER BY created_at DESC, id DESC')
     .all() as Array<{ payload?: string }>
   return rows.map((row) => JSON.parse(String(row.payload || '{}')) as LivePhotoItem)
 }

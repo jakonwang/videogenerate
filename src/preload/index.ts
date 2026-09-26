@@ -898,7 +898,7 @@ const api = {
   tiktokCreative: {
     list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),
     getSettings: () => ipcRenderer.invoke('plugin:tiktokCreative:getSettings'),
-    saveSettings: (payload: { imageRetryLimit?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:saveSettings', payload),
+    saveSettings: (payload: { imageRetryLimit?: number; qualityCheckerEnabled?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreative:saveSettings', payload),
     listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreative:listAccounts'),
     listPromptVersions: () => ipcRenderer.invoke('plugin:tiktokCreative:listPromptVersions'),
     createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createPromptVersion', payload),
