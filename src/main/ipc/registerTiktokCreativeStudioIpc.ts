@@ -7,7 +7,10 @@ export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokCreative:getSettings', async () => await tiktokCreativeStudioService.getSettings())
   ipcMain.handle('plugin:tiktokCreative:saveSettings', async (_e, payload) => await tiktokCreativeStudioService.saveSettings(payload))
   ipcMain.handle('plugin:tiktokCreative:listAccounts', async () => await tiktokCreativeStudioService.listAccounts())
-  ipcMain.handle('plugin:tiktokCreative:listPromptVersions', async () => await tiktokCreativeStudioService.listPromptVersions())
+  ipcMain.handle(
+    'plugin:tiktokCreative:listPromptVersions',
+    async (_e, kind?: 'image' | 'video') => await tiktokCreativeStudioService.listPromptVersions(kind),
+  )
   ipcMain.handle('plugin:tiktokCreative:createPromptVersion', async (_e, payload) => await tiktokCreativeStudioService.createPromptVersion(payload))
   ipcMain.handle('plugin:tiktokCreative:updatePromptVersion', async (_e, payload) => await tiktokCreativeStudioService.updatePromptVersion(payload))
   ipcMain.handle('plugin:tiktokCreative:activatePromptVersion', async (_e, payload) => await tiktokCreativeStudioService.activatePromptVersion(payload))
@@ -38,6 +41,7 @@ export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokPublisher:testCredential', async () => await creatokPublisherService.testCredential())
   ipcMain.handle('plugin:tiktokPublisher:connections', async () => await creatokPublisherService.connections())
   ipcMain.handle('plugin:tiktokPublisher:products', async (_e, connection?: string) => await creatokPublisherService.products(connection))
+  ipcMain.handle('plugin:tiktokPublisher:productsPage', async (_e, connection?: string, options?: { pageSize?: number; pageToken?: string; query?: string; includeTotal?: boolean }) => await creatokPublisherService.productsPage(connection, options))
   ipcMain.handle('plugin:tiktokPublisher:music', async (_e, query: string, connection?: string) => await creatokPublisherService.music(query, connection))
   ipcMain.handle('plugin:tiktokPublisher:listTasks', async () => await creatokPublisherService.listTasks())
   ipcMain.handle('plugin:tiktokPublisher:removeTask', async (_e, id: string) => await creatokPublisherService.removeTask(id))

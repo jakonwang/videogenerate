@@ -1126,22 +1126,6 @@ async function main() {
             scene_preservation: 'pass',
           },
         }),
-        runLocalQualityCheck: async () => ({
-          available: true,
-          report: {
-            checkerVersion: 'live-photo-quality-v8',
-            mode: 'local_python',
-            decision: 'pass',
-            score: 1,
-            threshold: 0.88,
-            retryFloor: 0.65,
-            components: { clip: 1, dinov2: 1, orb: 1, ssim: 1, scenePreservation: 1, textConsistency: 1 },
-            hardFailures: [],
-            notes: [],
-            durationMs: 1,
-            checkedAt: Date.now(),
-          },
-        }),
       }) as any,
     })
 

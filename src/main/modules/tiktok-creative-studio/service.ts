@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, rm } from 'node:fs/promises'
+import { copyFile, mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import PQueue from 'p-queue'
@@ -8,9 +8,10 @@ import { tiktokCreativeStudioRepo } from './repo'
 import { tiktokCreativeAccounts } from './accounts'
 import { TiktokOfficialClient } from './officialClient'
 import { prepareReferenceImageForExternalWorkflow } from '../live-photo/service'
+import { hashLivePhotoPrompt } from '../live-photo/promptVersions'
 import { normalizeLivePhotoReplacementRegion } from '../live-photo/replacementRegion'
 import { productsRepo } from '../products/repo'
-import { tiktokCreativePromptVersions } from './promptVersions'
+import { isImageReplacementPrompt, tiktokCreativePromptVersions } from './promptVersions'
 import type { TiktokCreativePromptVersion } from './promptVersions'
 import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/batchSubtitle'
 import { webPlatformRepo } from '../web-platform/repo'
@@ -22,6 +23,7 @@ import {
 import { runFfmpeg } from '../ffmpeg/runner'
 import { probeMedia } from '../ffmpeg/probe'
 import type { TiktokCreativeAccount, TiktokCreativeShotTask, TiktokCreativeTask, TiktokCreativeTaskLog } from './types'
+import { createTiktokZoomedLastFrame } from './imageAspect'
 
 // Keep paid image retries bounded. The limit counts automatic retries after
 // the initial image generation attempt.
@@ -86,10 +88,16 @@ function isLegacyPageCreationFailure(shot: TiktokCreativeShotTask) {
 function resolveOfficialVideoPrompt(prompt: unknown) {
   const value = String(prompt || '').trim()
   if (!value) throw new Error('TikTok video prompt is required')
-  if (/\b(?:replace|replace the product|image\s*[12]|preserving the original scene)\b/i.test(value)) {
+  if (isImageReplacementPrompt(value)) {
     throw new Error('The selected prompt is an image-replacement template and is not supported by Reference to video. Select a video-motion template.')
   }
   return value
+}
+
+// Image preparation and Reference-to-video use different prompt contracts.
+// Keep the image prompt independent from the user-configured motion prompt.
+async function getTikTokImagePromptVersion() {
+  return await tiktokCreativePromptVersions.getActive('image')
 }
 
 function summarizeShots(shots: TiktokCreativeShotTask[]) {
@@ -150,9 +158,22 @@ function updateShot(task: TiktokCreativeTask, shotId: string, updater: (shot: Ti
 const activeShots = new Set<string>()
 const queuedShots = new Set<string>()
 const scheduledShots = new Map<string, { timer: ReturnType<typeof setTimeout>; dueAt: number }>()
-const shotProcessingQueue = new PQueue({ concurrency: 2 })
+// Chromium persistent contexts are expensive and fragile under concurrent
+// startup on Windows. Serialize the complete TikTok workflow instead of
+// launching multiple browser processes for a large batch.
+const shotProcessingQueue = new PQueue({ concurrency: 1 })
 const accountLocks = new Map<string, Promise<void>>()
 const DEFAULT_DURATION_SEC = 10
+const DEFAULT_GENERATION_MODE = 'reference_to_video' as const
+
+function resolveGenerationMode(value: unknown) {
+  return value === 'image_to_video' ? 'image_to_video' as const : DEFAULT_GENERATION_MODE
+}
+
+function resolveZoomPercent(value: unknown) {
+  const numeric = Number(value)
+  return [10, 20, 30, 40, 50, 60, 70, 80].includes(numeric) ? numeric : 20
+}
 
 function taskCreditCost(durationSec: number) {
   return durationSec >= 10 ? 10 : 5
@@ -173,6 +194,11 @@ function scheduleShot(taskId: string, shotId: string, delayMs = 0) {
     scheduledShots.delete(key)
     if (queuedShots.has(key)) return
     queuedShots.add(key)
+    console.info('[tiktok-creative] queueScheduled', {
+      taskId,
+      shotId,
+      queueLength: shotProcessingQueue.size,
+    })
     void shotProcessingQueue.add(
       async () => {
         try {
@@ -271,40 +297,42 @@ async function downloadResult(input: { taskId: string; shotId: string; client: T
   const videoPath = join(dir, 'result.mp4')
   await input.client.download(input.videoUrl, sourceVideoPath)
   try {
-    await runFfmpeg({
-      args: [
-        '-y',
-        '-i',
-        sourceVideoPath,
-        '-map',
-        '0:v:0',
-        '-map',
-        '0:a:0?',
-        '-vf',
-        'fps=30,format=yuv420p',
-        '-c:v',
-        'libx264',
-        '-profile:v',
-        'baseline',
-        '-level:v',
-        '3.1',
-        '-preset',
-        'veryfast',
-        '-crf',
-        '20',
-        '-c:a',
-        'aac',
-        '-b:a',
-        '128k',
-        '-ar',
-        '44100',
-        '-ac',
-        '2',
-        '-movflags',
-        '+faststart',
-        videoPath,
-      ],
-    })
+    const sourceMedia = await probeMedia(sourceVideoPath)
+    const canKeepOriginal = sourceMedia.videoCodec === 'h264'
+      && Boolean(sourceMedia.width && sourceMedia.height && sourceMedia.durationSec > 0)
+    if (canKeepOriginal) {
+      // TikTok's MainUrl is the generated master. Keep its original bitrate,
+      // resolution, and frame rate instead of introducing a lossy transcode.
+      await rename(sourceVideoPath, videoPath)
+    } else {
+      // Compatibility fallback for an unexpected codec or malformed source.
+      await runFfmpeg({
+        args: [
+          '-y',
+          '-i',
+          sourceVideoPath,
+          '-map',
+          '0:v:0',
+          '-map',
+          '0:a:0?',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'medium',
+          '-crf',
+          '18',
+          '-pix_fmt',
+          'yuv420p',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-movflags',
+          '+faststart',
+          videoPath,
+        ],
+      })
+    }
     const media = await probeMedia(videoPath)
     if (media.videoCodec !== 'h264' || !media.width || !media.height || media.durationSec <= 0) {
       throw new Error('Normalized TikTok video failed media validation')
@@ -312,6 +340,7 @@ async function downloadResult(input: { taskId: string; shotId: string; client: T
     await rm(sourceVideoPath, { force: true })
   } catch (error) {
     await rm(videoPath, { force: true })
+    await rm(sourceVideoPath, { force: true })
     throw error
   }
   let posterPath: string | undefined
@@ -432,6 +461,12 @@ async function processReferenceShot(taskId: string, shotId: string) {
     const task = await tiktokCreativeStudioRepo.get(taskId)
     const shot = task?.shots.find((item) => item.shotId === shotId)
     if (!task || !shot || shot.status === 'completed') return
+    console.info('[tiktok-creative] taskStarted', {
+      taskId,
+      shotId,
+      accountId: shot.accountId || '__unbound__',
+      queueLength: shotProcessingQueue.size,
+    })
     if (shot.officialTaskId) {
       await withAccountLock(shot.accountId || '__unbound__', async () => {
         await pollOfficialTask(taskId, shotId, shot)
@@ -441,15 +476,18 @@ async function processReferenceShot(taskId: string, shotId: string) {
 
     const configuredImageRetryLimit = await getTiktokImageRetryLimit()
     const imageRetryLimit = Math.max(0, Math.min(20, Math.floor(Number(shot.imageRetryLimit ?? configuredImageRetryLimit) || 0)))
-    const activePromptVersion = await tiktokCreativePromptVersions.getActive()
-    const promptVersion = shot.imagePreparation?.promptVersionId
+    const promptVersion = shot.imagePreparation?.replacementPrompt
       ? {
-          id: shot.imagePreparation.promptVersionId,
-          version: shot.imagePreparation.promptVersion || activePromptVersion.version,
-          prompt: shot.imagePreparation.replacementPrompt || activePromptVersion.prompt,
-          promptHash: shot.imagePreparation.promptHash || activePromptVersion.promptHash,
+          id: shot.imagePreparation.promptVersionId || 'task-image-prompt',
+          version: shot.imagePreparation.promptVersion || 1,
+          prompt: shot.imagePreparation.replacementPrompt,
+          promptHash: shot.imagePreparation.promptHash || hashLivePhotoPrompt(shot.imagePreparation.replacementPrompt),
+          kind: 'image' as const,
+          active: false,
+          createdAt: now(),
+          updatedAt: now(),
         }
-      : activePromptVersion
+      : await getTikTokImagePromptVersion()
     const bypassedImagePath = shot.imageValidationBypassed
       ? [shot.preparedImagePath, shot.imagePreparation?.generatedStillPath, shot.referenceImagePath, shot.imagePath]
           .map((value) => String(value || '').trim())
@@ -535,8 +573,22 @@ async function processReferenceShot(taskId: string, shotId: string) {
         await withAccountLock(selected.account.id, async () => {
           let created: Awaited<ReturnType<TiktokOfficialClient['createTask']>>
           try {
+            const mode = resolveGenerationMode(shot.mode)
+            await persistShot(taskId, shotId, (current) => ({ ...current, mode, updatedAt: now() }))
+            const lastFramePath = mode === 'image_to_video'
+              ? (await createTiktokZoomedLastFrame(preparedImagePath, await defaultShotRoot(taskId, shotId), resolveZoomPercent(shot.zoomPercent))).path
+              : undefined
+            await persistShot(taskId, shotId, (current) => ({
+              ...current,
+              mode,
+              firstFramePath: preparedImagePath,
+              lastFramePath,
+              updatedAt: now(),
+            }))
+            const imagePaths = lastFramePath ? [preparedImagePath, lastFramePath] : [preparedImagePath]
             created = await selected.client.createTask({
-              imagePaths: [preparedImagePath],
+              imagePaths,
+              mode,
               prompt: resolveOfficialVideoPrompt(shot.prompt),
               durationSec: shot.durationSec || 5,
             })
@@ -599,21 +651,27 @@ async function processReferenceShot(taskId: string, shotId: string) {
   }
 }
 
-async function syncPendingPromptVersion(promptVersion: TiktokCreativePromptVersion) {
+async function syncPendingPromptVersion(_promptVersion: TiktokCreativePromptVersion) {
+  const imagePromptVersion = await getTikTokImagePromptVersion()
   const tasks = await tiktokCreativeStudioRepo.list()
   for (const task of tasks) {
     let changed = false
     const shots = task.shots.map((shot) => {
-      if (shot.sourceType !== 'reference_image' || shot.officialTaskId || shot.imagePreparation?.qualityReport?.decision === 'pass') return shot
+      if (
+        shot.sourceType !== 'reference_image'
+        || shot.officialTaskId
+        || shot.imagePreparation?.qualityReport?.decision === 'pass'
+        || Boolean(String(shot.imagePreparation?.replacementPrompt || '').trim())
+      ) return shot
       changed = true
       return {
         ...shot,
         imagePreparation: {
           ...shot.imagePreparation,
-          promptVersionId: promptVersion.id,
-          promptVersion: promptVersion.version,
-          promptHash: promptVersion.promptHash,
-          replacementPrompt: promptVersion.prompt,
+          promptVersionId: imagePromptVersion.id,
+          promptVersion: imagePromptVersion.version,
+          promptHash: imagePromptVersion.promptHash,
+          replacementPrompt: imagePromptVersion.prompt,
           imagePromptPreview: undefined,
         },
         updatedAt: now(),
@@ -662,29 +720,30 @@ export const tiktokCreativeStudioService = {
     return { encryptionAvailable: tiktokCreativeAccounts.encryptionAvailable(), accounts: await tiktokCreativeAccounts.list() }
   },
 
-  async listPromptVersions() {
-    return await tiktokCreativePromptVersions.list()
+  async listPromptVersions(kind: 'image' | 'video' = 'video') {
+    if (kind === 'video') await tiktokCreativePromptVersions.getActive('video')
+    return await tiktokCreativePromptVersions.list(kind)
   },
 
-  async createPromptVersion(input: { name: string; prompt: string }) {
+  async createPromptVersion(input: { name: string; prompt: string; kind?: 'image' | 'video' }) {
     return await tiktokCreativePromptVersions.save(input)
   },
 
-  async updatePromptVersion(input: { id: string; name: string; prompt: string }) {
+  async updatePromptVersion(input: { id: string; name: string; prompt: string; kind?: 'image' | 'video' }) {
     const saved = await tiktokCreativePromptVersions.save(input)
-    if (saved.active) await syncPendingPromptVersion(saved)
+    if (saved.active && saved.kind === 'image') await syncPendingPromptVersion(saved)
     return saved
   },
 
-  async activatePromptVersion(input: { id: string }) {
-    const activated = await tiktokCreativePromptVersions.activate(input.id)
-    await syncPendingPromptVersion(activated)
+  async activatePromptVersion(input: { id: string; kind?: 'image' | 'video' }) {
+    const activated = await tiktokCreativePromptVersions.activate(input.id, input.kind)
+    if (activated.kind === 'image') await syncPendingPromptVersion(activated)
     return activated
   },
 
-  async rollbackPromptVersion(input: { id: string }) {
-    const activated = await tiktokCreativePromptVersions.rollback(input.id)
-    await syncPendingPromptVersion(activated)
+  async rollbackPromptVersion(input: { id: string; kind?: 'image' | 'video' }) {
+    const activated = await tiktokCreativePromptVersions.rollback(input.id, input.kind)
+    if (activated.kind === 'image') await syncPendingPromptVersion(activated)
     return activated
   },
 
@@ -703,21 +762,23 @@ export const tiktokCreativeStudioService = {
   async testAccount(id: string) {
     const account = (await tiktokCreativeAccounts.list()).find((item) => item.id === String(id || '').trim())
     if (!account) throw new Error('TikTok account does not exist')
-    const client = await accountClient(account)
-    try {
-      const result = await client.queryCredit()
-      const state = !result.authenticated ? 'expired' : result.credit !== undefined && result.credit < 5 ? 'insufficient_credit' : result.credit === undefined ? 'error' : 'ready'
-      return await tiktokCreativeAccounts.updateState(account.id, {
-        state,
-        credit: result.credit,
-        lastError: state === 'ready' ? undefined : state === 'expired' ? 'Login expired' : state === 'insufficient_credit' ? 'Insufficient credit' : 'Credit could not be read',
-      })
-    } finally {
-      await client.close()
-    }
+    return await withAccountLock(account.id, async () => {
+      const client = await accountClient(account)
+      try {
+        const result = await client.queryCredit()
+        const state = !result.authenticated ? 'expired' : result.credit !== undefined && result.credit < 5 ? 'insufficient_credit' : result.credit === undefined ? 'error' : 'ready'
+        return await tiktokCreativeAccounts.updateState(account.id, {
+          state,
+          credit: result.credit,
+          lastError: state === 'ready' ? undefined : state === 'expired' ? 'Login expired' : state === 'insufficient_credit' ? 'Insufficient credit' : 'Credit could not be read',
+        })
+      } finally {
+        await client.close()
+      }
+    })
   },
 
-  async createFromReference(input: { referenceImagePaths: string[]; productId: string; prompt?: string; durationSec?: number }) {
+  async createFromReference(input: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number }) {
     const referenceImagePaths = Array.from(new Set((Array.isArray(input.referenceImagePaths) ? input.referenceImagePaths : []).map((item) => String(item || '').trim()).filter(Boolean)))
     if (!referenceImagePaths.length) throw new Error('Reference images are required')
     const productId = String(input.productId || '').trim()
@@ -725,10 +786,21 @@ export const tiktokCreativeStudioService = {
     if (!product) throw new Error('Product does not exist')
     const timestamp = now()
     const imageRetryLimit = await getTiktokImageRetryLimit()
-    const promptVersion = await tiktokCreativePromptVersions.getActive()
+    const promptKind = input.promptKind === 'image' ? 'image' : 'video'
+    const videoPromptVersion = await tiktokCreativePromptVersions.getActive('video')
+    const activeImagePromptVersion = await getTikTokImagePromptVersion()
+    const selectedImagePromptVersion = promptKind === 'image' && input.promptVersionId
+      ? (await tiktokCreativePromptVersions.list('image')).find((item) => item.id === input.promptVersionId) || activeImagePromptVersion
+      : activeImagePromptVersion
+    const promptVersion = videoPromptVersion
     const templatePrompt = String(promptVersion?.prompt || '').trim()
-    const videoPrompt = String(input.prompt || '').trim() || templatePrompt
+    const imagePrompt = promptKind === 'image'
+      ? String(input.prompt || '').trim() || selectedImagePromptVersion.prompt
+      : selectedImagePromptVersion.prompt
+    const videoPrompt = (promptKind === 'video' ? String(input.prompt || '').trim() : '') || templatePrompt
     const effectiveVideoPrompt = resolveOfficialVideoPrompt(videoPrompt)
+    const mode = resolveGenerationMode(input.mode)
+    const zoomPercent = resolveZoomPercent(input.zoomPercent)
     const shots: TiktokCreativeShotTask[] = referenceImagePaths.map((referenceImagePath, index) => ({
       id: randomUUID(),
       shotId: randomUUID(),
@@ -736,15 +808,17 @@ export const tiktokCreativeStudioService = {
       imagePath: referenceImagePath,
       referenceImagePath,
       sourceType: 'reference_image',
+      mode,
+      zoomPercent,
       prompt: effectiveVideoPrompt,
       durationSec: DEFAULT_DURATION_SEC,
       status: 'running',
       remoteStatus: 'queued',
       imagePreparation: {
-        promptVersionId: promptVersion.id,
-        promptVersion: promptVersion.version,
-        promptHash: promptVersion.promptHash,
-        replacementPrompt: promptVersion.prompt,
+        promptVersionId: selectedImagePromptVersion.id,
+        promptVersion: selectedImagePromptVersion.version,
+        promptHash: hashLivePhotoPrompt(imagePrompt),
+        replacementPrompt: imagePrompt,
       },
       imageRetryCount: 0,
       imageRetryLimit,
@@ -820,7 +894,7 @@ export const tiktokCreativeStudioService = {
         })
       : null
     if (input.replacementRegion && !manualReplacementRegion) throw new Error('Invalid replacement region')
-    const promptVersion = await tiktokCreativePromptVersions.getActive()
+    const imagePromptVersion = await getTikTokImagePromptVersion()
     const configuredImageRetryLimit = await getTiktokImageRetryLimit()
     const imageRetryLimit = Math.max(0, Math.min(20, Math.floor(Number(existingShot.imageRetryLimit ?? configuredImageRetryLimit) || 0)))
     const imageRetryMode = input.retryMode === 'manual_once' ? 'manual_once' : 'auto'
@@ -833,10 +907,10 @@ export const tiktokCreativeStudioService = {
         : {
             ...shot.imagePreparation,
             replacementRegion: manualReplacementRegion || shot.imagePreparation?.replacementRegion,
-            promptVersionId: promptVersion.id,
-            promptVersion: promptVersion.version,
-            promptHash: promptVersion.promptHash,
-            replacementPrompt: promptVersion.prompt,
+            promptVersionId: imagePromptVersion.id,
+            promptVersion: imagePromptVersion.version,
+            promptHash: imagePromptVersion.promptHash,
+            replacementPrompt: imagePromptVersion.prompt,
             imagePromptPreview: undefined,
             generatedStillPath: undefined,
             qualityReport: undefined,
@@ -847,6 +921,8 @@ export const tiktokCreativeStudioService = {
             imageTaskEndpointStyle: undefined,
           },
       preparedImagePath: shot.officialTaskId ? shot.preparedImagePath : undefined,
+      firstFramePath: shot.officialTaskId ? shot.firstFramePath : undefined,
+      lastFramePath: shot.officialTaskId ? shot.lastFramePath : undefined,
       imageRetryCount: shot.officialTaskId || imageRetryMode === 'manual_once' ? shot.imageRetryCount : 0,
       imageRetryLimit,
       imageRetryMode: shot.officialTaskId ? shot.imageRetryMode : imageRetryMode,
@@ -904,8 +980,22 @@ export const tiktokCreativeStudioService = {
           await withAccountLock(selected.account.id, async () => {
           let created: Awaited<ReturnType<TiktokOfficialClient['createTask']>>
           try {
+            const mode = resolveGenerationMode(latestShot.mode)
+            await persistShot(task.id, shotId, (current) => ({ ...current, mode, updatedAt: now() }))
+            const lastFramePath = mode === 'image_to_video'
+              ? (await createTiktokZoomedLastFrame(imagePath, await defaultShotRoot(task.id, shotId), resolveZoomPercent(latestShot.zoomPercent))).path
+              : undefined
+            await persistShot(task.id, shotId, (current) => ({
+              ...current,
+              mode,
+              firstFramePath: imagePath,
+              lastFramePath,
+              updatedAt: now(),
+            }))
+            const imagePaths = lastFramePath ? [imagePath, lastFramePath] : [imagePath]
             created = await selected.client.createTask({
-              imagePaths: [imagePath],
+              imagePaths,
+              mode,
               prompt: resolveOfficialVideoPrompt(latestShot.prompt),
               durationSec: latestShot.durationSec || 5,
             })

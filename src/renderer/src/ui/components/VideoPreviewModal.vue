@@ -156,9 +156,7 @@ onBeforeUnmount(() => stopPlayback())
 .preview-backdrop {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(180deg, rgba(3, 6, 14, 0.86), rgba(2, 5, 12, 0.94)),
-    rgba(0, 0, 0, 0.78);
+  background: color-mix(in srgb, var(--theme-root, #070910) 82%, transparent);
   backdrop-filter: blur(6px);
 }
 
@@ -176,13 +174,9 @@ onBeforeUnmount(() => stopPlayback())
   width: min(96vw, 760px);
   overflow: hidden;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(9, 13, 24, 0.96), rgba(5, 9, 18, 0.96)),
-    rgba(3, 6, 12, 0.94);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 34px 90px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--theme-border, #1d2633);
+  background: var(--theme-panel, #11131e);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--theme-text, #000) 18%, transparent);
 }
 
 .preview-panel--video {
@@ -204,26 +198,26 @@ onBeforeUnmount(() => stopPlayback())
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 11, 20, 0.74);
-  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--theme-border-control, #344154);
+  background: var(--theme-control, #171c2a);
+  color: var(--theme-text-secondary, #c6cfdb);
   cursor: pointer;
   transition: 0.2s ease;
 }
 
 .preview-close:hover {
-  background: rgba(13, 17, 28, 0.92);
-  color: #ffffff;
+  background: var(--theme-control-hover, #20283a);
+  color: var(--theme-text, #eef2f7);
 }
 
 .preview-titlebar {
   padding: 16px 56px 14px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--theme-divider, #202a38);
 }
 
 .preview-title {
   font-size: 14px;
-  color: rgba(240, 244, 255, 0.9);
+  color: var(--theme-text, #eef2f7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -242,7 +236,7 @@ onBeforeUnmount(() => stopPlayback())
   width: auto;
   max-width: 100%;
   border-radius: 18px;
-  background: #050913;
+  background: var(--theme-panel-soft, #151827);
   object-fit: contain;
 }
 
@@ -258,7 +252,7 @@ onBeforeUnmount(() => stopPlayback())
   width: min(100%, 980px);
   max-height: 78vh;
   border-radius: 18px;
-  background: #03060c;
+  background: var(--theme-root, #070910);
 }
 
 .preview-status {
@@ -269,7 +263,7 @@ onBeforeUnmount(() => stopPlayback())
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: rgba(232, 238, 255, 0.82);
+  color: var(--theme-text-secondary, #c6cfdb);
   text-align: center;
   pointer-events: none;
 }
@@ -277,7 +271,7 @@ onBeforeUnmount(() => stopPlayback())
 .preview-status--error {
   gap: 12px;
   padding: 0 28px;
-  color: #fecaca;
+  color: var(--theme-danger-text, #fecaca);
 }
 
 .preview-status__icon {

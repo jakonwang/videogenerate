@@ -6,6 +6,7 @@ import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
 import ProductSelectDialog from '../components/ProductSelectDialog.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import { webApiClient } from '@/lib/webApiClient'
+import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import {
   AlertTriangle,
   Captions,
@@ -212,18 +213,6 @@ type LivePhotoPromptVersion = {
   updatedAt: number
 }
 
-type LivePhotoQualityMetrics = {
-  totalTasks: number
-  checkedTasks: number
-  passedTasks: number
-  passRate: number
-  averageScore: number
-  retryCount: number
-  fallbackCount: number
-  cacheHitCount: number
-  checkerVersion: string
-}
-
 type SubtitlePresetId = 'viral-hook' | 'deal-punch' | 'premium-drop'
 
 type SubtitleCaptionStyle = {
@@ -366,11 +355,16 @@ const replacementRegionInteraction = ref<{
 } | null>(null)
 const livePhotoSettingsBusy = ref(false)
 const promptVersions = ref<LivePhotoPromptVersion[]>([])
+const promptKind = ref<'image' | 'video'>('image')
 const selectedPromptVersionId = ref('')
 const promptEditorName = ref('')
 const promptEditorText = ref('')
+const promptDrafts = reactive<Record<'image' | 'video', { versionId: string; name: string; text: string }>>({
+  image: { versionId: '', name: '', text: '' },
+  video: { versionId: '', name: '', text: '' },
+})
+let promptVersionLoadSequence = 0
 const promptVersionBusy = ref(false)
-const qualityMetrics = ref<LivePhotoQualityMetrics | null>(null)
 const subtitleDialogOpen = ref(false)
 const subtitleDialogBusy = ref(false)
 const subtitleDialogMode = ref<'batch' | 'single'>('batch')
@@ -1200,19 +1194,40 @@ function selectPromptVersion(id: string) {
   const selected = promptVersions.value.find((item) => item.id === id)
   promptEditorName.value = selected?.name || ''
   promptEditorText.value = selected?.prompt || ''
+  savePromptDraft()
 }
 
-async function loadPromptManagement() {
-  const [versions, metrics] = await Promise.all([
-    window.api.livePhoto.listPromptVersions() as Promise<LivePhotoPromptVersion[]>,
-    window.api.livePhoto.getQualityMetrics() as Promise<LivePhotoQualityMetrics>,
-  ])
+function savePromptDraft() {
+  promptDrafts[promptKind.value] = {
+    versionId: selectedPromptVersionId.value,
+    name: promptEditorName.value,
+    text: promptEditorText.value,
+  }
+}
+
+watch([selectedPromptVersionId, promptEditorName, promptEditorText], savePromptDraft, { flush: 'sync' })
+
+async function loadPromptManagement(kind: 'image' | 'video' = promptKind.value) {
+  if (promptKind.value !== kind) return
+  const requestId = ++promptVersionLoadSequence
+  const versions = await window.api.livePhoto.listPromptVersions(kind) as LivePhotoPromptVersion[]
+  if (requestId !== promptVersionLoadSequence || promptKind.value !== kind) return
   promptVersions.value = Array.isArray(versions) ? versions : []
-  qualityMetrics.value = metrics || null
-  const selected = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+  const draft = { ...promptDrafts[kind] }
+  const selected = promptVersions.value.find((item) => item.id === draft.versionId)
     || promptVersions.value.find((item) => item.active)
     || promptVersions.value[0]
-  if (selected) selectPromptVersion(selected.id)
+  if (!selected) {
+    selectedPromptVersionId.value = ''
+    promptEditorName.value = ''
+    promptEditorText.value = ''
+    savePromptDraft()
+    return
+  }
+  selectedPromptVersionId.value = selected.id
+  promptEditorName.value = draft.versionId === selected.id ? draft.name : selected.name
+  promptEditorText.value = draft.versionId === selected.id ? draft.text : selected.prompt
+  savePromptDraft()
 }
 
 async function createPromptVersion() {
@@ -1222,6 +1237,7 @@ async function createPromptVersion() {
     const created = await window.api.livePhoto.createPromptVersion({
       name: String(promptEditorName.value || '').trim() || 'Live Photo Product Replacement',
       prompt: promptEditorText.value,
+      kind: promptKind.value,
     }) as LivePhotoPromptVersion
     await loadPromptManagement()
     selectPromptVersion(created.id)
@@ -1242,6 +1258,7 @@ async function updatePromptVersion() {
       id: selectedPromptVersionId.value,
       name: promptEditorName.value,
       prompt: promptEditorText.value,
+      kind: promptKind.value,
     }) as LivePhotoPromptVersion
     await loadPromptManagement()
     await refreshLibraryItems(true)
@@ -1259,7 +1276,7 @@ async function activatePromptVersion() {
   if (!selectedPromptVersionId.value) return
   promptVersionBusy.value = true
   try {
-    await window.api.livePhoto.activatePromptVersion({ id: selectedPromptVersionId.value })
+    await window.api.livePhoto.activatePromptVersion({ id: selectedPromptVersionId.value, kind: promptKind.value })
     await loadPromptManagement()
     await refreshLibraryItems(true)
     notice.value = t('autoUi.k_975c2f826062')
@@ -1274,7 +1291,7 @@ async function rollbackPromptVersion() {
   if (!selectedPromptVersionId.value) return
   promptVersionBusy.value = true
   try {
-    const next = await window.api.livePhoto.rollbackPromptVersion({ id: selectedPromptVersionId.value }) as LivePhotoPromptVersion
+    const next = await window.api.livePhoto.rollbackPromptVersion({ id: selectedPromptVersionId.value, kind: promptKind.value }) as LivePhotoPromptVersion
     await loadPromptManagement()
     await refreshLibraryItems(true)
     selectPromptVersion(next.id)
@@ -1284,6 +1301,17 @@ async function rollbackPromptVersion() {
   } finally {
     promptVersionBusy.value = false
   }
+}
+
+async function switchPromptKind(kind: 'image' | 'video') {
+  if (promptKind.value === kind) return
+  savePromptDraft()
+  const draft = { ...promptDrafts[kind] }
+  promptKind.value = kind
+  selectedPromptVersionId.value = draft.versionId
+  promptEditorName.value = draft.name
+  promptEditorText.value = draft.text
+  await loadPromptManagement(kind)
 }
 
 function openRuntimeLogs(item: LivePhotoItem) {
@@ -1469,6 +1497,17 @@ async function pickReferenceImage() {
   }
 }
 
+async function pickReferenceImageFromLibrary() {
+  const selected = await openAssetLibraryPicker({ type: 'image', multiple: true })
+  if (!selected?.length) return
+  const mergedPaths = dedupePaths([...referenceImagePaths.value, ...selected.map((item) => item.filePath)])
+  const { existingPaths, missingPaths } = await splitExistingReferencePaths(mergedPaths)
+  referenceImagePaths.value = mergedPaths
+  referenceMissingPaths.value = missingPaths
+  if (!existingPaths.length && mergedPaths.length) notice.value = ''
+  else if (missingPaths.length) notice.value = t('autoUi.k_74cad9baa9fd', { p0: missingPaths.length })
+}
+
 function openMaterialPicker() {
   materialPickerPage.value = 1
   materialPickerOpen.value = true
@@ -1519,6 +1558,16 @@ async function appendMaterialImagesAsReferences() {
   referenceMaterialIds.value = dedupePaths([...referenceMaterialIds.value, ...selectedMaterialOptions.value.map((item) => item.id)])
   selectedMaterialImageIds.value = []
   closeMaterialPicker()
+  await Promise.all(selectedIds.map((materialId) =>
+    window.api.productImageMaterials.updateUsageStatus({
+      userId: 'desktop-local',
+      materialId,
+      usageStatus: 'used',
+    }).catch(() => null),
+  ))
+  productImageMaterials.value = productImageMaterials.value.map((item) =>
+    selectedIds.includes(item.id) ? { ...item, usageStatus: 'used' } : item,
+  )
   if (!existingPaths.length && mergedPaths.length) {
     notice.value = ''
   } else if (missingPaths.length) {
@@ -2109,6 +2158,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                   </div>
                 </template>
               </button>
+              <button class="reference-source-card" type="button" @click="pickReferenceImageFromLibrary">
+                <div class="reference-source-card__icon"><ImagePlus class="h-7 w-7" /></div>
+                <div class="reference-source-card__copy"><strong>从素材库选择</strong><small>使用电脑或手机上传的图片</small></div>
+              </button>
 
               <button class="reference-source-card" data-testid="live-photo-open-material-picker" type="button" @click="openMaterialPicker">
                 <div class="reference-source-card__icon">
@@ -2232,20 +2285,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <p>{{ uiText.outputDesc }}</p>
         </div>
         <div class="quality-control-card">
-          <div class="quality-control-card__head">
-            <div>
-              <strong>{{ t('livePhoto.workspace.qualityGateTitle') }}</strong>
-              <small>{{ t('livePhoto.workspace.qualityGateDesc') }}</small>
-            </div>
-            <ShieldCheck class="h-5 w-5" />
-          </div>
-          <div class="quality-metric-grid" v-if="qualityMetrics">
-            <div><span>{{ t('livePhoto.workspace.passRate') }}</span><strong>{{ formatQualityScore(qualityMetrics.passRate) }}</strong></div>
-            <div><span>{{ t('livePhoto.workspace.averageScore') }}</span><strong>{{ formatQualityScore(qualityMetrics.averageScore) }}</strong></div>
-            <div><span>{{ t('livePhoto.workspace.retryCount') }}</span><strong>{{ qualityMetrics.retryCount }}</strong></div>
-            <div><span>{{ t('livePhoto.workspace.cacheHits') }}</span><strong>{{ qualityMetrics.cacheHitCount }}</strong></div>
-          </div>
           <div class="prompt-version-editor">
+            <div class="prompt-kind-tabs" role="tablist">
+              <button class="ghost-button small" :class="{ active: promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ t('promptKind.image') }}</button>
+              <button class="ghost-button small" :class="{ active: promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ t('promptKind.video') }}</button>
+            </div>
             <label class="field">
               <span>{{ t('livePhoto.workspace.promptVersion') }}</span>
               <select v-model="selectedPromptVersionId" @change="selectPromptVersion(selectedPromptVersionId)">
@@ -2399,7 +2443,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
             <div class="live-console-row__preview">
               <div class="live-console-row__thumb">
-                <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" />
+                  <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" loading="lazy" decoding="async" />
                 <div v-else class="live-console-row__thumb-empty">
                   <FileImage class="h-5 w-5" />
                 </div>
@@ -2589,7 +2633,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
           >
             <div class="live-console-row__thumb">
-              <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" />
+              <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" loading="lazy" decoding="async" />
               <div v-else class="live-console-row__thumb-empty">
                 <FileImage class="h-5 w-5" />
               </div>
@@ -2808,7 +2852,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               :checked="selectedMaterialImageIds.includes(material.id)"
               @change="toggleMaterialImageSelection(material.id)"
             />
-            <img :src="material.qiniuUrl" alt="material option" />
+            <img :src="material.qiniuUrl" alt="material option" loading="lazy" decoding="async" />
             <div class="reference-material-card__copy">
               <strong>{{ fileNameOf(material.localImagePath) }}</strong>
               <small>
@@ -2868,13 +2912,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <input v-model.number="livePhotoSettings.retryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
             <span>{{ t('livePhoto.workspace.retryAttemptUnit') }}</span>
           </div>
-        </label>
-        <label class="live-photo-retry-settings-field">
-          <div>
-            <span>{{ t('livePhoto.workspace.qualityChecker') }}</span>
-            <small>{{ t('livePhoto.workspace.qualityCheckerDesc') }}</small>
-          </div>
-          <input v-model="livePhotoSettings.qualityCheckerEnabled" type="checkbox" />
         </label>
         <div class="live-subtitle-dialog__actions live-photo-retry-settings-actions">
           <button class="ghost-button" type="button" :disabled="livePhotoSettingsBusy" @click="livePhotoRetrySettingsOpen = false">{{ t('common.cancel') }}</button>
@@ -3561,7 +3598,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .upload-copy strong { font-size: 15px; line-height: 1.35; }
 .upload-copy small { font-size: 12px; line-height: 1.6; color: rgba(197, 205, 225, 0.76); word-break: break-all; }
 .upload-preview { width: 100%; max-height: 132px; object-fit: contain; border-radius: 10px; }
-.reference-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.reference-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .reference-source-card { min-width: 0; min-height: 164px; display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 12px; background: rgba(18, 23, 38, 0.82); color: #eef5ff; text-align: left; cursor: pointer; }
 .reference-source-card__icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: rgba(85, 68, 167, 0.48); color: #d9d4ff; }
 .reference-source-card__preview { width: 64px; height: 96px; object-fit: cover; border-radius: 8px; }
@@ -3853,6 +3890,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .quality-metric-grid span { color: #8ebbb0; font-size: 10px; }
 .quality-metric-grid strong { color: #effff8; font-size: 15px; }
 .prompt-version-editor { display: grid; gap: 9px; }
+.prompt-kind-tabs { display: inline-flex; width: fit-content; gap: 4px; padding: 4px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-surface-muted); }
+.prompt-kind-tabs .ghost-button { min-width: 72px; border: 1px solid transparent; background: transparent; color: var(--theme-text-secondary); }
+.prompt-kind-tabs .ghost-button { position: relative; }
+.prompt-kind-tabs .ghost-button.active,
+.prompt-kind-tabs .ghost-button[aria-selected='true'] { position: relative; border-color: var(--theme-accent) !important; background: var(--theme-accent-soft) !important; color: var(--theme-accent) !important; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 18%, transparent) !important; }
+.prompt-kind-tabs .ghost-button.active::after,
+.prompt-kind-tabs .ghost-button[aria-selected='true']::after { position: absolute; right: 10px; bottom: 2px; left: 10px; height: 2px; border-radius: 2px; background: var(--theme-accent); content: ''; }
+.prompt-kind-tabs .ghost-button:not(.active):hover { background: var(--theme-control); color: var(--theme-text); }
 .prompt-version-editor__prompt textarea { min-height: 138px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.5; }
 .prompt-version-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .clone-layout { display: grid; gap: 10px; align-content: start; }

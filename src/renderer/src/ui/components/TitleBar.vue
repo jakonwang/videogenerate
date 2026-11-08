@@ -114,9 +114,9 @@ async function close() {
   grid-template-columns: 208px minmax(0, 1fr) 132px;
   align-items: stretch;
   min-height: 62px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  background: linear-gradient(180deg, #070c16 0%, #080e19 100%);
-  color: #f8fafc;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-panel);
+  color: var(--theme-text);
 }
 
 .app-titlebar__brand {
@@ -163,6 +163,13 @@ async function close() {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+:global(html[data-app-theme='light-teal']) .app-titlebar__brand-line span:last-child,
+:global(html[data-app-theme='light-teal']) .app-titlebar__brand-copy small,
+:global(html[data-app-theme='mono']) .app-titlebar__brand-line span:last-child,
+:global(html[data-app-theme='mono']) .app-titlebar__brand-copy small {
+  color: var(--theme-text-muted);
 }
 
 .app-titlebar__actions {
@@ -234,6 +241,32 @@ async function close() {
 .app-titlebar__window-controls .app-titlebar__close:hover { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
 .app-titlebar__window-controls svg { width: 15px; height: 15px; }
 .is-spinning { animation: titlebar-spin 700ms linear infinite; }
+
+:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__action,
+:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__status {
+  border-color: var(--theme-border);
+  background: var(--theme-control);
+  color: var(--theme-text-secondary);
+}
+
+:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__action:hover {
+  border-color: var(--theme-accent);
+  background: var(--theme-control-hover);
+  color: var(--theme-text);
+}
+
+:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__action-copy small {
+  color: var(--theme-text-muted);
+}
+
+:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__window-controls button {
+  color: var(--theme-text-muted);
+}
+
+:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__window-controls button:hover {
+  background: var(--theme-control-hover);
+  color: var(--theme-text);
+}
 
 @keyframes titlebar-spin { to { transform: rotate(360deg); } }
 

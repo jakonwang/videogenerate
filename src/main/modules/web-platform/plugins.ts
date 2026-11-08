@@ -7,6 +7,28 @@ import type {
 
 export const pluginDefinitions: PluginDefinition[] = [
   {
+    id: "product-replacement",
+    name: "Product Replacement",
+    category: "video_processing",
+    description: "Batch-replace products in scene images using saved product references and versioned prompts.",
+    version: "0.1.0",
+    entryType: "tool",
+    workspacePath: "/plugins/product-replacement",
+    usageHint: "Choose a saved or custom product, add scene images, confirm the prompt version, and review generated results.",
+    configSchema: [],
+  },
+  {
+    id: "product-watermark",
+    name: "Product Brand Watermark",
+    category: "video_processing",
+    description: "Crop product images to squares and apply reusable transparent brand watermarks.",
+    version: "0.1.0",
+    entryType: "tool",
+    workspacePath: "/plugins/product-watermark",
+    usageHint: "Save a square transparent PNG or WebP template, batch process product images, and export JPEG files.",
+    configSchema: [],
+  },
+  {
     id: "tiktok-gmv-max-optimizer",
     name: "TikTok GMV MAX Optimizer",
     category: "advertising_optimization",
@@ -24,12 +46,12 @@ export const pluginDefinitions: PluginDefinition[] = [
     name: "Product Image Materials",
     category: "video_processing",
     description:
-      "Batch split uploaded videos into commercial material frames, upload them to Qiniu, and feed Hermes product-to-image selection flows.",
+      "Batch split uploaded videos into commercial material frames and upload them to Qiniu for reuse.",
     version: "0.1.0",
     entryType: "tool",
     workspacePath: "/plugins/product-image-materials",
     usageHint:
-      "Choose a fixed jewelry category, upload source videos, and maintain a reusable image-material library for Hermes Live Photo selection.",
+      "Choose a fixed jewelry category, upload source videos, and maintain a reusable image-material library.",
     configSchema: [
       {
         key: "segmentTimeSec",
@@ -37,14 +59,6 @@ export const pluginDefinitions: PluginDefinition[] = [
         type: "number",
         placeholder: "3",
         description: "Default segment duration for frame extraction.",
-      },
-      {
-        key: "hermesCandidateLimit",
-        label: "Hermes Candidate Limit",
-        type: "number",
-        placeholder: "8",
-        description:
-          "Maximum number of candidate images returned to Hermes per product selection.",
       },
     ],
   },
@@ -102,6 +116,17 @@ export const pluginDefinitions: PluginDefinition[] = [
         description: "Maximum automatic reference image retries. Minimum 0.",
       },
     ],
+  },
+  {
+    id: "tiktok-creator-outreach",
+    name: "TikTok Creator Outreach",
+    category: "ecommerce_listing",
+    description: "Use an isolated TikTok Affiliate session to review creators and prepare confirmed invite or message batches.",
+    version: "0.1.0",
+    entryType: "tool",
+    workspacePath: "/plugins/tiktok-creator-outreach",
+    usageHint: "Sign in inside the app, review creator rows, preview a batch, and confirm each external action.",
+    configSchema: [],
   },
   {
     id: "tiktok-listing-helper",

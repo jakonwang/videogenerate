@@ -16245,122 +16245,184 @@ h2 {
   backdrop-filter: none !important;
 }
 
-/* App appearance themes and compact typography. */
-:root,
-html[data-app-theme='dark-teal'] {
-  color-scheme: dark;
-  --theme-root: #070910;
-  --theme-shell: #090e18;
-  --theme-sidebar: #080c15;
-  --theme-panel: #11131e;
-  --theme-panel-soft: #151827;
-  --theme-input: #0d101b;
-  --theme-border: #1d2633;
-  --theme-border-control: #344154;
-  --theme-divider: #202a38;
-  --theme-text: #eef2f7;
-  --theme-text-secondary: #c6cfdb;
-  --theme-text-muted: #8c99ac;
-  --theme-accent: #14b8a6;
-  --theme-accent-soft: #123f3b;
-  --theme-control: #171c2a;
-  --theme-control-hover: #20283a;
-  --theme-control-selected: #123f3b;
-  --theme-control-selected-text: #5eead4;
-  --theme-danger: #ef4444;
-  --theme-danger-soft: #4a1f2a;
-  --theme-danger-text: #fecaca;
-  --theme-success-soft: #123b2a;
-  --theme-success-text: #86efac;
-  --theme-warning-soft: #493316;
-  --theme-warning-text: #fde68a;
+/* Theme tokens live in design-system/themes.css. */
+
+/* Monochrome workspace: keep the visual language intentionally quiet. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) #app,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ui-app,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .app-shell,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-shell,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-shell__main,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-workspace {
+  background: #ffffff !important;
+  color: #111111 !important;
 }
 
-html[data-app-theme='soft-mint'] {
-  color-scheme: light;
-  --theme-root: #eaf4f1;
-  --theme-shell: #f3faf8;
-  --theme-sidebar: #f8fcfb;
-  --theme-panel: #ffffff;
-  --theme-panel-soft: #edf7f4;
-  --theme-input: #f7fbfa;
-  --theme-border: #dceae6;
-  --theme-border-control: #b7d2ca;
-  --theme-divider: #d4e4df;
-  --theme-text: #18312b;
-  --theme-text-secondary: #365c52;
-  --theme-text-muted: #6d8b83;
-  --theme-accent: #2f9477;
-  --theme-accent-soft: #c7e7de;
-  --theme-control: #e4f2ee;
-  --theme-control-hover: #d7ebe5;
-  --theme-control-selected: #c7e7de;
-  --theme-control-selected-text: #1f6f59;
-  --theme-danger: #dc2626;
-  --theme-danger-soft: #fee2e2;
-  --theme-danger-text: #991b1b;
-  --theme-success-soft: #dcfce7;
-  --theme-success-text: #166534;
-  --theme-warning-soft: #fef3c7;
-  --theme-warning-text: #92400e;
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-sidebar,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-topbar,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .app-shell__body,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ui-nav,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ui-topbar {
+  border-color: #e2e2e2 !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  box-shadow: none !important;
 }
 
-html[data-app-theme='warm-paper'] {
-  color-scheme: light;
-  --theme-root: #efe5d1;
-  --theme-shell: #f6efdf;
-  --theme-sidebar: #fbf7ed;
-  --theme-panel: #fffaf0;
-  --theme-panel-soft: #f3e7d1;
-  --theme-input: #fffdf7;
-  --theme-border: #eadfcf;
-  --theme-border-control: #d8c3a4;
-  --theme-divider: #e4d6c2;
-  --theme-text: #3a2918;
-  --theme-text-secondary: #624a31;
-  --theme-text-muted: #8c745a;
-  --theme-accent: #ad5b00;
-  --theme-accent-soft: #efd3ad;
-  --theme-control: #f0e2ca;
-  --theme-control-hover: #e8d4b3;
-  --theme-control-selected: #efd3ad;
-  --theme-control-selected-text: #8a4700;
-  --theme-danger: #c2410c;
-  --theme-danger-soft: #ffedd5;
-  --theme-danger-text: #9a3412;
-  --theme-success-soft: #dcfce7;
-  --theme-success-text: #166534;
-  --theme-warning-soft: #fef3c7;
-  --theme-warning-text: #92400e;
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(
+  .ui-card,
+  .ui-panel,
+  .ds-card,
+  .panel,
+  .card,
+  .workspace-card,
+  .settings-card,
+  .live-subtitle-dialog__panel
+) {
+  border-color: #dedede !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06) !important;
 }
 
-html[data-app-theme='clear-sky'] {
-  color-scheme: light;
-  --theme-root: #eff0fb;
-  --theme-shell: #f7f7ff;
-  --theme-sidebar: #fbfbff;
-  --theme-panel: #ffffff;
-  --theme-panel-soft: #f0f2ff;
-  --theme-input: #fafaff;
-  --theme-border: #e1e6f3;
-  --theme-border-control: #c9d3ea;
-  --theme-divider: #d9e0ef;
-  --theme-text: #1d2840;
-  --theme-text-secondary: #445678;
-  --theme-text-muted: #7683a0;
-  --theme-accent: #3b82f6;
-  --theme-accent-soft: #dbe8ff;
-  --theme-control: #e8ecfa;
-  --theme-control-hover: #dce4f8;
-  --theme-control-selected: #dbe8ff;
-  --theme-control-selected-text: #1d4ed8;
-  --theme-danger: #dc2626;
-  --theme-danger-soft: #fee2e2;
-  --theme-danger-text: #991b1b;
-  --theme-success-soft: #dcfce7;
-  --theme-success-text: #166534;
-  --theme-warning-soft: #fef3c7;
-  --theme-warning-text: #92400e;
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(
+  input,
+  select,
+  textarea,
+  .ui-input,
+  .ui-select
+) {
+  border-color: #cfcfcf !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(
+  button.primary-button,
+  button.primary,
+  .button--primary,
+  .primary-button,
+  .create-button
+) {
+  border-color: #111111 !important;
+  background: #111111 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(
+  button.ghost-button,
+  button.secondary,
+  .button--secondary,
+  .ghost-button,
+  .toolbar-button
+) {
+  border-color: #cfcfcf !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(h1, h2, h3, h4, strong, label, p, span, small, button) {
+  border-color: inherit;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .live-subtitle-dialog {
+  background: rgba(255, 255, 255, 0.86) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .live-subtitle-dialog__close {
+  border-color: #cfcfcf !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+}
+
+/* Premium neutral chrome: distinct canvas, navigation, surfaces and controls. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.app-shell, .ds-shell, .ui-app) {
+  background: var(--theme-root) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-shell__main, .ds-workspace, .app-shell__body) {
+  background: var(--theme-shell) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-sidebar, .ui-nav) {
+  border-right: 1px solid var(--theme-border) !important;
+  background: var(--theme-sidebar) !important;
+  box-shadow: 8px 0 24px rgba(24, 34, 28, 0.035) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-topbar, .ui-topbar, .app-titlebar) {
+  border-bottom: 1px solid var(--theme-border) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 1px 12px rgba(23, 23, 23, 0.035) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .ds-sidebar__item {
+  min-height: 42px !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: var(--theme-text-secondary) !important;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .ds-sidebar__item:hover {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .ds-sidebar__item.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 2px 0 0 var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-sidebar__item, .ds-button, button, .toolbar-button, .ui-button) {
+  font-weight: 600;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-button, .ui-button, .toolbar-button, button.secondary, button.ghost-button) {
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 9px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: 0 1px 0 rgba(24, 34, 28, 0.04) !important;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-button, .ui-button, .toolbar-button, button.secondary, button.ghost-button):hover:not(:disabled) {
+  border-color: var(--theme-text-secondary) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 3px 10px rgba(24, 34, 28, 0.08) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-button--primary, .ui-button--primary, button.primary-button, button.primary, .button--primary, .create-button) {
+  border-color: var(--theme-accent) !important;
+  border-radius: 9px !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  box-shadow: 0 5px 12px rgba(20, 23, 22, 0.16) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-button--primary, .ui-button--primary, button.primary-button, button.primary, .button--primary, .create-button):hover:not(:disabled) {
+  background: var(--color-primary-hover) !important;
+  box-shadow: 0 7px 16px rgba(20, 23, 22, 0.2) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.panel-card, .workspace-card, .section-card, .library-card, .live-console-card, .card) {
+  border-color: var(--theme-border) !important;
+  border-radius: 12px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: 0 5px 18px rgba(24, 34, 28, 0.045) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(input, textarea, select, .ui-input, .ui-select):focus {
+  border-color: var(--theme-text-secondary) !important;
+  box-shadow: 0 0 0 3px var(--theme-accent-soft) !important;
+  outline: none !important;
 }
 
 html {
@@ -20915,7 +20977,7 @@ html[data-app-theme] body #app .app-shell .vpd-album-card__error {
 
 /* Final Live Photo reference source and material dialog theme rules. */
 html[data-app-theme] body #app .app-shell .live-photo-page .reference-source-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap: 10px !important;
 }
 
@@ -21805,3 +21867,3998 @@ html[data-app-theme] body #app .app-shell .tiktok-page .status-processing {
   background: var(--theme-warning-soft) !important;
   color: var(--theme-warning-text) !important;
 }
+
+/* Keep the creator outreach workspace synchronized with the active application theme. */
+html[data-app-theme] body #app .app-shell .outreach-page {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .panel,
+  .metric-card,
+  .library-metric,
+  .settings-card,
+  .creator-panel,
+  .composer,
+  .campaign-mode,
+  .campaign-products,
+  .queue-panel,
+  .activity-panel,
+  .preview-card,
+  .account-card,
+  .task-card,
+  .shop-card
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--theme-root) 24%, transparent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-header,
+  .workspace-tabs,
+  .creator-table-wrap,
+  .queue-summary,
+  .filter-panel,
+  .product-picker,
+  .activity-list,
+  .empty-state,
+  .library-empty,
+  .task-empty,
+  .account-empty
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  input,
+  select,
+  textarea,
+  .toolbar-search,
+  .field-label input,
+  .field-label select,
+  .field-label textarea
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  input::placeholder,
+  textarea::placeholder
+) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  input:focus,
+  select:focus,
+  textarea:focus
+) {
+  border-color: var(--theme-accent) !important;
+  outline-color: var(--theme-accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent) 16%, transparent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .tab,
+  .text-button,
+  .button--secondary,
+  .icon-button,
+  .filter-button,
+  .product-option,
+  .quick-action,
+  .source-card
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .tab:hover,
+  .text-button:hover,
+  .button--secondary:hover,
+  .icon-button:hover,
+  .filter-button:hover,
+  .product-option:hover,
+  .quick-action:hover,
+  .source-card:hover
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.tab.active, .tab[aria-selected='true'], .source-card.active, .product-option.selected) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .button--primary,
+html[data-app-theme] body #app .app-shell .outreach-page .primary-button {
+  border-color: color-mix(in srgb, var(--theme-accent) 70%, transparent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-accent) 22%, transparent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  h1, h2, h3, strong, .panel-heading, .section-title, .library-heading h2,
+  .page-header h1, .brand-block h1, .metric-card strong, .library-metric strong
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  p, small, label, .page-header p, .library-heading p, .settings-header-copy,
+  .muted-copy, .field-hint, .composer-hint, .metric-card span, .library-metric span,
+  .library-metric small, .creator-row small, .task-meta
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.eyebrow, .section-kicker) {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.state-pill, .status-pill, .badge) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.state-pill.completed, .state-pill.connected, .status-completed, .banner-success) {
+  border-color: var(--theme-success-text) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.state-pill.failed, .state-pill.cancelled, .state-pill.paused, .status-failed, .banner-error) {
+  border-color: var(--theme-danger) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+/* Cover the remaining nested controls and states declared by the scoped view styles. */
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .stats-grid > div,
+  .creator-row,
+  .audit-row,
+  .account-item,
+  .connection-card,
+  .list-toolbar,
+  .queue-card,
+  .task-row,
+  .filters-panel,
+  .audit-panel,
+  .modal
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .account-item:hover,
+  .quick-actions .quick-action:hover,
+  .task-row:hover,
+  .creator-row:hover
+) {
+  background: var(--theme-control-hover) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .account-item.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .account-item,
+  .account-copy strong,
+  .connection-title,
+  .empty-account strong,
+  .empty-creators strong,
+  .creator-table-wrap td strong,
+  .panel-heading h2,
+  .modal-header h2,
+  .stats-grid strong
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .account-copy small,
+  .empty-account,
+  .empty-creators,
+  .audit-empty,
+  .audit-row,
+  .audit-detail,
+  .audit-row time,
+  .creator-table-wrap th,
+  .creator-table-wrap td,
+  .list-toolbar,
+  .check-label,
+  .field-label,
+  .modal-copy,
+  .field-label small,
+  .switch-row small,
+  .muted-icon
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .empty-illustration,
+  .account-avatar,
+  .switch-row,
+  .preview-card,
+  .preview-card p,
+  .preview-meta,
+  .preview-meta strong,
+  .campaign-mode,
+  .campaign-products
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .switch-row span {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .button--danger,
+  .danger-text,
+  .status-dot.signed-out
+) {
+  border-color: var(--theme-danger) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .button--danger {
+  background: var(--theme-danger-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.banner--success, .banner--error) {
+  border-color: currentColor !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .banner--success {
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .banner--error {
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .modal-backdrop {
+  background: color-mix(in srgb, var(--theme-root) 72%, transparent) !important;
+}
+
+/* Last-mile theme overrides must stay after component-scoped legacy rules. */
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workbench-toolbar,
+  .workbench-main > *,
+  .outreach-workbench .campaign-mode,
+  .outreach-workbench .composer,
+  .outreach-workbench .workbench-side,
+  .queue-summary,
+  .queue-metrics,
+  .url-preview,
+  .specified-input,
+  .creator-table-wrap,
+  .preview-card,
+  .modal-copy,
+  .settings-actions
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-summary,
+  .queue-metrics,
+  .url-preview,
+  .specified-input,
+  .creator-table-wrap,
+  .preview-card,
+  .empty-illustration
+) {
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button,
+  .mode-button,
+  .product-option,
+  .account-item,
+  .source-card,
+  .campaign-mode
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button:hover,
+  .mode-button:hover,
+  .product-option:hover,
+  .account-item:hover,
+  .source-card:hover,
+  .campaign-mode:hover
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-summary span,
+  .queue-current,
+  .queue-metrics div,
+  .url-preview span,
+  .url-preview code,
+  .composer-hint,
+  .switch-row,
+  .preview-meta,
+  .account-copy,
+  .empty-account,
+  .empty-creators,
+  .settings-header-copy,
+  .modal-copy,
+  .product-option small,
+  .product-option strong,
+  .creator-table-wrap th,
+  .creator-table-wrap td
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-summary strong,
+  .queue-metrics strong,
+  .url-preview code,
+  .product-option strong,
+  .account-copy strong,
+  .empty-account strong,
+  .empty-creators strong,
+  .creator-table-wrap td strong
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .page-header,
+  .workspace-header,
+  .workbench-header,
+  .workspace-toolbar,
+  .workbench-toolbar
+) {
+  padding-top: 10px !important;
+  padding-bottom: 12px !important;
+  margin-bottom: 22px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .page-header h1,
+  .workspace-header h1,
+  .workbench-header h1,
+  .workspace-toolbar h1,
+  .workbench-toolbar h1,
+  .panel-heading h2,
+  .library-heading h2,
+  .settings-card-title strong,
+  .modal-header h2
+) {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  color: var(--theme-text) !important;
+  line-height: 1.3 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-tabs .tab.active,
+  .page-tabs button.active,
+  .tab-list button.active,
+  .mode-button.active,
+  .source-card.active,
+  .account-item.active
+) {
+  background: var(--theme-accent) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text, #ffffff) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-tabs .tab.active *,
+  .page-tabs button.active *,
+  .tab-list button.active *,
+  .mode-button.active *,
+  .source-card.active *,
+  .account-item.active *
+) {
+  color: var(--theme-control-selected-text, #ffffff) !important;
+}
+
+/* Normalize remaining outreach workbench surfaces that carry legacy dark values. */
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workbench-toolbar,
+  .workbench-main > *,
+  .outreach-workbench .campaign-mode,
+  .outreach-workbench .composer,
+  .outreach-workbench .workbench-side,
+  .queue-summary,
+  .queue-metrics,
+  .url-preview,
+  .specified-input,
+  .creator-table-wrap,
+  .preview-card,
+  .modal-copy
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-summary,
+  .queue-metrics,
+  .url-preview,
+  .specified-input,
+  .creator-table-wrap,
+  .preview-card
+) {
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button,
+  .mode-button,
+  .product-option,
+  .account-item,
+  .source-card,
+  .campaign-mode
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button:hover,
+  .mode-button:hover,
+  .product-option:hover,
+  .account-item:hover,
+  .source-card:hover,
+  .campaign-mode:hover
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-summary strong,
+  .queue-summary span,
+  .queue-current,
+  .queue-metrics div,
+  .url-preview span,
+  .url-preview code,
+  .composer-hint,
+  .switch-row,
+  .preview-meta,
+  .account-copy,
+  .empty-account,
+  .empty-creators,
+  .settings-header-copy,
+  .modal-copy,
+  .product-option small,
+  .product-option strong,
+  .creator-table-wrap th,
+  .creator-table-wrap td
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-summary strong,
+  .queue-metrics strong,
+  .url-preview code,
+  .product-option strong,
+  .account-copy strong,
+  .empty-account strong,
+  .empty-creators strong,
+  .creator-table-wrap td strong
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .settings-actions,
+  .product-picker,
+  .product-picker + .queue-card,
+  .empty-illustration,
+  .hero-node
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .state-pill,
+  .status-pill,
+  .badge
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .state-pill.success,
+  .status-pill.success,
+  .badge.success,
+  .state-pill--success
+) {
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .state-pill.error,
+  .status-pill.error,
+  .badge.error,
+  .state-pill--error
+) {
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-toolbar,
+  .workbench-toolbar,
+  .workbench-header,
+  .page-header,
+  .workspace-header
+) {
+  padding-top: 10px !important;
+  padding-bottom: 12px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-toolbar h1,
+  .workbench-toolbar h1,
+  .workbench-header h1,
+  .page-header h1,
+  .workspace-header h1,
+  .panel-heading h2,
+  .library-heading h2,
+  .settings-card-title strong,
+  .modal-header h2
+) {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  color: var(--theme-text) !important;
+  line-height: 1.3 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-tabs .tab.active,
+  .page-tabs button.active,
+  .tab-list button.active,
+  .mode-button.active,
+  .source-card.active,
+  .account-item.active
+) {
+  background: var(--theme-accent) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text, #ffffff) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workspace-tabs .tab.active *,
+  .page-tabs button.active *,
+  .tab-list button.active *,
+  .mode-button.active *,
+  .source-card.active *,
+  .account-item.active *
+) {
+  color: var(--theme-control-selected-text, #ffffff) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.metric-card, .library-metric)::after {
+  border-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .button--primary,
+  .primary-button,
+  .state-pill.invited
+) {
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .tab.active {
+  color: var(--theme-accent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .state-pill.invited {
+  border-color: var(--theme-success-text) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+}
+
+/* Normalize the campaign builder and queue internals that have legacy fixed colors. */
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .outreach-workbench,
+  .workbench-toolbar,
+  .workbench-main,
+  .campaign-layout,
+  .campaign-mode,
+  .composer,
+  .workbench-side,
+  .batch-builder,
+  .batch-builder-panel,
+  .queue-card,
+  .queue-summary,
+  .queue-current,
+  .stats-panel,
+  .stats-grid > div,
+  .task-strip,
+  .task-row,
+  .filters-panel,
+  .source-card,
+  .settings-card,
+  .settings-actions
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-metrics > div,
+  .queue-metrics div,
+  .queue-card-item,
+  .queue-card__stats,
+  .stats-grid > div,
+  .task-row,
+  .source-card,
+  .filters-panel,
+  .settings-card
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-metrics strong,
+  .queue-summary strong,
+  .queue-current strong,
+  .stats-grid strong,
+  .task-row strong,
+  .toolbar-title strong,
+  .mode-button strong,
+  .source-card strong,
+  .settings-card-title strong
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .queue-metrics span,
+  .queue-summary span,
+  .queue-current span,
+  .queue-current small,
+  .stats-grid span,
+  .task-row small,
+  .toolbar-field,
+  .toolbar-field > span,
+  .mode-button,
+  .mode-button small,
+  .source-card small,
+  .settings-card-title small,
+  .stats-panel .muted-copy
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .workbench-toolbar,
+  .toolbar-field select,
+  .toolbar-field input,
+  .filter-grid .field-label input,
+  .filter-grid .field-label select,
+  .specified-input,
+  .product-picker,
+  .product-option,
+  .mode-button,
+  .source-card
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .mode-button:hover,
+  .mode-button.active,
+  .source-card:hover,
+  .source-card.active,
+  .queue-card-item:hover,
+  .task-row:hover,
+  .product-option:hover,
+  .product-option:has(input:checked)
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .settings-card--mint,
+  .settings-card--violet,
+  .settings-card--blue,
+  .settings-card--amber,
+  .library-metric--violet,
+  .library-metric--mint,
+  .library-metric--amber,
+  .library-metric--blue
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .settings-card--mint,
+  .library-metric--mint
+) { color: var(--theme-success-text) !important; }
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .settings-card--violet,
+  .library-metric--violet
+) { color: var(--theme-accent) !important; }
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .settings-card--blue,
+  .library-metric--blue
+) { color: var(--theme-accent) !important; }
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .settings-card--amber,
+  .library-metric--amber
+) { color: var(--theme-warning-text) !important; }
+
+html[data-app-theme] body #app .app-shell .outreach-page .settings-icon,
+html[data-app-theme] body #app .app-shell .outreach-page .library-metric > svg {
+  background: var(--theme-accent-soft) !important;
+  color: currentColor !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button,
+  .product-picker-state,
+  .creator-table-wrap,
+  .creator-table-wrap th,
+  .library-heading h2 em,
+  .settings-header-icon,
+  .empty-illustration,
+  .toolbar-search,
+  .toolbar-search input
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button:hover,
+  .toolbar-search:focus-within,
+  .creator-table-wrap tr:hover
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(
+  .quick-grid button strong,
+  .quick-grid button small,
+  .product-picker-state,
+  .creator-table-wrap th,
+  .creator-table-wrap td,
+  .library-heading h2 em,
+  .toolbar-search,
+  .toolbar-search input
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .quick-grid button strong,
+html[data-app-theme] body #app .app-shell .outreach-page .library-heading h2 {
+  color: var(--theme-text) !important;
+}
+
+/* Keep the statistics heading clear of the panel edge and metric grid. */
+html[data-app-theme] body #app .app-shell .outreach-page .stats-panel {
+  padding: 22px 24px 24px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .stats-panel > .panel-heading {
+  padding: 2px 2px 0 !important;
+  margin-bottom: 18px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .stats-panel > .panel-heading h2 {
+  margin: 9px 0 0 !important;
+  line-height: 1.25 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .stats-panel > .stats-grid {
+  margin-top: 0 !important;
+}
+
+/* Keep the current shop identity chip aligned with the active application theme. */
+html[data-app-theme] body #app .app-shell .outreach-page .workspace-header .shop-chip {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .workspace-header .shop-chip small {
+  color: var(--theme-text-secondary) !important;
+}
+
+/* Final outreach workbench spacing and theme normalization. */
+html[data-app-theme] body #app .app-shell .outreach-page {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .page-header,
+html[data-app-theme] body #app .app-shell .outreach-page .workspace-header {
+  padding: 4px 2px 0 !important;
+  margin-bottom: 22px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.page-header h1, .workspace-header h1) {
+  margin: 8px 0 7px !important;
+  color: var(--theme-text) !important;
+  line-height: 1.25 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.page-header p, .workspace-header p) {
+  margin: 0 !important;
+  color: var(--theme-text-secondary) !important;
+  line-height: 1.5 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.panel, .api-config, .library-panel, .filters-panel, .audit-panel, .sidebar, .composer, .creator-panel, .page-tabs, .quick-actions, .settings-card, .connection-card, .preview-card, .product-picker, .queue-card, .stats-panel, .modal, .source-card, .filters-panel) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.panel-heading, .library-heading, .toolbar-title, .settings-header-line, .modal-header) {
+  padding-top: 2px !important;
+  margin-bottom: 16px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.panel-heading h2, .library-heading h2, .quick-actions h2, .toolbar-title strong, .settings-card-title strong, .modal-header h2) {
+  margin: 4px 0 7px !important;
+  color: var(--theme-text) !important;
+  line-height: 1.3 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.panel-heading p, .library-heading p, .quick-actions p, .toolbar-title small, .settings-card-title small, .modal-header p, .panel-heading .muted-copy) {
+  margin: 0 !important;
+  color: var(--theme-text-secondary) !important;
+  line-height: 1.45 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.metrics-grid, .library-metrics, .stats-grid, .quick-grid, .filter-grid, .api-grid) {
+  margin-top: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.metric-card, .library-metric, .stats-grid > div) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.metric-card span, .library-metric span, .metric-card small, .library-metric small, .stats-grid span, .muted-copy, .audit-empty, .audit-detail, .audit-row time, .creator-row small, .library-empty > p) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.metric-card strong, .library-metric strong, .stats-grid strong, .library-empty > strong, .creator-row strong, .audit-action) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(input, select, textarea, .toolbar-search, .specified-input, .product-option, .product-picker-state, .account-item, .icon-button, .button--secondary) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(input, select, textarea)::placeholder {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.account-item:hover, .icon-button:hover, .button--secondary:hover, .quick-grid button:hover, .product-option:hover, .creator-table-wrap tr:hover) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.account-item.active, .tab.active, .mode-button.active, .source-card.active) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.button--primary, .primary-button) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.button--primary:hover:not(:disabled), .primary-button:hover:not(:disabled)) {
+  background: var(--theme-accent-hover, var(--theme-accent)) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workspace-tabs, .page-tabs, .tab-list) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workspace-tabs .tab, .page-tabs button, .tab-list button) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workspace-tabs .tab:hover, .page-tabs button:hover, .tab-list button:hover) {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workspace-tabs .tab.active, .page-tabs button.active, .tab-list button.active) {
+  background: var(--theme-accent) !important;
+  color: #ffffff !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.field-label, .field-label label, .toolbar-field, .filter-check, .settings-card label) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page .modal-backdrop {
+  background: color-mix(in srgb, var(--theme-root) 72%, transparent) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workbench-toolbar, .workbench-main > *, .outreach-workbench .campaign-mode, .outreach-workbench .composer, .outreach-workbench .workbench-side, .queue-summary, .queue-metrics, .url-preview, .specified-input, .creator-table-wrap, .preview-card, .modal-copy, .settings-actions) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.queue-summary, .queue-metrics, .url-preview, .specified-input, .creator-table-wrap, .preview-card, .empty-illustration) {
+  background: var(--theme-panel-soft) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.quick-grid button, .mode-button, .product-option, .account-item, .source-card, .campaign-mode) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.quick-grid button:hover, .mode-button:hover, .product-option:hover, .account-item:hover, .source-card:hover, .campaign-mode:hover) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.queue-summary span, .queue-current, .queue-metrics div, .url-preview span, .url-preview code, .composer-hint, .switch-row, .preview-meta, .account-copy, .empty-account, .empty-creators, .settings-header-copy, .modal-copy, .product-option small, .product-option strong, .creator-table-wrap th, .creator-table-wrap td) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.queue-summary strong, .queue-metrics strong, .url-preview code, .product-option strong, .account-copy strong, .empty-account strong, .empty-creators strong, .creator-table-wrap td strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.page-header, .workspace-header, .workbench-header, .workspace-toolbar, .workbench-toolbar) {
+  padding-top: 10px !important;
+  padding-bottom: 12px !important;
+  margin-bottom: 22px !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.page-header h1, .workspace-header h1, .workbench-header h1, .workspace-toolbar h1, .workbench-toolbar h1, .panel-heading h2, .library-heading h2, .settings-card-title strong, .modal-header h2) {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  color: var(--theme-text) !important;
+  line-height: 1.3 !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workspace-tabs .tab.active, .page-tabs button.active, .tab-list button.active, .mode-button.active, .source-card.active, .account-item.active) {
+  background: var(--theme-accent) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text, #ffffff) !important;
+}
+
+html[data-app-theme] body #app .app-shell .outreach-page :is(.workspace-tabs .tab.active *, .page-tabs button.active *, .tab-list button.active *, .mode-button.active *, .source-card.active *, .account-item.active *) {
+  color: var(--theme-control-selected-text, #ffffff) !important;
+}
+
+/* Keep the creators workspace visible after switching tabs in every theme. */
+html[data-app-theme] body #app .outreach-page .tab-layout {
+  display: grid !important;
+  min-height: 520px !important;
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout > .sidebar,
+html[data-app-theme] body #app .outreach-page .tab-layout > .content-column,
+html[data-app-theme] body #app .outreach-page .tab-layout > .composer,
+html[data-app-theme] body #app .outreach-page .filters-panel,
+html[data-app-theme] body #app .outreach-page .creator-panel {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .content-column {
+  min-width: 0 !important;
+  background: transparent !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .filter-grid,
+html[data-app-theme] body #app .outreach-page .tab-layout .list-toolbar,
+html[data-app-theme] body #app .outreach-page .tab-layout .account-list,
+html[data-app-theme] body #app .outreach-page .tab-layout .connection-card {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .field-label,
+html[data-app-theme] body #app .outreach-page .tab-layout .check-label,
+html[data-app-theme] body #app .outreach-page .tab-layout .list-toolbar,
+html[data-app-theme] body #app .outreach-page .tab-layout .account-copy small,
+html[data-app-theme] body #app .outreach-page .tab-layout .empty-creators span,
+html[data-app-theme] body #app .outreach-page .tab-layout .empty-account span {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .empty-creators,
+html[data-app-theme] body #app .outreach-page .tab-layout .empty-account {
+  min-height: 210px !important;
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .creator-table-wrap {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .creator-table-wrap th {
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout .creator-table-wrap td,
+html[data-app-theme] body #app .outreach-page .tab-layout .creator-table-wrap td strong {
+  color: var(--theme-text) !important;
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout input,
+html[data-app-theme] body #app .outreach-page .tab-layout select,
+html[data-app-theme] body #app .outreach-page .tab-layout textarea {
+  background: var(--theme-input) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .outreach-page .tab-layout input:focus,
+html[data-app-theme] body #app .outreach-page .tab-layout select:focus,
+html[data-app-theme] body #app .outreach-page .tab-layout textarea:focus {
+  border-color: var(--theme-accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent) 18%, transparent) !important;
+}
+
+/* Final monochrome workbench pass. Keep this block last so view-local styles cannot reintroduce dark surfaces. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) {
+  color-scheme: light;
+  --mono-ink: #111111;
+  --mono-copy: #2f2f2f;
+  --mono-muted: #6b6b6b;
+  --mono-line: #dedede;
+  --mono-line-strong: #b7b7b7;
+  --mono-soft: #f5f5f5;
+  --mono-hover: #ededed;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) #app,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) #app > *,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ui-app,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .app-shell,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .app-shell__body,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .app-shell__content,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-shell,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-shell__main,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .ds-workspace,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .workspace,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .page-content,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) .view-container {
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.ds-sidebar, .ds-topbar, .ui-nav, .ui-topbar, .app-titlebar, .app-shell__header, .app-shell__sidebar, .sidebar, .topbar, .navbar, .page-header, .workspace-header) {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.ui-card, .ui-panel, .ds-card, .panel, .card, .workspace-card, .settings-card, .content-card, .section-card, .metric-card, .stat-card, .table-card, .toolbar, .filter-bar, .drawer, .dialog, .modal, .modal-content, .modal-panel, .popover, .dropdown-menu, .menu-panel, .command-center, .run-history-panel, .composer, .preview-card, .empty-state) {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.06) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.panel-header, .card-header, .modal-header, .dialog-header, .drawer-header, .toolbar-header, .section-header, .panel-footer, .card-footer, .modal-footer, .dialog-footer) {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(h1, h2, h3, h4, h5, h6, strong, b, .title, .heading, .label, .field-label, .page-title, .card-title, .panel-title) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(p, span, small, .description, .subtitle, .hint, .muted, .helper-text, .secondary-text, .empty-copy, .meta, .caption, time) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.muted, .hint, .helper-text, .secondary-text, .meta, .caption, time, input::placeholder, textarea::placeholder) {
+  color: var(--mono-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(input, select, textarea, .input, .select, .textarea, .ui-input, .ui-select, [contenteditable='true']) {
+  background: #ffffff !important;
+  border: 1px solid var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(input, select, textarea, .input, .select, .textarea, [contenteditable='true']):focus {
+  border-color: var(--mono-ink) !important;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.1) !important;
+  outline: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button, .button, [role='button']) {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button, .button, [role='button']):hover:not(:disabled) {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-hover) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button.primary, button.primary-button, .primary-button, .button--primary, .create-button, .submit-button, .confirm-button, .save-button, .action-primary, [data-variant='primary']) {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button.primary, button.primary-button, .primary-button, .button--primary, .create-button, .submit-button, .confirm-button, .save-button, .action-primary, [data-variant='primary']):hover:not(:disabled) {
+  background: #333333 !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button:disabled, .button:disabled, [role='button'][aria-disabled='true']) {
+  background: #f1f1f1 !important;
+  border-color: #e1e1e1 !important;
+  color: #999999 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button.active, [role='tab'].active, [role='option'][aria-selected='true'], [aria-current='page'], [data-state='active']) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(button.active, [role='tab'].active, [role='option'][aria-selected='true'], [aria-current='page'], [data-state='active']) * {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(table, thead, tbody, tr, th, td, .table, .table-row, .table-cell, .list-row, .grid-row) {
+  border-color: var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(th, thead, .table-head, .list-header) {
+  background: var(--mono-soft) !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(tr:hover, .table-row:hover, .list-row:hover, .grid-row:hover) {
+  background: var(--mono-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.tabs, .tab-list, .segmented-control, .pagination, .pager, .view-toggle, .filter-tabs) {
+  background: var(--mono-soft) !important;
+  border-color: var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.tabs button, .tab-list button, .segmented-control button, .pagination button, .pager button, .view-toggle button, .filter-tabs button) {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.tabs button.active, .tab-list button.active, .segmented-control button.active, .pagination button.active, .pager button.active, .view-toggle button.active, .filter-tabs button.active) {
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.modal-backdrop, .dialog-backdrop, .drawer-backdrop, .overlay, .backdrop) {
+  background: rgba(17, 17, 17, 0.34) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.modal, .modal-content, .modal-panel, .dialog, .drawer, .popover, .dropdown-menu) :is(svg, .icon) {
+  color: currentColor !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.badge, .tag, .chip, .status-pill, .count-badge) {
+  background: var(--mono-soft) !important;
+  border: 1px solid var(--mono-line) !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) :is(.error, .danger, .warning, .success, .info, .status-error, .status-warning, .status-success, .status-info) {
+  background: var(--mono-soft) !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+}
+
+/* Component-local dark palettes need an explicit monochrome surface contract. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .ds-workspace:has(.live-slicer-workbench),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench :is(.live-main, .live-side, .live-upload-card, .live-results-card, .live-panel, .live-drop-zone, .live-empty-result, .live-result-list) {
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  border-color: var(--mono-line) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench :is(.live-kicker, .live-slicer-head h1, .live-panel h2, .live-card-head h2, .live-drop-zone h2, .live-slicer-head p, .live-panel-head span, .live-card-head p, .live-drop-zone p, .live-label, .live-two-cols label span, .live-note, .live-empty-result, .live-result-item span, .live-result-item small) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench :is(.live-primary, .live-secondary, .live-small-button, .live-mode-card, .live-dir-row button) {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench :is(.live-primary, .live-mode-card.active) {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench :is(.live-primary, .live-mode-card.active) * {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench :is(.live-input, input, select) {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-shell, .models-shell__main, .models-layout, .models-detail-panel, .models-panel, .models-hero, .models-catalog-panel, .models-library-card, .models-library-card__body, .models-library-card__media) {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--mono-ink) !important;
+  border-color: var(--mono-line) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-hero__copy h1, .models-library-card__head h3, .models-library-card__title, .models-library-card__desc, .models-library-card__meta, .models-detail-panel h2, .models-detail-panel h3, .models-detail-panel strong, .models-detail-panel label, .models-tab, .models-tab strong, .models-toolbar, .models-pagination, .models-library-card__body) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-hero__copy h1, .models-detail-panel h2, .models-detail-panel h3, .models-library-card__head h3) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-input, .models-select, .models-field textarea, .models-detail-panel input, .models-detail-panel textarea) {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-detail-card, .models-detail-card__top, .models-detail-card__top-copy, .models-detail-section, .models-detail-time, .models-detail-time div, .models-detail-cta, .models-detail-tabs, .models-detail-tabs button, .models-tag-row, .models-hint, .models-action-menu__panel) {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-copy) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-detail-card__title h3, .models-detail-card__title span, .models-detail-card__online span, .models-detail-summary, .models-detail-section h4, .models-detail-time strong, .models-detail-desc, .models-detail-panel strong) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-detail-card__online, .models-detail-card__online i, .models-detail-card__media, .models-preview-strip__item) {
+  border-color: var(--mono-line) !important;
+  background: var(--mono-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-detail-close, .models-detail-more, .models-action-menu__panel button) {
+  background: #ffffff !important;
+  border-color: var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-tab.active, .models-library-card.active, .models-library-card.is-checked) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-tab.active *, .models-library-card.active *, .models-library-card.is-checked *) {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.models-dialog-backdrop, .clone-error-dialog-mask) {
+  background: rgba(17, 17, 17, 0.32) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.models-dialog, .clone-error-dialog, .clone-rename-dialog, .clone-subtitle-dialog) {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.models-dialog, .clone-error-dialog, .clone-rename-dialog, .clone-subtitle-dialog) :is(h1, h2, h3, h4, strong, label, p, span, small) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.models-dialog, .clone-error-dialog, .clone-rename-dialog, .clone-subtitle-dialog) :is(h1, h2, h3, h4, strong) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.models-dialog__close, .clone-error-dialog__close, .preview-close) {
+  background: #ffffff !important;
+  border-color: var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.preview-panel, .preview-titlebar) {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.preview-title, .preview-status, .preview-status--error, .preview-meta, .preview-panel) :is(h1, h2, h3, h4, p, span, strong, small) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.preview-stage, .preview-video-wrap, .preview-video, .clone-video-preview-dialog__player) {
+  background: #111111 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-home-page :is(.production-home-hero, .production-home-panel, .production-entry-card, .production-home-stat, .production-home-task-item) {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-home-page :is(.production-home-hero__copy h1, .production-home-stat strong, .production-entry-card__copy strong, .production-home-panel__head strong, .production-home-panel__list strong, .production-home-task-item strong) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-home-page :is(.production-home-hero__copy p, .production-home-stat span, .production-entry-card__copy p, .production-entry-card__copy span, .production-home-panel__head span, .production-home-panel__list p, .production-home-panel small, .production-home-empty, .production-home-task-item span) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.production-home-page, .production-home-grid, .production-home-detail) {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-subtitle-dialog {
+  background: rgba(17, 17, 17, 0.32) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-subtitle-dialog__panel {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-subtitle-dialog__panel :is(.live-subtitle-dialog__titleblock strong, .live-subtitle-dialog__titleblock p, .detail-dialog, .detail-tabs button, .detail-grid span, .detail-grid strong, .request-parameter-head p, .request-parameter-head span) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-subtitle-dialog__panel :is(.detail-tabs, .detail-tabs button.active, .detail-grid > div, .request-parameter-panel, .retry-settings-hero, .retry-settings-field) {
+  background: var(--mono-soft) !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-subtitle-dialog__panel :is(.detail-tabs button.active, .retry-settings-actions .primary-button) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .preview-backdrop {
+  background: rgba(17, 17, 17, 0.32) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Keep plugin market controls legible and strictly monochrome. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .hero-card__eyebrow,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .detail-card__eyebrow {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(.ghost-button, .plugins-tab) {
+  background: #ffffff !important;
+  border-color: var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(.ghost-button:hover, .ghost-button.active, .plugins-tab:hover, .plugins-tab.active) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(.ghost-button:hover *, .ghost-button.active *, .plugins-tab:hover *, .plugins-tab.active *) {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card.selected {
+  background: #ffffff !important;
+  border-color: var(--mono-ink) !important;
+  box-shadow: 0 0 0 1px var(--mono-ink) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card.selected :is(h3, p, span) {
+  color: inherit !important;
+}
+
+/* Keep hover and selected plugin cards readable in the monochrome theme. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card:is(:hover, .selected) {
+  background: #ffffff !important;
+  border-color: var(--mono-ink) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: 0 0 0 1px var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card:is(:hover, .selected)
+  :is(.plugin-card__body h3, .plugin-card__body p, .plugin-card__meta, .plugin-card__meta span) {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card:is(:hover, .selected)
+  .plugin-card__action,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card:is(:hover, .selected)
+  .plugin-card__action:hover:not(:disabled) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card:is(:hover, .selected)
+  .plugin-card__action :is(span, svg, svg *) {
+  color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__action {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__action * {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__action:hover:not(:disabled) {
+  background: #333333 !important;
+  border-color: #333333 !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__action:disabled {
+  background: #f1f1f1 !important;
+  border-color: #dedede !important;
+  color: #999999 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__action:disabled * {
+  color: #999999 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__state.installed {
+  background: #f5f5f5 !important;
+  border-color: var(--mono-ink) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page .plugin-card__state.installed * {
+  color: var(--mono-ink) !important;
+}
+
+/* Normalize remaining legacy dark states for the monochrome workbench. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.ds-sidebar__item.is-active, .ds-sidebar__item.is-active:hover) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__item.is-active::before {
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__item.is-active :is(span, svg) {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active span,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active svg,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active svg * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page :is(.product-card__analysis, .product-card__menu-panel) {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .product-card__analysis :is(span, p) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page :is(.product-card__primary, .products-empty__create, .pagination-button--active) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .product-card__primary:disabled {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .product-card__primary:disabled:hover {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .product-card__secondary {
+  background: #ffffff !important;
+  border-color: var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-stat {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-stat :is(strong, span, b, svg) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-stat.is-active {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-stat.is-active :is(strong, span, b, svg) {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-stat__icon {
+  background: #f1f1f1 !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-stat.is-active .clone-console-stat__icon {
+  background: #2b2b2b !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-run-mode__option {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-run-mode__option.is-active {
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-list-batch-bar {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-list-batch-bar :is(strong, em, small, span) {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-reference-row {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-reference-row :is(strong, small, span) {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-reference-row.active {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-reference-row.active :is(strong, small, span) {
+  color: #ffffff !important;
+}
+
+/* Keep Creative Studio controls, selection states, and metadata monochrome. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__label,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__eyebrow {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__options,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__details {
+  border-color: var(--mono-line) !important;
+  background: #f4f4f4 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__options button,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__zoom button {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__options button:is(:hover, .active),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__zoom button:is(:hover, .active) {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Use a quiet hover state; only the selected option receives the dark fill. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__options button:hover:not(.active),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__zoom button:hover:not(.active) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-border) !important;
+  transform: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__options button.active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__zoom button.active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__options button.active:hover,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__zoom button.active:hover {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .generation-mode-control__hint {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-picker-toolbar {
+  border-color: var(--mono-line) !important;
+  background: #f2f2f2 !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-picker-tabs button {
+  background: transparent !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-picker-tabs button span {
+  background: #e7e7e7 !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-picker-tabs button.active {
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-picker-tabs button.active span {
+  background: #3b3b3b !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-picker-selection {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-grid .material-card,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-grid .material-card:hover,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-grid .material-card.active {
+  border-color: var(--mono-line) !important;
+  background: #f5f5f5 !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-grid .material-card.active {
+  border-color: var(--mono-ink) !important;
+  box-shadow: inset 0 0 0 1px var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-grid .material-card > span,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-grid .material-card > small {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-usage-badge,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .material-usage-badge.used {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card.selected {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card.selected {
+  border-color: var(--mono-ink) !important;
+  box-shadow: inset 0 0 0 1px var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__source,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__quickchip,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .exported-badge,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-published-badge {
+  border: 1px solid var(--mono-line) !important;
+  background: #f2f2f2 !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics {
+  border-color: var(--mono-line) !important;
+  background: #f2f2f2 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics > div {
+  border-color: var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics :is(span, strong) {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .preview-play {
+  border: 1px solid rgba(255, 255, 255, 0.82) !important;
+  background: rgba(17, 17, 17, 0.86) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .preview-play svg {
+  color: #ffffff !important;
+  fill: currentColor !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .video-dialog__tags span,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .video-dialog__tags span.is-ready {
+  border-color: var(--mono-line-strong) !important;
+  background: #f2f2f2 !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .video-dialog__tags span.is-ready {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .video-dialog__info {
+  border-color: var(--mono-line) !important;
+  background: #f5f5f5 !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .video-dialog__info :is(.video-dialog__info-title, .video-dialog__info-row, .video-dialog__info-row span, .video-dialog__info-row strong) {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  opacity: 1 !important;
+}
+
+/* Live Photo and account dialogs use a shared light workbench contract. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.hero-shell, .panel-card, .library-export-card, .reference-material-picker, .reference-material-dialog__panel, .live-subtitle-dialog__panel, .live-photo-video-dialog, .account-form, .account-list) {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--mono-ink) !important;
+  border-color: var(--mono-line) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.hero-desc, .panel-head-note, .live-photo-master-ref__copy small, .reference-source-card__copy small, .reference-source-card__copy span, .reference-material-bar small, .reference-material-dialog__title p, .reference-material-dialog__empty, .reference-material-picker__hero-copy small, .reference-material-picker__pager, .live-subtitle-dialog__head p, .live-subtitle-dialog__meta, .live-subtitle-dialog__summary-item span, .live-subtitle-dialog__field span, .account-main small, .account-meta small, .account-status-column small, .account-pagination) {
+  color: var(--mono-muted) !important;
+  -webkit-text-fill-color: var(--mono-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.live-photo-master-ref, .live-console-row__binding-card, .reference-source-card, .reference-material-card, .live-subtitle-dialog__summary-item, .live-subtitle-dialog__tabs, .upload-surface) {
+  background: var(--mono-soft) !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.tab-button.active, .toolbar-icon.active, .reference-material-card.active, .live-subtitle-dialog__tabs button.active) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.tab-button.active, .toolbar-icon.active, .reference-material-card.active, .live-subtitle-dialog__tabs button.active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.primary-button, .live-subtitle-dialog__close, .live-subtitle-dialog__actions button, .reference-material-dialog button, .account-actions button, .account-add-button, .account-form button) {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(input, select, textarea, .field-select-mini, .account-search, .account-filter, .account-pagination select, .account-form input, .account-form textarea) {
+  background: #ffffff !important;
+  border-color: var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.reference-material-card:hover, .reference-source-card:hover, .account-row:hover) {
+  background: var(--mono-soft) !important;
+  border-color: var(--mono-line-strong) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-page :is(.live-subtitle-dialog, .reference-material-dialog) {
+  background: rgba(17, 17, 17, 0.38) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-video-dialog {
+  width: min(920px, 100%) !important;
+  padding: 20px !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-video-dialog__player {
+  min-height: 320px !important;
+  max-height: 68vh !important;
+  border-radius: 8px !important;
+  background: #080808 !important;
+  box-shadow: inset 0 0 0 1px #222222 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-photo-video-dialog__meta {
+  padding-top: 4px !important;
+  color: var(--mono-muted) !important;
+  -webkit-text-fill-color: var(--mono-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-dialog {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page :is(.account-search, .account-filter, .account-pagination select) {
+  background: #ffffff !important;
+  border-color: var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-search input {
+  background: transparent !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page :is(.account-list, .account-list-header, .account-row, .account-form) {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-list-header {
+  background: var(--mono-soft) !important;
+  color: var(--mono-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-row.editing {
+  background: var(--mono-soft) !important;
+  box-shadow: inset 3px 0 0 var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page :is(.account-main strong, .account-meta strong, .account-form > strong, .account-form label, .account-row small) {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-state,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-state.expired,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-state.insufficient_credit,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-state.error {
+  background: var(--mono-soft) !important;
+  border: 1px solid var(--mono-line-strong) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-pagination strong {
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+/* Page-specific monochrome contrast fixes for the supplied workbench screens. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page.publish-mode .publisher-single-icon,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page.publish-mode .publisher-design-logo {
+  border-color: var(--mono-line-strong) !important;
+  background: var(--mono-soft) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page.publish-mode .publisher-single-icon svg,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page.publish-mode .publisher-design-logo svg {
+  color: var(--mono-ink) !important;
+  stroke: currentColor !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page.publish-mode .publisher-editor-tabs-single {
+  display: block !important;
+  background: transparent !important;
+  border-color: var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page.publish-mode .publisher-editor-tabs-single span {
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 0 2px !important;
+  border-bottom: 2px solid var(--mono-ink) !important;
+  background: transparent !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-library-card.active, .models-library-card.is-checked) {
+  background: #ffffff !important;
+  border: 1px solid var(--mono-ink) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: 0 0 0 1px var(--mono-ink) !important;
+  transform: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page :is(.models-library-card.active *, .models-library-card.is-checked *) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page .models-library-card__media {
+  background: var(--mono-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .models-library-page .models-library-card__play {
+  color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page :is(.products-hero__create, .products-empty__create) {
+  background: var(--mono-ink) !important;
+  border-color: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page :is(.products-hero__create, .products-empty__create) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .tab-chip {
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .tab-chip em {
+  background: var(--mono-soft) !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .tab-chip--active {
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .tab-chip--active::after {
+  background: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .products-page .tab-chip--active em {
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .detail-shell .product-analysis-card :is(.product-analysis-card__summary, .product-analysis-card__rules, .product-analysis-card__item) {
+  background: #ffffff !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .detail-shell .product-analysis-card :is(.product-analysis-card__summary span, .product-analysis-card__rules span, .product-analysis-card__item span, .product-analysis-card__summary strong, .product-analysis-card__summary-text, .product-analysis-card__item p) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .detail-shell .product-analysis-card__rule-list em {
+  background: var(--mono-soft) !important;
+  border: 1px solid var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page :is(.clone-console-group em, .clone-console-group__main em) {
+  background: var(--mono-soft) !important;
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-group.is-active em {
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-row__progress-track {
+  background: #e7e7e7 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-row__progress-track span {
+  background: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-row__progress-step {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-row__progress-step.is-active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-task-list-page .clone-console-row__progress-step.is-done {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+}
+
+/* Monochrome workbench coverage for legacy scoped panels. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page {
+  color: var(--mono-ink) !important;
+  background: #ffffff !important;
+  background-image: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(.production-create-hero, .production-create-card, .production-summary__item),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(.hero-card, .detail-card, .empty-state, .plugin-card),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(.glass-panel, .work-card, .stepbar-panel, .upload-zone, .source-list-item, .preview-stage, .template-preset, .title-item-card, .strategy-card, .result-card) {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(h1, h2, strong, label, button),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(h1, h2, h3, strong, button),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(h1, h2, h3, h4, strong, label, button) {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(p, span, small),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(p, span, small),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(p, span, small, .section-note, .field-hint) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(input, select, textarea),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(input, select, textarea),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(input, select, textarea) {
+  border-color: var(--mono-line-strong) !important;
+  background: #ffffff !important;
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(.app-primary, .production-create-actions button:first-child),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(.primary-button, .plugin-card__action),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(.primary-button, .step-chip.is-active, .step-chip.is-done, .segmented-tabs button.is-active, .toolbar-pill.is-active, .mode-pills button.is-active) {
+  border-color: var(--mono-ink) !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(.app-primary, .production-create-actions button:first-child) *,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .plugins-page :is(.primary-button, .plugin-card__action) *,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(.primary-button, .step-chip.is-active, .step-chip.is-done, .segmented-tabs button.is-active, .toolbar-pill.is-active, .mode-pills button.is-active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page :is(.step-chip, .segmented-tabs, .preview-toolbar, .title-mode-card, .align-segment button) {
+  border-color: var(--mono-line) !important;
+  background: var(--mono-soft) !important;
+  color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__frame {
+  min-height: 410px !important;
+  border: 1px solid var(--mono-line) !important;
+  border-radius: 8px !important;
+  background: #f2f2f2 !important;
+  background-image: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__frame::before {
+  width: min(232px, 80%) !important;
+  border-radius: 8px !important;
+  background: #e7e7e7 !important;
+  box-shadow: inset 0 0 0 1px var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__frame > :is(video, img) {
+  width: min(232px, 80%) !important;
+  height: auto !important;
+  max-height: 380px !important;
+  aspect-ratio: 9 / 16 !important;
+  border-radius: 8px !important;
+  object-fit: contain !important;
+  background: #111111 !important;
+}
+
+/* Keep clone video workspace layers bounded and remove legacy decorative backplates. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .panel-video-stage,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-workbench,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .video-stage-layout--workarea {
+  position: relative !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .panel-video-stage::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .panel-video-stage::after,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-workbench::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .shot-workbench::after,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .video-stage-layout--workarea::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .video-stage-layout--workarea::after {
+  content: none !important;
+  display: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.video-render-hints-card, .shot-overview-panel, .shot-table-panel, .shot-reference-row, .console-sidebar, .meta-card) {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.video-render-hints-card, .shot-overview-panel, .shot-table-panel, .console-sidebar) :is(h1, h2, h3, h4, strong, span, small, p, em, label) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.variant-hero-card__score, .variant-score) {
+  border: 1px solid var(--mono-line) !important;
+  border-radius: 8px !important;
+  background: var(--mono-soft) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-summary-card--highlight {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .storyboard-preview-media--identity-grid {
+  width: min(100%, 280px) !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  aspect-ratio: 9 / 16 !important;
+  border-radius: 8px !important;
+  background: #f2f2f2 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .storyboard-preview-media--identity-grid img {
+  object-fit: cover !important;
+  background: transparent !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .identity-grid-preview-layout {
+  grid-template-columns: minmax(0, 280px) minmax(260px, 1fr) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-card--row.selected {
+  border-color: var(--mono-line-strong) !important;
+  background: var(--mono-soft) !important;
+  box-shadow: inset 3px 0 0 var(--mono-ink) !important;
+}
+
+@media (max-width: 800px) {
+  html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .identity-grid-preview-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Screenshot-driven fixes for monochrome workspaces. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(.production-create-hero, .production-create-card, .production-summary__item) {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: var(--mono-line) !important;
+  color: var(--mono-ink) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page :is(.production-create-hero__copy h1, .production-create-hero__tag, .production-field, .production-field span, .production-summary__item span, .production-summary__item strong, .production-feedback) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .production-create-page .production-create-actions button:disabled {
+  background: #f1f1f1 !important;
+  border-color: #dddddd !important;
+  color: #737373 !important;
+  -webkit-text-fill-color: #737373 !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+  background-image: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card__score {
+  border-radius: 8px !important;
+  background: var(--mono-ink) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card__score * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card__copy :is(strong, p, small) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .sidebar-preview-shell {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  max-height: 480px !important;
+  aspect-ratio: 9 / 16 !important;
+  border-radius: 8px !important;
+  border-color: var(--mono-line) !important;
+  background: #f2f2f2 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .video-stage-layout--workarea {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 268px) !important;
+  min-width: 0 !important;
+  align-items: start !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .video-stage-preview {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 268px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .sidebar-preview-shell > .small-empty {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 12px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .sidebar-preview-shell > .small-empty::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .sidebar-preview-shell > .small-empty::after {
+  content: none !important;
+  display: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__frame {
+  display: grid !important;
+  min-height: 410px !important;
+  place-items: center !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  background: #f2f2f2 !important;
+  background-image: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__frame::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: 50% auto auto 50% !important;
+  width: 232px !important;
+  height: 412px !important;
+  transform: translate(-50%, -50%) !important;
+  aspect-ratio: auto !important;
+  border-radius: 8px !important;
+  background: #e7e7e7 !important;
+  box-shadow: inset 0 0 0 1px var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__empty {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 2 !important;
+  width: min(232px, 80%) !important;
+  min-height: 0 !important;
+  aspect-ratio: 9 / 16 !important;
+  padding: 20px !important;
+  border-radius: 8px !important;
+  background: #e7e7e7 !important;
+  color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__empty :is(strong, span) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .subtitle-workbench-page .preview-stage__video {
+  position: relative !important;
+  z-index: 1 !important;
+  width: min(232px, 80%) !important;
+  height: auto !important;
+  max-height: 380px !important;
+  aspect-ratio: 9 / 16 !important;
+  border-radius: 8px !important;
+  object-fit: contain !important;
+  background: #111111 !important;
+  box-shadow: none !important;
+}
+
+/* Keep account and library surfaces readable in the monochrome workbench. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page :is(.live-subtitle-dialog, .publisher-status-modal) {
+  background: rgba(17, 17, 17, 0.28) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-row.disabled {
+  opacity: 1 !important;
+  background: #f4f4f4 !important;
+  color: var(--mono-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-row.disabled :is(.account-main strong, .account-meta strong) {
+  color: var(--mono-muted) !important;
+  -webkit-text-fill-color: var(--mono-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .account-row.disabled :is(.account-actions button, .account-order button) {
+  border-color: var(--mono-line) !important;
+  background: #ffffff !important;
+  color: var(--mono-muted) !important;
+  -webkit-text-fill-color: var(--mono-muted) !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  margin: 0 10px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--mono-line) !important;
+  border-radius: 8px !important;
+  background: #f7f7f7 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics > div {
+  min-width: 0 !important;
+  padding: 8px 10px !important;
+  background: #f7f7f7 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics > div + div {
+  border-left: 1px solid var(--mono-line) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics :is(span, strong) {
+  color: var(--mono-copy) !important;
+  -webkit-text-fill-color: var(--mono-copy) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__metrics strong {
+  color: var(--mono-ink) !important;
+  -webkit-text-fill-color: var(--mono-ink) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.tiktok-page, .live-photo-page) :is(button, select, input, textarea):disabled {
+  background: #eeeeee !important;
+  border-color: #d2d2d2 !important;
+  color: #777777 !important;
+  -webkit-text-fill-color: #777777 !important;
+  opacity: 1 !important;
+}
+
+/* Final monochrome overrides for publisher controls with component-local styles. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > button {
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > button > span {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > button.active {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 0 0 0 1px var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > button.active > span {
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > button strong {
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > button.active strong {
+  background: var(--theme-on-accent) !important;
+  color: var(--theme-accent) !important;
+  -webkit-text-fill-color: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode :is(.publisher-design-product, .publisher-design-title-cell button, .publisher-design-row-actions button) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-product-thumb {
+  border: 1px solid var(--theme-border) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-thumb small {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  border: 1px solid var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-video strong,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-video span > small,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-title-cell span,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-product span:last-child,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-time {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page.publish-mode .publisher-design-state {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-picker-dialog :is(.publisher-picker-tabs, .publisher-picker-tabs button) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-picker-dialog .publisher-picker-tabs button.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page .material-picker-tabs {
+  padding: 3px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-control) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page .material-picker-tabs button {
+  min-height: 32px !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page .material-picker-tabs button span {
+  min-width: 20px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 999px !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page .material-picker-tabs button.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .tiktok-page .material-picker-tabs button.active span {
+  border-color: var(--theme-on-accent) !important;
+  background: var(--theme-on-accent) !important;
+  color: var(--theme-accent) !important;
+  -webkit-text-fill-color: var(--theme-accent) !important;
+}
+
+/* Final monochrome corrections for plugin, clone and product workspaces. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page .plugin-card__action:disabled,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page .plugin-card__action:disabled * {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page :is(.plugins-tab, .ghost-button, .primary-button) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page :is(.plugins-tab.active, .primary-button, .plugin-card__action:not(:disabled)) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page :is(.plugins-tab.active, .primary-button, .plugin-card__action:not(:disabled)) * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page .plugin-card__action:not(:disabled):hover {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-hover, var(--theme-accent)) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page .plugin-card__action:not(:disabled):hover * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page .hero-card__actions > button svg,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page .hero-card__actions > button svg * {
+  color: currentColor !important;
+  stroke: currentColor !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-shell.has-clone-workflow,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step:hover {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step.is-active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step.is-done {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step :is(.app-topbar-clone__label, .app-topbar-clone__index) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__index,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step.is-done .app-topbar-clone__index {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__index {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__arrow {
+  background: var(--theme-border-control) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool button {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool button.is-active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool button.is-active * {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool button:hover {
+  border-color: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool.is-active span,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool.is-active span::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-console-table__viewtool.is-active span::after {
+  color: var(--theme-on-accent) !important;
+  background-color: currentColor !important;
+  border-color: currentColor !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.clone-ref-step, .clone-console-grid__card, .clone-console-table__row) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .compose-shot-strip__item {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .compose-shot-strip__item.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .compose-shot-strip__item :is(.compose-shot-strip__index, .compose-shot-strip__title, .compose-shot-strip__duration) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .compose-shot-strip__item.active :is(.compose-shot-strip__index, .compose-shot-strip__title, .compose-shot-strip__duration) {
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-ref-step.is-active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-ref-step.is-done {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-ref-step.is-active :is(span, strong, small),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-ref-step.is-done :is(span, strong, small) {
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.video-stage-preview, .video-stage-preview .console-sidebar__body, .clone-video-preview-dialog__player) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .video-stage-preview :deep(.sidebar-preview-shell),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .video-stage-preview .sidebar-preview-shell {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .video-stage-preview :deep(.sidebar-preview-shell__hud),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .video-stage-preview .sidebar-preview-shell__hud {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.variant-product-actions button:disabled, .analyze-project-info-card button:disabled) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+/* Keep clone workflow selection and preview surfaces legible in mono theme. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-main-panel .variant-hero-card {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-summary-card {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-summary-card .variant-summary-card__copy :is(span, strong, p) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-summary-card .variant-summary-card__copy :is(span, p) {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-main-panel .variant-hero-card__copy :is(strong, p, small) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-main-panel .variant-hero-card__copy :is(p, small) {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .variant-main-panel .variant-hero-card button:disabled {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control-selected) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-cell {
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-cell--index {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-cell--index :is(strong, small),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-copy :is(strong, small) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-tags em,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-status-pill {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .storyboard-design-row.is-active .storyboard-design-cell--actions button {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .video-stage-preview :deep(.console-sidebar .panel-head),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .video-stage-preview .console-sidebar .panel-head {
+  min-width: 0 !important;
+  align-items: center !important;
+  padding: 0 0 10px !important;
+  border-bottom: 1px solid var(--theme-border) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .video-stage-preview :deep(.console-sidebar__heading),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .video-stage-preview .console-sidebar__heading {
+  min-width: 0 !important;
+  gap: 3px !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .video-stage-preview :deep(.console-sidebar__heading h2),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .video-stage-preview .console-sidebar__heading h2 {
+  margin: 0 !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+  overflow-wrap: anywhere !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .sidebar-preview-shell__hud {
+  padding: 8px !important;
+  border-bottom: 1px solid var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .sidebar-preview-shell__hud span {
+  border-color: var(--theme-border) !important;
+  border-radius: 6px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+/* Make the music library search row a single, quiet control group. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-music-library-toolbar {
+  grid-template-columns: 180px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  padding: 14px 18px !important;
+  border-bottom-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-music-library-toolbar > select,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-selector-search {
+  height: 40px !important;
+  box-sizing: border-box !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-selector-search {
+  display: flex !important;
+  gap: 8px !important;
+  padding: 0 8px 0 12px !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-selector-search :is(svg, input) {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-selector-search input {
+  min-width: 0 !important;
+  background: transparent !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-selector-search button {
+  height: 30px !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--theme-accent) !important;
+  border-radius: 6px !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .publisher-selector-search button:hover {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+/* Refined library cards for the monochrome workspace. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid {
+  gap: 16px !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card {
+  gap: 12px !important;
+  padding: 14px !important;
+  border-color: var(--theme-border) !important;
+  border-radius: 12px !important;
+  background: var(--theme-panel) !important;
+  box-shadow: 0 5px 16px rgba(17, 17, 17, 0.06) !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card:hover {
+  border-color: var(--theme-border-control) !important;
+  box-shadow: 0 10px 24px rgba(17, 17, 17, 0.1) !important;
+  transform: translateY(-1px);
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card.selected {
+  border-color: var(--theme-accent) !important;
+  box-shadow: 0 0 0 2px var(--theme-accent-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__head {
+  min-height: 22px;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-card__badges {
+  gap: 8px !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status {
+  min-height: 20px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--theme-text-secondary) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status::before {
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--theme-text-secondary);
+  content: "";
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status.status-completed {
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status.status-completed::before {
+  background: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status.status-failed::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__status.status-paused::before {
+  background: var(--theme-danger) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__source {
+  min-height: 18px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--theme-text-secondary) !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-row__source::before {
+  width: 4px;
+  height: 4px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--theme-border-control);
+  content: "";
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card__preview {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 9px !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card__metrics {
+  margin: 0 !important;
+  border-color: var(--theme-border) !important;
+  border-radius: 8px !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-card__metrics > div {
+  padding: 7px 9px !important;
+  border-color: var(--theme-border) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-row__subtitle {
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .tiktok-page .live-console-grid .live-console-row__actions {
+  padding-top: 2px !important;
+  border-top: 1px solid var(--theme-border) !important;
+}
+
+/* Refined monochrome workbench surfaces for clone and live-slicer workflows. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.variant-hero-card, .variant-card, .storyboard-design-row, .clone-shot-row, .shot-card) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.045) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.variant-hero-card, .variant-card, .storyboard-design-row, .clone-shot-row, .shot-card):hover {
+  border-color: var(--theme-border-control) !important;
+  box-shadow: 0 8px 20px rgba(17, 17, 17, 0.08) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.variant-card--row.selected, .shot-card.is-selected, .shot-card.active, .clone-shot-row.is-active) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent), 0 8px 20px rgba(17, 17, 17, 0.07) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card {
+  padding: 18px !important;
+  border-radius: 12px !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card__score {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-text) !important;
+  color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-hero-card__copy :is(strong, p, small),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .variant-copy :is(strong, p, small, span),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .storyboard-design-cell,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .clone-shot-row :is(strong, span, small) {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.variant-hero-card__copy strong, .variant-copy__head strong, .storyboard-design-copy strong, .clone-shot-row h3) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.variant-shot-line, .storyboard-design-tags em, .storyboard-design-status-pill, .variant-copy__head span) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .storyboard-design-row.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page .storyboard-design-row.is-active :is(.storyboard-design-cell, .storyboard-design-copy strong, .storyboard-design-copy small) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.storyboard-design-cell--actions button, .clone-shot-row button, .variant-card button) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-page :is(.storyboard-design-cell--actions button, .clone-shot-row button, .variant-card button):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench .live-mode-grid {
+  gap: 10px !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench .live-mode-card {
+  min-height: 112px !important;
+  padding: 14px !important;
+  border-radius: 10px !important;
+  text-align: left !important;
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: 0 3px 10px rgba(17, 17, 17, 0.04) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench .live-mode-card.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-text) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench .live-mode-card :is(strong, small, svg) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .live-slicer-workbench .live-mode-card.active :is(strong, small, svg) {
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-subtitle-dialog {
+  width: min(760px, calc(100vw - 40px)) !important;
+  max-height: min(86vh, 820px) !important;
+  border-radius: 14px !important;
+  overflow: auto !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-subtitle-dialog :is(.clone-subtitle-dialog__summary-item, .clone-subtitle-dialog__inline-tip, .clone-subtitle-dialog__style-panel, .clone-subtitle-dialog__preset) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-subtitle-dialog :is(.clone-subtitle-dialog__summary-item strong, .clone-subtitle-dialog__preset strong, .clone-subtitle-dialog__section-head strong) {
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-subtitle-dialog :is(.clone-subtitle-dialog__tabs, .clone-subtitle-dialog__mode-pills) {
+  padding: 4px !important;
+  gap: 4px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 9px !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-subtitle-dialog :is(.clone-subtitle-dialog__tabs button, .clone-subtitle-dialog__mode-pills button) {
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .clone-subtitle-dialog :is(.clone-subtitle-dialog__tabs button.is-active, .clone-subtitle-dialog__mode-pills button.is-active) {
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+}
+/* Final light-theme visual corrections for component-level legacy overrides. */
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.publish-mode .publisher-design-actions button.publisher-music-library-button {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.publish-mode .publisher-design-actions button.publisher-music-library-button[data-v-6955d368] {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.publish-mode .publisher-design-page .publisher-design-actions button.publisher-music-library-button[data-v-6955d368] {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page .generation-mode-control__options {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border-control) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page .generation-mode-control__options button {
+  color: var(--theme-text-secondary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page .generation-mode-control__options button.active {
+  color: var(--theme-accent-strong) !important;
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .production-tabs {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .production-tabs a.production-tab {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .production-tabs a.production-tab:hover {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-tabs a.production-tab.router-link-active,
+html[data-app-theme='light-teal'] body #app .app-shell .production-tabs a.production-tab.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme='mono'] body #app .app-shell .production-tabs a.production-tab.router-link-active,
+html[data-app-theme='mono'] body #app .app-shell .production-tabs a.production-tab.is-active {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .production-tabs a.production-tab.is-active :is(.production-tab__label, .production-tab__desc, svg) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .materials-workbench .tabs-shell button.tab-button.active :is(span, svg) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+/* Light teal workspace hierarchy: neutral canvas, white surfaces, restrained accent. */
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-shell {
+  background: var(--color-app-bg) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-hero,
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .board-card,
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card,
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-empty,
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .pagination-row {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .stats-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .stat-card {
+  min-width: 0 !important;
+  min-height: 82px !important;
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  border-radius: 10px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .stat-card__icon {
+  background: var(--color-primary-subtle) !important;
+  color: var(--color-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page :is(.stat-card__icon--purple, .stat-card__icon--amber, .stat-card__icon--green, .stat-card__icon--red, .stat-card__icon--blue) {
+  background: var(--color-primary-subtle) !important;
+  color: var(--color-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page :is(.search-field, .select-field, .filter-button, .sort-field, .view-toggle, .pagination-button, .page-size-button) {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+  color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card:hover {
+  border-color: var(--color-border-strong) !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .session-rail,
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .employee-dock {
+  background: var(--color-surface-secondary) !important;
+  border-color: var(--color-border) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .activity-rail {
+  background: var(--color-app-bg) !important;
+  border-color: var(--color-border) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .session-row.is-active {
+  border-color: var(--color-primary) !important;
+  border-left-color: var(--color-primary) !important;
+  background: var(--color-primary-selected) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .session-row:hover,
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .employee-row:hover {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .message-row.is-user .message-bubble {
+  border-color: var(--color-border) !important;
+  background: var(--color-primary-subtle) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .message-row.is-assistant .message-bubble {
+  border-color: transparent !important;
+  background: var(--color-surface) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .activity-row {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .hermes-workspace .activity-row.is-running {
+  border-left-color: var(--color-primary) !important;
+}
+
+/* Clone workspace light theme: white work surface with one restrained accent. */
+html[data-app-theme='light-teal'] body #app .app-shell .clone-task-list-page {
+  padding: 12px 18px 20px !important;
+  color: var(--color-text-primary) !important;
+  background: var(--color-app-bg) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-panel {
+  gap: 16px !important;
+  padding: 20px !important;
+  border-color: var(--color-border) !important;
+  border-radius: 12px !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-hero__title-row h1,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat__copy strong,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat b,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-list-batch-bar__summary strong {
+  color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-hero__copy p,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat__copy span {
+  color: var(--color-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-hero__spark {
+  color: var(--color-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-overview__cards {
+  gap: 10px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat.tone-all,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat.tone-running,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat.tone-success,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat.tone-danger,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat.tone-muted {
+  border-color: var(--color-border) !important;
+  border-radius: 10px !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat.is-active {
+  border-color: var(--color-primary) !important;
+  background: var(--color-primary-subtle) !important;
+  box-shadow: inset 2px 0 0 var(--color-primary) !important;
+  transform: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-stat__icon {
+  background: var(--color-primary-subtle) !important;
+  color: var(--color-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-overview__tool,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-overview__icon,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-table__viewtool,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-row__rename,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-row__action,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-group__more {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  color: var(--color-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-run-mode {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-run-mode__option {
+  color: var(--color-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-run-mode__option.is-active {
+  background: var(--color-primary-subtle) !important;
+  color: var(--color-primary-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-list-batch-bar,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-table {
+  border-color: var(--color-border) !important;
+  border-radius: 10px !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-table__groupbar,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-table__head,
+html[data-app-theme='light-teal'] body #app .app-shell .clone-list-pagination {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-group.is-active {
+  border-color: var(--color-primary) !important;
+  background: var(--color-primary-subtle) !important;
+  color: var(--color-primary-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-row {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .clone-console-row:hover {
+  background: var(--color-surface-hover) !important;
+}
+
+/* Final contrast pass for light teal pages. Legacy view styles often carry
+ * light-on-dark text into the light workbench; reset semantic text roles. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  h1, h2, h3, h4, h5, strong, b, label,
+  .page-title, .section-title, .panel-title, .card-title
+) {
+  color: var(--color-text-primary) !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  p, small, .muted, .muted-copy, .hint, .field-hint,
+  [class*='subtitle'], [class*='description'], [class*='meta']
+) {
+  color: var(--color-text-secondary) !important;
+  -webkit-text-fill-color: var(--color-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  button:not(.primary-button):not(.danger-button),
+  .button:not(.primary-button), .ghost-button, .secondary-button
+) {
+  color: var(--color-text-primary) !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .primary-button, .app-primary, .product-card__primary,
+  .products-hero__create, .clone-console-hero__button--primary
+) {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .primary-button:hover, .app-primary:hover, .product-card__primary:hover,
+  .products-hero__create:hover, .clone-console-hero__button--primary:hover
+) {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  input, select, textarea, .ui-input, .ui-select
+) {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border-strong) !important;
+  color: var(--color-text-primary) !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  input::placeholder, textarea::placeholder
+) {
+  color: var(--color-text-muted) !important;
+  -webkit-text-fill-color: var(--color-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .status-pill, .state-pill, .badge, .tag, .chip
+) {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface-secondary) !important;
+  color: var(--color-text-primary) !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .status-pill.completed, .state-pill.completed, .badge.success,
+  .tag.success, .chip.success
+) {
+  border-color: var(--color-primary) !important;
+  background: var(--color-primary-subtle) !important;
+  color: var(--color-primary-hover) !important;
+  -webkit-text-fill-color: var(--color-primary-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active {
+  background: var(--color-primary-selected) !important;
+  border-color: transparent !important;
+  color: var(--color-primary-hover) !important;
+  -webkit-text-fill-color: var(--color-primary-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active :is(span, svg, svg *) {
+  background: transparent !important;
+  color: var(--color-primary-hover) !important;
+  -webkit-text-fill-color: var(--color-primary-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active {
+  box-shadow: inset 2px 0 0 var(--color-primary) !important;
+}
+
+/* Product library layout pass: keep the canvas open and reserve borders for
+ * the actual product cards. */
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-shell {
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 4px 0 18px !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page :is(.products-hero, .board-card) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-hero {
+  align-items: center !important;
+  padding: 2px 0 4px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .board-card {
+  gap: 12px !important;
+  padding: 0 !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .filters-row {
+  grid-template-columns: minmax(280px, 1.4fr) minmax(170px, 0.75fr) minmax(170px, 0.75fr) auto minmax(250px, auto) !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .toolbar-right {
+  justify-self: end !important;
+  gap: 8px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .tabs-row {
+  gap: 22px !important;
+  padding: 2px 0 10px !important;
+  border-bottom-color: var(--color-border) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-grid {
+  gap: 12px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card {
+  grid-template-columns: 136px minmax(0, 1fr) !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+  padding: 12px !important;
+  border-radius: 10px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__preview {
+  width: 136px !important;
+  height: 136px !important;
+  border-radius: 9px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__body {
+  gap: 8px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__title-wrap {
+  gap: 3px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__chips {
+  gap: 6px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__analysis {
+  gap: 4px !important;
+  padding: 8px 10px !important;
+  border-radius: 9px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__meta {
+  gap: 8px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__actions {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 38px !important;
+  gap: 6px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .products-page :is(
+  .product-card__primary,
+  .product-card__secondary,
+  .product-card__ghost
+) {
+  min-height: 36px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+}
+
+@media (max-width: 1360px) {
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .filters-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .toolbar-right {
+    justify-self: start !important;
+  }
+}
+
+@media (max-width: 960px) {
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-hero,
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .filters-row,
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .toolbar-right,
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .tabs-row,
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .stats-grid,
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .products-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .toolbar-right {
+    justify-self: stretch !important;
+    justify-content: flex-start !important;
+  }
+
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  html[data-app-theme='light-teal'] body #app .app-shell .products-page .product-card__preview {
+    width: 100% !important;
+    height: 220px !important;
+  }
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active {
+  background: var(--theme-control-selected) !important;
+  border-color: transparent !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 2px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav .ds-sidebar__item.is-active :is(span, svg, svg *) {
+  background: transparent !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-mode-card.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 2px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-mode-card.active :is(strong, small, svg) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-primary:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-primary:not(:disabled) :is(span, svg, svg *) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-primary:not(:disabled):hover {
+  background: var(--theme-accent-hover, var(--theme-accent)) !important;
+  border-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-primary:disabled {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .tiktok-page .live-console-card__badges .live-console-row__status {
+  min-height: 27px !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--theme-border-control) !important;
+  border-radius: 8px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  letter-spacing: 0 !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+html[data-app-theme] body #app .tiktok-page .live-console-card__badges .live-console-row__status::before {
+  width: 7px !important;
+  height: 7px !important;
+  margin-right: 7px !important;
+  border-radius: 50% !important;
+  background: currentColor !important;
+}
+
+html[data-app-theme] body #app .tiktok-page .live-console-card__badges .live-console-row__status.status-completed {
+  border-color: color-mix(in srgb, var(--theme-success-text) 55%, var(--theme-border-control)) !important;
+  background: var(--theme-success-soft) !important;
+  color: var(--theme-success-text) !important;
+  -webkit-text-fill-color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme] body #app .tiktok-page .live-console-card__badges .live-console-row__status.status-failed,
+html[data-app-theme] body #app .tiktok-page .live-console-card__badges .live-console-row__status.status-paused {
+  border-color: color-mix(in srgb, var(--theme-danger) 48%, var(--theme-border-control)) !important;
+  background: var(--theme-danger-soft) !important;
+  color: var(--theme-danger-text) !important;
+  -webkit-text-fill-color: var(--theme-danger-text) !important;
+}
+
+html[data-app-theme] body #app .tiktok-page .live-console-card__badges .exported-badge {
+  min-height: 27px !important;
+  padding: 0 10px !important;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 52%, var(--theme-border-control)) !important;
+  border-radius: 8px !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+/* Final compact sidebar sizing for short desktop viewports. */
+html[data-app-theme] body #app .app-shell .ds-sidebar {
+  gap: 10px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-sidebar__nav { gap: 8px !important; }
+
+html[data-app-theme] body #app .app-shell button.ds-sidebar__item {
+  min-height: 36px !important;
+  gap: 12px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-sidebar__item svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-sidebar__section {
+  gap: 5px !important;
+  padding-top: 4px !important;
+}
+
+html[data-app-theme] body #app .app-shell .ds-sidebar__section-items { gap: 6px !important; }
+html[data-app-theme] body #app .app-shell .app-shell__sidebar-footer { gap: 8px !important; }
+
+html[data-app-theme] body #app .app-shell .app-sidebar-locale,
+html[data-app-theme] body #app .app-shell .app-sidebar-footer-action {
+  min-height: 40px !important;
+}
+
+html[data-app-theme] body #app .app-shell .app-sidebar-user { padding-top: 8px !important; }
+html[data-app-theme] body #app .app-shell .app-sidebar-collapse { min-height: 38px !important; }

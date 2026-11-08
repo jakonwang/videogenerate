@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+} from "vue";
 import { useI18n } from "vue-i18n";
 import GmvMaxHelpCenter from "../components/gmv-max/GmvMaxHelpCenter.vue";
 import GmvMaxControlTowerNav, {
@@ -1443,6 +1451,8 @@ let syncProgressPollJobId = "";
 let syncProgressPollInFlight = false;
 let syncCompletionHandledJobId = "";
 let removeSyncProgressListener: (() => void) | null = null;
+let tabPrefetchTimer: ReturnType<typeof setTimeout> | null = null;
+let tabPrefetchRunId = 0;
 const dashboardRequest = createLatestRequestCoordinator();
 const campaignPageRequest = createLatestRequestCoordinator();
 const creativePageRequest = createLatestRequestCoordinator();
@@ -1452,9 +1462,11 @@ const productCostPageRequest = createLatestRequestCoordinator();
 const actionPageRequest = createLatestRequestCoordinator();
 const outcomePageRequest = createLatestRequestCoordinator();
 const auditPageRequest = createLatestRequestCoordinator();
+// Keep empty result pages from being treated as not loaded on every tab switch.
+const loadedData = new Set<string>();
 const notice = ref("");
 const errorText = ref("");
-const dashboard = ref<Dashboard>({
+const dashboard = shallowRef<Dashboard>({
   connection: null,
   connections: [],
   bindings: [],
@@ -1535,7 +1547,7 @@ const notificationDraft = ref({
   target: "",
   dailySummaryEnabled: true,
 });
-const sopWorkspace = ref<SopWorkspace>({
+const sopWorkspace = shallowRef<SopWorkspace>({
   instances: [],
   tasks: [],
   supplementalMetrics: [],
@@ -1580,7 +1592,7 @@ const sopWorkspace = ref<SopWorkspace>({
   },
   generatedAt: 0,
 });
-const commandCenter = ref<CommandCenter>({
+const commandCenter = shallowRef<CommandCenter>({
   stores: [],
   topActions: [],
   actionSummary: {
@@ -1715,7 +1727,7 @@ const startDate = ref(completeStartDate.toISOString().slice(0, 10));
 const endDate = ref(completeEndDate.toISOString().slice(0, 10));
 const campaignPage = ref(1);
 const campaignPageSize = ref(20);
-const campaignDataPage = ref<CampaignDataPage>({
+const campaignDataPage = shallowRef<CampaignDataPage>({
   items: [],
   total: 0,
   page: 1,
@@ -1735,7 +1747,7 @@ const minCampaignSpend = ref<number | undefined>();
 const minCampaignOrders = ref<number | undefined>();
 const minCampaignRoi = ref<number | undefined>();
 const minCampaignUtilization = ref<number | undefined>();
-const creativePage = ref<CreativePage>({
+const creativePage = shallowRef<CreativePage>({
   items: [],
   total: 0,
   page: 1,
@@ -1749,7 +1761,7 @@ const creativeCampaign = ref("all");
 const creativeState = ref("all");
 const creativeSortBy = ref("grossRevenue");
 const creativeSortDirection = ref<"asc" | "desc">("desc");
-const listEntryPage = ref<ListEntryPage>({
+const listEntryPage = shallowRef<ListEntryPage>({
   items: [],
   total: 0,
   page: 1,
@@ -1763,7 +1775,7 @@ const minCreativeOrders = ref<number | undefined>();
 const minCreativeRoi = ref<number | undefined>();
 const maxCreativeCpa = ref<number | undefined>();
 const minCreativeCtr = ref<number | undefined>();
-const productPage = ref<ProductPage>({
+const productPage = shallowRef<ProductPage>({
   items: [],
   total: 0,
   page: 1,
@@ -1792,7 +1804,7 @@ const minProductSpend = ref<number | undefined>();
 const minProductOrders = ref<number | undefined>();
 const minProductRoi = ref<number | undefined>();
 const minProductScore = ref<number | undefined>();
-const productCostPage = ref<ProductCostPage>({
+const productCostPage = shallowRef<ProductCostPage>({
   items: [],
   total: 0,
   page: 1,
@@ -1823,7 +1835,7 @@ const creativeVideoPreview = ref<{
   creativeId: string;
   embedded: boolean;
 } | null>(null);
-const actionPage = ref<ActionPage>({
+const actionPage = shallowRef<ActionPage>({
   items: [],
   total: 0,
   page: 1,
@@ -1832,7 +1844,7 @@ const actionPage = ref<ActionPage>({
   endDate: "",
   summary: { pending: 0, executed: 0, failed: 0, shadow: 0 },
 });
-const outcomePage = ref<OutcomePage>({
+const outcomePage = shallowRef<OutcomePage>({
   items: [],
   total: 0,
   page: 1,
@@ -1854,7 +1866,7 @@ const actionRisk = ref("all");
 const actionSortBy = ref("projectedNetProfitDelta");
 const actionSortDirection = ref<"asc" | "desc">("desc");
 const selectedActionIds = ref<string[]>([]);
-const auditPage = ref<AuditPage>({
+const auditPage = shallowRef<AuditPage>({
   items: [],
   total: 0,
   page: 1,
@@ -4531,6 +4543,25 @@ async function loadDashboard() {
   syncPolicyDrafts();
 }
 
+async function prefetchTabData() {
+  const runId = ++tabPrefetchRunId;
+  const loaders: Array<[string, () => Promise<unknown>]> = [
+    ["campaigns", () => loadCampaignPage(1)],
+    ["creatives:page", () => loadCreativePage(1)],
+    ["creatives:list", () => loadListEntryPage(1)],
+    ["growth:products", () => loadProductPage(1)],
+    ["growth:outcomes", () => loadOutcomePage(1)],
+    ["profit", () => loadProductCostPage(1)],
+    ["actions", () => loadActionPage(1)],
+    ["audit", () => loadAuditPage(1)],
+  ];
+  for (const [key, load] of loaders) {
+    if (runId !== tabPrefetchRunId || activeTab.value !== "overview") return;
+    if (!loadedData.has(key)) await load();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
+  }
+}
+
 async function loadSopWorkspace() {
   if (sopLoading.value || sopRefreshing.value) return;
   const requestId = ++sopWorkspaceRequestId;
@@ -4557,6 +4588,7 @@ async function loadSopWorkspace() {
     if (requestId !== sopWorkspaceRequestId) return;
     sopWorkspace.value = workspace;
     commandCenter.value = commandCenterWorkspace;
+    loadedData.add("sop");
     const latestSyncJob = sopWorkspace.value.latestSyncJob;
     const latestSyncJobAge = latestSyncJob?.updatedAt
       ? Date.now() - latestSyncJob.updatedAt
@@ -4637,6 +4669,7 @@ async function loadCampaignPage(page = campaignPage.value) {
   }
   campaignDataPage.value = result.value;
   campaignPage.value = result.value.page;
+  loadedData.add("campaigns");
 }
 
 async function loadCreativePage(page = creativePage.value.page) {
@@ -4670,6 +4703,7 @@ async function loadCreativePage(page = creativePage.value.page) {
     return;
   }
   creativePage.value = result.value;
+  loadedData.add("creatives:page");
 }
 
 async function loadListEntryPage(page = listEntryPage.value.page) {
@@ -4693,6 +4727,7 @@ async function loadListEntryPage(page = listEntryPage.value.page) {
     return;
   }
   listEntryPage.value = result.value;
+  loadedData.add("creatives:list");
 }
 
 async function loadProductPage(page = productPage.value.page) {
@@ -4725,6 +4760,7 @@ async function loadProductPage(page = productPage.value.page) {
     return;
   }
   productPage.value = result.value;
+  loadedData.add("growth:products");
 }
 
 async function loadProductCostPage(page = productCostPage.value.page) {
@@ -4754,6 +4790,7 @@ async function loadProductCostPage(page = productCostPage.value.page) {
     return;
   }
   productCostPage.value = result.value;
+  loadedData.add("profit");
 }
 
 async function loadActionPage(page = actionPage.value.page) {
@@ -4783,6 +4820,7 @@ async function loadActionPage(page = actionPage.value.page) {
     return;
   }
   actionPage.value = result.value;
+  loadedData.add("actions");
 }
 
 async function loadOutcomePage(page = outcomePage.value.page) {
@@ -4806,6 +4844,7 @@ async function loadOutcomePage(page = outcomePage.value.page) {
     return;
   }
   outcomePage.value = result.value;
+  loadedData.add("growth:outcomes");
 }
 
 async function loadAuditPage(page = auditPage.value.page) {
@@ -4833,6 +4872,7 @@ async function loadAuditPage(page = auditPage.value.page) {
     return;
   }
   auditPage.value = result.value;
+  loadedData.add("audit");
 }
 
 function campaignScopeAvailable(campaignId: string) {
@@ -6081,21 +6121,21 @@ async function importCosts(event: Event) {
 
 watch(activeTab, (value) => {
   if (value === "sop") void loadSopWorkspace();
-  if (value === "campaigns" && !campaignDataPage.value.items.length)
+  if (value === "campaigns" && !loadedData.has("campaigns"))
     void loadCampaignPage(1);
-  if (value === "creatives" && !creativePage.value.items.length)
+  if (value === "creatives" && !loadedData.has("creatives:page"))
     void loadCreativePage(1);
-  if (value === "creatives" && !listEntryPage.value.items.length)
+  if (value === "creatives" && !loadedData.has("creatives:list"))
     void loadListEntryPage(1);
-  if (value === "growth" && !productPage.value.items.length)
+  if (value === "growth" && !loadedData.has("growth:products"))
     void loadProductPage(1);
-  if (value === "growth" && !outcomePage.value.items.length)
+  if (value === "growth" && !loadedData.has("growth:outcomes"))
     void loadOutcomePage(1);
-  if (value === "profit" && !productCostPage.value.items.length)
+  if (value === "profit" && !loadedData.has("profit"))
     void loadProductCostPage(1);
-  if (value === "actions" && !actionPage.value.items.length)
+  if (value === "actions" && !loadedData.has("actions"))
     void loadActionPage(1);
-  if (value === "audit" && !auditPage.value.items.length) void loadAuditPage(1);
+  if (value === "audit" && !loadedData.has("audit")) void loadAuditPage(1);
 });
 watch(
   [sopLoading, sopRefreshing],
@@ -6201,10 +6241,18 @@ onMounted(() => {
       applySyncProgress(progress as SyncProgressState);
     },
   );
-  void loadDashboard();
-  void loadSopWorkspace();
+  // Load only the visible overview first. SOP data is deferred until its tab is opened.
+  void loadDashboard().then(() => {
+    tabPrefetchTimer = window.setTimeout(() => {
+      tabPrefetchTimer = null;
+      void prefetchTabData();
+    }, 1200);
+  });
 });
 onUnmounted(() => {
+  tabPrefetchRunId += 1;
+  if (tabPrefetchTimer) window.clearTimeout(tabPrefetchTimer);
+  tabPrefetchTimer = null;
   sopWorkspaceRequestId += 1;
   dashboardRequest.invalidate();
   campaignPageRequest.invalidate();
@@ -10254,7 +10302,7 @@ onUnmounted(() => {
                 </tr>
               </tbody>
             </table>
-            <div v-if="campaignDataLoading" class="gmv-empty">
+            <div v-if="campaignDataLoading && !campaignDataPage.items.length" class="gmv-empty">
               {{ t("gmvMaxData.loadingPage") }}
             </div>
             <div v-else-if="!campaignDataPage.total" class="gmv-empty">
@@ -10719,7 +10767,7 @@ onUnmounted(() => {
                   </tr>
                 </tbody>
               </table>
-              <div v-if="productLoading" class="gmv-empty gmv-empty--small">
+              <div v-if="productLoading && !productPage.items.length" class="gmv-empty gmv-empty--small">
                 {{ t("gmvMaxData.loadingPage") }}
               </div>
               <div
@@ -11187,7 +11235,7 @@ onUnmounted(() => {
                   </tr>
                 </tbody>
               </table>
-              <div v-if="outcomeLoading" class="gmv-empty gmv-empty--small">
+              <div v-if="outcomeLoading && !outcomePage.items.length" class="gmv-empty gmv-empty--small">
                 {{ t("gmvMaxData.loadingPage") }}
               </div>
               <div
@@ -11661,7 +11709,7 @@ onUnmounted(() => {
                 </button>
               </div>
             </article>
-            <div v-if="actionLoading" class="gmv-empty">
+            <div v-if="actionLoading && !actionPage.items.length" class="gmv-empty">
               {{ t("gmvMaxData.loadingPage") }}
             </div>
             <div v-else-if="!filteredActions.length" class="gmv-empty">
@@ -12934,7 +12982,7 @@ onUnmounted(() => {
                   </tr>
                 </tbody>
               </table>
-              <div v-if="creativeLoading" class="gmv-empty">
+              <div v-if="creativeLoading && !creativePage.items.length" class="gmv-empty">
                 {{ t("gmvMaxData.loadingPage") }}
               </div>
               <div v-else-if="!filteredCreatives.length" class="gmv-empty">
@@ -13715,7 +13763,7 @@ onUnmounted(() => {
                   </tr>
                 </tbody>
               </table>
-              <div v-if="productCostLoading" class="gmv-empty gmv-empty--small">
+              <div v-if="productCostLoading && !productCostPage.items.length" class="gmv-empty gmv-empty--small">
                 {{ t("gmvMaxData.loadingPage") }}
               </div>
               <div
@@ -13980,7 +14028,7 @@ onUnmounted(() => {
                 </tr>
               </tbody>
             </table>
-            <div v-if="auditLoading" class="gmv-empty">
+            <div v-if="auditLoading && !auditPage.items.length" class="gmv-empty">
               {{ t("gmvMaxData.loadingPage") }}
             </div>
             <div v-else-if="!filteredAudits.length" class="gmv-empty">

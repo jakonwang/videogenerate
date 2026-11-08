@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 
 type AppPathRuntimeOptions = {
@@ -43,8 +43,9 @@ export function getAppPaths() {
   const cacheDir = join(dataDir, 'cache')
 
   // electron-vite dev/build 默认输出为 .js（CommonJS 环境下可用 __dirname）
-  const preload = join(__dirname, '../preload/index.js')
-  const rendererDist = join(__dirname, '../renderer')
+  const mainRuntimeDir = getMainRuntimeDir()
+  const preload = join(mainRuntimeDir, '../preload/index.js')
+  const rendererDist = join(mainRuntimeDir, '../renderer')
 
   return { userData, dataDir, dbDir, tmpDir, cacheDir, preload, rendererDist }
 }
@@ -55,5 +56,9 @@ export async function ensureAppDirs() {
   await mkdir(dbDir, { recursive: true })
   await mkdir(tmpDir, { recursive: true })
   await mkdir(cacheDir, { recursive: true })
+}
+
+export function getMainRuntimeDir() {
+  return basename(__dirname) === 'chunks' ? dirname(__dirname) : __dirname
 }
 

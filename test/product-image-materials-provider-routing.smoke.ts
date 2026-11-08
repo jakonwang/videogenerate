@@ -68,7 +68,9 @@ async function main() {
     assert.equal(result.count, 1)
     assert.equal(captured?.provider, 'openai')
     assert.equal(captured?.model, 'gpt-image-1')
-    assert.deepEqual(captured?.imagePaths, [sourceImage])
+    assert.equal(captured?.imagePaths?.length, 1)
+    assert.ok(captured?.imagePaths?.[0]?.includes('managed-assets'))
+    assert.equal(path.basename(captured?.imagePaths?.[0] || ''), 'material-mat-provider-route-image.jpg')
 
     console.log('product image materials provider routing smoke test passed')
   } finally {

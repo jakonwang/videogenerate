@@ -3612,6 +3612,7 @@ onMounted(async () => {
     return
   }
   timer = window.setInterval(() => {
+    if (document.hidden) return
     if (current.value?.id && !isDraftingNewProject.value) {
       refreshTick += 1
       if (visibleStageKey.value === 'video' && !loading.value) {

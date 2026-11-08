@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  Bot,
   CheckCircle2,
   Clock3,
   Database,
@@ -44,8 +43,6 @@ const categoryMeta: Record<StorageCategoryId, { icon: typeof Database; tone: str
   preview_files: { icon: Eye, tone: 'violet', risk: 'caution', requiresRuntimeStop: false },
   diagnostic_logs: { icon: FileClock, tone: 'blue', risk: 'caution', requiresRuntimeStop: false },
   completed_project_artifacts: { icon: Database, tone: 'amber', risk: 'destructive', requiresRuntimeStop: false },
-  hermes_runtime: { icon: Bot, tone: 'cyan', risk: 'destructive', requiresRuntimeStop: true },
-  hermes_sessions_memory: { icon: HardDrive, tone: 'red', risk: 'destructive', requiresRuntimeStop: true },
   managed_source_assets: { icon: FolderLock, tone: 'green', risk: 'protected', requiresRuntimeStop: false },
   business_records: { icon: Database, tone: 'red', risk: 'protected', requiresRuntimeStop: false },
   configuration_credentials: { icon: KeyRound, tone: 'violet', risk: 'protected', requiresRuntimeStop: false },
@@ -53,7 +50,7 @@ const categoryMeta: Record<StorageCategoryId, { icon: typeof Database; tone: str
 
 const categoryGroupIds: Array<{ id: 'reclaimable' | 'advanced' | 'protected'; categoryIds: StorageCategoryId[] }> = [
   { id: 'reclaimable', categoryIds: ['safe_cache', 'temporary_files', 'preview_files', 'diagnostic_logs'] },
-  { id: 'advanced', categoryIds: ['completed_project_artifacts', 'hermes_runtime', 'hermes_sessions_memory'] },
+  { id: 'advanced', categoryIds: ['completed_project_artifacts'] },
   { id: 'protected', categoryIds: ['managed_source_assets', 'business_records', 'configuration_credentials'] },
 ]
 
@@ -67,7 +64,7 @@ const categories = computed(() => STORAGE_CATEGORY_IDS.map((id) => categorySnaps
   requiresRuntimeStop: categoryMeta[id].requiresRuntimeStop,
   cleanupAllowed: categoryMeta[id].risk !== 'protected',
   requiresTypedConfirmation: categoryMeta[id].risk === 'destructive',
-  backupRequired: id === 'hermes_sessions_memory',
+  backupRequired: false,
 }))
 const categoryGroups = computed(() => categoryGroupIds.map((group) => ({
   ...group,
@@ -106,7 +103,7 @@ function normalizeCategorySnapshot(snapshot: StorageCategorySnapshot): StorageCa
       : meta.risk === 'destructive',
     backupRequired: typeof snapshot.backupRequired === 'boolean'
       ? snapshot.backupRequired
-      : snapshot.id === 'hermes_sessions_memory',
+      : false,
   }
 }
 

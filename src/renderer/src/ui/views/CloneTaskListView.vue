@@ -1394,7 +1394,7 @@ onBeforeUnmount(() => {
 
               <div class="clone-console-row__preview">
                 <div class="clone-console-row__thumb" :data-duration="pseudoDurationLabel(item)">
-                  <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" />
+                  <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" loading="lazy" decoding="async" />
                   <div v-else class="clone-console-row__thumb-empty">
                     <Video class="h-5 w-5" />
                   </div>
@@ -1470,10 +1470,10 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="clone-console-row__progress-steps">
                   <span
-                    v-for="(_, index) in 5"
+                    v-for="(_, index) in 6"
                     :key="`${item.id}-${index}`"
                     class="clone-console-row__progress-step"
-                    :class="{ 'is-active': index === Math.max(0, Math.min(4, stepIndex(item.currentStep))), 'is-done': index < stepIndex(item.currentStep) }"
+                    :class="{ 'is-active': index === Math.max(0, Math.min(5, stepIndex(item.currentStep))), 'is-done': index < stepIndex(item.currentStep) }"
                   >
                     {{ index + 1 }}
                   </span>
@@ -1526,7 +1526,7 @@ onBeforeUnmount(() => {
               </div>
 
               <button class="clone-console-card__preview" type="button" @click="openVideoPreview(item)">
-                <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" />
+                <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" loading="lazy" decoding="async" />
                 <div v-else class="clone-console-row__thumb-empty">
                   <Video class="h-5 w-5" />
                 </div>

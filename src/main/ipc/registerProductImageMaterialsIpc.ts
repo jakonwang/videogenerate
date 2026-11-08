@@ -16,7 +16,27 @@ export function registerProductImageMaterialsIpc(ipcMain: IpcMain) {
     userId: string
     materialIds: string[]
     variantCount: number
+    promptVersionId?: string
+    prompt?: string
   }) => await productImageMaterialsService.createBackgroundVariants(payload))
+  ipcMain.handle('plugin:productImageMaterials:createImageVariants', async (_e, payload: {
+    userId: string
+    sourceImagePath: string
+    category: 'necklace' | 'ring' | 'earring' | 'bracelet'
+    variantCount: number
+    promptVersionId?: string
+    prompt?: string
+  }) => await productImageMaterialsService.createImageVariants(payload))
+  ipcMain.handle('plugin:productImageMaterials:listPromptVersions', async () => await productImageMaterialsService.listPromptVersions())
+  ipcMain.handle('plugin:productImageMaterials:savePromptVersion', async (_e, payload: { id?: string; name?: string; prompt: string }) =>
+    await productImageMaterialsService.savePromptVersion(payload),
+  )
+  ipcMain.handle('plugin:productImageMaterials:activatePromptVersion', async (_e, id: string) =>
+    await productImageMaterialsService.activatePromptVersion(id),
+  )
+  ipcMain.handle('plugin:productImageMaterials:rollbackPromptVersion', async (_e, id: string) =>
+    await productImageMaterialsService.rollbackPromptVersion(id),
+  )
   ipcMain.handle('plugin:productImageMaterials:listMaterials', async (_e, payload: any) =>
     await productImageMaterialsService.listMaterials(payload.userId, payload.filters),
   )

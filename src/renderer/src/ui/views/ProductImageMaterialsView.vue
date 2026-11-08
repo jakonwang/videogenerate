@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import {
   Check,
   Boxes,
@@ -11,6 +12,7 @@ import {
   Eye,
   FolderOpen,
   Image as ImageIcon,
+  Images,
   Info,
   Link2,
   RefreshCcw,
@@ -19,6 +21,7 @@ import {
   Tags,
   Trash2,
   TriangleAlert,
+  X,
 } from 'lucide-vue-next'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
@@ -87,9 +90,10 @@ type ParserVideoItem = {
 const { locale } = useI18n()
 const router = useRouter()
 const DESKTOP_USER_ID = 'desktop-local'
-const PLUGIN_NAME = 'Product Image Materials'
+const ASSET_USAGE_PLUGIN = 'product-image-materials'
 
-const activeTab = ref<'batch' | 'background' | 'library'>('batch')
+type PromptVersion = { id: string; name: string; version: number; prompt: string; active: boolean }
+const activeTab = ref<'batch' | 'image-to-image' | 'background' | 'library'>('batch')
 const batchSourceMode = ref<'upload' | 'downloaded'>('upload')
 const categories = ref<Category[]>(['necklace', 'ring', 'earring', 'bracelet'])
 const selectedCategory = ref<Category>('necklace')
@@ -108,6 +112,17 @@ const libraryPageSize = ref(24)
 const parserVideoPageSize = ref(12)
 const selectedMaterialIds = ref<string[]>([])
 const backgroundMaterialCount = ref(3)
+const imageVariantCount = ref(3)
+const imageCategory = ref<Category>('necklace')
+const sourceImagePath = ref('')
+const sourceImageName = computed(() => sourceImagePath.value.split(/[\\/]/).pop() || '')
+const sourceImagePreviewSrc = computed(() => sourceImagePath.value ? `vg://file?path=${encodeURIComponent(sourceImagePath.value)}` : '')
+const promptVersions = ref<PromptVersion[]>([])
+const selectedPromptVersionId = ref('')
+const promptVersionName = ref('')
+const promptText = ref('')
+const promptBusy = ref(false)
+const imageGenerating = ref(false)
 const selectedBackgroundMaterialIds = ref<string[]>([])
 const loading = ref(false)
 const submitting = ref(false)
@@ -119,20 +134,23 @@ const previewOpen = ref(false)
 const previewSrc = ref<string | null>(null)
 const previewTitle = ref('')
 let refreshTimer: ReturnType<typeof setInterval> | null = null
+let loadAllInFlight = false
 
 const copy = computed(() => {
   if (locale.value === 'vi-VN') {
     return {
+      pluginName: 'Tu lieu hinh anh san pham',
       kicker: 'Kho vat lieu hinh anh san pham',
       title: 'Xu ly hang loat, quan ly hieu qua',
-      subtitle: 'Tach video theo loat, lay khung hinh giua an toan, tai len Qiniu va duy tri thu vien anh co the tai su dung cho Hermes.',
+      subtitle: 'Tach video theo loat, lay khung hinh giua an toan, tai len Qiniu va duy tri thu vien anh co the tai su dung.',
       batches: 'Lo batch',
       materials: 'Vat lieu',
       processingCount: 'Dang xu ly',
       completedCount: 'Hoan thanh',
       workspace: 'Khong gian lam viec',
       workspaceHint: 'Chuyen nhanh giua xu ly batch va thu vien vat lieu',
-      batchTab: 'Tao batch',
+      batchTab: 'Tach video',
+      imageToImageTab: 'Anh sang anh',
       libraryTab: 'Thu vien vat lieu',
       createBatch: 'Tao batch',
       createBatchDesc: 'Chon danh muc co dinh va dua nhieu video vao hang doi xu ly.',
@@ -145,9 +163,12 @@ const copy = computed(() => {
       pickZoneDesc: 'Ho tro chon nhieu tep hoac keo tha vao khu vuc nay.',
       pickZoneFormats: 'Ho tro MP4 / MOV / AVI va cac dinh dang pho bien.',
       pickVideos: 'Chon video',
+      pickAssetVideos: 'Chon tu thu vien',
       queueBatch: 'Them vao hang doi',
       noVideosSelected: 'Chua chon video.',
       noDownloadedVideosSelected: 'Chua chon video da tai.',
+      noDownloadedVideos: 'Chua co video da tai hoan tat. Hay dung plugin Tai video truoc.',
+      downloadedVideo: 'Video da tai',
       backPlugin: 'Quay lai plugin',
       refresh: 'Lam moi',
       loadingBatches: 'Dang tai batch...',
@@ -185,16 +206,18 @@ const copy = computed(() => {
 
   if (locale.value === 'zh-CN') {
     return {
+      pluginName: '\u5546\u54c1\u56fe\u7247\u7d20\u6750',
       kicker: '商品图片素材库',
       title: '批量处理，高效管理',
-      subtitle: '批量拆分视频，提取安全中帧，上传到七牛，并维护可供 Hermes 复用的图片素材库。',
+      subtitle: '批量拆分视频，提取安全中帧，上传到七牛，并维护可复用的图片素材库。',
       batches: '批次',
       materials: '素材',
       processingCount: '处理中',
       completedCount: '已完成',
       workspace: '工作区',
       workspaceHint: '在批次处理与素材相册之间快速切换',
-      batchTab: '创建批次',
+      batchTab: '\u62c6\u89e3\u89c6\u9891',
+      imageToImageTab: '\u56fe\u751f\u56fe',
       libraryTab: '素材库',
       createBatch: '创建批次',
       createBatchDesc: '选择固定分类后，将多个源视频加入处理队列。',
@@ -209,9 +232,12 @@ const copy = computed(() => {
       pickZoneDesc: '支持批量选择，或将文件拖拽到此区域',
       pickZoneFormats: '支持 MP4 / MOV / AVI 等常见格式',
       pickVideos: '选择视频',
+      pickAssetVideos: '从素材库选择',
       queueBatch: '加入队列',
       noVideosSelected: '暂未选择视频。',
       noDownloadedVideosSelected: '暂未选择已下载视频。',
+      noDownloadedVideos: '暂无已完成下载的视频，请先使用视频解析下载插件。',
+      downloadedVideo: '已下载视频',
       backPlugin: '返回插件',
       refresh: '刷新',
       loadingBatches: '正在加载批次...',
@@ -248,16 +274,18 @@ const copy = computed(() => {
   }
 
   return {
+    pluginName: 'Product Image Materials',
     kicker: 'Product Image Materials',
     title: 'Batch processing, efficient management',
-    subtitle: 'Split videos in batches, extract safe middle frames, upload to Qiniu, and maintain a reusable image-material library for Hermes.',
+    subtitle: 'Split videos in batches, extract safe middle frames, upload to Qiniu, and maintain a reusable image-material library.',
     batches: 'Batches',
     materials: 'Materials',
     processingCount: 'Processing',
     completedCount: 'Completed',
     workspace: 'Workspace',
     workspaceHint: 'Switch quickly between batch processing and the material album',
-    batchTab: 'Create Batch',
+    batchTab: 'Break Down Video',
+    imageToImageTab: 'Image to Image',
     libraryTab: 'Material Library',
     createBatch: 'Create Batch',
     createBatchDesc: 'Choose a fixed category and queue multiple source videos.',
@@ -272,9 +300,12 @@ const copy = computed(() => {
     pickZoneDesc: 'Supports multi-select or dragging files into this area.',
     pickZoneFormats: 'Supports MP4 / MOV / AVI and common formats.',
     pickVideos: 'Pick Videos',
+    pickAssetVideos: 'Choose From Library',
     queueBatch: 'Queue Batch',
     noVideosSelected: 'No videos selected.',
     noDownloadedVideosSelected: 'No downloaded videos selected.',
+    noDownloadedVideos: 'No completed downloaded videos yet. Use the Video Parser Download plugin first.',
+    downloadedVideo: 'Downloaded video',
     backPlugin: 'Back to Plugins',
     refresh: 'Refresh',
     loadingBatches: 'Loading batches...',
@@ -310,22 +341,23 @@ const copy = computed(() => {
   }
 })
 
-const backgroundCopy = {
-  tab: '背景生成',
-  desc: '选择原始素材，批量生成相似背景图，同时保持产品主体不变。',
-  hint: '衍生图片会清晰标记，并默认从来源选择器中隐藏。',
-  materialCount: '每张生成数量',
-  generate: '生成背景变体',
-  sourceOnly: '仅看原图',
-  clearSelection: '清空选择',
-  selected: '已选',
-  totalOutput: '总输出',
-  origin: '来源',
-  original: '原始',
-  derived: '已衍生',
-  derivedFrom: '衍生自',
-  success: '背景变体已生成。',
-} as const
+const backgroundCopy = computed(() => {
+  if (locale.value === 'vi-VN') return {
+    tab: 'Tao nen', desc: 'Tao hang loat anh nen tu tai lieu goc va giu nguyen san pham.', hint: 'Anh phai sinh duoc danh dau ro rang va an khoi bo chon nguon.',
+    materialCount: 'So anh moi nguon', generate: 'Tao bien the nen', sourceOnly: 'Chi xem anh goc', clearSelection: 'Bo chon', selected: 'Da chon', totalOutput: 'Tong dau ra',
+    origin: 'Nguon', original: 'Anh goc', derived: 'Anh phai sinh', derivedFrom: 'Phai sinh tu', success: 'Da tao bien the nen.',
+  }
+  if (locale.value === 'zh-CN') return {
+    tab: '\u80cc\u666f\u751f\u6210', desc: '\u9009\u62e9\u539f\u59cb\u7d20\u6750\uff0c\u6279\u91cf\u751f\u6210\u76f8\u4f3c\u80cc\u666f\u56fe\uff0c\u540c\u65f6\u4fdd\u6301\u4ea7\u54c1\u4e3b\u4f53\u4e0d\u53d8\u3002', hint: '\u884d\u751f\u56fe\u7247\u4f1a\u6e05\u6670\u6807\u8bb0\uff0c\u5e76\u9ed8\u8ba4\u4ece\u6765\u6e90\u9009\u62e9\u5668\u4e2d\u9690\u85cf\u3002',
+    materialCount: '\u6bcf\u5f20\u751f\u6210\u6570\u91cf', generate: '\u751f\u6210\u80cc\u666f\u53d8\u4f53', sourceOnly: '\u4ec5\u770b\u539f\u56fe', clearSelection: '\u6e05\u7a7a\u9009\u62e9', selected: '\u5df2\u9009', totalOutput: '\u603b\u8f93\u51fa',
+    origin: '\u6765\u6e90', original: '\u539f\u59cb', derived: '\u5df2\u884d\u751f', derivedFrom: '\u884d\u751f\u81ea', success: '\u80cc\u666f\u53d8\u4f53\u5df2\u751f\u6210\u3002',
+  }
+  return {
+    tab: 'Background Generation', desc: 'Generate similar backgrounds in batches while keeping the product unchanged.', hint: 'Derived images are clearly marked and hidden from the source picker by default.',
+    materialCount: 'Variants Per Source', generate: 'Generate Background Variants', sourceOnly: 'Original Images Only', clearSelection: 'Clear Selection', selected: 'Selected', totalOutput: 'Total Output',
+    origin: 'Origin', original: 'Original', derived: 'Derived', derivedFrom: 'Derived From', success: 'Background variants generated.',
+  }
+})
 
 const libraryBatchCopy = computed(() => {
   if (locale.value === 'vi-VN') {
@@ -408,7 +440,7 @@ const paginationCopy = computed(() => {
 const libraryDisplayCopy = computed(() => {
   if (locale.value === 'vi-VN') {
     return {
-      tab: 'Thu vien anh phai sinh',
+      tab: 'Thu vien tach video',
       title: 'Thu vien anh phai sinh',
       desc: 'Chi hien thi anh phai sinh de duyet, xuat va quan ly nhanh.',
       hint: 'Chi hien thi ket qua anh phai sinh theo dang album.',
@@ -416,14 +448,14 @@ const libraryDisplayCopy = computed(() => {
   }
   if (locale.value === 'zh-CN') {
     return {
-      tab: '\u884d\u751f\u56fe\u7d20\u6750\u5e93',
+      tab: '\u884d\u751f\u56fe\u7d20\u6750',
       title: '\u884d\u751f\u56fe\u7d20\u6750\u5e93',
       desc: '\u53ea\u663e\u793a\u5df2\u884d\u751f\u51fa\u6765\u7684\u56fe\u7247\uff0c\u7528\u4e8e\u6d4f\u89c8\u3001\u5bfc\u51fa\u548c\u7ba1\u7406\u3002',
       hint: '\u5f53\u524d\u7d20\u6750\u5e93\u4ec5\u5c55\u793a\u884d\u751f\u56fe\u7ed3\u679c\u3002',
     }
   }
   return {
-    tab: 'Derived Library',
+    tab: 'Derived Image Materials',
     title: 'Derived Library',
     desc: 'Only show derived images for browsing, export, and quick management.',
     hint: 'This library only displays derived image results.',
@@ -433,7 +465,7 @@ const libraryDisplayCopy = computed(() => {
 const generationCopy = computed(() => {
   if (locale.value === 'vi-VN') {
     return {
-      tab: 'Tao anh',
+      tab: 'Thu vien anh tach video',
       desc: 'Hien thi anh nguon va anh cat tu video de tiep tuc tao anh phai sinh hang loat.',
       hint: 'Anh duoc tao moi se vao thu vien anh phai sinh va khong tron vao danh sach anh nguon.',
       materialCount: 'So anh tao moi moi nguon',
@@ -450,8 +482,8 @@ const generationCopy = computed(() => {
   }
   if (locale.value === 'zh-CN') {
     return {
-      tab: '\u56fe\u7247\u751f\u6210',
-      desc: '\u8fd9\u91cc\u53ea\u5c55\u793a\u539f\u56fe\u4e0e\u4ece\u89c6\u9891\u5207\u51fa\u7684\u6e90\u56fe\uff0c\u7528\u4e8e\u7ee7\u7eed\u6279\u91cf\u751f\u6210\u884d\u751f\u56fe\u3002',
+      tab: '\u89c6\u9891\u62c6\u89e3\u56fe\u7247\u5e93',
+      desc: '\u6d4f\u89c8\u89c6\u9891\u62c6\u89e3\u5f97\u5230\u7684\u6e90\u56fe\uff0c\u9009\u62e9\u7d20\u6750\u751f\u6210\u884d\u751f\u56fe\u3002',
       hint: '\u65b0\u751f\u6210\u7684\u56fe\u7247\u4f1a\u8fdb\u5165\u300c\u884d\u751f\u56fe\u7d20\u6750\u5e93\u300d\uff0c\u4e0d\u518d\u4e0e\u6e90\u56fe\u6df7\u663e\u3002',
       materialCount: '\u6bcf\u5f20\u6e90\u56fe\u751f\u6210\u6570\u91cf',
       generate: '\u751f\u6210\u884d\u751f\u56fe',
@@ -466,7 +498,7 @@ const generationCopy = computed(() => {
     }
   }
   return {
-    tab: 'Image Generation',
+    tab: 'Video Breakdown Image Library',
     desc: 'Show source images and video-cut frames here, then batch generate derived images from them.',
     hint: 'New outputs go into the derived library and no longer mix with source images.',
     materialCount: 'Variants per source image',
@@ -479,6 +511,24 @@ const generationCopy = computed(() => {
     derived: 'Derived Image',
     derivedFrom: 'Derived From',
     success: 'Derived images generated:',
+  }
+})
+
+const promptUi = computed(() => {
+  if (locale.value === 'zh-CN') return {
+    title: '\u751f\u6210\u63d0\u793a\u8bcd\u7248\u672c', version: '\u63d0\u793a\u8bcd\u7248\u672c', name: '\u7248\u672c\u540d\u79f0', content: '\u63d0\u793a\u8bcd\u5185\u5bb9', update: '\u4fdd\u5b58\u66f4\u65b0', copy: '\u590d\u5236\u4e3a\u65b0\u7248\u672c', activate: '\u542f\u7528\u7248\u672c', rollback: '\u56de\u6eda\u4e3a\u65b0\u7248\u672c', active: '\u5df2\u542f\u7528',
+    source: '\u6e90\u56fe\u7247', assetLibrary: '\u4ece\u7d20\u6750\u5e93\u9009\u56fe', localUpload: '\u672c\u5730\u9009\u56fe', clearSource: '\u6e05\u9664\u6e90\u56fe', sourceHint: '\u652f\u6301 JPG\u3001PNG \u548c WEBP', category: '\u5546\u54c1\u5206\u7c7b', count: '\u751f\u6210\u6570\u91cf', generate: '\u751f\u6210\u884d\u751f\u56fe', empty: '\u5c1a\u672a\u9009\u62e9\u56fe\u7247',
+    pickSourceTitle: '\u9009\u62e9\u6e90\u56fe\u7247', imageFilter: '\u56fe\u7247', saved: '\u63d0\u793a\u8bcd\u7248\u672c\u5df2\u4fdd\u5b58\u3002', activated: '\u63d0\u793a\u8bcd\u7248\u672c\u5df2\u542f\u7528\u3002', restored: '\u63d0\u793a\u8bcd\u7248\u672c\u5df2\u56de\u6eda\u4e3a\u65b0\u7684\u542f\u7528\u7248\u672c\u3002',
+  }
+  if (locale.value === 'vi-VN') return {
+    title: 'Phien ban cau lenh', version: 'Phien ban', name: 'Ten phien ban', content: 'Noi dung cau lenh', update: 'Luu cap nhat', copy: 'Sao chep thanh phien ban moi', activate: 'Kich hoat', rollback: 'Khoi phuc thanh phien ban moi', active: 'Dang dung',
+    source: 'Anh nguon', assetLibrary: 'Chon tu thu vien', localUpload: 'Chon anh tren may', clearSource: 'Xoa anh nguon', sourceHint: 'Ho tro JPG, PNG va WEBP', category: 'Danh muc san pham', count: 'So luong dau ra', generate: 'Tao anh phai sinh', empty: 'Chua chon anh',
+    pickSourceTitle: 'Chon anh nguon', imageFilter: 'Hinh anh', saved: 'Da luu phien ban cau lenh.', activated: 'Da kich hoat phien ban cau lenh.', restored: 'Da khoi phuc thanh phien ban moi.',
+  }
+  return {
+    title: 'Generation Prompt Versions', version: 'Prompt Version', name: 'Version Name', content: 'Prompt Content', update: 'Save Update', copy: 'Copy as New Version', activate: 'Activate Version', rollback: 'Rollback as New Version', active: 'Active',
+    source: 'Source Image', assetLibrary: 'Choose From Asset Library', localUpload: 'Choose Local Image', clearSource: 'Clear Source Image', sourceHint: 'Supports JPG, PNG, and WEBP', category: 'Product Category', count: 'Output Count', generate: 'Generate Derived Images', empty: 'No image selected',
+    pickSourceTitle: 'Select Source Image', imageFilter: 'Images', saved: 'Prompt version saved.', activated: 'Prompt version activated.', restored: 'Prompt version restored as a new active version.',
   }
 })
 
@@ -626,6 +676,8 @@ function backgroundMaterialTitle(item: MaterialItem) {
 }
 
 async function loadAll() {
+  if (loadAllInFlight) return
+  loadAllInFlight = true
   loading.value = true
   try {
     const [nextCategories, nextBatches, nextMaterials, nextProducts, nextParserVideos] = await Promise.all([
@@ -655,6 +707,119 @@ async function loadAll() {
     errorText.value = error?.message ?? String(error)
   } finally {
     loading.value = false
+    loadAllInFlight = false
+  }
+}
+
+async function loadPromptManagement() {
+  const versions = await window.api.productImageMaterials.listPromptVersions() as PromptVersion[]
+  promptVersions.value = Array.isArray(versions) ? versions : []
+  const selected = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+    || promptVersions.value.find((item) => item.active)
+    || promptVersions.value[0]
+  if (selected) {
+    selectedPromptVersionId.value = selected.id
+    promptVersionName.value = selected.name
+    promptText.value = selected.prompt
+  }
+}
+
+function selectPromptVersion() {
+  const selected = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+  if (!selected) return
+  promptVersionName.value = selected.name
+  promptText.value = selected.prompt
+}
+
+async function savePromptVersion(copyVersion = false) {
+  promptBusy.value = true
+  errorText.value = ''
+  try {
+    const selected = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+    const saved = await window.api.productImageMaterials.savePromptVersion({
+      id: copyVersion ? undefined : selected?.id,
+      name: promptVersionName.value,
+      prompt: promptText.value,
+    }) as PromptVersion
+    await loadPromptManagement()
+    selectedPromptVersionId.value = saved.id
+    selectPromptVersion()
+    notice.value = `${promptUi.value.saved} V${saved.version}`
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+async function activatePromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptBusy.value = true
+  try {
+    await window.api.productImageMaterials.activatePromptVersion(selectedPromptVersionId.value)
+    await loadPromptManagement()
+    notice.value = promptUi.value.activated
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+async function rollbackPromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptBusy.value = true
+  try {
+    const saved = await window.api.productImageMaterials.rollbackPromptVersion(selectedPromptVersionId.value) as PromptVersion
+    await loadPromptManagement()
+    selectedPromptVersionId.value = saved.id
+    selectPromptVersion()
+    notice.value = `${promptUi.value.restored} V${saved.version}`
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+async function pickSourceImage() {
+  const paths = await window.api.pickFiles({
+    title: promptUi.value.pickSourceTitle,
+    filters: [{ name: promptUi.value.imageFilter, extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+    multiple: false,
+  })
+  if (Array.isArray(paths) && paths[0]) sourceImagePath.value = paths[0]
+}
+
+async function pickSourceImageFromAssetLibrary() {
+  const selected = await openAssetLibraryPicker({ type: 'image', multiple: false, usagePlugin: ASSET_USAGE_PLUGIN })
+  if (selected?.[0]) sourceImagePath.value = selected[0].filePath
+}
+
+function clearSourceImage() {
+  sourceImagePath.value = ''
+}
+
+async function generateFromUploadedImage() {
+  if (!sourceImagePath.value || imageGenerating.value) return
+  imageGenerating.value = true
+  errorText.value = ''
+  notice.value = ''
+  try {
+    const result = await window.api.productImageMaterials.createImageVariants({
+      userId: DESKTOP_USER_ID,
+      sourceImagePath: sourceImagePath.value,
+      category: imageCategory.value,
+      variantCount: Math.max(1, Math.min(6, Math.floor(Number(imageVariantCount.value || 1)))),
+      promptVersionId: selectedPromptVersionId.value,
+      prompt: promptText.value,
+    })
+    notice.value = `${generationCopy.value.success} ${result.count}`
+    await loadAll()
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    imageGenerating.value = false
   }
 }
 
@@ -739,6 +904,12 @@ async function pickVideos() {
   pickedVideos.value = Array.from(new Set((files || []).map(String).filter(Boolean)))
 }
 
+async function pickVideosFromAssetLibrary() {
+  const selected = await openAssetLibraryPicker({ type: 'video', multiple: true, usagePlugin: ASSET_USAGE_PLUGIN })
+  if (!selected?.length) return
+  pickedVideos.value = Array.from(new Set([...pickedVideos.value, ...selected.map((item) => item.filePath)]))
+}
+
 function toggleParserVideoSelection(videoId: string) {
   const next = new Set(selectedParserVideoIds.value)
   if (next.has(videoId)) next.delete(videoId)
@@ -752,7 +923,7 @@ function parserVideoThumb(item: ParserVideoItem) {
 }
 
 function parserVideoLabel(item: ParserVideoItem) {
-  return String(item.title || item.author || item.videoId || 'Downloaded video').trim()
+  return String(item.title || item.author || item.videoId || copy.value.downloadedVideo).trim()
 }
 
 function materialPreviewSrc(item: MaterialItem) {
@@ -944,6 +1115,8 @@ async function generateBackgroundVariants() {
       userId: DESKTOP_USER_ID,
       materialIds,
       variantCount: Math.max(1, Math.min(6, Math.floor(Number(backgroundMaterialCount.value || 1)))),
+      promptVersionId: selectedPromptVersionId.value,
+      prompt: promptText.value,
     })
     selectedBackgroundMaterialIds.value = []
     notice.value = `${generationCopy.value.success} ${result.count}`
@@ -967,9 +1140,14 @@ async function showInFolder(path: string) {
 
 onMounted(async () => {
   await loadAll()
+  await loadPromptManagement().catch((error) => { errorText.value = error?.message ?? String(error) })
   refreshTimer = setInterval(() => {
+    if (document.visibilityState === 'hidden' || loadAllInFlight) return
+    const hasActiveWork = batches.value.some((item) => item.status === 'queued' || item.status === 'processing')
+      || parserVideos.value.some((item) => item.status === 'processing')
+    if (!hasActiveWork) return
     void loadAll()
-  }, 4000)
+  }, 8000)
 })
 
 onUnmounted(() => {
@@ -1002,7 +1180,7 @@ onUnmounted(() => {
             <Sparkles class="icon" />
           </div>
           <div class="workspace-card__copy">
-            <div class="workspace-card__title">{{ PLUGIN_NAME }}</div>
+            <div class="workspace-card__title" data-testid="product-image-materials-title">{{ copy.pluginName }}</div>
             <div class="workspace-card__hint">{{ copy.workspaceHint }}</div>
           </div>
           <div class="workspace-card__actions">
@@ -1022,15 +1200,19 @@ onUnmounted(() => {
             <Sparkles class="icon icon--small" />
             <span>{{ copy.batchTab }}</span>
           </button>
-          <button class="tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
+          <button class="tab-button" :class="{ active: activeTab === 'image-to-image' }" type="button" @click="activeTab = 'image-to-image'">
             <ImageIcon class="icon icon--small" />
-            <span>{{ libraryDisplayCopy.tab }}</span>
-            <span class="tab-badge">{{ derivedMaterialCount }}</span>
+            <span>{{ copy.imageToImageTab }}</span>
           </button>
           <button class="tab-button" :class="{ active: activeTab === 'background' }" type="button" @click="activeTab = 'background'">
             <ImageIcon class="icon icon--small" />
             <span>{{ generationCopy.tab }}</span>
             <span class="tab-badge">{{ backgroundSourceMaterials.length }}</span>
+          </button>
+          <button class="tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
+            <ImageIcon class="icon icon--small" />
+            <span>{{ libraryDisplayCopy.tab }}</span>
+            <span class="tab-badge">{{ derivedMaterialCount }}</span>
           </button>
         </div>
       </div>
@@ -1075,10 +1257,14 @@ onUnmounted(() => {
               <span>{{ copy.pickZoneFormats }}</span>
             </button>
 
-            <div class="pick-row">
-              <button class="primary-button" type="button" @click="pickVideos">
+            <div class="pick-row pick-row--three">
+              <button class="primary-button" data-testid="product-image-materials-local-videos" type="button" @click="pickVideos">
                 <FolderOpen class="icon" />
                 {{ copy.pickVideos }}
+              </button>
+              <button class="primary-button primary-button--soft" data-testid="product-image-materials-library-videos" type="button" @click="pickVideosFromAssetLibrary">
+                <Images class="icon" />
+                {{ copy.pickAssetVideos }}
               </button>
               <button class="primary-button primary-button--soft" type="button" :disabled="!canSubmit" @click="submitBatch">
                 <RefreshCcw v-if="submitting" class="icon spin" />
@@ -1097,7 +1283,7 @@ onUnmounted(() => {
 
           <template v-else>
             <div v-if="!downloadableParserVideos.length" class="empty-copy">
-              No completed downloaded videos yet. Use the Video Parser Download plugin first.
+              {{ copy.noDownloadedVideos }}
             </div>
             <div v-else class="parser-video-grid">
               <article
@@ -1107,12 +1293,12 @@ onUnmounted(() => {
                 :class="{ 'is-selected': selectedParserVideoIds.includes(item.id) }"
                 @click="toggleParserVideoSelection(item.id)"
               >
-                <img v-if="parserVideoThumb(item)" :src="parserVideoThumb(item)" alt="video thumbnail" class="parser-video-card__thumb" />
+                <img v-if="parserVideoThumb(item)" :src="parserVideoThumb(item)" alt="video thumbnail" class="parser-video-card__thumb" loading="lazy" decoding="async" />
                 <div v-else class="parser-video-card__placeholder">VIDEO</div>
                 <div class="parser-video-card__body">
                   <strong>{{ parserVideoLabel(item) }}</strong>
                   <span>{{ item.author || item.videoId }}</span>
-                  <span>{{ item.usedStatus === 'used' ? 'Used' : 'Unused' }}</span>
+                  <span>{{ item.usedStatus === 'used' ? copy.used : copy.unused }}</span>
                 </div>
               </article>
             </div>
@@ -1238,6 +1424,65 @@ onUnmounted(() => {
         </section>
       </div>
 
+      <section v-else-if="activeTab === 'image-to-image'" class="panel panel--library">
+        <div class="section-head section-head--library">
+          <div class="section-head__lead">
+            <div class="section-head__badge section-head__badge--image"><ImageIcon class="icon icon--small" /></div>
+            <div><h2>{{ copy.imageToImageTab }}</h2><p>{{ generationCopy.hint }}</p></div>
+          </div>
+        </div>
+        <div class="image-generation-grid">
+          <div class="source-picker-panel" :class="{ 'source-picker-panel--selected': sourceImagePath }">
+            <button class="source-picker-preview" data-testid="product-image-materials-source-preview" type="button" @click="pickSourceImage">
+              <img v-if="sourceImagePreviewSrc" :src="sourceImagePreviewSrc" :alt="sourceImageName" />
+              <span v-else class="source-picker-placeholder">
+                <ImageIcon class="source-picker-placeholder__icon" />
+              </span>
+            </button>
+            <div class="source-picker-content">
+              <div class="source-picker-copy">
+                <span>{{ promptUi.source }}</span>
+                <strong :title="sourceImageName">{{ sourceImageName || promptUi.empty }}</strong>
+                <small>{{ promptUi.sourceHint }}</small>
+              </div>
+              <button v-if="sourceImagePath" class="source-picker-clear" data-testid="product-image-materials-clear-image" type="button" :title="promptUi.clearSource" :aria-label="promptUi.clearSource" @click="clearSourceImage">
+                <X class="icon icon--small" />
+              </button>
+              <div class="source-picker-actions">
+                <button class="source-picker-action source-picker-action--local" data-testid="product-image-materials-local-image" style="background: #0d7568 !important; border-color: rgba(107, 235, 211, 0.32) !important; color: #ffffff !important;" type="button" @click="pickSourceImage">
+                  <CloudUpload class="icon icon--small" style="color: #ffffff !important;" />
+                  <span style="color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;">{{ promptUi.localUpload }}</span>
+                </button>
+                <button class="ghost-button source-picker-action" data-testid="product-image-materials-library-image" type="button" @click="pickSourceImageFromAssetLibrary">
+                  <Images class="icon icon--small" />
+                  <span>{{ promptUi.assetLibrary }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <label><span>{{ promptUi.category }}</span><select v-model="imageCategory" class="input"><option v-for="item in categories" :key="item" :value="item">{{ categoryLabel(item) }}</option></select></label>
+            <label><span>{{ promptUi.count }}</span><input v-model.number="imageVariantCount" class="input" type="number" min="1" max="6" step="1" /></label>
+          </div>
+        </div>
+        <div class="prompt-version-editor">
+          <div class="prompt-version-meta">
+            <label><span>{{ promptUi.version }}</span><select v-model="selectedPromptVersionId" class="input" @change="selectPromptVersion"><option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${promptUi.active}` : '' }}</option></select></label>
+            <label><span>{{ promptUi.name }}</span><input v-model="promptVersionName" class="input" type="text" /></label>
+          </div>
+          <label class="prompt-version-content"><span>{{ promptUi.content }}</span><textarea v-model="promptText" class="input prompt-textarea" rows="5" spellcheck="false"></textarea></label>
+          <div class="prompt-version-actions">
+            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="savePromptVersion()">{{ promptUi.update }}</button>
+            <button class="ghost-button" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ promptUi.copy }}</button>
+            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ promptUi.activate }}</button>
+            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ promptUi.rollback }}</button>
+          </div>
+        </div>
+        <div class="library-toolbar__actions image-generation-actions">
+          <button class="primary-button generate-button" type="button" :disabled="!sourceImagePath || imageGenerating" @click="generateFromUploadedImage"><span class="generate-button__icon"><RefreshCcw class="icon" :class="{ spin: imageGenerating }" /></span><span>{{ promptUi.generate }}</span><span class="generate-button__arrow">&#8594;</span></button>
+        </div>
+      </section>
+
       <section v-else-if="activeTab === 'background'" class="panel panel--library">
         <div class="section-head section-head--library">
           <div class="section-head__lead">
@@ -1266,6 +1511,20 @@ onUnmounted(() => {
           </label>
         </div>
 
+        <div class="prompt-version-editor">
+          <div class="prompt-version-meta">
+            <label><span>{{ promptUi.version }}</span><select v-model="selectedPromptVersionId" class="input" @change="selectPromptVersion"><option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${promptUi.active}` : '' }}</option></select></label>
+            <label><span>{{ promptUi.name }}</span><input v-model="promptVersionName" class="input" type="text" /></label>
+          </div>
+          <label class="prompt-version-content"><span>{{ promptUi.content }}</span><textarea v-model="promptText" class="input prompt-textarea" rows="5" spellcheck="false"></textarea></label>
+          <div class="prompt-version-actions">
+            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="savePromptVersion()">{{ promptUi.update }}</button>
+            <button class="ghost-button" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ promptUi.copy }}</button>
+            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ promptUi.activate }}</button>
+            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ promptUi.rollback }}</button>
+          </div>
+        </div>
+
         <div v-if="backgroundSourceMaterials.length" class="library-toolbar">
           <div class="library-toolbar__selection">
             <button class="ghost-button ghost-button--toolbar" type="button" @click="toggleSelectAllBackgroundVisible">
@@ -1284,13 +1543,14 @@ onUnmounted(() => {
               {{ generationCopy.clearSelection }}
             </button>
             <button
-              class="primary-button library-toolbar__export"
+              class="primary-button library-toolbar__export generate-button"
               type="button"
               :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting"
               @click="generateBackgroundVariants"
             >
-              <RefreshCcw class="icon" :class="{ spin: backgroundSubmitting }" />
-              {{ generationCopy.generate }}
+              <span class="generate-button__icon"><RefreshCcw class="icon" :class="{ spin: backgroundSubmitting }" /></span>
+              <span>{{ generationCopy.generate }}</span>
+              <span class="generate-button__arrow">&#8594;</span>
             </button>
             <button
               class="ghost-button library-toolbar__export"
@@ -1310,7 +1570,7 @@ onUnmounted(() => {
             <article v-for="item in pagedBackgroundMaterials" :key="item.id" class="album-card">
               <div class="album-card__media">
                 <button class="album-thumb-button" type="button" @click="openMaterialPreview(item)">
-                  <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+                  <img class="album-thumb" :src="item.qiniuUrl" alt="material" loading="lazy" decoding="async" />
                 </button>
                 <button
                   class="select-checkbox"
@@ -1446,7 +1706,7 @@ onUnmounted(() => {
             <article v-for="item in pagedMaterials" :key="item.id" class="album-card">
             <div class="album-card__media">
               <button class="album-thumb-button" type="button" @click="openMaterialPreview(item)">
-                <img class="album-thumb" :src="item.qiniuUrl" alt="material" />
+                <img class="album-thumb" :src="item.qiniuUrl" alt="material" loading="lazy" decoding="async" />
               </button>
               <button
                 class="select-checkbox"
@@ -1859,6 +2119,203 @@ onUnmounted(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.image-generation-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.source-picker-panel {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 152px;
+  padding: 10px;
+  border: 1px solid rgba(141, 169, 175, 0.16);
+  border-radius: 14px;
+  background: #0c1219;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.source-picker-panel--selected {
+  border-color: rgba(76, 210, 188, 0.38);
+  background: #0d171d;
+}
+
+.source-picker-preview {
+  width: 132px;
+  height: 132px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(141, 169, 175, 0.18);
+  border-radius: 10px;
+  background: #111a22;
+  color: rgba(98, 224, 202, 0.82);
+  cursor: pointer;
+}
+
+.source-picker-preview:hover {
+  border-color: rgba(76, 210, 188, 0.58);
+}
+
+.source-picker-preview img,
+.source-picker-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.source-picker-preview img {
+  display: block;
+  object-fit: cover;
+}
+
+.source-picker-placeholder {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(21, 52, 56, 0.72), rgba(13, 22, 29, 0.94));
+}
+
+.source-picker-placeholder__icon {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.5;
+}
+
+.source-picker-content {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 4px 2px 2px 0;
+}
+
+.source-picker-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding-right: 38px;
+}
+
+.source-picker-copy > span {
+  color: #5cd3bf;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.source-picker-copy > strong {
+  overflow: hidden;
+  color: #eef8f6;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-picker-copy > small {
+  color: rgba(210, 226, 227, 0.5);
+  font-size: 11px;
+}
+
+.source-picker-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(141, 169, 175, 0.14);
+  border-radius: 8px;
+  background: #141d25;
+  color: rgba(224, 237, 237, 0.68);
+  cursor: pointer;
+}
+
+.source-picker-clear:hover {
+  border-color: rgba(255, 124, 124, 0.34);
+  color: #ffb1b1;
+}
+
+.source-picker-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: auto;
+}
+
+.source-picker-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.source-picker-action span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-picker-action--local {
+  border: 1px solid rgba(107, 235, 211, 0.32);
+  background: #0d7568;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(8, 104, 92, 0.22);
+}
+
+.source-picker-action--local:hover {
+  border-color: rgba(132, 244, 222, 0.52);
+  background: #118b7c;
+}
+
+.prompt-version-editor {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.prompt-version-meta {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.prompt-version-content {
+  min-width: 0;
+}
+
+.prompt-version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.prompt-textarea {
+  min-height: 112px;
+  height: 112px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  line-height: 1.5;
+}
+
+.image-generation-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
 .form-grid--single {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -2016,6 +2473,10 @@ label span {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   margin-top: 10px;
+}
+
+.pick-row--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .primary-button,
@@ -2568,6 +3029,8 @@ label span {
 
 @media (max-width: 1280px) {
   .workspace-grid,
+  .image-generation-grid,
+  .prompt-version-editor,
   .form-grid,
   .filter-grid,
   .pick-row {
@@ -2642,6 +3105,28 @@ label span {
     justify-content: space-between;
     width: 100%;
   }
+
+  .prompt-version-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-version-actions {
+    grid-column: auto;
+  }
+
+  .source-picker-panel {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .source-picker-preview {
+    width: 96px;
+    height: 96px;
+  }
+
+  .source-picker-actions {
+    grid-template-columns: 1fr;
+    margin-top: 12px;
+  }
 }
 
 @keyframes spin {
@@ -2652,5 +3137,224 @@ label span {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Premium workspace treatment: restrained graphite surfaces with one clear accent. */
+.materials-workbench {
+  gap: 12px;
+  color: #eef4f4;
+}
+
+.hero-card,
+.workspace-card,
+.footer-card,
+.panel {
+  border-color: rgba(141, 169, 175, 0.16);
+  border-radius: 20px;
+  background: #10151d;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.workspace-card {
+  background: #0f141b;
+}
+
+.workspace-card__icon,
+.hero-card__eyebrow-icon {
+  background: #0c6d61;
+  box-shadow: 0 8px 22px rgba(16, 185, 164, 0.16);
+}
+
+.tabs-shell {
+  padding: 5px;
+  border-radius: 14px;
+  background: #0b1017;
+  border-color: rgba(141, 169, 175, 0.13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.tab-button {
+  min-height: 38px;
+  border-radius: 10px;
+  color: rgba(226, 237, 238, 0.68);
+}
+
+.tab-button:hover {
+  background: rgba(92, 211, 191, 0.08);
+  color: #d8f7f1;
+}
+
+.tab-button.active {
+  background: #0d5d55;
+  border-color: rgba(91, 220, 199, 0.42);
+  color: #ecfffb;
+  box-shadow: 0 8px 20px rgba(11, 118, 103, 0.22);
+}
+
+.tab-badge {
+  background: rgba(231, 255, 250, 0.12);
+  color: #c9f2e9;
+}
+
+.panel--feature,
+.panel--queue,
+.panel--library {
+  background: #111720;
+}
+
+.section-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(141, 169, 175, 0.1);
+}
+
+.section-head__badge,
+.section-head__badge--image {
+  background: #0c6d61;
+  box-shadow: 0 7px 18px rgba(16, 185, 164, 0.15);
+}
+
+.section-head h2 {
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+
+.section-head p,
+.workspace-card__hint {
+  color: rgba(210, 226, 227, 0.6);
+}
+
+.image-generation-grid {
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.upload-dropzone:hover {
+  border-color: rgba(89, 225, 202, 0.72);
+  background: #11272a;
+}
+
+.upload-dropzone__icon {
+  color: #42cfb7;
+}
+
+.prompt-version-editor {
+  padding: 16px 0 2px;
+  border-top-color: rgba(141, 169, 175, 0.12);
+}
+
+.prompt-version-meta {
+  padding: 12px;
+  border: 1px solid rgba(141, 169, 175, 0.1);
+  border-radius: 14px;
+  background: #0d131a;
+}
+
+.prompt-version-content {
+  padding: 12px;
+  border: 1px solid rgba(141, 169, 175, 0.1);
+  border-radius: 14px;
+  background: #0d131a;
+}
+
+.prompt-version-actions {
+  padding-top: 2px;
+}
+
+.input {
+  border-color: rgba(141, 169, 175, 0.25);
+  border-radius: 10px;
+  background: #0a1016;
+  color: #ecf8f6;
+}
+
+.input:hover,
+.input:focus {
+  border-color: rgba(76, 210, 188, 0.68);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(53, 186, 165, 0.1);
+}
+
+.primary-button,
+.ghost-button {
+  border-radius: 10px;
+}
+
+.primary-button {
+  background: #0d7568;
+  border-color: rgba(107, 235, 211, 0.32);
+  box-shadow: 0 8px 18px rgba(8, 104, 92, 0.22);
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #118b7c;
+}
+
+.generate-button {
+  min-height: 46px;
+  min-width: 184px;
+  padding: 0 14px 0 10px;
+  border-radius: 13px;
+  gap: 10px;
+  background: linear-gradient(135deg, #119b87 0%, #087267 58%, #07564f 100%);
+  border-color: rgba(135, 255, 227, 0.52);
+  box-shadow: 0 10px 24px rgba(5, 121, 105, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.generate-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #18b79f 0%, #0b8c7c 58%, #07655d 100%);
+  border-color: rgba(160, 255, 235, 0.78);
+  box-shadow: 0 14px 28px rgba(5, 147, 127, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.generate-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.generate-button:disabled {
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.generate-button__icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: rgba(2, 49, 45, 0.38);
+  border: 1px solid rgba(179, 255, 239, 0.25);
+}
+
+.generate-button__arrow {
+  margin-left: auto;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.82;
+  transition: transform 0.2s ease;
+}
+
+.generate-button:hover:not(:disabled) .generate-button__arrow {
+  transform: translateX(3px);
+}
+
+.image-generation-actions .generate-button {
+  min-width: 208px;
+}
+
+.ghost-button {
+  background: #171f29;
+  border-color: rgba(141, 169, 175, 0.16);
+  color: #dcebea;
+}
+
+.ghost-button:hover:not(:disabled) {
+  background: #1c2b31;
+  border-color: rgba(76, 210, 188, 0.42);
+  color: #f0fffc;
 }
 </style>

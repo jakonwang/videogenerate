@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
-import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import { backgroundRecordStore } from '../../lib/backgroundRecordStore'
 import { materializeManagedAsset } from '../managed-assets/service'
 import type { TiktokCreativeShotTask, TiktokCreativeTask, TiktokCreativeTaskLog } from './types'
 
-type DbShape = {
-  tasks: TiktokCreativeTask[]
-}
+const STORE_NAMESPACE = 'tiktok-creative-studio-tasks'
+let migrationPromise: Promise<{ migrated: number }> | null = null
 
 function dbPath() {
   return join(getAppPaths().dbDir, 'tiktok-creative-studio.json')
@@ -17,8 +16,9 @@ function now() {
   return Date.now()
 }
 
-function defaultDb(): DbShape {
-  return { tasks: [] }
+function ensureMigrated() {
+  migrationPromise ||= backgroundRecordStore.migrate(STORE_NAMESPACE, dbPath(), 'tasks')
+  return migrationPromise
 }
 
 function normalizeLogs(logs: TiktokCreativeTaskLog[] | undefined) {
@@ -26,6 +26,7 @@ function normalizeLogs(logs: TiktokCreativeTaskLog[] | undefined) {
 }
 
 function normalizeShotTask(shot: TiktokCreativeShotTask): TiktokCreativeShotTask {
+  const zoomPercent = [10, 20, 30, 40, 50, 60, 70, 80].includes(Number(shot.zoomPercent)) ? Number(shot.zoomPercent) : 20
   const imageRetryLimit = Math.max(0, Math.min(20, Math.floor(Number(shot.imageRetryLimit ?? 1) || 0)))
   const imageRetryCount = Math.min(imageRetryLimit, Math.max(0, Number(shot.imageRetryCount || 0) || 0))
   const lastError = String(shot.lastError || '').trim() || undefined
@@ -48,6 +49,7 @@ function normalizeShotTask(shot: TiktokCreativeShotTask): TiktokCreativeShotTask
     lastError,
     logs: normalizeLogs(shot.logs),
     sourceType: shot.sourceType || (shot.shotId ? 'legacy_clone_shot' : 'reference_image'),
+    zoomPercent,
     referenceImagePath: String(shot.referenceImagePath || '').trim() || undefined,
     preparedImagePath: String(shot.preparedImagePath || '').trim() || undefined,
     imagePreparation: shot.imagePreparation && typeof shot.imagePreparation === 'object'
@@ -138,8 +140,9 @@ async function materializeTaskAssets(task: TiktokCreativeTask): Promise<TiktokCr
 
 export const tiktokCreativeStudioRepo = {
   async list(): Promise<TiktokCreativeTask[]> {
-    const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
-    return [...db.tasks]
+    await ensureMigrated()
+    const page = await backgroundRecordStore.list<TiktokCreativeTask>(STORE_NAMESPACE, { limit: 10_000 })
+    return page.items
       .map(normalizeTask)
       .sort(
         (a, b) =>
@@ -149,31 +152,35 @@ export const tiktokCreativeStudioRepo = {
   },
 
   async get(id: string) {
-    const tasks = await this.list()
-    return tasks.find((item) => item.id === id) || null
+    await ensureMigrated()
+    const task = await backgroundRecordStore.get<TiktokCreativeTask>(STORE_NAMESPACE, id)
+    return task ? normalizeTask(task) : null
   },
 
   async upsert(task: TiktokCreativeTask) {
-    const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
+    await ensureMigrated()
     const normalized = normalizeTask(await materializeTaskAssets(task))
-    const index = db.tasks.findIndex((item) => item.id === normalized.id)
-    if (index >= 0) db.tasks[index] = normalized
-    else db.tasks.unshift(normalized)
-    await writeJsonFile(dbPath(), db)
+    await backgroundRecordStore.upsert(STORE_NAMESPACE, normalized as unknown as Record<string, unknown>)
     return normalized
   },
 
+  async listPage(input: { offset?: number; limit?: number } = {}) {
+    await ensureMigrated()
+    const page = await backgroundRecordStore.list<TiktokCreativeTask>(STORE_NAMESPACE, input)
+    return { ...page, items: page.items.map(normalizeTask) }
+  },
+
   async migrateExternalAssets(): Promise<{ migrated: number }> {
-    const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
+    await ensureMigrated()
+    const tasks = await this.list()
     let migrated = 0
-    for (let index = 0; index < db.tasks.length; index += 1) {
-      const current = normalizeTask(db.tasks[index])
+    for (const task of tasks) {
+      const current = normalizeTask(task)
       const next = normalizeTask(await materializeTaskAssets(current))
       if (JSON.stringify(next) === JSON.stringify(current)) continue
-      db.tasks[index] = next
+      await backgroundRecordStore.upsert(STORE_NAMESPACE, next as unknown as Record<string, unknown>)
       migrated += 1
     }
-    if (migrated) await writeJsonFile(dbPath(), db)
     return { migrated }
   },
 
@@ -197,9 +204,7 @@ export const tiktokCreativeStudioRepo = {
   },
 
   async remove(id: string) {
-    const db = await readJsonFile<DbShape>(dbPath(), defaultDb())
-    db.tasks = db.tasks.filter((item) => item.id !== id)
-    await writeJsonFile(dbPath(), db)
-    return { ok: true as const }
+    await ensureMigrated()
+    return { ok: await backgroundRecordStore.remove(STORE_NAMESPACE, id) }
   },
 }

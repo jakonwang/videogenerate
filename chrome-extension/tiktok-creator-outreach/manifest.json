@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "TikTok Creator Outreach",
+  "version": "1.0.0",
+  "description": "Read visible TikTok Affiliate creators and prepare confirmed outreach actions.",
+  "permissions": ["activeTab", "tabs", "scripting", "storage", "sidePanel"],
+  "host_permissions": ["https://affiliate.tiktok.com/affiliate/*", "https://affiliate.tiktok.com/seller/*", "http://127.0.0.1:47960/*"],
+  "action": { "default_title": "Creator Outreach", "default_popup": "sidepanel.html" },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://affiliate.tiktok.com/affiliate/*", "https://affiliate.tiktok.com/seller/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

@@ -6,7 +6,11 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'src/main/index.ts'),
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          backgroundRecordStoreWorker: resolve(__dirname, 'src/main/workers/backgroundRecordStoreWorker.ts'),
+          gmvMaxWorker: resolve(__dirname, 'src/main/workers/gmvMaxWorker.ts'),
+        },
         // 这些包依赖自身 __dirname 计算二进制路径；打包进 main bundle 会导致路径错误（ENOENT）
         external: [
           'ffmpeg-static',

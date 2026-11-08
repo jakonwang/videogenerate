@@ -25,6 +25,11 @@ function emptyDb(): ProductImageMaterialDb {
   }
 }
 
+const DB_CACHE_TTL_MS = 1_000
+let dbCache: ProductImageMaterialDb | null = null
+let dbCacheAt = 0
+let dbReadPromise: Promise<ProductImageMaterialDb> | null = null
+
 function normalizeBatch(batch: ProductImageMaterialBatch): ProductImageMaterialBatch {
   return {
     ...batch,
@@ -58,15 +63,30 @@ function normalizeMaterial(item: ProductImageMaterialItem): ProductImageMaterial
 
 export const productImageMaterialsRepo = {
   async readDb() {
-    const raw = await readJsonFile<ProductImageMaterialDb>(dbPath(), emptyDb())
-    return {
-      batches: Array.isArray(raw.batches) ? raw.batches.map(normalizeBatch) : [],
-      materials: Array.isArray(raw.materials) ? raw.materials.map(normalizeMaterial) : [],
+    const currentTime = now()
+    if (dbCache && currentTime - dbCacheAt < DB_CACHE_TTL_MS) return dbCache
+    if (dbReadPromise) return await dbReadPromise
+    dbReadPromise = (async () => {
+      const raw = await readJsonFile<ProductImageMaterialDb>(dbPath(), emptyDb())
+      const normalized = {
+        batches: Array.isArray(raw.batches) ? raw.batches.map(normalizeBatch) : [],
+        materials: Array.isArray(raw.materials) ? raw.materials.map(normalizeMaterial) : [],
+      }
+      dbCache = normalized
+      dbCacheAt = now()
+      return normalized
+    })()
+    try {
+      return await dbReadPromise
+    } finally {
+      dbReadPromise = null
     }
   },
 
   async writeDb(db: ProductImageMaterialDb) {
     await writeJsonFile(dbPath(), db)
+    dbCache = db
+    dbCacheAt = now()
   },
 
   async listBatches(userId: string) {

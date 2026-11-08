@@ -3,12 +3,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import type { TiktokCookie } from './accounts'
 import type { TiktokCreativeRequestTrace } from './types'
-import { getAppPaths } from '../../lib/paths'
 
 const BASE_URL = 'https://ads.tiktok.com'
 const PAGE_URL = `${BASE_URL}/creative/creativestudio/image-to-video?subApp=CreativeStudio/ReferenceToVideo/ReferenceToVideo`
+const IMAGE_TO_VIDEO_PAGE_URL = `${BASE_URL}/creative/creativestudio/image-to-video?subApp=CreativeStudio/MiniApp/ImageToVideo`
 const SAVE_LIBRARY_URL = `${BASE_URL}/creative_bff_i18n/api/cue/save_to_my_library`
 const REFERENCE_VIDEO_URL = `${BASE_URL}/creative_bff_i18n/api/cue/i2v/gen_r2v_video`
+const IMAGE_TO_VIDEO_URL = `${BASE_URL}/creative_bff_i18n/api/cue/i2v/create_generate_task`
 const VIDEO_INFO_URL = `${BASE_URL}/creative_bff_i18n/api/cue/video_info`
 const CHECK_URL = `${BASE_URL}/creative_bff_i18n/api/cue/generate-task/check?aid=__AID__&app_name=creative_aio_client&device_platform=web`
 const CREDIT_URL = `${BASE_URL}/CreativeOne/SymphonyPlatform/QueryCreditAccount`
@@ -56,14 +57,122 @@ function findValue(value: unknown, keys: string[]): string {
   return ''
 }
 
-function findNumber(value: unknown, keys: string[]): number | undefined {
-  const text = findValue(value, keys)
+function parseNumericValue(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value !== 'string') return undefined
+  const text = value.trim().replace(/,/g, '')
+  if (!text) return undefined
   const number = Number(text)
   return Number.isFinite(number) ? number : undefined
 }
 
-function hasSessionCookie(cookies: TiktokCookie[]) {
-  return cookies.some((cookie) => /^(sessionid|sessionid_ss|sid_tt|sid_guard|uid_tt|uid_tt_ss|msToken|passport_csrf_token|ttwid)$/i.test(cookie.name))
+function findNumber(value: unknown, keys: string[]): number | undefined {
+  const findAnyNumeric = (current: unknown, visited = new Set<object>()): number | undefined => {
+    const direct = parseNumericValue(current)
+    if (direct !== undefined) return direct
+    if (!current || typeof current !== 'object' || visited.has(current)) return undefined
+    visited.add(current)
+    for (const nested of Object.values(current as Record<string, unknown>)) {
+      const number = findAnyNumeric(nested, visited)
+      if (number !== undefined) return number
+    }
+    return undefined
+  }
+  const findKey = (current: unknown, wanted: string, visited = new Set<object>()): number | undefined => {
+    if (!current || typeof current !== 'object' || visited.has(current)) return undefined
+    visited.add(current)
+    for (const [key, nested] of Object.entries(current as Record<string, unknown>)) {
+      if (key.toLowerCase() === wanted) {
+        const number = parseNumericValue(nested) ?? findAnyNumeric(nested)
+        if (number !== undefined) return number
+      }
+    }
+    for (const nested of Object.values(current as Record<string, unknown>)) {
+      const number = findKey(nested, wanted, visited)
+      if (number !== undefined) return number
+    }
+    return undefined
+  }
+  for (const key of keys) {
+    const number = findKey(value, key.toLowerCase())
+    if (number !== undefined) return number
+  }
+  return undefined
+}
+
+export function extractCreditValue(value: unknown) {
+  return findNumber(value, [
+    'credit',
+    'credits',
+    'creditAmount',
+    'creditBalance',
+    'availableCredit',
+    'availableCredits',
+    'availableCreditAmount',
+    'balance',
+    'remain',
+    'remaining',
+  ])
+}
+
+function selectBestVideoUrl(value: unknown): string {
+  if (!value || typeof value !== 'object') return ''
+  const findVideoInfos = (current: unknown, visited = new Set<object>()): any[] | undefined => {
+    if (!current || typeof current !== 'object' || visited.has(current)) return undefined
+    visited.add(current)
+    if (Array.isArray(current)) {
+      for (const entry of current) {
+        const found = findVideoInfos(entry, visited)
+        if (found) return found
+      }
+      return undefined
+    }
+    const object = current as Record<string, unknown>
+    for (const [key, nested] of Object.entries(object)) {
+      if (key.toLowerCase() === 'videoinfos' && Array.isArray(nested)) return nested as any[]
+    }
+    for (const nested of Object.values(object)) {
+      const found = findVideoInfos(nested, visited)
+      if (found) return found
+    }
+    return undefined
+  }
+  const videoInfos = findVideoInfos(value)
+  if (videoInfos?.length) {
+    const candidates = videoInfos.map((entry: Record<string, any>) => {
+      const meta = entry?.VideoMeta || entry?.videoMeta || {}
+      const width = Number(meta.Width || meta.width) || 0
+      const height = Number(meta.Height || meta.height) || 0
+      const definition = String(meta.Definition || meta.definition || '')
+      const definitionRank = Number(definition.match(/(\d+)p/i)?.[1] || 0)
+      const url = String(entry?.MainHTTPUrl || entry?.MainUrl || entry?.mainUrl || '').trim()
+      return { url, pixels: width * height, definitionRank }
+    }).filter((entry: { url: string }) => entry.url)
+    candidates.sort((left: any, right: any) =>
+      right.pixels - left.pixels || right.definitionRank - left.definitionRank,
+    )
+    if (candidates[0]?.url) return candidates[0].url
+  }
+  return findValue(value, ['MainHTTPUrl', 'MainUrl', 'mainUrl'])
+}
+
+let sharedBrowser: any
+let sharedBrowserPromise: Promise<any> | undefined
+let contextLifecycleTail: Promise<void> = Promise.resolve()
+let browserStartCount = 0
+let browserStartFailures = 0
+const MAX_BROWSER_START_FAILURES = 2
+
+async function acquireContextLock() {
+  const previous = contextLifecycleTail
+  let release!: () => void
+  contextLifecycleTail = new Promise<void>((resolve) => { release = resolve })
+  await previous
+  return release
+}
+
+async function delay(milliseconds: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 }
 
 async function launchPage(cookies: TiktokCookie[], accountId: string) {
@@ -72,22 +181,73 @@ async function launchPage(cookies: TiktokCookie[], accountId: string) {
   if (!executablePath) {
     throw new Error('A supported browser was not found. Install Microsoft Edge or Google Chrome and try again.')
   }
-  const profileDir = join(getAppPaths().cacheDir, 'tiktok-creative-studio', 'profiles', accountId.replace(/[^a-zA-Z0-9._-]/g, '_'))
-  await mkdir(profileDir, { recursive: true })
-  // chromium.launch({ executablePath }) remains the supported executable selection contract.
-  const context = await chromium.launchPersistentContext(profileDir, {
+  const launchOptions = {
     executablePath,
     headless: false,
-    userAgent: USER_AGENT,
-    extraHTTPHeaders: { Referer: BASE_URL },
-    args: ['--window-position=-32000,-32000'],
-  })
-  const existingCookies = await context.cookies([BASE_URL]).catch(() => [])
-  if (!hasSessionCookie(existingCookies as TiktokCookie[])) {
-    await context.addCookies(cookies.map((cookie) => ({ ...cookie, expires: cookie.expires || -1 })))
+    args: ['--window-position=-32000,-32000', '--no-first-run', '--no-default-browser-check'],
   }
-  const page = await context.newPage()
-  return { browser: context.browser(), context, page }
+  const reusedBrowser = Boolean(sharedBrowser?.isConnected?.())
+  if (!reusedBrowser) {
+    if (!sharedBrowserPromise) {
+      if (browserStartFailures >= MAX_BROWSER_START_FAILURES) {
+        throw new Error('TikTok browser start is paused after repeated failures')
+      }
+      sharedBrowserPromise = chromium.launch(launchOptions)
+        .then((browser: any) => {
+          sharedBrowser = browser
+          sharedBrowserPromise = undefined
+          browserStartFailures = 0
+          browserStartCount += 1
+          console.info('[tiktok-creative] browserStarted', { browserStartCount })
+          browser.once('disconnected', () => {
+            if (sharedBrowser === browser) sharedBrowser = undefined
+            console.warn('[tiktok-creative] browserDisconnected')
+          })
+          return browser
+        })
+        .catch((error) => {
+          sharedBrowserPromise = undefined
+          browserStartFailures += 1
+          throw error
+        })
+    }
+    try {
+      await sharedBrowserPromise
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`TikTok browser could not start: ${message}`)
+    }
+  }
+  const browser = sharedBrowser
+  if (!browser) throw new Error('TikTok browser could not start: browser instance is unavailable')
+  if (reusedBrowser) {
+    console.info('[tiktok-creative] browserReused', { browserStartCount })
+  }
+  const releaseContext = await acquireContextLock()
+  let context: any
+  try {
+    console.info('[tiktok-creative] contextCreated', { accountId })
+    context = await browser.newContext({
+      userAgent: USER_AGENT,
+      extraHTTPHeaders: { Referer: BASE_URL },
+      serviceWorkers: 'block',
+    })
+    await context.addCookies(cookies.map((cookie) => ({ ...cookie, expires: cookie.expires || -1 })))
+    const page = await context.newPage()
+    return { browser, context, page, releaseContext }
+  } catch (error) {
+    await context?.close().catch(() => undefined)
+    releaseContext()
+    throw error
+  }
+}
+
+export async function closeTiktokOfficialBrowser() {
+  const browser = sharedBrowser
+  sharedBrowser = undefined
+  sharedBrowserPromise = undefined
+  if (!browser) return
+  await browser.close().catch(() => undefined)
 }
 
 async function readJsonResponse(response: any) {
@@ -110,6 +270,23 @@ async function pageFetch(page: any, url: string, init?: { method?: string; body?
     })
     return { status: response.status, body: await response.text() }
   }, { url, init })
+}
+
+async function apiFetch(cookies: TiktokCookie[], url: string, init?: { method?: string; body?: unknown; headers?: Record<string, string> }) {
+  const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+  const response = await fetch(url, {
+    method: init?.method || 'GET',
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      'user-agent': USER_AGENT,
+      referer: `${BASE_URL}/`,
+      cookie: cookieHeader,
+      ...(init?.headers || {}),
+    },
+    body: init?.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: AbortSignal.timeout(60_000),
+  })
+  return { status: response.status, body: await response.text() }
 }
 
 async function parsePageBody(result: { status: number; body: string }) {
@@ -245,28 +422,60 @@ function draftInfoHasFailure(body: unknown) {
   })
 }
 
+function extractDraftVideoId(body: unknown): string {
+  const draftInfos = body && typeof body === 'object'
+    ? (body as Record<string, any>).data?.draft_infos
+    : undefined
+  if (!Array.isArray(draftInfos)) return ''
+  for (const draft of draftInfos) {
+    if (!draft || typeof draft !== 'object') continue
+    const direct = findValue(draft, ['vid', 'videoId', 'video_id', 'CueVideoID', 'VideoID'])
+    if (direct) return direct
+    const content = (draft as Record<string, unknown>).content
+    if (typeof content === 'string' && content.trim()) {
+      try {
+        const parsed = JSON.parse(content)
+        const nested = findValue(parsed, ['vid', 'videoId', 'video_id', 'CueVideoID', 'VideoID'])
+        if (nested) return nested
+      } catch {
+        // Some TikTok responses contain escaped draft content that is not JSON.
+        const match = content.match(/(?:CueVideoID|VideoID|videoId)\\?"?\s*:\s*\\?"?(\d+)/i)
+        if (match?.[1]) return match[1]
+      }
+    }
+  }
+  return ''
+}
+
 export class TiktokOfficialClient {
   private browser: any
   private context: any
   private page: any
+  private releaseContext: (() => void) | undefined
+  private closed = false
+  private openedMode: 'reference_to_video' | 'image_to_video' | undefined
   private aid: string
   private requestHeaders: Record<string, string> = {}
-  private capturedCredit: any
   private requestTrace: TiktokCreativeRequestTrace[] = []
 
   constructor(private readonly options: ClientOptions) {
     this.aid = aidFromCookies(options.cookies)
   }
 
-  async open() {
-    if (this.page) return this.page
+  async open(mode: 'reference_to_video' | 'image_to_video' = 'reference_to_video') {
+    if (this.page && this.openedMode === mode) return this.page
+    if (this.page) await this.close()
     const opened = await launchPage(this.options.cookies, this.options.accountId)
     this.browser = opened.browser
     this.context = opened.context
     this.page = opened.page
-    this.page.on('request', (request: any) => {
-      const requestUrl = request.url()
-      const traceStage = requestUrl.includes('/i2v/gen_r2v_video')
+    this.releaseContext = opened.releaseContext
+    this.closed = false
+    this.openedMode = mode
+    try {
+      this.page.on('request', (request: any) => {
+        const requestUrl = request.url()
+      const traceStage = requestUrl.includes('/i2v/gen_r2v_video') || requestUrl.includes('/i2v/create_generate_task')
         ? 'create'
         : requestUrl.includes('/generate-task/check') || requestUrl.includes('/video_info')
           ? 'check'
@@ -315,24 +524,20 @@ export class TiktokOfficialClient {
       } catch {
         // Keep the cookie fallback.
       }
-    })
-    this.page.on('response', async (response: any) => {
-      const responseUrl = response.url()
-      if (responseUrl.includes('QueryCreditAccount')) {
-        try {
-          this.capturedCredit = await response.json()
-        } catch {
-          this.capturedCredit = undefined
+      })
+      this.page.on('response', async (response: any) => {
+        const responseUrl = response.url()
+        if (responseUrl.includes('QueryCreditAccount')) {
+          await response.json().catch(() => undefined)
         }
-      }
-      const traceStage = responseUrl.includes('/i2v/gen_r2v_video')
+      const traceStage = responseUrl.includes('/i2v/gen_r2v_video') || responseUrl.includes('/i2v/create_generate_task')
         ? 'create'
         : responseUrl.includes('/generate-task/check') || responseUrl.includes('/video_info')
           ? 'check'
           : responseUrl.includes('/save_to_my_library') || responseUrl.includes('/upload')
             ? 'upload'
             : undefined
-      if (traceStage) {
+        if (traceStage) {
         this.requestTrace.push({
           stage: traceStage,
           method: `RESPONSE ${response.status()}`,
@@ -342,26 +547,35 @@ export class TiktokOfficialClient {
           capturedAt: Date.now(),
         })
         this.requestTrace = this.requestTrace.slice(-30)
-      }
-    })
-    await this.page.route('**/creative_bff_i18n/api/cue/upload/token*', async (route: any) => {
-      const headers = {
-        ...route.request().headers(),
-        'x-creative-source': 'CreativeStudio/MiniApp/ImageToVideo',
-      }
-      await route.continue({ headers })
-    })
-    await this.page.goto(PAGE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
-    await this.page.waitForTimeout(3000)
-    return this.page
+        }
+      })
+      await this.page.route('**/creative_bff_i18n/api/cue/upload/token*', async (route: any) => {
+        const headers = {
+          ...route.request().headers(),
+          'x-creative-source': 'CreativeStudio/MiniApp/ImageToVideo',
+        }
+        await route.continue({ headers })
+      })
+      await this.page.goto(mode === 'image_to_video' ? IMAGE_TO_VIDEO_PAGE_URL : PAGE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      await this.page.waitForTimeout(3000)
+      return this.page
+    } catch (error) {
+      await this.close()
+      throw error
+    }
   }
 
   async close() {
+    if (this.closed) return
+    this.closed = true
     await this.context?.close().catch(() => undefined)
-    await this.browser?.close().catch(() => undefined)
+    console.info('[tiktok-creative] contextClosed', { accountId: this.options.accountId })
+    this.releaseContext?.()
     this.browser = undefined
     this.context = undefined
     this.page = undefined
+    this.releaseContext = undefined
+    this.openedMode = undefined
   }
 
   getRequestTrace() {
@@ -371,7 +585,10 @@ export class TiktokOfficialClient {
   async queryCredit() {
     await this.open()
     await this.page.waitForTimeout(1000)
-    const account = this.capturedCredit || await parsePageBody(await pageFetch(this.page, CREDIT_URL, {
+    // Always request a fresh value after the session is opened. A response
+    // captured during initial page hydration can be stale or belong to a
+    // previous account state.
+    const account = await parsePageBody(await pageFetch(this.page, CREDIT_URL, {
       method: 'POST',
       body: {},
       headers: this.requestHeaders,
@@ -379,7 +596,7 @@ export class TiktokOfficialClient {
     await pageFetch(this.page, TIER_URL, { headers: this.requestHeaders })
       .then(parsePageBody)
       .catch(() => undefined)
-    const credit = findNumber(account, ['credit', 'credits', 'availableCredit', 'availableCredits', 'balance', 'remain'])
+    const credit = extractCreditValue(account)
     return { credit, authenticated: !responseRequiresLogin(account) && credit !== undefined }
   }
 
@@ -470,12 +687,23 @@ export class TiktokOfficialClient {
     })()`)
   }
 
-  async createTask(input: { imagePaths: string[]; prompt: string; durationSec: number }) {
-    await this.open()
-    if (!input.imagePaths.length) throw new Error('TikTok reference-to-video requires at least one image')
+  async createTask(input: { imagePaths: string[]; prompt: string; durationSec: number; mode?: 'reference_to_video' | 'image_to_video' }) {
+    const mode = input.mode === 'image_to_video' ? 'image_to_video' : 'reference_to_video'
+    await this.open(mode)
+    const prompt = String(input.prompt ?? '').trim()
+    if (!prompt) throw new Error('TikTok video prompt is required')
+    const durationValue = Number(input.durationSec)
+    const duration = Number.isFinite(durationValue) && durationValue > 0
+      ? Math.round(durationValue)
+      : 5
+    const imagePaths = Array.isArray(input.imagePaths)
+      ? input.imagePaths.map((imagePath) => String(imagePath ?? '').trim()).filter(Boolean)
+      : []
+    if (!imagePaths.length) throw new Error('TikTok video generation requires at least one image')
+    if (mode === 'image_to_video' && imagePaths.length !== 2) throw new Error('TikTok image-to-video requires first and last frame images')
 
     const uploads = []
-    for (const imagePath of input.imagePaths) uploads.push(await this.uploadImage(imagePath))
+    for (const imagePath of imagePaths) uploads.push(await this.uploadImage(imagePath))
 
     const libraryBody = await parsePageBody(await pageFetch(this.page, this.apiUrl(SAVE_LIBRARY_URL), {
       method: 'POST',
@@ -508,16 +736,12 @@ export class TiktokOfficialClient {
         || upload.imageUrl,
       ).trim()
       if (!/^https?:\/\//i.test(previewUrl)) throw new Error(`TikTok reference image ${index + 1} has an invalid preview URL`)
-      const imageSrcSet = libraryAsset.imageSrcSet || upload.imageSrcSet
-      const previewUrlSrcSet = libraryAsset.previewUrlSrcSet || imageSrcSet
       return {
         assetId,
         assetType: 'image' as const,
         id: `videogenerate-${index}`,
         fileType: 'image' as const,
         previewUrl,
-        ...(imageSrcSet ? { imageSrcSet } : {}),
-        ...(previewUrlSrcSet ? { previewUrlSrcSet } : {}),
       }
     })
     const previewImages = assets.map((asset) => asset.previewUrl)
@@ -527,18 +751,32 @@ export class TiktokOfficialClient {
     const settings = {
       images: assets,
       aiModel: model,
-      duration: input.durationSec,
-      prompt: input.prompt,
+      duration,
+      prompt,
+      ...(mode === 'image_to_video' ? {
+        image: previewImages[0],
+        multipleFrames: 'all',
+      } : {}),
     }
-    const body = await parsePageBody(await pageFetch(this.page, this.apiUrl(REFERENCE_VIDEO_URL), {
+    const endpoint = mode === 'image_to_video' ? IMAGE_TO_VIDEO_URL : REFERENCE_VIDEO_URL
+    const body = await parsePageBody(await pageFetch(this.page, this.apiUrl(endpoint), {
       method: 'POST',
-      body: {
-        prompt: input.prompt,
-        duration: input.durationSec,
-        model,
-        settings: JSON.stringify(settings),
-        mentions: previewImages.map((imageUrl) => ({ type: 1, id: imageUrl })),
-      },
+      body: mode === 'image_to_video'
+        ? {
+            image: previewImages[0],
+            images: previewImages,
+            prompt,
+            duration,
+            model,
+            settings: JSON.stringify(settings),
+          }
+        : {
+            prompt,
+            duration,
+            model,
+            settings: JSON.stringify(settings),
+            mentions: previewImages.map((imageUrl) => ({ type: 1, id: imageUrl })),
+          },
       headers: this.requestHeaders,
     }))
     if (responseRequiresLogin(body)) throw new Error('TikTok official session requires login')
@@ -547,17 +785,46 @@ export class TiktokOfficialClient {
   }
 
   async checkTask(taskId: string) {
-    await this.open()
     let responseResult: { status: number; body: string } | undefined
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
-        method: 'POST',
-        body: { taskId },
-        headers: this.requestHeaders,
-      })
+      let currentResult: { status: number; body: string }
+      try {
+        currentResult = await apiFetch(this.options.cookies, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
+          method: 'POST',
+          body: { taskId },
+          headers: this.requestHeaders,
+        })
+      } catch {
+        await this.open()
+        currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
+          method: 'POST',
+          body: { taskId },
+          headers: this.requestHeaders,
+        })
+      }
+      if (currentResult.status < 400) {
+        let apiBody: any
+        try { apiBody = JSON.parse(currentResult.body) } catch { apiBody = undefined }
+        if (apiBody && Number(apiBody.code) !== 0 && apiBody.code !== undefined) {
+          await this.open()
+          currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
+            method: 'POST',
+            body: { taskId },
+            headers: this.requestHeaders,
+          })
+        }
+      }
+      if (currentResult.status === 401 || currentResult.status === 403) {
+        await this.open()
+        currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
+          method: 'POST',
+          body: { taskId },
+          headers: this.requestHeaders,
+        })
+      }
       responseResult = currentResult
       if (currentResult.status !== 429 && currentResult.status < 500) break
-      if (attempt < 4) await this.page.waitForTimeout(Math.min(60000, 10000 * 2 ** attempt))
+      if (attempt < 4) await delay(Math.min(60000, 10000 * 2 ** attempt))
     }
     const result = await parsePageBody(responseResult || { status: 500, body: '' })
     const status = findNumber(result, ['renderTaskStatus', 'draftTaskStatus', 'status'])
@@ -589,23 +856,36 @@ export class TiktokOfficialClient {
         requestTrace: this.getRequestTrace(),
       }
     }
-    const videoId = findValue(result, ['vid', 'videoId']) || undefined
+    const draftVideoId = extractDraftVideoId(result)
+    const videoId = findValue(result, ['vid', 'videoId']) || draftVideoId || undefined
+    const hasCompletedDraft = Boolean(draftVideoId && hasDraftInfoList(result))
+    const effectiveStatus = status === 3 && hasCompletedDraft ? 0 : status
     let videoInfo: any
-    if (status === 0 && videoId) {
+    if (effectiveStatus === 0 && videoId) {
       const videoInfoUrl = new URL(this.apiUrl(VIDEO_INFO_URL))
       videoInfoUrl.searchParams.set('vid', videoId)
-      videoInfo = await parsePageBody(await pageFetch(this.page, videoInfoUrl.toString(), {
-        headers: this.requestHeaders,
-      }))
+      let videoInfoResult: { status: number; body: string }
+      try {
+        videoInfoResult = await apiFetch(this.options.cookies, videoInfoUrl.toString(), { headers: this.requestHeaders })
+      } catch {
+        await this.open()
+        videoInfoResult = await pageFetch(this.page, videoInfoUrl.toString(), { headers: this.requestHeaders })
+      }
+      try {
+        videoInfo = await parsePageBody(videoInfoResult)
+      } catch {
+        await this.open()
+        videoInfo = await parsePageBody(await pageFetch(this.page, videoInfoUrl.toString(), { headers: this.requestHeaders }))
+      }
     }
-    const videoUrl = findValue(videoInfo, ['MainUrl', 'mainUrl', 'MainHTTPUrl'])
-      || findValue(result, ['MainUrl', 'mainUrl', 'MainHTTPUrl'])
+    const videoUrl = selectBestVideoUrl(videoInfo)
+      || selectBestVideoUrl(result)
       || undefined
     return {
-      status,
-      processing: status === 2,
-      completed: status === 0 && Boolean(videoId && videoUrl),
-      failureReason: status !== undefined && status !== 0 && status !== 2 ? taskFailureReason(result) : undefined,
+      status: effectiveStatus,
+      processing: effectiveStatus === 2,
+      completed: effectiveStatus === 0 && Boolean(videoId && videoUrl),
+      failureReason: effectiveStatus !== undefined && effectiveStatus !== 0 && effectiveStatus !== 2 ? taskFailureReason(result) : undefined,
       videoId,
       videoUrl,
       posterUrl: findValue(videoInfo, ['PosterUrl', 'posterUrl']) || findValue(result, ['PosterUrl', 'posterUrl']) || undefined,

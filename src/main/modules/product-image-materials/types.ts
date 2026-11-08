@@ -76,14 +76,3 @@ export type ProductImageMaterialProductSummary = {
   type: string
   coverImagePath?: string
 }
-
-export type ProductImageMaterialHermesOption = {
-  id: string
-  index: number
-  category: ProductImageMaterialCategory
-  thumbnailUrl: string
-  materialOrigin?: 'original' | 'derived'
-  boundProductId?: string
-  localImagePath: string
-  derivedFromMaterialId?: string
-}

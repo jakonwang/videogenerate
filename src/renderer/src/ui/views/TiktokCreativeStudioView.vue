@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { openAssetLibraryPicker } from "@/lib/assetLibraryPicker";
 import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
@@ -32,6 +33,7 @@ import {
   PanelBottomOpen,
   Pause,
   Pencil,
+  Plus,
   Play,
   RefreshCcw,
   ScanLine,
@@ -39,6 +41,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Shuffle,
   Sparkles,
   Trash2,
   UserRound,
@@ -193,20 +196,34 @@ const materials = ref<Material[]>([]);
 const tasks = ref<Task[]>([]);
 const accounts = ref<Account[]>([]);
 const promptVersions = ref<PromptVersion[]>([]);
+const promptKind = ref<"image" | "video">("video");
 const selectedPromptVersionId = ref("");
 const promptEditorName = ref("");
 const promptEditorText = ref("");
+const promptDrafts = reactive<Record<"image" | "video", { versionId: string; name: string; text: string }>>({
+  image: { versionId: "", name: "", text: "" },
+  video: { versionId: "", name: "", text: "" },
+});
+let promptVersionLoadSequence = 0;
 const promptVersionBusy = ref(false);
 const referenceImagePaths = ref<string[]>([]);
+const generationMode = ref<"reference_to_video" | "image_to_video">("reference_to_video");
+const zoomPercentOptions = [10, 20, 30, 40, 50, 60, 70, 80] as const;
+const zoomPercent = ref<(typeof zoomPercentOptions)[number]>(20);
 const selectedProductId = ref("");
 const productPickerOpen = ref(false);
 const accountDialogOpen = ref(false);
 const materialDialogOpen = ref(false);
+const materialFilter = ref<"all" | "unused" | "used">("unused");
 const retrySettingsOpen = ref(false);
 const retrySettingsBusy = ref(false);
 const creativeSettings = ref({ imageRetryLimit: 2, qualityCheckerEnabled: true });
 const accountName = ref("");
 const accountCookieJson = ref("");
+const accountSearch = ref("");
+const accountStatusFilter = ref<"all" | "enabled" | "disabled">("all");
+const accountPage = ref(1);
+const accountPageSize = ref(8);
 const editingAccountId = ref("");
 const selectedMaterialIds = ref<string[]>([]);
 const selectedShotIds = ref<string[]>([]);
@@ -235,6 +252,13 @@ const publisherSequenceInterval = ref(10);
 const publisherConnections = ref<any[]>([]);
 const publisherProducts = ref<any[]>([]);
 const publisherProductsLoading = ref(false);
+const publisherProductsPage = ref(1);
+const publisherProductsPageSize = 20;
+const publisherProductsNextPageToken = ref("");
+const publisherProductsPageTokens = ref<string[]>([]);
+const publisherProductsTotal = ref<number | undefined>(undefined);
+let publisherProductsRequestId = 0;
+let publisherProductsSearchTimer: ReturnType<typeof setTimeout> | undefined;
 const publisherMusicQuery = ref("");
 const publisherMusic = ref<any[]>([]);
 const publisherFavoriteMusic = ref<any[]>([]);
@@ -243,6 +267,7 @@ const publisherMusicLibraryOpen = ref(false);
 const publisherMusicPlayingId = ref("");
 let publisherMusicAudio: HTMLAudioElement | null = null;
 const publisherBrokenMusicCovers = ref(new Set<string>());
+const publisherMusicRandomizing = ref(false);
 const publisherEditId = ref("");
 const publisherBusy = ref(false);
 const publisherLoadedAt = ref(0);
@@ -376,6 +401,7 @@ const runtimeDialogOpen = computed({
 });
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let taskRefreshBusy = false;
+let publisherTaskRefreshBusy = false;
 
 const selectedProduct = computed(() =>
   products.value.find((item) => item.id === selectedProductId.value),
@@ -383,12 +409,32 @@ const selectedProduct = computed(() =>
 const enabledAccounts = computed(() =>
   accounts.value.filter((item) => item.enabled),
 );
+const filteredAccounts = computed(() => {
+  const query = accountSearch.value.trim().toLowerCase();
+  return accounts.value.filter((account) => {
+    const matchesQuery = !query || `${account.name} ${account.id}`.toLowerCase().includes(query);
+    const matchesStatus = accountStatusFilter.value === "all"
+      || (accountStatusFilter.value === "enabled" ? account.enabled : !account.enabled);
+    return matchesQuery && matchesStatus;
+  });
+});
+const accountPageCount = computed(() => Math.max(1, Math.ceil(filteredAccounts.value.length / accountPageSize.value)));
+const pagedAccounts = computed(() => {
+  const safePage = Math.min(accountPage.value, accountPageCount.value);
+  const start = (safePage - 1) * accountPageSize.value;
+  return filteredAccounts.value.slice(start, start + accountPageSize.value);
+});
 const derivedMaterials = computed(() =>
   materials.value.filter(
     (item) =>
       item.materialOrigin === "derived" && Boolean(item.localImagePath?.trim()),
   ),
 );
+const filteredDerivedMaterials = computed(() => {
+  if (materialFilter.value === "used") return derivedMaterials.value.filter((item) => item.usageStatus === "used");
+  if (materialFilter.value === "unused") return derivedMaterials.value.filter((item) => item.usageStatus !== "used");
+  return derivedMaterials.value;
+});
 const allShots = computed(() =>
   tasks.value
     .flatMap((task) => task.shots.map((shot) => ({ task, shot })))
@@ -571,11 +617,12 @@ const publisherFilteredConnections = computed(() =>
   ),
 );
 const publisherFilteredProducts = computed(() =>
-  publisherProducts.value.filter((item) =>
-    String(item.title || item.name || "")
-      .toLowerCase()
-      .includes(publisherSelectorQuery.value.toLowerCase()),
-  ),
+  publisherProducts.value,
+);
+const publisherProductsPageCount = computed(() =>
+  publisherProductsTotal.value === undefined
+    ? undefined
+    : Math.max(1, Math.ceil(publisherProductsTotal.value / publisherProductsPageSize)),
 );
 const publisherPreviewTask = computed(() => publisherTasks.value[0]);
 const publisherPendingTasks = computed(() =>
@@ -945,8 +992,40 @@ function accountState(account: Account) {
 function setPromptVersion(id: string) {
   const item = promptVersions.value.find((version) => version.id === id);
   if (!item) return;
+  selectedPromptVersionId.value = id;
   promptEditorName.value = item.name;
   promptEditorText.value = item.prompt;
+  savePromptDraft();
+}
+function savePromptDraft() {
+  promptDrafts[promptKind.value] = {
+    versionId: selectedPromptVersionId.value,
+    name: promptEditorName.value,
+    text: promptEditorText.value,
+  };
+}
+watch([selectedPromptVersionId, promptEditorName, promptEditorText], savePromptDraft, { flush: "sync" });
+async function loadPromptVersions(kind: "image" | "video") {
+  if (promptKind.value !== kind) return;
+  const requestId = ++promptVersionLoadSequence;
+  const versions = await window.api.tiktokCreative.listPromptVersions(kind);
+  if (requestId !== promptVersionLoadSequence || promptKind.value !== kind) return;
+  promptVersions.value = Array.isArray(versions) ? versions : [];
+  const draft = { ...promptDrafts[kind] };
+  const selected = promptVersions.value.find((item) => item.id === draft.versionId)
+    || promptVersions.value.find((item) => item.active)
+    || promptVersions.value[0];
+  if (!selected) {
+    selectedPromptVersionId.value = "";
+    promptEditorName.value = "";
+    promptEditorText.value = "";
+    savePromptDraft();
+    return;
+  }
+  selectedPromptVersionId.value = selected.id;
+  promptEditorName.value = draft.versionId === selected.id ? draft.name : selected.name;
+  promptEditorText.value = draft.versionId === selected.id ? draft.text : selected.prompt;
+  savePromptDraft();
 }
 function syncRuntimeSelection() {
   if (!runtimeTask.value) return;
@@ -965,11 +1044,11 @@ function syncRuntimeSelection() {
 async function refresh(silent = false) {
   if (!silent) loading.value = true;
   try {
-    const [taskRows, productRows, accountResult, versions, settings] = await Promise.all([
+    const requestedPromptKind = promptKind.value;
+    const [taskRows, productRows, accountResult, settings] = await Promise.all([
       window.api.tiktokCreative.list(),
       window.api.products.list(),
       window.api.tiktokCreative.listAccounts(),
-      window.api.tiktokCreative.listPromptVersions(),
       window.api.tiktokCreative.getSettings(),
     ]);
     tasks.value = Array.isArray(taskRows) ? taskRows : [];
@@ -978,7 +1057,6 @@ async function refresh(silent = false) {
     accounts.value = Array.isArray(accountResult?.accounts)
       ? accountResult.accounts
       : [];
-    promptVersions.value = Array.isArray(versions) ? versions : [];
     creativeSettings.value.imageRetryLimit = Math.max(
       0,
       Math.min(20, Math.floor(Number(settings?.imageRetryLimit) || 0)),
@@ -986,13 +1064,7 @@ async function refresh(silent = false) {
     creativeSettings.value.qualityCheckerEnabled = settings?.qualityCheckerEnabled !== false;
     if (!selectedProductId.value && products.value[0])
       selectedProductId.value = products.value[0].id;
-    if (!selectedPromptVersionId.value && promptVersions.value[0]) {
-      selectedPromptVersionId.value = (
-        promptVersions.value.find((item) => item.active) ||
-        promptVersions.value[0]
-      ).id;
-      setPromptVersion(selectedPromptVersionId.value);
-    }
+    await loadPromptVersions(requestedPromptKind);
     if (libraryPage.value > totalPages.value)
       libraryPage.value = totalPages.value;
   } catch (error: any) {
@@ -1036,25 +1108,46 @@ async function pickReferenceImages() {
     ]),
   );
 }
+async function pickReferenceImagesFromAssetLibrary() {
+  const selected = await openAssetLibraryPicker({ type: "image", multiple: true });
+  if (!selected?.length) return;
+  referenceImagePaths.value = Array.from(
+    new Set([
+      ...referenceImagePaths.value,
+      ...selected.map((item) => item.filePath),
+    ]),
+  );
+}
 async function openMaterialPicker() {
   await loadMaterials();
   selectedMaterialIds.value = [];
+  materialFilter.value = "unused";
   materialDialogOpen.value = true;
 }
 function toggleMaterial(id: string) {
-  if (!derivedMaterials.value.some((item) => item.id === id)) return;
+  if (!filteredDerivedMaterials.value.some((item) => item.id === id)) return;
   selectedMaterialIds.value = selectedMaterialIds.value.includes(id)
     ? selectedMaterialIds.value.filter((item) => item !== id)
     : [...selectedMaterialIds.value, id];
 }
-function addMaterials() {
+async function addMaterials() {
+  const selected = derivedMaterials.value.filter((item) => selectedMaterialIds.value.includes(item.id))
+  if (!selected.length) return
   referenceImagePaths.value = Array.from(
     new Set([
       ...referenceImagePaths.value,
-      ...derivedMaterials.value
-        .filter((item) => selectedMaterialIds.value.includes(item.id))
-        .map((item) => item.localImagePath),
+      ...selected.map((item) => item.localImagePath),
     ]),
+  );
+  await Promise.all(selected.map((item) =>
+    window.api.productImageMaterials.updateUsageStatus({
+      userId: "desktop-local",
+      materialId: item.id,
+      usageStatus: "used",
+    }).catch(() => null),
+  ));
+  materials.value = materials.value.map((item) =>
+    selected.some((entry) => entry.id === item.id) ? { ...item, usageStatus: "used" } : item,
   );
   materialDialogOpen.value = false;
 }
@@ -1092,8 +1185,12 @@ async function createTasks() {
     await window.api.tiktokCreative.createFromReference({
       referenceImagePaths: imagePaths,
       productId: selectedProductId.value,
-      prompt: promptEditorText.value.trim(),
+      prompt: promptDrafts.video.text.trim(),
+      promptKind: "video",
+      promptVersionId: promptDrafts.video.versionId || undefined,
       durationSec: 10,
+      mode: generationMode.value,
+      zoomPercent: generationMode.value === "image_to_video" ? zoomPercent.value : undefined,
     });
     notice.value = tr("autoUi.k_43510a9cf14d", { p0: imagePaths.length });
     referenceImagePaths.value = [];
@@ -1115,21 +1212,25 @@ async function savePrompt(mode: "update" | "copy" | "activate" | "rollback") {
         id: selectedPromptVersionId.value,
         name: promptEditorName.value,
         prompt: promptEditorText.value,
+        kind: promptKind.value,
       });
     if (mode === "copy") {
       const created = await window.api.tiktokCreative.createPromptVersion({
         name: promptEditorName.value || "TikTok Prompt Copy",
         prompt: promptEditorText.value,
+        kind: promptKind.value,
       });
       selectedPromptVersionId.value = created.id;
     }
     if (mode === "activate")
       await window.api.tiktokCreative.activatePromptVersion({
         id: selectedPromptVersionId.value,
+        kind: promptKind.value,
       });
     if (mode === "rollback") {
       const created = await window.api.tiktokCreative.rollbackPromptVersion({
         id: selectedPromptVersionId.value,
+        kind: promptKind.value,
       });
       selectedPromptVersionId.value = created.id;
     }
@@ -1141,6 +1242,17 @@ async function savePrompt(mode: "update" | "copy" | "activate" | "rollback") {
   } finally {
     promptVersionBusy.value = false;
   }
+}
+
+async function switchPromptKind(kind: "image" | "video") {
+  if (promptKind.value === kind) return;
+  savePromptDraft();
+  const draft = { ...promptDrafts[kind] };
+  promptKind.value = kind;
+  selectedPromptVersionId.value = draft.versionId;
+  promptEditorName.value = draft.name;
+  promptEditorText.value = draft.text;
+  await loadPromptVersions(kind);
 }
 async function importCookieFile() {
   const paths = await window.api.pickFiles({
@@ -1743,12 +1855,15 @@ async function refreshPublisher() {
   return publisherRefreshPromise;
 }
 async function refreshPublisherTasks() {
-  if (publisherBusy.value) return;
+  if (publisherBusy.value || publisherTaskRefreshBusy || document.hidden) return;
+  publisherTaskRefreshBusy = true;
   try {
     publisherTasks.value = await window.api.tiktokPublisher.refresh();
     publisherLoadedAt.value = Date.now();
   } catch (error: any) {
     publisherSyncError.value = error?.message || String(error);
+  } finally {
+    publisherTaskRefreshBusy = false;
   }
 }
 function setPublisherPage(page: number) {
@@ -1888,6 +2003,58 @@ async function applyPublisherDefaults(ids?: string[]) {
   }
   publisherTasks.value = await window.api.tiktokPublisher.refresh();
   notice.value = `已应用到 ${targetItems.length} 个视频`;
+}
+function shuffledPublisherMusic(items: any[]) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
+  }
+  return result;
+}
+async function applyRandomFavoriteMusic(ids?: string[]) {
+  restorePublisherFavoriteMusic();
+  const favorites = publisherFavoriteMusic.value.filter(
+    (item) => item && item.id,
+  );
+  const targetIds = ids?.length
+    ? ids
+    : publisherRowSelection.value.length
+      ? publisherRowSelection.value
+      : publisherPendingTasks.value.map((item) => String(item.id));
+  const targetItems = publisherTasks.value.filter(
+    (row) =>
+      targetIds.includes(String(row.id)) &&
+      !["published", "queued", "scheduled", "publishing"].includes(
+        String(row.state),
+      ),
+  );
+  if (!favorites.length) {
+    publisherSyncError.value = "请先在音乐库收藏至少一首音乐";
+    publisherMusicLibraryOpen.value = true;
+    return;
+  }
+  if (!targetItems.length) {
+    publisherSyncError.value = "请先选择待发布视频";
+    return;
+  }
+  publisherMusicRandomizing.value = true;
+  publisherSyncError.value = "";
+  try {
+    const pool = shuffledPublisherMusic(favorites);
+    for (const [index, item] of targetItems.entries()) {
+      item.music = pool[index % pool.length];
+      await savePublisherRow(item, false);
+    }
+    publisherTasks.value = await window.api.tiktokPublisher.refresh();
+    publisherEditorFields.music = true;
+    publisherSelectedMusic.value = null;
+    notice.value = `已从 ${favorites.length} 首收藏音乐中随机分配到 ${targetItems.length} 个视频`;
+  } catch (error: any) {
+    publisherSyncError.value = error?.message || String(error);
+  } finally {
+    publisherMusicRandomizing.value = false;
+  }
 }
 async function applyPublisherProductToSelection() {
   if (!publisherProduct.value || !publisherRowSelection.value.length) {
@@ -2304,7 +2471,7 @@ function openPublisherSelector(
   publisherSelectorQuery.value = "";
   if (kind === "music") restorePublisherFavoriteMusic();
   if (kind === "product" && publisherConnection.value)
-    void loadPublisherProducts();
+    void loadPublisherProducts({ reset: true });
 }
 function openPublisherBatchSelector(kind: "account" | "product" | "music") {
   publisherEditId.value = "";
@@ -2326,7 +2493,7 @@ async function choosePublisherConnection(uid: string) {
   publisherSyncError.value = "";
   publisherSelector.value = nextSelector;
   publisherSelectorQuery.value = nextSelector === "music" ? publisherMusicQuery.value : "";
-  if (nextSelector === "product") await loadPublisherProducts();
+  if (nextSelector === "product") await loadPublisherProducts({ reset: true });
   else void loadPublisherProducts();
 }
 async function choosePublisherProduct(id: string) {
@@ -2488,7 +2655,7 @@ async function editPublisherTask(item: any) {
   publisherScheduleMode.value = item.scheduleAt ? "unified" : "keep";
   publisherUnifiedSchedule.value = publisherSchedule.value;
   publisherSelectedMusic.value = item.music || null;
-  if (publisherConnection.value) await loadPublisherProducts();
+  if (publisherConnection.value) await loadPublisherProducts({ reset: true });
 }
 async function applyPublisherEdit() {
   if (!publisherEditId.value) return;
@@ -2517,23 +2684,62 @@ async function applyPublisherEdit() {
     publisherSyncError.value = error?.message || String(error);
   }
 }
-async function loadPublisherProducts() {
+async function loadPublisherProducts(options: { reset?: boolean; page?: number } = {}) {
   if (!publisherConnection.value) {
     publisherProducts.value = [];
     publisherProduct.value = "";
+    publisherProductsPage.value = 1;
+    publisherProductsNextPageToken.value = "";
+    publisherProductsPageTokens.value = [];
+    publisherProductsTotal.value = undefined;
     return;
   }
+  const reset = options.reset === true;
+  const page = options.page || (reset ? 1 : publisherProductsPage.value);
+  if (reset) {
+    publisherProductsPage.value = 1;
+    publisherProductsPageTokens.value = [];
+    publisherProductsNextPageToken.value = "";
+    publisherProductsTotal.value = undefined;
+  }
+  const requestId = ++publisherProductsRequestId;
   publisherProductsLoading.value = true;
   try {
-    publisherProducts.value = await window.api.tiktokPublisher.products(
+    const result = await window.api.tiktokPublisher.productsPage(
       publisherConnection.value,
+      {
+        pageSize: publisherProductsPageSize,
+        pageToken: page > 1 ? publisherProductsPageTokens.value[page - 1] : undefined,
+        query: publisherSelectorQuery.value.trim() || undefined,
+        includeTotal: true,
+      },
     );
+    if (requestId !== publisherProductsRequestId) return;
+    publisherProducts.value = Array.isArray(result?.items) ? result.items : [];
+    publisherProductsPage.value = page;
+    publisherProductsNextPageToken.value = String(result?.nextPageToken || "");
+    if (result?.totalCount !== undefined) publisherProductsTotal.value = Number(result.totalCount);
+    if (publisherProductsNextPageToken.value) {
+      publisherProductsPageTokens.value[page] = publisherProductsNextPageToken.value;
+    }
   } catch (error: any) {
+    if (requestId !== publisherProductsRequestId) return;
     publisherProducts.value = [];
     publisherSyncError.value = error?.message || String(error);
   } finally {
-    publisherProductsLoading.value = false;
+    if (requestId === publisherProductsRequestId) publisherProductsLoading.value = false;
   }
+}
+function searchPublisherProducts() {
+  if (publisherProductsSearchTimer) clearTimeout(publisherProductsSearchTimer);
+  publisherProductsSearchTimer = setTimeout(() => {
+    void loadPublisherProducts({ reset: true });
+  }, 250);
+}
+function changePublisherProductsPage(page: number) {
+  if (publisherProductsLoading.value || page < 1) return;
+  if (page > publisherProductsPage.value && !publisherProductsNextPageToken.value) return;
+  void loadPublisherProducts({ page });
 }
 async function addSelectedToPublisher(
   presetItems?: Array<{ taskId: string; shotId: string }>,
@@ -2574,7 +2780,7 @@ async function addSelectedToPublisher(
 }
 async function precheckPublisher(ids?: string[]) {
   publisherPrecheckState.value = "running";
-  publisherPrecheckMessage.value = "正在预检...";
+  publisherPrecheckMessage.value = "正在本地检查...";
   publisherBusy.value = true;
   publisherSyncError.value = "";
   try {
@@ -2586,8 +2792,8 @@ async function precheckPublisher(ids?: string[]) {
       .map(String);
     if (!targetIds.length) {
       publisherPrecheckState.value = "failed";
-      publisherPrecheckMessage.value = "没有可预检的视频";
-      publisherSyncError.value = "当前选中的视频没有可预检任务";
+      publisherPrecheckMessage.value = "没有可本地检查的视频";
+      publisherSyncError.value = "当前选中的视频没有可本地检查任务";
       return;
     }
     const checked = await window.api.tiktokPublisher.precheck(targetIds);
@@ -2602,10 +2808,10 @@ async function precheckPublisher(ids?: string[]) {
         item.state === "failed" || item.precheck?.ok === false || item.error,
     );
     publisherPrecheckState.value = failed ? "failed" : "passed";
-    publisherPrecheckMessage.value = failed ? "预检未通过，请检查任务配置" : "预检通过";
+    publisherPrecheckMessage.value = failed ? "本地检查未通过，请检查任务配置" : "本地检查通过";
   } catch (error: any) {
     publisherPrecheckState.value = "failed";
-    publisherPrecheckMessage.value = "预检失败";
+    publisherPrecheckMessage.value = "本地检查失败";
     publisherSyncError.value = error?.message || String(error);
   } finally {
     publisherBusy.value = false;
@@ -2631,7 +2837,7 @@ async function nextPublisherStep() {
   }
   if (publisherPrecheckEnabled.value) {
     await precheckPublisher();
-    notice.value = "发布配置预检完成，请在页面底部确认提交";
+    notice.value = "发布配置本地检查完成，请在页面底部确认提交";
   } else {
     notice.value = "发布配置已准备完成，可直接提交发布";
   }
@@ -2741,10 +2947,19 @@ onMounted(async () => {
   await refresh();
   if (props.publisherOnly) await refreshPublisher();
   refreshTimer = setInterval(() => {
+    if (document.hidden) return;
     if (props.publisherOnly || activeTab.value === "publish") {
+      const hasActivePublishTask = publisherTasks.value.some((item: any) =>
+        ["prechecking", "uploading", "queued", "scheduled", "publishing"].includes(String(item.state || "")),
+      );
+      if (!hasActivePublishTask) return;
       void refreshPublisherTasks();
       return;
     }
+    const hasActiveCreativeTask = tasks.value.some((item: any) =>
+      ["queued", "processing", "running", "pending"].includes(String(item.status || "")),
+    );
+    if (!hasActiveCreativeTask) return;
     void refreshTaskRows();
   }, 10000);
 });
@@ -3085,6 +3300,18 @@ onBeforeUnmount(() => {
                 批量编辑</button
               ><button
                 type="button"
+                :disabled="publisherMusicRandomizing"
+                @click="applyRandomFavoriteMusic()"
+              >
+                <LoaderCircle
+                  v-if="publisherMusicRandomizing"
+                  class="h-3 w-3 animate-spin"
+                /><Shuffle v-else class="h-3 w-3" />随机收藏音乐
+                <small v-if="publisherFavoriteMusic.length"
+                  >({{ publisherFavoriteMusic.length }})</small
+                ></button
+              ><button
+                type="button"
                 @click="openPublisherBatchSelector('product')"
               >
                 设置商品</button
@@ -3092,13 +3319,13 @@ onBeforeUnmount(() => {
                 设置发布时间</button>
               <label class="publisher-precheck-toggle">
                 <input v-model="publisherPrecheckEnabled" type="checkbox" />
-                发布前预检
+                发布前本地检查
               </label>
               <button
                 v-if="publisherPrecheckEnabled"
                 type="button"
                 @click="precheckPublisher"
-              >预检</button>
+              >本地检查</button>
             </div>
             <button
               class="publisher-design-primary publisher-submit-button"
@@ -3460,6 +3687,21 @@ onBeforeUnmount(() => {
               <Music2 class="h-4 w-4" />{{
                 publisherSelectedMusic?.title || "选择音乐"
               }}
+            </button>
+            <button
+              class="publisher-design-select publisher-random-music-button"
+              type="button"
+              :disabled="publisherMusicRandomizing"
+              @click="applyRandomFavoriteMusic()"
+            >
+              <LoaderCircle
+                v-if="publisherMusicRandomizing"
+                class="h-4 w-4 animate-spin"
+              /><Shuffle v-else class="h-4 w-4" />
+              随机分配收藏音乐
+              <small v-if="publisherFavoriteMusic.length"
+                >{{ publisherFavoriteMusic.length }} 首可用</small
+              >
             </button>
           </div>
           <div class="publisher-editor-apply-mode">
@@ -3834,6 +4076,17 @@ onBeforeUnmount(() => {
                 publisherSelectedMusic?.title || "选择音乐"
               }}
             </button>
+            ><button
+              class="toolbar-button"
+              type="button"
+              :disabled="publisherMusicRandomizing"
+              @click="applyRandomFavoriteMusic()"
+            >
+              <LoaderCircle
+                v-if="publisherMusicRandomizing"
+                class="h-4 w-4 animate-spin"
+              /><Shuffle v-else class="h-4 w-4" />随机收藏音乐
+            </button>
           </div>
           <button
             class="primary-button publisher-apply-button"
@@ -3884,6 +4137,21 @@ onBeforeUnmount(() => {
                 publisherSelectedMusic?.title || "选择音乐"
               }}</span
               ><ChevronDown class="h-4 w-4" />
+            </button>
+            <button
+              class="publisher-select-button publisher-random-music-button"
+              type="button"
+              :disabled="publisherMusicRandomizing"
+              @click="applyRandomFavoriteMusic()"
+            >
+              <LoaderCircle
+                v-if="publisherMusicRandomizing"
+                class="h-4 w-4 animate-spin"
+              /><Shuffle v-else class="h-4 w-4" />
+              <span>随机分配收藏音乐</span>
+              <small v-if="publisherFavoriteMusic.length"
+                >{{ publisherFavoriteMusic.length }} 首可用</small
+              >
             </button>
           </div>
           <label class="publisher-editor-field"
@@ -4697,10 +4965,13 @@ onBeforeUnmount(() => {
             :placeholder="
               publisherSelector === 'music'
                 ? '搜索音乐名称或作者'
-                : '输入关键词筛选'
+                : '输入商品名称或 ID 搜索'
             "
+            @input="publisherSelector === 'product' && searchPublisherProducts()"
             @keydown.enter="
-              publisherSelector === 'music' && searchPublisherMusic()
+              publisherSelector === 'music'
+                ? searchPublisherMusic()
+                : publisherSelector === 'product' && loadPublisherProducts({ reset: true })
             "
           />
           <button
@@ -4762,6 +5033,31 @@ onBeforeUnmount(() => {
           </button>
           <div v-if="!publisherFilteredProducts.length" class="publisher-picker-empty">
             {{ publisherProductsLoading ? "正在加载商品..." : "当前账号没有可选择的商品。" }}
+          </div>
+          <div v-if="publisherProducts.length || publisherProductsTotal" class="publisher-picker-pagination">
+            <span>
+              <template v-if="publisherProductsTotal !== undefined">共 {{ publisherProductsTotal }} 个商品</template>
+              <template v-else>当前页 {{ publisherProducts.length }} 个商品</template>
+            </span>
+            <div>
+              <button
+                type="button"
+                :disabled="publisherProductsLoading || publisherProductsPage <= 1"
+                @click="changePublisherProductsPage(publisherProductsPage - 1)"
+              >
+                <ChevronLeft class="h-4 w-4" />
+              </button>
+              <span>
+                {{ publisherProductsPage }}<template v-if="publisherProductsPageCount"> / {{ publisherProductsPageCount }}</template>
+              </span>
+              <button
+                type="button"
+                :disabled="publisherProductsLoading || !publisherProductsNextPageToken"
+                @click="changePublisherProductsPage(publisherProductsPage + 1)"
+              >
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
         <div v-else class="publisher-option-grid">
@@ -4999,6 +5295,34 @@ onBeforeUnmount(() => {
           </div>
           <span class="panel-head-note">{{ tr("autoUi.k_e6f568ddd540") }}</span>
         </div>
+        <div class="generation-mode-control">
+          <span class="generation-mode-control__label">{{ tr("tiktokCreative.generationMode.label") }}</span>
+          <div class="generation-mode-control__options" role="group" :aria-label="tr('tiktokCreative.generationMode.label')">
+            <button type="button" :class="{ active: generationMode === 'reference_to_video' }" @click="generationMode = 'reference_to_video'">
+              {{ tr("tiktokCreative.generationMode.referenceToVideo") }}
+            </button>
+            <button type="button" :class="{ active: generationMode === 'image_to_video' }" @click="generationMode = 'image_to_video'">
+              {{ tr("tiktokCreative.generationMode.imageToVideo") }}
+            </button>
+          </div>
+          <div v-if="generationMode === 'image_to_video'" class="generation-mode-control__details">
+            <div class="generation-mode-control__copy">
+              <span class="generation-mode-control__eyebrow">{{ tr("tiktokCreative.generationMode.zoomPercentLabel") }}</span>
+              <small class="generation-mode-control__hint">
+                {{ tr("tiktokCreative.generationMode.imageToVideoHint", { p0: zoomPercent }) }}
+              </small>
+            </div>
+            <div class="generation-mode-control__zoom" role="group" :aria-label="tr('tiktokCreative.generationMode.zoomPercentLabel')">
+              <button
+                v-for="option in zoomPercentOptions"
+                :key="option"
+                type="button"
+                :class="{ active: zoomPercent === option }"
+                @click="zoomPercent = option"
+              >{{ option }}%</button>
+            </div>
+          </div>
+        </div>
         <div class="field-stack">
           <div class="field">
             <span>{{ tr("autoUi.k_2132324c5c89") }}</span>
@@ -5032,6 +5356,19 @@ onBeforeUnmount(() => {
                     ><small>{{ tr("autoUi.k_4b7af20133a5") }}</small>
                   </div></template
                 ></button
+              ><button
+                class="reference-source-card"
+                type="button"
+                @click="pickReferenceImagesFromAssetLibrary"
+              >
+                <div class="reference-source-card__icon">
+                  <ImagePlus class="h-7 w-7" />
+                </div>
+                <div class="reference-source-card__copy">
+                  <strong>从素材库选图</strong>
+                  <small>选择电脑或手机上传的图片</small>
+                </div>
+              </button
               ><button
                 class="reference-source-card"
                 type="button"
@@ -5163,6 +5500,10 @@ onBeforeUnmount(() => {
             <ShieldCheck class="h-5 w-5" />
           </div>
           <div class="prompt-version-editor">
+            <div class="prompt-kind-tabs" role="tablist">
+              <button class="ghost-button small" :class="{ active: promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ tr("promptKind.image") }}</button>
+              <button class="ghost-button small" :class="{ active: promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ tr("promptKind.video") }}</button>
+            </div>
             <label class="field"
               ><span>{{ tr("autoUi.k_e3ba534bb0ab") }}</span
               ><select
@@ -5723,10 +6064,31 @@ onBeforeUnmount(() => {
             <X class="h-4 w-4" />
           </button>
         </div>
+        <div class="account-toolbar">
+          <label class="account-search">
+            <Search class="h-4 w-4" />
+            <input v-model="accountSearch" type="search" :placeholder="tr('tiktokCreative.account.search')" @input="accountPage = 1" />
+          </label>
+          <select v-model="accountStatusFilter" class="account-filter" @change="accountPage = 1">
+            <option value="all">{{ tr("tiktokCreative.account.allStatus") }}</option>
+            <option value="enabled">{{ tr("tiktokCreative.account.enabled") }}</option>
+            <option value="disabled">{{ tr("tiktokCreative.account.disabled") }}</option>
+          </select>
+          <button class="primary-button account-add-button" type="button" @click="resetAccountForm">
+            <Plus class="h-4 w-4" />{{ tr("tiktokCreative.account.add") }}
+          </button>
+        </div>
         <div class="account-layout">
           <div class="account-list">
+            <div class="account-list-header" aria-hidden="true">
+              <span>#</span>
+              <span>{{ tr("autoUi.k_3f2da24264f0") }}</span>
+              <span>{{ tr("tiktokCreative.account.cookieInfo") }}</span>
+              <span>{{ tr("tiktokCreative.account.statusLabel") }}</span>
+              <span>{{ tr("tiktokCreative.account.actions") }}</span>
+            </div>
             <article
-              v-for="(account, index) in accounts"
+              v-for="account in pagedAccounts"
               :key="account.id"
               class="account-row"
               :class="{
@@ -5737,29 +6099,30 @@ onBeforeUnmount(() => {
               <div class="account-order">
                 <button
                   type="button"
-                  :disabled="index === 0"
+                  :disabled="account.priority <= 0"
                   @click="moveAccount(account, -1)"
                 >
                   ↑</button
                 ><button
                   type="button"
-                  :disabled="index === accounts.length - 1"
+                  :disabled="account.priority >= accounts.length - 1"
                   @click="moveAccount(account, 1)"
                 >
                   ↓
                 </button>
               </div>
               <div class="account-main">
-                <strong>{{ account.name }}</strong
-                ><small
-                  >{{ account.cookieCount }} {{ tr("autoUi.k_69fd1d0af720") }}
-                  {{ account.priority + 1 }}</small
-                ><span class="account-state" :class="account.state">{{
-                  accountState(account)
-                }}</span
-                ><small v-if="account.lastError" class="account-error">{{
-                  account.lastError
-                }}</small>
+                <strong>{{ account.name }}</strong>
+                <small>{{ account.id }}</small>
+              </div>
+              <div class="account-meta">
+                <strong>{{ account.cookieCount }} {{ tr("autoUi.k_69fd1d0af720") }}</strong>
+                <small>{{ tr("tiktokCreative.account.priority") }} {{ account.priority + 1 }}</small>
+              </div>
+              <div class="account-status-column">
+                <span class="account-state" :class="account.state">{{ accountState(account) }}</span>
+                <small v-if="account.lastError" class="account-error">{{ account.lastError }}</small>
+                <small v-else>{{ account.enabled ? tr("tiktokCreative.account.ready") : tr("tiktokCreative.account.paused") }}</small>
               </div>
               <div class="account-actions">
                 <button
@@ -5797,6 +6160,18 @@ onBeforeUnmount(() => {
             </article>
             <div v-if="!accounts.length" class="account-empty">
               {{ tr("autoUi.k_e610551a276a") }}
+            </div>
+            <div v-else-if="!pagedAccounts.length" class="account-empty">
+              {{ tr("tiktokCreative.account.noMatch") }}
+            </div>
+            <div class="account-pagination" v-else>
+              <span>{{ (accountPage - 1) * accountPageSize + 1 }}-{{ Math.min(accountPage * accountPageSize, filteredAccounts.length) }} / {{ filteredAccounts.length }}</span>
+              <div>
+                <button type="button" :disabled="accountPage <= 1" @click="accountPage -= 1"><ChevronLeft class="h-4 w-4" /></button>
+                <strong>{{ accountPage }}</strong>
+                <button type="button" :disabled="accountPage >= accountPageCount" @click="accountPage += 1"><ChevronRight class="h-4 w-4" /></button>
+              </div>
+              <select v-model.number="accountPageSize" @change="accountPage = 1"><option :value="8">8 / {{ tr("tiktokCreative.account.page") }}</option><option :value="12">12 / {{ tr("tiktokCreative.account.page") }}</option></select>
             </div>
           </div>
           <div class="account-form">
@@ -5874,10 +6249,25 @@ onBeforeUnmount(() => {
             <X class="h-4 w-4" />
           </button>
         </div>
+        <div class="material-picker-toolbar">
+          <div class="material-picker-tabs" role="tablist" :aria-label="tr('tiktokCreative.material.filterLabel')">
+            <button type="button" :class="{ active: materialFilter === 'all' }" @click="materialFilter = 'all'">
+              {{ tr("tiktokCreative.material.filterAll") }} <span>{{ derivedMaterials.length }}</span>
+            </button>
+            <button type="button" :class="{ active: materialFilter === 'unused' }" @click="materialFilter = 'unused'">
+              {{ tr("livePhoto.workspace.materialUnused") }} <span>{{ derivedMaterials.filter((item) => item.usageStatus !== 'used').length }}</span>
+            </button>
+            <button type="button" :class="{ active: materialFilter === 'used' }" @click="materialFilter = 'used'">
+              {{ tr("livePhoto.workspace.materialUsed") }} <span>{{ derivedMaterials.filter((item) => item.usageStatus === 'used').length }}</span>
+            </button>
+          </div>
+          <span class="material-picker-selection">{{ selectedMaterialIds.length }} {{ tr("tiktokCreative.material.selected") }}</span>
+        </div>
         <div class="material-grid">
           <button
-            v-for="material in derivedMaterials"
+            v-for="material in filteredDerivedMaterials"
             :key="material.id"
+            class="material-card"
             :class="{ active: selectedMaterialIds.includes(material.id) }"
             type="button"
             @click="toggleMaterial(material.id)"
@@ -5885,7 +6275,9 @@ onBeforeUnmount(() => {
             <img
               :src="previewSrc(material.localImagePath)"
               alt="material"
-            /><span>{{ fileName(material.localImagePath) }}</span>
+            /><span>{{ fileName(material.localImagePath) }}</span><small class="material-usage-badge" :class="{ used: material.usageStatus === 'used' }">
+              {{ material.usageStatus === 'used' ? tr("livePhoto.workspace.materialUsed") : tr("livePhoto.workspace.materialUnused") }}
+            </small>
           </button>
         </div>
         <div v-if="!derivedMaterials.length" class="material-grid-empty">{{ tr("tiktokCreative.material.empty") }}</div>
@@ -6202,28 +6594,6 @@ onBeforeUnmount(() => {
       @click.self="videoDialog = null"
     >
       <div class="live-subtitle-dialog__panel video-dialog">
-        <div class="live-subtitle-dialog__head">
-          <div class="live-subtitle-dialog__titleblock">
-            <strong>{{
-              videoDialog.task.productName || tr("autoUi.k_9355dd64fd86")
-            }}</strong>
-            <p>
-              {{
-                videoDialog.shot.subtitleVideoPath
-                  ? tr("autoUi.k_6d27a746c36c")
-                  : tr("autoUi.k_1a73a0bbb20c")
-              }}
-              · {{ formatTime(videoDialog.shot.createdAt) }}
-            </p>
-          </div>
-          <button
-            class="live-subtitle-dialog__close"
-            type="button"
-            @click="videoDialog = null"
-          >
-            <X class="h-4 w-4" />
-          </button>
-        </div>
         <video
           class="video-dialog__player"
           controls
@@ -6236,19 +6606,26 @@ onBeforeUnmount(() => {
             )
           "
         />
-        <div class="video-dialog__meta">
-          <span>{{
-            fileName(
-              videoDialog.shot.subtitleVideoPath ||
-                videoDialog.shot.resultVideoPath,
-            )
-          }}</span
-          ><span v-if="videoDialog.shot.officialVideoId"
-            >{{ tr("autoUi.k_18dc60d000ef") }}
-            {{ videoDialog.shot.officialVideoId }}</span
-          >
-        </div>
-        <div class="dialog-actions">
+        <aside class="video-dialog__side">
+          <div class="video-dialog__head">
+            <div class="live-subtitle-dialog__titleblock">
+              <strong>{{ videoDialog.task.productName || tr("autoUi.k_9355dd64fd86") }}</strong>
+              <p>{{ videoDialog.shot.subtitleVideoPath ? tr("autoUi.k_6d27a746c36c") : tr("autoUi.k_1a73a0bbb20c") }} · {{ formatTime(videoDialog.shot.createdAt) }}</p>
+            </div>
+            <button class="live-subtitle-dialog__close" type="button" @click="videoDialog = null">
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+          <div class="video-dialog__tags">
+            <span>9:16</span><span>{{ videoDialog.shot.durationSec || 10 }}s</span><span class="is-ready">{{ videoDialog.shot.subtitleVideoPath ? tr("autoUi.k_6d27a746c36c") : tr("autoUi.k_1a73a0bbb20c") }}</span>
+          </div>
+          <div class="video-dialog__info">
+            <div class="video-dialog__info-title">{{ tr("tiktokCreative.videoPreview.fileInfo") }}</div>
+            <div class="video-dialog__info-row"><span>{{ tr("tiktokCreative.videoPreview.fileName") }}</span><strong>{{ fileName(videoDialog.shot.subtitleVideoPath || videoDialog.shot.resultVideoPath) }}</strong></div>
+            <div v-if="videoDialog.shot.officialVideoId" class="video-dialog__info-row"><span>{{ tr("autoUi.k_18dc60d000ef") }}</span><strong>{{ videoDialog.shot.officialVideoId }}</strong></div>
+            <div class="video-dialog__info-row"><span>{{ tr("tiktokCreative.videoPreview.createdAt") }}</span><strong>{{ formatTime(videoDialog.shot.createdAt) }}</strong></div>
+          </div>
+          <div class="video-dialog__actions">
           <button
             class="ghost-button"
             type="button"
@@ -6276,7 +6653,8 @@ onBeforeUnmount(() => {
           >
             {{ tr("autoUi.k_6c14bd7f6f9e") }}
           </button>
-        </div>
+          </div>
+        </aside>
       </div>
     </div>
     <div
@@ -7196,9 +7574,123 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 700;
 }
-.reference-source-grid {
+.generation-mode-control {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.generation-mode-control__label {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.generation-mode-control__options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.generation-mode-control__options button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.generation-mode-control__options button.active {
+  background: #14b8a6;
+  color: #042f2e;
+}
+
+.generation-mode-control__hint {
+  color: #8fa2bd;
+  line-height: 1.45;
+}
+
+.generation-mode-control__details {
+  display: grid;
+  gap: 12px;
+  padding: 13px 14px 14px;
+  border: 1px solid rgba(100, 116, 139, 0.24);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(20, 30, 48, 0.8), rgba(12, 19, 33, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 8px 20px rgba(2, 6, 23, 0.12);
+}
+
+.generation-mode-control__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.generation-mode-control__eyebrow {
+  color: #f1f5f9;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.generation-mode-control__zoom {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.generation-mode-control__zoom button {
+  min-width: 0;
+  height: 30px;
+  padding: 0 4px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.generation-mode-control__zoom button:hover {
+  border-color: rgba(45, 212, 191, 0.55);
+  color: #d9fffa;
+  transform: translateY(-1px);
+}
+
+.generation-mode-control__zoom button.active {
+  border-color: rgba(45, 212, 191, 0.8);
+  background: linear-gradient(180deg, #19b9aa, #0f8f88);
+  color: #042f2e;
+  box-shadow: 0 4px 10px rgba(20, 184, 166, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.generation-mode-control__zoom button:focus-visible {
+  outline: 2px solid rgba(94, 234, 212, 0.85);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .generation-mode-control__details {
+    gap: 10px;
+  }
+
+  .generation-mode-control__zoom {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.reference-source-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 .reference-source-card {
@@ -7449,6 +7941,50 @@ onBeforeUnmount(() => {
 .prompt-version-editor {
   display: grid;
   gap: 9px;
+}
+.prompt-kind-tabs {
+  display: inline-flex;
+  width: fit-content;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 9px;
+  background: var(--theme-surface-muted);
+}
+.prompt-kind-tabs .ghost-button {
+  position: relative;
+  min-width: 72px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--theme-text-secondary);
+}
+.prompt-kind-tabs .ghost-button.active {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 18%, transparent);
+}
+.prompt-kind-tabs .ghost-button[aria-selected="true"] {
+  position: relative;
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent-soft) !important;
+  color: var(--theme-accent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 18%, transparent) !important;
+}
+.prompt-kind-tabs .ghost-button.active::after,
+.prompt-kind-tabs .ghost-button[aria-selected="true"]::after {
+  position: absolute;
+  right: 10px;
+  bottom: 2px;
+  left: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--theme-accent);
+  content: "";
+}
+.prompt-kind-tabs .ghost-button:not(.active):hover {
+  background: var(--theme-control);
+  color: var(--theme-text);
 }
 .prompt-version-editor__prompt textarea {
   min-height: 138px;
@@ -7802,33 +8338,37 @@ onBeforeUnmount(() => {
 .live-subtitle-dialog {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 300;
   display: grid;
   place-items: center;
-  padding: 16px;
-  background: rgba(5, 8, 16, 0.72);
-  backdrop-filter: blur(8px);
+  box-sizing: border-box;
+  padding: 28px;
+  background: rgba(3, 7, 15, 0.78);
+  backdrop-filter: blur(14px) saturate(115%);
 }
 .live-subtitle-dialog__panel {
+  box-sizing: border-box;
   width: min(760px, 100%);
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 56px);
   overflow: auto;
   display: grid;
   gap: 14px;
-  padding: 18px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
-  border-radius: 16px;
+  padding: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
   background: linear-gradient(
     180deg,
-    rgba(15, 19, 31, 0.98),
-    rgba(12, 16, 27, 0.99)
+    rgba(18, 25, 40, 0.985),
+    rgba(10, 15, 27, 0.99)
   );
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .live-subtitle-dialog__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 4px;
 }
 .live-subtitle-dialog__titleblock {
   display: grid;
@@ -7852,53 +8392,196 @@ onBeforeUnmount(() => {
 }
 .account-layout {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.8fr);
+  gap: 16px;
+}
+.account-dialog {
+  width: min(1280px, 100%);
+  max-height: calc(100dvh - 40px);
+  padding: 26px;
+}
+.account-dialog .live-subtitle-dialog__head {
+  align-items: flex-start;
+  padding: 4px 4px 14px;
+}
+.account-dialog .live-subtitle-dialog__titleblock strong {
+  font-size: 22px;
+  letter-spacing: 0.01em;
+}
+.account-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.account-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 220px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid rgba(111, 145, 190, 0.28);
+  border-radius: 11px;
+  background: rgba(8, 15, 29, 0.72);
+  color: #7f93b2;
+}
+.account-search:focus-within {
+  border-color: rgba(45, 212, 191, 0.72);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+}
+.account-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f4f7fb;
+  font: inherit;
+  font-size: 12px;
+}
+.account-filter,
+.account-pagination select {
+  height: 40px;
+  border: 1px solid rgba(111, 145, 190, 0.28);
+  border-radius: 11px;
+  padding: 0 12px;
+  background: rgba(8, 15, 29, 0.72);
+  color: #d7e1f1;
+  font: inherit;
+  font-size: 12px;
+}
+.account-filter {
+  min-width: 132px;
+}
+.account-add-button {
+  height: 40px;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(45, 212, 191, 0.15);
 }
 .account-list {
   display: grid;
-  gap: 8px;
+  gap: 2px;
   align-content: start;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(111, 145, 190, 0.18);
+  border-radius: 14px;
+  background: rgba(10, 17, 31, 0.72);
+}
+.account-list-header {
+  display: grid;
+  grid-template-columns: 34px minmax(160px, 1.35fr) minmax(120px, 0.8fr) minmax(125px, 0.75fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(111, 145, 190, 0.17);
+  color: #7085a5;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .account-row {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 34px minmax(160px, 1.35fr) minmax(120px, 0.8fr) minmax(125px, 0.75fr) auto;
+  gap: 12px;
   align-items: center;
-  padding: 10px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  border-radius: 12px;
-  background: rgba(18, 23, 38, 0.74);
+  min-height: 72px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(111, 145, 190, 0.11);
+  background: rgba(17, 26, 43, 0.56);
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+.account-row:hover {
+  background: rgba(24, 42, 62, 0.7);
+}
+.account-row.editing {
+  background: linear-gradient(90deg, rgba(17, 111, 121, 0.32), rgba(17, 38, 57, 0.7));
+  box-shadow: inset 2px 0 0 #2dd4bf;
 }
 .account-row.disabled {
-  opacity: 0.55;
+  opacity: 0.72;
 }
 .account-order {
   display: grid;
+  justify-items: center;
+  gap: 1px;
 }
 .account-order button {
-  border: 0;
+  width: 22px;
+  height: 18px;
+  border: 1px solid transparent;
+  border-radius: 5px;
   background: transparent;
   color: #9fb1d8;
+  cursor: pointer;
+  line-height: 1;
+}
+.account-order button:hover:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.12);
+  color: #6ee7d5;
+}
+.account-order button:disabled {
+  cursor: default;
+  opacity: 0.28;
 }
 .account-main strong,
 .account-main small,
-.account-state {
+.account-meta strong,
+.account-meta small,
+.account-status-column small {
   display: block;
+}
+.account-main {
+  min-width: 0;
+}
+.account-main strong,
+.account-meta strong {
+  overflow: hidden;
+  color: #f2f6fb;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .account-main small {
   color: #9fb1d8;
   font-size: 10px;
   overflow-wrap: anywhere;
 }
+.account-meta,
+.account-status-column {
+  min-width: 0;
+}
+.account-meta strong {
+  color: #cbd7e8;
+  font-size: 11px;
+}
+.account-meta small,
+.account-status-column small {
+  margin-top: 4px;
+  color: #7186a6;
+  font-size: 10px;
+}
+.account-status-column {
+  overflow: hidden;
+}
 .account-state {
   width: max-content;
-  margin: 4px 0;
-  padding: 2px 7px;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 8px;
   border-radius: 999px;
   background: rgba(16, 101, 78, 0.18);
   color: #68f0b9;
   font-size: 10px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .account-state.expired,
 .account-state.insufficient_credit,
@@ -7908,17 +8591,73 @@ onBeforeUnmount(() => {
 }
 .account-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 5px;
   flex-wrap: wrap;
+}
+.account-actions .small {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+.account-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  color: #7e93b3;
+  font-size: 11px;
+}
+.account-pagination > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.account-pagination button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(111, 145, 190, 0.23);
+  border-radius: 8px;
+  background: rgba(18, 30, 48, 0.8);
+  color: #b9c9df;
+}
+.account-pagination button:disabled {
+  opacity: 0.35;
+}
+.account-pagination strong {
+  display: inline-grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: #22cdbd;
+  color: #062a30;
+}
+.account-pagination select {
+  width: auto;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 10px;
 }
 .account-form {
   display: grid;
   align-content: start;
   gap: 10px;
-  padding: 14px;
+  min-width: 0;
+  padding: 18px;
   border: 1px solid rgba(111, 123, 170, 0.18);
-  border-radius: 12px;
-  background: rgba(18, 23, 38, 0.74);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(23, 35, 55, 0.78), rgba(12, 20, 36, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.account-form > strong {
+  padding-bottom: 4px;
+  color: #f2f6fb;
+  font-size: 15px;
 }
 .account-form label {
   display: grid;
@@ -7930,11 +8669,17 @@ onBeforeUnmount(() => {
 .account-form textarea {
   width: 100%;
   box-sizing: border-box;
-  padding: 9px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
-  border-radius: 10px;
-  background: rgba(19, 24, 38, 0.92);
+  padding: 10px 11px;
+  border: 1px solid rgba(111, 145, 190, 0.26);
+  border-radius: 9px;
+  outline: 0;
+  background: rgba(7, 14, 28, 0.72);
   color: #fff;
+}
+.account-form input:focus,
+.account-form textarea:focus {
+  border-color: rgba(45, 212, 191, 0.68);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
 }
 .dialog-actions {
   display: flex;
@@ -7945,8 +8690,66 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
-  max-height: 58vh;
+  max-height: min(58vh, 620px);
   overflow: auto;
+}
+.material-picker-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 12px;
+  padding: 4px;
+  border: 1px solid rgba(111, 123, 170, 0.2);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+}
+.material-picker-tabs {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+}
+.material-picker-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8fa2bd;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.material-picker-tabs button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  font-size: 10px;
+}
+.material-picker-tabs button.active {
+  background: #243047;
+  color: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.material-picker-tabs button.active span {
+  background: rgba(45, 212, 191, 0.18);
+  color: #70e2d0;
+}
+.material-picker-selection {
+  flex: 0 0 auto;
+  padding: 0 9px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
 }
 .material-grid button {
   border: 2px solid transparent;
@@ -7955,8 +8758,18 @@ onBeforeUnmount(() => {
   color: #bcc7d4;
   background: #151d2a;
 }
+.material-grid .material-card {
+  position: relative;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+.material-grid .material-card:hover {
+  background: #1a2637;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.24);
+}
 .material-grid button.active {
   border-color: #55dfca;
+  box-shadow: 0 0 0 1px rgba(85, 223, 202, 0.2), 0 8px 18px rgba(20, 184, 166, 0.12);
 }
 .material-grid img {
   width: 100%;
@@ -7971,6 +8784,35 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10px;
+}
+.material-usage-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  margin-top: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  border-radius: 999px;
+  background: rgba(120, 82, 10, 0.16);
+  color: #fcd34d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.material-usage-badge::before {
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+.material-usage-badge.used {
+  border-color: rgba(45, 212, 191, 0.42);
+  background: rgba(13, 148, 136, 0.14);
+  color: #70e2d0;
 }
 .material-grid-empty {
   padding: 24px;
@@ -8128,12 +8970,56 @@ onBeforeUnmount(() => {
   }
   .account-row {
     grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
   }
+  .account-list-header {
+    display: none;
+  }
+  .account-main,
+  .account-meta,
+  .account-status-column,
   .account-actions {
     grid-column: 2;
   }
+  .account-meta,
+  .account-status-column {
+    display: inline-block;
+    margin-right: 12px;
+  }
+  .account-actions {
+    justify-content: flex-start;
+  }
+  .account-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .account-search {
+    flex-basis: 100%;
+  }
+  .account-dialog {
+    padding: 18px;
+  }
+  .account-pagination {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
   .material-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .material-picker-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .material-picker-tabs {
+    justify-content: space-between;
+  }
+  .material-picker-tabs button {
+    flex: 1;
+    justify-content: center;
+  }
+  .material-picker-selection {
+    padding: 4px 8px 6px;
+    text-align: right;
   }
 }
 .live-console-row__thumb img {
@@ -8216,6 +9102,23 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.publisher-editor-media-actions .publisher-random-music-button {
+  grid-column: 1 / -1;
+}
+.publisher-random-music-button {
+  justify-content: flex-start;
+  gap: 7px;
+  color: #79e4d0 !important;
+}
+.publisher-random-music-button small {
+  margin-left: auto;
+  color: #8faabd;
+  font-size: 9px;
+}
+.publisher-random-music-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 .tiktok-page.publish-mode,
 .publish-mode .publisher-single-page,
@@ -9798,6 +10701,14 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(111, 123, 170, 0.16);
   border-radius: 12px;
   background: rgba(18, 23, 38, 0.72);
+  color: #dbeafe;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.live-subtitle-dialog__close:hover {
+  border-color: rgba(94, 234, 212, 0.5);
+  background: rgba(30, 45, 66, 0.92);
+  transform: translateY(-1px);
 }
 .subtitle-summary span {
   color: #9fb1d8;
@@ -9807,16 +10718,96 @@ onBeforeUnmount(() => {
   font-size: 15px;
 }
 .video-dialog {
-  width: min(900px, 100%);
+  width: min(1180px, 100%);
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  align-items: stretch;
+  gap: 28px;
+  padding: 22px;
 }
 .video-dialog__player {
-  display: block;
+  grid-column: 1;
+  grid-row: 1;
   width: 100%;
-  max-height: 68vh;
-  min-height: 280px;
-  object-fit: contain;
-  border-radius: 12px;
-  background: #050810;
+  height: min(72vh, 720px);
+  max-height: none;
+  min-height: 360px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  background: #030711;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025), 0 16px 36px rgba(0, 0, 0, 0.24);
+}
+.video-dialog__side {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 18px;
+  padding: 12px 2px 2px;
+}
+.video-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.video-dialog__head .live-subtitle-dialog__titleblock strong {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 26px;
+}
+.video-dialog__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+.video-dialog__tags span {
+  padding: 7px 11px;
+  border: 1px solid rgba(111, 123, 170, 0.24);
+  border-radius: 9px;
+  background: rgba(30, 41, 59, 0.72);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+}
+.video-dialog__tags span.is-ready {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(13, 148, 136, 0.16);
+  color: #5eead4;
+}
+.video-dialog__info {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(111, 123, 170, 0.2);
+  border-radius: 14px;
+  background: rgba(18, 27, 43, 0.72);
+}
+.video-dialog__info-title {
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 800;
+}
+.video-dialog__info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #8fa2bd;
+  font-size: 12px;
+}
+.video-dialog__info-row strong {
+  max-width: 210px;
+  overflow: hidden;
+  color: #dbeafe;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .video-dialog__meta {
   display: flex;
@@ -9826,6 +10817,30 @@ onBeforeUnmount(() => {
   color: #9fb1d8;
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+.video-dialog__actions {
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+}
+.video-dialog__actions button {
+  width: 100%;
+  justify-content: center;
+}
+@media (max-width: 860px) {
+  .video-dialog {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .video-dialog__player,
+  .video-dialog__side {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .video-dialog__player {
+    height: min(58vh, 560px);
+    min-height: 260px;
+  }
 }
 .live-subtitle-dialog__panel--copied {
   width: min(760px, 100%);
@@ -12545,6 +13560,10 @@ onBeforeUnmount(() => {
   color: #c7d6e6;
   font-size: 10px;
 }
+.publisher-design-selection button:not(.publisher-design-primary) small {
+  color: #80cfc1;
+  font-size: 9px;
+}
 .publisher-design-workspace {
   display: grid;
   grid-template-columns: minmax(0, 3fr) 360px;
@@ -14911,4 +15930,30 @@ html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-d
   }
 }
 .publisher-poster-placeholder { display: grid; width: 100%; height: 100%; place-items: center; color: var(--theme-text-muted); background: var(--theme-panel-soft); }
+
+/* Keep the light theme from inheriting the legacy purple music action. */
+:global(html[data-app-theme='light-teal']) .tiktok-page.publish-mode .publisher-design-actions button.publisher-music-library-button {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-app-theme='light-teal']) .tiktok-page .generation-mode-control__options {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border-control) !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-app-theme='light-teal']) .tiktok-page .generation-mode-control__options button {
+  color: var(--theme-text-secondary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+:global(html[data-app-theme='light-teal']) .tiktok-page .generation-mode-control__options button.active {
+  color: var(--theme-accent-strong) !important;
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-accent) !important;
+}
 </style>

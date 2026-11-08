@@ -145,7 +145,6 @@ import type {
   CloneRunMode,
   CloneShotVideoFailureBreakdown,
   CloneShotVideoSubmissionAuditLog,
-  HermesIntegrationSettings,
 } from './types'
 
 const CLONE_SUBTITLE_USER_ID = 'desktop-clone-task-list'
@@ -12013,14 +12012,6 @@ export const cloneService = {
 
   async setRuntimeOptions(input: { storyboardFrameConcurrency?: number; globalStoryboardFrameConcurrency?: number }) {
     return await cloneRepo.setRuntimeOptions(input)
-  },
-
-  async getHermesIntegrationSettings() {
-    return await cloneRepo.getHermesIntegrationSettings()
-  },
-
-  async setHermesIntegrationSettings(input: Partial<HermesIntegrationSettings>) {
-    return await cloneRepo.setHermesIntegrationSettings(input)
   },
 
   async getGrsAiCredits() {

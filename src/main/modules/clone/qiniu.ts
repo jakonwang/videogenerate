@@ -33,6 +33,8 @@ function mimeByPath(filePath: string) {
   if (ext === '.gif') return 'image/gif'
   if (ext === '.mp4') return 'video/mp4'
   if (ext === '.mov') return 'video/quicktime'
+  if (ext === '.webm') return 'video/webm'
+  if (ext === '.mkv') return 'video/x-matroska'
   return 'image/png'
 }
 

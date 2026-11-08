@@ -3,8 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  Bot,
-  Boxes,
   Check,
   Clapperboard,
   Cloud,
@@ -15,14 +13,10 @@ import {
   KeyRound,
   MessagesSquare,
   Palette,
-  Puzzle,
-  Radio,
   Server,
 } from 'lucide-vue-next'
 import { useAppSettingsStore, type AppTheme } from '@/stores/appSettings'
-import HermesManagementPanel from '../components/HermesManagementPanel.vue'
 import StorageManagementPanel from '../components/StorageManagementPanel.vue'
-import { HERMES_SETTINGS_SECTIONS, type HermesSettingsSection } from '../../../../shared/hermesWorkspace'
 import {
   listCapabilityPlatforms,
   mapPlatformToStoredProvider,
@@ -51,10 +45,6 @@ type SecretKey =
   | 'replicateApiToken'
   | 'qiniuAccessKey'
   | 'qiniuSecretKey'
-  | 'hermesFeishuAppSecret'
-  | 'hermesFeishuTenantAccessToken'
-  | 'hermesWecomCorpSecret'
-  | 'hermesWecomAccessToken'
 
 type HubCredentials = {
   enabled: boolean
@@ -111,27 +101,6 @@ type ModelCredentialsView = {
   xibapiHub: HubCredentials
   gaoruiHub: HubCredentials
   apifoxHub: HubCredentials
-}
-
-type HermesIntegrationView = {
-  enabled: boolean
-  callbackBaseUrl: string
-  feishu: {
-    enabled: boolean
-    appId: string
-    appSecret: string
-    tenantAccessToken: string
-    receiveIdType: 'open_id' | 'user_id' | 'union_id' | 'chat_id' | 'email'
-    defaultReceiveId: string
-  }
-  wecom: {
-    enabled: boolean
-    corpId: string
-    corpSecret: string
-    accessToken: string
-    agentId: string
-    defaultToUser: string
-  }
 }
 
 function createHubDefaults(input?: Partial<HubCredentials>): HubCredentials {
@@ -207,29 +176,6 @@ function createDefaultCredentials(): ModelCredentialsView {
   }
 }
 
-function createDefaultHermesIntegration(): HermesIntegrationView {
-  return {
-    enabled: false,
-    callbackBaseUrl: '',
-    feishu: {
-      enabled: false,
-      appId: '',
-      appSecret: '',
-      tenantAccessToken: '',
-      receiveIdType: 'open_id',
-      defaultReceiveId: '',
-    },
-    wecom: {
-      enabled: false,
-      corpId: '',
-      corpSecret: '',
-      accessToken: '',
-      agentId: '',
-      defaultToUser: '',
-    },
-  }
-}
-
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
 const modelSettingsBusy = ref(false)
@@ -237,10 +183,6 @@ type SettingsSection =
   | 'appearance'
   | 'platforms'
   | 'capabilities'
-  | 'hermes-runtime'
-  | 'hermes-skills'
-  | 'hermes-channels'
-  | 'hermes-data'
   | 'storage-management'
   | 'qiniu'
 
@@ -251,8 +193,8 @@ const route = useRoute()
 const appSettings = useAppSettingsStore()
 
 watch(() => route.query.section, (value) => {
-  const section = String(Array.isArray(value) ? value[0] : value || '') as HermesSettingsSection
-  if (HERMES_SETTINGS_SECTIONS.includes(section) || section === 'storage-management') settingsSection.value = section
+  const section = String(Array.isArray(value) ? value[0] : value || '') as SettingsSection
+  if (['appearance', 'platforms', 'capabilities', 'storage-management', 'qiniu'].includes(section)) settingsSection.value = section
 }, { immediate: true })
 
 function revealActiveSettingsSection() {
@@ -270,9 +212,8 @@ const accessKeyVisible = ref(false)
 const accessKeyMessage = ref('')
 const themeOptions: Array<{ value: AppTheme; labelKey: string }> = [
   { value: 'dark-teal', labelKey: 'settings.appearance.themes.darkTeal' },
-  { value: 'soft-mint', labelKey: 'settings.appearance.themes.softMint' },
-  { value: 'warm-paper', labelKey: 'settings.appearance.themes.warmPaper' },
-  { value: 'clear-sky', labelKey: 'settings.appearance.themes.clearSky' },
+  { value: 'light-teal', labelKey: 'settings.appearance.themes.lightTeal' },
+  { value: 'mono', labelKey: 'settings.appearance.themes.mono' },
 ]
 const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   klingApiKey: false,
@@ -285,14 +226,8 @@ const modelVisibleSecrets = ref<Record<SecretKey, boolean>>({
   replicateApiToken: false,
   qiniuAccessKey: false,
   qiniuSecretKey: false,
-  hermesFeishuAppSecret: false,
-  hermesFeishuTenantAccessToken: false,
-  hermesWecomCorpSecret: false,
-  hermesWecomAccessToken: false,
 })
 const modelCredentials = ref<ModelCredentialsView>(createDefaultCredentials())
-const hermesIntegration = ref<HermesIntegrationView>(createDefaultHermesIntegration())
-
 const sectionGroups = [
   {
     key: 'general',
@@ -310,16 +245,6 @@ const sectionGroups = [
     ],
   },
   {
-    key: 'hermes',
-    labelKey: 'settings.navigation.groups.hermes',
-    items: [
-      { key: 'hermes-runtime', labelKey: 'settings.sections.hermesRuntime.label', descKey: 'settings.sections.hermesRuntime.desc', icon: Bot },
-      { key: 'hermes-skills', labelKey: 'settings.sections.hermesSkills.label', descKey: 'settings.sections.hermesSkills.desc', icon: Puzzle },
-      { key: 'hermes-channels', labelKey: 'settings.sections.hermesChannels.label', descKey: 'settings.sections.hermesChannels.desc', icon: Radio },
-      { key: 'hermes-data', labelKey: 'settings.sections.hermesData.label', descKey: 'settings.sections.hermesData.desc', icon: Boxes },
-    ],
-  },
-  {
     key: 'storage',
     labelKey: 'settings.navigation.groups.storage',
     items: [
@@ -330,13 +255,6 @@ const sectionGroups = [
 ] as const
 
 const isModelSettingsSection = computed(() => ['platforms', 'capabilities', 'qiniu'].includes(settingsSection.value))
-const isHermesSettingsSection = computed(() => settingsSection.value.startsWith('hermes-'))
-const hermesTabs = computed(() => {
-  if (settingsSection.value === 'hermes-runtime') return ['runtime', 'models'] as const
-  if (settingsSection.value === 'hermes-skills') return ['skills'] as const
-  if (settingsSection.value === 'hermes-channels') return ['channels'] as const
-  return ['memory', 'backups', 'diagnostics'] as const
-})
 
 const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; hostPlaceholder: string; keyName: SecretKey }> = {
   grsai: {
@@ -686,32 +604,11 @@ function normalizeIncomingCredentials(next: any): ModelCredentialsView {
   }
 }
 
-function normalizeIncomingHermesIntegration(next: any): HermesIntegrationView {
-  const defaults = createDefaultHermesIntegration()
-  return {
-    ...defaults,
-    ...next,
-    callbackBaseUrl: String(next?.callbackBaseUrl ?? defaults.callbackBaseUrl),
-    feishu: {
-      ...defaults.feishu,
-      ...next?.feishu,
-    },
-    wecom: {
-      ...defaults.wecom,
-      ...next?.wecom,
-    },
-  }
-}
-
 async function refreshModelSettings() {
   modelSettingsBusy.value = true
   try {
-    const [next, hermesNext] = await Promise.all([
-      window.api.clone.getModelCredentials() as Promise<Partial<ModelCredentialsView>>,
-      window.api.clone.getHermesIntegrationSettings() as Promise<Partial<HermesIntegrationView>>,
-    ])
+    const next = await window.api.clone.getModelCredentials() as Partial<ModelCredentialsView>
     modelCredentials.value = normalizeIncomingCredentials(next)
-    hermesIntegration.value = normalizeIncomingHermesIntegration(hermesNext)
     settingsMessage.value = t('settings.messages.loaded')
   } catch (e: any) {
     settingsMessage.value = `${t('settings.messages.loadFailed')}: ${e?.message ?? String(e)}`
@@ -752,13 +649,8 @@ async function saveModelSettings() {
     if (payload.chatApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
     if (payload.chatApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
     await window.api.clone.setModelCredentials(payload)
-    await window.api.clone.setHermesIntegrationSettings(JSON.parse(JSON.stringify(hermesIntegration.value)))
-    const [confirmed, confirmedHermes] = await Promise.all([
-      window.api.clone.getModelCredentials() as Promise<Partial<ModelCredentialsView>>,
-      window.api.clone.getHermesIntegrationSettings() as Promise<Partial<HermesIntegrationView>>,
-    ])
+    const confirmed = await window.api.clone.getModelCredentials() as Partial<ModelCredentialsView>
     modelCredentials.value = normalizeIncomingCredentials(confirmed)
-    hermesIntegration.value = normalizeIncomingHermesIntegration(confirmedHermes)
     settingsMessage.value = t('settings.messages.savedAndReloaded')
   } catch (e: any) {
     settingsMessage.value = `${t('settings.messages.saveFailed')}: ${e?.message ?? String(e)}`
@@ -1096,14 +988,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <HermesManagementPanel
-          v-else-if="isHermesSettingsSection"
-          :key="settingsSection"
-          embedded
-          :initial-tab="hermesTabs[0]"
-          :visible-tabs="hermesTabs"
-        />
-
         <StorageManagementPanel v-else-if="settingsSection === 'storage-management'" />
 
         <section v-else-if="settingsSection === 'qiniu'" class="form-section">
@@ -1174,8 +1058,8 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 100%;
   padding: 12px;
-  background: var(--theme-bg, #08111f);
-  color: var(--theme-text, #f8fafc);
+  background: var(--theme-root);
+  color: var(--theme-text);
 }
 
 .settings-shell,
@@ -1190,8 +1074,8 @@ onBeforeUnmount(() => {
 .platform-card,
 .capability-card {
   border-radius: 8px;
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.16));
-  background: var(--theme-panel, #111c31);
+  border: 1px solid var(--theme-border);
+  background: var(--theme-panel);
 }
 
 .settings-shell {
@@ -1208,7 +1092,7 @@ onBeforeUnmount(() => {
 }
 
 .settings-kicker {
-  color: #8ea0c7;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -1277,10 +1161,10 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.16));
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: var(--theme-panel, linear-gradient(180deg, rgba(17, 28, 49, 0.92), rgba(8, 17, 31, 0.94)));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: var(--theme-panel);
+  box-shadow: none;
 }
 
 .appearance-heading {
@@ -1292,7 +1176,7 @@ onBeforeUnmount(() => {
 
 .appearance-heading h2 {
   margin: 0;
-  color: var(--theme-text, #f8fafc);
+  color: var(--theme-text);
   font-size: 15px;
   line-height: 1.3;
 }
@@ -1336,7 +1220,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: block;
   height: 72px;
-  background: #0a0c14;
+  background: var(--theme-panel-soft);
 }
 
 .theme-option__line,
@@ -1373,18 +1257,15 @@ onBeforeUnmount(() => {
   background: #151827;
 }
 
-.theme-option--soft-mint .theme-option__preview { background: #edf7f4; }
-.theme-option--soft-mint .theme-option__line { background: #9dcebf; }
-.theme-option--soft-mint .theme-option__dot { background: #349879; }
-.theme-option--soft-mint .theme-option__field { background: #ffffff; }
-.theme-option--warm-paper .theme-option__preview { background: #f3ead8; }
-.theme-option--warm-paper .theme-option__line { background: #d6ae7b; }
-.theme-option--warm-paper .theme-option__dot { background: #ad5b00; }
-.theme-option--warm-paper .theme-option__field { background: #fffaf0; }
-.theme-option--clear-sky .theme-option__preview { background: #eef1ff; }
-.theme-option--clear-sky .theme-option__line { background: #a9c5ff; }
-.theme-option--clear-sky .theme-option__dot { background: #3b82f6; }
-.theme-option--clear-sky .theme-option__field { background: #ffffff; }
+.theme-option--mono .theme-option__preview { background: #ffffff; border-color: #e5e5e7; }
+.theme-option--mono .theme-option__line { background: #171717; }
+.theme-option--mono .theme-option__dot { background: #171717; }
+.theme-option--mono .theme-option__field { background: #f7f7f8; }
+
+.theme-option--light-teal .theme-option__preview { background: #f7f9f8; border-color: #e4eae6; }
+.theme-option--light-teal .theme-option__line { background: #066b4d; }
+.theme-option--light-teal .theme-option__dot { background: #087f5b; }
+.theme-option--light-teal .theme-option__field { background: #e8f5ef; }
 
 .theme-option__label {
   padding: 8px 10px;

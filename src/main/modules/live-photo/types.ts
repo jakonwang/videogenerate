@@ -4,6 +4,7 @@ export type LivePhotoMotionTemplate = 'push_in' | 'push_out' | 'ambient_sway'
 export type LivePhotoOutputResolution = '1080x1440' | '2160x2880' | '3024x4032'
 export type LivePhotoFrameRate = '24' | '30'
 export type LivePhotoQuality = 'medium' | 'high'
+export type LivePhotoPromptKind = 'image' | 'video'
 
 export type LivePhotoProductSnapshot = {
   id: string
@@ -57,6 +58,7 @@ export type LivePhotoPromptVersion = {
   active: boolean
   createdAt: number
   updatedAt: number
+  kind?: LivePhotoPromptKind
 }
 
 export type LivePhotoQualityDecision = 'pass' | 'retry' | 'reject'
@@ -299,4 +301,5 @@ export type SaveLivePhotoPromptVersionInput = {
   id?: string
   name: string
   prompt: string
+  kind?: LivePhotoPromptKind
 }

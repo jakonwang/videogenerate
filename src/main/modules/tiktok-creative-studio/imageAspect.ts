@@ -67,3 +67,29 @@ export async function normalizeTiktokPreparedImageAspect(
     normalized: true,
   }
 }
+
+export async function createTiktokZoomedLastFrame(sourcePath: string, outputDir: string, zoomPercent = 20): Promise<TiktokImageAspectResult> {
+  const sharp = await getSharp()
+  const metadata = await sharp(sourcePath).metadata()
+  const sourceWidth = Number(metadata.width || 0)
+  const sourceHeight = Number(metadata.height || 0)
+  if (!sourceWidth || !sourceHeight) throw new Error('TikTok first frame dimensions are unavailable')
+
+  await mkdir(outputDir, { recursive: true })
+  const normalizedZoomPercent = [10, 20, 30, 40, 50, 60, 70, 80].includes(Number(zoomPercent)) ? Number(zoomPercent) : 20
+  const scale = 1 + normalizedZoomPercent / 100
+  const outputPath = join(outputDir, `tiktok-last-frame-zoom${normalizedZoomPercent}-${Date.now()}-${randomUUID()}.png`)
+  const zoomWidth = Math.max(sourceWidth + 2, Math.round(sourceWidth * scale))
+  const zoomHeight = Math.max(sourceHeight + 2, Math.round(sourceHeight * scale))
+  await sharp(sourcePath)
+    .resize(zoomWidth, zoomHeight, { fit: 'fill' })
+    .extract({
+      left: Math.floor((zoomWidth - sourceWidth) / 2),
+      top: Math.floor((zoomHeight - sourceHeight) / 2),
+      width: sourceWidth,
+      height: sourceHeight,
+    })
+    .png()
+    .toFile(outputPath)
+  return { path: outputPath, width: sourceWidth, height: sourceHeight, sourceWidth, sourceHeight, normalized: true }
+}

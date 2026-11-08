@@ -303,11 +303,11 @@ function formatRuntimeMessage(message: string) {
   gap: 10px;
   height: 44px;
   padding: 0 14px;
-  border: 1px solid rgba(126, 146, 255, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 999px;
-  background: rgba(10, 15, 28, 0.94);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
-  color: #f4f7ff;
+  background: var(--theme-panel);
+  box-shadow: var(--theme-shadow-float);
+  color: var(--theme-text);
   backdrop-filter: blur(14px);
 }
 
@@ -318,8 +318,8 @@ function formatRuntimeMessage(message: string) {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(124, 92, 255, 0.24);
-  color: #cdbfff;
+  background: var(--theme-accent-soft);
+  color: var(--theme-control-selected-text);
   font-size: 11px;
   font-weight: 800;
 }
@@ -328,13 +328,13 @@ function formatRuntimeMessage(message: string) {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.8);
-  box-shadow: 0 0 0 5px rgba(148, 163, 184, 0.12);
+  background: var(--theme-text-muted);
+  box-shadow: 0 0 0 5px var(--theme-panel-soft);
 }
 
 .runtime-fab__dot.active {
-  background: #34d399;
-  box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.14);
+  background: var(--theme-success-text);
+  box-shadow: 0 0 0 5px var(--theme-success-soft);
 }
 
 .runtime-dialog {
@@ -347,7 +347,7 @@ function formatRuntimeMessage(message: string) {
   position: absolute;
   inset: 0;
   border: none;
-  background: rgba(4, 8, 16, 0.62);
+  background: var(--theme-overlay);
   backdrop-filter: blur(8px);
 }
 
@@ -360,10 +360,10 @@ function formatRuntimeMessage(message: string) {
   height: min(720px, calc(100vh - 56px));
   margin: 28px 20px 28px auto;
   padding: 18px 18px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(10, 16, 30, 0.98), rgba(7, 12, 24, 0.98));
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: var(--theme-panel);
+  box-shadow: var(--theme-shadow-dialog);
   overflow: hidden;
 }
 
@@ -377,14 +377,14 @@ function formatRuntimeMessage(message: string) {
 
 .runtime-dialog__head strong {
   display: block;
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 16px;
   font-weight: 800;
 }
 
 .runtime-dialog__head p {
   margin: 6px 0 0;
-  color: rgba(207, 215, 232, 0.72);
+  color: var(--theme-text-muted);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -392,10 +392,10 @@ function formatRuntimeMessage(message: string) {
 .runtime-dialog__close {
   min-width: 72px;
   height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f4f7ff;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-control);
+  color: var(--theme-text-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -406,7 +406,7 @@ function formatRuntimeMessage(message: string) {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
-  color: rgba(207, 215, 232, 0.74);
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 
@@ -416,14 +416,14 @@ function formatRuntimeMessage(message: string) {
   min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(124, 92, 255, 0.2);
-  background: rgba(124, 92, 255, 0.12);
-  color: #d7ccff;
+  border: 1px solid var(--theme-border-control);
+  background: var(--theme-accent-soft);
+  color: var(--theme-control-selected-text);
   font-weight: 700;
 }
 
 .runtime-summary__hint {
-  color: rgba(161, 173, 198, 0.74);
+  color: var(--theme-text-muted);
 }
 
 .runtime-filters {
@@ -444,33 +444,33 @@ function formatRuntimeMessage(message: string) {
   gap: 8px;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(226, 232, 240, 0.88);
+  background: var(--theme-control);
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 
 .runtime-filter-chip strong {
   min-width: 18px;
-  color: rgba(255, 255, 255, 0.96);
+  color: inherit;
   font-size: 11px;
   font-weight: 800;
   text-align: center;
 }
 
 .runtime-filter-chip--active {
-  border-color: rgba(124, 92, 255, 0.24);
-  background: rgba(124, 92, 255, 0.14);
-  color: #f4edff;
+  border-color: var(--theme-accent);
+  background: var(--theme-control-selected);
+  color: var(--theme-control-selected-text);
 }
 
 .runtime-log-board {
   min-height: 0;
   height: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  background: rgba(16, 22, 38, 0.72);
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-panel-soft);
   overflow: hidden;
 }
 
@@ -486,23 +486,23 @@ function formatRuntimeMessage(message: string) {
   display: grid;
   gap: 10px;
   padding: 12px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-panel);
 }
 
 .runtime-log-card--success {
-  border-color: rgba(52, 211, 153, 0.2);
-  background: rgba(16, 185, 129, 0.08);
+  border-color: var(--theme-success-text);
+  background: var(--theme-success-soft);
 }
 
 .runtime-log-card--error {
-  border-color: rgba(248, 113, 113, 0.22);
-  background: rgba(239, 68, 68, 0.08);
+  border-color: var(--theme-danger-text);
+  background: var(--theme-danger-soft);
 }
 
 .runtime-log-card--info {
-  border-color: rgba(96, 165, 250, 0.16);
+  border-color: var(--theme-border);
 }
 
 .runtime-log-card__meta {
@@ -520,7 +520,7 @@ function formatRuntimeMessage(message: string) {
 }
 
 .runtime-log-card__meta time {
-  color: rgba(161, 173, 198, 0.76);
+  color: var(--theme-text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -531,20 +531,20 @@ function formatRuntimeMessage(message: string) {
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #eef2ff;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 700;
 }
 
 .runtime-log-card__badge--level {
-  background: rgba(124, 92, 255, 0.12);
-  color: #d9cdff;
+  background: var(--theme-accent-soft);
+  color: var(--theme-control-selected-text);
 }
 
 .runtime-log-card p {
   margin: 0;
-  color: #eef2ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.6;
   word-break: break-word;
@@ -561,14 +561,14 @@ function formatRuntimeMessage(message: string) {
 }
 
 .runtime-empty strong {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 14px;
   font-weight: 800;
 }
 
 .runtime-empty p {
   margin: 0;
-  color: rgba(177, 188, 208, 0.72);
+  color: var(--theme-text-muted);
   font-size: 12px;
   line-height: 1.7;
 }

@@ -1,10 +1,8 @@
 import { existsSync } from 'node:fs'
 import { lstat, readdir, rm } from 'node:fs/promises'
-import { dirname, join, relative, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { cloneRepo } from '../clone/repo'
-import { hermesRuntime } from '../hermes/runtime'
-import { hermesManagement } from '../hermes/management'
 import { livePhotoRepo } from '../live-photo/repo'
 import { webPlatformRepo } from '../web-platform/repo'
 import {
@@ -117,10 +115,9 @@ async function staleFileTargets(root: string, minimumAgeMs: number): Promise<Sto
 
 function assertManagedTarget(path: string) {
   const { dataDir, userData } = getAppPaths()
-  const profileDir = hermesRuntime.getProfileDirectory()
-  const runtimeParent = dirname(hermesRuntime.getRuntimeRoot())
+  const profileDir = getAppPaths().userData
   const target = resolve(path)
-  const allowedRoots = [dataDir, userData, profileDir, runtimeParent].map((item) => resolve(item))
+  const allowedRoots = [dataDir, userData, profileDir].map((item) => resolve(item))
   const allowed = allowedRoots.some((root) => {
     const suffix = relative(root, target)
     return Boolean(suffix) && suffix !== '..' && !suffix.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
@@ -178,17 +175,8 @@ async function completedArtifactTargets(): Promise<StorageTarget[]> {
   ])
 }
 
-async function hermesSessionTargets(): Promise<StorageTarget[]> {
-  const profileDir = hermesRuntime.getProfileDirectory()
-  return uniqueTargets([
-    { path: join(profileDir, 'sessions'), preserveRoot: true },
-    { path: join(profileDir, 'memories'), preserveRoot: true },
-  ])
-}
-
 async function diagnosticLogTargets(): Promise<StorageTarget[]> {
   const { dataDir, userData } = getAppPaths()
-  const profileDir = hermesRuntime.getProfileDirectory()
   const roots = [
     join(dataDir, 'logs'),
     join(dataDir, 'diagnostics'),
@@ -196,7 +184,6 @@ async function diagnosticLogTargets(): Promise<StorageTarget[]> {
     join(userData, 'Logs'),
     join(userData, 'Crashpad', 'reports'),
     join(userData, 'crashDumps'),
-    join(profileDir, 'logs'),
   ]
   const targets = await Promise.all(roots.map((root) => staleFileTargets(root, STALE_DIAGNOSTIC_LOG_AGE_MS)))
   return uniqueTargets(targets.flat())
@@ -204,9 +191,7 @@ async function diagnosticLogTargets(): Promise<StorageTarget[]> {
 
 function definitions(): Record<StorageCategoryId, CategoryDefinition> {
   const { cacheDir, dataDir, tmpDir, userData } = getAppPaths()
-  const profileDir = hermesRuntime.getProfileDirectory()
-  const runtimeRoot = hermesRuntime.getRuntimeRoot()
-  const runtimeParent = dirname(runtimeRoot)
+  const profileDir = userData
   return {
     safe_cache: {
       id: 'safe_cache',
@@ -261,28 +246,6 @@ function definitions(): Record<StorageCategoryId, CategoryDefinition> {
       backupRequired: false,
       targets: completedArtifactTargets,
     },
-    hermes_runtime: {
-      id: 'hermes_runtime',
-      risk: 'destructive',
-      requiresRuntimeStop: true,
-      cleanupAllowed: true,
-      requiresTypedConfirmation: true,
-      backupRequired: false,
-      targets: async () => uniqueTargets([
-        { path: runtimeRoot },
-        { path: join(runtimeParent, 'hermes-agent.videogenerate-staging') },
-        { path: join(runtimeParent, 'hermes-agent.videogenerate-previous') },
-      ]),
-    },
-    hermes_sessions_memory: {
-      id: 'hermes_sessions_memory',
-      risk: 'destructive',
-      requiresRuntimeStop: true,
-      cleanupAllowed: true,
-      requiresTypedConfirmation: true,
-      backupRequired: true,
-      targets: hermesSessionTargets,
-    },
     managed_source_assets: {
       id: 'managed_source_assets',
       risk: 'protected',
@@ -317,9 +280,8 @@ function definitions(): Record<StorageCategoryId, CategoryDefinition> {
       requiresTypedConfirmation: false,
       backupRequired: false,
       targets: async () => {
-        const profileDir = hermesRuntime.getProfileDirectory()
         return uniqueTargets([
-          ...['.env', 'config.yaml', 'config.yml', 'config.json', 'channels.json'].map((name) => ({ path: join(profileDir, name) })),
+          ...['.env', 'config.yaml', 'config.yml', 'config.json'].map((name) => ({ path: join(profileDir, name) })),
         ])
       },
     },
@@ -390,29 +352,12 @@ class StorageManagementService {
     const definition = definitions()[categoryId]
     const targets = await definition.targets()
     const before = await Promise.all(targets.map((target) => scanPath(target.path)))
-    const runtimeWasReady = hermesRuntime.getStatus().state === 'ready'
     const warnings: string[] = []
-    let backupCreated = false
-    if (definition.backupRequired) {
-      try {
-        await hermesManagement.createBackup()
-        backupCreated = true
-      } catch (error) {
-        throw new Error(`A backup is required before cleaning this category: ${String((error as Error)?.message || error)}`)
-      }
-    }
-
-    if (definition.requiresRuntimeStop) await hermesRuntime.stop()
     try {
       for (const target of targets) {
         warnings.push(...await clearTarget(target))
       }
     } finally {
-      if (definition.requiresRuntimeStop && categoryId !== 'hermes_runtime' && runtimeWasReady) {
-        await hermesRuntime.start().catch((error) => {
-          warnings.push(String((error as Error)?.message || error))
-        })
-      }
     }
 
     const after = await Promise.all(targets.map((target) => scanPath(target.path)))
@@ -428,7 +373,6 @@ class StorageManagementService {
       reclaimedBytes: Math.max(0, beforeBytes - afterBytes),
       removedFiles: Math.max(0, beforeFiles - afterFiles),
       removedItems: 0,
-      ...(backupCreated ? { backupCreated: true } : {}),
       ...(warnings.length ? { warning: `${warnings.length} locked or unavailable entries were retained.` } : {}),
       overview,
     }

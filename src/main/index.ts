@@ -4,8 +4,10 @@ import { basename, join } from 'node:path'
 import { createReadStream, existsSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { performance } from 'node:perf_hooks'
+import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { ensureAppDirs, getAppPaths } from './lib/paths'
+import { backgroundRecordStore } from './lib/backgroundRecordStore'
+import { gmvMaxWorkerClient } from './modules/tiktok-gmv-max/workerClient'
 import { analyzeVideoFolderAndSuggestTemplate } from './modules/style/analyzeVideos'
 import { normalizeAppLocale, type AppLocale } from '../shared/locale'
 import { defaultOpenDialogTitle } from './lib/dialogDefaults'
@@ -25,7 +27,6 @@ import { ensureWebApiServer, getWebApiServerPort, stopWebApiServer } from './lib
 import { cloneRepo } from './modules/clone/repo'
 import { cloneService } from './modules/clone/service'
 import { livePhotoService } from './modules/live-photo/service'
-import { stopLocalLivePhotoQualityChecker } from './modules/live-photo/qualityChecker'
 import { productsRepo } from './modules/products/repo'
 import { templatesRepo } from './modules/templates/repo'
 import { webPlatformRepo } from './modules/web-platform/repo'
@@ -33,25 +34,27 @@ import { configureWindowsStorageRoot, cleanupLegacyWindowsStorage, migrateLegacy
 import { registerAppShellMediaIpc } from './ipc/registerAppShellMediaIpc'
 import { registerProductsIpc } from './ipc/registerProductsIpc'
 import { registerLivePhotoIpc } from './ipc/registerLivePhotoIpc'
-import { registerHermesLivePhotoIpc } from './ipc/registerHermesLivePhotoIpc'
 import { registerProductImageMaterialsIpc } from './ipc/registerProductImageMaterialsIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 import { registerVideoParserDownloadIpc } from './ipc/registerVideoParserDownloadIpc'
 import { registerAgentOsIpc } from './ipc/registerAgentOsIpc'
-import { registerHermesAgentIpc } from './ipc/registerHermesAgentIpc'
 import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
 import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
 import { registerDianxiaomiInventoryIpc } from './ipc/registerDianxiaomiInventoryIpc'
+import { registerTiktokCreatorOutreachIpc } from './ipc/registerTiktokCreatorOutreachIpc'
+import { registerProductWatermarkIpc } from './ipc/registerProductWatermarkIpc'
+import { registerAssetLibraryIpc } from './ipc/registerAssetLibraryIpc'
+import { registerProductReplacementIpc } from './ipc/registerProductReplacementIpc'
+import { productReplacementService } from './modules/product-replacement/service'
 import { agentOsService } from './modules/agent-os/service'
-import { hermesRuntime } from './modules/hermes/runtime'
-import { hermesManagement } from './modules/hermes/management'
 import { productImageMaterialsService } from './modules/product-image-materials/service'
 import { productImageMaterialsRepo } from './modules/product-image-materials/repo'
 import { tiktokListingRepo } from './modules/tiktok-listing/repo'
 import { tiktokCreativeStudioRepo } from './modules/tiktok-creative-studio/repo'
 import { tiktokCreativeStudioService } from './modules/tiktok-creative-studio/service'
+import { closeTiktokOfficialBrowser } from './modules/tiktok-creative-studio/officialClient'
 import { livePhotoRepo } from './modules/live-photo/repo'
 import { videoParserDownloadService } from './modules/video-parser-download/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
@@ -86,6 +89,38 @@ let rendererRecoveryTimestamps: number[] = []
 const appStartupStartedAt = performance.now()
 const RENDERER_RECOVERY_WINDOW_MS = 60_000
 const MAX_RENDERER_RECOVERIES = 2
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 })
+let eventLoopMonitorTimer: NodeJS.Timeout | null = null
+let lastEventLoopWarningAt = 0
+
+function startEventLoopMonitoring() {
+  if (eventLoopMonitorTimer) return
+  eventLoopDelay.enable()
+  eventLoopMonitorTimer = setInterval(() => {
+    const maxDelayMs = eventLoopDelay.max / 1_000_000
+    const meanDelayMs = eventLoopDelay.mean / 1_000_000
+    eventLoopDelay.reset()
+    if (maxDelayMs < 250 || Date.now() - lastEventLoopWarningAt < 30_000) return
+    lastEventLoopWarningAt = Date.now()
+    const memory = process.memoryUsage()
+    const details = {
+      maxDelayMs: Math.round(maxDelayMs),
+      meanDelayMs: Math.round(meanDelayMs),
+      rssMb: Math.round(memory.rss / 1024 / 1024),
+      heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+      url: mainWindow?.webContents.getURL() || '',
+    }
+    console.warn('[performance] main event loop delayed', details)
+    void persistRendererDiagnostic('main-event-loop-delay', details)
+  }, 5_000)
+  eventLoopMonitorTimer.unref()
+}
+
+function stopEventLoopMonitoring() {
+  if (eventLoopMonitorTimer) clearInterval(eventLoopMonitorTimer)
+  eventLoopMonitorTimer = null
+  eventLoopDelay.disable()
+}
 
 function markStartupStage(stage: string, details: Record<string, unknown> = {}) {
   console.log('[startup-performance]', {
@@ -183,12 +218,14 @@ function ignoreBrokenPipeOnStdStreams() {
 configureWindowsStorageRoot()
 ignoreBrokenPipeOnStdStreams()
 if (process.platform === 'win32') {
-  app.disableHardwareAcceleration()
-  app.commandLine.appendSwitch('disable-gpu')
-  // Some Windows machines fail to load Electron's GPU subprocess DLLs.
-  // Keep rendering in the browser process so the desktop app can still open.
-  app.commandLine.appendSwitch('disable-gpu-compositing')
-  app.commandLine.appendSwitch('in-process-gpu')
+  const softwareRenderingRequested = process.env.VIDEOGENERATE_SOFTWARE_RENDERING === '1'
+    || process.argv.includes('--software-rendering')
+  if (softwareRenderingRequested) {
+    app.disableHardwareAcceleration()
+    app.commandLine.appendSwitch('disable-gpu')
+    app.commandLine.appendSwitch('disable-gpu-compositing')
+    app.commandLine.appendSwitch('in-process-gpu')
+  }
   // The packaged app runs in environments where Chromium's sandbox broker
   // cannot create a renderer process (exit code 49). Disable it on Windows so
   // the renderer can start consistently.
@@ -569,7 +606,7 @@ function wireIpc() {
     if (buffer.length > maxBytes) throw new Error('The attachment exceeds the 64 MB clipboard limit.')
     const requestedName = basename(String(input?.name || 'attachment.bin'))
     const safeName = requestedName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 160) || 'attachment.bin'
-    const targetDir = join(getAppPaths().dataDir, 'hermes', 'attachment-inbox')
+    const targetDir = join(getAppPaths().dataDir, 'attachments', 'inbox')
     await mkdir(targetDir, { recursive: true })
     const targetPath = join(targetDir, `${Date.now()}-${randomUUID()}-${safeName}`)
     await writeFile(targetPath, buffer)
@@ -1553,9 +1590,6 @@ function wireIpc() {
   ipcMain.handle('clone:getRuntimeOptions', async () => {
     return await cloneService.getRuntimeOptions()
   })
-  ipcMain.handle('clone:getHermesIntegrationSettings', async () => {
-    return await cloneService.getHermesIntegrationSettings()
-  })
   ipcMain.handle(
     'clone:setModelCredentials',
     async (
@@ -1679,20 +1713,6 @@ function wireIpc() {
       })
     },
   )
-  ipcMain.handle(
-    'clone:setHermesIntegrationSettings',
-    async (
-      _e,
-      payload: {
-        enabled?: boolean
-        callbackBaseUrl?: string
-        feishu?: import('./modules/clone/types').HermesFeishuIntegrationSettings
-        wecom?: import('./modules/clone/types').HermesWecomIntegrationSettings
-      },
-    ) => {
-      return await cloneService.setHermesIntegrationSettings(payload)
-    },
-  )
   ipcMain.handle('clone:getGrsAiCredits', async () => {
     return await cloneService.getGrsAiCredits()
   })
@@ -1700,17 +1720,20 @@ function wireIpc() {
   registerAppShellMediaIpc(ipcMain, () => mainWindow, () => mainUiLocale)
   registerProductsIpc(ipcMain)
   registerLivePhotoIpc(ipcMain)
-  registerHermesLivePhotoIpc(ipcMain)
   registerProductImageMaterialsIpc(ipcMain)
   registerTiktokCreativeStudioIpc(ipcMain)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
   registerVideoParserDownloadIpc(ipcMain)
   registerAgentOsIpc(ipcMain, () => mainWindow)
-  registerHermesAgentIpc(ipcMain, () => mainWindow)
   registerStorageManagementIpc(ipcMain)
   registerTiktokGmvMaxIpc(ipcMain)
   registerDianxiaomiInventoryIpc(ipcMain, () => mainWindow)
+  registerTiktokCreatorOutreachIpc(ipcMain)
+  registerProductWatermarkIpc(ipcMain)
+  registerAssetLibraryIpc(ipcMain)
+  registerProductReplacementIpc(ipcMain)
+  void productReplacementService.recoverOnStartup()
 }
 
 app.whenReady().then(async () => {
@@ -1731,7 +1754,7 @@ app.whenReady().then(async () => {
   markStartupStage('window-created')
   try {
     crashReporter.start({
-      productName: 'VideoGenerate',
+        productName: 'TiktokCut',
       companyName: 'VideoGenerate',
       submitURL: '',
       uploadToServer: false,
@@ -1742,6 +1765,7 @@ app.whenReady().then(async () => {
   }
   registerUpdaterIpc(() => mainWindow)
   setupAutoUpdater(() => mainWindow)
+  startEventLoopMonitoring()
 
   setTimeout(() => {
     void (async () => {
@@ -1749,16 +1773,6 @@ app.whenReady().then(async () => {
       try {
         await cleanupLegacyWindowsStorage()
         await agentOsService.initialize()
-        void hermesRuntime.start()
-          .then(async () => {
-            await hermesManagement.migrateLegacyIntegrationSettings()
-            const channels = await hermesManagement.listChannels()
-            if (channels.some((channel) => channel.enabled)) await hermesManagement.startGateway().catch(() => undefined)
-            markStartupStage('hermes-ready')
-          })
-          .catch((error) => {
-            console.error('[hermes-runtime] startup failed', String((error as Error)?.message || error))
-          })
         await productsRepo.ensureSeed()
         const productImageMigration = await productsRepo.migrateExternalImages()
         if (productImageMigration.migrated || productImageMigration.missing) {
@@ -1767,15 +1781,21 @@ app.whenReady().then(async () => {
         await templatesRepo.ensureSeed()
         await cloneRepo.ensureSeed()
         await webPlatformRepo.ensureSeed()
-        const managedAssetMigrations = await Promise.all([
-          templatesRepo.migrateExternalAssets(),
-          cloneRepo.migrateExternalAssets(),
-          webPlatformRepo.migrateBatchSubtitleExternalAssets(),
-          productImageMaterialsRepo.migrateExternalAssets(),
-          tiktokListingRepo.migrateExternalAssets(),
-          tiktokCreativeStudioRepo.migrateExternalAssets(),
-          livePhotoRepo.migrateExternalAssets(),
-        ])
+        // Run large asset migrations in slices so startup work does not saturate disk I/O at once.
+        const managedAssetMigrations: Array<{ migrated: number }> = []
+        const migrationSteps = [
+          () => templatesRepo.migrateExternalAssets(),
+          () => cloneRepo.migrateExternalAssets(),
+          () => webPlatformRepo.migrateBatchSubtitleExternalAssets(),
+          () => productImageMaterialsRepo.migrateExternalAssets(),
+          () => tiktokListingRepo.migrateExternalAssets(),
+          () => tiktokCreativeStudioRepo.migrateExternalAssets(),
+          () => livePhotoRepo.migrateExternalAssets(),
+        ]
+        for (const migrate of migrationSteps) {
+          managedAssetMigrations.push(await migrate())
+          await new Promise<void>((resolve) => setImmediate(resolve))
+        }
         const migratedManagedAssets = managedAssetMigrations.reduce((total, item) => total + item.migrated, 0)
         if (migratedManagedAssets) {
           console.log('[managed-assets] external-asset-migration', { migrated: migratedManagedAssets })
@@ -1792,7 +1812,7 @@ app.whenReady().then(async () => {
           console.error('[tiktok-creative] startup resume failed', error)
           markStartupStage('tiktok-creative-auto-resume-failed')
         }
-        gmvMaxScheduler.start()
+        // Background synchronization must be started explicitly by the user.
         markStartupStage('background-initialization-complete')
       } catch (error: any) {
         console.error('[app-startup] bootstrap-failed', {
@@ -1816,10 +1836,12 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isAppQuitting = true
-  stopLocalLivePhotoQualityChecker()
+  stopEventLoopMonitoring()
+  void closeTiktokOfficialBrowser()
   void stopPreviewHttpServer()
   void stopWebApiServer()
-  void hermesRuntime.stop()
   gmvMaxScheduler.stop()
+  void backgroundRecordStore.close()
+  void gmvMaxWorkerClient.close()
   void gmvMaxMcpClient.closeAll().finally(() => closeGmvMaxSqlite())
 })

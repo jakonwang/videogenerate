@@ -699,7 +699,6 @@ export const agentOsService = {
     externalUserId?: string
     externalConversationId?: string
     context?: Record<string, unknown>
-    hermesStoredSessionId?: string
   }) {
     const timestamp = now()
     const conversation: AgentConversation = {
@@ -709,7 +708,6 @@ export const agentOsService = {
       externalUserId: cleanText(input?.externalUserId) || undefined,
       externalConversationId: cleanText(input?.externalConversationId) || undefined,
       employeeId: cleanText(input?.employeeId) || 'employee.supervisor',
-      hermesStoredSessionId: cleanText(input?.hermesStoredSessionId) || undefined,
       context: sanitizeContext(input?.context),
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -719,43 +717,6 @@ export const agentOsService = {
       appendEvent({ emit, type: 'agent.conversation.created', aggregateType: 'conversation', aggregateId: conversation.id, conversationId: conversation.id, correlationId: conversation.id, payload: { channel: conversation.channel } })
       return conversation
     })
-  },
-
-  async linkHermesSession(input: { conversationId: string; storedSessionId: string }) {
-    return await agentOsStore.mutate((db, emit) => {
-      const conversation = db.conversations.find((item) => item.id === input.conversationId)
-      if (!conversation) throw new Error('Conversation does not exist')
-      const storedSessionId = cleanText(input.storedSessionId)
-      if (!storedSessionId) throw new Error('Hermes stored session ID is required')
-      const linkedSessionIds = new Set([
-        ...(conversation.hermesStoredSessionId ? [conversation.hermesStoredSessionId] : []),
-        ...(conversation.hermesStoredSessionIds || []),
-        storedSessionId,
-      ])
-      conversation.hermesStoredSessionId ||= storedSessionId
-      conversation.hermesStoredSessionIds = Array.from(linkedSessionIds)
-      conversation.updatedAt = now()
-      appendEvent({
-        emit,
-        type: 'agent.conversation.hermes_linked',
-        aggregateType: 'conversation',
-        aggregateId: conversation.id,
-        conversationId: conversation.id,
-        correlationId: conversation.id,
-        payload: { storedSessionId, linkedSessionCount: conversation.hermesStoredSessionIds.length },
-      })
-      return conversation
-    })
-  },
-
-  async findConversationByHermesSession(storedSessionId: string) {
-    const id = cleanText(storedSessionId)
-    if (!id) return undefined
-    const db = await agentOsStore.read()
-    return db.conversations.find((conversation) => (
-      conversation.hermesStoredSessionId === id
-      || (conversation.hermesStoredSessionIds || []).includes(id)
-    ))
   },
 
   async createIntentRun(input: {

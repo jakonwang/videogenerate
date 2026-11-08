@@ -1,0 +1,1680 @@
+/* Shared component contracts. Page components should use these semantic classes. */
+html[data-app-theme] body #app .app-shell {
+  color: var(--theme-text);
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .billing-page,
+  .inventory-page,
+  .publish-center-page,
+  .geelark-settings-page,
+  .clone-task-list-page,
+  .clone-page,
+  .live-photo-page,
+  .live-slicer-workbench,
+  .models-library-page,
+  .plugins-page,
+  .placeholder-page,
+  .product-detail-page,
+  .materials-workbench,
+  .production-create-page,
+  .production-home-page,
+  .products-page,
+  .task-detail-page,
+  .tasks-page,
+  .tiktok-page,
+  .outreach-page,
+  .gmv-workspace
+) {
+  background: var(--theme-shell) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .panel-card,
+  .workspace-card,
+  .hero-shell,
+  .glass-panel,
+  .work-card,
+  .section-card,
+  .detail-card,
+  .library-export-card,
+  .settings-shell,
+  .settings-nav-panel,
+  .settings-form-panel,
+  .settings-side-panel,
+  .side-card,
+  .summary-card,
+  .platform-card,
+  .capability-card,
+  .account-form,
+  .account-list,
+  .account-dialog,
+  .live-subtitle-dialog__panel,
+  .reference-material-dialog__panel,
+  .live-photo-video-dialog
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+/* Legacy workbench surfaces use shorter page-specific class names. */
+html[data-app-theme] body #app .app-shell :is(
+  .panel,
+  .panel--library,
+  .library-panel,
+  .library-shell,
+  .form-section,
+  .filter-grid,
+  .library-results,
+  .library-layout,
+  .image-generation-source,
+  .prompt-version-editor,
+  .workspace-grid > *,
+  .workspace-layout > *,
+  .workbench-main > *,
+  .gmv-workspace-pane,
+  .gmv-workspace-summary,
+  .gmv-workspace-experiment
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .panel,
+  .panel--library,
+  .library-panel,
+  .library-shell,
+  .form-section,
+  .filter-grid,
+  .library-results,
+  .library-layout,
+  .image-generation-source,
+  .prompt-version-editor,
+  .workspace-grid > *,
+  .workspace-layout > *,
+  .workbench-main > *,
+  .gmv-workspace-pane,
+  .gmv-workspace-summary,
+  .gmv-workspace-experiment
+) :is(h1, h2, h3, h4, strong, label, .section-title, .library-title) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .panel,
+  .panel--library,
+  .library-panel,
+  .library-shell,
+  .form-section,
+  .filter-grid,
+  .library-results,
+  .library-layout,
+  .image-generation-source,
+  .prompt-version-editor,
+  .workspace-grid > *,
+  .workspace-layout > *,
+  .workbench-main > *,
+  .gmv-workspace-pane,
+  .gmv-workspace-summary,
+  .gmv-workspace-experiment
+) :is(p, span, small, .hint, .subtitle, .description, .meta, .section-note) {
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .upload-dropzone,
+  .upload-surface,
+  .image-generation-source .upload-dropzone,
+  .reference-source-card,
+  .reference-material-picker,
+  .library-toolbar,
+  .filter-bar,
+  .toolbar
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+  background-image: none !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .prompt-version-editor .prompt-version-meta,
+  .prompt-version-editor .prompt-version-content,
+  .prompt-version-editor .prompt-version-actions,
+  .image-generation-grid > *,
+  .library-overview__card,
+  .library-metric,
+  .stat-card
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .material-usage-badge,
+  .material-usage-badge.used,
+  .reference-material-card__status,
+  .usage-status-badge
+) {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: max-content !important;
+  max-width: none !important;
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+  word-break: keep-all !important;
+  overflow: visible !important;
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(.material-card, .reference-material-card, .library-card) :is(.material-usage-badge, .reference-material-card__status, .usage-status-badge) {
+  position: absolute !important;
+  top: 8px !important;
+  left: 8px !important;
+  z-index: 2 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .panel-card,
+  .workspace-card,
+  .hero-shell,
+  .glass-panel,
+  .work-card,
+  .section-card,
+  .detail-card,
+  .library-export-card,
+  .settings-shell,
+  .settings-nav-panel,
+  .settings-form-panel,
+  .settings-side-panel,
+  .side-card,
+  .summary-card,
+  .platform-card,
+  .capability-card
+) :is(h1, h2, h3, h4, strong, label) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .panel-card,
+  .workspace-card,
+  .hero-shell,
+  .glass-panel,
+  .work-card,
+  .section-card,
+  .detail-card,
+  .library-export-card,
+  .settings-shell,
+  .settings-nav-panel,
+  .settings-form-panel,
+  .settings-side-panel,
+  .side-card,
+  .summary-card,
+  .platform-card,
+  .capability-card
+) :is(p, span, small, em, .hint, .subtitle, .description, .meta) {
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  input,
+  textarea,
+  select,
+  .input,
+  .field-control,
+  .count-input,
+  .search-field,
+  .account-search,
+  .account-filter
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-input) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(input, textarea, select)::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .primary-button,
+  .create-button,
+  .submit-button,
+  .confirm-button,
+  .save-button,
+  .action-primary,
+  [data-variant='primary']
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .ghost-button,
+  .secondary-button,
+  .toolbar-button,
+  .toolbar-icon,
+  .icon-button,
+  .secondary-action,
+  .minor-button,
+  .action-button
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .ghost-button,
+  .secondary-button,
+  .toolbar-button,
+  .toolbar-icon,
+  .icon-button,
+  .secondary-action,
+  .minor-button,
+  .action-button
+):hover:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(.toolbar-icon, .tab-button, .segmented-tabs button).active,
+html[data-app-theme] body #app .app-shell :is(.toolbar-icon, .tab-button, .segmented-tabs button).is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  .status-pill,
+  .live-console-row__status,
+  .live-console-row__source,
+  .live-console-row__quickchip,
+  .exported-badge,
+  .publisher-published-badge,
+  .library-count,
+  .live-tab-count,
+  .tag,
+  .chip,
+  .badge
+) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(
+  button,
+  select,
+  input,
+  textarea,
+  [role='button']
+):disabled,
+html[data-app-theme] body #app .app-shell [aria-disabled='true'] {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(.modal-backdrop, .live-subtitle-dialog, .reference-material-dialog, .publisher-status-modal) {
+  background: color-mix(in srgb, var(--theme-root) 72%, transparent) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html[data-app-theme] body #app .app-shell :is(.live-console-card, .live-console-row, .material-card, .reference-material-card) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+/* Monochrome workspace contract for legacy utility classes and page-local surfaces. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-page,
+  .app-card,
+  .app-soft-card,
+  .tasks-hero,
+  .tasks-panel,
+  .tasks-stat,
+  .products-shell,
+  .products-hero,
+  .products-create-card,
+  .board-card,
+  .products-empty,
+  .live-upload-card,
+  .live-results-card,
+  .live-panel,
+  .live-slicer-head,
+  .preview-layout,
+  .preview-panel,
+  .publish-center-page,
+  .publisher-page,
+  .music-library-dialog__panel,
+  .asset-picker-dialog__panel,
+  .template-page,
+  .templates-page
+) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-page,
+  .tasks-page,
+  .products-page,
+  .templates-page,
+  .live-slicer-workbench,
+  .tiktok-page,
+  .publish-center-page
+) :is(h1, h2, h3, h4, strong, label, .text-white, .text-slate-900) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-page,
+  .tasks-page,
+  .products-page,
+  .templates-page,
+  .live-slicer-workbench,
+  .tiktok-page,
+  .publish-center-page
+) :is(p, small, .text-slate-300, .text-slate-400, .text-slate-500, .text-gray-500, .text-muted) {
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-tab, .tab-chip, .view-toggle__button, .live-mode-card, .segmented-tabs button) {
+  border: 1px solid var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-tab, .tab-chip, .view-toggle__button, .live-mode-card, .segmented-tabs button):is(.is-active, .active, .tab-chip--active, .view-toggle__button--active) {
+  border-color: var(--theme-control-selected) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-primary, .live-primary, .products-hero__create, .products-empty__create, .filter-button, .product-card__primary) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-ghost, .live-secondary, .live-small-button, .product-card__secondary, .product-card__ghost, .pagination-button, .tasks-batch-actions button) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.tasks-item, .product-card, .live-result-item, .app-flow-node, .library-card, .stat-card) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.tasks-empty, .products-empty, .live-empty-result, .small-empty) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.clone-page, .clone-page .clone-workspace, .clone-page .clone-content, .clone-page .clone-main, .clone-page .clone-stage, .clone-page .clone-stage-content, .clone-page .clone-console) {
+  background: var(--theme-shell) !important;
+  background-image: none !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page :is(.clone-panel, .clone-card, .clone-console-row, .clone-task-card, .variant-card, .storyboard-card, .shot-card) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page :is(.selected, .is-selected, .is-active, .clone-console-row.is-selected) {
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.preview-shell, .preview-layout, .preview-stage, .preview-video-wrap) {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border) !important;
+}
+
+/* Tailwind utility remnants used by older workspaces must not bypass the active theme. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='bg-slate-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='bg-gray-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='bg-white/'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='bg-violet-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='bg-indigo-'] {
+  background-image: none !important;
+  background-color: var(--theme-panel) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='text-white'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='text-slate-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='text-gray-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='text-violet-'] {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='border-white/'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='border-slate-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='border-violet-'] {
+  border-color: var(--theme-border) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='ring-violet-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell [class*='bg-violet-'][class*='ring-'] {
+  border-color: var(--theme-accent) !important;
+  background-color: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+/* Final contrast corrections for the reported product and clone states. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .products-page .tab-chip--active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .products-page .tab-chip--active em {
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .products-page .product-card__primary:disabled,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .products-page button:disabled {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+  opacity: 1 !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page :is(.variant-hero-card, .variant-hero-card__copy, .variant-card--row.selected, .storyboard-design-row.is-active, .shot-reference-row.active) {
+  background: var(--theme-control-selected) !important;
+  background-image: none !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page :is(.variant-hero-card, .variant-card--row.selected, .storyboard-design-row.is-active, .shot-reference-row.active) * {
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page :is(.variant-hero-card__score, .variant-score) {
+  background: var(--theme-accent) !important;
+  border-color: var(--theme-control-selected-text) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page :is(.shot-reference-row, .storyboard-design-row):not(.active):not(.is-active) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .clone-page .sidebar-preview-shell {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.template-page, .templates-page, .app-page) .app-soft-card[class*='ring-violet-'],
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.template-page, .templates-page, .app-page) .app-soft-card[class*='bg-violet-'] {
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.template-page, .templates-page, .app-page) .app-soft-card[class*='ring-violet-'] * {
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .templates-page :is(.ds-button--primary, .ds-button--accent),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .templates-page button.ds-button {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .live-slicer-workbench :is(.live-mode-card, .live-small-button, .live-status, .live-panel-head > span) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .live-slicer-workbench .live-mode-card.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .live-slicer-workbench :is(.live-mode-card, .live-small-button):disabled {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page :is(.publisher-design-stats, .publisher-design-list, .publisher-design-list-head, .publisher-design-row, .publisher-design-selection, .publisher-design-filters select, .publisher-design-filters button, .publisher-design-search, .publisher-design-secondary, .publisher-design-api) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page :is(.publisher-design-stats strong, .publisher-design-video strong, .publisher-design-title h1, .publisher-design-row strong, .publisher-design-list-head, .publisher-design-selection > span) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page .publisher-design-stats .active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page .publisher-design-stats .active strong {
+  color: var(--theme-accent) !important;
+  -webkit-text-fill-color: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page :is(.publisher-design-primary, .publisher-design-selection .publisher-design-primary) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page :is(.publisher-design-row, .publisher-design-list-head) .publisher-queue-count,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-page :is(.publisher-design-row, .publisher-design-list-head) [class*='count'] {
+  border: 1px solid var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-stats > button {
+  border: 0 !important;
+  border-right: 1px solid var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-stats > button.active {
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-stats > button :is(strong, span) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-stats > button strong {
+  display: inline-flex !important;
+  min-width: 22px !important;
+  min-height: 20px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-design-stats > button.active strong {
+  background: var(--theme-on-accent) !important;
+  color: var(--theme-accent) !important;
+  -webkit-text-fill-color: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-workspace-switcher__tab {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-workspace-switcher__tab.is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-music-library-dialog :is(.publisher-selector-search, .publisher-selector-search input, .publisher-selector-search button) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .publisher-music-library-dialog .publisher-picker-empty {
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page :is(.ghost-button, .primary-button, .plugin-card__action) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page :is(.ghost-button.active, .primary-button.active, .plugin-card__action:hover) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .plugins-page :is(.ghost-button.active, .primary-button.active) * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .settings-nav-panel .nav-item {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel-soft) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .settings-nav-panel .nav-item.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .settings-nav-panel .nav-item.active * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+/* Light teal uses the same component contracts with restrained emerald accents. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .primary-button,
+  .create-button,
+  .submit-button,
+  .confirm-button,
+  .save-button,
+  .action-primary,
+  [data-variant='primary']
+) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .primary-button,
+  .create-button,
+  .submit-button,
+  .confirm-button,
+  .save-button,
+  .action-primary,
+  [data-variant='primary']
+):hover:not(:disabled) {
+  border-color: var(--color-primary-hover) !important;
+  background: var(--color-primary-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .ghost-button,
+  .secondary-button,
+  .toolbar-button,
+  .toolbar-icon,
+  .icon-button,
+  .secondary-action,
+  .minor-button,
+  .action-button
+) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-panel) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .ghost-button,
+  .secondary-button,
+  .toolbar-button,
+  .toolbar-icon,
+  .icon-button,
+  .secondary-action,
+  .minor-button,
+  .action-button
+):hover:not(:disabled) {
+  border-color: var(--theme-border-control) !important;
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.toolbar-icon, .tab-button, .segmented-tabs button).active,
+html[data-app-theme='light-teal'] body #app .app-shell :is(.toolbar-icon, .tab-button, .segmented-tabs button).is-active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(input, textarea, select, .input, .field-control, .search-field):focus {
+  border-color: var(--theme-accent) !important;
+  box-shadow: 0 0 0 3px var(--theme-accent-soft) !important;
+  outline: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.panel-card, .workspace-card, .section-card, .library-card, .live-console-card, .card) {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-panel) !important;
+  box-shadow: 0 4px 14px rgba(24, 33, 29, 0.04) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .settings-nav-panel .nav-item {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .settings-nav-panel .nav-item:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .settings-nav-panel .nav-item.active {
+  border-color: transparent !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .settings-nav-panel .nav-item.active * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+/* Mono navigation selection is intentionally quiet; black remains reserved for primary actions. */
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app :is(.ds-sidebar__item.is-active, .settings-nav-panel .nav-item.active) {
+  border-color: transparent !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 2px 0 0 var(--theme-text) !important;
+}
+/* Shell chrome follows the same tokens as the rest of the application. */
+html[data-app-theme='light-teal'] body #app .app-root,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-root {
+  background: var(--theme-root) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+  background-image: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar {
+  background: var(--theme-sidebar) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__section,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__section {
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__section-title,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__section-title {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__item,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__item {
+  color: var(--theme-text-secondary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__item:hover,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__item:hover {
+  color: var(--theme-text) !important;
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__item.is-active,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__item.is-active {
+  color: var(--theme-control-selected-text) !important;
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__item.is-active::before,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .ds-sidebar__item.is-active::before {
+  background: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.app-sidebar-footer-action, .app-sidebar-collapse),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-sidebar-footer-action, .app-sidebar-collapse) {
+  color: var(--theme-text-secondary) !important;
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+}
+
+/* Keep shared shell chrome semantic in every non-dark theme. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(.app-sidebar-user, .app-sidebar-footer-action, .app-sidebar-collapse) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-sidebar-user, .app-sidebar-footer-action, .app-sidebar-collapse) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.app-sidebar-user, .app-sidebar-footer-action, .app-sidebar-collapse):hover,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-sidebar-user, .app-sidebar-footer-action, .app-sidebar-collapse):hover {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-avatar,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-avatar {
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.app-sidebar-user__name, .app-titlebar__brand-line strong),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-sidebar-user__name, .app-titlebar__brand-line strong) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-sidebar-user__meta,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-sidebar-user__meta {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar :is(.app-titlebar__action, .app-titlebar__status) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar :is(.app-titlebar__action, .app-titlebar__status) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__action:hover,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar .app-titlebar__action:hover {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar :is(.app-titlebar__action-copy small, .app-titlebar__brand-copy small),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar :is(.app-titlebar__action-copy small, .app-titlebar__brand-copy small) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__status-icon,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar .app-titlebar__status-icon,
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__ready-dot,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar .app-titlebar__ready-dot {
+  color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__window-controls button,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar .app-titlebar__window-controls button {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__window-controls button:hover,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-titlebar .app-titlebar__window-controls button:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone :is(.app-topbar-clone__step, .app-topbar-clone__metric strong),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone :is(.app-topbar-clone__step, .app-topbar-clone__metric strong) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone :is(.app-topbar-clone__step.is-active, .app-topbar-clone__step.is-done),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone :is(.app-topbar-clone__step.is-active, .app-topbar-clone__step.is-done) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone__index,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__index {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__index,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__step.is-active .app-topbar-clone__index {
+  background: var(--theme-accent) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+}
+
+/* Final light-workbench corrections for legacy page-specific surfaces. */
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page,
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page :is(
+  .models-shell,
+  .models-shell__main,
+  .models-layout,
+  .models-detail-panel,
+  .models-panel,
+  .models-hero,
+  .models-catalog-panel,
+  .models-library-card,
+  .models-library-card__body,
+  .models-library-card__media,
+  .models-stat-card,
+  .models-create-section,
+  .models-prompt-preview,
+  .models-upload-panel,
+  .models-empty-state
+) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page :is(
+  .models-input,
+  .models-select,
+  .models-select-menu,
+  .models-selection-pill,
+  .models-profile-summary,
+  .models-profile-chip,
+  .models-detail-section,
+  .models-upload-preview,
+  .models-prompt-preview__textarea
+) {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page :is(
+  .models-hero__copy h1,
+  .models-library-card__head h3,
+  .models-library-card__title,
+  .models-library-card__desc,
+  .models-library-card__meta,
+  .models-detail-panel h2,
+  .models-detail-panel h3,
+  .models-detail-panel strong,
+  .models-detail-panel label,
+  .models-tab,
+  .models-tab strong,
+  .models-toolbar,
+  .models-pagination
+) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page,
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :is(
+  .production-create-hero,
+  .production-create-card,
+  .production-summary__item
+) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :is(
+  .production-create-hero__tag,
+  .production-create-hero__copy h1,
+  .production-create-hero__copy p,
+  .production-field span,
+  .production-summary__item span,
+  .production-summary__item strong,
+  .production-feedback
+) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :is(input, select, textarea) {
+  background: var(--theme-input) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .publish-center-page :is(
+  .music-library-button,
+  .publisher-music-library-button,
+  [class*='music-library']
+) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .live-slicer-workbench .live-eyebrow,
+html[data-app-theme='light-teal'] body #app .app-shell .live-slicer-workbench .live-kicker {
+  color: var(--theme-accent) !important;
+  -webkit-text-fill-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page > .live-workspace-head {
+  position: relative !important;
+  z-index: 2 !important;
+  flex: 0 0 88px !important;
+  min-height: 88px !important;
+  margin-bottom: 0 !important;
+  overflow: visible !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page > .live-workspace-head :is(.live-workspace-intro, .live-workspace-tabs) {
+  min-height: 88px !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page > :not(.live-workspace-head):not([role='dialog']):not([class*='dialog']):not([class*='modal']):not([class*='overlay']):not([class*='mask']) {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item:hover {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item.is-active {
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item.is-active :is(span, svg, svg *) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-primary:not(:disabled) {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  -webkit-text-fill-color: var(--theme-on-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-mode-card.active {
+  border-color: var(--theme-accent) !important;
+  background: var(--theme-control-selected) !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 3px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench :is(.live-primary, .live-mode-card.active) :is(*, svg *) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-app-theme='light-teal'] body #app .live-slicer-workbench .live-primary:not(:disabled):hover {
+  border-color: var(--theme-accent-hover) !important;
+  background: var(--theme-accent-hover) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone__metric small,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__metric small {
+  color: var(--theme-text-muted) !important;
+}
+
+/* Dialog surfaces use the same light surface contract instead of legacy dark utility classes. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0, [role='dialog']) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0 .bg-\[\#18181B\], [role='dialog']) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: 0 18px 50px rgba(24, 33, 29, 0.14) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.fixed.inset-0 .bg-\[\#18181B\], [role='dialog']) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: 0 18px 50px rgba(23, 23, 23, 0.12) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0 .text-white\/90, .fixed.inset-0 .text-white\/88, .fixed.inset-0 .text-white\/75, [role='dialog'] h1, [role='dialog'] h2, [role='dialog'] h3),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.fixed.inset-0 .text-white\/90, .fixed.inset-0 .text-white\/88, .fixed.inset-0 .text-white\/75, [role='dialog'] h1, [role='dialog'] h2, [role='dialog'] h3) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0 .text-white\/50, [role='dialog'] p),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.fixed.inset-0 .text-white\/50, [role='dialog'] p) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0 .border-white\/10, .fixed.inset-0 .border-white\/\[0\.1\], [role='dialog']) {
+  border-color: var(--theme-border) !important;
+}
+
+/* Compatibility layer for legacy utility classes. Keep it scoped to the two
+ * light themes so the existing dark-teal workspace remains unchanged. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  [class*='bg-violet-'], [class*='bg-indigo-'], [class*='bg-purple-'],
+  [class*='bg-blue-'], [class*='bg-slate-'], [class*='bg-gray-'],
+  [class*='bg-zinc-'], [class*='bg-black/'], [class*='bg-white/']
+):not(:is(.app-primary, .primary-button, .create-button, .submit-button, .confirm-button, .save-button, [data-variant='primary'])) {
+  background: var(--theme-panel-soft) !important;
+  background-image: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  [class*='bg-violet-'], [class*='bg-indigo-'], [class*='bg-purple-'],
+  [class*='bg-blue-'], [class*='bg-slate-'], [class*='bg-gray-'],
+  [class*='bg-zinc-'], [class*='bg-black/'], [class*='bg-white/']
+):not(:is(.app-primary, .primary-button, .create-button, .submit-button, .confirm-button, .save-button, [data-variant='primary'])) {
+  background: var(--theme-panel-soft) !important;
+  background-image: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  [class*='text-violet-'], [class*='text-indigo-'], [class*='text-purple-'],
+  [class*='text-blue-'], [class*='text-slate-'], [class*='text-gray-'],
+  [class*='text-zinc-'], [class*='text-white']
+):not(:is(.app-primary, .primary-button, .create-button, .submit-button, .confirm-button, .save-button, [data-variant='primary'])) {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  [class*='text-violet-'], [class*='text-indigo-'], [class*='text-purple-'],
+  [class*='text-blue-'], [class*='text-slate-'], [class*='text-gray-'],
+  [class*='text-zinc-'], [class*='text-white']
+):not(:is(.app-primary, .primary-button, .create-button, .submit-button, .confirm-button, .save-button, [data-variant='primary'])) {
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  [class*='border-violet-'], [class*='border-indigo-'], [class*='border-purple-'],
+  [class*='border-blue-'], [class*='border-slate-'], [class*='border-gray-'],
+  [class*='border-zinc-'], [class*='border-white/']
+):not(:is(.app-primary, .primary-button, .create-button, .submit-button, .confirm-button, .save-button, [data-variant='primary'])) {
+  border-color: var(--theme-border) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  [class*='border-violet-'], [class*='border-indigo-'], [class*='border-purple-'],
+  [class*='border-blue-'], [class*='border-slate-'], [class*='border-gray-'],
+  [class*='border-zinc-'], [class*='border-white/']
+):not(:is(.app-primary, .primary-button, .create-button, .submit-button, .confirm-button, .save-button, [data-variant='primary'])) {
+  border-color: var(--theme-border) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(button, [role='button'], a):hover:not(:disabled):not(.app-primary):not(.primary-button):not(.create-button):not(.submit-button):not(.confirm-button):not(.save-button),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(button, [role='button'], a):hover:not(:disabled):not(.app-primary):not(.primary-button):not(.create-button):not(.submit-button):not(.confirm-button):not(.save-button) {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0, [role='dialog']) :is(input, textarea, select) ,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.fixed.inset-0, [role='dialog']) :is(input, textarea, select) {
+  background: var(--theme-input) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(.fixed.inset-0 > div, [role='dialog']) ,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.fixed.inset-0 > div, [role='dialog']) {
+  background-image: none !important;
+}
+
+/* Main shell legacy rules are intentionally kept for dark-teal. These scoped
+ * overrides give the light themes the same quiet navigation and workflow
+ * chrome without changing layout or interaction behavior. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .ds-sidebar__item--sub,
+  .app-sidebar-footer-action,
+  .app-sidebar-collapse,
+  .app-sidebar-user
+) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .ds-sidebar__item--sub,
+  .app-sidebar-footer-action,
+  .app-sidebar-collapse,
+  .app-sidebar-user
+) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .app-sidebar-footer-action:hover,
+  .app-sidebar-collapse:hover,
+  .app-sidebar-user:hover
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-sidebar-footer-action:hover,
+  .app-sidebar-collapse:hover,
+  .app-sidebar-user:hover
+) {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .app-avatar,
+  .app-topbar-clone__step.is-active .app-topbar-clone__index
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-avatar,
+  .app-topbar-clone__step.is-active .app-topbar-clone__index
+) {
+  background: var(--theme-accent) !important;
+  background-image: none !important;
+  border-color: var(--theme-accent) !important;
+  color: var(--theme-on-accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .app-sidebar-user__name,
+  .app-topbar-clone__step.is-active,
+  .app-topbar-clone__step.is-done
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-sidebar-user__name,
+  .app-topbar-clone__step.is-active,
+  .app-topbar-clone__step.is-done
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell :is(
+  .app-sidebar-user__meta,
+  .app-topbar-clone__metric strong,
+  .app-topbar-clone__metric small,
+  .app-topbar-clone__label
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(
+  .app-sidebar-user__meta,
+  .app-topbar-clone__metric strong,
+  .app-topbar-clone__metric small,
+  .app-topbar-clone__label
+) {
+  color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone__arrow,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__arrow {
+  background: var(--theme-border-control) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-topbar-clone__arrow::after,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .app-topbar-clone__arrow::after {
+  border-color: var(--theme-text-muted) !important;
+}
+
+/* Billing uses a scoped style block, so its legacy palette needs an explicit
+ * theme bridge at the application boundary. */
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page :is(
+  .billing-hero, .billing-summary-card, .billing-panel, .plan-card,
+  .billing-table, .transaction-item, .billing-note
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page :is(
+  .billing-hero, .billing-summary-card, .billing-panel, .plan-card,
+  .billing-table, .transaction-item, .billing-note
+) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page :is(
+  h1, h2, h3, strong, .billing-panel__head strong, .plan-card__price strong,
+  .billing-summary-card strong, .billing-table__row span
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page :is(
+  h1, h2, h3, strong, .billing-panel__head strong, .plan-card__price strong,
+  .billing-summary-card strong, .billing-table__row span
+) {
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page :is(
+  p, small, span, .billing-panel__head small, .billing-summary-card span,
+  .plan-card__price span, .plan-card__meta, .billing-empty
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page :is(
+  p, small, span, .billing-panel__head small, .billing-summary-card span,
+  .plan-card__price span, .plan-card__meta, .billing-empty
+) {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page :is(
+  .billing-table__head, .billing-table__row
+),
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page :is(
+  .billing-table__head, .billing-table__row
+) {
+  border-color: var(--theme-divider) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page .billing-feedback,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page .billing-feedback {
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page .transaction-item em.is-positive,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page .transaction-item em.is-positive {
+  color: var(--theme-success-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .billing-page .transaction-item em.is-negative,
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell .billing-page .transaction-item em.is-negative {
+  color: var(--theme-danger-text) !important;
+}
+
+/* TitleBar has a few intentionally branded status pixels; keep them within
+ * the active palette instead of leaking the former teal/purple colors. */
+html[data-app-theme='light-teal'] body #app .app-shell :is(.app-titlebar__brand-mark, .app-titlebar__status-icon) {
+  background: var(--theme-accent) !important;
+  color: var(--theme-accent) !important;
+}
+
+html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-shell :is(.app-titlebar__brand-mark, .app-titlebar__status-icon) {
+  background: var(--theme-accent) !important;
+  color: var(--theme-accent) !important;
+}
+
+/* Final shell precedence: legacy MainLayout rules target these controls with
+ * a more specific selector, so keep the light themes explicit at the end of
+ * the cascade. */
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item,
+html[data-app-theme='mono'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item:hover,
+html[data-app-theme='mono'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item:hover {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item.is-active,
+html[data-app-theme='mono'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item.is-active {
+  background: var(--theme-control-selected) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  color: var(--theme-control-selected-text) !important;
+  -webkit-text-fill-color: var(--theme-control-selected-text) !important;
+  box-shadow: inset 2px 0 0 var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item.is-active :is(span, svg),
+html[data-app-theme='mono'] body #app .app-shell .ds-sidebar__nav button.ds-sidebar__item.is-active :is(span, svg) {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .app-sidebar-locale :is(select, .ui-select),
+html[data-app-theme='mono'] body #app .app-shell .app-sidebar-locale :is(select, .ui-select) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+  -webkit-text-fill-color: var(--theme-text-secondary) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__window-controls button,
+html[data-app-theme='mono'] body #app .app-titlebar .app-titlebar__window-controls button {
+  background: var(--theme-panel) !important;
+  border-color: transparent !important;
+  color: var(--theme-text-muted) !important;
+  -webkit-text-fill-color: var(--theme-text-muted) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-titlebar .app-titlebar__window-controls button:hover,
+html[data-app-theme='mono'] body #app .app-titlebar .app-titlebar__window-controls button:hover {
+  background: var(--theme-control-hover) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+/* Last-pass page overrides must remain after all legacy compatibility rules. */
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page,
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page :is(.models-shell, .models-shell__main, .models-layout, .models-detail-panel, .models-panel, .models-hero, .models-catalog-panel, .models-library-card, .models-library-card__body, .models-library-card__media, .models-stat-card, .models-create-section, .models-prompt-preview, .models-upload-panel, .models-empty-state) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page :is(.models-input, .models-select, .models-select-menu, .models-selection-pill, .models-profile-summary, .models-profile-chip, .models-detail-section, .models-upload-preview, .models-prompt-preview__textarea) {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .models-library-page :is(.models-hero__copy h1, .models-library-card__head h3, .models-library-card__title, .models-library-card__desc, .models-library-card__meta, .models-detail-panel h2, .models-detail-panel h3, .models-detail-panel strong, .models-detail-panel label, .models-tab, .models-tab strong, .models-toolbar, .models-pagination) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page,
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :is(.production-create-hero, .production-create-card, .production-summary__item) {
+  background: var(--theme-panel) !important;
+  background-image: none !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :is(.production-create-hero__tag, .production-create-hero__copy h1, .production-create-hero__copy p, .production-field span, .production-summary__item span, .production-summary__item strong, .production-feedback) {
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :is(input, select, textarea) {
+  background: var(--theme-input) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  -webkit-text-fill-color: var(--theme-text) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .publish-center-page :is(.music-library-button, .publisher-music-library-button, [class*='music-library']) {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.publish-mode .publisher-music-library-button {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.publish-mode .publisher-design-actions button.publisher-music-library-button {
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
+  color: var(--theme-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page .generation-mode-control__options {
+  background: var(--theme-panel-soft) !important;
+  border-color: var(--theme-border-control) !important;
+  box-shadow: none !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page .generation-mode-control__options button {
+  color: var(--theme-text-secondary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page .generation-mode-control__options button.active {
+  color: var(--theme-accent-strong) !important;
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-accent) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page > .live-workspace-head {
+  position: relative !important;
+  z-index: 2 !important;
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.68fr) minmax(0, 1fr) !important;
+  grid-template-rows: minmax(88px, auto) !important;
+  flex: 0 0 88px !important;
+  min-height: 88px !important;
+  margin-bottom: 0 !important;
+  overflow: visible !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.plugin-workspace-standard {
+  grid-template-rows: 88px minmax(0, 1fr) !important;
+}
+
+html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page > :not(.live-workspace-head):not([role='dialog']):not([class*='dialog']):not([class*='modal']):not([class*='overlay']):not([class*='mask']) {
+  position: relative !important;
+  z-index: 1 !important;
+}

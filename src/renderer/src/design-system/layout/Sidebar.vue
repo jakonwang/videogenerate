@@ -83,7 +83,10 @@ function navigate(to: string) {
   overflow: auto;
   padding-right: 2px;
   gap: 8px;
+  scrollbar-width: none;
 }
+
+.ds-sidebar__nav::-webkit-scrollbar { display: none; }
 
 .ds-sidebar__section {
   display: grid;

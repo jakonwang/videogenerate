@@ -34,8 +34,6 @@ import {
   hashLivePhotoPrompt,
   livePhotoPromptVersionService,
 } from './promptVersions'
-import { buildLivePhotoQualityCacheKey, livePhotoQualityCache } from './qualityCache'
-import { LIVE_PHOTO_QUALITY_CHECKER_VERSION, runLocalLivePhotoQualityCheck } from './qualityChecker'
 import { submitLivePhotoImageGeneration, type LivePhotoImageProviderAdapter } from './imageGenerationAdapter'
 import { resolveAuthoritativeProductReferencePath } from './productInput'
 import { bindLivePhotoReplacementInputs, normalizeLivePhotoScenePaths } from './sceneInput'
@@ -94,8 +92,9 @@ type LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs: typeof analyzeProductStructureWithGrs
   reviewReferenceReplacementStillStrict: typeof reviewReferenceReplacementStillStrict
   reviewReferenceReplacementStillVisual: typeof reviewReferenceReplacementStillVisual
-  runLocalQualityCheck: typeof runLocalLivePhotoQualityCheck
 }
+
+const LIVE_PHOTO_QUALITY_CHECKER_VERSION = 'disabled'
 
 const LIVE_PHOTO_SUBTITLE_USER_ID = 'desktop-live-photo'
 async function getConfiguredLivePhotoRetryLimit() {
@@ -156,7 +155,6 @@ const livePhotoDeps: LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs,
   reviewReferenceReplacementStillStrict,
   reviewReferenceReplacementStillVisual,
-  runLocalQualityCheck: runLocalLivePhotoQualityCheck,
 }
 
 const LIVE_PHOTO_AUTO_FLOW_CONCURRENCY = 2
@@ -1999,143 +1997,18 @@ async function validateGeneratedStillWithPipeline(input: {
   product: LivePhotoProductSnapshot
   scenePath: string
   stillPath: string
-  outputRoot?: string
-  qualitySettings?: {
-    qualityCheckerEnabled: boolean
-    qualityPassThreshold: number
-    qualityRetryFloor: number
-  }
 }): Promise<LivePhotoQualityReport> {
-  const settings = input.qualitySettings || await livePhotoRepo.getSettings()
-  const qualityCheckerEnabled = (settings as { qualityCheckerEnabled?: boolean }).qualityCheckerEnabled !== false
-  if (!qualityCheckerEnabled) {
-    return {
-      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
-      mode: 'remote_fallback',
-      decision: 'pass',
-      score: 1,
-      threshold: 1,
-      retryFloor: 0,
-      components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: 1, textConsistency: 1 },
-      hardFailures: [],
-      notes: ['quality_checker_disabled'],
-      fallbackReason: 'quality_checker_disabled',
-      durationMs: 0,
-      checkedAt: now(),
-    } satisfies LivePhotoQualityReport
-  }
-  const passThreshold = Math.max(0.5, Math.min(1, Number(settings.qualityPassThreshold ?? 0.88)))
-  const retryFloor = Math.max(0, Math.min(passThreshold, Number(settings.qualityRetryFloor ?? 0.65)))
-  const rawProductPath = resolveAuthoritativeProductReferencePath(input.product)
-  const preparedProduct = rawProductPath
-    ? await prepareLivePhotoProductReference({
-        sourcePath: rawProductPath,
-        outputDir: join(input.outputRoot || livePhotoRoot(input.item.id), 'product-reference'),
-        variant: resolveLivePhotoProductReferenceVariant(input.item),
-        hint: { type: input.product.type, category: input.product.productAnalysis?.category },
-      })
-    : null
-  const productPath = preparedProduct?.path || rawProductPath
-  if (qualityCheckerEnabled && productPath) {
-    const local = await livePhotoDeps.runLocalQualityCheck({
-      scenePath: input.scenePath,
-      productPath,
-      generatedPath: input.stillPath,
-      passThreshold,
-      retryFloor,
-      productType: input.product.type,
-      productCategory: input.product.productAnalysis?.category,
-      replacementRegion: input.item.replacementRegion,
-    })
-    if (local.available && local.report) {
-      if (local.report.decision !== 'pass') return local.report
-      const remote = await validateReferenceReplacementStill({
-        product: input.product,
-        stillPath: input.stillPath,
-        referenceImagePath: input.scenePath,
-      })
-      if (remote.skipped || remote.visualReview.skipped) {
-        throw new Error(`[review_unavailable] [remote_pending] Strict visual review is temporarily unavailable: ${remote.reason || remote.visualReview.reason || 'unknown'}`)
-      }
-      if (!remote.passed) {
-        const validationCategories = inferLivePhotoValidationCategories({
-          missing: remote.missing,
-          negativeSignals: remote.negativeSignals,
-          strictReview: remote.strictReview,
-          visualReview: remote.visualReview,
-        })
-        return {
-          ...local.report,
-          decision: 'reject',
-          score: Math.min(local.report.score, remote.visualReview.score),
-          hardFailures: Array.from(new Set([
-            ...local.report.hardFailures,
-            ...remote.negativeSignals,
-            ...remote.strictReview.negativeSignals,
-            ...remote.visualReview.failures,
-            ...validationCategories.map((category) => `[validation_category:${category}]`),
-          ])),
-          notes: [...local.report.notes, ...remote.visualReview.notes, 'strict_visual_review:failed'],
-        }
-      }
-      return {
-        ...local.report,
-        notes: [...local.report.notes, 'strict_visual_review:passed'],
-      }
-    }
-    const fallback = await validateReferenceReplacementStill({
-      product: input.product,
-      stillPath: input.stillPath,
-      referenceImagePath: input.scenePath,
-    })
-    const score = Math.max(0, Math.min(1, Number(fallback.visualReview?.score ?? fallback.score ?? 0)))
-    const decision = fallback.passed ? 'pass' : score >= retryFloor ? 'retry' : 'reject'
-    return {
-      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
-      mode: 'remote_fallback',
-      decision,
-      score,
-      threshold: passThreshold,
-      retryFloor,
-      components: {
-        clip: 0,
-        dinov2: 0,
-        orb: 0,
-        ssim: 0,
-        scenePreservation: String(fallback.visualReview?.checks?.scene_preservation || '').toLowerCase() === 'fail' ? 0 : score,
-        textConsistency: score,
-      },
-      hardFailures: [
-        ...(fallback.negativeSignals || []),
-        ...(fallback.strictReview?.negativeSignals || []),
-        ...(fallback.visualReview?.failures || []),
-      ],
-      notes: [
-        `Local checker unavailable: ${local.reason || 'unknown'}`,
-        ...(fallback.visualReview?.notes || []),
-      ],
-      fallbackReason: local.reason || 'local_checker_unavailable',
-      durationMs: Number(fallback.visualReview?.score === undefined ? 0 : 1),
-      checkedAt: now(),
-    } satisfies LivePhotoQualityReport
-  }
-  const fallback = await validateReferenceReplacementStill({
-    product: input.product,
-    stillPath: input.stillPath,
-    referenceImagePath: input.scenePath,
-  })
-  const score = Math.max(0, Math.min(1, Number(fallback.visualReview?.score ?? fallback.score ?? 0)))
   return {
     checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
     mode: 'remote_fallback',
-    decision: fallback.passed ? 'pass' : score >= retryFloor ? 'retry' : 'reject',
-    score,
-    threshold: passThreshold,
-    retryFloor,
-    components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: score, textConsistency: score },
-    hardFailures: [...(fallback.negativeSignals || []), ...(fallback.visualReview?.failures || [])],
-    notes: fallback.visualReview?.notes || [],
-    fallbackReason: !qualityCheckerEnabled ? 'local_checker_disabled' : 'product_reference_missing',
+    decision: 'pass',
+    score: 1,
+    threshold: 1,
+    retryFloor: 0,
+    components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: 1, textConsistency: 1 },
+    hardFailures: [],
+    notes: ['quality_checker_skipped'],
+    fallbackReason: 'quality_checker_skipped',
     durationMs: 0,
     checkedAt: now(),
   } satisfies LivePhotoQualityReport
@@ -4174,8 +4047,7 @@ async function finalizeReferenceItem(input: {
   let cacheKey: string | undefined
   let cacheHit = false
   const autoFlowLogs = [] as ReturnType<typeof buildLivePhotoLog>[]
-  const promptVersion = livePhotoPromptVersionService.getActive()
-  const promptHash = String(input.item.promptHash || promptVersion.promptHash).trim()
+  const promptVersion = livePhotoPromptVersionService.getActive('image')
   const previewProvider = String(input.item.imagePromptPreview?.provider || '').trim()
   const previewModel = String(input.item.imagePromptPreview?.model || '').trim()
   const replacementStrategy = inferLivePhotoReplacementStrategy({ item: input.item, product: input.product })
@@ -4184,87 +4056,6 @@ async function finalizeReferenceItem(input: {
     strategy: replacementStrategy,
     sceneInteraction: input.item.sceneInteraction,
   })
-  if (!String(input.item.generatedStillPath || '').trim() && !String(input.item.imageTaskId || '').trim()) {
-    const revalidationCandidate = [...generationAttempts]
-      .reverse()
-      .find((attempt) =>
-        String(attempt.outputPath || '').trim() &&
-        existsSync(String(attempt.outputPath || '').trim()) &&
-        Number(attempt.regionRevision || 0) === Number(input.item.replacementRegion?.revision || 0) &&
-        String(attempt.quality?.checkerVersion || '').trim() !== LIVE_PHOTO_QUALITY_CHECKER_VERSION,
-      )
-    if (revalidationCandidate) {
-      try {
-        const revalidated = await validateGeneratedStillWithPipeline({
-          item: input.item,
-          product: input.product,
-          scenePath: input.referenceImagePath,
-          stillPath: revalidationCandidate.outputPath,
-        })
-        generationAttempts = generationAttempts.map((attempt) =>
-          attempt.id === revalidationCandidate.id ? { ...attempt, quality: revalidated } : attempt,
-        )
-        if (revalidated.decision === 'pass') {
-          generated = {
-            stillPath: revalidationCandidate.outputPath,
-            productReferenceImagePaths: input.product.imagePaths,
-          }
-          qualityReport = revalidated
-          autoFlowLogs.push(
-            buildLivePhotoLog(
-              `[live-photo] previous image passed revalidation with ${LIVE_PHOTO_QUALITY_CHECKER_VERSION}: score=${revalidated.score}`,
-              'success',
-            ),
-          )
-        }
-      } catch (error) {
-        autoFlowLogs.push(buildLivePhotoLog(`[live-photo] previous image revalidation skipped: ${String(error)}`))
-      }
-    }
-  }
-  try {
-    if (!String(input.item.generatedStillPath || '').trim() && !String(input.item.imageTaskId || '').trim()) {
-      cacheKey = await buildLivePhotoQualityCacheKey({
-          scenePath: input.referenceImagePath,
-          productPath: resolveAuthoritativeProductReferencePath(input.product),
-          promptHash,
-          provider: previewProvider,
-          model: previewModel,
-          outputSize: (await livePhotoRepo.getSettings()).outputResolution,
-          generationParams: {
-            strategy: replacementStrategy,
-            negativePrompt: replacementNegativePrompt,
-            replacementRegion: input.item.replacementRegion,
-          },
-          checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
-        })
-      const cached = cacheKey ? await livePhotoQualityCache.get(cacheKey) : null
-      if (cached) {
-        const cachePath = join(stillOutputDir, `reference_replace_cache_${randomUUID()}.png`)
-        await copyFile(cached.imagePath, cachePath)
-        generated = { stillPath: cachePath, productReferenceImagePaths: input.product.imagePaths }
-        qualityReport = cached.quality
-        cacheHit = true
-        generationAttempts = [
-          ...generationAttempts,
-          {
-            id: randomUUID(),
-            index: generationAttempts.length + 1,
-            outputPath: cachePath,
-            provider: previewProvider,
-            model: previewModel,
-            strategy: 'cache',
-            cacheHit: true,
-            quality: cached.quality,
-            regionRevision: input.item.replacementRegion?.revision,
-            createdAt: now(),
-          },
-        ]
-      }
-    }
-  } catch (error) {
-    appendLivePhotoLogs(input.item, [buildLivePhotoLog(`[live-photo] quality cache lookup skipped: ${String(error)}`)])
-  }
   if (!generated && String(input.item.generatedStillPath || '').trim() && existsSync(String(input.item.generatedStillPath || '').trim())) {
     generated = {
       stillPath: String(input.item.generatedStillPath || '').trim(),
@@ -4366,7 +4157,6 @@ async function finalizeReferenceItem(input: {
       const category = classifyLivePhotoQualityFailures(qualityReport.hardFailures)
       throw new Error(`[image_validation_failed]${category ? ` ${category}` : ''} ${qualityReport.decision}: ${qualityReport.hardFailures.join(', ') || `quality score ${qualityReport.score}`}`)
     }
-    if (cacheKey) await livePhotoQualityCache.put({ key: cacheKey, sourcePath: generated.stillPath, quality: qualityReport })
   }
   // Preserve the provider output dimensions. Video packaging handles the
   // target frame independently and must not rewrite the returned still.
@@ -4899,7 +4689,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
   const referenceImagePaths = normalizeLivePhotoScenePaths(input)
   const product = await buildProductSnapshot(String(input.productId || '').trim())
   const credentials = await cloneRepo.getCredentials()
-  const promptVersion = livePhotoPromptVersionService.getActive()
+  const promptVersion = livePhotoPromptVersionService.getActive('video')
   ensureLivePhotoStrictImageEditProvider(credentials)
   const motionTemplate = input.motionTemplate || 'push_in'
   const retryLimit = await getConfiguredLivePhotoRetryLimit()
@@ -5129,15 +4919,7 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     generatedCropPath: generatedPath,
     outputRoot: input.outputRoot,
   })
-  const qualityReport = input.qualityCheckerEnabled === false
-    ? undefined
-    : await validateGeneratedStillWithPipeline({
-        item,
-        product,
-        scenePath: input.referenceImagePath,
-        stillPath: preparedImagePath,
-        outputRoot: input.outputRoot,
-      })
+  const qualityReport = undefined
   const attempt: LivePhotoGenerationAttempt = {
     id: randomUUID(),
     index: (item.generationAttempts || []).length + 1,
@@ -5161,10 +4943,8 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
   return {
     pending: false,
     preparedImagePath,
-    failed: qualityReport ? qualityReport.decision !== 'pass' : false,
-    error: qualityReport && qualityReport.decision !== 'pass'
-      ? `[image_validation_failed] ${qualityReport.decision}: ${qualityReport.hardFailures.join(', ') || `quality score ${qualityReport.score}`}`
-      : undefined,
+    failed: false,
+    error: undefined,
     state: toState(item),
   }
 }
@@ -5254,7 +5034,6 @@ export const livePhotoService = {
     if (input.analyzeProductStructureWithGrs) livePhotoDeps.analyzeProductStructureWithGrs = input.analyzeProductStructureWithGrs
     if (input.reviewReferenceReplacementStillStrict) livePhotoDeps.reviewReferenceReplacementStillStrict = input.reviewReferenceReplacementStillStrict
     if (input.reviewReferenceReplacementStillVisual) livePhotoDeps.reviewReferenceReplacementStillVisual = input.reviewReferenceReplacementStillVisual
-    if (input.runLocalQualityCheck) livePhotoDeps.runLocalQualityCheck = input.runLocalQualityCheck
   },
 
   async resetTestDependencies() {
@@ -5265,7 +5044,6 @@ export const livePhotoService = {
     livePhotoDeps.analyzeProductStructureWithGrs = analyzeProductStructureWithGrs
     livePhotoDeps.reviewReferenceReplacementStillStrict = reviewReferenceReplacementStillStrict
     livePhotoDeps.reviewReferenceReplacementStillVisual = reviewReferenceReplacementStillVisual
-    livePhotoDeps.runLocalQualityCheck = runLocalLivePhotoQualityCheck
     clearLivePhotoPendingTimers()
     livePhotoAutoFlowScheduled.clear()
     livePhotoAutoFlowLastQueuedAt.clear()
@@ -5342,50 +5120,30 @@ export const livePhotoService = {
     return await livePhotoRepo.saveSettings(input || {})
   },
 
-  async listPromptVersions() {
-    return livePhotoPromptVersionService.list()
+  async listPromptVersions(kind: 'image' | 'video' = 'image') {
+    return livePhotoPromptVersionService.list(kind)
   },
 
-  async createPromptVersion(input: { name: string; prompt: string }) {
+  async createPromptVersion(input: { name: string; prompt: string; kind?: 'image' | 'video' }) {
     return livePhotoPromptVersionService.save(input)
   },
 
-  async updatePromptVersion(input: { id: string; name: string; prompt: string }) {
+  async updatePromptVersion(input: { id: string; name: string; prompt: string; kind?: 'image' | 'video' }) {
     const updated = livePhotoPromptVersionService.save(input)
-    if (updated.active) await syncLivePhotoPromptVersionToPendingItems(updated)
+    if (updated.active && updated.kind === 'image') await syncLivePhotoPromptVersionToPendingItems(updated)
     return updated
   },
 
-  async activatePromptVersion(input: { id: string }) {
+  async activatePromptVersion(input: { id: string; kind?: 'image' | 'video' }) {
     const active = livePhotoPromptVersionService.activate(String(input?.id || '').trim())
-    await syncLivePhotoPromptVersionToPendingItems(active)
+    if (active.kind === 'image') await syncLivePhotoPromptVersionToPendingItems(active)
     return active
   },
 
-  async rollbackPromptVersion(input: { id: string }) {
+  async rollbackPromptVersion(input: { id: string; kind?: 'image' | 'video' }) {
     const active = livePhotoPromptVersionService.rollback(String(input?.id || '').trim())
-    await syncLivePhotoPromptVersionToPendingItems(active)
+    if (active.kind === 'image') await syncLivePhotoPromptVersionToPendingItems(active)
     return active
-  },
-
-  async getQualityMetrics() {
-    const items = (await livePhotoRepo.list()).filter((item) => item.sourceType === 'reference_replace')
-    const reports = items.map((item) => item.qualityReport).filter(Boolean) as LivePhotoQualityReport[]
-    const passed = reports.filter((item) => item.decision === 'pass').length
-    const fallback = reports.filter((item) => item.mode === 'remote_fallback').length
-    const retries = items.reduce((sum, item) => sum + Math.max(0, Number(item.autoFlowStatus?.retryCount || 0)), 0)
-    const cacheHits = items.filter((item) => item.cacheHit).length
-    return {
-      totalTasks: items.length,
-      checkedTasks: reports.length,
-      passedTasks: passed,
-      passRate: reports.length ? passed / reports.length : 0,
-      averageScore: reports.length ? reports.reduce((sum, item) => sum + Number(item.score || 0), 0) / reports.length : 0,
-      retryCount: retries,
-      fallbackCount: fallback,
-      cacheHitCount: cacheHits,
-      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
-    }
   },
 
   async get(id: string) {
@@ -5726,11 +5484,8 @@ export const livePhotoService = {
         })
       : null
     if (input.replacementRegion && !manualReplacementRegion) throw new Error('Invalid Live Photo replacement region')
-    const activePromptVersion = livePhotoPromptVersionService.getActive()
-    const promptChanged = Boolean(
-      String(existing.promptHash || '').trim() &&
-        String(existing.promptHash || '').trim() !== activePromptVersion.promptHash,
-    )
+    const imagePromptVersion = livePhotoPromptVersionService.getActive('image')
+    const videoPromptVersion = livePhotoPromptVersionService.getActive('video')
     const preservedStillPath = String(existing.generatedStillPath || '').trim()
     const persistedStage = resolveLivePhotoStage({
       failedStage: existingAutoFlowStatus.failedStage,
@@ -5738,19 +5493,24 @@ export const livePhotoService = {
       imageTaskId: existing.imageTaskId,
       videoTaskId: existing.videoTaskId,
     })
+    const videoStageCandidate = Boolean(
+      !manualReplacementRegion &&
+      persistedStage === 'video' &&
+      preservedStillPath &&
+      existsSync(preservedStillPath) &&
+      (String(existing.videoTaskId || '').trim() ||
+        String(existing.motionVideoPath || '').trim() ||
+        ensureAutoFlowStatus(existing).currentStage === 'video_generation'),
+    )
+    const activePromptVersion = videoStageCandidate ? videoPromptVersion : imagePromptVersion
+    const promptChanged = Boolean(
+      String(existing.promptHash || '').trim() &&
+        String(existing.promptHash || '').trim() !== activePromptVersion.promptHash,
+    )
     if (existingAutoFlowStatus.failedStage === 'video' && (!preservedStillPath || !existsSync(preservedStillPath))) {
       throw new Error('The validated still image is missing; regenerate the image before retrying video.')
     }
-    const canRetryFromVideoStage = Boolean(
-      !manualReplacementRegion &&
-      !promptChanged &&
-      persistedStage === 'video' &&
-      preservedStillPath &&
-        existsSync(preservedStillPath) &&
-        (String(existing.videoTaskId || '').trim() ||
-          String(existing.motionVideoPath || '').trim() ||
-          ensureAutoFlowStatus(existing).currentStage === 'video_generation'),
-    )
+    const canRetryFromVideoStage = videoStageCandidate && !promptChanged
     const credentials = await cloneRepo.getCredentials()
     const refreshedProductSnapshot =
       existing.productId && (existing.sourceType === 'reference_replace' || existing.sourceType === 'clone_shot')

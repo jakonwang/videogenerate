@@ -4,8 +4,6 @@ export const STORAGE_CATEGORY_IDS = [
   'preview_files',
   'diagnostic_logs',
   'completed_project_artifacts',
-  'hermes_runtime',
-  'hermes_sessions_memory',
   'managed_source_assets',
   'business_records',
   'configuration_credentials',

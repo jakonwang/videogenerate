@@ -5,6 +5,15 @@ import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT, hashLivePhotoPrompt } from '../live-photo/promptVersions'
 
 export const DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT = 'Create a smooth ten-second product showcase with gentle natural motion and stable product identity.'
+export const DEFAULT_TIKTOK_REFERENCE_IMAGE_PROMPT = DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT
+export type TiktokPromptKind = 'image' | 'video'
+
+export function isImageReplacementPrompt(prompt: string) {
+  const value = String(prompt || '').trim()
+  if (!value) return false
+  return /replace\s+the\s+product\s+in\s+image\s*1.{0,120}image\s*2|image\s*1.{0,120}replace\s+the\s+product.{0,120}image\s*2/i.test(value)
+    || /将图片\s*1.{0,24}(?:产品|商品).{0,12}替换为.{0,32}图片\s*2|(?:把|将)图片\s*1.{0,24}(?:产品|商品).{0,12}替换成.{0,32}图片\s*2/.test(value)
+}
 
 export type TiktokCreativePromptVersion = {
   id: string
@@ -12,6 +21,7 @@ export type TiktokCreativePromptVersion = {
   version: number
   prompt: string
   promptHash: string
+  kind: TiktokPromptKind
   active: boolean
   createdAt: number
   updatedAt: number
@@ -32,13 +42,26 @@ function normalize(input: TiktokCreativePromptVersion): TiktokCreativePromptVers
     name: String(input.name || '').trim() || `Prompt V${input.version}`,
     prompt,
     promptHash: hashLivePhotoPrompt(prompt),
+    kind: input.kind === 'image' ? 'image' : 'video',
     active: Boolean(input.active),
   }
 }
 
 async function readDb() {
   const db = await readJsonFile<PromptVersionDb>(promptVersionsPath(), { versions: [] })
-  if (db.versions.length) return { versions: db.versions.map(normalize) }
+  if (db.versions.length) {
+    const versions = db.versions.map(normalize)
+    const timestamp = Date.now()
+    if (!versions.some((item) => item.kind === 'video')) {
+      versions.push({ id: randomUUID(), name: 'TikTok Reference to Video', version: 1, prompt: DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT, promptHash: hashLivePhotoPrompt(DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT), kind: 'video', active: true, createdAt: timestamp, updatedAt: timestamp })
+    }
+    if (!versions.some((item) => item.kind === 'image')) {
+      versions.push({ id: randomUUID(), name: 'TikTok Reference Image', version: 1, prompt: DEFAULT_TIKTOK_REFERENCE_IMAGE_PROMPT, promptHash: hashLivePhotoPrompt(DEFAULT_TIKTOK_REFERENCE_IMAGE_PROMPT), kind: 'image', active: true, createdAt: timestamp, updatedAt: timestamp })
+    }
+    const next = { versions }
+    await writeJsonFile(promptVersionsPath(), next)
+    return next
+  }
   const timestamp = Date.now()
   const seeded: TiktokCreativePromptVersion = {
     id: randomUUID(),
@@ -46,11 +69,12 @@ async function readDb() {
     version: 1,
     prompt: DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT,
     promptHash: hashLivePhotoPrompt(DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT),
+    kind: 'video',
     active: true,
     createdAt: timestamp,
     updatedAt: timestamp,
   }
-  const next = { versions: [seeded] }
+  const next = { versions: [seeded, { ...seeded, id: randomUUID(), name: 'TikTok Reference Image', prompt: DEFAULT_TIKTOK_REFERENCE_IMAGE_PROMPT, promptHash: hashLivePhotoPrompt(DEFAULT_TIKTOK_REFERENCE_IMAGE_PROMPT), kind: 'image' as const }] }
   await writeJsonFile(promptVersionsPath(), next)
   return next
 }
@@ -60,38 +84,41 @@ async function saveDb(db: PromptVersionDb) {
 }
 
 export const tiktokCreativePromptVersions = {
-  async list() {
+  async list(kind: TiktokPromptKind = 'video') {
     const db = await readDb()
-    return db.versions.sort((a, b) => b.version - a.version)
+    return db.versions.filter((item) => item.kind === kind).sort((a, b) => b.version - a.version)
   },
 
-  async getActive() {
-    const versions = await this.list()
+  async getActive(kind: TiktokPromptKind = 'video') {
+    const versions = await this.list(kind)
     const active = versions.find((item) => item.active) || versions[0]!
     // Migrate the old shared Live Photo replacement seed to a valid R2V motion prompt.
-    if (active.promptHash === hashLivePhotoPrompt(DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT)) {
+    if (kind === 'video' && isImageReplacementPrompt(active.prompt)) {
       return await this.save({
         id: active.id,
         name: 'TikTok Reference to Video',
         prompt: DEFAULT_TIKTOK_REFERENCE_VIDEO_PROMPT,
+        kind,
       })
     }
     return active
   },
 
-  async save(input: { id?: string; name: string; prompt: string }) {
+  async save(input: { id?: string; name: string; prompt: string; kind?: TiktokPromptKind }) {
     const prompt = String(input.prompt || '').trim()
     if (!prompt) throw new Error('Prompt content is required')
     const db = await readDb()
-    const existingIndex = db.versions.findIndex((item) => item.id === String(input.id || '').trim())
+    const kind = input.kind === 'image' ? 'image' : 'video'
+    const existingIndex = db.versions.findIndex((item) => item.id === String(input.id || '').trim() && item.kind === kind)
     const existing = existingIndex >= 0 ? db.versions[existingIndex] : undefined
     const timestamp = Date.now()
     const next = normalize({
       id: existing?.id || randomUUID(),
       name: String(input.name || '').trim() || existing?.name || `Prompt V${db.versions.length + 1}`,
-      version: existing?.version || Math.max(0, ...db.versions.map((item) => item.version)) + 1,
+      version: existing?.version || Math.max(0, ...db.versions.filter((item) => item.kind === kind).map((item) => item.version)) + 1,
       prompt,
       promptHash: hashLivePhotoPrompt(prompt),
+      kind,
       active: existing?.active || false,
       createdAt: existing?.createdAt || timestamp,
       updatedAt: timestamp,
@@ -102,19 +129,19 @@ export const tiktokCreativePromptVersions = {
     return next
   },
 
-  async activate(id: string) {
+  async activate(id: string, kind: TiktokPromptKind = 'video') {
     const db = await readDb()
     const targetId = String(id || '').trim()
-    if (!db.versions.some((item) => item.id === targetId)) throw new Error('Prompt version does not exist')
-    db.versions = db.versions.map((item) => ({ ...item, active: item.id === targetId, updatedAt: item.id === targetId ? Date.now() : item.updatedAt }))
+    if (!db.versions.some((item) => item.id === targetId && item.kind === kind)) throw new Error('Prompt version does not exist')
+    db.versions = db.versions.map((item) => ({ ...item, active: item.kind === kind ? item.id === targetId : item.active, updatedAt: item.kind === kind && item.id === targetId ? Date.now() : item.updatedAt }))
     await saveDb(db)
-    return db.versions.find((item) => item.id === targetId)!
+    return db.versions.find((item) => item.id === targetId && item.kind === kind)!
   },
 
-  async rollback(id: string) {
-    const source = (await this.list()).find((item) => item.id === String(id || '').trim())
+  async rollback(id: string, kind: TiktokPromptKind = 'video') {
+    const source = (await this.list(kind)).find((item) => item.id === String(id || '').trim())
     if (!source) throw new Error('Prompt version does not exist')
-    const copy = await this.save({ name: `${source.name} Rollback`, prompt: source.prompt })
-    return await this.activate(copy.id)
+    const copy = await this.save({ name: `${source.name} Rollback`, prompt: source.prompt, kind })
+    return await this.activate(copy.id, kind)
   },
 }

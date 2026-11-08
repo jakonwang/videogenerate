@@ -131,8 +131,6 @@ export type AgentConversation = {
   externalUserId?: string
   externalConversationId?: string
   employeeId: string
-  hermesStoredSessionId?: string
-  hermesStoredSessionIds?: string[]
   context: Record<string, unknown>
   createdAt: number
   updatedAt: number

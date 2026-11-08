@@ -804,6 +804,8 @@
     "clone": "Sao chep",
     "models": "Nguoi mau",
     "productLibrary": "San pham",
+    "assetLibrary": "Thu vien tai nguyen",
+    "assets": "Tai nguyen",
     "liveSlicer": "Cat video",
     "publish": "Dang bai",
     "plugins": "Plugin",
@@ -812,6 +814,7 @@
   "common": {
     "confirm": "Xac nhan",
     "cancel": "Huy",
+    "close": "Dong",
     "save": "Luu",
     "language": "Ngon ngu giao dien",
     "starting": "Dang khoi dong...",
@@ -819,6 +822,10 @@
     "remove": "Xoa",
     "refresh": "Lam moi",
     "all": "Tat ca"
+  },
+  "promptKind": {
+    "image": "Hinh anh",
+    "video": "Video"
   },
   "auth": {
     "title": "Kich hoat ban quyen",
@@ -1472,6 +1479,14 @@
       "backToMarket": "Quay lai cho plugin"
     },
     "catalog": {
+      "product-watermark": {
+        "name": "Dong dau thuong hieu san pham",
+        "description": "Cat giua anh san pham thanh hinh vuong va ap dung watermark thuong hieu trong suot co the tai su dung."
+      },
+      "product-replacement": {
+        "name": "Thay the san pham",
+        "description": "Thay san pham hang loat trong anh boi canh bang anh tham chieu va prompt co phien ban."
+      },
       "dianxiaomi-inventory": {
         "name": "Phan tich ton kho Dianxiaomi",
         "description": "Theo doi SKU, dong bo so luong da giao va du bao rui ro can nhap hang."
@@ -1508,6 +1523,140 @@
     "detail": {
       "eyebrow": "Chi tiet plugin"
     }
+  },
+  "productReplacement": {
+    "backToPlugins": "Quay lai plugin",
+    "eyebrow": "Chinh sua anh hang loat",
+    "title": "Thay the san pham",
+    "description": "Thay san pham trong anh boi canh va giu nguyen moi truong, bo cuc ban dau.",
+    "targetProduct": "San pham muc tieu",
+    "systemProduct": "San pham da luu",
+    "chooseProduct": "Chon san pham",
+    "changeProduct": "Doi san pham",
+    "selectFromProducts": "Mo thu vien san pham",
+    "selectedProduct": "San pham da chon",
+    "referenceImagesShort": "anh tham chieu",
+    "uploadProduct": "Tai anh san pham len",
+    "customProduct": "San pham tuy chinh",
+    "noProductImage": "Them tu mot den bon anh tham chieu",
+    "sceneImages": "Anh boi canh",
+    "images": "anh",
+    "dropTitle": "Tha anh boi canh vao day",
+    "dropDescription": "Ho tro JPG, PNG, WebP va GIF",
+    "uploadScenes": "Tai anh len",
+    "fromLibrary": "Chon tu thu vien",
+    "remove": "Xoa",
+    "prompt": "Prompt",
+    "manageVersions": "Quan ly phien ban",
+    "activeVersion": "Phien ban prompt",
+    "active": "Dang dung",
+    "promptPlaceholder": "Mo ta quy tac thay the. Anh dau tien la boi canh; cac anh sau la tham chieu san pham.",
+    "promptLoadFailed": "Khong the tai phien ban prompt. Hay khoi dong lai ung dung va thu lai.",
+    "promptName": "Ten phien ban",
+    "saveVersion": "Luu phien ban",
+    "promptSaved": "Da luu phien ban prompt.",
+    "confirmTitle": "Xac nhan lo",
+    "product": "San pham muc tieu",
+    "notSelected": "Chua chon",
+    "referenceImages": "Anh tham chieu san pham",
+    "variantsPerImage": "Ket qua moi anh",
+    "estimatedTasks": "So ket qua du kien",
+    "modelNote": "Su dung model chinh sua anh trong Cai dat. Ket qua tu dong them vao thu vien tai nguyen.",
+    "start": "Bat dau thay the",
+    "processing": "Dang tao...",
+    "validation": "Hay chon anh san pham, anh boi canh va phien ban prompt.",
+    "batchCreated": "Da tao lo va bat dau xu ly.",
+    "output": "Ket qua",
+    "taskHistory": "Lich su lo",
+    "historyDescription": "Xem va quan ly lich su tao",
+    "historyRecords": "ban ghi",
+    "allResults": "Tat ca",
+    "imageResults": "Anh",
+    "completed": "da xong",
+    "tasks": "tac vu",
+    "noBatches": "Chua co lo thay the san pham",
+    "promptManagement": "Phien ban prompt",
+    "activate": "Kich hoat",
+    "edit": "Sua",
+    "copy": "Sao chep phien ban",
+    "rollback": "Khoi phuc phien ban nay",
+    "newPrompt": "Phien ban moi",
+    "pause": "Tam dung lo",
+    "resume": "Tiep tuc lo",
+    "cancel": "Huy lo",
+    "retryFailed": "Thu lai muc loi",
+    "export": "Xuat ket qua",
+    "batchExport": "Xuat tat ca",
+    "exported": "Da xuat",
+    "selectExportable": "Chon muc co the xuat",
+    "selectResult": "Chon ket qua",
+    "openLocation": "Mo vi tri tep",
+    "status": {
+      "queued": "Dang doi",
+      "processing": "Dang xu ly",
+      "paused": "Da tam dung",
+      "completed": "Hoan tat",
+      "partial_failed": "Loi mot phan",
+      "failed": "That bai",
+      "cancelled": "Da huy"
+    }
+  },
+  "productWatermark": {
+    "hero": { "description": "Cat anh san pham hang loat va ap dung watermark thuong hieu trong suot co the tai su dung." },
+    "sections": { "template": "Mau watermark", "images": "Anh san pham", "export": "Xu ly va xuat" },
+    "labels": {
+      "savedTemplates": "Da luu {count} mau",
+      "chooseSaved": "Chon mau da luu",
+      "transparent": "Watermark trong suot",
+      "newTemplate": "Them mau",
+      "dropTemplate": "Tha mau trong suot 1:1 vao day",
+      "templateRules": "PNG hoac WebP; hinh vuong va co kenh alpha",
+      "imageCount": "{count} anh",
+      "selected": "Da chon {selected} / {total}",
+      "dropImages": "Tha anh san pham vao day",
+      "supportedImages": "JPG, PNG, WebP; cat giua thanh hinh vuong",
+      "queue": "Hang doi xu ly",
+      "squareOutput": "Hinh vuong",
+      "outputFolder": "Thu muc xuat",
+      "format": "Dinh dang dau ra",
+      "crop": "Cat anh",
+      "background": "Vung trong suot",
+      "centerSquare": "Hinh vuong can giua",
+      "white": "Nen trang",
+      "results": "Ket qua",
+      "succeeded": "Thanh cong {count}",
+      "failed": "That bai {count}"
+    },
+    "placeholders": { "template": "Chon mau", "templateName": "Ten mau", "outputFolder": "Chua chon thu muc" },
+    "actions": {
+      "back": "Quay lai plugin",
+      "rename": "Doi ten",
+      "delete": "Xoa mau",
+      "chooseTemplate": "Chon anh mau",
+      "saveTemplate": "Luu mau",
+      "chooseImages": "Chon anh",
+      "chooseFromLibrary": "Chon tu thu vien tai lieu",
+      "clear": "Xoa tat ca",
+      "selectAll": "Chon tat ca",
+      "clearSelection": "Bo chon tat ca",
+      "removeImage": "Xoa anh",
+      "chooseFolder": "Chon thu muc",
+      "process": "Xu ly va xuat JPEG",
+      "processing": "Dang xu ly...",
+      "retryFailed": "Xu ly lai anh loi"
+    },
+    "empty": { "images": "Chua them anh san pham" },
+    "pickers": { "template": "Chon mau watermark trong suot", "images": "Chon anh san pham", "output": "Chon thu muc xuat" },
+    "prompts": { "rename": "Ten mau", "delete": "Xoa mau nay?" },
+    "errors": {
+      "templateFormat": "Mau phai la PNG hoac WebP.",
+      "templateNameAndFile": "Hay chon anh mau va nhap ten.",
+      "noSupportedImages": "Khong tim thay anh ho tro. Hay chon JPG, PNG hoac WebP.",
+      "selectTemplate": "Hay chon mau watermark truoc.",
+      "selectImages": "Hay them anh san pham truoc.",
+      "selectOutput": "Hay chon thu muc xuat truoc."
+    },
+    "messages": { "templateSaved": "Da luu mau.", "processed": "Hoan tat: thanh cong {success}, that bai {failed}." }
   },
   "geelarkPublishCenter": {
     "hero": {
@@ -1683,8 +1832,8 @@
       "referenceNote": "Tao tac vu hang loat theo ty le hien tai",
       "referenceUploadTitle": "Bam de tai len hoac tha anh vao day",
       "referenceUploadDesc": "Ho tro JPG, PNG va WEBP. Nen dung anh rong hon 2000 px.",
-      "materialLibrarySelect": "Chon Tu Thu Vien",
-      "materialLibraryDesc": "Mo thu vien anh san pham va chon hang loat anh chua lien ket.",
+      "materialLibrarySelect": "Chon Anh Phai Sinh",
+      "materialLibraryDesc": "Mo thu vien anh phai sinh va chon hang loat anh da tao.",
       "materialLibraryEmpty": "Khong co anh san pham chua lien ket.",
       "materialLibraryAddSelected": "Them Anh Tham Chieu",
       "selected": "Da chon",
@@ -3059,5 +3208,8 @@
     "strategy": { "profit": "Bao ve loi nhuan", "profitHint": "Bao ve ROI hoa von va nguong loi nhuan", "budget": "Bao ve ngan sach", "budgetHint": "Gioi han tang ngan sach va chi phi bat thuong", "roi": "Bao ve ROI", "roiHint": "Gioi han moi thay doi va khoa quan sat", "data": "Bao ve du lieu", "dataHint": "Chan du lieu thieu, cu va khong day du", "permission": "Quyen thuc thi", "permissionHint": "Moi thay doi nen tang van can phe duyet" },
     "audit": { "execution": "Lich su thuc thi", "results": "Danh gia ket qua", "exceptions": "Bat thuong", "before": "Truoc", "after": "Sau", "improved": "Hieu qua", "stable": "On dinh", "invalid": "Khong hieu qua", "noResults": "Chua co ket qua", "noExceptions": "Khong co bat thuong" },
     "settings": { "subtitle": "Quan ly ket noi, du lieu, chi phi, chien luoc, quyen, thong bao va an toan.", "connection": "Ket noi TikTok", "sync": "Dong bo du lieu", "cost": "Chi phi va loi nhuan", "strategy": "ROI va chien luoc", "permissions": "Quyen nen tang", "notifications": "Thong bao", "emergency": "Dung khan cap", "configured": "Da cau hinh", "notConfigured": "Can cau hinh", "open": "Mo cai dat", "syncNow": "Dong bo ngay", "staleItems": "muc can du lieu moi", "emergencyHint": "Ghi nen tang dang hoat dong va co the dung ngay", "costHint": "Quan ly chi phi san pham, mac dinh cua hang va nguong loi nhuan", "strategyHint": "Quan ly quy tac bao ve ROI, ngan sach va du lieu", "permissionHint": "{enabled} / {total} kha nang kha dung" }
+  },
+  "tiktokCreatorOutreach": {
+      "title": "Trung tam ket noi nha sang tao", "subtitle": "Quan ly tim kiem, moi hop tac va tin nhan trong mot khong gian gon gang.", "noShop": "Chua chon cua hang", "addAccount": "Them cua hang", "refresh": "Lam moi du lieu", "connected": "Da ket noi", "actionRequired": "Can thao tac", "apiConnected": "API da ket noi", "authorizationRequired": "Can uy quyen", "authorize": "Uy quyen cua hang", "configured": "Da cau hinh", "setupRequired": "Can cau hinh", "saveSettings": "Luu cai dat", "shopConnections": "Shop connections", "connectHint": "Them cua hang TikTok Shop de bat dau.", "connectShop": "Ket noi cua hang", "local": "Cua hang noi dia", "crossBorder": "Xuyen bien gioi", "oauthHint": "Moi cua hang dung uy quyen OAuth rieng.", "quickTitle": "Bat dau nhanh", "quickHint": "Chon quy trinh va thao tac trong cung man hinh.", "quickCreators": "Tim va loc nha sang tao phu hop.", "quickInvite": "Tao ke hoach moi va chay theo lo.", "quickMessage": "Gui tin nhan mau cho nha sang tao da moi.", "prepareInvites": "Chuan bi loi moi", "prepareMessages": "Chuan bi tin nhan", "totalCreators": "Tong so nha sang tao", "batchSize": "So luong moi lo", "batchHint": "Tu dong tach thanh cac lo toi da 50 nguoi.", "invitedOnly": "Chi nha sang tao da moi", "invitedOnlyHint": "Chi dung ket qua da moi tu API.", "invitationName": "Ten loi moi", "expiry": "Ngay het han", "contentType": "Loai noi dung", "productIds": "Ma san pham", "baseCommission": "Hoa hong co ban", "adCommission": "Hoa hong quang cao", "productLabel": "Ten san pham", "invitationMessage": "Noi dung loi moi", "messageTemplate": "Mau tin nhan", "variables": "Bien: creatorName, productName, shopName, commissionRate", "preview": "Xem truoc", "batchOf": "Lo {current} / {total}", "confirmBatch": "Xac nhan va chay lo", "queue": "Hang doi thuc thi", "batchesReady": "lo san sang", "currentBatch": "Lo hien tai", "creators": "nha sang tao", "activityTitle": "Hoat dong API gan day", "noActivity": "Chua co hoat dong cho cua hang nay.", "apiSettings": "Cai dat API Partner Center", "syncing": "Dang dong bo", "ready": "San sang", "taskQueueKicker": "HANG DOI NHIEM VU", "createTask": "Tao nhiem vu", "taskSource": "Nguon nha sang tao", "sourceMarketplace": "Bo loc thi truong", "sourceSpecified": "Nha sang tao chi dinh", "sourceLibrary": "Thu vien cua toi", "specifiedCreatorsLabel": "ID, ten nguoi dung hoac lien ket", "specifiedCreatorsHint": "Moi dong mot ID, ten nguoi dung hoac URL ho so", "taskCompleted": "da hoan tat", "startTask": "Bat dau", "resumeTask": "Tiep tuc", "pauseTask": "Tam dung", "cancelTask": "Huy", "retryFailed": "Thu lai muc loi", "saveSelected": "Luu vao thu vien", "taskStatus": { "draft": "Ban nhap", "preview": "San sang", "running": "Dang chay", "paused": "Da tam dung", "completed": "Da hoan tat", "cancelled": "Da huy", "failed": "That bai" }, "metrics": { "authorization": "Uy quyen", "quota": "Han muc moi", "remaining": "con lai trong ky", "inbox": "Hop thu", "attention": "cuoc tro chuyen can chu y", "sync": "Dong bo gan nhat", "official": "trang thai API chinh thuc" }, "tabs": { "overview": "Tong quan", "creators": "Nha sang tao", "campaign": "Ke hoach moi", "messages": "Tin nhan", "activity": "Hoat dong", "settings": "Cai dat" }, "errors": { "shopNotAuthorized": "Cua hang nay chua hoan tat uy quyen OAuth. Hay luu cau hinh API Partner Center hop le, sau do uy quyen cua hang.", "apiNotConfigured": "Hay luu cau hinh API Partner Center truoc.", "invalidAppKey": "App Key khong hop le. Hay nhap App Key duoc tao trong Partner Center.", "invalidCallback": "URL callback OAuth khong hop le. Hay nhap URL HTTPS da dang ky trong Partner Center.", "appSecretRequired": "Hay nhap App Secret duoc tao trong Partner Center." }
   }
 }

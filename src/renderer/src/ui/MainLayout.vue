@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -11,6 +11,7 @@ import {
   ScissorsLineDashed,
   Send,
   Puzzle,
+  Images,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -19,10 +20,10 @@ import { storeToRefs } from "pinia";
 import TitleBar from "./components/TitleBar.vue";
 import UiLocaleSelect from "./components/UiLocaleSelect.vue";
 import DsMainLayout from "../design-system/layout/MainLayout.vue";
+import AssetLibraryPickerHost from "./components/AssetLibraryPickerHost.vue";
 import { useCloneTopbarStore } from "@/stores/cloneTopbar";
 import { useDesignInspectorStore } from "@/stores/designInspector";
 import { useWebSessionStore } from "@/stores/webSession";
-import type { HermesWorkspaceAction } from "../../../shared/hermesWorkspace";
 
 const route = useRoute();
 const router = useRouter();
@@ -46,7 +47,6 @@ const showCloneWorkflowTopbar = computed(
 );
 const topUserName = computed(() => "VideoGenerate");
 const topUserPlan = computed(() => t("shell.localMode"));
-let unsubscribeHermesWorkspaceActions: (() => void) | null = null;
 
 const navItems = computed(() => [
   {
@@ -60,6 +60,12 @@ const navItems = computed(() => [
     icon: Sparkles,
     label: t("nav.models"),
     active: route.path.includes("/models"),
+  },
+  {
+    to: "/asset-library",
+    icon: Images,
+    label: t("nav.assets"),
+    active: route.path.includes("/asset-library"),
   },
   {
     to: "/products",
@@ -183,30 +189,9 @@ function toggleAppSidebar() {
   );
 }
 
-async function handleHermesWorkspaceAction(action: HermesWorkspaceAction) {
-  const routeName = String(action?.route?.name || "").trim();
-  if (!routeName) return;
-  await router
-    .push({
-      name: routeName,
-      ...(action.route.params ? { params: action.route.params } : {}),
-      ...(action.route.query ? { query: action.route.query } : {}),
-    })
-    .catch(() => undefined);
-}
-
 onMounted(() => {
   appSidebarCollapsed.value =
     localStorage.getItem(APP_SIDEBAR_STORAGE_KEY) === "true";
-  unsubscribeHermesWorkspaceActions =
-    window.api.hermes.subscribeWorkspaceActions((action) => {
-      void handleHermesWorkspaceAction(action);
-    });
-});
-
-onUnmounted(() => {
-  unsubscribeHermesWorkspaceActions?.();
-  unsubscribeHermesWorkspaceActions = null;
 });
 </script>
 
@@ -217,6 +202,7 @@ onUnmounted(() => {
       { 'is-sidebar-collapsed': appSidebarCollapsed },
     ]"
   >
+    <AssetLibraryPickerHost />
     <TitleBar />
     <div class="app-shell__body">
       <DsMainLayout
@@ -374,10 +360,59 @@ onUnmounted(() => {
   flex-direction: column;
   width: 100%;
   max-width: 100%;
-  background:
-    radial-gradient(circle at 20% 0, rgba(111, 88, 255, 0.12), transparent 24%),
-    linear-gradient(180deg, #070d18 0%, #09111c 100%);
-  color: #f8fafc;
+  background: var(--theme-shell);
+  color: var(--theme-text);
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell,
+:global(html[data-app-theme='mono']) .app-shell {
+  background: var(--theme-shell) !important;
+  color: var(--theme-text) !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar) {
+  background: var(--theme-sidebar) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar__section),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar__section) {
+  border-color: var(--theme-divider) !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar__section-title),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar__section-title) {
+  color: var(--theme-text-secondary) !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar__item),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar__item) {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar__item:hover),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar__item:hover) {
+  background: var(--theme-control-hover) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text) !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar__item.is-active),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar__item.is-active) {
+  background: var(--theme-control-selected) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-control-selected-text) !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-app-theme='light-teal']) .app-shell :deep(.ds-sidebar__item.is-active::before),
+:global(html[data-app-theme='mono']) .app-shell :deep(.ds-sidebar__item.is-active::before) {
+  background: var(--theme-accent) !important;
+  box-shadow: none !important;
 }
 
 .app-shell__body {

@@ -198,13 +198,45 @@ async function main() {
     assert.ok(existsSync(derived.localImagePath))
     assert.ok(derived.localImagePath.includes('managed-assets'))
 
+    const promptVersions = await productImageMaterialsService.listPromptVersions()
+    assert.equal(promptVersions.length, 1)
+    assert.match(promptVersions[0]!.prompt, /dark walnut/i)
+    const copiedPrompt = await productImageMaterialsService.savePromptVersion({ name: 'Custom Cafe', prompt: 'Dark cafe, exact jewelry.' })
+    assert.equal(copiedPrompt.version, 2)
+    await productImageMaterialsService.activatePromptVersion(copiedPrompt.id)
+    assert.equal((await productImageMaterialsService.listPromptVersions()).find((item) => item.active)?.id, copiedPrompt.id)
+    const rolledBackPrompt = await productImageMaterialsService.rollbackPromptVersion(promptVersions[0]!.id)
+    assert.equal(rolledBackPrompt.active, true)
+    assert.equal(rolledBackPrompt.prompt, promptVersions[0]!.prompt)
+
+    const uploadedImagePath = path.join(fixtureDir, 'uploaded-product.png')
+    await writeFile(uploadedImagePath, 'uploaded-product-image', 'utf-8')
+    const imageVariants = await productImageMaterialsService.createImageVariants({
+      userId: 'desktop-local',
+      sourceImagePath: uploadedImagePath,
+      category: 'ring',
+      variantCount: 7,
+      prompt: 'Dark cafe, keep ring unchanged.',
+    })
+    assert.equal(imageVariants.count, 6)
+    const imageDerived = await productImageMaterialsRepo.listMaterials('desktop-local')
+    const uploadedDerived = imageDerived.filter((item) => item.sourceVideoName === 'uploaded-product.png' && item.materialOrigin === 'derived')
+    assert.equal(uploadedDerived.length, 6)
+    assert.ok(uploadedDerived.every((item) => item.sourceVideoPath === '' && !item.derivedFromMaterialId))
+    await assert.rejects(
+      productImageMaterialsService.createImageVariants({
+        userId: 'desktop-local', sourceImagePath: path.join(fixtureDir, 'missing.png'), category: 'ring', variantCount: 1,
+      }),
+      /Source image file does not exist/,
+    )
+
     const options = await productImageMaterialsService.listHermesMaterialOptionsForProduct({
       productId: product.id,
       limit: 8,
     })
 
     assert.equal(options.category, 'ring')
-    assert.equal(options.options.length, 4)
+    assert.equal(options.options.length, 8)
     assert.equal(options.options[0]?.id, 'mat-1')
     assert.equal(options.options[0]?.index, 1)
 

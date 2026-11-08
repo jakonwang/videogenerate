@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
+import { access, copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, extname, join } from 'node:path'
 import { constants as fsConstants } from 'node:fs'
@@ -12,13 +12,13 @@ import { toPublicUrlViaQiniu } from '../clone/qiniu'
 import { generateGptShotFrameImage } from '../clone/gptImage'
 import { getAppPaths } from '../../lib/paths'
 import { getFfmpegExecutable } from '../../lib/binariesPath'
+import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { productImageMaterialsQueue } from './queue'
 import { productImageMaterialsRepo } from './repo'
 import { videoParserDownloadService } from '../video-parser-download/service'
 import type {
   ProductImageMaterialBatch,
   ProductImageMaterialCategory,
-  ProductImageMaterialHermesOption,
   ProductImageMaterialItem,
   ProductImageMaterialListFilters,
   ProductImageMaterialProductSummary,
@@ -26,12 +26,12 @@ import type {
   ProductImageMaterialUsageStatus,
 } from './types'
 
-const DEFAULT_HERMES_LIMIT = 8
 const BUILTIN_CATEGORIES: ProductImageMaterialCategory[] = ['necklace', 'ring', 'earring', 'bracelet']
 const MAX_SCENE_SEGMENTS = 16
 const MAX_SCENE_SEGMENT_DURATION_SEC = 8
 const MIN_SEGMENT_DURATION_SEC = 0.5
 const MAX_BACKGROUND_VARIANT_COUNT = 6
+const MAX_PROMPT_LENGTH = 20_000
 
 type ProductImageMaterialsServiceDeps = {
   runFfmpeg: typeof runFfmpeg
@@ -115,6 +115,8 @@ function sourceItemOf(videoPath: string, parserVideoId?: string): ProductImageMa
 }
 
 const BACKGROUND_VARIANT_SCENES = [
+  'a neighborhood cafe with dark walnut tables, charcoal wood paneling, warm pendant lights, rich shadows, and a softly blurred coffee bar',
+  'a cozy coffee shop corner with espresso-brown furniture, low warm ambient light, deep background tones, and natural high contrast',
   'an ordinary Southeast Asian bedroom with warm window light and a lived-in bedside table',
   'a normal local living room with a sofa edge, soft daylight, and everyday home details',
   'a simple bedroom dressing table with natural daylight and lightly used daily objects',
@@ -125,6 +127,56 @@ const BACKGROUND_VARIANT_SCENES = [
   'a balcony-side table with humid daylight, real apartment context, and ordinary local texture',
   'a small wardrobe or entrance table area with natural indoor light and believable daily-use objects',
 ] as const
+
+const DEFAULT_DERIVED_IMAGE_PROMPT = [
+  'Create a realistic lifestyle product photograph using the uploaded image as the exact product reference.',
+  'Keep the jewelry identical in shape, proportions, metal, color, gemstones, texture, markings, and all visible details.',
+  'Do not redesign, replace, duplicate, or add jewelry. Keep the product sharp and recognizable.',
+  'Place it naturally in a believable everyday setting, such as a neighborhood cafe with dark walnut furniture, charcoal wood, warm pendant lighting, and deep softly blurred shadows, or a relaxed local home scene.',
+  'Allow natural hands to hold or present the item when appropriate. Keep hands anatomically natural and secondary to the product.',
+  'Use realistic warm ambient light, visible detail in the shadows, and restrained high contrast. Avoid a studio, showroom, staged advertisement, text, logos, or watermarks.',
+].join('\n')
+
+type ProductImagePromptVersion = { id: string; name: string; version: number; prompt: string; active: boolean; createdAt: number; updatedAt: number }
+const promptVersionsPath = () => join(getAppPaths().dbDir, 'product-image-materials-prompts.json')
+
+async function listPromptVersions() {
+  const db = await readJsonFile(promptVersionsPath(), { versions: [] as ProductImagePromptVersion[] })
+  if (db.versions.length) return db.versions.sort((a, b) => b.version - a.version)
+  const timestamp = now()
+  const version: ProductImagePromptVersion = {
+    id: randomUUID(), name: 'Cafe and Everyday Scenes', version: 1,
+    prompt: DEFAULT_DERIVED_IMAGE_PROMPT, active: true, createdAt: timestamp, updatedAt: timestamp,
+  }
+  await writeJsonFile(promptVersionsPath(), { versions: [version] })
+  return [version]
+}
+
+async function savePromptVersion(input: { id?: string; name?: string; prompt: string }) {
+  const prompt = String(input.prompt || '').trim()
+  if (!prompt) throw new Error('Prompt content is required')
+  if (prompt.length > MAX_PROMPT_LENGTH) throw new Error('Prompt content is too long')
+  const versions = await listPromptVersions()
+  const existing = versions.find((item) => item.id === String(input.id || '').trim())
+  const timestamp = now()
+  const version: ProductImagePromptVersion = {
+    id: existing?.id || randomUUID(),
+    name: String(input.name || '').trim() || existing?.name || `Prompt V${Math.max(0, ...versions.map((item) => item.version)) + 1}`,
+    version: existing?.version || Math.max(0, ...versions.map((item) => item.version)) + 1,
+    prompt, active: existing?.active || false, createdAt: existing?.createdAt || timestamp, updatedAt: timestamp,
+  }
+  await writeJsonFile(promptVersionsPath(), { versions: [version, ...versions.filter((item) => item.id !== version.id)] })
+  return version
+}
+
+async function activatePromptVersion(id: string) {
+  const versions = await listPromptVersions()
+  if (!versions.some((item) => item.id === id)) throw new Error('Prompt version does not exist')
+  const timestamp = now()
+  const updated = versions.map((item) => ({ ...item, active: item.id === id, updatedAt: item.id === id ? timestamp : item.updatedAt }))
+  await writeJsonFile(promptVersionsPath(), { versions: updated })
+  return updated.find((item) => item.id === id)!
+}
 
 function updateBatchProgress(batch: ProductImageMaterialBatch): ProductImageMaterialBatch {
   const completedVideos = batch.sourceItems.filter((item) => item.status === 'completed').length
@@ -204,10 +256,12 @@ async function cleanupMaterialFiles(item: {
 function buildBackgroundVariantPrompt(input: {
   category: ProductImageMaterialCategory
   variantIndex: number
+  template: string
 }) {
   const selectedScene = BACKGROUND_VARIANT_SCENES[input.variantIndex % BACKGROUND_VARIANT_SCENES.length]
   return [
     'You are a realistic lifestyle product photography system.',
+    input.template,
     'Keep the product exactly identical to the reference image.',
     'Create a brand-new everyday environment that feels authentic, natural, and casually photographed.',
     'The final image should look like an ordinary person naturally taking a photo during daily life, not a commercial advertisement.',
@@ -234,7 +288,7 @@ function buildBackgroundVariantPrompt(input: {
     'Never make it look staged, luxury, catalog, influencer-commercial, e-commerce-studio, or AI-generated.',
     'Avoid cinematic camera angles, ultra-wide distortion, exaggerated perspective, HDR effect, oversaturation, fake sunlight, or artificial glow.',
     `Product category: ${input.category}.`,
-    'Do not add people, extra products, packaging, text, logos, subtitles, watermarks, or props that change the scene meaning.',
+    'Do not add extra products, packaging, text, logos, subtitles, watermarks, or props that change the scene meaning.',
   ].join(' ')
 }
 
@@ -254,8 +308,6 @@ function backgroundVariantNegativePrompt() {
     'logo',
     'watermark',
     'packaging',
-    'hands',
-    'person',
     'commercial studio',
     'premium studio',
     'luxury showroom',
@@ -590,6 +642,8 @@ export const productImageMaterialsService = {
     userId: string
     materialIds: string[]
     variantCount: number
+    promptVersionId?: string
+    prompt?: string
   }) {
     const userId = String(input.userId || '').trim()
     const materialIds = Array.from(new Set((input.materialIds || []).map((item) => String(item || '').trim()).filter(Boolean)))
@@ -608,6 +662,9 @@ export const productImageMaterialsService = {
     if (!selected.length) throw new Error('No materials found to generate background variants')
 
     const credentials = await cloneRepo.getCredentials()
+    const promptVersions = await listPromptVersions()
+    const activePrompt = promptVersions.find((item) => item.id === input.promptVersionId) || promptVersions.find((item) => item.active) || promptVersions[0]!
+    const prompt = String(input.prompt || activePrompt.prompt).trim()
     const created: ProductImageMaterialItem[] = []
     const errors: string[] = []
 
@@ -625,6 +682,7 @@ export const productImageMaterialsService = {
             prompt: buildBackgroundVariantPrompt({
               category: source.category,
               variantIndex,
+              template: prompt,
             }),
             negativePrompt: backgroundVariantNegativePrompt(),
             imagePaths: [sourcePath],
@@ -677,6 +735,93 @@ export const productImageMaterialsService = {
       failedCount: errors.length,
       errors,
     }
+  },
+
+  async createImageVariants(input: {
+    userId: string
+    sourceImagePath: string
+    category: ProductImageMaterialCategory
+    variantCount: number
+    promptVersionId?: string
+    prompt?: string
+  }) {
+    const userId = String(input.userId || '').trim()
+    const sourceImagePath = String(input.sourceImagePath || '').trim()
+    if (!userId) throw new Error('userId is required')
+    if (!sourceImagePath) throw new Error('sourceImagePath is required')
+    const imageStat = await stat(sourceImagePath).catch(() => null)
+    if (!imageStat?.isFile()) throw new Error('Source image file does not exist')
+    const category = ensureCategory(String(input.category || ''))
+    const parsedCount = Number(input.variantCount || 0)
+    const variantCount = Number.isFinite(parsedCount) ? Math.max(1, Math.min(MAX_BACKGROUND_VARIANT_COUNT, Math.floor(parsedCount))) : 1
+    const versions = await listPromptVersions()
+    const activePrompt = versions.find((item) => item.id === input.promptVersionId) || versions.find((item) => item.active) || versions[0]!
+    const prompt = String(input.prompt || activePrompt.prompt).trim()
+    if (!prompt) throw new Error('Prompt content is required')
+    const credentials = await cloneRepo.getCredentials()
+    const sourceName = basename(sourceImagePath)
+    const groupId = randomUUID()
+    const created: ProductImageMaterialItem[] = []
+    const errors: string[] = []
+    for (let variantIndex = 0; variantIndex < variantCount; variantIndex += 1) {
+      try {
+        const outputPath = await deps.generateVariantImage({
+          credentials,
+          prompt: `${prompt} Product category: ${category}.`,
+          negativePrompt: backgroundVariantNegativePrompt(),
+          imagePaths: [sourceImagePath],
+          outDir: join(getAppPaths().dataDir, 'product-image-materials', 'derived', groupId),
+          filePrefix: `image_variant_${variantIndex + 1}`,
+          normalizeOutput: 'preserve',
+        })
+        const outputPathText = String(outputPath || '').trim()
+        if (!outputPathText) throw new Error('Image generation did not return an output path')
+        const qiniuUrl = await deps.toPublicUrlViaQiniu(credentials, outputPathText, 'product-image-materials/image-to-image')
+        const item: ProductImageMaterialItem = {
+          id: randomUUID(),
+          userId,
+          batchId: groupId,
+          category,
+          sourceVideoPath: '',
+          sourceVideoName: sourceName,
+          segmentIndex: variantIndex,
+          segmentPath: '',
+          frameTimeSec: 0,
+          localImagePath: outputPathText,
+          qiniuUrl,
+          materialOrigin: 'derived',
+          derivedVariantIndex: variantIndex + 1,
+          usageStatus: 'unused',
+          createdAt: now(),
+          updatedAt: now(),
+        }
+        await productImageMaterialsRepo.upsertMaterial(item)
+        created.push(item)
+      } catch (error: any) {
+        errors.push(`#${variantIndex + 1}: ${String(error?.message ?? error ?? 'Unknown error').trim()}`)
+      }
+    }
+    if (!created.length) throw new Error(errors.join(' | ') || 'No image variants were generated')
+    return { ok: true, count: created.length, created, failedCount: errors.length, errors }
+  },
+
+  async listPromptVersions() {
+    return await listPromptVersions()
+  },
+
+  async savePromptVersion(input: { id?: string; name?: string; prompt: string }) {
+    return await savePromptVersion(input)
+  },
+
+  async activatePromptVersion(id: string) {
+    return await activatePromptVersion(id)
+  },
+
+  async rollbackPromptVersion(id: string) {
+    const source = (await listPromptVersions()).find((item) => item.id === id)
+    if (!source) throw new Error('Prompt version does not exist')
+    const created = await savePromptVersion({ name: `${source.name} Rollback`, prompt: source.prompt })
+    return await activatePromptVersion(created.id)
   },
 
   async listMaterials(userId: string, filters?: ProductImageMaterialListFilters) {
@@ -799,49 +944,6 @@ export const productImageMaterialsService = {
 
   async listProductBindingOptions() {
     return await listProductSummaries()
-  },
-
-  async listHermesMaterialOptionsForProduct(input: {
-    productId: string
-    limit?: number
-  }): Promise<{
-    product: ProductImageMaterialProductSummary
-    category: ProductImageMaterialCategory
-    options: ProductImageMaterialHermesOption[]
-  }> {
-    const products = await listProductSummaries()
-    const product = products.find((item) => item.id === String(input.productId || '').trim())
-    if (!product) throw new Error('Selected product does not exist')
-    const category = inferCategoryFromProductType(product.type)
-    if (!category) throw new Error('Selected product type is not supported by material selection yet')
-    const materials = await productImageMaterialsRepo.listAllMaterials({
-      category,
-      usageStatus: 'unused',
-    })
-    const limit = Math.max(1, Math.min(12, Number(input.limit || DEFAULT_HERMES_LIMIT)))
-    const ranked = [...materials].sort((a, b) => {
-      const aBound = String(a.boundProductId || '').trim()
-      const bBound = String(b.boundProductId || '').trim()
-      const target = product.id
-      const aScore = aBound === target ? 2 : aBound ? 0 : 1
-      const bScore = bBound === target ? 2 : bBound ? 0 : 1
-      if (aScore !== bScore) return bScore - aScore
-      return Number(b.createdAt || 0) - Number(a.createdAt || 0)
-    })
-    return {
-      product,
-      category,
-      options: ranked.slice(0, limit).map((item, index) => ({
-        id: item.id,
-        index: index + 1,
-        category: item.category,
-        thumbnailUrl: item.qiniuUrl,
-        materialOrigin: item.materialOrigin,
-        boundProductId: item.boundProductId,
-        localImagePath: item.localImagePath,
-        derivedFromMaterialId: item.derivedFromMaterialId,
-      })),
-    }
   },
 
   async getMaterial(userId: string, materialId: string) {

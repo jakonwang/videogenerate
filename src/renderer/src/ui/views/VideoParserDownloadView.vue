@@ -249,6 +249,7 @@ async function showInFolder(filePath?: string) {
 onMounted(async () => {
   await loadAll()
   refreshTimer = setInterval(() => {
+    if (document.hidden || !items.value.some((item) => item.status === 'processing')) return
     void loadAll()
   }, 4000)
 })
@@ -371,6 +372,8 @@ onUnmounted(() => {
                 class="vpd-album-thumb"
                 :src="posterUrl(item)"
                 alt=""
+                loading="lazy"
+                decoding="async"
                 @error="markPosterBroken(item.id)"
               />
               <div v-else class="vpd-album-card__placeholder">

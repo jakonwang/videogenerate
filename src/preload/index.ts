@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
-import type { HermesWorkspaceAction } from '../shared/hermesWorkspace'
 import { storageCleanupConfirmation, type StorageCategoryId } from '../shared/storageManagement'
 import type {
   InventoryDashboard,
@@ -22,27 +21,36 @@ function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.
   }
 }
 
-function normalizeHermesPromptPayload(payload: any) {
-  const attachments = Array.isArray(payload?.attachments)
-    ? payload.attachments.map((attachment: any) => ({
-      path: String(attachment?.path || ''),
-      ...(attachment?.name ? { name: String(attachment.name) } : {}),
-      ...(attachment?.mediaType === 'image' || attachment?.mediaType === 'video' || attachment?.mediaType === 'file'
-        ? { mediaType: attachment.mediaType }
-        : {}),
-    })).filter((attachment: { path: string }) => attachment.path)
-    : []
-  return {
-    sessionId: String(payload?.sessionId || ''),
-    text: String(payload?.text || ''),
-    ...(attachments.length ? { attachments } : {}),
-    ...(Number.isInteger(payload?.regenerateUserOrdinal)
-      ? { regenerateUserOrdinal: Number(payload.regenerateUserOrdinal) }
-      : {}),
-  }
-}
 
 const api = {
+  assetLibrary: {
+    list: (payload?: { query?: string; type?: 'all' | 'image' | 'video'; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:list', payload),
+    upload: (folderId?: string | null) => ipcRenderer.invoke('assetLibrary:upload', folderId),
+    importPaths: (payload: { paths: string[]; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:importPaths', payload),
+    listFolders: (parentId?: string | null) => ipcRenderer.invoke('assetLibrary:listFolders', parentId),
+    getFolderPath: (folderId?: string | null) => ipcRenderer.invoke('assetLibrary:getFolderPath', folderId),
+    createFolder: (payload: { name: string; parentId?: string | null }) => ipcRenderer.invoke('assetLibrary:createFolder', payload),
+    renameFolder: (payload: { id: string; name: string }) => ipcRenderer.invoke('assetLibrary:renameFolder', payload),
+    removeFolder: (id: string) => ipcRenderer.invoke('assetLibrary:removeFolder', id),
+    moveAssets: (payload: { ids: string[]; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:moveAssets', payload),
+    copyAssets: (payload: { ids: string[]; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:copyAssets', payload),
+    renameAsset: (payload: { id: string; name: string }) => ipcRenderer.invoke('assetLibrary:renameAsset', payload),
+    removeMany: (ids: string[]) => ipcRenderer.invoke('assetLibrary:removeMany', ids),
+    moveFolder: (payload: { id: string; parentId?: string | null }) => ipcRenderer.invoke('assetLibrary:moveFolder', payload),
+    folderStats: (id: string) => ipcRenderer.invoke('assetLibrary:folderStats', id),
+    trashAssets: (ids: string[]) => ipcRenderer.invoke('assetLibrary:trashAssets', ids),
+    trashFolder: (id: string) => ipcRenderer.invoke('assetLibrary:trashFolder', id),
+    listTrash: () => ipcRenderer.invoke('assetLibrary:listTrash'),
+    restoreTrash: (payload: { kind: 'asset' | 'folder'; id: string }) => ipcRenderer.invoke('assetLibrary:restoreTrash', payload),
+    purgeTrash: (payload?: { kind?: 'asset' | 'folder'; id?: string }) => ipcRenderer.invoke('assetLibrary:purgeTrash', payload),
+    audit: (repair?: boolean) => ipcRenderer.invoke('assetLibrary:audit', repair),
+    exportBackup: () => ipcRenderer.invoke('assetLibrary:exportBackup'),
+    remove: (id: string) => ipcRenderer.invoke('assetLibrary:remove', id),
+    updateUsageStatus: (payload: { id: string; pluginId: string; usageStatus: 'used' | 'unused' }) => ipcRenderer.invoke('assetLibrary:updateUsageStatus', payload),
+    thumbnail: (id: string) => ipcRenderer.invoke('assetLibrary:thumbnail', id),
+    editImage: (payload: { id: string; input: import('../shared/assetLibrary').AssetImageEditInput }) => ipcRenderer.invoke('assetLibrary:editImage', payload),
+    createUploadSession: () => ipcRenderer.invoke('assetLibrary:createUploadSession'),
+  },
   getPaths: () => ipcRenderer.invoke('app:getPaths'),
   getWebApiInfo: () => ipcRenderer.invoke('app:getWebApiInfo'),
   setUiLocale: (locale: string) => ipcRenderer.invoke('app:setUiLocale', locale),
@@ -63,6 +71,13 @@ const api = {
   pickFiles: (opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) =>
     ipcRenderer.invoke('fs:pickFiles', normalizeFilePickerOptions(opts)),
   pickDir: (opts: { title?: string }) => ipcRenderer.invoke('fs:pickDir', opts),
+  productWatermark: {
+    listTemplates: () => ipcRenderer.invoke('productWatermark:listTemplates'),
+    saveTemplate: (payload: { filePath: string; name: string }) => ipcRenderer.invoke('productWatermark:saveTemplate', payload),
+    renameTemplate: (payload: { id: string; name: string }) => ipcRenderer.invoke('productWatermark:renameTemplate', payload),
+    deleteTemplate: (id: string) => ipcRenderer.invoke('productWatermark:deleteTemplate', id),
+    processBatch: (payload: { templateId: string; sourcePaths: string[]; outputDir: string }) => ipcRenderer.invoke('productWatermark:processBatch', payload),
+  },
   pathExists: (input: { path: string }) => ipcRenderer.invoke('fs:pathExists', input) as Promise<boolean>,
   describeFiles: (paths: string[]) => ipcRenderer.invoke(
     'fs:describeFiles',
@@ -617,8 +632,6 @@ const api = {
         storyboardFrameConcurrency: number
         globalStoryboardFrameConcurrency: number
       }>,
-    getHermesIntegrationSettings: () =>
-      ipcRenderer.invoke('clone:getHermesIntegrationSettings') as Promise<import('../main/modules/clone/types').HermesIntegrationSettings>,
     setModelCredentials: (payload: {
       seedanceApiKey?: string
       seedanceHost?: string
@@ -661,13 +674,6 @@ const api = {
       globalStoryboardFrameConcurrency?: number
     }) =>
       ipcRenderer.invoke('clone:setRuntimeOptions', payload),
-    setHermesIntegrationSettings: (payload: {
-      enabled?: boolean
-      callbackBaseUrl?: string
-      feishu?: import('../main/modules/clone/types').HermesFeishuIntegrationSettings
-      wecom?: import('../main/modules/clone/types').HermesWecomIntegrationSettings
-    }) =>
-      ipcRenderer.invoke('clone:setHermesIntegrationSettings', payload),
     getGrsAiCredits: () =>
       ipcRenderer.invoke('clone:getGrsAiCredits') as Promise<{ available?: number; raw: unknown }>,
     onRuntimeLog: (cb: (payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => void) => {
@@ -759,8 +765,15 @@ const api = {
     listBatches: (payload: { userId: string }) => ipcRenderer.invoke('plugin:productImageMaterials:listBatches', payload),
     retryBatch: (payload: { userId: string; batchId: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:retryBatch', payload),
-    createBackgroundVariants: (payload: { userId: string; materialIds: string[]; variantCount: number }) =>
+    createBackgroundVariants: (payload: { userId: string; materialIds: string[]; variantCount: number; promptVersionId?: string; prompt?: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:createBackgroundVariants', payload),
+    createImageVariants: (payload: { userId: string; sourceImagePath: string; category: 'necklace' | 'ring' | 'earring' | 'bracelet'; variantCount: number; promptVersionId?: string; prompt?: string }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:createImageVariants', payload),
+    listPromptVersions: () => ipcRenderer.invoke('plugin:productImageMaterials:listPromptVersions'),
+    savePromptVersion: (payload: { id?: string; name?: string; prompt: string }) =>
+      ipcRenderer.invoke('plugin:productImageMaterials:savePromptVersion', payload),
+    activatePromptVersion: (id: string) => ipcRenderer.invoke('plugin:productImageMaterials:activatePromptVersion', id),
+    rollbackPromptVersion: (id: string) => ipcRenderer.invoke('plugin:productImageMaterials:rollbackPromptVersion', id),
     listMaterials: (payload: {
       userId: string
       filters?: {
@@ -783,6 +796,22 @@ const api = {
       ipcRenderer.invoke('plugin:productImageMaterials:exportMaterials', payload),
     listProducts: () => ipcRenderer.invoke('plugin:productImageMaterials:listProducts'),
   },
+  productReplacement: {
+    listProducts: () => ipcRenderer.invoke('plugin:productReplacement:listProducts'),
+    pickImages: () => ipcRenderer.invoke('plugin:productReplacement:pickImages'),
+    importPaths: (paths: string[]) => ipcRenderer.invoke('plugin:productReplacement:importPaths', paths),
+    listBatches: () => ipcRenderer.invoke('plugin:productReplacement:listBatches'),
+    createBatch: (payload: { productId?: string; productName: string; productImagePaths: string[]; sourceImages: Array<{ path: string; name: string }>; variantCount: number; promptVersionId?: string }) => ipcRenderer.invoke('plugin:productReplacement:createBatch', payload),
+    pauseBatch: (id: string) => ipcRenderer.invoke('plugin:productReplacement:pauseBatch', id),
+    resumeBatch: (id: string) => ipcRenderer.invoke('plugin:productReplacement:resumeBatch', id),
+    cancelBatch: (id: string) => ipcRenderer.invoke('plugin:productReplacement:cancelBatch', id),
+    retryFailed: (id: string) => ipcRenderer.invoke('plugin:productReplacement:retryFailed', id),
+    listPromptVersions: () => ipcRenderer.invoke('plugin:productReplacement:listPromptVersions'),
+    savePromptVersion: (payload: { id?: string; name?: string; prompt: string }) => ipcRenderer.invoke('plugin:productReplacement:savePromptVersion', payload),
+    activatePromptVersion: (id: string) => ipcRenderer.invoke('plugin:productReplacement:activatePromptVersion', id),
+    rollbackPromptVersion: (id: string) => ipcRenderer.invoke('plugin:productReplacement:rollbackPromptVersion', id),
+    exportResults: (paths: string[]) => ipcRenderer.invoke('plugin:productReplacement:exportResults', paths),
+  },
   videoParserDownload: {
     listItems: (payload: { userId: string }) => ipcRenderer.invoke('plugin:videoParserDownload:listItems', payload),
     importShareUrls: (payload: { userId: string; shareUrls: string[] }) => ipcRenderer.invoke('plugin:videoParserDownload:importShareUrls', payload),
@@ -799,6 +828,62 @@ const api = {
     getAuthStatus: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:getAuthStatus'),
     openLogin: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:openLogin'),
     logout: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:logout'),
+  },
+  tiktokCreatorOutreach: {
+    listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listAccounts'),
+    createAccount: (payload: { name: string; shopRegion: string; shopId: string; storeType?: 'cross_border' | 'local'; affiliateHost?: string; id?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:createAccount', payload),
+    removeAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:removeAccount', id),
+    listTemplates: (kind?: 'invite' | 'message') => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listTemplates', kind),
+    saveTemplate: (payload: { id?: string; name: string; kind: 'invite' | 'message'; body: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:saveTemplate', payload),
+    open: (payload: { accountId: string; path?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:open', payload),
+    authStatus: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:authStatus', id),
+    configureApi: (payload: { appKey: string; appSecret: string; redirectUri: string; apiBaseUrl?: string; apiVersion?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:configureApi', payload),
+    getApiConfigStatus: () => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getApiConfigStatus'),
+    startOAuth: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:startOAuth', accountId),
+    handleOAuthCallback: (payload: { code: string; state: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:handleOAuthCallback', payload),
+    disconnectShop: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:disconnectShop', accountId),
+    authorizationStatus: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:authorizationStatus', accountId),
+    getCreatorFilters: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getCreatorFilters', accountId),
+    listShopProducts: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listShopProducts', payload),
+    searchTargetCollaborations: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:searchTargetCollaborations', payload),
+    getTargetCollaborationDetail: (payload: { accountId: string; collaborationId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getTargetCollaborationDetail', payload),
+    getConversationList: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getConversationList', payload),
+    getMessages: (payload: { accountId: string; conversationId: string; pageToken?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getMessages', payload),
+    markConversationRead: (payload: { accountId: string; conversationId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:markConversationRead', payload),
+    generateCollaborationLink: (payload: { accountId: string; collaborationId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:generateCollaborationLink', payload),
+    getCreatorPerformance: (payload: { accountId: string; creatorId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getCreatorPerformance', payload),
+    getWeeklyOutreachRecords: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getWeeklyOutreachRecords', payload),
+    getWeeklyOutreachQuota: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getWeeklyOutreachQuota', accountId),
+    getInboxCounts: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getInboxCounts', accountId),
+    getPromotionDetails: (payload: { accountId: string; collaborationId: string; creatorId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getPromotionDetails', payload),
+    searchCreators: (payload: { accountId: string; filters?: Record<string, unknown>; cursor?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:searchCreators', payload),
+    readCreators: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:readCreators', id),
+    preview: (payload: { accountId: string; action: 'invite' | 'message'; creatorIds: string[]; creatorNames?: string[]; template?: string; variables?: Record<string, string>; batchSize?: number }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:preview', payload),
+    confirm: (payload: { accountId: string; action: 'invite' | 'message'; count: number; creatorIds?: string[]; creatorNames?: string[]; body?: string; invitation?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:confirm', payload),
+    listAudits: (id?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listAudits', id),
+    listCampaigns: (id?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listCampaigns', id),
+    updateCampaignStatus: (payload: { id: string; status: 'draft' | 'ready' | 'running' | 'paused' | 'completed' | 'cancelled' | 'failed' }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:updateCampaignStatus', payload),
+    parseSpecifiedCreators: (input: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:parseSpecifiedCreators', input),
+    listCreatorLibrary: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listCreatorLibrary', accountId),
+    addCreatorsToLibrary: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:addCreatorsToLibrary', payload),
+    removeCreatorsFromLibrary: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:removeCreatorsFromLibrary', ids),
+    updateCreatorTags: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:updateCreatorTags', payload),
+    blockCreators: (payload: { ids: string[]; blocked?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:blockCreators', payload),
+    previewOutreachTask: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:previewOutreachTask', payload),
+    createOutreachTask: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:createOutreachTask', payload),
+    confirmOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:confirmOutreachTask', id),
+    startOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:startOutreachTask', id),
+    pauseOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:pauseOutreachTask', id),
+    resumeOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:resumeOutreachTask', id),
+    cancelOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:cancelOutreachTask', id),
+    retryFailedCreators: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:retryFailedCreators', id),
+    getOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getOutreachTask', id),
+    listOutreachTasks: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listOutreachTasks', accountId),
+    listTaskBatches: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listTaskBatches', id),
+    listTaskAuditLogs: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listTaskAuditLogs', id),
+    getOutreachStatistics: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getOutreachStatistics', accountId),
+    getFeatureAvailability: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getFeatureAvailability', accountId),
+    listMessageHistory: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listMessageHistory', payload),
   },
   tiktokGmvMax: {
     getDashboard: (payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getDashboard', payload),
@@ -900,16 +985,16 @@ const api = {
     getSettings: () => ipcRenderer.invoke('plugin:tiktokCreative:getSettings'),
     saveSettings: (payload: { imageRetryLimit?: number; qualityCheckerEnabled?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreative:saveSettings', payload),
     listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreative:listAccounts'),
-    listPromptVersions: () => ipcRenderer.invoke('plugin:tiktokCreative:listPromptVersions'),
-    createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createPromptVersion', payload),
-    updatePromptVersion: (payload: { id: string; name: string; prompt: string }) => ipcRenderer.invoke('plugin:tiktokCreative:updatePromptVersion', payload),
-    activatePromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokCreative:activatePromptVersion', payload),
-    rollbackPromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokCreative:rollbackPromptVersion', payload),
+    listPromptVersions: (kind: 'image' | 'video' = 'video') => ipcRenderer.invoke('plugin:tiktokCreative:listPromptVersions', kind),
+    createPromptVersion: (payload: { name: string; prompt: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:tiktokCreative:createPromptVersion', payload),
+    updatePromptVersion: (payload: { id: string; name: string; prompt: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:tiktokCreative:updatePromptVersion', payload),
+    activatePromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:tiktokCreative:activatePromptVersion', payload),
+    rollbackPromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:tiktokCreative:rollbackPromptVersion', payload),
     importAccount: (payload: { id?: string; name: string; cookieJson: string }) => ipcRenderer.invoke('plugin:tiktokCreative:importAccount', payload),
     updateAccount: (payload: { id: string; name?: string; enabled?: boolean; priority?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:updateAccount', payload),
     testAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:testAccount', id),
     removeAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:removeAccount', id),
-    createFromReference: (payload: { referenceImagePaths: string[]; productId: string; prompt?: string; durationSec?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:createFromReference', payload),
+    createFromReference: (payload: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:createFromReference', payload),
     retryShot: (payload: {
       id: string
       shotId: string
@@ -931,6 +1016,7 @@ const api = {
     testCredential: () => ipcRenderer.invoke('plugin:tiktokPublisher:testCredential'),
     connections: () => ipcRenderer.invoke('plugin:tiktokPublisher:connections'),
     products: (connection?: string) => ipcRenderer.invoke('plugin:tiktokPublisher:products', connection),
+    productsPage: (connection?: string, options?: { pageSize?: number; pageToken?: string; query?: string; includeTotal?: boolean }) => ipcRenderer.invoke('plugin:tiktokPublisher:productsPage', connection, options),
     music: (query: string, connection?: string) => ipcRenderer.invoke('plugin:tiktokPublisher:music', query, connection),
     listTasks: () => ipcRenderer.invoke('plugin:tiktokPublisher:listTasks'),
     removeTask: (id: string) => ipcRenderer.invoke('plugin:tiktokPublisher:removeTask', id),
@@ -957,12 +1043,11 @@ const api = {
       qualityRetryFloor?: number
       retryLimit?: number
     }) => ipcRenderer.invoke('plugin:livePhoto:saveSettings', payload),
-    listPromptVersions: () => ipcRenderer.invoke('plugin:livePhoto:listPromptVersions'),
-    createPromptVersion: (payload: { name: string; prompt: string }) => ipcRenderer.invoke('plugin:livePhoto:createPromptVersion', payload),
-    updatePromptVersion: (payload: { id: string; name: string; prompt: string }) => ipcRenderer.invoke('plugin:livePhoto:updatePromptVersion', payload),
-    activatePromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:activatePromptVersion', payload),
-    rollbackPromptVersion: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:rollbackPromptVersion', payload),
-    getQualityMetrics: () => ipcRenderer.invoke('plugin:livePhoto:getQualityMetrics'),
+    listPromptVersions: (kind: 'image' | 'video' = 'image') => ipcRenderer.invoke('plugin:livePhoto:listPromptVersions', kind),
+    createPromptVersion: (payload: { name: string; prompt: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:createPromptVersion', payload),
+    updatePromptVersion: (payload: { id: string; name: string; prompt: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:updatePromptVersion', payload),
+    activatePromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:activatePromptVersion', payload),
+    rollbackPromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:rollbackPromptVersion', payload),
     enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:enqueueReference', payload),
     startReference: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
@@ -1067,139 +1152,6 @@ const api = {
     continueWithVideo: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:continueWithVideo', payload),
   },
-  hermes: {
-    livePhoto: {
-      startReferenceSession: (payload: {
-        channel: string
-        userId: string
-        referenceImagePaths?: string[]
-        selectionMode?: 'product' | 'material' | 'delivery'
-      }) => ipcRenderer.invoke('hermes:livePhoto:startReferenceSession', payload),
-      getLatestSession: (payload: { channel: string; userId: string }) =>
-        ipcRenderer.invoke('hermes:livePhoto:getLatestSession', payload),
-      listProductOptions: () => ipcRenderer.invoke('hermes:livePhoto:listProductOptions'),
-      selectProduct: (payload: { sessionId: string; productId: string }) =>
-        ipcRenderer.invoke('hermes:livePhoto:selectProduct', payload),
-      selectMaterial: (payload: { sessionId: string; materialId: string }) =>
-        ipcRenderer.invoke('hermes:livePhoto:selectMaterial', payload),
-      selectDeliveryCount: (payload: { sessionId: string; count: number }) =>
-        ipcRenderer.invoke('hermes:livePhoto:selectDeliveryCount', payload),
-      getSessionStatus: (sessionId: string) => ipcRenderer.invoke('hermes:livePhoto:getSessionStatus', sessionId),
-    },
-    getRuntimeStatus: () => ipcRenderer.invoke('hermes:getRuntimeStatus'),
-    getInstallationStatus: () => ipcRenderer.invoke('hermes:getInstallationStatus'),
-    installRuntime: () => ipcRenderer.invoke('hermes:installRuntime'),
-    updateRuntime: () => ipcRenderer.invoke('hermes:updateRuntime'),
-    repairRuntime: () => ipcRenderer.invoke('hermes:repairRuntime'),
-    startRuntime: () => ipcRenderer.invoke('hermes:startRuntime'),
-    stopRuntime: () => ipcRenderer.invoke('hermes:stopRuntime'),
-    restartRuntime: () => ipcRenderer.invoke('hermes:restartRuntime'),
-    getGatewayStatus: () => ipcRenderer.invoke('hermes:getGatewayStatus'),
-    startGateway: () => ipcRenderer.invoke('hermes:startGateway'),
-    stopGateway: () => ipcRenderer.invoke('hermes:stopGateway'),
-    restartGateway: () => ipcRenderer.invoke('hermes:restartGateway'),
-    approvePairing: (payload: { platform: string; code: string }) => ipcRenderer.invoke('hermes:approvePairing', payload),
-    listSkills: () => ipcRenderer.invoke('hermes:listSkills'),
-    searchSkills: (payload: { query: string; source?: string; limit?: number }) => ipcRenderer.invoke('hermes:searchSkills', payload),
-    inspectSkill: (identifier: string) => ipcRenderer.invoke('hermes:inspectSkill', identifier),
-    auditSkill: (identifier: string) => ipcRenderer.invoke('hermes:auditSkill', identifier),
-    installSkill: (identifier: string) => ipcRenderer.invoke('hermes:installSkill', identifier),
-    updateSkills: () => ipcRenderer.invoke('hermes:updateSkills'),
-    uninstallSkill: (name: string) => ipcRenderer.invoke('hermes:uninstallSkill', name),
-    setSkillEnabled: (payload: { name: string; enabled: boolean }) => ipcRenderer.invoke('hermes:setSkillEnabled', payload),
-    listChannels: () => ipcRenderer.invoke('hermes:listChannels'),
-    getChannel: (id: string) => ipcRenderer.invoke('hermes:getChannel', id),
-    saveChannel: (payload: { id: string; enabled?: boolean; values?: Record<string, string>; clear?: string[] }) => ipcRenderer.invoke('hermes:saveChannel', payload),
-    connectChannel: (id: string) => ipcRenderer.invoke('hermes:connectChannel', id),
-    disconnectChannel: (id: string) => ipcRenderer.invoke('hermes:disconnectChannel', id),
-    testChannel: (id: string) => ipcRenderer.invoke('hermes:testChannel', id),
-    startChannelPairing: (id: string) => ipcRenderer.invoke('hermes:startChannelPairing', id),
-    pollChannelPairing: (pairingId: string) => ipcRenderer.invoke('hermes:pollChannelPairing', pairingId),
-    cancelChannelPairing: (pairingId: string) => ipcRenderer.invoke('hermes:cancelChannelPairing', pairingId),
-    createBackup: () => ipcRenderer.invoke('hermes:createBackup'),
-    listBackups: () => ipcRenderer.invoke('hermes:listBackups'),
-    getMemoryStatus: () => ipcRenderer.invoke('hermes:getMemoryStatus'),
-    getDiagnostics: () => ipcRenderer.invoke('hermes:getDiagnostics'),
-    openWorkspace: (payload: { workspaceId: string; entityId?: string; settingsSection?: string }) => ipcRenderer.invoke('hermes:openWorkspace', {
-      workspaceId: String(payload?.workspaceId || ''),
-      ...(payload?.entityId ? { entityId: String(payload.entityId) } : {}),
-      ...(payload?.settingsSection ? { settingsSection: String(payload.settingsSection) } : {}),
-    }),
-    listSessions: (limit?: number) => ipcRenderer.invoke('hermes:listSessions', limit),
-    getModelOptions: (sessionId?: string) => ipcRenderer.invoke('hermes:getModelOptions', sessionId),
-    saveProviderKey: (payload: { provider: string; apiKey: string; sessionId?: string }) => ipcRenderer.invoke('hermes:saveProviderKey', payload),
-    selectModel: (payload: { provider: string; model: string; sessionId?: string }) => ipcRenderer.invoke('hermes:selectModel', payload),
-    disconnectModelProvider: (payload: { provider: string; sessionId?: string }) => ipcRenderer.invoke('hermes:disconnectModelProvider', payload),
-    saveCustomModel: (payload: { model: string; baseUrl: string; apiKey?: string }) => ipcRenderer.invoke('hermes:saveCustomModel', payload),
-    useApplicationModel: () => ipcRenderer.invoke('hermes:useApplicationModel'),
-    testModelConnection: () => ipcRenderer.invoke('hermes:testModelConnection'),
-    createSession: (payload: any) => ipcRenderer.invoke('hermes:createSession', payload),
-    resumeSession: (storedSessionId: string) => ipcRenderer.invoke('hermes:resumeSession', storedSessionId),
-    forkSession: (payload: { sessionId: string; name?: string }) => ipcRenderer.invoke('hermes:forkSession', payload),
-    closeSession: (sessionId: string) => ipcRenderer.invoke('hermes:closeSession', sessionId),
-    renameSession: (payload: { sessionId: string; title: string }) => ipcRenderer.invoke('hermes:renameSession', payload),
-    deleteSession: (sessionId: string) => ipcRenderer.invoke('hermes:deleteSession', sessionId),
-    getHistory: (sessionId: string) => ipcRenderer.invoke('hermes:getHistory', sessionId),
-    sendPrompt: (payload: any) => ipcRenderer.invoke('hermes:sendPrompt', normalizeHermesPromptPayload(payload)),
-    interruptSession: (sessionId: string) => ipcRenderer.invoke('hermes:interruptSession', sessionId),
-    steerSession: (payload: { sessionId: string; text: string }) => ipcRenderer.invoke('hermes:steerSession', payload),
-    respondClarification: (payload: any) => ipcRenderer.invoke('hermes:respondClarification', payload),
-    respondApproval: (payload: any) => ipcRenderer.invoke('hermes:respondApproval', payload),
-    respondSudo: (payload: any) => ipcRenderer.invoke('hermes:respondSudo', payload),
-    respondSecret: (payload: any) => ipcRenderer.invoke('hermes:respondSecret', payload),
-    getDelegationStatus: () => ipcRenderer.invoke('hermes:getDelegationStatus'),
-    setDelegationPaused: (paused: boolean) => ipcRenderer.invoke('hermes:setDelegationPaused', Boolean(paused)),
-    interruptSubagent: (subagentId: string) => ipcRenderer.invoke('hermes:interruptSubagent', subagentId),
-    listBackgroundProcesses: (sessionId: string) => ipcRenderer.invoke('hermes:listBackgroundProcesses', String(sessionId || '')),
-    stopBackgroundProcess: (payload: { sessionId: string; processId: string }) => ipcRenderer.invoke('hermes:stopBackgroundProcess', {
-      sessionId: String(payload?.sessionId || ''),
-      processId: String(payload?.processId || ''),
-    }),
-    manageBrowser: (payload: { action: 'status' | 'connect' | 'disconnect'; sessionId?: string; url?: string }) =>
-      ipcRenderer.invoke('hermes:manageBrowser', {
-        action: payload?.action,
-        ...(payload?.sessionId ? { sessionId: String(payload.sessionId) } : {}),
-        ...(payload?.url ? { url: String(payload.url) } : {}),
-      }),
-    listSessionEvents: (payload: { sessionId?: string; storedSessionId?: string; limit?: number }) =>
-      ipcRenderer.invoke('hermes:listSessionEvents', {
-        ...(payload?.sessionId ? { sessionId: String(payload.sessionId) } : {}),
-        ...(payload?.storedSessionId ? { storedSessionId: String(payload.storedSessionId) } : {}),
-        ...(Number.isInteger(payload?.limit) ? { limit: Number(payload.limit) } : {}),
-      }),
-    listPendingInputs: () => ipcRenderer.invoke('hermes:listPendingInputs'),
-    subscribeEvents: (afterSequence: number, callback: (events: any[]) => void) => {
-      let lastSequence = Math.max(0, Number(afterSequence || 0))
-      const forward = (events: any[]) => {
-        const fresh = (Array.isArray(events) ? events : [])
-          .filter((event) => Number(event?.sequence || 0) > lastSequence)
-          .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0))
-        if (!fresh.length) return
-        lastSequence = Number(fresh[fresh.length - 1].sequence || lastSequence)
-        callback(fresh)
-      }
-      const handler = (_event: unknown, events: any[]) => forward(events)
-      ipcRenderer.on('hermes:event', handler)
-      void ipcRenderer.invoke('hermes:listEvents', lastSequence).then(forward)
-      return () => ipcRenderer.off('hermes:event', handler)
-    },
-    subscribeRuntimeStatus: (callback: (status: any) => void) => {
-      const handler = (_event: unknown, status: any) => callback(status)
-      ipcRenderer.on('hermes:runtimeStatus', handler)
-      return () => ipcRenderer.off('hermes:runtimeStatus', handler)
-    },
-    subscribeManagementEvents: (callback: (status: any) => void) => {
-      const handler = (_event: unknown, status: any) => callback(status)
-      ipcRenderer.on('hermes:managementStatus', handler)
-      return () => ipcRenderer.off('hermes:managementStatus', handler)
-    },
-    subscribeWorkspaceActions: (callback: (action: HermesWorkspaceAction) => void) => {
-      const handler = (_event: unknown, action: HermesWorkspaceAction) => callback(action)
-      ipcRenderer.on('hermes:workspaceAction', handler)
-      return () => ipcRenderer.off('hermes:workspaceAction', handler)
-    },
-  },
-
   agentOs: {
     listEmployees: () => ipcRenderer.invoke('agentOs:listEmployees'),
     createEmployee: (payload: any) => ipcRenderer.invoke('agentOs:createEmployee', payload),

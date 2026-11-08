@@ -2023,6 +2023,8 @@
     "clone": "Clone",
     "models": "Models",
     "productLibrary": "Products",
+    "assetLibrary": "Asset Library",
+    "assets": "Assets",
     "liveSlicer": "Slicer",
     "publish": "Publish",
     "plugins": "Plugins",
@@ -2031,6 +2033,7 @@
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
+    "close": "Close",
     "save": "Save",
     "language": "Interface Language",
     "starting": "Starting...",
@@ -2038,6 +2041,10 @@
     "remove": "Remove",
     "refresh": "Refresh",
     "all": "All"
+  },
+  "promptKind": {
+    "image": "Image",
+    "video": "Video"
   },
   "plugins": {
     "hero": {
@@ -2093,6 +2100,14 @@
       "backToMarket": "Back To Market"
     },
     "catalog": {
+      "product-watermark": {
+        "name": "Product Brand Watermark",
+        "description": "Center-crop product images to squares and apply reusable transparent brand watermarks."
+      },
+      "product-replacement": {
+        "name": "Product Replacement",
+        "description": "Batch-replace products in scene images using saved references and versioned prompts."
+      },
       "tiktok-gmv-max-optimizer": {
         "name": "TikTok GMV MAX Optimizer",
         "description": "Review and execute guarded GMV MAX budget and target ROI recommendations through TikTok for Business MCP."
@@ -2131,6 +2146,140 @@
       }
     },
     "detail": { "eyebrow": "Plugin Detail" }
+  },
+  "productReplacement": {
+    "backToPlugins": "Back to plugins",
+    "eyebrow": "Batch image editing",
+    "title": "Product Replacement",
+    "description": "Replace products in scene images while preserving their environment and composition.",
+    "targetProduct": "Target product",
+    "systemProduct": "Saved products",
+    "chooseProduct": "Choose a product",
+    "changeProduct": "Change product",
+    "selectFromProducts": "Browse saved products",
+    "selectedProduct": "Selected product",
+    "referenceImagesShort": "reference images",
+    "uploadProduct": "Upload product images",
+    "customProduct": "Custom product",
+    "noProductImage": "Add one to four product references",
+    "sceneImages": "Scene images",
+    "images": "images",
+    "dropTitle": "Drop scene images here",
+    "dropDescription": "JPG, PNG, WebP, and GIF are supported",
+    "uploadScenes": "Upload images",
+    "fromLibrary": "Choose from library",
+    "remove": "Remove",
+    "prompt": "Prompt",
+    "manageVersions": "Manage versions",
+    "activeVersion": "Prompt version",
+    "active": "Active",
+    "promptPlaceholder": "Describe replacement rules. The first input image is the scene; following images are product references.",
+    "promptLoadFailed": "Could not load prompt versions. Restart the app and try again.",
+    "promptName": "Version name",
+    "saveVersion": "Save version",
+    "promptSaved": "Prompt version saved.",
+    "confirmTitle": "Review batch",
+    "product": "Target product",
+    "notSelected": "Not selected",
+    "referenceImages": "Product references",
+    "variantsPerImage": "Results per scene image",
+    "estimatedTasks": "Estimated outputs",
+    "modelNote": "Uses the image editing model configured in Settings. Results are added to the asset library.",
+    "start": "Start replacement",
+    "processing": "Creating...",
+    "validation": "Select product references, scene images, and a prompt version first.",
+    "batchCreated": "Batch created and processing started.",
+    "output": "Output",
+    "taskHistory": "Batch history",
+    "historyDescription": "View and manage your generation history",
+    "historyRecords": "records",
+    "allResults": "All",
+    "imageResults": "Images",
+    "completed": "completed",
+    "tasks": "tasks",
+    "noBatches": "No product replacement batches yet",
+    "promptManagement": "Prompt versions",
+    "activate": "Activate",
+    "edit": "Edit",
+    "copy": "Copy version",
+    "rollback": "Roll back to this version",
+    "newPrompt": "New version",
+    "pause": "Pause batch",
+    "resume": "Resume batch",
+    "cancel": "Cancel batch",
+    "retryFailed": "Retry failed items",
+    "export": "Export results",
+    "batchExport": "Export all",
+    "exported": "Exported",
+    "selectExportable": "Select exportable",
+    "selectResult": "Select result",
+    "openLocation": "Show file location",
+    "status": {
+      "queued": "Queued",
+      "processing": "Processing",
+      "paused": "Paused",
+      "completed": "Completed",
+      "partial_failed": "Partially failed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "productWatermark": {
+    "hero": { "description": "Batch-crop product images and apply reusable transparent brand watermarks." },
+    "sections": { "template": "Watermark template", "images": "Product images", "export": "Process and export" },
+    "labels": {
+      "savedTemplates": "{count} saved",
+      "chooseSaved": "Select a saved template",
+      "transparent": "Transparent watermark",
+      "newTemplate": "Add a template",
+      "dropTemplate": "Drop a 1:1 transparent template here",
+      "templateRules": "PNG or WebP; square with an alpha channel",
+      "imageCount": "{count} images",
+      "selected": "Selected {selected} / {total}",
+      "dropImages": "Drop product images here",
+      "supportedImages": "JPG, PNG, WebP; center-cropped to square",
+      "queue": "Processing queue",
+      "squareOutput": "Square",
+      "outputFolder": "Export folder",
+      "format": "Output format",
+      "crop": "Image crop",
+      "background": "Transparent areas",
+      "centerSquare": "Centered square",
+      "white": "White fill",
+      "results": "Results",
+      "succeeded": "Succeeded {count}",
+      "failed": "Failed {count}"
+    },
+    "placeholders": { "template": "Choose a template", "templateName": "Template name", "outputFolder": "No folder selected" },
+    "actions": {
+      "back": "Back to plugins",
+      "rename": "Rename",
+      "delete": "Delete template",
+      "chooseTemplate": "Choose template image",
+      "saveTemplate": "Save template",
+      "chooseImages": "Choose images",
+      "chooseFromLibrary": "Choose from asset library",
+      "clear": "Clear",
+      "selectAll": "Select all",
+      "clearSelection": "Clear selection",
+      "removeImage": "Remove image",
+      "chooseFolder": "Choose folder",
+      "process": "Process and export JPEG",
+      "processing": "Processing...",
+      "retryFailed": "Retry failed images"
+    },
+    "empty": { "images": "No product images added" },
+    "pickers": { "template": "Choose transparent watermark template", "images": "Choose product images", "output": "Choose export folder" },
+    "prompts": { "rename": "Template name", "delete": "Delete this template?" },
+    "errors": {
+      "templateFormat": "Template must be PNG or WebP.",
+      "templateNameAndFile": "Choose a template image and enter a name.",
+      "noSupportedImages": "No supported images found. Choose JPG, PNG, or WebP files.",
+      "selectTemplate": "Select a watermark template first.",
+      "selectImages": "Add product images first.",
+      "selectOutput": "Choose an export folder first."
+    },
+    "messages": { "templateSaved": "Template saved.", "processed": "Complete: {success} succeeded, {failed} failed." }
   },
   "geelarkPublishCenter": {
     "hero": {
@@ -2306,8 +2455,8 @@
       "referenceNote": "Create tasks in batches using the current aspect ratio",
       "referenceUploadTitle": "Click to upload or drop images here",
       "referenceUploadDesc": "Supports JPG, PNG, and WEBP. Images wider than 2000 px are recommended.",
-      "materialLibrarySelect": "Choose From Library",
-      "materialLibraryDesc": "Open the product image library and select unbound images in batches.",
+      "materialLibrarySelect": "Choose Derived Images",
+      "materialLibraryDesc": "Open the derived image library and select generated images in batches.",
       "materialLibraryEmpty": "No unbound product images are available.",
       "materialLibraryAddSelected": "Add References",
       "selected": "Selected",
@@ -2397,6 +2546,13 @@
     }
   },
   "tiktokCreative": {
+    "generationMode": {
+      "label": "Generation mode",
+      "referenceToVideo": "Reference to video",
+      "imageToVideo": "Image to video",
+      "imageToVideoHint": "Uses First and last frame: the first frame is the generated image and the last frame is a centered {p0}% zoom-in.",
+      "zoomPercentLabel": "Last-frame zoom"
+    },
     "retry": {
       "guard": "Retry Guard",
       "title": "Image Retry Guard",
@@ -2417,7 +2573,30 @@
     },
     "material": {
       "derivedOnly": "Only derived images are available to protect source material compliance.",
-      "empty": "No derived images are available."
+      "empty": "No derived images are available.",
+      "filterLabel": "Material status",
+      "filterAll": "All",
+      "selected": "selected"
+    },
+    "videoPreview": {
+      "fileInfo": "File information",
+      "fileName": "File name",
+      "createdAt": "Created"
+    },
+    "account": {
+      "search": "Search account name or ID...",
+      "allStatus": "All status",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "add": "Add account",
+      "cookieInfo": "Cookie",
+      "statusLabel": "Status",
+      "actions": "Actions",
+      "priority": "Priority",
+      "ready": "Ready for tasks",
+      "paused": "Paused",
+      "noMatch": "No matching accounts",
+      "page": "per page"
     },
     "revertSubtitles": "Revert subtitles"
   },
@@ -2549,9 +2728,11 @@
       "subtitle": "Theme changes apply immediately and persist after restart.",
       "themes": {
         "darkTeal": "Dark Teal",
+        "lightTeal": "Light Teal",
         "softMint": "Soft Mint",
         "warmPaper": "Warm Paper",
-        "clearSky": "Clear Sky"
+        "clearSky": "Clear Sky",
+        "mono": "Black and White"
       }
     },
     "access": {
@@ -4268,5 +4449,8 @@
     "strategy": { "profit": "Profit protection", "profitHint": "Protect break-even ROI and profit floor", "budget": "Budget protection", "budgetHint": "Limit budget increases and abnormal spend", "roi": "ROI protection", "roiHint": "Limit each change and enforce observation lock", "data": "Data protection", "dataHint": "Block missing, stale, and incomplete data", "permission": "Execution permissions", "permissionHint": "Every platform change still requires approval" },
     "audit": { "execution": "Execution records", "results": "Result evaluation", "exceptions": "Exceptions", "before": "Before", "after": "After", "improved": "Effective", "stable": "Stable", "invalid": "Ineffective", "noResults": "No results available", "noExceptions": "No exceptions" },
     "settings": { "subtitle": "Manage connections, data, costs, strategies, permissions, notifications, and safety status.", "connection": "TikTok connection", "sync": "Data sync", "cost": "Cost and profit", "strategy": "ROI and strategies", "permissions": "Platform permissions", "notifications": "Notifications", "emergency": "Emergency stop", "configured": "Configured", "notConfigured": "Needs setup", "open": "Open settings", "syncNow": "Sync now", "staleItems": "items need fresh data", "emergencyHint": "Platform writes are active and can be stopped immediately", "costHint": "Manage product costs, store defaults, and profit boundaries", "strategyHint": "Manage ROI, budget, and data protection rules", "permissionHint": "{enabled} of {total} capabilities available" }
+  },
+  "tiktokCreatorOutreach": {
+      "title": "Creator outreach workspace", "subtitle": "Manage creator discovery, invitations, and messages from one compact workspace.", "noShop": "No shop selected", "addAccount": "Add shop", "refresh": "Refresh data", "connected": "Connected", "actionRequired": "Action required", "apiConnected": "API connected", "authorizationRequired": "Authorization required", "authorize": "Authorize shop", "configured": "Configured", "setupRequired": "Setup required", "saveSettings": "Save settings", "shopConnections": "Shop connections", "connectHint": "Add a TikTok Shop to begin.", "connectShop": "Connect shop", "local": "Local store", "crossBorder": "Cross-border", "oauthHint": "Each shop uses an isolated OAuth authorization.", "quickTitle": "Quick start", "quickHint": "Choose a workflow and keep the key actions in the current view.", "quickCreators": "Search and filter creators that match your criteria.", "quickInvite": "Create invitation plans and run them in batches.", "quickMessage": "Send template messages to invited creators.", "prepareInvites": "Prepare invitations", "prepareMessages": "Prepare messages", "totalCreators": "Total creators", "batchSize": "Batch size", "batchHint": "Automatically split into official batches of 50 or less.", "invitedOnly": "Invited creators only", "invitedOnlyHint": "Use invited creators returned by the API.", "invitationName": "Invitation name", "expiry": "Expiry date", "contentType": "Content type", "productIds": "Product IDs", "baseCommission": "Base commission", "adCommission": "Ad commission", "productLabel": "Product name", "invitationMessage": "Invitation message", "messageTemplate": "Message template", "variables": "Variables: creatorName, productName, shopName, commissionRate", "preview": "Preview", "batchOf": "Batch {current} of {total}", "confirmBatch": "Confirm and run batch", "queue": "Execution queue", "batchesReady": "batches ready", "currentBatch": "Current batch", "creators": "creators", "activityTitle": "Recent API activity", "noActivity": "No activity for the selected shop yet.", "apiSettings": "Partner Center API settings", "syncing": "Syncing", "ready": "Ready", "taskQueueKicker": "TASK QUEUE", "createTask": "Create task", "taskSource": "Creator source", "sourceMarketplace": "Marketplace filters", "sourceSpecified": "Specified creators", "sourceLibrary": "My creator library", "specifiedCreatorsLabel": "Creator IDs, usernames, or URLs", "specifiedCreatorsHint": "One creator ID, username, or profile URL per line", "taskCompleted": "completed", "startTask": "Start", "resumeTask": "Resume", "pauseTask": "Pause", "cancelTask": "Cancel", "retryFailed": "Retry failed", "saveSelected": "Save to library", "taskStatus": { "draft": "Draft", "preview": "Ready", "running": "Running", "paused": "Paused", "completed": "Completed", "cancelled": "Cancelled", "failed": "Failed" }, "metrics": { "authorization": "Authorization", "quota": "Outreach quota", "remaining": "remaining this period", "inbox": "Inbox", "attention": "conversations requiring attention", "sync": "Last sync", "official": "official API status" }, "tabs": { "overview": "Overview", "creators": "Creators", "campaign": "Campaign", "messages": "Messages", "activity": "Activity", "settings": "Settings" }, "errors": { "shopNotAuthorized": "This shop has not completed OAuth authorization. Save valid Partner Center API settings, then authorize this shop.", "apiNotConfigured": "Save the Partner Center API settings first.", "invalidAppKey": "The App Key is invalid. Enter the App Key generated in Partner Center.", "invalidCallback": "The OAuth callback is invalid. Enter an HTTPS URL registered in Partner Center.", "appSecretRequired": "Enter the App Secret generated in Partner Center." }
   }
 }

@@ -11,7 +11,6 @@ export type ManagedAssetModule =
   | 'tiktok-creative'
   | 'templates'
   | 'live-photo'
-  | 'hermes'
   | 'agent-os'
   | 'other'
 

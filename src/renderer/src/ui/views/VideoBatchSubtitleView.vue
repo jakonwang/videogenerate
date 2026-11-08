@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -795,8 +796,8 @@ async function loadAll() {
   }
 }
 
-async function pickUploadVideos() {
-  const picked = await window.api.pickFiles({
+async function pickUploadVideos(paths?: string[]) {
+  const picked = paths ?? await window.api.pickFiles({
     title: tr('autoUi.k_f6bc7748ef45'),
     filters: [{ name: tr('autoUi.k_436893584feb'), extensions: ['mp4', 'mov', 'm4v', 'webm'] }],
     multiple: true,
@@ -831,6 +832,11 @@ async function pickUploadVideos() {
   selectedJobId.value = ''
   sourcePage.value = sourcePageCount.value
   notice.value = tr('autoUi.k_5df58afa1877', { p0: items.length })
+}
+
+async function pickUploadVideosFromLibrary() {
+  const selected = await openAssetLibraryPicker({ type: 'video', multiple: true })
+  if (selected?.length) await pickUploadVideos(selected.map((item) => item.filePath))
 }
 
 function startQueuePolling() {
@@ -1183,6 +1189,7 @@ onBeforeUnmount(() => {
           </div>
           <strong>{{ tr('autoUi.k_ce5318355f95') }}</strong>
           <span>{{ tr('autoUi.k_0e8f11cc03f6') }}</span>
+          <button class="minor-button" type="button" @click.stop="pickUploadVideosFromLibrary">从素材库选择视频</button>
         </div>
 
         <div v-else class="clone-picker">

@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS live_photo_items (
   id TEXT PRIMARY KEY,
   updated_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'image',
   payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_live_photo_items_updated_at
@@ -37,10 +38,9 @@ CREATE TABLE IF NOT EXISTS live_photo_prompt_versions (
   active INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'image',
   payload TEXT NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_live_photo_prompt_versions_version
-ON live_photo_prompt_versions(version);
 CREATE INDEX IF NOT EXISTS idx_live_photo_prompt_versions_active
 ON live_photo_prompt_versions(active DESC, version DESC);
 `
@@ -105,6 +105,9 @@ function getDatabase() {
 export function initializeLivePhotoSqlite() {
   const database = getDatabase()
   database.exec(schemaSql)
+  try { database.exec("ALTER TABLE live_photo_prompt_versions ADD COLUMN kind TEXT NOT NULL DEFAULT 'image'") } catch {}
+  database.exec('CREATE INDEX IF NOT EXISTS idx_live_photo_prompt_versions_kind_version ON live_photo_prompt_versions(kind, version DESC)')
+  try { database.exec('DROP INDEX IF EXISTS idx_live_photo_prompt_versions_version') } catch {}
   return database
 }
 
@@ -193,11 +196,11 @@ export function readLivePhotoPromptVersionsFromSqlite(): LivePhotoPromptVersion[
   return rows.map((row) => JSON.parse(String(row.payload || '{}')) as LivePhotoPromptVersion)
 }
 
-export function readActiveLivePhotoPromptVersionFromSqlite(): LivePhotoPromptVersion | null {
+export function readActiveLivePhotoPromptVersionFromSqlite(kind: 'image' | 'video' = 'image'): LivePhotoPromptVersion | null {
   const database = initializeLivePhotoSqlite()
   const row = database
-    .prepare('SELECT payload FROM live_photo_prompt_versions WHERE active = 1 ORDER BY version DESC LIMIT 1')
-    .get() as { payload?: string } | undefined
+    .prepare('SELECT payload FROM live_photo_prompt_versions WHERE active = 1 AND kind = ? ORDER BY version DESC LIMIT 1')
+    .get(kind) as { payload?: string } | undefined
   return row?.payload ? (JSON.parse(String(row.payload)) as LivePhotoPromptVersion) : null
 }
 
@@ -205,7 +208,7 @@ export function upsertLivePhotoPromptVersionInSqlite(version: LivePhotoPromptVer
   const database = initializeLivePhotoSqlite()
   database
     .prepare(
-      'INSERT OR REPLACE INTO live_photo_prompt_versions (id, version, active, updated_at, created_at, payload) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO live_photo_prompt_versions (id, version, active, updated_at, created_at, kind, payload) VALUES (?, ?, ?, ?, ?, ?, ?)',
     )
     .run(
       version.id,
@@ -213,24 +216,25 @@ export function upsertLivePhotoPromptVersionInSqlite(version: LivePhotoPromptVer
       version.active ? 1 : 0,
       Number(version.updatedAt || 0),
       Number(version.createdAt || 0),
-      JSON.stringify(version),
+      version.kind || 'image', JSON.stringify(version),
     )
 }
 
-export function activateLivePhotoPromptVersionInSqlite(id: string) {
+export function activateLivePhotoPromptVersionInSqlite(id: string, kind: 'image' | 'video' = 'image') {
   const database = initializeLivePhotoSqlite()
   const target = String(id || '').trim()
   database.exec('BEGIN IMMEDIATE;')
   try {
     const rows = database.prepare('SELECT payload FROM live_photo_prompt_versions').all() as Array<{ payload?: string }>
     const replace = database.prepare(
-      'INSERT OR REPLACE INTO live_photo_prompt_versions (id, version, active, updated_at, created_at, payload) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO live_photo_prompt_versions (id, version, active, updated_at, created_at, kind, payload) VALUES (?, ?, ?, ?, ?, ?, ?)',
     )
     const updatedAt = Date.now()
     for (const row of rows) {
       const current = JSON.parse(String(row.payload || '{}')) as LivePhotoPromptVersion
-      const next = { ...current, active: current.id === target, updatedAt: current.id === target ? updatedAt : current.updatedAt }
-      replace.run(next.id, next.version, next.active ? 1 : 0, next.updatedAt, next.createdAt, JSON.stringify(next))
+      const currentKind = current.kind || 'image'
+      const next = { ...current, active: currentKind === kind ? current.id === target : current.active, updatedAt: currentKind === kind && current.id === target ? updatedAt : current.updatedAt, kind: currentKind }
+      replace.run(next.id, next.version, next.active ? 1 : 0, next.updatedAt, next.createdAt, next.kind || 'image', JSON.stringify(next))
     }
     database.exec('COMMIT;')
   } catch (error) {

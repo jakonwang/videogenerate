@@ -29,7 +29,6 @@ import { assertGmvMaxPortfolioEvidenceFresh } from './portfolioFreshness'
 import { buildGmvMaxRealtimeDeltas, buildGmvMaxRealtimeWindowSummary, getGmvMaxSixHourWindow } from './realtimeWindow'
 import { evaluateGmvMaxRealtimeSignal } from './realtimeSignals'
 import { gmvMaxRepo } from './sqlite'
-import { sendHermesMessage } from '../hermes/messaging'
 import { cloneService } from '../clone/service'
 import { cloneRepo } from '../clone/repo'
 import { generateChatCompletion } from '../clone/unifiedChat'
@@ -1792,12 +1791,7 @@ async function sendGmvMaxNotification(eventType: string, message: string) {
   const config = gmvMaxRepo.listNotificationConfigs()[0]
   if (!config?.enabled) return
   const record = { id: randomUUID(), eventType, status: 'succeeded' as const, target: config.target, message, createdAt: Date.now() }
-  try {
-    await sendHermesMessage({ platform: 'feishu', target: config.target, message })
-    gmvMaxRepo.saveNotification(record)
-  } catch (error) {
-    gmvMaxRepo.saveNotification({ ...record, status: 'failed', error: error instanceof Error ? error.message : String(error) })
-  }
+  gmvMaxRepo.saveNotification({ ...record, status: 'failed', error: 'Feishu notifications are unavailable because the integration was removed.' })
 }
 
 function hasPendingChange(campaignId: string) {

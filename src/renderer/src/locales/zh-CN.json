@@ -1985,6 +1985,8 @@
     "clone": "复刻",
     "models": "模特",
     "productLibrary": "商品",
+    "assetLibrary": "素材库",
+    "assets": "素材",
     "liveSlicer": "切片",
     "publish": "发布",
     "plugins": "插件",
@@ -1993,6 +1995,7 @@
   "common": {
     "confirm": "确定",
     "cancel": "取消",
+    "close": "关闭",
     "save": "保存",
     "language": "界面语言",
     "starting": "启动中...",
@@ -2000,6 +2003,10 @@
     "remove": "移除",
     "refresh": "刷新",
     "all": "全部"
+  },
+  "promptKind": {
+    "image": "图片",
+    "video": "视频"
   },
   "auth": {
     "title": "授权激活",
@@ -2022,6 +2029,8 @@
     "helpDesc": "选择一个模块，快速进入对应工作流。",
     "project": "项目",
     "edit": "编辑",
+    "copy": "复制版本",
+    "rollback": "回滚到此版本",
     "view": "视图",
     "export": "导出",
     "openCloud": "打开云素材",
@@ -2129,9 +2138,11 @@
       "subtitle": "\u5207\u6362\u540e\u7acb\u5373\u751f\u6548\uff0c\u5e76\u5728\u4e0b\u6b21\u542f\u52a8\u65f6\u4fdd\u7559\u3002",
       "themes": {
         "darkTeal": "\u6697\u8272\u9752\u7eff",
+        "lightTeal": "\u7eff\u767d\u5de5\u4f5c\u53f0",
         "softMint": "\u67d4\u548c\u62a4\u773c",
         "warmPaper": "\u6696\u7eb8\u590d\u53e4",
-        "clearSky": "\u6781\u7b80\u6674\u7a7a"
+        "clearSky": "\u6781\u7b80\u6674\u7a7a",
+        "mono": "\u9ed1\u767d\u7b80\u6d01"
       }
     },
     "access": {
@@ -2651,6 +2662,14 @@
       "backToMarket": "返回插件市场"
     },
     "catalog": {
+      "product-watermark": {
+        "name": "商品品牌水印",
+        "description": "批量将商品图片居中裁剪为正方形并叠加可复用的透明品牌水印。"
+      },
+      "product-replacement": {
+        "name": "商品替换",
+        "description": "选择目标商品并批量替换场景图片中的商品，支持提示词版本管理。"
+      },
       "tiktok-gmv-max-optimizer": {
         "name": "TikTok GMV MAX 优化器",
         "description": "通过 TikTok for Business MCP 审核并执行受保护的 GMV MAX 预算与目标 ROI 建议。"
@@ -2689,6 +2708,138 @@
       }
     },
     "detail": { "eyebrow": "插件详情" }
+  },
+  "productReplacement": {
+    "backToPlugins": "返回插件中心",
+    "eyebrow": "批量图片编辑",
+    "title": "商品替换",
+    "description": "使用商品参考图批量替换场景图片中的商品，同时保留原图环境与构图。",
+    "targetProduct": "目标商品",
+    "systemProduct": "系统商品",
+    "chooseProduct": "选择商品",
+    "changeProduct": "更换商品",
+    "selectFromProducts": "点击打开商品库",
+    "selectedProduct": "已选择商品",
+    "referenceImagesShort": "张参考图",
+    "uploadProduct": "上传商品图",
+    "customProduct": "自定义商品",
+    "noProductImage": "添加一至四张商品参考图",
+    "sceneImages": "待替换图片",
+    "images": "张图片",
+    "dropTitle": "拖放场景图片到这里",
+    "dropDescription": "支持 JPG、PNG、WebP 和 GIF",
+    "uploadScenes": "上传图片",
+    "fromLibrary": "从素材库选择",
+    "remove": "移除",
+    "prompt": "提示词",
+    "manageVersions": "版本管理",
+    "activeVersion": "当前提示词版本",
+    "active": "使用中",
+    "promptPlaceholder": "描述商品替换规则。第一张输入图为场景图，后续图片为商品参考图。",
+    "promptLoadFailed": "无法加载提示词版本，请重启应用后重试。",
+    "promptName": "版本名称",
+    "saveVersion": "保存版本",
+    "promptSaved": "提示词版本已保存。",
+    "confirmTitle": "确认任务",
+    "product": "目标商品",
+    "notSelected": "未选择",
+    "referenceImages": "商品参考图",
+    "variantsPerImage": "每张图片生成数量",
+    "estimatedTasks": "预计生成任务",
+    "modelNote": "使用设置中当前配置的图片编辑模型。结果自动保存到素材库。",
+    "start": "开始批量替换",
+    "processing": "正在创建...",
+    "validation": "请先选择商品参考图、场景图片和提示词版本。",
+    "batchCreated": "批次已创建并开始处理。",
+    "output": "生成结果",
+    "taskHistory": "批次记录",
+    "historyDescription": "查看与管理你的生成记录",
+    "historyRecords": "条记录",
+    "allResults": "全部",
+    "imageResults": "图片",
+    "completed": "张已完成",
+    "tasks": "项任务",
+    "noBatches": "还没有商品替换任务",
+    "promptManagement": "提示词版本管理",
+    "activate": "启用",
+    "edit": "编辑",
+    "newPrompt": "新建版本",
+    "pause": "暂停批次",
+    "resume": "继续批次",
+    "cancel": "取消批次",
+    "retryFailed": "重试失败项",
+    "export": "导出结果",
+    "batchExport": "批量导出",
+    "exported": "已导出",
+    "selectExportable": "全选可导出",
+    "selectResult": "选择结果",
+    "openLocation": "打开文件位置",
+    "status": {
+      "queued": "等待中",
+      "processing": "处理中",
+      "paused": "已暂停",
+      "completed": "已完成",
+      "partial_failed": "部分失败",
+      "failed": "失败",
+      "cancelled": "已取消"
+    }
+  },
+  "productWatermark": {
+    "hero": { "description": "批量裁剪商品图片并叠加可复用的透明品牌水印。" },
+    "sections": { "template": "水印模板", "images": "商品图片", "export": "处理与导出" },
+    "labels": {
+      "savedTemplates": "已保存 {count} 个",
+      "chooseSaved": "选择已保存模板",
+      "transparent": "透明水印",
+      "newTemplate": "添加模板",
+      "dropTemplate": "拖放 1:1 透明模板到这里",
+      "templateRules": "支持 PNG / WebP，必须为正方形并包含透明通道",
+      "imageCount": "{count} 张图片",
+      "selected": "已选择 {selected} / {total}",
+      "dropImages": "拖放商品图片到这里",
+      "supportedImages": "支持 JPG、PNG、WebP；将按中心位置裁剪为正方形",
+      "queue": "处理队列",
+      "squareOutput": "正方形",
+      "outputFolder": "导出目录",
+      "format": "输出格式",
+      "crop": "图片裁剪",
+      "background": "透明区域",
+      "centerSquare": "居中正方形",
+      "white": "白色填充",
+      "results": "处理结果",
+      "succeeded": "成功 {count}",
+      "failed": "失败 {count}"
+    },
+    "placeholders": { "template": "选择模板", "templateName": "输入模板名称", "outputFolder": "尚未选择目录" },
+    "actions": {
+      "back": "返回插件市场",
+      "rename": "重命名",
+      "delete": "删除模板",
+      "chooseTemplate": "选择模板图片",
+      "saveTemplate": "保存模板",
+      "chooseImages": "批量选择图片",
+      "chooseFromLibrary": "从素材库选择",
+      "clear": "清空",
+      "selectAll": "全选",
+      "clearSelection": "取消全选",
+      "removeImage": "移除图片",
+      "chooseFolder": "选择目录",
+      "process": "处理并导出 JPEG",
+      "processing": "正在处理...",
+      "retryFailed": "重新处理失败项"
+    },
+    "empty": { "images": "尚未添加商品图片" },
+    "pickers": { "template": "选择透明水印模板", "images": "选择商品图片", "output": "选择导出目录" },
+    "prompts": { "rename": "模板名称", "delete": "确定删除此模板吗？" },
+    "errors": {
+      "templateFormat": "模板格式必须为 PNG 或 WebP。",
+      "templateNameAndFile": "请选择模板图片并输入名称。",
+      "noSupportedImages": "没有可用图片。请选择 JPG、PNG 或 WebP 文件。",
+      "selectTemplate": "请先选择水印模板。",
+      "selectImages": "请先添加商品图片。",
+      "selectOutput": "请先选择导出目录。"
+    },
+    "messages": { "templateSaved": "模板已保存。", "processed": "处理完成：成功 {success} 张，失败 {failed} 张。" }
   },
   "geelarkPublishCenter": {
     "hero": {
@@ -2864,8 +3015,8 @@
       "referenceNote": "按当前比例批量创建任务",
       "referenceUploadTitle": "点击上传或拖拽图片到此处",
       "referenceUploadDesc": "支持 JPG、PNG、WEBP，建议宽度 2000 像素以上，可连续追加多张图片。",
-      "materialLibrarySelect": "从素材库选图",
-      "materialLibraryDesc": "打开商品图片素材库，批量选择未绑定商品的图片。",
+      "materialLibrarySelect": "从衍生图选图",
+      "materialLibraryDesc": "打开衍生图库，批量选择已生成的衍生图片。",
       "materialLibraryEmpty": "当前没有可用的未绑定商品素材图片。",
       "materialLibraryAddSelected": "加入参考图",
       "selected": "已选择",
@@ -2955,6 +3106,13 @@
     }
   },
   "tiktokCreative": {
+    "generationMode": {
+      "label": "生成模式",
+      "referenceToVideo": "Reference to video",
+      "imageToVideo": "Image to video",
+      "imageToVideoHint": "使用 First and last frame：首帧为当前生成图，尾帧为居中放大 {p0}% 的镜头推进图。",
+      "zoomPercentLabel": "尾帧放大比例"
+    },
     "retry": {
       "guard": "重试保护",
       "title": "图片重试设置",
@@ -2975,7 +3133,30 @@
     },
     "material": {
       "derivedOnly": "仅可选择衍生图，以保护来源素材合规。",
-      "empty": "暂无可用衍生图。"
+      "empty": "暂无可用衍生图。",
+      "filterLabel": "素材状态",
+      "filterAll": "全部",
+      "selected": "项已选择"
+    },
+    "videoPreview": {
+      "fileInfo": "文件信息",
+      "fileName": "文件名称",
+      "createdAt": "创建时间"
+    },
+    "account": {
+      "search": "搜索账号名称或 ID...",
+      "allStatus": "全部状态",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "add": "新增账号",
+      "cookieInfo": "Cookie 信息",
+      "statusLabel": "状态",
+      "actions": "操作",
+      "priority": "优先级",
+      "ready": "可用于任务",
+      "paused": "已暂停",
+      "noMatch": "没有匹配的账号",
+      "page": "条/页"
     },
     "revertSubtitles": "恢复原字幕"
   },
@@ -4241,5 +4422,8 @@
     "strategy": { "profit": "利润保护", "profitHint": "守住盈亏平衡 ROI 和利润底线", "budget": "预算保护", "budgetHint": "限制单次预算增幅和异常消耗", "roi": "ROI 保护", "roiHint": "限制单次调整并执行观察锁", "data": "数据保护", "dataHint": "阻断缺失、过期和不完整数据", "permission": "执行权限", "permissionHint": "所有平台变更仍需人工审批" },
     "audit": { "execution": "执行记录", "results": "结果评估", "exceptions": "异常记录", "before": "调整前", "after": "调整后", "improved": "有效", "stable": "稳定", "invalid": "无效", "noResults": "暂无可评估结果", "noExceptions": "暂无异常记录" },
     "settings": { "subtitle": "集中管理连接、数据、成本、策略、权限、通知和安全状态。", "connection": "TikTok 连接", "sync": "数据同步", "cost": "成本与利润", "strategy": "ROI 与自动策略", "permissions": "平台权限", "notifications": "通知配置", "emergency": "紧急停止", "configured": "已配置", "notConfigured": "待配置", "open": "打开设置", "syncNow": "立即同步", "staleItems": "项数据需要更新", "emergencyHint": "当前平台写入正常，需要时可立即停止", "costHint": "管理商品成本、店铺默认成本和利润边界", "strategyHint": "管理 ROI、预算和数据保护规则", "permissionHint": "{enabled} / {total} 项能力可用" }
+  },
+  "tiktokCreatorOutreach": {
+      "title": "达人联系工作台", "subtitle": "在一个紧凑工作区管理达人搜索、邀约和消息。", "noShop": "未选择店铺", "addAccount": "添加店铺", "refresh": "刷新数据", "connected": "已连接", "actionRequired": "需要操作", "apiConnected": "API 已连接", "authorizationRequired": "需要授权", "authorize": "授权店铺", "configured": "已配置", "setupRequired": "需要配置", "saveSettings": "保存设置", "shopConnections": "店铺连接", "connectHint": "添加 TikTok Shop 店铺开始操作。", "connectShop": "连接店铺", "local": "本土店", "crossBorder": "跨境店", "oauthHint": "每个店铺使用独立的 OAuth 授权。", "quickTitle": "快速开始", "quickHint": "选择一个工作流，所有关键操作都在当前页面完成。", "quickCreators": "搜索并筛选符合条件的达人。", "quickInvite": "创建邀约计划并按批次执行。", "quickMessage": "向已邀约达人发送模板消息。", "prepareInvites": "准备邀约", "prepareMessages": "准备消息", "totalCreators": "达人总数", "batchSize": "单批数量", "batchHint": "自动拆分为不超过 50 人的官方批次。", "invitedOnly": "仅已邀约达人", "invitedOnlyHint": "只使用 API 返回的已邀约达人。", "invitationName": "邀约名称", "expiry": "截止日期", "contentType": "内容类型", "productIds": "商品 ID", "baseCommission": "基础佣金", "adCommission": "广告佣金", "productLabel": "商品名称", "invitationMessage": "邀约内容", "messageTemplate": "消息模板", "variables": "变量：creatorName、productName、shopName、commissionRate", "preview": "预览", "batchOf": "第 {current} / {total} 批", "confirmBatch": "确认并执行本批", "queue": "执行队列", "batchesReady": "个批次已准备", "currentBatch": "当前批次", "creators": "位达人", "activityTitle": "最近 API 活动", "noActivity": "当前店铺暂无活动记录", "apiSettings": "Partner Center API 设置", "syncing": "同步中", "ready": "就绪", "taskQueueKicker": "任务队列", "createTask": "创建任务", "taskSource": "达人来源", "sourceMarketplace": "筛选达人库", "sourceSpecified": "指定达人", "sourceLibrary": "我的达人库", "specifiedCreatorsLabel": "达人 ID、用户名或链接", "specifiedCreatorsHint": "每行一个达人标识，支持 ID、用户名或主页链接", "taskCompleted": "已完成", "startTask": "开始", "resumeTask": "继续", "pauseTask": "暂停", "cancelTask": "取消", "retryFailed": "重试失败项", "saveSelected": "加入达人库", "taskStatus": { "draft": "草稿", "preview": "待确认", "running": "执行中", "paused": "已暂停", "completed": "已完成", "cancelled": "已取消", "failed": "失败" }, "metrics": { "authorization": "授权状态", "quota": "邀约额度", "remaining": "本周期剩余", "inbox": "收件箱", "attention": "需要关注的会话", "sync": "最近同步", "official": "官方 API 状态" }, "tabs": { "overview": "总览", "creators": "达人", "campaign": "邀约计划", "messages": "消息", "activity": "活动", "settings": "设置" }, "errors": { "shopNotAuthorized": "当前店铺尚未完成 OAuth 授权。请先保存正确的 Partner Center API 配置，再授权此店铺。", "apiNotConfigured": "请先在设置中保存 Partner Center API 配置。", "invalidAppKey": "App Key 无效。请填写 Partner Center 生成的 App Key。", "invalidCallback": "OAuth 回调地址无效。请填写已在 Partner Center 注册的 HTTPS 地址。", "appSecretRequired": "请填写 Partner Center 生成的 App Secret。" }
   }
 }

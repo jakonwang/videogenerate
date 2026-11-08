@@ -4,7 +4,7 @@ import { APP_LOCALES } from '../../../shared/locale'
 import { APP_SETTINGS_STORAGE_KEY, getInitialAppLocale, persistAppLocale } from '@/lib/appLocaleStorage'
 import { i18n } from '@/i18n'
 
-export type AppTheme = 'dark-teal' | 'soft-mint' | 'warm-paper' | 'clear-sky'
+export type AppTheme = 'dark-teal' | 'light-teal' | 'mono'
 
 const THEME_STORAGE_KEY = 'videogenerate.ui.theme'
 const ACCESS_KEY_STORAGE_KEY = 'videogenerate.access.key'
@@ -18,7 +18,7 @@ function getInitialTheme(): AppTheme {
     storedTheme = ''
   }
   const value = String(storedTheme || localStorage.getItem(THEME_STORAGE_KEY) || '').trim()
-  if (value === 'soft-mint' || value === 'warm-paper' || value === 'clear-sky') return value
+  if (value === 'mono' || value === 'light-teal') return value
   return 'dark-teal'
 }
 

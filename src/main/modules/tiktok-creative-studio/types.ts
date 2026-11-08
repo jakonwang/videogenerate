@@ -5,6 +5,7 @@ export type TiktokCreativeTaskStatus = 'draft' | 'running' | 'requires_manual' |
 export type TiktokCreativeAccountState = 'unknown' | 'ready' | 'expired' | 'insufficient_credit' | 'error' | 'disabled'
 
 export type TiktokCreativeRemoteStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'paused_auth' | 'paused_error'
+export type TiktokCreativeGenerationMode = 'reference_to_video' | 'image_to_video'
 
 export type TiktokCreativeAccount = {
   id: string
@@ -23,7 +24,11 @@ export type TiktokCreativeReferenceInput = {
   referenceImagePaths: string[]
   productId: string
   prompt?: string
+  promptKind?: 'image' | 'video'
+  promptVersionId?: string
   durationSec?: number
+  mode?: TiktokCreativeGenerationMode
+  zoomPercent?: number
 }
 
 export type TiktokCreativeTaskLogLevel = 'info' | 'success' | 'error'
@@ -60,6 +65,10 @@ export type TiktokCreativeShotTask = {
   createdAt: number
   updatedAt: number
   sourceType?: 'reference_image' | 'legacy_clone_shot'
+  mode?: TiktokCreativeGenerationMode
+  zoomPercent?: number
+  firstFramePath?: string
+  lastFramePath?: string
   referenceImagePath?: string
   preparedImagePath?: string
   imagePreparation?: ExternalReferenceImagePreparationState

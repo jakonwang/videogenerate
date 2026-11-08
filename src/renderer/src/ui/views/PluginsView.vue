@@ -34,6 +34,20 @@ const selectedPluginId = ref("");
 
 const fallbackPlugins: PluginSummary[] = [
   {
+    id: "product-replacement",
+    name: "Product Replacement",
+    category: "video_processing",
+    description: "Replace products in batches of scene images using saved product references and versioned prompts.",
+    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/product-replacement", status: "installed", enabled: true,
+  },
+  {
+    id: "product-watermark",
+    name: "Product Brand Watermark",
+    category: "video_processing",
+    description: "Crop product images to squares and apply reusable transparent brand watermarks.",
+    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/product-watermark", status: "uninstalled", enabled: false,
+  },
+  {
     id: "tiktok-gmv-max-optimizer",
     name: "TikTok GMV MAX Optimizer",
     category: "advertising_optimization",
@@ -50,7 +64,7 @@ const fallbackPlugins: PluginSummary[] = [
     name: "Product Image Materials",
     category: "video_processing",
     description:
-      "Batch split videos into Hermes-ready product image materials with Qiniu upload and usage tracking.",
+      "Batch split videos into reusable product image materials with Qiniu upload and usage tracking.",
     version: "0.1.0",
     entryType: "tool",
     workspacePath: "/plugins/product-image-materials",
@@ -90,6 +104,17 @@ const fallbackPlugins: PluginSummary[] = [
     version: "0.1.0",
     entryType: "tool",
     workspacePath: "/plugins/tiktok-creative-studio",
+    status: "uninstalled",
+    enabled: false,
+  },
+  {
+    id: "tiktok-creator-outreach",
+    name: "TikTok Creator Outreach",
+    category: "ecommerce_listing",
+    description: "Prepare reviewed TikTok Affiliate creator invitation and message batches.",
+    version: "0.1.0",
+    entryType: "tool",
+    workspacePath: "/plugins/tiktok-creator-outreach",
     status: "uninstalled",
     enabled: false,
   },
@@ -198,6 +223,8 @@ function pluginStatusText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === "product-watermark") return t("plugins.categories.videoProcessing");
+  if (plugin.id === "product-replacement") return t("plugins.categories.videoProcessing");
   if (plugin.id === "tiktok-gmv-max-optimizer")
     return t("plugins.categories.advertisingOptimization");
   if (plugin.id === "dianxiaomi-inventory")
@@ -216,6 +243,8 @@ function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginIconText(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === "product-watermark") return "BW";
+  if (plugin.id === "product-replacement") return "PR";
   if (plugin.id === "tiktok-gmv-max-optimizer") return "GM";
   if (plugin.id === "dianxiaomi-inventory") return "IA";
   if (plugin.id === "product-image-materials") return "IM";
@@ -229,6 +258,8 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
 }
 
 function pluginCardTone(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === "product-watermark") return "tone-blue";
+  if (plugin.id === "product-replacement") return "tone-green";
   if (plugin.id === "tiktok-gmv-max-optimizer") return "tone-cyan";
   if (plugin.id === "dianxiaomi-inventory") return "tone-green";
   if (plugin.id === "product-image-materials") return "tone-blue";
@@ -249,10 +280,13 @@ function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
     "product-image-materials",
     "video-parser-download",
     "dianxiaomi-inventory",
+    "product-watermark",
+    "product-replacement",
   ].includes(plugin.id);
 }
 
 function primaryActionText(plugin: PluginSummary) {
+  if (plugin.id === "product-watermark" || plugin.id === "product-replacement") return t("plugins.actions.openWorkspace");
   if (plugin.status !== "installed") return t("plugins.actions.install");
   if (!plugin.enabled) return t("plugins.actions.enable");
   return isDirectWorkspacePlugin(plugin)
@@ -337,6 +371,14 @@ function selectPlugin(pluginId: string) {
 }
 
 function usePlugin(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === "product-watermark") {
+    void router.push("/plugins/product-watermark");
+    return;
+  }
+  if (plugin.id === "product-replacement") {
+    void router.push("/plugins/product-replacement");
+    return;
+  }
   if (plugin.status !== "installed") {
     errorText.value = t("plugins.errors.installFirst");
     return;
@@ -357,6 +399,10 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
     void router.push("/plugins/tiktok-creative-studio");
     return;
   }
+  if (plugin.id === "tiktok-creator-outreach") {
+    void router.push("/plugins/tiktok-creator-outreach");
+    return;
+  }
   if (plugin.id === "geelark-publisher") {
     void router.push("/plugins/geelark-publisher/publish-center");
     return;
@@ -373,6 +419,10 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
 }
 
 function onPrimaryAction(plugin: PluginSummary) {
+  if (plugin.id === "product-watermark" || plugin.id === "product-replacement") {
+    void router.push(plugin.workspacePath);
+    return;
+  }
   if (plugin.status !== "installed") {
     void installPlugin(plugin.id);
     return;
@@ -552,7 +602,17 @@ onMounted(async () => {
 
         <div class="detail-card__actions">
           <button
-            v-if="selectedPlugin.status !== 'installed'"
+            v-if="selectedPlugin.id === 'product-replacement'"
+            class="primary-button"
+            type="button"
+            :disabled="actionBusy"
+            @click="router.push('/plugins/product-replacement')"
+          >
+            <Wrench class="h-4 w-4" />
+            {{ t("plugins.actions.openWorkspace") }}
+          </button>
+          <button
+            v-else-if="selectedPlugin.status !== 'installed'"
             class="primary-button"
             type="button"
             :disabled="actionBusy"

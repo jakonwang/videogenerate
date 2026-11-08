@@ -12,8 +12,10 @@ function hashKey(parts: string[]) {
   return h.digest('hex')
 }
 
-export async function generateThumbnailJpg(input: { filePath: string; atSec?: number }): Promise<string | null> {
+export async function generateThumbnailJpg(input: { filePath: string; atSec?: number; width?: number; height?: number }): Promise<string | null> {
   const atSec = input.atSec ?? 0.5
+  const width = Math.max(1, Math.round(input.width ?? 240))
+  const height = Math.max(1, Math.round(input.height ?? 426))
 
   // 用 mtime/size 作为缓存因子，文件更新会自动生成新缩略图
   let size = 0
@@ -27,7 +29,7 @@ export async function generateThumbnailJpg(input: { filePath: string; atSec?: nu
     return null
   }
 
-  const key = hashKey([input.filePath, String(size), String(mtimeMs), String(atSec)])
+  const key = hashKey([input.filePath, String(size), String(mtimeMs), String(atSec), String(width), String(height)])
   const existing = cache.get(key)
   if (existing) return existing
 
@@ -51,7 +53,7 @@ export async function generateThumbnailJpg(input: { filePath: string; atSec?: nu
           '-q:v',
           '3',
           '-vf',
-          'scale=240:426:force_original_aspect_ratio=decrease,pad=240:426:(ow-iw)/2:(oh-ih)/2:color=black',
+          `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
           outPath,
         ],
       })

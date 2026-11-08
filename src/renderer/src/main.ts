@@ -4,6 +4,8 @@ import App from './ui/App.vue'
 import { i18n } from './i18n'
 import { router } from './router'
 import './styles.css'
+import './design-system/themes.css'
+import './design-system/theme-components.css'
 
 window.addEventListener('error', (event) => {
   console.error('[renderer-error]', {

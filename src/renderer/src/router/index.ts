@@ -41,6 +41,11 @@ const router = createRouter({
           component: () => import("@/ui/views/ModelLibraryView.vue"),
         },
         {
+          path: "asset-library",
+          name: "asset-library",
+          component: () => import("@/ui/views/AssetLibraryView.vue"),
+        },
+        {
           path: "clone",
           name: "clone",
           component: () => import("@/ui/views/CloneTaskListView.vue"),
@@ -76,6 +81,16 @@ const router = createRouter({
           component: () => import("@/ui/views/ProductImageMaterialsView.vue"),
         },
         {
+          path: "plugins/product-replacement",
+          name: "plugin-product-replacement",
+          component: () => import("@/ui/views/ProductReplacementView.vue"),
+        },
+        {
+          path: "plugins/product-watermark",
+          name: "plugin-product-watermark",
+          component: () => import("@/ui/views/ProductWatermarkView.vue"),
+        },
+        {
           path: "plugins/dianxiaomi-inventory",
           name: "plugin-dianxiaomi-inventory",
           component: () => import("@/ui/views/DianxiaomiInventoryView.vue"),
@@ -84,6 +99,11 @@ const router = createRouter({
           path: "plugins/tiktok-creative-studio",
           name: "plugin-tiktok-creative-studio",
           component: () => import("@/ui/views/TiktokCreativeStudioView.vue"),
+        },
+        {
+          path: "plugins/tiktok-creator-outreach",
+          name: "plugin-tiktok-creator-outreach",
+          component: () => import("@/ui/views/TiktokCreatorOutreachView.vue"),
         },
         {
           path: "publish",

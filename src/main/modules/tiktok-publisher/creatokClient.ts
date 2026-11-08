@@ -5,6 +5,14 @@ import { randomUUID } from 'node:crypto'
 import { app } from 'electron'
 
 type Runner = (args: string[], apiKey: string) => Promise<any>
+export type ProductListOptions = {
+  pageSize?: number
+  pageToken?: string
+  query?: string
+  includeTotal?: boolean
+  eligibility?: 'publishable' | 'addable' | 'all'
+  source?: 'showcase' | 'shop'
+}
 function defaultPath() {
   if (process.env.CREATOK_CLI_PATH) return process.env.CREATOK_CLI_PATH
   try {
@@ -48,7 +56,17 @@ export function createCreatokClient(apiKey: string, runner: Runner = runCreatokC
     doctor: () => call(['doctor']),
     connections: (capability = 'publish_shoppable_video') => call(['publish', 'connection', 'list', ...(capability ? ['--capability', capability] : []), '--operation-id', operation()]),
     capabilities: (connection: string) => call(['publish', 'connection', 'capabilities', connection, '--operation-id', operation()]),
-    products: (connection?: string) => call(['publish', 'product', 'list', ...(connection ? ['--connection', connection] : []), '--operation-id', operation()]),
+    products: (connection?: string, options: ProductListOptions = {}) => call([
+      'publish', 'product', 'list',
+      ...(connection ? ['--connection', connection] : []),
+      ...(options.eligibility ? ['--eligibility', options.eligibility] : []),
+      ...(options.source ? ['--source', options.source] : []),
+      ...(Number.isFinite(options.pageSize) ? ['--page-size', String(Math.max(1, Math.min(100, Math.floor(options.pageSize!))))] : []),
+      ...(options.pageToken ? ['--page-token', options.pageToken] : []),
+      ...(options.query ? ['--query', options.query.slice(0, 200)] : []),
+      ...(options.includeTotal ? ['--include-total'] : []),
+      '--operation-id', operation(),
+    ]),
     music: (query: string, connection?: string) => call(['publish', 'music', query.startsWith('https://www.tiktok.com/music/') || query.startsWith('https://tiktok.com/music/') ? 'resolve' : 'search', ...(connection ? ['--connection', connection] : []), query.startsWith('https://www.tiktok.com/music/') || query.startsWith('https://tiktok.com/music/') ? '--url' : '--query', query, '--operation-id', operation()]),
     asset: (file: string) => call(['assets', 'create', '--type', 'video', '--file', file]),
     prepareVideo: (connection: string, assetJson: string, operationId: string) => call(['publish', 'video', 'prepare', '--connection', connection, '--json', assetJson, '--operation-id', operationId]),
