@@ -185,6 +185,15 @@ function complexSpecificity(complex) {
   return total
 }
 
+/** Tailwind's generated CSS lives in @layer blocks and uses nested `&` selectors; never rewrite it. */
+function isFrameworkRule(rule) {
+  if (rule.selector.includes('&')) return true
+  for (let node = rule.parent; node; node = node.parent) {
+    if (node.type === 'atrule' && node.name === 'layer') return true
+  }
+  return false
+}
+
 module.exports = () => ({
   postcssPlugin: 'vgx-expand-trailing-is',
   // Single pass over the final tree (a `Rule` visitor would revisit rewritten
@@ -193,6 +202,7 @@ module.exports = () => ({
     root.walkRules((rule) => {
       if (!rule.selector.includes(':is(')) return
       if (rule.parent && rule.parent.type === 'atrule' && /keyframes$/i.test(rule.parent.name)) return
+      if (isFrameworkRule(rule)) return
       let changed = false
       const selectors = []
       for (const part of splitTop(rule.selector, (c) => c === ',')) {

@@ -97,6 +97,15 @@ function guardComplex(complex) {
   return trimmed.slice(0, at) + GUARD + trimmed.slice(at)
 }
 
+/** Tailwind's generated CSS lives in @layer blocks and uses nested `&` selectors; never rewrite it. */
+function isFrameworkRule(rule) {
+  if (rule.selector.includes('&')) return true
+  for (let node = rule.parent; node; node = node.parent) {
+    if (node.type === 'atrule' && node.name === 'layer') return true
+  }
+  return false
+}
+
 module.exports = () => ({
   postcssPlugin: 'vgx-legacy-scope-guard',
   OnceExit(root) {
@@ -104,6 +113,7 @@ module.exports = () => ({
     if (!file || !LEGACY_FILES.some((re) => re.test(file))) return
     root.walkRules((rule) => {
       if (rule.parent && rule.parent.type === 'atrule' && /keyframes$/i.test(rule.parent.name)) return
+      if (isFrameworkRule(rule)) return
       const selectors = splitTop(rule.selector, (c) => c === ',').map((p) => guardComplex(p.text))
       rule.selector = selectors.join(',\n')
     })

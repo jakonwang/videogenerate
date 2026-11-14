@@ -3,20 +3,29 @@ import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
+  Activity,
   ArrowLeft,
   Check,
-  Clock3,
   Copy,
   Edit3,
   FileText,
   Grid2X2,
+  History,
   Image as ImageIcon,
+  Info,
+  LayoutGrid,
   LayoutList,
+  Loader,
+  NotebookPen,
   Plus,
+  ScanSearch,
+  SearchX,
   Sparkles,
   Trash2,
   Upload,
+  Workflow,
 } from 'lucide-vue-next'
+import { thumbnailUrl } from '@/lib/localMedia'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
 type ProductType =
@@ -251,6 +260,13 @@ function canonicalStatusLabel(status?: Product['canonicalSourceStatus']) {
   if (status === 'processing') return tr('autoUi.k_fcb979ef0b91')
   if (status === 'failed') return tr('autoUi.k_3e3c8068bb0e')
   return tr('autoUi.k_59a9eb4e6574')
+}
+/** Kit tone for a canonical / analysis-board stage status. */
+function stageTone(status?: string | null) {
+  if (status === 'done') return 'green'
+  if (status === 'processing') return 'blue'
+  if (status === 'failed') return 'red'
+  return 'gray'
 }
 function canonicalStatusValue(status?: Product['canonicalSourceStatus']) {
   if (status === 'done') return tr('autoUi.k_e99b48a29bdf')
@@ -636,434 +652,301 @@ watch(productId, () => {
 </script>
 
 <template>
-  <div class="product-detail-page" data-testid="product-detail-page">
-    <section v-if="selected" class="detail-shell">
-      <div class="top-area">
-        <button class="back-button" data-testid="product-detail-back" type="button" @click="router.push('/products')">
-          <ArrowLeft class="h-4 w-4" />
-          <span>{{ tr('autoUi.k_cac1a287bf6d') }}</span>
+  <div class="vg-scope vg-page pd" data-testid="product-detail-page">
+    <template v-if="selected">
+      <!-- Header -->
+      <header class="vg-page-head">
+        <button class="vg-icon-btn" data-testid="product-detail-back" type="button" :title="tr('autoUi.k_cac1a287bf6d')" @click="router.push('/products')">
+          <ArrowLeft :size="18" />
         </button>
-
-        <div class="title-row">
-          <div class="title-block">
-            <template v-if="editingName">
-              <div class="name-editor">
-                <input
-                  v-model="nameDraft"
-                  class="name-editor__input"
-                  data-testid="product-name-input"
-                  type="text"
-                  maxlength="80"
-                  @keydown.enter.prevent="saveProductName"
-                  @keydown.esc.prevent="cancelEditName"
-                />
-                <button class="name-editor__button name-editor__button--primary" :disabled="savingName" data-testid="product-name-save-button" type="button" @click="saveProductName">
-                  {{ savingName ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
-                </button>
-                <button class="name-editor__button" type="button" @click="cancelEditName">{{ tr('autoUi.k_4d0b4688c787') }}</button>
-              </div>
-            </template>
-            <template v-else>
-              <div class="title-inline">
-                <h1 data-testid="product-detail-name">{{ pageTitle }}</h1>
-                <button class="title-inline__edit" data-testid="product-name-edit-button" type="button" @click="startEditName">
-                  <Edit3 class="h-4 w-4" />
-                </button>
-              </div>
-            </template>
-            <p>{{ pageSubtitle }}</p>
+        <div class="vg-page-head__text pd-title">
+          <div v-if="editingName" class="vg-row pd-title__edit">
+            <input
+              v-model="nameDraft"
+              class="vg-input"
+              data-testid="product-name-input"
+              type="text"
+              maxlength="80"
+              @keydown.enter.prevent="saveProductName"
+              @keydown.esc.prevent="cancelEditName"
+            />
+            <button class="vg-btn vg-btn--primary vg-btn--sm" :disabled="savingName" data-testid="product-name-save-button" type="button" @click="saveProductName">
+              {{ savingName ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
+            </button>
+            <button class="vg-btn vg-btn--sm" type="button" @click="cancelEditName">{{ tr('autoUi.k_4d0b4688c787') }}</button>
           </div>
-
-          <div class="hero-actions">
-            <button class="hero-button" :disabled="uploading" data-testid="product-upload-button" type="button" @click="uploadImages">
-              <Upload class="h-4 w-4" />
-              <span>{{ uploading ? tr('autoUi.k_ba72be007133') : tr('autoUi.k_45bba1a10c73') }}</span>
-            </button>
-            <button class="hero-button" :disabled="refreshingAnalysisBoard || !hasImages" data-testid="product-refresh-canonical-button" type="button" @click="refreshAnalysisBoard">
-              <Sparkles class="h-4 w-4" />
-              <span>{{ refreshingAnalysisBoard ? tr('autoUi.k_26eab253a08e') : tr('autoUi.k_27a715d5991e') }}</span>
-            </button>
-            <button class="hero-button hero-button--danger" data-testid="product-delete-button" type="button" @click="removeProduct">
-              <Trash2 class="h-4 w-4" />
-              <span>{{ tr('autoUi.k_1c4e19354208') }}</span>
-            </button>
-          </div>
+          <h1 v-else>
+            <span data-testid="product-detail-name">{{ pageTitle }}</span>
+            <button class="vg-icon-btn vg-icon-btn--sm" data-testid="product-name-edit-button" type="button" @click="startEditName"><Edit3 :size="14" /></button>
+          </h1>
+          <p>{{ pageSubtitle }}</p>
         </div>
+        <div class="vg-page-head__actions">
+          <button class="vg-btn" :disabled="uploading" data-testid="product-upload-button" type="button" @click="uploadImages">
+            <Upload :size="15" /> {{ uploading ? tr('autoUi.k_ba72be007133') : tr('autoUi.k_45bba1a10c73') }}
+          </button>
+          <button class="vg-btn vg-btn--soft" :disabled="refreshingAnalysisBoard || !hasImages" data-testid="product-refresh-canonical-button" type="button" @click="refreshAnalysisBoard">
+            <Sparkles :size="15" :class="{ 'vg-spin': refreshingAnalysisBoard }" /> {{ refreshingAnalysisBoard ? tr('autoUi.k_26eab253a08e') : tr('autoUi.k_27a715d5991e') }}
+          </button>
+          <button class="vg-btn vg-btn--danger" data-testid="product-delete-button" type="button" @click="removeProduct">
+            <Trash2 :size="15" /> {{ tr('autoUi.k_1c4e19354208') }}
+          </button>
+        </div>
+      </header>
 
-        <div class="summary-strip">
-          <div class="summary-item">
-            <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
-            <template v-if="editingType">
-              <div class="type-editor">
-                <label class="type-editor__field">
-                  <select v-model="typeDraft" data-testid="product-type-select">
-                    <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </label>
-                <div class="type-editor__actions">
-                  <button
-                    class="name-editor__button name-editor__button--primary"
-                    :disabled="savingType"
-                    data-testid="product-type-save-button"
-                    type="button"
-                    @click="saveProductType"
-                  >
-                    {{ savingType ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
-                  </button>
-                  <button class="name-editor__button" type="button" @click="cancelEditType">{{ tr('autoUi.k_4d0b4688c787') }}</button>
-                </div>
-              </div>
-            </template>
-            <template v-else>
-              <strong class="summary-item__inline">
-                {{ productTypeLabel(selected.type) }}
-                <button class="summary-item__edit" data-testid="product-type-edit-button" type="button" @click="startEditType">
-                  <Edit3 class="h-3.5 w-3.5" />
-                </button>
-              </strong>
-            </template>
+      <!-- Summary -->
+      <section class="vg-card pd-summary">
+        <div class="pd-summary__item">
+          <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
+          <div v-if="editingType" class="vg-row pd-summary__edit">
+            <select v-model="typeDraft" class="vg-select vg-select--sm" data-testid="product-type-select">
+              <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <button class="vg-btn vg-btn--primary vg-btn--xs" :disabled="savingType" data-testid="product-type-save-button" type="button" @click="saveProductType">
+              {{ savingType ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
+            </button>
+            <button class="vg-btn vg-btn--xs" type="button" @click="cancelEditType">{{ tr('autoUi.k_4d0b4688c787') }}</button>
           </div>
-          <div class="summary-item">
-            <span>{{ tr('autoUi.k_604dfedb0ba5') }}</span>
-            <strong>{{ selectedImageCount }} {{ tr('autoUi.k_9273cc90ea18') }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>{{ tr('autoUi.k_98943466db66') }}</span>
-            <strong class="summary-item__status">
-              <i :class="`status-dot status-dot--${analysisBoardStageStatus || canonicalStageStatus || 'idle'}`"></i>
+          <strong v-else>
+            {{ productTypeLabel(selected.type) }}
+            <button class="vg-icon-btn vg-icon-btn--sm" data-testid="product-type-edit-button" type="button" @click="startEditType"><Edit3 :size="13" /></button>
+          </strong>
+        </div>
+        <div class="pd-summary__item">
+          <span>{{ tr('autoUi.k_604dfedb0ba5') }}</span>
+          <strong>{{ selectedImageCount }} {{ tr('autoUi.k_9273cc90ea18') }}</strong>
+        </div>
+        <div class="pd-summary__item pd-summary__item--wide">
+          <span>{{ tr('autoUi.k_98943466db66') }}</span>
+          <strong>
+            <span class="vg-pill vg-pill--dot" :class="`vg-pill--${stageTone(analysisBoardStageStatus || canonicalStageStatus)}`">
               {{ tr('autoUi.k_d64c41f40928', { p0: canonicalStatusValue(analysisBoardStageStatus), p1: productAnalysisSnapshot ? tr('autoUi.k_79c74f41ca9e') : tr('autoUi.k_aef4104370ae') }) }}
-            </strong>
-          </div>
-          <div class="summary-item">
-            <span>{{ tr('autoUi.k_093dea88c930') }}</span>
-            <strong>{{ formatDateTime(selected.analysisBoardUpdatedAt ?? selected.canonicalSourceUpdatedAt ?? selected.updatedAt) }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>{{ tr('autoUi.k_84e3802f60a7') }}</span>
-            <strong>{{ formatDateTime(selected.createdAt) }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>ID</span>
-            <strong class="summary-item__id">
-              {{ selected.id.slice(0, 8) }}
-              <Copy class="h-4 w-4" />
-            </strong>
-          </div>
+            </span>
+          </strong>
         </div>
+        <div class="pd-summary__item">
+          <span>{{ tr('autoUi.k_093dea88c930') }}</span>
+          <strong class="vg-num">{{ formatDateTime(selected.analysisBoardUpdatedAt ?? selected.canonicalSourceUpdatedAt ?? selected.updatedAt) }}</strong>
+        </div>
+        <div class="pd-summary__item">
+          <span>{{ tr('autoUi.k_84e3802f60a7') }}</span>
+          <strong class="vg-num">{{ formatDateTime(selected.createdAt) }}</strong>
+        </div>
+        <div class="pd-summary__item">
+          <span>ID</span>
+          <strong class="vg-num">{{ selected.id.slice(0, 8) }} <Copy :size="13" class="vg-muted" /></strong>
+        </div>
+      </section>
+
+      <div class="vg-notice" :class="feedbackTone === 'success' ? 'vg-notice--accent' : feedbackTone === 'error' ? 'vg-notice--danger' : ''">
+        <Info :size="16" />
+        <span><b>{{ tr('autoUi.k_a30ab87b6869') }}</b> · {{ actionStatusText }}</span>
+        <span v-if="refreshingAnalysisBoard" class="vg-pill vg-pill--blue pd-notice__tag"><Loader :size="12" class="vg-spin" /> {{ tr('autoUi.k_f5394c6ce4af') }}</span>
+        <span v-else-if="refreshingProductAnalysis" class="vg-pill vg-pill--blue pd-notice__tag"><Loader :size="12" class="vg-spin" /> {{ tr('autoUi.k_403c4b72c90e') }}</span>
+      </div>
+      <div v-if="feedback" class="vg-notice" :class="feedbackTone === 'error' ? 'vg-notice--danger' : 'vg-notice--accent'" data-testid="product-detail-feedback">
+        <span>{{ feedback }}</span>
       </div>
 
-      <div class="action-banner" :class="`action-banner--${feedbackTone}`">
-        <div class="action-banner__main">
-          <strong>{{ tr('autoUi.k_a30ab87b6869') }}</strong>
-          <p>{{ actionStatusText }}</p>
-        </div>
-        <span v-if="refreshingAnalysisBoard" class="action-banner__tag">{{ tr('autoUi.k_f5394c6ce4af') }}</span>
-        <span v-else-if="refreshingProductAnalysis" class="action-banner__tag">{{ tr('autoUi.k_403c4b72c90e') }}</span>
-      </div>
-
-      <p v-if="feedback" class="detail-feedback" :class="`detail-feedback--${feedbackTone}`" data-testid="product-detail-feedback">{{ feedback }}</p>
-
-      <div class="content-grid">
-        <div class="left-column">
-          <article class="panel-card image-panel">
-            <div class="panel-head">
-              <strong>{{ tr('autoUi.k_c2e3ab910df2') }}{{ selectedImageCount }})</strong>
-              <div class="panel-head__tools">
-                <div class="view-toggle">
-                  <button
-                    type="button"
-                    class="view-toggle__button"
-                    :class="{ 'view-toggle__button--active': galleryViewMode === 'grid' }"
-                    @click="galleryViewMode = 'grid'"
-                  >
-                    <Grid2X2 class="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    class="view-toggle__button"
-                    :class="{ 'view-toggle__button--active': galleryViewMode === 'list' }"
-                    @click="galleryViewMode = 'list'"
-                  >
-                    <LayoutList class="h-4 w-4" />
-                  </button>
-                </div>
-                <button class="ghost-pill" type="button">{{ tr('autoUi.k_b170b0f4deef') }}</button>
+      <div class="pd-grid">
+        <!-- Left column -->
+        <div class="vg-stack pd-col">
+          <article class="vg-card">
+            <div class="vg-card__head">
+              <span class="vg-card__title"><ImageIcon :size="16" /> {{ tr('autoUi.k_c2e3ab910df2') }}{{ selectedImageCount }})</span>
+              <div class="vg-row pd-view">
+                <button type="button" class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-active': galleryViewMode === 'grid' }" @click="galleryViewMode = 'grid'"><Grid2X2 :size="15" /></button>
+                <button type="button" class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-active': galleryViewMode === 'list' }" @click="galleryViewMode = 'list'"><LayoutList :size="15" /></button>
               </div>
             </div>
 
-            <div v-if="selectedImages.length" class="image-stage" :class="{ 'image-stage--list': galleryViewMode === 'list' }" data-testid="product-images-grid">
-              <article
-                v-for="image in selectedImages"
-                :key="image.id"
-                class="preview-card"
-                :data-testid="`product-image-card-${image.id}`"
-              >
-                <button class="preview-card__media" type="button" @click="openPreview(image.filePath, image.fileName)">
-                  <img :src="toFileUrl(image.filePath)" class="preview-card__img" />
-                  <span v-if="image.isCover" class="preview-card__badge">{{ tr('autoUi.k_b8bb31e17014') }}</span>
-                  <span v-if="livePhotoReferenceImagePath === image.filePath" class="preview-card__badge preview-card__badge--accent">{{ tr('autoUi.k_43e228224b35') }}</span>
+            <div v-if="selectedImages.length" class="pd-images" :class="{ 'is-list': galleryViewMode === 'list' }" data-testid="product-images-grid">
+              <article v-for="image in selectedImages" :key="image.id" class="pd-image" :data-testid="`product-image-card-${image.id}`">
+                <button class="pd-image__media" type="button" @click="openPreview(image.filePath, image.fileName)">
+                  <img :src="thumbnailUrl(image.filePath, 320)" alt="" loading="lazy" decoding="async" />
+                  <span class="pd-image__badges">
+                    <span v-if="image.isCover" class="vg-pill vg-pill--solid">{{ tr('autoUi.k_b8bb31e17014') }}</span>
+                    <span v-if="livePhotoReferenceImagePath === image.filePath" class="vg-pill vg-pill--solid-blue">{{ tr('autoUi.k_43e228224b35') }}</span>
+                  </span>
                 </button>
-                <div class="preview-card__actions">
-                  <button class="preview-card__action" :disabled="image.isCover" :data-testid="`product-set-cover-${image.id}`" type="button" @click.stop="setCover(image.id)"> {{ tr('autoUi.k_b7607a6106bb') }} </button>
+                <div class="pd-image__actions">
+                  <button class="vg-btn vg-btn--xs" :disabled="image.isCover" :data-testid="`product-set-cover-${image.id}`" type="button" @click.stop="setCover(image.id)">{{ tr('autoUi.k_b7607a6106bb') }}</button>
                   <button
-                    class="preview-card__action"
+                    class="vg-btn vg-btn--xs"
                     :disabled="livePhotoReferenceImagePath === image.filePath"
                     :data-testid="`product-set-live-photo-ref-${image.id}`"
                     type="button"
+                    :title="tr('autoUi.k_5ea5cbe5b672')"
                     @click.stop="setLivePhotoReferenceImage(image.id)"
-                  > {{ tr('autoUi.k_5ea5cbe5b672') }} </button>
-                  <button class="preview-card__action preview-card__action--danger" :data-testid="`product-delete-image-${image.id}`" type="button" @click.stop="removeImage(image.id)"> {{ tr('autoUi.k_3755f56f2f83') }} </button>
+                  >Live Photo</button>
+                  <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="tr('autoUi.k_3755f56f2f83')" :data-testid="`product-delete-image-${image.id}`" type="button" @click.stop="removeImage(image.id)"><Trash2 :size="14" /></button>
                 </div>
               </article>
-
-              <button class="upload-card" type="button" @click="uploadImages">
-                <Plus class="h-11 w-11" />
+              <button class="pd-upload" type="button" @click="uploadImages">
+                <Plus :size="26" />
                 <strong>{{ tr('autoUi.k_9eb26c4cb30b') }}</strong>
                 <span>{{ tr('autoUi.k_f2190e39fc99') }}</span>
               </button>
             </div>
 
-            <div v-else class="empty-card" data-testid="product-images-empty">
-              <ImageIcon class="h-10 w-10" />
-              <strong>{{ tr('autoUi.k_3ac724a49cd2') }}</strong>
+            <div v-else class="vg-empty" data-testid="product-images-empty">
+              <span class="vg-empty__icon"><ImageIcon :size="24" /></span>
+              <h3>{{ tr('autoUi.k_3ac724a49cd2') }}</h3>
               <p>{{ tr('autoUi.k_dfebb5a654b9') }}</p>
-              <button class="empty-card__button" type="button" @click="uploadImages">
-                <Plus class="h-4 w-4" />
-                <span>{{ tr('autoUi.k_59b308c817cd') }}</span>
-              </button>
+              <button class="vg-btn vg-btn--primary" type="button" @click="uploadImages"><Plus :size="15" /> {{ tr('autoUi.k_59b308c817cd') }}</button>
             </div>
           </article>
 
-          <article class="panel-card flow-panel">
-            <div class="panel-head">
-              <strong>{{ tr('autoUi.k_83056258dd36') }}</strong>
-            </div>
-            <div class="flow-strip">
-              <div v-for="(step, index) in stepItems" :key="step.number" class="flow-step">
-                <div
-                  class="flow-step__num"
-                  :class="{
-                    'flow-step__num--done': step.number < productFlowActiveStep,
-                    'flow-step__num--active': step.number === productFlowActiveStep,
-                  }"
-                >
-                  {{ step.number }}
-                </div>
-                <div class="flow-step__copy">
-                  <strong>{{ step.title }}</strong>
-                  <span>{{ step.desc }}</span>
-                </div>
-                <div v-if="index < stepItems.length - 1" class="flow-step__line"></div>
-              </div>
-            </div>
+          <article class="vg-card">
+            <div class="vg-card__head"><span class="vg-card__title"><Workflow :size="16" /> {{ tr('autoUi.k_83056258dd36') }}</span></div>
+            <ol class="pd-flow">
+              <li
+                v-for="step in stepItems"
+                :key="step.number"
+                class="pd-flow__step"
+                :class="{ 'is-done': step.number < productFlowActiveStep, 'is-active': step.number === productFlowActiveStep }"
+              >
+                <span class="pd-flow__num"><Check v-if="step.number < productFlowActiveStep" :size="13" /><template v-else>{{ step.number }}</template></span>
+                <span class="pd-flow__copy"><strong>{{ step.title }}</strong><small>{{ step.desc }}</small></span>
+              </li>
+            </ol>
           </article>
 
-          <article class="panel-card canonical-panel" data-testid="product-canonical-source-panel">
-            <div class="panel-head">
-              <strong>{{ tr('autoUi.k_ff7656c30444') }}</strong>
-            </div>
-
-            <div v-if="analysisBoardPath" class="canonical-result">
-              <button class="canonical-result__media" data-testid="product-canonical-preview" type="button" @click="openPreview(analysisBoardPath, tr('autoUi.k_ff7656c30444'))">
-                <img :src="toFileUrl(analysisBoardPath)" alt="Product Analysis Board" />
+          <article class="vg-card" data-testid="product-canonical-source-panel">
+            <div class="vg-card__head"><span class="vg-card__title"><LayoutGrid :size="16" /> {{ tr('autoUi.k_ff7656c30444') }}</span></div>
+            <div v-if="analysisBoardPath" class="pd-board">
+              <button class="pd-board__media" data-testid="product-canonical-preview" type="button" @click="openPreview(analysisBoardPath, tr('autoUi.k_ff7656c30444'))">
+                <img :src="thumbnailUrl(analysisBoardPath, 640)" alt="Product Analysis Board" decoding="async" />
               </button>
-              <div class="canonical-result__body">
-                <div class="canonical-result__meta">
-                  <span>{{ tr('autoUi.k_9190b6bf7713') }}</span>
-                  <strong>{{ shortFileName(analysisBoardPath) }}</strong>
-                </div>
-                <div class="canonical-result__meta">
-                  <span>{{ tr('autoUi.k_2213d2e64aff') }}</span>
-                  <strong>{{ formatDateTime(selected.analysisBoardUpdatedAt || selected.canonicalSourceUpdatedAt) }}</strong>
-                </div>
-                <div class="canonical-result__actions">
-                  <button class="ghost-pill ghost-pill--accent" type="button" @click="openPreview(analysisBoardPath, tr('autoUi.k_ff7656c30444'))"> {{ tr('autoUi.k_552647d32c4b') }} </button>
-                </div>
+              <div class="vg-stack pd-board__body">
+                <dl class="vg-kv">
+                  <dt>{{ tr('autoUi.k_9190b6bf7713') }}</dt><dd>{{ shortFileName(analysisBoardPath) }}</dd>
+                  <dt>{{ tr('autoUi.k_2213d2e64aff') }}</dt><dd class="vg-num">{{ formatDateTime(selected.analysisBoardUpdatedAt || selected.canonicalSourceUpdatedAt) }}</dd>
+                </dl>
+                <button class="vg-btn vg-btn--soft vg-btn--sm" type="button" @click="openPreview(analysisBoardPath, tr('autoUi.k_ff7656c30444'))">{{ tr('autoUi.k_552647d32c4b') }}</button>
               </div>
             </div>
-
-            <div v-else class="canonical-placeholder" :class="{ 'canonical-placeholder--danger': analysisBoardStageStatus === 'failed' }">
-              <strong>{{ canonicalStatusValue(analysisBoardStageStatus) }}</strong>
-              <p>{{ analysisBoardStageStatus === 'failed' ? tr('autoUi.k_c90e34c224cb') : canonicalStatusHint(analysisBoardStageStatus) }}</p>
+            <div v-else class="vg-notice" :class="{ 'vg-notice--danger': analysisBoardStageStatus === 'failed' }">
+              <Info :size="16" />
+              <span><b>{{ canonicalStatusValue(analysisBoardStageStatus) }}</b><br />{{ analysisBoardStageStatus === 'failed' ? tr('autoUi.k_c90e34c224cb') : canonicalStatusHint(analysisBoardStageStatus) }}</span>
             </div>
-
-            <div v-if="analysisBoardDiagnostics.length" class="diagnostic-list">
-              <div v-for="(item, index) in analysisBoardDiagnostics" :key="`${item.originalPath}-${index}`" class="diagnostic-item">
-                <div class="diagnostic-item__row">
-                  <span>{{ tr('autoUi.k_8542beb99054') }}</span>
-                  <strong>{{ canonicalDiagnosticStatusLabel(item.status) }}</strong>
-                </div>
-                <div class="diagnostic-item__row">
-                  <span>{{ tr('autoUi.k_cd0f3ad8ddd8') }}</span>
-                  <strong>{{ shortFileName(item.originalPath) }}</strong>
-                </div>
-                <div v-if="item.sanitizedPath" class="diagnostic-item__row">
-                  <span>{{ tr('autoUi.k_ded698ae1e7e') }}</span>
-                  <strong>{{ shortFileName(item.sanitizedPath) }}</strong>
-                </div>
-                <p v-if="item.note">{{ item.note }}</p>
+            <div v-if="analysisBoardDiagnostics.length" class="vg-stack pd-diag">
+              <div v-for="(item, index) in analysisBoardDiagnostics" :key="`${item.originalPath}-${index}`" class="vg-card vg-card--soft pd-diag__item">
+                <dl class="vg-kv">
+                  <dt>{{ tr('autoUi.k_8542beb99054') }}</dt><dd>{{ canonicalDiagnosticStatusLabel(item.status) }}</dd>
+                  <dt>{{ tr('autoUi.k_cd0f3ad8ddd8') }}</dt><dd>{{ shortFileName(item.originalPath) }}</dd>
+                  <template v-if="item.sanitizedPath"><dt>{{ tr('autoUi.k_ded698ae1e7e') }}</dt><dd>{{ shortFileName(item.sanitizedPath) }}</dd></template>
+                </dl>
+                <p v-if="item.note" class="vg-muted pd-diag__note">{{ item.note }}</p>
               </div>
             </div>
           </article>
         </div>
 
-        <div class="right-column">
-          <article class="panel-card status-panel">
-            <div class="panel-head">
-              <strong>{{ tr('autoUi.k_b81634cd96ef') }}</strong>
-            </div>
-            <div class="status-banner">
-              <div class="status-banner__head">
-                <div class="status-banner__icon" :class="`status-banner__icon--${analysisBoardStageStatus || canonicalStageStatus || 'idle'}`">
-                <Check v-if="analysisBoardReady" class="h-6 w-6" />
-                  <Sparkles v-else class="h-6 w-6" />
-                </div>
-                <div class="status-banner__copy">
-                  <strong>{{ tr('autoUi.k_d64c41f40928', { p0: canonicalStatusValue(analysisBoardStageStatus), p1: productAnalysisSnapshot ? tr('autoUi.k_79c74f41ca9e') : tr('autoUi.k_aef4104370ae') }) }}</strong>
-                  <p v-if="refreshingAnalysisBoard">{{ tr('autoUi.k_c0b276ab6743') }}</p>
-                  <p v-else-if="refreshingProductAnalysis">{{ tr('autoUi.k_1e4ef108d9dc') }}</p>
-                  <p v-else-if="analysisBoardStageStatus === 'failed'">{{ tr('autoUi.k_c90e34c224cb') }}</p>
-                  <p v-else>{{ canonicalStatusHint(analysisBoardStageStatus || canonicalStageStatus) }}</p>
-                </div>
-              </div>
-              <button class="status-banner__button" :disabled="refreshingAnalysisBoard || refreshingProductAnalysis || !hasImages" type="button" @click="refreshAnalysisBoard">
-                {{ refreshingAnalysisBoard ? tr('autoUi.k_d4f52968578a') : tr('autoUi.k_dabe751bf59b') }}
-              </button>
-            </div>
-
-            <div class="status-meta">
-              <div class="status-meta__item">
-                <span>{{ tr('autoUi.k_093dea88c930') }}</span>
-                <strong>{{ canonicalStatusValue(canonicalStageStatus) }}</strong>
-              </div>
-              <div class="status-meta__item">
-                <span>{{ tr('autoUi.k_9190b6bf7713') }}</span>
-                <strong>{{ canonicalStatusValue(analysisBoardStageStatus) }}</strong>
+        <!-- Right column -->
+        <div class="vg-stack pd-col">
+          <article class="vg-card">
+            <div class="vg-card__head"><span class="vg-card__title"><Activity :size="16" /> {{ tr('autoUi.k_b81634cd96ef') }}</span></div>
+            <div class="pd-status">
+              <span class="pd-status__icon" :class="`is-${stageTone(analysisBoardStageStatus || canonicalStageStatus)}`">
+                <Check v-if="analysisBoardReady" :size="22" /><Sparkles v-else :size="22" />
+              </span>
+              <div class="pd-status__copy">
+                <strong>{{ tr('autoUi.k_d64c41f40928', { p0: canonicalStatusValue(analysisBoardStageStatus), p1: productAnalysisSnapshot ? tr('autoUi.k_79c74f41ca9e') : tr('autoUi.k_aef4104370ae') }) }}</strong>
+                <p v-if="refreshingAnalysisBoard">{{ tr('autoUi.k_c0b276ab6743') }}</p>
+                <p v-else-if="refreshingProductAnalysis">{{ tr('autoUi.k_1e4ef108d9dc') }}</p>
+                <p v-else-if="analysisBoardStageStatus === 'failed'">{{ tr('autoUi.k_c90e34c224cb') }}</p>
+                <p v-else>{{ canonicalStatusHint(analysisBoardStageStatus || canonicalStageStatus) }}</p>
               </div>
             </div>
+            <button class="vg-btn vg-btn--primary vg-btn--block" :disabled="refreshingAnalysisBoard || refreshingProductAnalysis || !hasImages" type="button" @click="refreshAnalysisBoard">
+              {{ refreshingAnalysisBoard ? tr('autoUi.k_d4f52968578a') : tr('autoUi.k_dabe751bf59b') }}
+            </button>
+            <dl class="vg-kv pd-status__meta">
+              <dt>{{ tr('autoUi.k_093dea88c930') }}</dt><dd>{{ canonicalStatusValue(canonicalStageStatus) }}</dd>
+              <dt>{{ tr('autoUi.k_9190b6bf7713') }}</dt><dd>{{ canonicalStatusValue(analysisBoardStageStatus) }}</dd>
+            </dl>
           </article>
 
-          <div class="bottom-right-grid">
-            <article class="panel-card log-panel">
-              <div class="panel-head">
-                <strong>{{ tr('autoUi.k_f4bc877cd282') }}</strong>
-              </div>
-              <div class="log-list">
-                <div class="log-row log-row--green">
-                  <i></i>
-                  <span>{{ formatDateTime(selected.updatedAt) }}</span>
-                  <p>{{ tr('autoUi.k_4146b80a32a5') }} {{ selectedImageCount }} {{ tr('autoUi.k_2d45b5becee8') }}</p>
-                </div>
-                <div class="log-row log-row--cyan">
-                  <i></i>
-                  <span>{{ formatDateTime(selected.createdAt) }}</span>
-                  <p>{{ tr('autoUi.k_003e7f8e23fa') }}</p>
-                </div>
-                <div class="log-row log-row--yellow">
-                  <i></i>
-                  <span>{{ formatDateTime(selected.analysisBoardUpdatedAt || selected.canonicalSourceUpdatedAt || selected.createdAt) }}</span>
-                  <p>{{ tr('autoUi.k_adc25bacb2c8') }}{{ canonicalStatusValue(selected.analysisBoardStatus || selected.canonicalSourceStatus) }}。</p>
-                </div>
-                <div class="log-row log-row--red">
-                  <i></i>
-                  <span>{{ formatDateTime(selected.createdAt) }}</span>
-                  <p>{{ tr('autoUi.k_f7f2bec5ecdb') }}</p>
-                </div>
-              </div>
-              <button class="text-link" type="button">{{ tr('autoUi.k_7707ca9a769a') }}</button>
-            </article>
-
-            <div class="stack-panel">
-              <article class="panel-card remark-panel">
-                <div class="panel-head">
-                  <strong>{{ tr('autoUi.k_5b4af310d47c') }}</strong>
-                  <button class="head-icon" type="button">
-                    <Edit3 class="h-4 w-4" />
-                  </button>
-                </div>
-                <div class="remark-box">
-                  <textarea
-                    v-model="remarkDraft"
-                    class="remark-box__input"
-                    :placeholder="tr('autoUi.k_4f0c7877ed93')"
-                    data-testid="product-remark-input"
-                  ></textarea>
-                  <button class="remark-box__button" :disabled="savingRemark" data-testid="product-remark-save-button" type="button" @click="saveRemark">
-                    {{ savingRemark ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_606e82096d63') }}
-                  </button>
-                </div>
-              </article>
-
-              <article class="panel-card rule-panel">
-                <div class="panel-head">
-                  <strong>{{ tr('autoUi.k_84bd36a8dda3') }}</strong>
-                </div>
-                <div class="rule-row">
-                  <div class="rule-row__head">
-                    <FileText class="h-4 w-4" />
-                    <span>{{ tr('autoUi.k_5404b48fd379') }}</span>
-                  </div>
-                  <p>{{ tr('autoUi.k_df5b3cd5d128') }}</p>
-                </div>
-              </article>
-            </div>
-          </div>
-
-          <article class="panel-card analysis-panel" data-testid="product-analysis-panel">
-            <div class="panel-head">
-              <div class="analysis-panel__head">
-                <strong>{{ tr('autoUi.k_a63100cd721e') }}</strong>
-                <span>{{ productAnalysisSections.length ? tr('autoUi.k_deb4673d0f5d') : tr('autoUi.k_aba8f1ef66ed') }}</span>
-              </div>
-              <button class="ghost-pill ghost-pill--accent" :disabled="refreshingProductAnalysis || refreshingAnalysisBoard || !hasImages" type="button" @click="refreshProductAnalysis">
+          <article class="vg-card" data-testid="product-analysis-panel">
+            <div class="vg-card__head">
+              <span class="vg-card__title"><ScanSearch :size="16" /> {{ tr('autoUi.k_a63100cd721e') }} <small>{{ productAnalysisSections.length ? tr('autoUi.k_deb4673d0f5d') : tr('autoUi.k_aba8f1ef66ed') }}</small></span>
+              <button class="vg-btn vg-btn--soft vg-btn--sm" :disabled="refreshingProductAnalysis || refreshingAnalysisBoard || !hasImages" type="button" @click="refreshProductAnalysis">
                 {{ refreshingProductAnalysis ? tr('autoUi.k_e75aa98ee967') : tr('autoUi.k_bf0d744b504c') }}
               </button>
             </div>
-            <div v-if="productAnalysisSnapshot" class="product-analysis-card">
-              <div class="product-analysis-card__top">
-                <div class="product-analysis-card__summary">
-                  <span>Summary</span>
-                  <p v-if="productAnalysisSnapshot.summary" class="product-analysis-card__summary-text">{{ productAnalysisSnapshot.summary }}</p>
-                  <span>Category</span>
-                  <strong>{{ productAnalysisSnapshot.category || tr('autoUi.k_face982a4aae') }}</strong>
-                </div>
-                <div v-if="productAnalysisSnapshot.matchingRules.length" class="product-analysis-card__rules">
-                  <span>Matching Rules</span>
-                  <div class="product-analysis-card__rule-list">
-                    <em v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</em>
-                  </div>
+            <div v-if="productAnalysisSnapshot" class="vg-stack pd-analysis">
+              <div class="pd-analysis__summary">
+                <p v-if="productAnalysisSnapshot.summary">{{ productAnalysisSnapshot.summary }}</p>
+                <div class="vg-row">
+                  <span class="vg-chip">Category · {{ productAnalysisSnapshot.category || tr('autoUi.k_face982a4aae') }}</span>
+                  <span v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule" class="vg-pill vg-pill--accent">{{ rule }}</span>
                 </div>
               </div>
-              <div v-if="productAnalysisPrimarySections.length" class="product-analysis-card__hero-grid">
-                <div
-                  v-for="item in productAnalysisPrimarySections"
-                  :key="item.key"
-                  class="product-analysis-card__item product-analysis-card__item--hero"
-                >
+              <div v-if="productAnalysisPrimarySections.length" class="pd-analysis__grid pd-analysis__grid--hero">
+                <div v-for="item in productAnalysisPrimarySections" :key="item.key" class="pd-analysis__item is-hero">
                   <span>{{ item.title }}</span>
                   <p>{{ item.desc }}</p>
                 </div>
               </div>
-              <div class="product-analysis-card__grid">
-                <div v-for="item in productAnalysisSecondarySections" :key="item.key" class="product-analysis-card__item">
+              <div class="pd-analysis__grid">
+                <div v-for="item in productAnalysisSecondarySections" :key="item.key" class="pd-analysis__item">
                   <span>{{ item.title }}</span>
                   <p>{{ item.desc }}</p>
                 </div>
               </div>
             </div>
-            <div v-else class="canonical-placeholder">
-              <strong>{{ tr('autoUi.k_233a0e76b7b5') }}</strong>
-              <p>{{ tr('autoUi.k_9f3fe6cd1003') }}</p>
+            <div v-else class="vg-notice">
+              <Info :size="16" />
+              <span><b>{{ tr('autoUi.k_233a0e76b7b5') }}</b><br />{{ tr('autoUi.k_9f3fe6cd1003') }}</span>
             </div>
+          </article>
+
+          <article class="vg-card">
+            <div class="vg-card__head"><span class="vg-card__title"><NotebookPen :size="16" /> {{ tr('autoUi.k_5b4af310d47c') }}</span></div>
+            <div class="vg-stack pd-remark">
+              <textarea v-model="remarkDraft" class="vg-textarea" rows="4" :placeholder="tr('autoUi.k_4f0c7877ed93')" data-testid="product-remark-input"></textarea>
+              <button class="vg-btn vg-btn--primary vg-btn--sm pd-remark__save" :disabled="savingRemark" data-testid="product-remark-save-button" type="button" @click="saveRemark">
+                {{ savingRemark ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_606e82096d63') }}
+              </button>
+            </div>
+            <div class="vg-notice pd-rule">
+              <FileText :size="15" />
+              <span><b>{{ tr('autoUi.k_84bd36a8dda3') }} · {{ tr('autoUi.k_5404b48fd379') }}</b><br />{{ tr('autoUi.k_df5b3cd5d128') }}</span>
+            </div>
+          </article>
+
+          <article class="vg-card">
+            <div class="vg-card__head"><span class="vg-card__title"><History :size="16" /> {{ tr('autoUi.k_f4bc877cd282') }}</span></div>
+            <ol class="pd-log">
+              <li class="is-green">
+                <time>{{ formatDateTime(selected.updatedAt) }}</time>
+                <p>{{ tr('autoUi.k_4146b80a32a5') }} {{ selectedImageCount }} {{ tr('autoUi.k_2d45b5becee8') }}</p>
+              </li>
+              <li class="is-amber">
+                <time>{{ formatDateTime(selected.analysisBoardUpdatedAt || selected.canonicalSourceUpdatedAt || selected.createdAt) }}</time>
+                <p>{{ tr('autoUi.k_adc25bacb2c8') }}{{ canonicalStatusValue(selected.analysisBoardStatus || selected.canonicalSourceStatus) }}。</p>
+              </li>
+              <li class="is-blue">
+                <time>{{ formatDateTime(selected.createdAt) }}</time>
+                <p>{{ tr('autoUi.k_003e7f8e23fa') }}</p>
+              </li>
+              <li class="is-gray">
+                <time>{{ formatDateTime(selected.createdAt) }}</time>
+                <p>{{ tr('autoUi.k_f7f2bec5ecdb') }}</p>
+              </li>
+            </ol>
           </article>
         </div>
       </div>
-    </section>
+    </template>
 
-    <section v-else class="missing-card">
-      <p>{{ tr('autoUi.k_c2dcc0b6ff43') }}</p>
+    <section v-else class="vg-card">
+      <div class="vg-empty">
+        <span class="vg-empty__icon"><SearchX :size="24" /></span>
+        <p>{{ tr('autoUi.k_c2dcc0b6ff43') }}</p>
+        <button class="vg-btn" type="button" @click="router.push('/products')"><ArrowLeft :size="15" /> {{ tr('autoUi.k_cac1a287bf6d') }}</button>
+      </div>
     </section>
   </div>
 
@@ -1071,1074 +954,111 @@ watch(productId, () => {
 </template>
 
 <style scoped>
-.product-detail-page {
-  display: grid;
-  gap: 12px;
-  padding: 4px 6px 20px;
-}
-
-.detail-shell,
-.missing-card,
-.detail-feedback {
-  border: 1px solid rgba(111, 130, 193, 0.14);
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(95, 83, 190, 0.1), transparent 28%),
-    rgba(13, 20, 38, 0.96);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 20px 48px rgba(2, 6, 20, 0.28);
-}
-
-.detail-shell {
-  display: grid;
-  gap: 12px;
-  padding: 10px;
-}
-
-.action-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid rgba(111, 130, 193, 0.18);
-  border-radius: 18px;
-  background: rgba(18, 27, 49, 0.88);
-}
-
-.action-banner--info {
-  border-color: rgba(92, 164, 255, 0.26);
-  background: rgba(17, 39, 72, 0.88);
-}
-
-.action-banner--success {
-  border-color: rgba(53, 215, 119, 0.24);
-  background: rgba(17, 43, 33, 0.9);
-}
-
-.action-banner--error {
-  border-color: rgba(255, 114, 114, 0.24);
-  background: rgba(55, 24, 31, 0.9);
-}
-
-.action-banner__main {
-  display: grid;
-  gap: 3px;
-}
-
-.action-banner__main strong {
-  color: #edf3ff;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.action-banner__main p {
-  margin: 0;
-  color: #b6c6ea;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.action-banner__tag {
-  flex-shrink: 0;
-  min-height: 28px;
-  padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f4f7ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.top-area {
-  display: grid;
-  gap: 10px;
-}
-
-.back-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  border: 0;
-  background: transparent;
-  color: #eef3ff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.title-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.title-block {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.title-inline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.title-inline h1 {
-  margin: 0;
-  color: #ffffff;
-  font-size: 24px;
-  line-height: 1.08;
-  font-weight: 900;
-}
-
-.title-inline__edit,
-.head-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(114, 96, 255, 0.24);
-  border-radius: 10px;
-  background: rgba(108, 85, 255, 0.16);
-  color: #b59cff;
-}
-
-.title-block p {
-  margin: 0;
-  color: #9aadd6;
-  font-size: 12px;
-}
-
-.name-editor {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.name-editor__input {
-  min-width: min(460px, 100%);
-  height: 44px;
-  border: 1px solid rgba(123, 142, 201, 0.2);
-  border-radius: 12px;
-  background: rgba(20, 28, 49, 0.92);
-  padding: 0 14px;
-  color: #ffffff;
-  font-size: 21px;
-  font-weight: 900;
-  outline: none;
-}
-
-.name-editor__button {
-  min-height: 36px;
-  padding: 0 13px;
-  border: 1px solid rgba(123, 142, 201, 0.16);
-  border-radius: 10px;
-  background: rgba(18, 25, 45, 0.92);
-  color: #eef2ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.name-editor__button--primary {
-  border-color: transparent;
-  background: linear-gradient(135deg, #795dff, #9b6cff);
-}
-
-.hero-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.hero-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 136px;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid rgba(111, 90, 255, 0.46);
-  border-radius: 14px;
-  background: rgba(22, 28, 52, 0.96);
-  color: #f3f6ff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.hero-button:disabled {
-  opacity: 0.6;
-}
-
-.hero-button--danger {
-  border-color: rgba(255, 105, 105, 0.28);
-  background: rgba(47, 20, 29, 0.96);
-  color: #ff7e7e;
-}
-
-.summary-strip {
-  display: grid;
-  grid-template-columns: 0.95fr 0.82fr 0.95fr 1.18fr 1.18fr 0.8fr;
-  border: 1px solid rgba(123, 142, 201, 0.12);
-  border-radius: 16px;
-  overflow: hidden;
-  background: rgba(21, 28, 49, 0.92);
-}
-
-.summary-item {
-  display: grid;
-  gap: 6px;
-  min-height: 76px;
-  padding: 14px 18px;
-}
-
-.summary-item + .summary-item {
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.summary-item span {
-  color: #98aad2;
-  font-size: 11px;
-}
-
-.summary-item strong {
-  color: #ffffff;
-  font-size: 15px;
-  line-height: 1.2;
-  font-weight: 800;
-}
-
-.summary-item__inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.summary-item__status,
-.summary-item__id {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.summary-item__edit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid rgba(114, 96, 255, 0.24);
-  border-radius: 8px;
-  background: rgba(108, 85, 255, 0.12);
-  color: #c7b6ff;
-}
-
-.type-editor {
-  display: grid;
-  gap: 8px;
-}
-
-.type-editor__field {
-  display: block;
-}
-
-.type-editor__field select {
-  width: 100%;
-  min-height: 40px;
-  border: 1px solid rgba(123, 142, 201, 0.2);
-  border-radius: 12px;
-  background: rgba(20, 28, 49, 0.92);
-  padding: 0 14px;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
-  outline: none;
-}
-
-.type-editor__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-
-.status-dot--done {
-  background: #37d978;
-}
-
-.status-dot--processing {
-  background: #5ca4ff;
-}
-
-.status-dot--failed {
-  background: #ff6f6f;
-}
-
-.status-dot--idle {
-  background: #9aabd4;
-}
-
-.detail-feedback {
-  padding: 10px 14px;
-  color: #dde6ff;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.detail-feedback--info {
-  border-color: rgba(92, 164, 255, 0.2);
-  color: #cfe4ff;
-}
-
-.detail-feedback--success {
-  border-color: rgba(53, 215, 119, 0.2);
-  color: #c8f5d9;
-}
-
-.detail-feedback--error {
-  border-color: rgba(255, 114, 114, 0.2);
-  color: #ffd1d1;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.16fr) minmax(400px, 0.84fr);
-  gap: 12px;
-}
-
-.left-column,
-.right-column,
-.stack-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.panel-card {
-  border: 1px solid rgba(111, 130, 193, 0.14);
-  border-radius: 16px;
-  background: rgba(17, 24, 43, 0.94);
-  padding: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.panel-head strong {
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.panel-head__tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.view-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px;
-  border: 1px solid rgba(123, 142, 201, 0.14);
-  border-radius: 12px;
-  background: rgba(27, 34, 56, 0.96);
-}
-
-.view-toggle__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 32px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #96a8d0;
-}
-
-.view-toggle__button--active {
-  background: linear-gradient(135deg, #6d52ff, #8d66ff);
-  color: #ffffff;
-}
-
-.ghost-pill {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid rgba(123, 142, 201, 0.16);
-  border-radius: 12px;
-  background: rgba(27, 34, 56, 0.96);
-  color: #eef2ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.ghost-pill--accent {
-  border-color: rgba(108, 85, 255, 0.28);
-  background: rgba(48, 37, 106, 0.84);
-  color: #d6c7ff;
-}
-
-.image-stage {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  align-items: start;
-}
-
-.image-stage--list {
-  grid-template-columns: 1fr;
-}
-
-.preview-card,
-.upload-card,
-.status-banner,
-.status-meta__item,
-.canonical-result,
-.canonical-placeholder,
-.diagnostic-item,
-.rule-row {
-  border: 1px solid rgba(123, 142, 201, 0.12);
-  border-radius: 14px;
-  background: rgba(21, 29, 52, 0.92);
-}
-
-.preview-card {
-  display: grid;
-  gap: 7px;
-  padding: 7px;
-}
-
-.preview-card__media {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  overflow: hidden;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.preview-card__img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.preview-card__badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 3px 8px;
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.66);
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.preview-card__badge--accent {
-  left: auto;
-  right: 8px;
-  background: rgba(68, 174, 109, 0.9);
-}
-
-.preview-card__actions {
-  display: flex;
-  gap: 6px;
-}
-
-.preview-card__action {
-  flex: 1;
-  min-height: 30px;
-  border: 1px solid rgba(123, 142, 201, 0.14);
-  border-radius: 10px;
-  background: rgba(17, 24, 43, 0.96);
-  color: #eef2ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.preview-card__action--danger {
-  color: #ff9595;
-}
-
-.upload-card {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 8px;
-  min-height: 204px;
-  border-style: dashed;
-  color: #9db0d9;
-}
-
-.upload-card strong {
-  color: #edf3ff;
-  font-size: 14px;
-}
-
-.upload-card span {
-  font-size: 12px;
-}
-
-.empty-card,
-.missing-card {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 34px 18px;
-  text-align: center;
-}
-
-.empty-card strong,
-.missing-card p {
-  margin: 0;
-  color: #ffffff;
-  font-size: 16px;
-}
-
-.empty-card p {
-  margin: 0;
-  color: #98aad2;
-  font-size: 12px;
-}
-
-.empty-card__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #795dff, #9b6cff);
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.flow-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.flow-step {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.flow-step__num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #d8e0ff;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.flow-step__num--active {
-  background: linear-gradient(135deg, #744fff, #925fff);
-  box-shadow: 0 12px 26px rgba(101, 77, 255, 0.28);
-}
-
-.flow-step__num--done {
-  background: linear-gradient(135deg, #31ca74, #49de92);
-  color: #ffffff;
-  box-shadow: 0 10px 22px rgba(53, 215, 119, 0.2);
-}
-
-.flow-step__copy {
-  display: grid;
-  gap: 3px;
-}
-
-.flow-step__copy strong {
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.flow-step__copy span {
-  color: #99abd4;
-  font-size: 11px;
-}
-
-.flow-step__line {
-  position: absolute;
-  top: 50%;
-  left: calc(100% - 18px);
-  width: 26px;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.canonical-result {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 8px;
-  padding: 6px;
-}
-
-.canonical-result__media {
-  overflow: hidden;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  aspect-ratio: 1 / 1;
-}
-
-.canonical-result__media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.canonical-result__body {
-  display: grid;
-  gap: 6px;
-  align-content: start;
-  min-width: 0;
-}
-
-.canonical-result__meta,
-.diagnostic-item__row {
-  display: grid;
-  gap: 3px;
-}
-
-.canonical-result__meta span,
-.diagnostic-item__row span,
-.status-meta__item span,
-.log-row span,
-.rule-row span {
-  color: #98aad2;
-  font-size: 11px;
-}
-
-.canonical-result__meta strong,
-.diagnostic-item__row strong,
-.status-meta__item strong {
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.canonical-result__actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.canonical-placeholder {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-}
-
-.canonical-placeholder strong {
-  color: #ffffff;
-  font-size: 15px;
-}
-
-.canonical-placeholder p,
-.diagnostic-item p,
-.status-banner__copy p,
-.rule-row p {
-  margin: 0;
-  color: #9db0d9;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.canonical-placeholder--danger {
-  border-color: rgba(255, 105, 105, 0.24);
-  background: rgba(48, 21, 30, 0.92);
-}
-
-.diagnostic-list {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.diagnostic-item {
-  display: grid;
-  gap: 5px;
-  padding: 8px;
-}
-
-.diagnostic-item p {
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.diagnostic-item__row strong {
-  white-space: normal;
-}
-
-.status-banner {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-}
-
-.status-banner__head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-banner__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 999px;
-  border: 2px solid currentColor;
-}
-
-.status-banner__icon--done {
-  color: #35d777;
-}
-
-.status-banner__icon--processing {
-  color: #5ca4ff;
-}
-
-.status-banner__icon--failed {
-  color: #ff7272;
-}
-
-.status-banner__icon--idle {
-  color: #9aabd4;
-}
-
-.status-banner__copy {
-  display: grid;
-  gap: 3px;
-}
-
-.status-banner__copy strong {
-  color: #33d873;
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.status-banner__button,
-.remark-box__button {
-  min-height: 38px;
-  border: 0;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #795dff, #9b6cff);
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.status-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.status-meta__item {
-  display: grid;
-  gap: 5px;
-  min-height: 74px;
-  padding: 10px;
-}
-
-.bottom-right-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(260px, 0.98fr);
-  gap: 12px;
-  align-items: stretch;
-}
-
-.analysis-panel {
-  display: grid;
-  gap: 10px;
-}
-
-.log-panel,
-.remark-panel,
-.rule-panel {
-  height: 100%;
-}
-
-.stack-panel {
-  grid-template-rows: minmax(0, 1fr) auto;
-}
-
-.log-list {
-  display: grid;
-  gap: 10px;
-}
-
-.log-row {
-  display: grid;
-  grid-template-columns: 8px 112px 1fr;
-  gap: 8px;
-  align-items: start;
-}
-
-.log-row i {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  margin-top: 4px;
-}
-
-.log-row p {
-  margin: 0;
-  color: #cfdbff;
-  font-size: 11px;
-}
-
-.log-row--green i {
-  background: #35d777;
-}
-
-.log-row--cyan i {
-  background: #56d3ff;
-}
-
-.log-row--yellow i {
-  background: #ffc84d;
-}
-
-.log-row--red i {
-  background: #ff6565;
-}
-
-.text-link {
-  margin-top: 8px;
-  border: 0;
-  background: transparent;
-  color: #8f74ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.remark-box {
-  display: grid;
-  gap: 10px;
-}
-
-.remark-box__input {
-  min-height: 82px;
-  border: 1px solid rgba(123, 142, 201, 0.14);
-  border-radius: 12px;
-  background: rgba(14, 21, 39, 0.94);
-  padding: 10px 12px;
-  color: #ecf2ff;
-  font-size: 12px;
-  resize: vertical;
-  outline: none;
-}
-
-.rule-row {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-}
-
-.rule-row__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #d4ddff;
-}
-
-.analysis-panel__head {
-  display: grid;
-  gap: 4px;
-}
-
-.analysis-panel__head span,
-.product-analysis-card__summary span,
-.product-analysis-card__rules span,
-.product-analysis-card__item span {
-  color: #98aad2;
-  font-size: 11px;
-}
-
-.product-analysis-card {
-  display: grid;
-  gap: 10px;
-}
-
-.product-analysis-card__top {
-  display: grid;
-  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
-  gap: 10px;
-}
-
-.product-analysis-card__hero-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.product-analysis-card__summary,
-.product-analysis-card__rules,
-.product-analysis-card__item {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid rgba(123, 142, 201, 0.12);
-  border-radius: 14px;
-  background: rgba(21, 29, 52, 0.92);
-}
-
-.product-analysis-card__summary strong {
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.product-analysis-card__summary-text {
-  margin: 0;
-  color: #ecf2ff;
-  font-size: 12px;
-  line-height: 1.6;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.product-analysis-card__rule-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.product-analysis-card__rule-list em {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(108, 85, 255, 0.14);
-  color: #dccfff;
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.product-analysis-card__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.product-analysis-card__item--hero {
-  background:
-    linear-gradient(180deg, rgba(108, 85, 255, 0.12), rgba(21, 29, 52, 0.92)),
-    rgba(21, 29, 52, 0.92);
-  border-color: rgba(140, 118, 255, 0.22);
-}
-
-.product-analysis-card__item--hero span {
-  color: #cbbcff;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-}
-
-.product-analysis-card__item--hero p {
-  color: #ffffff;
-  font-size: 13px;
-}
-
-.product-analysis-card__item p {
-  margin: 0;
-  color: #ecf2ff;
-  font-size: 12px;
-  line-height: 1.6;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 1600px) {
-  .summary-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1360px) {
-  .content-grid,
-  .bottom-right-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 1080px) {
-  .title-row,
-  .hero-actions,
-  .status-meta,
-  .flow-strip,
-  .image-stage {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .summary-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .product-analysis-card__top,
-  .product-analysis-card__hero-grid,
-  .product-analysis-card__grid {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-item + .summary-item {
-    border-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .canonical-result {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .summary-strip,
-  .log-row {
-    grid-template-columns: 1fr;
-  }
-
-  .log-row p {
-    grid-column: auto;
-  }
+.pd { width: min(1408px, 100%); margin: 0 auto; }
+.pd-title h1 { display: inline-flex; align-items: center; gap: 6px; }
+.pd-title__edit { flex-wrap: nowrap; }
+.pd-title__edit .vg-input { width: min(360px, 50vw); }
+
+/* Summary strip */
+.pd-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) minmax(0, 2.2fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, .8fr); padding: 0; overflow: hidden; }
+.pd-summary__item { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; min-width: 0; }
+.pd-summary__item + .pd-summary__item { border-left: 1px solid var(--theme-divider); }
+.pd-summary__item > span { font-size: 12px; color: var(--theme-text-muted); }
+.pd-summary__item > strong { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--theme-text); min-width: 0; }
+.pd-summary__item > strong .vg-pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pd-summary__edit { flex-wrap: nowrap; gap: 4px; }
+.pd-notice__tag { margin-left: auto; flex-shrink: 0; }
+
+/* Two columns */
+.pd-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.pd-col { gap: 14px; }
+.pd-view { gap: 2px; }
+
+/* Images */
+.pd-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.pd-image { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); background: var(--theme-panel); transition: border-color .15s; }
+.pd-image:hover { border-color: var(--vg-accent-line); }
+.pd-image__media { position: relative; aspect-ratio: 1; padding: 0; border: 0; border-bottom: 1px solid var(--theme-border); background: var(--theme-panel-soft); cursor: zoom-in; overflow: hidden; }
+.pd-image__media img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.pd-image__badges { position: absolute; top: 6px; left: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.pd-image__badges .vg-pill { height: 20px; font-size: 11px; }
+.pd-image__actions { display: flex; align-items: center; gap: 4px; padding: 6px; }
+.pd-image__actions .vg-btn { flex: 1; padding: 0 4px; }
+.pd-upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 190px; padding: 12px; border: 1px dashed var(--theme-border-control); border-radius: var(--vg-radius-sm); background: transparent; color: var(--theme-text-muted); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.pd-upload:hover { border-color: var(--vg-accent); color: var(--vg-accent); background: var(--vg-accent-soft); }
+.pd-upload strong { font-size: 13px; color: var(--theme-text); }
+.pd-upload span { font-size: 11px; }
+.pd-images.is-list { grid-template-columns: 1fr; }
+.pd-images.is-list .pd-image { flex-direction: row; align-items: center; }
+.pd-images.is-list .pd-image__media { width: 88px; border-bottom: 0; border-right: 1px solid var(--theme-border); flex-shrink: 0; }
+.pd-images.is-list .pd-image__actions { flex: 1; justify-content: flex-end; }
+.pd-images.is-list .pd-image__actions .vg-btn { flex: 0 0 auto; padding: 0 8px; }
+.pd-images.is-list .pd-upload { min-height: 72px; flex-direction: row; }
+
+/* Flow steps */
+.pd-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: none; }
+.pd-flow__step { position: relative; display: flex; gap: 10px; padding: 10px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); }
+.pd-flow__step.is-active { border-color: var(--vg-accent); background: var(--vg-accent-soft); }
+.pd-flow__num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; background: var(--theme-panel); border: 1px solid var(--theme-border-control); color: var(--theme-text-muted); font-size: 12px; font-weight: 700; }
+.pd-flow__step.is-done .pd-flow__num { background: var(--vg-accent-soft); border-color: var(--vg-accent-line); color: var(--vg-accent); }
+.pd-flow__step.is-active .pd-flow__num { background: var(--vg-accent); border-color: var(--vg-accent); color: var(--theme-on-accent); }
+.pd-flow__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pd-flow__copy strong { font-size: 12px; font-weight: 700; }
+.pd-flow__copy small { font-size: 11px; color: var(--theme-text-muted); line-height: 1.4; }
+
+/* Analysis board */
+.pd-board { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.pd-board__media { padding: 0; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); overflow: hidden; cursor: zoom-in; }
+.pd-board__media img { width: 100%; display: block; }
+.pd-board__body { gap: 10px; }
+.pd-board__body .vg-kv { font-size: 12px; }
+.pd-board__body .vg-btn { align-self: flex-start; }
+.pd-diag { margin-top: 12px; gap: 8px; }
+.pd-diag__item { padding: 10px 12px; }
+.pd-diag__item .vg-kv { font-size: 12px; }
+.pd-diag__note { margin-top: 6px; font-size: 12px; }
+
+/* Status */
+.pd-status { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.pd-status__icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; background: color-mix(in srgb, var(--vg-gray) 14%, transparent); color: var(--vg-gray); }
+.pd-status__icon.is-green { background: var(--vg-accent-soft); color: var(--vg-green); }
+.pd-status__icon.is-blue { background: color-mix(in srgb, var(--vg-blue) 14%, transparent); color: var(--vg-blue); }
+.pd-status__icon.is-red { background: color-mix(in srgb, var(--vg-red) 14%, transparent); color: var(--vg-red); }
+.pd-status__icon.is-amber { background: color-mix(in srgb, var(--vg-amber) 14%, transparent); color: var(--vg-amber); }
+.pd-status__copy strong { font-size: 15px; font-weight: 800; line-height: 1.35; }
+.pd-status__copy p { margin-top: 4px; font-size: 12px; color: var(--theme-text-muted); }
+.pd-status__meta { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--theme-divider); font-size: 12px; }
+
+/* Product analysis */
+.pd-analysis { gap: 10px; }
+.pd-analysis__summary p { font-size: 13px; line-height: 1.6; color: var(--theme-text-secondary); margin-bottom: 8px; }
+.pd-analysis__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pd-analysis__item { padding: 10px 12px; border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); border: 1px solid var(--theme-border); min-width: 0; }
+.pd-analysis__item.is-hero { border-color: var(--vg-accent-line); background: var(--vg-accent-soft); }
+.pd-analysis__item span { font-size: 11px; font-weight: 700; color: var(--theme-text-muted); }
+.pd-analysis__item.is-hero span { color: var(--vg-accent); }
+.pd-analysis__item p { margin-top: 3px; font-size: 12px; line-height: 1.55; color: var(--theme-text); overflow-wrap: anywhere; }
+
+/* Remark */
+.pd-remark { gap: 8px; }
+.pd-remark__save { align-self: flex-end; }
+.pd-rule { margin-top: 12px; }
+
+/* Log timeline */
+.pd-log { position: relative; margin: 0; padding: 0 0 0 18px; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.pd-log::before { content: ''; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 1px; background: var(--theme-divider); }
+.pd-log li { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.pd-log li::before { content: ''; position: absolute; left: -18px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--vg-gray); box-shadow: 0 0 0 3px var(--theme-panel); }
+.pd-log li.is-green::before { background: var(--vg-green); }
+.pd-log li.is-amber::before { background: var(--vg-amber); }
+.pd-log li.is-blue::before { background: var(--vg-blue); }
+.pd-log time { font-size: 11px; color: var(--theme-text-muted); font-variant-numeric: tabular-nums; }
+.pd-log p { font-size: 12px; color: var(--theme-text); line-height: 1.5; }
+
+@media (max-width: 1240px) {
+  .pd-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pd-summary__item:nth-child(4) { border-left: 0; }
+  .pd-summary__item { border-top: 1px solid var(--theme-divider); }
+  .pd-grid { grid-template-columns: 1fr; }
 }
 </style>
