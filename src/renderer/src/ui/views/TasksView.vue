@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import UiChip from '../components/UiChip.vue'
+import { AlertTriangle, CheckCircle2, ListChecks, ListVideo, Loader, Pause, Play, Plus, RefreshCw, XCircle } from 'lucide-vue-next'
+import { taskStatusTone } from '@/lib/taskStatus'
 
 type VideoTask = {
   id: string
@@ -106,228 +107,142 @@ function openTask(taskId: string) {
   void router.push(`/production/tasks/${taskId}`)
 }
 
+let unsubscribeTaskEvents: (() => void) | null = null
+
 onMounted(() => {
   void refresh()
-  window.api.tasks.onEvent(() => {
+  // Keep the unsubscribe handle: previously every visit added another listener.
+  unsubscribeTaskEvents = window.api.tasks.onEvent(() => {
     void refresh()
   })
+})
+
+onUnmounted(() => {
+  unsubscribeTaskEvents?.()
+  unsubscribeTaskEvents = null
 })
 </script>
 
 <template>
-  <div class="tasks-page">
-    <section class="tasks-hero">
-      <div class="tasks-hero__copy">
-        <span class="tasks-hero__tag">{{ t('production.tasks.kicker') }}</span>
+  <div class="vg-scope vg-page tasks">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><ListVideo :size="20" /></span>
+      <div class="vg-page-head__text">
         <h1>{{ t('production.tasks.title') }}</h1>
         <p>{{ t('production.tasks.desc') }}</p>
       </div>
-      <div class="tasks-hero__actions">
-        <button class="app-primary px-4 py-2 text-sm" @click="router.push('/production/create')">{{ t('production.tasks.create') }}</button>
-        <button class="app-ghost px-4 py-2 text-sm" :disabled="loading" @click="refresh">{{ t('common.refresh') }}</button>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn" type="button" :disabled="loading" @click="refresh">
+          <RefreshCw :size="15" :class="{ 'vg-spin': loading }" /> {{ t('common.refresh') }}
+        </button>
+        <button class="vg-btn vg-btn--primary" type="button" @click="router.push('/production/create')">
+          <Plus :size="15" /> {{ t('production.tasks.create') }}
+        </button>
+      </div>
+    </header>
+
+    <section class="vg-stats">
+      <div class="vg-stat">
+        <span class="vg-stat__icon"><ListChecks :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.tasks.stats.total') }}</span><span class="vg-stat__value">{{ tasks.length }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--blue"><Loader :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.tasks.stats.running') }}</span><span class="vg-stat__value">{{ runningCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon"><CheckCircle2 :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.tasks.stats.done') }}</span><span class="vg-stat__value">{{ doneCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--red"><AlertTriangle :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.tasks.stats.failed') }}</span><span class="vg-stat__value">{{ failCount }}</span></span>
       </div>
     </section>
 
-    <section class="tasks-stats">
-      <div class="tasks-stat"><span>{{ t('production.tasks.stats.total') }}</span><strong>{{ tasks.length }}</strong></div>
-      <div class="tasks-stat"><span>{{ t('production.tasks.stats.running') }}</span><strong>{{ runningCount }}</strong></div>
-      <div class="tasks-stat"><span>{{ t('production.tasks.stats.done') }}</span><strong>{{ doneCount }}</strong></div>
-      <div class="tasks-stat"><span>{{ t('production.tasks.stats.failed') }}</span><strong>{{ failCount }}</strong></div>
-    </section>
-
-    <section class="tasks-panel">
-      <div class="tasks-toolbar">
-        <div class="tasks-filters">
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'all' }" @click="statusFilter = 'all'">{{ t('common.all') }}</button>
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'running' }" @click="statusFilter = 'running'">{{ t('production.tasks.stats.running') }}</button>
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'done' }" @click="statusFilter = 'done'">{{ t('production.tasks.stats.done') }}</button>
-          <button class="app-tab" :class="{ 'is-active': statusFilter === 'error' }" @click="statusFilter = 'error'">{{ t('production.tasks.stats.failed') }}</button>
+    <section class="vg-card vg-card--flush">
+      <div class="vg-card__head tasks__toolbar">
+        <div class="vg-seg vg-seg--sm">
+          <button class="vg-seg__btn" :class="{ 'is-active': statusFilter === 'all' }" type="button" @click="statusFilter = 'all'">
+            {{ t('common.all') }} <span class="vg-count">{{ tasks.length }}</span>
+          </button>
+          <button class="vg-seg__btn" :class="{ 'is-active': statusFilter === 'running' }" type="button" @click="statusFilter = 'running'">
+            {{ t('production.tasks.stats.running') }} <span class="vg-count">{{ runningCount }}</span>
+          </button>
+          <button class="vg-seg__btn" :class="{ 'is-active': statusFilter === 'done' }" type="button" @click="statusFilter = 'done'">
+            {{ t('production.tasks.stats.done') }} <span class="vg-count">{{ doneCount }}</span>
+          </button>
+          <button class="vg-seg__btn" :class="{ 'is-active': statusFilter === 'error' }" type="button" @click="statusFilter = 'error'">
+            {{ t('production.tasks.stats.failed') }} <span class="vg-count">{{ failCount }}</span>
+          </button>
         </div>
-        <div class="tasks-batch-actions">
-          <button class="app-ghost px-3 py-2 text-xs" :disabled="!runningCount || (stats?.paused ?? false)" @click="pause">{{ t('production.tasks.pause') }}</button>
-          <button class="app-ghost px-3 py-2 text-xs" :disabled="!runningCount || !(stats?.paused ?? false)" @click="resume">{{ t('production.tasks.resume') }}</button>
-          <button class="app-ghost px-3 py-2 text-xs" :disabled="!tasks.length" @click="cancelAll">{{ t('production.tasks.cancelAll') }}</button>
+        <div class="vg-card__actions">
+          <span v-if="stats?.paused" class="vg-pill vg-pill--amber vg-pill--dot">{{ t('production.tasks.status.paused') }}</span>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="!runningCount || (stats?.paused ?? false)" @click="pause">
+            <Pause :size="14" /> {{ t('production.tasks.pause') }}
+          </button>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="!runningCount || !(stats?.paused ?? false)" @click="resume">
+            <Play :size="14" /> {{ t('production.tasks.resume') }}
+          </button>
+          <button class="vg-btn vg-btn--danger vg-btn--sm" type="button" :disabled="!tasks.length" @click="cancelAll">
+            <XCircle :size="14" /> {{ t('production.tasks.cancelAll') }}
+          </button>
         </div>
       </div>
 
-      <div v-if="!filteredTasks.length" class="tasks-empty">
-        <strong>{{ t('production.tasks.emptyTitle') }}</strong>
+      <div v-if="!filteredTasks.length" class="vg-empty">
+        <span class="vg-empty__icon"><ListVideo :size="24" /></span>
+        <h3>{{ t('production.tasks.emptyTitle') }}</h3>
         <p>{{ t('production.tasks.emptyDesc') }}</p>
       </div>
 
-      <div v-else class="tasks-list">
-        <button v-for="task in filteredTasks" :key="task.id" class="tasks-item" type="button" @click="openTask(task.id)">
-          <div class="tasks-item__main">
-            <div class="tasks-item__header">
-              <strong>{{ task.id.slice(0, 8) }}</strong>
-              <UiChip :tone="task.status === 'error' ? 'danger' : task.status === 'done' ? 'accent' : 'neutral'">
-                {{ statusLabel(task.status) }}
-              </UiChip>
-            </div>
-            <div class="tasks-item__meta-grid">
-              <span>{{ t('production.tasks.product') }}: {{ resolveProductName(task.productId) }}</span>
-              <span>{{ t('production.tasks.template') }}: {{ resolveTemplateName(task.templateId) }}</span>
-              <span>{{ t('production.tasks.createdAt') }}: {{ formatTime(task.createdAt) }}</span>
-              <span>{{ t('production.tasks.progress') }}: {{ Math.round((task.progress || 0) * 100) }}%</span>
-            </div>
-            <span class="tasks-item__path">{{ task.outPath || t('production.tasks.noOutput') }}</span>
-            <span v-if="task.status === 'error' && task.error" class="tasks-item__error">{{ task.error }}</span>
-          </div>
-        </button>
+      <div v-else class="tasks__table">
+        <table class="vg-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>{{ t('production.tasks.product') }}</th>
+              <th>{{ t('production.tasks.template') }}</th>
+              <th>{{ t('production.tasks.progress') }}</th>
+              <th>{{ t('production.tasks.createdAt') }}</th>
+              <th>{{ t('production.tasks.statusColumn') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="task in filteredTasks" :key="task.id" class="tasks__row" @click="openTask(task.id)">
+              <td class="vg-num tasks__id">#{{ task.id.slice(0, 8) }}</td>
+              <td>
+                <div class="tasks__product">{{ resolveProductName(task.productId) }}</div>
+                <div class="tasks__path" :title="task.outPath">{{ task.outPath || t('production.tasks.noOutput') }}</div>
+                <div v-if="task.status === 'error' && task.error" class="tasks__error">{{ task.error }}</div>
+              </td>
+              <td class="vg-secondary">{{ resolveTemplateName(task.templateId) }}</td>
+              <td>
+                <span class="vg-progress">
+                  <span class="vg-progress__bar">
+                    <span class="vg-progress__fill" :class="{ 'vg-progress__fill--fail': task.status === 'error' }" :style="{ width: `${Math.round((task.progress || 0) * 100)}%` }"></span>
+                  </span>
+                  <span>{{ Math.round((task.progress || 0) * 100) }}%</span>
+                </span>
+              </td>
+              <td class="vg-secondary vg-num">{{ formatTime(task.createdAt) }}</td>
+              <td><span class="vg-pill vg-pill--dot" :class="`vg-pill--${taskStatusTone(task.status)}`">{{ statusLabel(task.status) }}</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.tasks-page {
-  display: grid;
-  gap: 14px;
-}
-
-.tasks-hero,
-.tasks-panel,
-.tasks-stat {
-  border: 1px solid rgba(119, 137, 198, 0.14);
-  background: rgba(10, 16, 29, 0.92);
-  border-radius: 18px;
-}
-
-.tasks-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px;
-}
-
-.tasks-hero__copy {
-  display: grid;
-  gap: 6px;
-}
-
-.tasks-hero__tag {
-  color: #8ea6ff;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.tasks-hero__copy h1 {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 24px;
-  font-weight: 800;
-}
-
-.tasks-hero__copy p,
-.tasks-stat span,
-.tasks-empty p,
-.tasks-item__meta-grid span,
-.tasks-item__path,
-.tasks-item__error {
-  margin: 0;
-  color: #98a6c7;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.tasks-hero__actions,
-.tasks-batch-actions,
-.tasks-filters {
-  display: flex;
-  gap: 8px;
-}
-
-.tasks-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.tasks-stat {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-}
-
-.tasks-stat strong,
-.tasks-empty strong,
-.tasks-item__header strong {
-  color: #eef3ff;
-}
-
-.tasks-panel {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-}
-
-.tasks-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tasks-empty {
-  display: grid;
-  place-items: center;
-  gap: 8px;
-  min-height: 240px;
-  border-radius: 16px;
-  border: 1px dashed rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.tasks-list {
-  display: grid;
-  gap: 10px;
-}
-
-.tasks-item {
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  text-align: left;
-}
-
-.tasks-item__main {
-  display: grid;
-  gap: 8px;
-}
-
-.tasks-item__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tasks-item__meta-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
-}
-
-.tasks-item__path {
-  color: #b6c2df;
-}
-
-.tasks-item__error {
-  color: #fca5a5;
-}
-
-@media (max-width: 900px) {
-  .tasks-hero,
-  .tasks-toolbar,
-  .tasks-stats,
-  .tasks-item__header,
-  .tasks-item__meta-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-}
+.tasks { width: min(1408px, 100%); margin: 0 auto; }
+.tasks__toolbar { padding-bottom: 12px; margin-bottom: 0; border-bottom: 1px solid var(--theme-divider); }
+.tasks__table { overflow: auto; }
+.tasks__row { cursor: pointer; }
+.tasks__id { color: var(--theme-text-secondary); white-space: nowrap; }
+.tasks__product { font-weight: 600; }
+.tasks__path { max-width: 420px; font-size: 11px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks__error { margin-top: 2px; font-size: 12px; color: var(--vg-red); }
+.tasks .vg-progress { min-width: 140px; }
 </style>

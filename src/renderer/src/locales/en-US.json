@@ -2146,7 +2146,7 @@
         "description": "Submit clone outputs to Geelark cloud-phone publishing workflows from a dedicated workspace."
       }
     },
-    "detail": { "eyebrow": "Plugin Detail" }
+    "detail": { "eyebrow": "Plugin Detail", "status": "Status", "category": "Category", "path": "Path" }
   },
   "productReplacement": {
     "backToPlugins": "Back to plugins",
@@ -3648,6 +3648,7 @@
       "createdAt": "Created",
       "progress": "Progress",
       "noOutput": "No output path yet",
+      "statusColumn": "Status",
       "stats": {
         "total": "Total",
         "running": "Running",

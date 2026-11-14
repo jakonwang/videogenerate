@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronLeft, Wrench } from 'lucide-vue-next'
+import { AlertTriangle, ChevronLeft, Wrench } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { webApiClient, type PluginDetail } from '@/lib/webApiClient'
 
@@ -23,135 +23,41 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="placeholder-page">
-    <section class="placeholder-card">
-      <button class="ghost-button" type="button" @click="router.push('/plugins?tab=installed')">
-        <ChevronLeft class="h-4 w-4" />
-        {{ t('pluginPlaceholder.back') }}
+  <div class="vg-scope vg-page placeholder">
+    <header class="vg-page-head">
+      <button class="vg-icon-btn" type="button" :title="t('pluginPlaceholder.back')" @click="router.push('/plugins?tab=installed')">
+        <ChevronLeft :size="18" />
       </button>
-
-      <div class="placeholder-hero">
-        <div class="placeholder-icon">
-          <Wrench class="h-6 w-6" />
-        </div>
-        <div>
-          <h1>{{ plugin?.name || t('pluginPlaceholder.title') }}</h1>
-          <p>{{ plugin?.description || t('pluginPlaceholder.description') }}</p>
-        </div>
+      <span class="vg-page-head__icon"><Wrench :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ plugin?.name || t('pluginPlaceholder.title') }}</h1>
+        <p>{{ plugin?.description || t('pluginPlaceholder.description') }}</p>
       </div>
-
-      <div class="placeholder-grid">
-        <div class="placeholder-item">
-          <span>{{ t('pluginPlaceholder.status') }}</span>
-          <strong>{{ plugin ? (plugin.enabled ? t('pluginPlaceholder.enabled') : t('pluginPlaceholder.disabled')) : t('pluginPlaceholder.unknown') }}</strong>
-        </div>
-        <div class="placeholder-item">
-          <span>{{ t('pluginPlaceholder.route') }}</span>
-          <strong>{{ plugin?.workspacePath || route.path }}</strong>
-        </div>
-        <div class="placeholder-item">
-          <span>{{ t('pluginPlaceholder.notes') }}</span>
-          <strong>{{ plugin?.usageHint || t('pluginPlaceholder.notesFallback') }}</strong>
-        </div>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn" type="button" @click="router.push('/plugins?tab=installed')">{{ t('pluginPlaceholder.back') }}</button>
       </div>
+    </header>
 
-      <div v-if="errorText" class="error-box">{{ errorText }}</div>
+    <section class="vg-card">
+      <dl class="vg-kv placeholder__kv">
+        <dt>{{ t('pluginPlaceholder.status') }}</dt>
+        <dd>
+          <span class="vg-pill vg-pill--dot" :class="plugin ? (plugin.enabled ? 'vg-pill--green' : 'vg-pill--amber') : ''">
+            {{ plugin ? (plugin.enabled ? t('pluginPlaceholder.enabled') : t('pluginPlaceholder.disabled')) : t('pluginPlaceholder.unknown') }}
+          </span>
+        </dd>
+        <dt>{{ t('pluginPlaceholder.route') }}</dt>
+        <dd class="vg-num">{{ plugin?.workspacePath || route.path }}</dd>
+        <dt>{{ t('pluginPlaceholder.notes') }}</dt>
+        <dd class="vg-secondary">{{ plugin?.usageHint || t('pluginPlaceholder.notesFallback') }}</dd>
+      </dl>
     </section>
+
+    <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
   </div>
 </template>
 
 <style scoped>
-.placeholder-page {
-  padding: 12px;
-}
-
-.placeholder-card {
-  display: grid;
-  gap: 18px;
-  padding: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 22px;
-  background: rgba(8, 13, 21, 0.78);
-}
-
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: fit-content;
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef5ff;
-}
-
-.placeholder-hero {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.placeholder-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #3b82f6, #14b8a6);
-  color: #fff;
-}
-
-.placeholder-hero h1 {
-  margin: 0;
-  color: #fff;
-  font-size: 30px;
-  font-weight: 800;
-}
-
-.placeholder-hero p {
-  margin: 8px 0 0;
-  color: rgba(205, 218, 236, 0.76);
-}
-
-.placeholder-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.placeholder-item {
-  display: grid;
-  gap: 8px;
-  padding: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.placeholder-item span {
-  color: rgba(205, 218, 236, 0.72);
-  font-size: 12px;
-}
-
-.placeholder-item strong {
-  color: #fff;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.error-box {
-  padding: 12px 14px;
-  border: 1px solid rgba(248, 113, 113, 0.18);
-  border-radius: 14px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #ffd8d8;
-}
-
-@media (max-width: 960px) {
-  .placeholder-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.placeholder { width: min(960px, 100%); margin: 0 auto; }
+.placeholder__kv { gap: 12px 24px; }
 </style>

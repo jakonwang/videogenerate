@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import UiChip from '../components/UiChip.vue'
+import { ArrowLeft, ClipboardList, FolderOpen, Loader, Rocket, Settings2 } from 'lucide-vue-next'
 
 type Product = { id: string; name: string }
 type Template = { id: string; name: string }
@@ -78,179 +78,85 @@ onMounted(refresh)
 </script>
 
 <template>
-  <div class="production-create-page">
-    <section class="production-create-hero">
-      <div class="production-create-hero__copy">
-        <span class="production-create-hero__tag">{{ t('production.create.kicker') }}</span>
+  <div class="vg-scope vg-page prod-create">
+    <header class="vg-page-head">
+      <button class="vg-icon-btn" type="button" :title="t('production.create.viewTasks')" @click="router.push('/production/tasks')">
+        <ArrowLeft :size="18" />
+      </button>
+      <div class="vg-page-head__text">
         <h1>{{ t('production.create.title') }}</h1>
         <p>{{ t('production.create.desc') }}</p>
       </div>
-      <UiChip tone="neutral">{{ selectedProduct?.name || t('production.create.noProduct') }}</UiChip>
-    </section>
+      <div class="vg-page-head__actions">
+        <span class="vg-pill vg-pill--accent">{{ t('production.create.kicker') }}</span>
+      </div>
+    </header>
 
-    <section class="production-create-card">
-      <div class="production-create-grid">
-        <label class="production-field">
-          <span>{{ t('production.create.product') }}</span>
-          <select v-model="form.productId" class="ui-select h-11">
-            <option v-for="item in products" :key="item.id" :value="item.id">{{ item.name }}</option>
-          </select>
-        </label>
-
-        <label class="production-field">
-          <span>{{ t('production.create.template') }}</span>
-          <select v-model="form.templateId" class="ui-select h-11">
-            <option v-for="item in templates" :key="item.id" :value="item.id">{{ item.name }}</option>
-          </select>
-        </label>
-
-        <label class="production-field">
-          <span>{{ t('production.create.quantity') }}</span>
-          <input v-model.number="form.count" class="ui-input h-11" type="number" min="1" max="100" />
-        </label>
-
-        <label class="production-field production-field--outdir">
-          <span>{{ t('production.create.outputDir') }}</span>
-          <div class="production-outdir">
-            <input v-model="form.outDir" class="ui-input h-11 min-w-0 flex-1" />
-            <button class="app-ghost px-4 py-2 text-sm" @click="pickOutDir">{{ t('production.create.chooseDir') }}</button>
+    <div class="vg-split prod-create__layout">
+      <section class="vg-card">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><Settings2 :size="16" /> {{ t('production.create.title') }}</span>
+        </div>
+        <div class="vg-form-grid">
+          <div class="vg-field">
+            <label for="pc-product">{{ t('production.create.product') }}<span class="vg-req">*</span></label>
+            <select id="pc-product" v-model="form.productId" class="vg-select">
+              <option v-for="item in products" :key="item.id" :value="item.id">{{ item.name }}</option>
+            </select>
           </div>
-        </label>
-      </div>
-
-      <div class="production-summary">
-        <div class="production-summary__item">
-          <span>{{ t('production.create.currentProduct') }}</span>
-          <strong>{{ selectedProduct?.name || '-' }}</strong>
+          <div class="vg-field">
+            <label for="pc-template">{{ t('production.create.template') }}<span class="vg-req">*</span></label>
+            <select id="pc-template" v-model="form.templateId" class="vg-select">
+              <option v-for="item in templates" :key="item.id" :value="item.id">{{ item.name }}</option>
+            </select>
+          </div>
+          <div class="vg-field">
+            <label for="pc-count">{{ t('production.create.quantity') }}</label>
+            <input id="pc-count" v-model.number="form.count" class="vg-input" type="number" min="1" max="100" />
+          </div>
+          <div class="vg-field span-all">
+            <label for="pc-outdir">{{ t('production.create.outputDir') }}<span class="vg-req">*</span></label>
+            <div class="vg-row prod-create__outdir">
+              <input id="pc-outdir" v-model="form.outDir" class="vg-input" />
+              <button class="vg-btn" type="button" @click="pickOutDir"><FolderOpen :size="15" /> {{ t('production.create.chooseDir') }}</button>
+            </div>
+          </div>
         </div>
-        <div class="production-summary__item">
-          <span>{{ t('production.create.currentTemplate') }}</span>
-          <strong>{{ selectedTemplate?.name || '-' }}</strong>
+        <div class="vg-card__foot">
+          <p v-if="feedback" class="prod-create__feedback">{{ feedback }}</p>
+          <div class="vg-row prod-create__actions">
+            <button class="vg-btn" type="button" @click="router.push('/production/tasks')">{{ t('production.create.viewTasks') }}</button>
+            <button class="vg-btn vg-btn--primary" type="button" :disabled="submitting" @click="submit">
+              <Loader v-if="submitting" :size="15" class="vg-spin" /><Rocket v-else :size="15" />
+              {{ submitting ? t('production.create.creating') : t('production.create.submit') }}
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="production-create-actions">
-        <button class="app-primary px-5 py-3 text-sm" :disabled="submitting" @click="submit">
-          {{ submitting ? t('production.create.creating') : t('production.create.submit') }}
-        </button>
-        <button class="app-ghost px-5 py-3 text-sm" @click="router.push('/production/tasks')">{{ t('production.create.viewTasks') }}</button>
-      </div>
-
-      <p v-if="feedback" class="production-feedback">{{ feedback }}</p>
-    </section>
+      <aside class="vg-card vg-card--soft">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><ClipboardList :size="16" /> {{ t('production.create.currentProduct') }}</span>
+        </div>
+        <dl class="vg-kv">
+          <dt>{{ t('production.create.currentProduct') }}</dt>
+          <dd>{{ selectedProduct?.name || t('production.create.noProduct') }}</dd>
+          <dt>{{ t('production.create.currentTemplate') }}</dt>
+          <dd>{{ selectedTemplate?.name || '-' }}</dd>
+          <dt>{{ t('production.create.quantity') }}</dt>
+          <dd class="vg-num">{{ form.count }}</dd>
+          <dt>{{ t('production.create.outputDir') }}</dt>
+          <dd class="vg-secondary">{{ form.outDir || '-' }}</dd>
+        </dl>
+      </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.production-create-page {
-  display: grid;
-  gap: 14px;
-}
-
-.production-create-hero,
-.production-create-card {
-  border: 1px solid rgba(119, 137, 198, 0.14);
-  background: rgba(10, 16, 29, 0.92);
-  border-radius: 18px;
-}
-
-.production-create-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px;
-}
-
-.production-create-hero__copy {
-  display: grid;
-  gap: 6px;
-}
-
-.production-create-hero__tag {
-  color: #8ea6ff;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.production-create-hero__copy h1 {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 24px;
-  font-weight: 800;
-}
-
-.production-create-hero__copy p,
-.production-field span,
-.production-summary__item span,
-.production-feedback {
-  margin: 0;
-  color: #98a6c7;
-  font-size: 12px;
-}
-
-.production-create-card {
-  display: grid;
-  gap: 18px;
-  padding: 18px;
-}
-
-.production-create-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.production-field {
-  display: grid;
-  gap: 8px;
-}
-
-.production-field--outdir {
-  grid-column: 1 / -1;
-}
-
-.production-outdir {
-  display: flex;
-  gap: 8px;
-}
-
-.production-summary {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.production-summary__item {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.production-summary__item strong {
-  color: #eef3ff;
-}
-
-.production-create-actions {
-  display: flex;
-  gap: 10px;
-}
-
-@media (max-width: 860px) {
-  .production-create-grid,
-  .production-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .production-outdir,
-  .production-create-actions,
-  .production-create-hero {
-    display: grid;
-  }
-}
+.prod-create { width: min(1180px, 100%); margin: 0 auto; }
+.prod-create__outdir { flex-wrap: nowrap; }
+.prod-create__outdir .vg-input { flex: 1; }
+.prod-create__feedback { font-size: 12px; color: var(--theme-text-secondary); }
+.prod-create__actions { margin-left: auto; }
 </style>

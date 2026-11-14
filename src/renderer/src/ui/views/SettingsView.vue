@@ -14,6 +14,14 @@ import {
   MessagesSquare,
   Palette,
   Server,
+  ClipboardList,
+  DownloadCloud,
+  FolderOpen,
+  Info,
+  Layers,
+  RefreshCw,
+  Save,
+  Settings as SettingsIcon,
 } from 'lucide-vue-next'
 import { useAppSettingsStore, type AppTheme } from '@/stores/appSettings'
 import StorageManagementPanel from '../components/StorageManagementPanel.vue'
@@ -199,7 +207,7 @@ watch(() => route.query.section, (value) => {
 
 function revealActiveSettingsSection() {
   void nextTick(() => {
-    settingsNavPanel.value?.querySelector<HTMLElement>('.nav-item.active')?.scrollIntoView({
+    settingsNavPanel.value?.querySelector<HTMLElement>('.settings-nav__item.is-active')?.scrollIntoView({
       block: 'nearest',
       inline: 'center',
     })
@@ -292,7 +300,9 @@ const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; host
 const settingsMessageTone = computed(() => {
   const text = String(settingsMessage.value || '').trim().toLowerCase()
   if (!text) return 'neutral'
-  return /saved|loaded|opened|started|success/.test(text) ? 'success' : 'error'
+  // Messages are localized, so match both English and Chinese wording.
+  if (/fail|error|invalid|失败|错误|无效/.test(text)) return 'error'
+  return /saved|loaded|opened|started|success|已保存|已加载|已打开|已开始|成功/.test(text) ? 'success' : 'neutral'
 })
 
 function capabilityProviderLabel(
@@ -441,6 +451,13 @@ const chatPrimaryModelBinding = computed({
 })
 
 const imageQualityLabel = computed(() => String(modelCredentials.value.openaiImageQuality || 'high').toUpperCase())
+
+function summaryToneClass(tone: string) {
+  if (tone === 'violet') return 'vg-stat__icon--violet'
+  if (tone === 'cyan') return 'vg-stat__icon--blue'
+  if (tone === 'slate') return 'vg-stat__icon--gray'
+  return ''
+}
 
 const summaryCards = computed(() => [
   {
@@ -712,70 +729,72 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="settings-console" :class="{ 'is-storage-section': settingsSection === 'storage-management' }">
-    <section class="settings-shell">
-      <div class="settings-shell__hero">
-        <div>
-          <div class="settings-kicker">{{ t('settings.hero.kicker') }}</div>
-          <h1>{{ t('settings.hero.title') }}</h1>
-          <p>{{ t('settings.hero.subtitle') }}</p>
-        </div>
-        <div class="settings-shell__actions">
-          <button class="ghost-button small" :disabled="settingsBusy" @click="checkUpdatesNow">{{ t('settings.actions.checkUpdates') }}</button>
-          <button class="ghost-button small" @click="openDataDir">{{ t('settings.actions.openDataDir') }}</button>
-          <button class="ghost-button small" @click="refreshModelSettings">{{ t('settings.actions.refresh') }}</button>
-          <button v-if="isModelSettingsSection" class="primary-button small" :disabled="modelSettingsBusy" @click="saveModelSettings">
-            {{ modelSettingsBusy ? t('settings.actions.saving') : t('settings.actions.saveSettings') }}
-          </button>
-        </div>
+  <div class="vg-scope vg-page settings" :class="{ 'is-storage-section': settingsSection === 'storage-management' }">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><SettingsIcon :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ t('settings.hero.title') }}</h1>
+        <p>{{ t('settings.hero.subtitle') }}</p>
       </div>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn vg-btn--sm" type="button" :disabled="settingsBusy" @click="checkUpdatesNow">
+          <DownloadCloud :size="14" /> {{ t('settings.actions.checkUpdates') }}
+        </button>
+        <button class="vg-btn vg-btn--sm" type="button" @click="openDataDir">
+          <FolderOpen :size="14" /> {{ t('settings.actions.openDataDir') }}
+        </button>
+        <button class="vg-btn vg-btn--sm" type="button" @click="refreshModelSettings">
+          <RefreshCw :size="14" /> {{ t('settings.actions.refresh') }}
+        </button>
+        <button v-if="isModelSettingsSection" class="vg-btn vg-btn--primary vg-btn--sm" type="button" :disabled="modelSettingsBusy" @click="saveModelSettings">
+          <Save :size="14" /> {{ modelSettingsBusy ? t('settings.actions.saving') : t('settings.actions.saveSettings') }}
+        </button>
+      </div>
+    </header>
 
-      <div class="settings-summary-grid">
-        <article v-for="item in summaryCards" :key="item.title" class="summary-card" :class="`tone-${item.tone}`">
-          <div class="summary-card__icon">
-            <component :is="item.icon" :size="16" />
-          </div>
-          <div>
-            <span>{{ item.title }}</span>
-            <strong>{{ item.value }}</strong>
-            <small>{{ item.meta }}</small>
-          </div>
-        </article>
+    <section class="vg-stats">
+      <div v-for="item in summaryCards" :key="item.title" class="vg-stat">
+        <span class="vg-stat__icon" :class="summaryToneClass(item.tone)"><component :is="item.icon" :size="17" /></span>
+        <span class="vg-stat__body">
+          <span class="vg-stat__label">{{ item.title }}</span>
+          <span class="settings__stat-value" :title="item.value">{{ item.value }}</span>
+          <span class="settings__stat-meta" :title="item.meta">{{ item.meta }}</span>
+        </span>
       </div>
     </section>
 
-    <section class="settings-layout" :class="{ 'has-side-panel': isModelSettingsSection }">
-      <aside ref="settingsNavPanel" class="settings-nav-panel">
-        <div v-for="group in sectionGroups" :key="group.key" class="nav-group">
-          <div class="nav-group__label">{{ t(group.labelKey) }}</div>
+    <div v-if="settingsMessage" class="vg-notice" :class="settingsMessageTone === 'success' ? 'vg-notice--accent' : settingsMessageTone === 'error' ? 'vg-notice--danger' : ''">
+      <Info :size="16" /><span>{{ settingsMessage }}</span>
+    </div>
+
+    <section class="settings__layout" :class="{ 'has-side-panel': isModelSettingsSection }">
+      <aside ref="settingsNavPanel" class="vg-card settings-nav">
+        <div v-for="group in sectionGroups" :key="group.key" class="settings-nav__group">
+          <div class="settings-nav__label">{{ t(group.labelKey) }}</div>
           <button
             v-for="item in group.items"
             :key="item.key"
             type="button"
-            class="nav-item"
-            :class="{ active: settingsSection === item.key }"
+            class="vg-list__item vg-list__item--button settings-nav__item"
+            :class="{ 'is-active': settingsSection === item.key }"
             :data-settings-section="item.key"
             @click="settingsSection = item.key"
           >
-            <span class="nav-item__icon"><component :is="item.icon" :size="16" /></span>
-            <div>
-              <strong>{{ t(item.labelKey) }}</strong>
-              <small>{{ t(item.descKey) }}</small>
-            </div>
+            <span class="settings-nav__icon"><component :is="item.icon" :size="16" /></span>
+            <span class="vg-list__main">
+              <span class="vg-list__title">{{ t(item.labelKey) }}</span>
+              <span class="vg-list__sub">{{ t(item.descKey) }}</span>
+            </span>
           </button>
         </div>
       </aside>
 
-      <main class="settings-form-panel">
-        <div v-if="settingsMessage" class="settings-message" :class="settingsMessageTone">{{ settingsMessage }}</div>
-
-        <section v-if="settingsSection === 'appearance'" class="appearance-panel">
-          <div class="appearance-block">
-            <div class="appearance-heading">
-              <div>
-                <h2>{{ t('settings.appearance.title') }}</h2>
-                <p>{{ t('settings.appearance.subtitle') }}</p>
-              </div>
+      <main class="settings__main">
+        <!-- Appearance -->
+        <template v-if="settingsSection === 'appearance'">
+          <section class="vg-card">
+            <div class="vg-card__head">
+              <span class="vg-card__title"><Palette :size="16" /> {{ t('settings.appearance.title') }} <small>{{ t('settings.appearance.subtitle') }}</small></span>
             </div>
             <div class="theme-grid">
               <button
@@ -783,7 +802,7 @@ onBeforeUnmount(() => {
                 :key="theme.value"
                 type="button"
                 class="theme-option"
-                :class="[`theme-option--${theme.value}`, { active: appSettings.theme === theme.value }]"
+                :class="[`theme-option--${theme.value}`, { 'is-active': appSettings.theme === theme.value }]"
                 @click="selectTheme(theme.value)"
               >
                 <span class="theme-option__preview">
@@ -791,261 +810,244 @@ onBeforeUnmount(() => {
                   <i class="theme-option__dot"></i>
                   <i class="theme-option__field"></i>
                 </span>
-                <span class="theme-option__label">{{ t(theme.labelKey) }}</span>
-                <Check v-if="appSettings.theme === theme.value" class="theme-option__check" :size="14" />
+                <span class="theme-option__label">
+                  {{ t(theme.labelKey) }}
+                  <Check v-if="appSettings.theme === theme.value" :size="14" />
+                </span>
               </button>
             </div>
-          </div>
+          </section>
 
-          <div class="appearance-block access-key-block">
-            <div class="appearance-heading">
-              <div>
-                <h2>{{ t('settings.access.title') }}</h2>
-                <p>{{ t('settings.access.subtitle') }}</p>
-              </div>
-              <span class="local-mode-badge">{{ t('settings.access.localMode') }}</span>
+          <section class="vg-card">
+            <div class="vg-card__head">
+              <span class="vg-card__title"><KeyRound :size="16" /> {{ t('settings.access.title') }} <small>{{ t('settings.access.subtitle') }}</small></span>
+              <span class="vg-pill vg-pill--accent">{{ t('settings.access.localMode') }}</span>
             </div>
-            <label class="access-key-label">
-              <span>{{ t('settings.access.keyLabel') }}</span>
-              <div class="access-key-field">
+            <div class="vg-field">
+              <label for="settings-access-key">{{ t('settings.access.keyLabel') }}</label>
+              <div class="vg-row settings__inline">
                 <input
+                  id="settings-access-key"
                   v-model="accessKeyInput"
+                  class="vg-input"
                   :type="accessKeyVisible ? 'text' : 'password'"
                   autocomplete="off"
                   :placeholder="t('settings.access.placeholder')"
                 />
-                <button type="button" class="access-key-visibility" @click="accessKeyVisible = !accessKeyVisible">
+                <button type="button" class="vg-icon-btn" :aria-label="t('settings.common.show')" @click="accessKeyVisible = !accessKeyVisible">
                   <EyeOff v-if="accessKeyVisible" :size="16" />
                   <Eye v-else :size="16" />
                 </button>
-                <button type="button" class="primary-button access-key-save" @click="saveAccessKey">
-                  {{ t('settings.access.save') }}
-                </button>
+                <button type="button" class="vg-btn vg-btn--primary" @click="saveAccessKey">{{ t('settings.access.save') }}</button>
               </div>
-            </label>
-            <div class="access-key-footer">
-              <span>{{ accessKeyMessage || t('settings.access.futureHint') }}</span>
-              <strong>{{ appSettings.accessKey ? t('settings.access.configured') : t('settings.access.notConfigured') }}</strong>
             </div>
-          </div>
-        </section>
-
-        <section v-else-if="settingsSection === 'platforms'" class="form-section">
-          <div class="section-head">
-            <div>
-              <h2>{{ t('settings.platforms.title') }}</h2>
-              <p>{{ t('settings.platforms.subtitle') }}</p>
+            <div class="vg-card__foot">
+              <span class="vg-muted settings__hint">{{ accessKeyMessage || t('settings.access.futureHint') }}</span>
+              <span class="vg-pill vg-pill--dot" :class="appSettings.accessKey ? 'vg-pill--green' : ''">
+                {{ appSettings.accessKey ? t('settings.access.configured') : t('settings.access.notConfigured') }}
+              </span>
             </div>
-          </div>
+          </section>
+        </template>
 
-          <div class="platform-grid">
-            <article class="platform-card">
-              <div class="platform-card__head">
-                <div class="platform-card__icon">
-                  <KeyRound :size="16" />
-                </div>
+        <!-- Platforms -->
+        <section v-else-if="settingsSection === 'platforms'" class="vg-stack">
+          <div class="vg-card__head settings__section-head">
+            <span class="vg-card__title"><Server :size="16" /> {{ t('settings.platforms.title') }} <small>{{ t('settings.platforms.subtitle') }}</small></span>
+          </div>
+          <div class="vg-grid settings__platforms">
+            <article class="vg-card">
+              <div class="settings__card-head">
+                <span class="settings__card-icon"><KeyRound :size="16" /></span>
                 <div>
                   <h3>TikHub</h3>
                   <p>TikTok share-link parsing and download access token.</p>
                 </div>
               </div>
-
-              <div class="form-grid single-column">
-                <label>
-                  <span>API Key</span>
-                  <div class="field-inline">
-                    <input v-model="modelCredentials.tikhubApiKey" :type="modelSecretType('tikhubApiKey')" placeholder="TikHub bearer token" />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret('tikhubApiKey')">
-                      {{ modelVisibleSecrets.tikhubApiKey ? t('settings.common.hide') : t('settings.common.show') }}
-                    </button>
-                  </div>
-                </label>
+              <div class="vg-field">
+                <label>API Key</label>
+                <div class="vg-row settings__inline">
+                  <input v-model="modelCredentials.tikhubApiKey" class="vg-input" :type="modelSecretType('tikhubApiKey')" placeholder="TikHub bearer token" />
+                  <button class="vg-btn vg-btn--sm" type="button" @click="toggleModelSecret('tikhubApiKey')">
+                    {{ modelVisibleSecrets.tikhubApiKey ? t('settings.common.hide') : t('settings.common.show') }}
+                  </button>
+                </div>
               </div>
             </article>
 
-            <article v-for="card in platformCards" :key="card.provider" class="platform-card">
-              <div class="platform-card__head">
-                <div class="platform-card__icon">
-                  <component :is="card.icon" :size="16" />
-                </div>
+            <article v-for="card in platformCards" :key="card.provider" class="vg-card">
+              <div class="settings__card-head">
+                <span class="settings__card-icon"><component :is="card.icon" :size="16" /></span>
                 <div>
                   <h3>{{ card.title }}</h3>
                   <p>{{ card.desc }}</p>
                 </div>
-                </div>
-
-              <div class="form-grid single-column">
-                <label>
-                  <span>{{ t('settings.platforms.fields.apiKey') }}</span>
-                  <div class="field-inline">
+              </div>
+              <div class="vg-stack settings__fields">
+                <div class="vg-field">
+                  <label>{{ t('settings.platforms.fields.apiKey') }}</label>
+                  <div class="vg-row settings__inline">
                     <input
+                      class="vg-input"
                       :value="providerApiKey(card.provider)"
                       :type="modelSecretType(providerMeta[card.provider].keyName)"
                       @input="assignProviderApiKey(card.provider, ($event.target as HTMLInputElement).value)"
                     />
-                    <button class="ghost-button tiny" type="button" @click="toggleModelSecret(providerMeta[card.provider].keyName)">
+                    <button class="vg-btn vg-btn--sm" type="button" @click="toggleModelSecret(providerMeta[card.provider].keyName)">
                       {{ modelVisibleSecrets[providerMeta[card.provider].keyName] ? t('settings.common.hide') : t('settings.common.show') }}
                     </button>
                   </div>
-                </label>
-
-                <label>
-                  <span>{{ providerMeta[card.provider].hostLabel }}</span>
+                </div>
+                <div class="vg-field">
+                  <label>{{ providerMeta[card.provider].hostLabel }}</label>
                   <input
+                    class="vg-input"
                     :value="providerHost(card.provider)"
                     :placeholder="providerMeta[card.provider].hostPlaceholder"
                     @input="assignProviderHost(card.provider, ($event.target as HTMLInputElement).value)"
                   />
-                </label>
+                </div>
               </div>
             </article>
-
           </div>
         </section>
 
-        <section v-else-if="settingsSection === 'capabilities'" class="form-section">
-          <div class="section-head">
-            <div>
-              <h2>{{ t('settings.capabilities.title') }}</h2>
-              <p>{{ t('settings.capabilities.subtitle') }}</p>
+        <!-- Capabilities -->
+        <section v-else-if="settingsSection === 'capabilities'" class="vg-stack">
+          <div class="vg-card__head settings__section-head">
+            <span class="vg-card__title"><Layers :size="16" /> {{ t('settings.capabilities.title') }} <small>{{ t('settings.capabilities.subtitle') }}</small></span>
+          </div>
+
+          <article class="vg-card">
+            <div class="settings__card-head">
+              <span class="settings__card-icon settings__card-icon--violet"><Clapperboard :size="16" /></span>
+              <div>
+                <h3>{{ t('settings.capabilities.video.title') }}</h3>
+                <p>{{ t('settings.capabilities.video.desc') }}</p>
+              </div>
             </div>
-          </div>
+            <div class="vg-form-grid">
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.primaryPlatform') }}</label>
+                <select v-model="videoPrimaryPlatformBinding" class="vg-select">
+                  <option v-for="option in videoPlatformOptions" :key="`video-${option.id}`" :value="option.id">{{ option.label }}</option>
+                </select>
+              </div>
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.primaryModel') }}</label>
+                <input v-model="videoPrimaryModelBinding" class="vg-input" :placeholder="t('settings.capabilities.placeholders.videoPrimaryModel')" />
+              </div>
+            </div>
+          </article>
 
-          <div class="capability-stack">
-            <article class="capability-card">
-              <div class="capability-card__head">
-                <div class="capability-card__icon is-violet"><Clapperboard :size="16" /></div>
-                <div>
-                  <h3>{{ t('settings.capabilities.video.title') }}</h3>
-                  <p>{{ t('settings.capabilities.video.desc') }}</p>
-                </div>
+          <article class="vg-card">
+            <div class="settings__card-head">
+              <span class="settings__card-icon settings__card-icon--blue"><ImageIcon :size="16" /></span>
+              <div>
+                <h3>{{ t('settings.capabilities.image.title') }}</h3>
+                <p>{{ t('settings.capabilities.image.desc') }}</p>
               </div>
-              <div class="form-grid">
-                <label>
-                  <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
-                  <select v-model="videoPrimaryPlatformBinding">
-                    <option v-for="option in videoPlatformOptions" :key="`video-${option.id}`" :value="option.id">{{ option.label }}</option>
-                  </select>
-                </label>
-                <label>
-                  <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
-                  <input v-model="videoPrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.videoPrimaryModel')" />
-                </label>
+            </div>
+            <div class="vg-form-grid vg-form-grid--3">
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.primaryPlatform') }}</label>
+                <select v-model="imagePrimaryPlatformBinding" class="vg-select">
+                  <option v-for="option in imagePlatformOptions" :key="`image-${option.id}`" :value="option.id">{{ option.label }}</option>
+                </select>
               </div>
-            </article>
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.primaryModel') }}</label>
+                <input v-model="imagePrimaryModelBinding" class="vg-input" :placeholder="t('settings.capabilities.placeholders.imagePrimaryModel')" />
+              </div>
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.imageQuality') }}</label>
+                <select v-model="modelCredentials.openaiImageQuality" class="vg-select">
+                  <option value="low">{{ t('settings.capabilities.quality.low') }}</option>
+                  <option value="medium">{{ t('settings.capabilities.quality.medium') }}</option>
+                  <option value="high">{{ t('settings.capabilities.quality.high') }}</option>
+                </select>
+              </div>
+            </div>
+          </article>
 
-            <article class="capability-card">
-              <div class="capability-card__head">
-                <div class="capability-card__icon is-cyan"><ImageIcon :size="16" /></div>
-                <div>
-                  <h3>{{ t('settings.capabilities.image.title') }}</h3>
-                  <p>{{ t('settings.capabilities.image.desc') }}</p>
-                </div>
+          <article class="vg-card">
+            <div class="settings__card-head">
+              <span class="settings__card-icon"><MessagesSquare :size="16" /></span>
+              <div>
+                <h3>{{ t('settings.capabilities.chat.title') }}</h3>
+                <p>{{ t('settings.capabilities.chat.desc') }}</p>
               </div>
-              <div class="form-grid">
-                <label>
-                  <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
-                  <select v-model="imagePrimaryPlatformBinding">
-                    <option v-for="option in imagePlatformOptions" :key="`image-${option.id}`" :value="option.id">{{ option.label }}</option>
-                  </select>
-                </label>
-                <label>
-                  <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
-                  <input v-model="imagePrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.imagePrimaryModel')" />
-                </label>
-                <label>
-                  <span>{{ t('settings.capabilities.fields.imageQuality') }}</span>
-                  <select v-model="modelCredentials.openaiImageQuality">
-                    <option value="low">{{ t('settings.capabilities.quality.low') }}</option>
-                    <option value="medium">{{ t('settings.capabilities.quality.medium') }}</option>
-                    <option value="high">{{ t('settings.capabilities.quality.high') }}</option>
-                  </select>
-                </label>
+            </div>
+            <div class="vg-form-grid">
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.primaryPlatform') }}</label>
+                <select v-model="chatPrimaryPlatformBinding" class="vg-select">
+                  <option v-for="option in chatPlatformOptions" :key="`chat-${option.id}`" :value="option.id">{{ option.label }}</option>
+                </select>
               </div>
-            </article>
-
-            <article class="capability-card">
-              <div class="capability-card__head">
-                <div class="capability-card__icon is-green"><MessagesSquare :size="16" /></div>
-                <div>
-                  <h3>{{ t('settings.capabilities.chat.title') }}</h3>
-                  <p>{{ t('settings.capabilities.chat.desc') }}</p>
-                </div>
+              <div class="vg-field">
+                <label>{{ t('settings.capabilities.fields.primaryModel') }}</label>
+                <input v-model="chatPrimaryModelBinding" class="vg-input" :placeholder="t('settings.capabilities.placeholders.chatPrimaryModel')" />
               </div>
-              <div class="form-grid">
-                <label>
-                  <span>{{ t('settings.capabilities.fields.primaryPlatform') }}</span>
-                  <select v-model="chatPrimaryPlatformBinding">
-                    <option v-for="option in chatPlatformOptions" :key="`chat-${option.id}`" :value="option.id">{{ option.label }}</option>
-                  </select>
-                </label>
-                <label>
-                  <span>{{ t('settings.capabilities.fields.primaryModel') }}</span>
-                  <input v-model="chatPrimaryModelBinding" :placeholder="t('settings.capabilities.placeholders.chatPrimaryModel')" />
-                </label>
-              </div>
-            </article>
-          </div>
+            </div>
+          </article>
         </section>
 
+        <!-- Storage -->
         <StorageManagementPanel v-else-if="settingsSection === 'storage-management'" />
 
-        <section v-else-if="settingsSection === 'qiniu'" class="form-section">
-          <div class="section-head">
-            <div>
-              <h2>{{ t('settings.qiniu.title') }}</h2>
-              <p>{{ t('settings.qiniu.subtitle') }}</p>
-            </div>
+        <!-- Qiniu -->
+        <section v-else-if="settingsSection === 'qiniu'" class="vg-card">
+          <div class="vg-card__head">
+            <span class="vg-card__title"><Cloud :size="16" /> {{ t('settings.qiniu.title') }} <small>{{ t('settings.qiniu.subtitle') }}</small></span>
           </div>
-          <div class="form-grid">
-            <label>
-              <span>{{ t('settings.qiniu.fields.accessKey') }}</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.qiniuAccessKey" :type="modelSecretType('qiniuAccessKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuAccessKey')">
+          <div class="vg-form-grid">
+            <div class="vg-field">
+              <label>{{ t('settings.qiniu.fields.accessKey') }}</label>
+              <div class="vg-row settings__inline">
+                <input v-model="modelCredentials.qiniuAccessKey" class="vg-input" :type="modelSecretType('qiniuAccessKey')" />
+                <button class="vg-btn vg-btn--sm" type="button" @click="toggleModelSecret('qiniuAccessKey')">
                   {{ modelVisibleSecrets.qiniuAccessKey ? t('settings.common.hide') : t('settings.common.show') }}
                 </button>
               </div>
-            </label>
-            <label>
-              <span>{{ t('settings.qiniu.fields.secretKey') }}</span>
-              <div class="field-inline">
-                <input v-model="modelCredentials.qiniuSecretKey" :type="modelSecretType('qiniuSecretKey')" />
-                <button class="ghost-button tiny" type="button" @click="toggleModelSecret('qiniuSecretKey')">
+            </div>
+            <div class="vg-field">
+              <label>{{ t('settings.qiniu.fields.secretKey') }}</label>
+              <div class="vg-row settings__inline">
+                <input v-model="modelCredentials.qiniuSecretKey" class="vg-input" :type="modelSecretType('qiniuSecretKey')" />
+                <button class="vg-btn vg-btn--sm" type="button" @click="toggleModelSecret('qiniuSecretKey')">
                   {{ modelVisibleSecrets.qiniuSecretKey ? t('settings.common.hide') : t('settings.common.show') }}
                 </button>
               </div>
-            </label>
-            <label><span>{{ t('settings.qiniu.fields.bucket') }}</span><input v-model="modelCredentials.qiniuBucket" /></label>
-            <label><span>{{ t('settings.qiniu.fields.domain') }}</span><input v-model="modelCredentials.qiniuDomain" /></label>
-            <label><span>{{ t('settings.qiniu.fields.uploadHost') }}</span><input v-model="modelCredentials.qiniuUploadHost" /></label>
-            <label><span>{{ t('settings.qiniu.fields.prefix') }}</span><input v-model="modelCredentials.qiniuPrefix" /></label>
+            </div>
+            <div class="vg-field"><label>{{ t('settings.qiniu.fields.bucket') }}</label><input v-model="modelCredentials.qiniuBucket" class="vg-input" /></div>
+            <div class="vg-field"><label>{{ t('settings.qiniu.fields.domain') }}</label><input v-model="modelCredentials.qiniuDomain" class="vg-input" /></div>
+            <div class="vg-field"><label>{{ t('settings.qiniu.fields.uploadHost') }}</label><input v-model="modelCredentials.qiniuUploadHost" class="vg-input" /></div>
+            <div class="vg-field"><label>{{ t('settings.qiniu.fields.prefix') }}</label><input v-model="modelCredentials.qiniuPrefix" class="vg-input" /></div>
           </div>
         </section>
       </main>
 
-      <aside v-if="isModelSettingsSection" class="settings-side-panel">
-        <section class="side-card">
-          <div class="side-card__head">
-            <h3>{{ t('settings.summary.title') }}</h3>
-          </div>
-          <div class="side-list">
-            <div class="side-row"><span>{{ t('settings.summary.rows.video') }}</span><strong>{{ capabilityProviderLabel('video', modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
-            <div class="side-row"><span>{{ t('settings.summary.rows.image') }}</span><strong>{{ capabilityProviderLabel('image', modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || t('settings.common.notSet') }} / {{ imageQualityLabel }}</strong></div>
-            <div class="side-row"><span>{{ t('settings.summary.rows.chat') }}</span><strong>{{ capabilityProviderLabel('chat', modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || t('settings.common.notSet') }}</strong></div>
-          </div>
+      <aside v-if="isModelSettingsSection" class="vg-stack settings__side">
+        <section class="vg-card">
+          <div class="vg-card__head"><span class="vg-card__title"><ClipboardList :size="16" /> {{ t('settings.summary.title') }}</span></div>
+          <dl class="vg-kv settings__summary">
+            <dt>{{ t('settings.summary.rows.video') }}</dt>
+            <dd>{{ capabilityProviderLabel('video', modelCredentials.videoProviderPrimary, modelCredentials.videoApifoxHubProfile) }} / {{ videoPrimaryModelBinding || t('settings.common.notSet') }}</dd>
+            <dt>{{ t('settings.summary.rows.image') }}</dt>
+            <dd>{{ capabilityProviderLabel('image', modelCredentials.imageProviderPrimary, modelCredentials.imageApifoxHubProfile) }} / {{ imagePrimaryModelBinding || t('settings.common.notSet') }} / {{ imageQualityLabel }}</dd>
+            <dt>{{ t('settings.summary.rows.chat') }}</dt>
+            <dd>{{ capabilityProviderLabel('chat', modelCredentials.chatProviderPrimary, modelCredentials.chatApifoxHubProfile) }} / {{ chatPrimaryModelBinding || t('settings.common.notSet') }}</dd>
+          </dl>
         </section>
-
-        <section class="side-card">
-          <div class="side-card__head">
-            <h3>{{ t('settings.notes.title') }}</h3>
-          </div>
-          <div class="bullet-list">
-            <div class="bullet-item">{{ t('settings.notes.items.credentialsReuse') }}</div>
-            <div class="bullet-item">{{ t('settings.notes.items.xibapiIndependent') }}</div>
-            <div class="bullet-item">{{ t('settings.notes.items.reloadAfterSave') }}</div>
-            <div class="bullet-item">{{ t('settings.notes.items.imageQualityForwarded') }}</div>
-          </div>
+        <section class="vg-card">
+          <div class="vg-card__head"><span class="vg-card__title"><Info :size="16" /> {{ t('settings.notes.title') }}</span></div>
+          <ul class="settings__notes">
+            <li>{{ t('settings.notes.items.credentialsReuse') }}</li>
+            <li>{{ t('settings.notes.items.xibapiIndependent') }}</li>
+            <li>{{ t('settings.notes.items.reloadAfterSave') }}</li>
+            <li>{{ t('settings.notes.items.imageQualityForwarded') }}</li>
+          </ul>
         </section>
       </aside>
     </section>
@@ -1053,657 +1055,69 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.settings-console {
-  display: grid;
-  gap: 10px;
-  min-height: 100%;
-  padding: 12px;
-  background: var(--theme-root);
-  color: var(--theme-text);
-}
+.settings { width: min(1408px, 100%); margin: 0 auto; }
+.settings__stat-value { display: block; font-size: 14px; font-weight: 700; color: var(--theme-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings__stat-meta { display: block; font-size: 11px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings .vg-stat__icon--gray { background: color-mix(in srgb, var(--vg-gray) 14%, transparent); color: var(--vg-gray); }
 
-.settings-shell,
-.settings-nav-panel,
-.settings-form-panel,
-.settings-side-panel,
-.side-card,
-.summary-card,
-.nav-item,
-.settings-message,
-.bullet-item,
-.platform-card,
-.capability-card {
-  border-radius: 8px;
-  border: 1px solid var(--theme-border);
-  background: var(--theme-panel);
-}
+.settings__layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 14px; align-items: start; }
+.settings__layout.has-side-panel { grid-template-columns: 260px minmax(0, 1fr) 300px; }
+.settings__main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.settings__side { position: sticky; top: 0; }
 
-.settings-shell {
-  padding: 14px 16px;
-  display: grid;
-  gap: 10px;
-}
+/* Section navigation */
+.settings-nav { position: sticky; top: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.settings-nav__group { display: flex; flex-direction: column; gap: 2px; }
+.settings-nav__label { padding: 4px 10px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--theme-text-muted); }
+.settings-nav__item { border-top: 0 !important; padding: 9px 10px; }
+.settings-nav__item.is-active .vg-list__title { color: var(--vg-accent); }
+.settings-nav__icon { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--theme-panel-soft); color: var(--theme-text-secondary); }
+.settings-nav__item.is-active .settings-nav__icon { background: var(--vg-accent); color: var(--theme-on-accent); }
 
-.settings-shell__hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-}
+/* Cards */
+.settings__section-head { margin-bottom: 0; }
+.settings__platforms { --vg-grid-min: 300px; }
+.settings__card-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.settings__card-head h3 { font-size: 14px; font-weight: 700; }
+.settings__card-head p { font-size: 12px; color: var(--theme-text-muted); margin-top: 2px; }
+.settings__card-icon { width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--vg-accent-soft); color: var(--vg-accent); }
+.settings__card-icon--violet { background: color-mix(in srgb, var(--vg-violet) 14%, transparent); color: var(--vg-violet); }
+.settings__card-icon--blue { background: color-mix(in srgb, var(--vg-blue) 14%, transparent); color: var(--vg-blue); }
+.settings__fields { gap: 10px; }
+.settings__inline { flex-wrap: nowrap; }
+.settings__inline .vg-input { flex: 1; }
+.settings__hint { font-size: 12px; }
+.settings__summary { grid-template-columns: 1fr; gap: 2px 0; }
+.settings__summary dd { margin-bottom: 8px; font-size: 12px; }
+.settings__notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--theme-text-secondary); line-height: 1.55; }
 
-.settings-kicker {
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.settings-shell__hero h1 {
-  margin: 4px 0 6px;
-  font-size: 24px;
-}
-
-.settings-shell__hero p,
-.section-head p,
-.nav-item small,
-.summary-card small,
-.side-row span,
-.platform-card__head p,
-.capability-card__head p {
-  margin: 0;
-  color: var(--theme-text-muted, #94a3b8);
-  font-size: 12px;
-}
-
-.settings-shell__actions,
-.field-inline,
-.side-row,
-.side-card__head,
-.platform-card__head,
-.capability-card__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.checkbox-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.checkbox-field input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
-}
-
-.settings-shell__actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.settings-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.appearance-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-}
-
-.appearance-block {
-  display: grid;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-panel);
-  box-shadow: none;
-}
-
-.appearance-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.appearance-heading h2 {
-  margin: 0;
-  color: var(--theme-text);
-  font-size: 15px;
-  line-height: 1.3;
-}
-
-.appearance-heading p {
-  margin: 4px 0 0;
-  color: var(--theme-text-muted, #94a3b8);
-  font-size: 11px;
-}
-
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.theme-option {
-  position: relative;
-  display: grid;
-  overflow: hidden;
-  min-width: 0;
-  padding: 0;
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
-  border-radius: 12px;
-  background: var(--theme-panel-soft, #111827);
-  color: var(--theme-text, #f8fafc);
-  text-align: left;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-}
-
-.theme-option:hover {
-  transform: translateY(-1px);
-}
-
-.theme-option.active {
-  border-color: var(--theme-accent, #14b8a6);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent, #14b8a6) 26%, transparent);
-}
-
-.theme-option__preview {
-  position: relative;
-  display: block;
-  height: 72px;
-  background: var(--theme-panel-soft);
-}
-
-.theme-option__line,
-.theme-option__field,
-.theme-option__dot {
-  position: absolute;
-  display: block;
-}
-
-.theme-option__line {
-  left: 18px;
-  right: 10px;
-  top: 28px;
-  height: 6px;
-  border-radius: 999px;
-  background: #126d67;
-}
-
-.theme-option__dot {
-  left: 10px;
-  bottom: 10px;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: #14b8a6;
-}
-
-.theme-option__field {
-  left: 30px;
-  right: 10px;
-  bottom: 10px;
-  height: 22px;
-  border-radius: 8px;
-  background: #151827;
-}
-
-.theme-option--mono .theme-option__preview { background: #ffffff; border-color: #e5e5e7; }
+/* Theme picker: previews deliberately use each theme's real colours. */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.theme-option { display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel); color: var(--theme-text); cursor: pointer; text-align: left; transition: border-color .15s, box-shadow .15s; }
+.theme-option:hover { border-color: var(--vg-accent-line); }
+.theme-option.is-active { border-color: var(--vg-accent); box-shadow: 0 0 0 3px var(--vg-accent-soft); }
+.theme-option__preview { position: relative; display: block; width: 100%; height: 92px; background: #090e18; border-bottom: 1px solid var(--theme-border); }
+.theme-option__preview i { position: absolute; display: block; }
+.theme-option__line { left: 10px; top: 12px; width: 48%; height: 8px; border-radius: 99px; background: #14b8a6; }
+.theme-option__dot { left: 10px; bottom: 10px; width: 14px; height: 14px; border-radius: 999px; background: #14b8a6; }
+.theme-option__field { left: 30px; right: 10px; bottom: 10px; height: 22px; border-radius: 8px; background: #151827; }
+.theme-option--mono .theme-option__preview { background: #ffffff; }
 .theme-option--mono .theme-option__line { background: #171717; }
 .theme-option--mono .theme-option__dot { background: #171717; }
 .theme-option--mono .theme-option__field { background: #f7f7f8; }
-
-.theme-option--light-teal .theme-option__preview { background: #f7f9f8; border-color: #e4eae6; }
+.theme-option--light-teal .theme-option__preview { background: #f7f9f8; }
 .theme-option--light-teal .theme-option__line { background: #066b4d; }
 .theme-option--light-teal .theme-option__dot { background: #087f5b; }
 .theme-option--light-teal .theme-option__field { background: #e8f5ef; }
+.theme-option__label { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 12px; font-size: 13px; font-weight: 600; }
+.theme-option__label svg { color: var(--vg-accent); }
 
-.theme-option__label {
-  padding: 8px 10px;
-  color: var(--theme-text, #f8fafc);
-  font-size: 11px;
-  font-weight: 650;
+@media (max-width: 1280px) {
+  .settings__layout.has-side-panel { grid-template-columns: 240px minmax(0, 1fr); }
+  .settings__side { grid-column: 2; position: static; }
 }
-
-.theme-option__check {
-  position: absolute;
-  right: 9px;
-  bottom: 8px;
-  color: var(--theme-accent, #14b8a6);
-}
-
-.local-mode-badge {
-  padding: 5px 9px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--theme-accent, #14b8a6) 18%, transparent);
-  color: var(--theme-accent, #14b8a6);
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.access-key-label {
-  display: grid;
-  gap: 6px;
-  color: var(--theme-text, #f8fafc);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.access-key-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px auto;
-  gap: 8px;
-}
-
-.access-key-field input {
-  min-width: 0;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
-  border-radius: 10px;
-  background: var(--theme-input, #0a1324);
-  color: var(--theme-text, #f8fafc);
-  outline: none;
-}
-
-.access-key-field input:focus {
-  border-color: var(--theme-accent, #14b8a6);
-}
-
-.access-key-visibility {
-  display: grid;
-  width: 36px;
-  place-items: center;
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
-  border-radius: 10px;
-  background: var(--theme-panel-soft, #111827);
-  color: var(--theme-text-muted, #94a3b8);
-}
-
-.access-key-save {
-  min-width: 72px;
-}
-
-.access-key-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--theme-text-muted, #94a3b8);
-  font-size: 10px;
-}
-
-.access-key-footer strong {
-  color: var(--theme-accent, #14b8a6);
-  white-space: nowrap;
-}
-
-.summary-card {
-  padding: 10px 12px;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.summary-card__icon,
-.platform-card__icon,
-.capability-card__icon,
-.nav-item__icon {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.platform-card__icon,
-.capability-card__icon {
-  width: 34px;
-  height: 34px;
-}
-
-.capability-card__icon.is-violet,
-.nav-item__icon {
-  background: var(--theme-accent-soft);
-  color: var(--theme-accent);
-}
-
-.capability-card__icon.is-cyan {
-  background: rgba(34, 211, 238, 0.16);
-  color: #c7f9ff;
-}
-
-.capability-card__icon.is-green {
-  background: rgba(34, 197, 94, 0.16);
-  color: #d1fae5;
-}
-
-.summary-card span {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.summary-card strong {
-  display: block;
-  margin-top: 2px;
-  line-height: 1.2;
-}
-
-.settings-layout {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 10px;
-  min-height: 0;
-}
-
-.settings-layout.has-side-panel {
-  grid-template-columns: 260px minmax(0, 1fr) 300px;
-}
-
-.settings-nav-panel,
-.settings-form-panel,
-.settings-side-panel {
-  padding: 12px;
-  min-height: 0;
-}
-
-.settings-nav-panel,
-.settings-side-panel,
-.settings-form-panel,
-.side-card,
-.form-section,
-.capability-stack {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-
-.settings-nav-panel {
-  position: sticky;
-  top: 0;
-  overflow-y: auto;
-  max-height: calc(100vh - 24px);
-  align-self: start;
-}
-
-.nav-group {
-  display: grid;
-  gap: 5px;
-}
-
-.nav-group + .nav-group {
-  margin-top: 5px;
-  padding-top: 10px;
-  border-top: 1px solid var(--theme-border, rgba(148, 163, 184, 0.12));
-}
-
-.nav-group__label {
-  padding: 0 5px;
-  color: var(--theme-text-muted, #94a3b8);
-  font-size: 10px;
-  font-weight: 750;
-  text-transform: uppercase;
-}
-
-.nav-item {
-  padding: 8px;
-  text-align: left;
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 7px;
-  background: transparent;
-  color: var(--theme-text, #f8fafc);
-}
-
-.nav-item .nav-item__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 24%, var(--theme-border));
-  background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-panel));
-  color: var(--theme-accent);
-}
-
-.nav-item.active {
-  border-color: color-mix(in srgb, var(--theme-accent, #14b8a6) 42%, var(--theme-border));
-  background: color-mix(in srgb, var(--theme-accent, #14b8a6) 12%, var(--theme-panel-soft));
-}
-
-.nav-item.active .nav-item__icon {
-  border-color: color-mix(in srgb, var(--theme-accent) 52%, var(--theme-border));
-  background: var(--theme-accent-soft);
-  color: var(--theme-control-selected-text);
-}
-
-.nav-item strong {
-  display: block;
-  margin-bottom: 2px;
-  font-size: 12px;
-}
-
-.nav-item small {
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.settings-message {
-  padding: 10px 12px;
-  font-size: 12px;
-}
-
-.settings-message.success {
-  border-color: rgba(34, 197, 94, 0.24);
-  background: rgba(34, 197, 94, 0.12);
-  color: #d1fae5;
-}
-
-.settings-message.error {
-  border-color: rgba(239, 68, 68, 0.24);
-  background: rgba(239, 68, 68, 0.12);
-  color: #fee2e2;
-}
-
-.section-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.section-head h2,
-.side-card__head h3,
-.platform-card__head h3,
-.capability-card__head h3 {
-  margin: 0;
-}
-
-.platform-grid,
-.capability-stack {
-  display: grid;
-  gap: 10px;
-}
-
-.platform-card,
-.capability-card,
-.side-card {
-  padding: 12px;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.form-grid.single-column {
-  grid-template-columns: 1fr;
-}
-
-.form-grid label,
-.side-list {
-  display: grid;
-  gap: 6px;
-}
-
-.form-grid label span {
-  color: var(--theme-text-muted, #94a3b8);
-  font-size: 11px;
-}
-
-.form-grid input,
-.form-grid select {
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.16));
-  background: var(--theme-input, #0a1324);
-  padding: 0 12px;
-  color: var(--theme-text, #f8fafc);
-}
-
-.field-inline input {
-  flex: 1;
-}
-
-.side-row {
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-}
-
-.side-row:last-child {
-  border-bottom: 0;
-}
-
-.bullet-list {
-  display: grid;
-  gap: 8px;
-}
-
-.bullet-item {
-  padding: 10px 12px;
-  background: var(--theme-panel-soft, rgba(10, 19, 36, 0.78));
-  font-size: 12px;
-  color: var(--theme-text, #cbd5e1);
-}
-
-.primary-button,
-.ghost-button {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.primary-button {
-  background: var(--theme-accent, #14b8a6);
-  border: 1px solid color-mix(in srgb, var(--theme-accent, #14b8a6) 72%, #000);
-  color: #fff;
-}
-
-.ghost-button {
-  background: var(--theme-panel-soft, rgba(15, 23, 42, 0.72));
-  border: 1px solid var(--theme-border, rgba(148, 163, 184, 0.18));
-  color: var(--theme-text, #cbd5e1);
-}
-
-.tiny {
-  min-height: 30px;
-  padding: 0 10px;
-}
-
-@media (max-width: 1440px) {
-  .settings-layout.has-side-panel {
-    grid-template-columns: 240px minmax(0, 1fr);
-  }
-
-  .settings-layout.has-side-panel .settings-side-panel {
-    grid-column: 2;
-  }
-}
-
-@media (max-width: 960px) {
-  .settings-layout,
-  .settings-layout.has-side-panel,
-  .settings-summary-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-layout.has-side-panel .settings-side-panel {
-    grid-column: auto;
-  }
-
-  .settings-nav-panel {
-    position: static;
-    overflow-y: visible;
-    max-height: none;
-  }
-
-  .nav-group {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .nav-group__label {
-    grid-column: 1 / -1;
-  }
-
-  .theme-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .settings-shell__hero,
-  .form-grid {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .settings-console.is-storage-section .settings-summary-grid {
-    display: none;
-  }
-
-  .settings-console.is-storage-section .settings-nav-panel {
-    display: flex;
-    gap: 7px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-  }
-
-  .settings-console.is-storage-section .nav-group {
-    display: contents;
-  }
-
-  .settings-console.is-storage-section .nav-group__label {
-    display: none;
-  }
-
-  .settings-console.is-storage-section .nav-item {
-    min-width: 188px;
-    flex: 0 0 188px;
-  }
-}
-
-@media (max-width: 560px) {
-  .nav-group {
-    grid-template-columns: 1fr;
-  }
-
-  .access-key-field {
-    grid-template-columns: minmax(0, 1fr) 36px;
-  }
-
-  .access-key-save {
-    grid-column: 1 / -1;
-  }
+@media (max-width: 900px) {
+  .settings__layout, .settings__layout.has-side-panel { grid-template-columns: 1fr; }
+  .settings-nav, .settings__side { position: static; grid-column: auto; }
 }
 </style>

@@ -2708,7 +2708,7 @@
         "description": "在专用工作台中把复刻成片提交到 Geelark 云手机发布流程。"
       }
     },
-    "detail": { "eyebrow": "插件详情" }
+    "detail": { "eyebrow": "插件详情", "status": "状态", "category": "分类", "path": "路径" }
   },
   "productReplacement": {
     "backToPlugins": "返回插件中心",
@@ -3621,6 +3621,7 @@
       "createdAt": "创建时间",
       "progress": "进度",
       "noOutput": "未生成输出路径",
+      "statusColumn": "状态",
       "stats": {
         "total": "总任务",
         "running": "运行中",

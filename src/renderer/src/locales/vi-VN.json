@@ -1522,7 +1522,10 @@
       }
     },
     "detail": {
-      "eyebrow": "Chi tiet plugin"
+      "eyebrow": "Chi tiet plugin",
+      "status": "Trang thai",
+      "category": "Danh muc",
+      "path": "Duong dan"
     }
   },
   "productReplacement": {
@@ -2407,6 +2410,7 @@
       "createdAt": "Thoi gian tao",
       "progress": "Tien do",
       "noOutput": "Chua co duong dan dau ra",
+      "statusColumn": "Trang thai",
       "stats": {
         "total": "Tong",
         "running": "Dang chay",
