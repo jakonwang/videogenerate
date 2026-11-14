@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -1242,7 +1243,7 @@ watch([activeTab, statusFilter, search], () => {
                   <button type="button" class="models-library-card__favorite" @click.stop="copyText(item.id, t('modelLibrary.messages.idCopied'))">
                     <Star class="h-4 w-4" />
                   </button>
-                  <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="mediaUrl(item.coverImagePath || item.imagePaths?.[0])" :alt="item.name" />
+                  <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="thumbnailUrl(item.coverImagePath || item.imagePaths?.[0], 320)" :alt="item.name" loading="lazy" decoding="async" />
                   <div v-else class="models-library-card__fallback">AI</div>
                   <div class="models-library-card__play">
                     <ArrowRight class="h-4 w-4" />
@@ -1406,7 +1407,7 @@ watch([activeTab, statusFilter, search], () => {
             <h4>{{ t('modelLibrary.details.preview') }}</h4>
             <div class="models-preview-strip">
               <div v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)" :key="`${selectedModel.id}-${imageIndex}`" class="models-preview-strip__item">
-                <img :src="mediaUrl(image)" :alt="`${selectedModel.name}-${imageIndex}`" />
+                <img :src="thumbnailUrl(image, 240)" :alt="`${selectedModel.name}-${imageIndex}`" decoding="async" />
               </div>
             </div>
           </div>

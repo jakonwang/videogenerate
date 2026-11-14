@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -498,7 +499,7 @@ onBeforeUnmount(() => {
             <button class="product-card__preview" type="button" @click="openDetail(product.id)">
               <img
                 v-if="resolveProductCoverPath(product)"
-                :src="toFileUrl(resolveProductCoverPath(product))"
+                :src="thumbnailUrl(resolveProductCoverPath(product), 320)"
                 class="product-card__image"
               />
               <div v-else class="product-card__empty">
@@ -594,6 +595,8 @@ onBeforeUnmount(() => {
 .products-page {
   display: grid;
   gap: 14px;
+                loading="lazy"
+                decoding="async"
   padding: 4px 6px 20px;
 }
 

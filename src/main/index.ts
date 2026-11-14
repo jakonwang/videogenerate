@@ -6,6 +6,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { ensureAppDirs, getAppPaths } from './lib/paths'
+import { canThumbnail, getThumbnail, normalizeThumbnailWidth } from './lib/mediaThumbnails'
 import { backgroundRecordStore } from './lib/backgroundRecordStore'
 import { gmvMaxWorkerClient } from './modules/tiktok-gmv-max/workerClient'
 import { analyzeVideoFolderAndSuggestTemplate } from './modules/style/analyzeVideos'
@@ -283,6 +284,21 @@ async function wireMediaProtocol() {
 
       if (range) {
         const match = /^bytes=(\d*)-(\d*)$/i.exec(range.trim())
+      // `&w=` asks for a downscaled, disk-cached thumbnail (see mediaThumbnails.ts).
+      const thumbWidth = normalizeThumbnailWidth(u.searchParams.get('w'))
+      if (thumbWidth && !range && canThumbnail(filePath)) {
+        const thumbnail = await getThumbnail(filePath, thumbWidth, fileStat.mtimeMs, size)
+        if (thumbnail) {
+          return new Response(new Uint8Array(thumbnail), {
+            status: 200,
+            headers: {
+              'Content-Length': String(thumbnail.length),
+              'Content-Type': 'image/webp',
+            },
+          })
+        }
+      }
+
         if (!match) {
           return new Response('range not satisfiable', {
             status: 416,

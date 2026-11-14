@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Archive, ArrowLeft, Check, CheckCircle2, ChevronDown, CirclePause, Download, ImagePlus, Images, MoreHorizontal, Package, Play, Plus, RefreshCw, RotateCcw, Save, Sparkles, Upload, X } from 'lucide-vue-next'
@@ -266,7 +267,7 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
           </div>
           <div v-if="selectedProduct" class="product-selection-meta"><span>{{ t('productReplacement.selectedProduct') }}</span><strong>{{ productImages.length }}/4 {{ t('productReplacement.referenceImagesShort') }}</strong><button type="button" class="text-button" @click="openProductDialog">{{ t('productReplacement.changeProduct') }}</button></div>
           <div class="thumb-strip">
-            <div v-for="path in productImages" :key="path" class="thumb product-thumb"><img :src="src(path)" /><button :title="t('productReplacement.remove')" @click="productImages = productImages.filter((item) => item !== path)"><X :size="13" /></button></div>
+            <div v-for="path in productImages" :key="path" class="thumb product-thumb"><img :src="thumbnailUrl(path, 160)" decoding="async" /><button :title="t('productReplacement.remove')" @click="productImages = productImages.filter((item) => item !== path)"><X :size="13" /></button></div>
             <button v-if="productImages.length < 4" type="button" class="add-thumb" @click="addProductImages"><Plus :size="17" /></button>
             <span v-if="!productImages.length" class="empty-inline"><Package :size="17" />{{ t('productReplacement.noProductImage') }}</span>
           </div>
@@ -275,7 +276,7 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
         <section class="work-section content-card scene-section">
           <div class="section-heading"><div><span class="step">02</span><h2>{{ t('productReplacement.sceneImages') }}</h2></div><span class="section-meta">{{ sourceImages.length }} {{ t('productReplacement.images') }}</span></div>
           <div class="drop-zone" @dragover.prevent @drop.prevent="onFiles"><div class="drop-icon"><ImagePlus :size="21" /></div><strong>{{ t('productReplacement.dropTitle') }}</strong><span>{{ t('productReplacement.dropDescription') }}</span><div class="drop-actions"><button class="primary-button" @click="addLocalImages"><Upload :size="15" />{{ t('productReplacement.uploadScenes') }}</button><button class="secondary-button" @click="addLibraryImages">{{ t('productReplacement.fromLibrary') }}</button></div></div>
-          <div v-if="sourceImages.length" class="source-list"><div v-for="(item, index) in sourceImages" :key="item.path" class="source-row"><img :src="src(item.path)" /><span>{{ item.name }}</span><small>{{ String(index + 1).padStart(2, '0') }}</small><button :title="t('productReplacement.remove')" @click="sourceImages.splice(index, 1)"><X :size="14" /></button></div></div>
+          <div v-if="sourceImages.length" class="source-list"><div v-for="(item, index) in sourceImages" :key="item.path" class="source-row"><img :src="thumbnailUrl(item.path, 96)" loading="lazy" decoding="async" /><span>{{ item.name }}</span><small>{{ String(index + 1).padStart(2, '0') }}</small><button :title="t('productReplacement.remove')" @click="sourceImages.splice(index, 1)"><X :size="14" /></button></div></div>
         </section>
 
         <section class="work-section content-card prompt-section">
@@ -315,7 +316,7 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
             <label v-if="item.outputPath" class="result-select"><input type="checkbox" :checked="selectedResultIds.includes(item.id)" :aria-label="`${t('productReplacement.selectResult')}: ${item.sourceName}`" @change="toggleResultSelection(item.id)" /></label>
             <span v-else class="result-select-placeholder" aria-hidden="true"></span>
             <div class="history-preview">
-              <img v-if="item.outputPath" :src="src(item.outputPath)" :title="t('productReplacement.openLocation')" @click="window.api.showItemInFolder(item.outputPath)" />
+              <img v-if="item.outputPath" :src="thumbnailUrl(item.outputPath, 320)" loading="lazy" decoding="async" :title="t('productReplacement.openLocation')" @click="window.api.showItemInFolder(item.outputPath)" />
               <div v-else class="result-placeholder"><span v-if="item.status === 'failed'">!</span><span v-else class="loader"></span></div>
             </div>
             <div class="history-product-info">

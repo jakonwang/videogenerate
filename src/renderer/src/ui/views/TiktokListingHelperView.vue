@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -761,7 +762,7 @@ onBeforeUnmount(() => {
                   </label>
 
                   <div class="product-info" @click="viewItem(item)">
-                    <img :src="toFileUrl(item.sourceImagePath)" alt="product" class="product-cover" />
+                    <img :src="thumbnailUrl(item.sourceImagePath, 96)" alt="product" class="product-cover" loading="lazy" decoding="async" />
                     <div class="product-copy">
                       <strong>{{ previewTitle(item) }}</strong>
                       <div class="product-copy__meta">
@@ -826,7 +827,7 @@ onBeforeUnmount(() => {
                     </label>
                     <span class="status-pill" :class="statusTone(item.generationStatus)">{{ statusLabel(item.generationStatus) }}</span>
                   </div>
-                  <img :src="toFileUrl(item.sourceImagePath)" alt="product" class="grid-card__image" />
+                  <img :src="thumbnailUrl(item.sourceImagePath, 320)" alt="product" class="grid-card__image" loading="lazy" decoding="async" />
                   <strong>{{ previewTitle(item) }}</strong>
                   <p>{{ previewDescription(item) }}</p>
                   <div class="grid-card__meta">

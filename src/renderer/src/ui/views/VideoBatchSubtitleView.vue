@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -1231,8 +1232,10 @@ onBeforeUnmount(() => {
           >
             <img
               v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
-              :src="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
+              :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
               :alt="item.fileName"
+              loading="lazy"
+              decoding="async"
             />
             <div class="source-list-item__copy">
               <strong>{{ item.fileName }}</strong>
@@ -1345,8 +1348,10 @@ onBeforeUnmount(() => {
             >
               <img
                 v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
-                :src="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
+                :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
                 :alt="item.fileName"
+                loading="lazy"
+                decoding="async"
               />
               <span class="preview-thumbs__overlay"></span>
               <span class="preview-thumbs__label">{{ shortFileName(item.fileName) }}</span>
@@ -1661,7 +1666,9 @@ onBeforeUnmount(() => {
               ></video>
               <img
                 v-else-if="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
-                :src="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
+                :src="thumbnailUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath, 320)"
+                loading="lazy"
+                decoding="async"
                 :alt="item.selectedTitle || tr('autoUi.k_7da807cf5fc2')"
               />
               <span class="result-thumb__badge" :class="{ 'is-failed': item.renderStatus === 'failed' }">
