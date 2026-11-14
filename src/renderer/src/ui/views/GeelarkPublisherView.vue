@@ -544,9 +544,9 @@ onMounted(() => {
 .panel-card,
 .stat-card,
 .loading-card {
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--theme-border);
   border-radius: 22px;
-  background: rgba(8, 13, 21, 0.78);
+  background: color-mix(in srgb, var(--theme-panel) 78%, transparent);
 }
 
 .hero-card,
@@ -569,7 +569,7 @@ onMounted(() => {
 }
 
 .eyebrow {
-  color: #7dd3fc;
+  color: var(--theme-accent);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -579,7 +579,7 @@ onMounted(() => {
 h1,
 h2,
 strong {
-  color: #fff;
+  color: var(--theme-text);
 }
 
 h1 {
@@ -597,7 +597,7 @@ h2 {
 p,
 small,
 .hint-text {
-  color: rgba(205, 218, 236, 0.76);
+  color: color-mix(in srgb, var(--theme-tone-blue) 76%, transparent);
   line-height: 1.65;
 }
 
@@ -637,7 +637,7 @@ small,
 }
 
 .stat-card span {
-  color: #8fb5df;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   font-weight: 700;
 }
@@ -661,7 +661,7 @@ small,
 }
 
 .field span {
-  color: #dbe7f7;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -670,10 +670,10 @@ small,
 .field select {
   min-height: 44px;
   padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f8fbff;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   outline: none;
 }
 
@@ -681,9 +681,9 @@ small,
 .account-item,
 .empty-card,
 .blocked-card {
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .workspace-card,
@@ -742,21 +742,21 @@ small,
 }
 
 .primary-button {
-  border: 1px solid rgba(14, 165, 233, 0.34);
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 34%, transparent);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-tone-blue));
+  color: var(--theme-text);
 }
 
 .ghost-button {
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef5ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 
 .danger-button {
-  border: 1px solid rgba(248, 113, 113, 0.22);
-  background: rgba(239, 68, 68, 0.12);
-  color: #ffd5d5;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 22%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
+  color: var(--theme-text);
 }
 
 .banner {
@@ -767,26 +767,26 @@ small,
 }
 
 .banner--success {
-  border: 1px solid rgba(74, 222, 128, 0.18);
-  background: rgba(34, 197, 94, 0.12);
-  color: #ddffe7;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-text);
 }
 
 .banner--error {
-  border: 1px solid rgba(248, 113, 113, 0.18);
-  background: rgba(239, 68, 68, 0.12);
-  color: #ffd8d8;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
+  color: var(--theme-text);
 }
 
 .loading-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #e7f0ff;
+  color: var(--theme-text);
 }
 
 .panel-icon {
-  color: rgba(205, 218, 236, 0.56);
+  color: color-mix(in srgb, var(--theme-tone-blue) 56%, transparent);
 }
 
 .spin {

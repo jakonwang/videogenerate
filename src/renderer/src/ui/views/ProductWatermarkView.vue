@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronLeft, FolderOpen, ImagePlus, Images, Layers3, LoaderCircle, Pencil, Play, RefreshCcw, Save, SlidersHorizontal, Trash2, Upload } from 'lucide-vue-next'
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, FolderOpen, ImagePlus, Images, Layers3, LoaderCircle, Pencil, Play, RefreshCcw, Save, SlidersHorizontal, Trash2, Upload, X } from 'lucide-vue-next'
+import { thumbnailUrl } from '@/lib/localMedia'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 
 type Template = { id: string; name: string; width: number; height: number; filePath: string }
@@ -109,135 +110,223 @@ onMounted(loadTemplates)
 </script>
 
 <template>
-  <div class="watermark-workspace plugin-workspace-standard">
-    <section class="workspace-head">
-      <div class="workspace-intro">
-        <div class="workspace-icon"><Images class="h-5 w-5" /></div>
-        <div class="workspace-copy">
-          <div class="workspace-eyebrow">{{ t('plugins.detail.eyebrow') }}</div>
-          <h1>{{ t('plugins.catalog.product-watermark.name') }}</h1>
-          <p>{{ t('productWatermark.hero.description') }}</p>
-        </div>
-        <div class="workspace-actions">
-          <button class="ghost-button" type="button" @click="router.push('/plugins')"><ChevronLeft class="h-4 w-4" />{{ t('productWatermark.actions.back') }}</button>
-        </div>
+  <div class="vg-scope vg-page wm">
+    <header class="vg-page-head">
+      <button class="vg-icon-btn" type="button" :title="t('productWatermark.actions.back')" @click="router.push('/plugins')"><ChevronLeft :size="18" /></button>
+      <span class="vg-page-head__icon"><Images :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ t('plugins.catalog.product-watermark.name') }}</h1>
+        <p>{{ t('productWatermark.hero.description') }}</p>
       </div>
-    </section>
+      <div class="vg-page-head__actions">
+        <span class="vg-pill vg-pill--accent">{{ t('plugins.detail.eyebrow') }}</span>
+      </div>
+    </header>
 
-    <div v-if="notice" class="banner banner-success">{{ notice }}</div>
-    <div v-if="errorText" class="banner banner-error">{{ errorText }}</div>
+    <div v-if="notice" class="vg-notice vg-notice--accent"><CheckCircle2 :size="16" /><span>{{ notice }}</span></div>
+    <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
 
-    <section class="watermark-grid">
-      <article class="watermark-panel">
-        <div class="panel-head"><div class="panel-title-wrap"><span class="panel-icon"><Layers3 class="h-5 w-5" /></span><strong>{{ t('productWatermark.sections.template') }}</strong></div><span class="panel-head-note">{{ t('productWatermark.labels.savedTemplates', { count: templates.length }) }}</span></div>
-        <div class="field-stack">
-          <div class="field"><span>{{ t('productWatermark.labels.chooseSaved') }}</span><select v-model="selectedId" class="workspace-select"><option value="">{{ t('productWatermark.placeholders.template') }}</option><option v-for="item in templates" :key="item.id" :value="item.id">{{ item.name }} ({{ item.width }} x {{ item.height }})</option></select></div>
-          <div v-if="selectedTemplate" class="selected-template"><div class="template-thumb"><img :src="previewSrc(selectedTemplate.filePath)" alt="" /></div><div class="template-copy"><strong>{{ selectedTemplate.name }}</strong><small>{{ selectedTemplate.width }} x {{ selectedTemplate.height }} - {{ t('productWatermark.labels.transparent') }}</small></div><button class="icon-action" type="button" :title="t('productWatermark.actions.rename')" @click="renameTemplate"><Pencil class="h-4 w-4" /></button><button class="icon-action danger-action" type="button" :title="t('productWatermark.actions.delete')" @click="deleteTemplate"><Trash2 class="h-4 w-4" /></button></div>
-          <div class="field"><span>{{ t('productWatermark.labels.newTemplate') }}</span><div class="template-upload" :class="{ 'is-dragging': draggingTemplate }" @dragover.prevent="draggingTemplate = true" @dragleave.prevent="draggingTemplate = false" @drop.prevent="onTemplateDrop"><Upload class="h-5 w-5" /><strong>{{ templatePath ? fileName(templatePath) : t('productWatermark.labels.dropTemplate') }}</strong><small>{{ t('productWatermark.labels.templateRules') }}</small><button class="ghost-button" type="button" @click="chooseTemplate">{{ t('productWatermark.actions.chooseTemplate') }}</button></div></div>
-          <div class="inline-form"><input v-model="templateName" class="workspace-input" :placeholder="t('productWatermark.placeholders.templateName')" /><button class="primary-button" type="button" :disabled="!templatePath || !templateName.trim()" @click="saveTemplate"><Save class="h-4 w-4" />{{ t('productWatermark.actions.saveTemplate') }}</button></div>
+    <section class="wm-grid">
+      <!-- 1. Template -->
+      <article class="vg-card wm-panel">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><span class="wm-step">1</span><Layers3 :size="16" /> {{ t('productWatermark.sections.template') }}</span>
+          <span class="vg-chip">{{ t('productWatermark.labels.savedTemplates', { count: templates.length }) }}</span>
+        </div>
+        <div class="vg-stack">
+          <div class="vg-field">
+            <label for="wm-template">{{ t('productWatermark.labels.chooseSaved') }}</label>
+            <select id="wm-template" v-model="selectedId" class="vg-select">
+              <option value="">{{ t('productWatermark.placeholders.template') }}</option>
+              <option v-for="item in templates" :key="item.id" :value="item.id">{{ item.name }} ({{ item.width }} x {{ item.height }})</option>
+            </select>
+          </div>
+
+          <div v-if="selectedTemplate" class="wm-selected">
+            <div class="wm-checker wm-selected__thumb"><img :src="previewSrc(selectedTemplate.filePath)" alt="" /></div>
+            <div class="wm-selected__copy">
+              <strong>{{ selectedTemplate.name }}</strong>
+              <small>{{ selectedTemplate.width }} x {{ selectedTemplate.height }} · {{ t('productWatermark.labels.transparent') }}</small>
+            </div>
+            <button class="vg-icon-btn" type="button" :title="t('productWatermark.actions.rename')" @click="renameTemplate"><Pencil :size="15" /></button>
+            <button class="vg-icon-btn vg-icon-btn--danger" type="button" :title="t('productWatermark.actions.delete')" @click="deleteTemplate"><Trash2 :size="15" /></button>
+          </div>
+
+          <div class="vg-field">
+            <label>{{ t('productWatermark.labels.newTemplate') }}</label>
+            <div
+              class="wm-drop"
+              :class="{ 'is-dragging': draggingTemplate, 'has-file': templatePath }"
+              @dragover.prevent="draggingTemplate = true"
+              @dragleave.prevent="draggingTemplate = false"
+              @drop.prevent="onTemplateDrop"
+            >
+              <Upload :size="20" />
+              <strong>{{ templatePath ? fileName(templatePath) : t('productWatermark.labels.dropTemplate') }}</strong>
+              <small>{{ t('productWatermark.labels.templateRules') }}</small>
+              <button class="vg-btn vg-btn--sm" type="button" @click="chooseTemplate">{{ t('productWatermark.actions.chooseTemplate') }}</button>
+            </div>
+          </div>
+          <div class="vg-row wm-inline">
+            <input v-model="templateName" class="vg-input" :placeholder="t('productWatermark.placeholders.templateName')" />
+            <button class="vg-btn vg-btn--primary" type="button" :disabled="!templatePath || !templateName.trim()" @click="saveTemplate">
+              <Save :size="15" /> {{ t('productWatermark.actions.saveTemplate') }}
+            </button>
+          </div>
         </div>
       </article>
 
-      <article class="watermark-panel">
-        <div class="panel-head"><div class="panel-title-wrap"><span class="panel-icon"><Images class="h-5 w-5" /></span><strong>{{ t('productWatermark.sections.images') }}</strong></div><span class="panel-head-note">{{ t('productWatermark.labels.selected', { selected: selectedImages.length, total: sourcePaths.length }) }}</span></div>
-        <div class="image-drop" :class="{ 'is-dragging': draggingImages }" @dragover.prevent="draggingImages = true" @dragleave.prevent="draggingImages = false" @drop.prevent="onImagesDrop"><ImagePlus class="h-6 w-6" /><strong>{{ t('productWatermark.labels.dropImages') }}</strong><small>{{ t('productWatermark.labels.supportedImages') }}</small><div class="image-drop-actions"><button class="ghost-button" type="button" @click="chooseImages"><Images class="h-4 w-4" />{{ t('productWatermark.actions.chooseImages') }}</button><button class="ghost-button" type="button" @click="chooseLibraryImages"><Images class="h-4 w-4" />{{ t('productWatermark.actions.chooseFromLibrary') }}</button></div></div>
-        <div v-if="sourcePaths.length" class="queue-head"><span>{{ t('productWatermark.labels.queue') }}</span><div class="queue-actions"><button class="text-action" type="button" @click="toggleAllImages">{{ selectedImages.length === sourcePaths.length ? t('productWatermark.actions.clearSelection') : t('productWatermark.actions.selectAll') }}</button><button class="text-action" type="button" @click="clearImages">{{ t('productWatermark.actions.clear') }}</button></div></div>
-        <div v-if="sourcePaths.length" class="image-grid"><button v-for="path in sourcePaths" :key="path" class="image-tile" :class="{ selected: selectedImages.includes(path) }" type="button" @click="toggleImage(path)"><img :src="previewSrc(path)" alt="" /><span class="image-check">{{ selectedImages.includes(path) ? 'x' : '' }}</span><span class="image-remove" :title="t('productWatermark.actions.removeImage')" @click.stop="removeImage(path)">x</span><span class="image-label">{{ fileName(path) }}</span></button></div>
-        <div v-else class="empty-queue">{{ t('productWatermark.empty.images') }}</div>
+      <!-- 2. Images -->
+      <article class="vg-card wm-panel">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><span class="wm-step">2</span><Images :size="16" /> {{ t('productWatermark.sections.images') }}</span>
+          <span class="vg-chip">{{ t('productWatermark.labels.selected', { selected: selectedImages.length, total: sourcePaths.length }) }}</span>
+        </div>
+        <div
+          class="wm-drop wm-drop--images"
+          :class="{ 'is-dragging': draggingImages }"
+          @dragover.prevent="draggingImages = true"
+          @dragleave.prevent="draggingImages = false"
+          @drop.prevent="onImagesDrop"
+        >
+          <ImagePlus :size="22" />
+          <strong>{{ t('productWatermark.labels.dropImages') }}</strong>
+          <small>{{ t('productWatermark.labels.supportedImages') }}</small>
+          <div class="vg-row">
+            <button class="vg-btn vg-btn--sm" type="button" @click="chooseImages"><Images :size="14" /> {{ t('productWatermark.actions.chooseImages') }}</button>
+            <button class="vg-btn vg-btn--sm" type="button" @click="chooseLibraryImages"><FolderOpen :size="14" /> {{ t('productWatermark.actions.chooseFromLibrary') }}</button>
+          </div>
+        </div>
+
+        <template v-if="sourcePaths.length">
+          <div class="wm-queue-head">
+            <span class="vg-muted">{{ t('productWatermark.labels.queue') }}</span>
+            <div class="vg-row">
+              <button class="vg-link" type="button" @click="toggleAllImages">{{ selectedImages.length === sourcePaths.length ? t('productWatermark.actions.clearSelection') : t('productWatermark.actions.selectAll') }}</button>
+              <button class="vg-link vg-link--muted" type="button" @click="clearImages">{{ t('productWatermark.actions.clear') }}</button>
+            </div>
+          </div>
+          <div class="wm-images">
+            <button
+              v-for="path in sourcePaths"
+              :key="path"
+              class="wm-image"
+              :class="{ 'is-selected': selectedImages.includes(path) }"
+              type="button"
+              :title="fileName(path)"
+              @click="toggleImage(path)"
+            >
+              <img :src="thumbnailUrl(path, 160)" alt="" loading="lazy" decoding="async" />
+              <span class="wm-image__check"><Check :size="12" /></span>
+              <span class="wm-image__remove" :title="t('productWatermark.actions.removeImage')" @click.stop="removeImage(path)"><X :size="12" /></span>
+              <span class="wm-image__label">{{ fileName(path) }}</span>
+            </button>
+          </div>
+        </template>
+        <div v-else class="vg-empty wm-empty"><p>{{ t('productWatermark.empty.images') }}</p></div>
       </article>
 
-      <article class="watermark-panel export-panel">
-        <div class="panel-head"><div class="panel-title-wrap"><span class="panel-icon"><SlidersHorizontal class="h-5 w-5" /></span><strong>{{ t('productWatermark.sections.export') }}</strong></div></div>
-        <div class="field-stack">
-          <div class="field"><span>{{ t('productWatermark.labels.outputFolder') }}</span><div class="output-picker"><button class="ghost-button" type="button" @click="chooseOutput"><FolderOpen class="h-4 w-4" />{{ t('productWatermark.actions.chooseFolder') }}</button><span :title="outputDir">{{ outputDir || t('productWatermark.placeholders.outputFolder') }}</span></div></div>
-          <div class="export-spec"><div><span>{{ t('productWatermark.labels.format') }}</span><strong>JPEG</strong></div><div><span>{{ t('productWatermark.labels.crop') }}</span><strong>{{ t('productWatermark.labels.centerSquare') }}</strong></div><div><span>{{ t('productWatermark.labels.background') }}</span><strong>{{ t('productWatermark.labels.white') }}</strong></div></div>
-          <button class="primary-button run-button" type="button" :disabled="busy" @click="processPaths(selectedImages)"><LoaderCircle v-if="busy" class="h-4 w-4 spin" /><Play v-else class="h-4 w-4" />{{ busy ? t('productWatermark.actions.processing') : t('productWatermark.actions.process') }}</button>
+      <!-- 3. Export -->
+      <article class="vg-card wm-panel">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><span class="wm-step">3</span><SlidersHorizontal :size="16" /> {{ t('productWatermark.sections.export') }}</span>
         </div>
-        <div v-if="result" class="result-block"><div class="result-summary"><strong>{{ t('productWatermark.labels.results') }}</strong><span class="result-success">{{ t('productWatermark.labels.succeeded', { count: result.successCount }) }}</span><span v-if="result.failedCount" class="result-failed">{{ t('productWatermark.labels.failed', { count: result.failedCount }) }}</span></div><ul v-if="result.failed.length" class="failure-list"><li v-for="item in result.failed" :key="item.name"><span>{{ item.name }}</span><small>{{ item.reason }}</small></li></ul><button v-if="result.failed.length" class="ghost-button retry-button" type="button" @click="processPaths(sourcePaths.filter((path) => result?.failed.some((item) => item.name === fileName(path))))"><RefreshCcw class="h-4 w-4" />{{ t('productWatermark.actions.retryFailed') }}</button><ul v-if="result.success.length" class="success-list"><li v-for="path in result.success" :key="path">{{ fileName(path) }}</li></ul></div>
+        <div class="vg-stack">
+          <div class="vg-field">
+            <label>{{ t('productWatermark.labels.outputFolder') }}</label>
+            <div class="wm-output">
+              <button class="vg-btn vg-btn--sm" type="button" @click="chooseOutput"><FolderOpen :size="14" /> {{ t('productWatermark.actions.chooseFolder') }}</button>
+              <span :title="outputDir" :class="{ 'vg-muted': !outputDir }">{{ outputDir || t('productWatermark.placeholders.outputFolder') }}</span>
+            </div>
+          </div>
+          <dl class="vg-kv wm-spec">
+            <dt>{{ t('productWatermark.labels.format') }}</dt><dd>JPEG</dd>
+            <dt>{{ t('productWatermark.labels.crop') }}</dt><dd>{{ t('productWatermark.labels.centerSquare') }}</dd>
+            <dt>{{ t('productWatermark.labels.background') }}</dt><dd>{{ t('productWatermark.labels.white') }}</dd>
+          </dl>
+          <button class="vg-btn vg-btn--primary vg-btn--lg vg-btn--block" type="button" :disabled="busy" @click="processPaths(selectedImages)">
+            <LoaderCircle v-if="busy" :size="16" class="vg-spin" /><Play v-else :size="16" />
+            {{ busy ? t('productWatermark.actions.processing') : t('productWatermark.actions.process') }}
+          </button>
+        </div>
+
+        <div v-if="result" class="vg-stack wm-result">
+          <div class="vg-row">
+            <strong>{{ t('productWatermark.labels.results') }}</strong>
+            <span class="vg-pill vg-pill--green">{{ t('productWatermark.labels.succeeded', { count: result.successCount }) }}</span>
+            <span v-if="result.failedCount" class="vg-pill vg-pill--red">{{ t('productWatermark.labels.failed', { count: result.failedCount }) }}</span>
+          </div>
+          <ul v-if="result.failed.length" class="wm-list wm-list--failed">
+            <li v-for="item in result.failed" :key="item.name"><span>{{ item.name }}</span><small>{{ item.reason }}</small></li>
+          </ul>
+          <button
+            v-if="result.failed.length"
+            class="vg-btn vg-btn--sm"
+            type="button"
+            @click="processPaths(sourcePaths.filter((path) => result?.failed.some((item) => item.name === fileName(path))))"
+          >
+            <RefreshCcw :size="14" /> {{ t('productWatermark.actions.retryFailed') }}
+          </button>
+          <ul v-if="result.success.length" class="wm-list">
+            <li v-for="path in result.success" :key="path"><span>{{ fileName(path) }}</span></li>
+          </ul>
+        </div>
       </article>
     </section>
   </div>
 </template>
 
 <style scoped>
-.watermark-workspace { display:grid; align-content:start; gap:18px; padding:4px 12px 24px; color:var(--text-primary,#e8eef8); }
-.workspace-head { display:grid; gap:14px; }
-.workspace-intro { display:flex; align-items:center; gap:14px; min-width:0; }
-.workspace-icon { width:76px; height:76px; flex:0 0 76px; display:grid; place-items:center; border-radius:16px; color:#39e0b1; background:linear-gradient(145deg,rgba(31,184,141,.35),rgba(5,73,69,.52)); border:1px solid rgba(57,224,177,.32); box-shadow:0 10px 28px rgba(9,190,149,.12); }
-.workspace-icon svg { width:38px; height:38px; }
-.workspace-copy { min-width:0; flex:1; }
-.workspace-eyebrow { color:var(--text-muted,#8492a8); font-size:12px; margin-bottom:3px; }
-.workspace-copy h1 { margin:0; font-size:28px; line-height:1.15; font-weight:800; letter-spacing:.01em; }
-.workspace-copy p { margin:4px 0 0; color:var(--text-secondary,#9eabc0); font-size:13px; }
-.workspace-actions { display:flex; gap:8px; }
-.watermark-grid { display:grid !important; grid-template-columns:minmax(300px,1fr) minmax(340px,1.08fr) minmax(300px,.94fr); gap:16px; align-items:stretch; }
-.watermark-panel { min-width:0; padding:0 16px 16px; border:1px solid #263d55; border-radius:16px; background:linear-gradient(180deg,#0e1b2b 0%,#0b1523 100%); overflow:hidden; }
-.panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 -16px 18px; padding:14px 16px; background:linear-gradient(180deg,rgba(42,61,83,.76),rgba(24,40,59,.7)); border-bottom:1px solid rgba(100,137,171,.16); }
-.panel-title-wrap { display:flex; align-items:center; gap:9px; min-width:0; }
-.panel-title-wrap strong { font-size:19px; font-weight:800; }
-.panel-icon { width:34px; height:34px; display:grid; place-items:center; flex:none; color:#31e1b1; }
-.panel-head-note { color:var(--text-muted,#8492a8); font-size:11px; white-space:nowrap; }
-.field-stack { display:grid; gap:13px; }
-.field { display:grid; gap:6px; min-width:0; }
-.field>span { color:var(--text-secondary,#aab6c8); font-size:12px; font-weight:600; }
-.workspace-select,.workspace-input { width:100%; min-width:0; height:48px; box-sizing:border-box; padding:0 13px; border-radius:10px; border:1px solid #304962; background:rgba(5,12,22,.66); color:var(--text-primary,#e8eef8); font:inherit; font-size:14px; }
-.selected-template { display:flex; align-items:center; gap:9px; padding:8px; border:1px solid var(--border-subtle,#27364b); border-radius:8px; background:rgba(255,255,255,.025); }
-.template-thumb { width:38px; height:38px; display:grid; place-items:center; overflow:hidden; border-radius:6px; background-color:#fff; background-image:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%); background-size:10px 10px; background-position:0 0,0 5px,5px -5px,-5px 0; }
-.template-thumb img { width:100%; height:100%; object-fit:contain; }
-.template-copy { display:grid; gap:3px; flex:1; min-width:0; }
-.template-copy strong { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.template-copy small { color:var(--text-muted,#8492a8); font-size:10px; }
-.icon-action { width:30px; height:30px; display:grid; place-items:center; flex:none; border:1px solid var(--border-subtle,#334155); border-radius:6px; color:var(--text-secondary,#aab6c8); background:transparent; cursor:pointer; }
-.danger-action { color:#ed8f9a; }
-.template-upload,.image-drop { display:grid; justify-items:center; gap:10px; padding:22px 10px; border:1px dashed #50718d; border-radius:12px; color:#31e1b1; background:rgba(21,55,77,.18); text-align:center; transition:background .15s,border-color .15s; }
-.template-upload.is-dragging,.image-drop.is-dragging { border-color:#50c6a2; background:rgba(36,184,139,.1); }
-.template-upload strong,.image-drop strong { color:var(--text-primary,#e8eef8); font-size:15px; max-width:100%; overflow-wrap:anywhere; }
-.template-upload small,.image-drop small { color:var(--text-muted,#8492a8); font-size:10px; }
-.ghost-button,.primary-button { min-height:40px; display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:0 14px; border-radius:10px; border:1px solid #30445b; background:linear-gradient(180deg,#24344b,#182638); color:var(--text-primary,#e8eef8); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
-.ghost-button:hover { border-color:#4f7087; }
-.primary-button { border-color:#17c8a3; background:linear-gradient(180deg,#1fd3b0,#0ea991); color:#fff; }
-.primary-button:disabled { opacity:.5; cursor:not-allowed; }
-.inline-form { display:flex; gap:7px; }
-.inline-form .primary-button { flex:none; }
-.image-drop { min-height:190px; align-content:center; padding:20px; }
-.image-drop-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-.queue-head { display:flex; justify-content:space-between; align-items:center; margin:13px 0 5px; color:var(--text-secondary,#aab6c8); font-size:11px; font-weight:600; }
-.queue-actions { display:flex; gap:10px; }
-.text-action { padding:3px 0; border:0; background:none; color:#74c9e4; font:inherit; cursor:pointer; }
-.image-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; max-height:280px; overflow:auto; }
-.image-tile { position:relative; min-width:0; aspect-ratio:1; overflow:hidden; padding:0; border:1px solid var(--border-subtle,#334155); border-radius:8px; background:#111b2a; cursor:pointer; }
-.image-tile.selected { border-color:#36c59b; box-shadow:0 0 0 1px #36c59b inset; }
-.image-tile img { width:100%; height:100%; object-fit:cover; display:block; }
-.image-check { position:absolute; top:5px; left:5px; width:18px; height:18px; display:grid; place-items:center; border-radius:50%; border:1px solid rgba(255,255,255,.7); background:rgba(5,12,20,.65); color:#fff; font-size:11px; }
-.image-tile.selected .image-check { background:#21ae84; border-color:#21ae84; }
-.image-remove { position:absolute; top:4px; right:5px; width:18px; height:18px; display:grid; place-items:center; border-radius:50%; background:rgba(5,12,20,.72); color:#fff; font-size:14px; line-height:1; }
-.image-label { position:absolute; right:0; bottom:0; left:0; overflow:hidden; padding:12px 5px 4px; background:linear-gradient(transparent,rgba(0,0,0,.78)); color:#fff; font-size:9px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
-.image-queue,.failure-list,.success-list { list-style:none; padding:0; margin:0; max-height:245px; overflow:auto; }
-.image-queue li { display:flex; align-items:center; gap:8px; min-width:0; padding:7px 2px; border-bottom:1px solid rgba(137,158,181,.12); }
-.file-mark { width:26px; height:23px; flex:none; display:grid; place-items:center; border-radius:5px; background:rgba(68,183,211,.12); color:#7dd2e7; font-size:8px; font-weight:700; }
-.file-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary,#dce6f2); font-size:11px; }
-.file-dimensions { color:var(--text-muted,#8492a8); font-size:10px; }
-.empty-queue { display:grid; min-height:145px; place-items:center; color:var(--text-muted,#8492a8); font-size:12px; }
-.output-picker { display:flex; align-items:center; gap:9px; min-width:0; }
-.output-picker>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted,#8492a8); font-size:11px; }
-.export-spec { display:grid; gap:0; border:1px solid #263d55; border-radius:12px; overflow:hidden; }
-.export-spec>div { display:flex; justify-content:space-between; gap:8px; padding:15px 14px; border-bottom:1px solid rgba(137,158,181,.14); font-size:14px; }
-.export-spec>div:last-child { border:0; }
-.export-spec span { color:var(--text-muted,#8492a8); }
-.export-spec strong { color:var(--text-primary,#dce6f2); font-weight:600; }
-.run-button { width:100%; min-height:52px; font-size:16px; }
-.spin { animation:spin .9s linear infinite; }
-.result-block { margin-top:15px; padding-top:13px; border-top:1px solid rgba(137,158,181,.16); }
-.result-summary { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:11px; }
-.result-summary strong { width:100%; font-size:12px; }
-.result-success,.result-failed { padding:3px 6px; border-radius:5px; background:rgba(49,174,123,.12); color:#72d5a5; }
-.result-failed { background:rgba(219,90,105,.13); color:#f39aa3; }
-.failure-list,.success-list { margin-top:8px; max-height:110px; }
-.failure-list li { display:grid; gap:3px; padding:6px 0; border-bottom:1px solid rgba(137,158,181,.1); font-size:10px; }
-.failure-list small { color:#f39aa3; overflow-wrap:anywhere; }
-.success-list li { padding:4px 0; color:#8d9cb1; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.retry-button { margin-top:9px; }
-@keyframes spin { to { transform:rotate(360deg); } }
-@media (max-width:1050px) { .watermark-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .export-panel { grid-column:1/-1; } }
-@media (max-width:700px) { .watermark-workspace { padding:0 0 18px; } .watermark-grid { grid-template-columns:1fr; } .export-panel { grid-column:auto; } .workspace-intro { align-items:flex-start; flex-wrap:wrap; } .workspace-actions { width:100%; padding-left:56px; } .workspace-copy h1 { font-size:19px; } }
+.wm { width: min(1480px, 100%); margin: 0 auto; }
+.wm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .9fr); gap: 14px; align-items: start; }
+.wm-panel { display: flex; flex-direction: column; gap: 12px; }
+.wm-panel .vg-card__head { margin-bottom: 0; }
+.wm-step { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--vg-accent); color: var(--theme-on-accent); font-size: 11px; font-weight: 800; }
+
+/* Transparent PNG preview */
+.wm-checker { background-color: var(--theme-panel); background-image: linear-gradient(45deg, var(--theme-panel-soft) 25%, transparent 25%), linear-gradient(-45deg, var(--theme-panel-soft) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--theme-panel-soft) 75%), linear-gradient(-45deg, transparent 75%, var(--theme-panel-soft) 75%); background-size: 12px 12px; background-position: 0 0, 0 6px, 6px -6px, -6px 0; }
+.wm-selected { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--vg-accent-line); border-radius: var(--vg-radius-sm); background: var(--vg-accent-soft); }
+.wm-selected__thumb { width: 52px; height: 52px; border-radius: 7px; border: 1px solid var(--theme-border); overflow: hidden; flex-shrink: 0; }
+.wm-selected__thumb img { width: 100%; height: 100%; object-fit: contain; }
+.wm-selected__copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.wm-selected__copy strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-selected__copy small { color: var(--theme-text-muted); }
+
+/* Drop zones */
+.wm-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 14px; border: 1.5px dashed var(--theme-border-control); border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); color: var(--theme-text-muted); text-align: center; transition: border-color .15s, background .15s; }
+.wm-drop strong { font-size: 13px; color: var(--theme-text); overflow-wrap: anywhere; }
+.wm-drop small { font-size: 11px; }
+.wm-drop > svg { color: var(--vg-accent); }
+.wm-drop.is-dragging, .wm-drop.has-file { border-color: var(--vg-accent); background: var(--vg-accent-soft); }
+.wm-drop--images { padding: 22px 14px; }
+.wm-inline { flex-wrap: nowrap; }
+.wm-inline .vg-input { flex: 1; }
+
+/* Image queue */
+.wm-queue-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+.wm-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; max-height: 420px; overflow-y: auto; }
+.wm-image { position: relative; aspect-ratio: 1; padding: 0; border: 2px solid transparent; border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); overflow: hidden; cursor: pointer; outline: 1px solid var(--theme-border); outline-offset: -1px; }
+.wm-image img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .55; transition: opacity .15s; }
+.wm-image.is-selected { border-color: var(--vg-accent); }
+.wm-image.is-selected img { opacity: 1; }
+.wm-image__check { position: absolute; top: 4px; left: 4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--theme-border-control); background: color-mix(in srgb, var(--theme-panel) 85%, transparent); color: transparent; }
+.wm-image.is-selected .wm-image__check { background: var(--vg-accent); border-color: var(--vg-accent); color: var(--theme-on-accent); }
+.wm-image__remove { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: color-mix(in srgb, var(--theme-panel) 85%, transparent); color: var(--theme-text-secondary); opacity: 0; transition: opacity .15s; }
+.wm-image:hover .wm-image__remove { opacity: 1; }
+.wm-image__remove:hover { color: var(--vg-red); }
+.wm-image__label { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 5px; background: color-mix(in srgb, var(--theme-root) 70%, transparent); color: var(--theme-text); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.wm-empty { padding: 20px 12px; }
+
+/* Export */
+.wm-output { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wm-output span { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-spec { padding: 10px 12px; border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); font-size: 12px; }
+.wm-result { padding-top: 12px; border-top: 1px solid var(--theme-divider); gap: 8px; }
+.wm-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; font-size: 12px; }
+.wm-list li { display: flex; flex-direction: column; padding: 6px 8px; border-radius: 6px; background: var(--theme-panel-soft); color: var(--theme-text-secondary); overflow-wrap: anywhere; }
+.wm-list--failed li { background: color-mix(in srgb, var(--vg-red) 8%, transparent); color: var(--vg-red); }
+.wm-list small { color: var(--theme-text-muted); }
+
+@media (max-width: 1240px) { .wm-grid { grid-template-columns: 1fr 1fr; } .wm-grid > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 860px) { .wm-grid { grid-template-columns: 1fr; } }
 </style>

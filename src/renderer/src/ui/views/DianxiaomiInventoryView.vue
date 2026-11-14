@@ -443,11 +443,11 @@ onMounted(async () => {
 .sync-status strong { margin-top: 3px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 600; }
 .inventory-toolbar__actions { flex-wrap: wrap; justify-content: flex-end; }
 .ghost-button, .primary-button, .icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; border-radius: 7px; border: 1px solid var(--theme-border-control); padding: 0 12px; color: var(--theme-text-secondary); background: var(--theme-control); font-size: 12px; font-weight: 650; cursor: pointer; transition: border-color .16s ease, background .16s ease, color .16s ease; }
-.primary-button { border-color: var(--theme-accent); background: var(--theme-accent); color: #fff; }
-.sync-button { border-color: color-mix(in srgb, #3b82f6 42%, var(--theme-border)); color: color-mix(in srgb, #3b82f6 76%, var(--theme-text)); }
+.primary-button { border-color: var(--theme-accent); background: var(--theme-accent); color: var(--theme-on-accent); }
+.sync-button { border-color: color-mix(in srgb, var(--theme-tone-blue) 42%, var(--theme-border)); color: color-mix(in srgb, var(--theme-tone-blue) 76%, var(--theme-text)); }
 .add-button { min-width: 104px; }
 .ghost-button:hover, .icon-button:hover { border-color: var(--theme-border-control); background: var(--theme-control-hover); color: var(--theme-text); }
-.primary-button:hover { background: color-mix(in srgb, var(--theme-accent) 86%, #000); }
+.primary-button:hover { background: color-mix(in srgb, var(--theme-accent) 86%, var(--theme-input)); }
 button:disabled { cursor: not-allowed; opacity: .55; }
 .icon-button { width: 32px; min-height: 32px; padding: 0; }
 .icon-button.danger { color: var(--theme-danger-text); }
@@ -463,7 +463,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .summary-card strong { color: var(--theme-text); font-size: 29px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .summary-card small { color: var(--theme-text-muted); font-size: 10px; }
 .summary-card--stock { --metric-color: var(--theme-control-selected-text); --metric-background: var(--theme-accent-soft); border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border)); background: color-mix(in srgb, var(--theme-accent) 7%, var(--theme-panel)); }
-.summary-card--shipments { --metric-color: #3b82f6; --metric-background: color-mix(in srgb, #3b82f6 13%, var(--theme-panel)); }
+.summary-card--shipments { --metric-color: var(--theme-tone-blue); --metric-background: color-mix(in srgb, color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel)) 13%, var(--theme-panel)); }
 .summary-card--warning { --metric-color: var(--theme-warning-text); --metric-background: var(--theme-warning-soft); }
 .summary-card--danger { --metric-color: var(--theme-danger); --metric-background: var(--theme-danger-soft); }
 .panel-heading, .dialog-heading, .detail-section__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -495,10 +495,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .stockout-value--urgent { color: var(--theme-warning-text); }
 .negative-stock { color: var(--theme-danger-text); }
 .risk-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 999px; font-size: 10px; font-weight: 800; }
-.risk-not-synced { color: var(--theme-text-secondary); background: var(--theme-control); border-color: var(--theme-border); } .risk-out-of-stock { color: var(--theme-danger-text); background: var(--theme-danger-soft); border-color: color-mix(in srgb, var(--theme-danger) 22%, transparent); } .risk-reorder { color: var(--theme-warning-text); background: var(--theme-warning-soft); border-color: color-mix(in srgb, var(--theme-warning-text) 22%, transparent); } .risk-healthy { color: var(--theme-success-text); background: var(--theme-success-soft); border-color: color-mix(in srgb, var(--theme-success-text) 22%, transparent); } .risk-no-sales { color: color-mix(in srgb, #0284c7 72%, var(--theme-text)); background: color-mix(in srgb, #0ea5e9 12%, var(--theme-panel)); border-color: color-mix(in srgb, #0ea5e9 20%, transparent); }
+.risk-not-synced { color: var(--theme-text-secondary); background: var(--theme-control); border-color: var(--theme-border); } .risk-out-of-stock { color: var(--theme-danger-text); background: var(--theme-danger-soft); border-color: color-mix(in srgb, var(--theme-danger) 22%, transparent); } .risk-reorder { color: var(--theme-warning-text); background: var(--theme-warning-soft); border-color: color-mix(in srgb, var(--theme-warning-text) 22%, transparent); } .risk-healthy { color: var(--theme-success-text); background: var(--theme-success-soft); border-color: color-mix(in srgb, var(--theme-success-text) 22%, transparent); } .risk-no-sales { color: color-mix(in srgb, var(--theme-tone-blue) 72%, var(--theme-text)); background: color-mix(in srgb, var(--theme-accent) 12%, var(--theme-panel)); border-color: color-mix(in srgb, var(--theme-accent) 20%, transparent); }
 .inventory-empty, .detail-empty { display: grid; place-items: center; gap: 8px; min-height: 180px; color: var(--theme-text-muted); font-size: 13px; }
 .inventory-empty strong { color: var(--theme-text); }
-.inventory-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 18px; background: rgba(2, 6, 12, .72); }
+.inventory-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 18px; background: color-mix(in srgb, var(--theme-input) 72%, transparent); }
 .inventory-dialog { width: min(560px, 100%); padding: 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, .35); }
 .inventory-dialog--wide { width: min(980px, 100%); max-height: min(760px, 92vh); overflow: auto; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
