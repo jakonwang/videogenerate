@@ -22,8 +22,8 @@ withDefaults(
 <style scoped>
 .data-card {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 
 .data-card--large {
@@ -31,12 +31,12 @@ withDefaults(
 }
 
 .data-card--danger {
-  border-color: rgba(255, 120, 120, 0.28);
-  background: rgba(120, 22, 22, 0.12);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
 }
 
 .data-card--context {
-  border-color: rgba(120, 144, 255, 0.2);
-  background: rgba(36, 54, 105, 0.18);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 </style>

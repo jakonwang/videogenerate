@@ -64,8 +64,8 @@ watch(
   min-height: 0;
   margin-top: 10px;
   padding: 8px 10px 10px;
-  border: 1px solid rgba(119, 137, 198, 0.16);
-  background: rgba(11, 17, 30, 0.94);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
+  background: color-mix(in srgb, var(--theme-panel) 94%, transparent);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
 }
 
@@ -78,7 +78,7 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #93a2c1;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -102,35 +102,35 @@ watch(
   gap: 4px;
   padding: 10px 11px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 
 .runtime-log-item strong {
   font-size: 11px;
-  color: #7e90bb;
+  color: var(--theme-text-secondary);
 }
 
 .runtime-log-item span {
-  color: #edf2ff;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.55;
 }
 
 .runtime-log-item.success {
-  border-color: rgba(88, 214, 154, 0.18);
-  background: rgba(88, 214, 154, 0.08);
+  border-color: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
 }
 
 .runtime-log-item.error {
-  border-color: rgba(255, 120, 120, 0.22);
-  background: rgba(255, 120, 120, 0.08);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 22%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 8%, transparent);
 }
 
 .runtime-log-item.info {
-  border-color: rgba(142, 166, 255, 0.16);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
 }
 
 .runtime-console-toggle {
@@ -140,9 +140,9 @@ watch(
   z-index: 41;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid rgba(119, 137, 198, 0.18);
-  background: rgba(11, 17, 30, 0.96);
-  color: #eef3ff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-panel) 96%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   cursor: pointer;
 }

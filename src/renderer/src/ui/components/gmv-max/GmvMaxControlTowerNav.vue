@@ -131,9 +131,9 @@ function itemActive(item: GmvMaxNavItem) {
   flex: 0 0 40px;
   display: grid;
   place-items: center;
-  color: #ffffff;
+  color: var(--theme-text);
   border-radius: 8px;
-  background: #e83f62;
+  background: var(--theme-tone-red);
   box-shadow: 0 8px 22px color-mix(in srgb, #e83f62 24%, transparent);
 }
 .gmv-v2-nav__brand svg { width: 20px; }
@@ -196,12 +196,12 @@ function itemActive(item: GmvMaxNavItem) {
 .gmv-v2-nav__item em {
   min-width: 22px;
   padding: 2px 5px;
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 10px;
   font-style: normal;
   text-align: center;
   border-radius: 9px;
-  background: #e83f62;
+  background: var(--theme-tone-red);
 }
 .gmv-v2-nav__group {
   position: relative;

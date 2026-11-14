@@ -56,7 +56,7 @@ defineProps<{
 
 .stage-head__main p {
   margin: 0;
-  color: #93a2c1;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   line-height: 1.4;
   max-width: 520px;
@@ -79,11 +79,11 @@ defineProps<{
   flex-wrap: wrap;
   min-height: 22px;
   padding: 2px 2px 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .stage-head__aux :deep(span) {
-  color: #8fa0c4;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   line-height: 1.4;
 }

@@ -29,13 +29,13 @@ withDefaults(
 }
 
 .state-card strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 700;
 }
 
 .state-card span {
-  color: #93a2c1;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -46,18 +46,18 @@ withDefaults(
 
 .state-card--empty {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.015)),
-    rgba(255, 255, 255, 0.02);
-  border: 1px dashed rgba(142, 166, 255, 0.18);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 3%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 
 .state-card--pending {
-  background: rgba(142, 166, 255, 0.08);
-  border: 1px solid rgba(142, 166, 255, 0.16);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
 }
 
 .state-card--danger {
-  background: rgba(255, 120, 120, 0.08);
-  border: 1px solid rgba(255, 120, 120, 0.18);
+  background: color-mix(in srgb, var(--theme-tone-red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
 }
 </style>
