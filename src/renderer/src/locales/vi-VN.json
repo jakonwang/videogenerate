@@ -798,6 +798,7 @@
   },
   "nav": {
     "home": "Trang chu",
+    "productResearch": "Nghien cuu san pham",
     "products": "San xuat",
     "templates": "Mau",
     "tasks": "Tac vu",
@@ -2240,6 +2241,20 @@
     "previous": "Trang truoc",
     "next": "Trang sau",
     "perPage": "muc / trang",
+    "promptSettings": {
+      "button": "Prompt nhieu goc",
+      "title": "Phien ban prompt nhieu goc",
+      "desc": "Quan ly prompt dung de tao bang phan tich san pham nhieu goc.",
+      "version": "Phien ban",
+      "name": "Ten phien ban",
+      "content": "Noi dung prompt",
+      "active": "Dang dung",
+      "save": "Luu thay doi",
+      "copy": "Sao chep ban moi",
+      "activate": "Kich hoat",
+      "rollback": "Khoi phuc thanh ban moi",
+      "close": "Dong"
+    },
     "types": {
       "phone_case": "Op dien thoai",
       "earring": "Bong tai",

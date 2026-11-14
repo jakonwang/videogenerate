@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Product Research Assistant</string>
+    <string name="accessibility_service_description">Runs product search tasks after explicit user activation.</string>
+</resources>

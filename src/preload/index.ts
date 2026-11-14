@@ -7,6 +7,7 @@ import type {
   InventorySyncResult,
   SaveInventorySkuInput,
 } from '../main/modules/dianxiaomi-inventory/types'
+import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
 
 function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) {
   return {
@@ -23,6 +24,23 @@ function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.
 
 
 const api = {
+  productResearch: {
+    snapshot: (schemeId?: string) => ipcRenderer.invoke('productResearch:snapshot', schemeId) as Promise<ProductResearchSnapshot>,
+    createPairing: () => ipcRenderer.invoke('productResearch:createPairing') as Promise<ProductResearchPairing>,
+    createTask: (payload: { keyword: string; schemeId?: string; sort: 'comprehensive' | 'sales'; targetCount: number }) =>
+      ipcRenderer.invoke('productResearch:createTask', payload) as Promise<ProductResearchTask>,
+    cancelTask: (taskId: string) => ipcRenderer.invoke('productResearch:cancelTask', taskId) as Promise<ProductResearchTask | undefined>,
+    removeTask: (taskId: string) => ipcRenderer.invoke('productResearch:removeTask', taskId) as Promise<boolean>,
+    removeResult: (resultId: string, schemeId?: string) => ipcRenderer.invoke('productResearch:removeResult', { resultId, schemeId }) as Promise<boolean>,
+    removeResults: (resultIds: string[], schemeId?: string) => ipcRenderer.invoke('productResearch:removeResults', { resultIds, schemeId }) as Promise<number>,
+    clearResults: (schemeId?: string) => ipcRenderer.invoke('productResearch:clearResults', schemeId) as Promise<number>,
+    createScheme: (payload: { name: string; need: string; market: string; keywords: string[]; note?: string }) => ipcRenderer.invoke('productResearch:createScheme', payload) as Promise<ProductResearchScheme>,
+    listSchemes: () => ipcRenderer.invoke('productResearch:listSchemes') as Promise<ProductResearchScheme[]>,
+    updateScheme: (id: string, patch: any) => ipcRenderer.invoke('productResearch:updateScheme', id, patch) as Promise<ProductResearchScheme | null>,
+    deleteScheme: (id: string) => ipcRenderer.invoke('productResearch:deleteScheme', id) as Promise<boolean>,
+    getSchemeState: (id: string) => ipcRenderer.invoke('productResearch:getSchemeState', id) as Promise<ProductResearchSchemeState | null>,
+    saveSchemeState: (id: string, patch: Partial<ProductResearchSchemeState>) => ipcRenderer.invoke('productResearch:saveSchemeState', id, patch) as Promise<boolean>,
+  },
   assetLibrary: {
     list: (payload?: { query?: string; type?: 'all' | 'image' | 'video'; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:list', payload),
     upload: (folderId?: string | null) => ipcRenderer.invoke('assetLibrary:upload', folderId),
@@ -749,6 +767,10 @@ const api = {
     list: () => ipcRenderer.invoke('products:list'),
     upsert: (payload: any) => ipcRenderer.invoke('products:upsert', payload),
     remove: (id: string) => ipcRenderer.invoke('products:remove', id),
+    listPromptVersions: () => ipcRenderer.invoke('products:listPromptVersions'),
+    savePromptVersion: (payload: { id?: string; name?: string; prompt: string }) => ipcRenderer.invoke('products:savePromptVersion', payload),
+    activatePromptVersion: (id: string) => ipcRenderer.invoke('products:activatePromptVersion', id),
+    rollbackPromptVersion: (id: string) => ipcRenderer.invoke('products:rollbackPromptVersion', id),
     refreshCanonicalSource: (payload: { productId: string; force?: boolean }) => ipcRenderer.invoke('products:refreshCanonicalSource', payload),
     refreshProductAnalysis: (payload: { productId: string }) => ipcRenderer.invoke('products:refreshProductAnalysis', payload),
     ensureSegmentBucketsFromTemplates: () =>
@@ -1247,3 +1269,4 @@ const api = {
 contextBridge.exposeInMainWorld('api', api)
 
 export type PreloadApi = typeof api
+

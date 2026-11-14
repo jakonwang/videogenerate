@@ -4,11 +4,10 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   House,
+  SearchCheck,
   Sparkles,
   CopyPlus,
-  Rocket,
   FolderOpen,
-  ScissorsLineDashed,
   Send,
   Puzzle,
   Images,
@@ -56,6 +55,12 @@ const navItems = computed(() => [
     active: route.path.includes("/home"),
   },
   {
+    to: "/product-research",
+    icon: SearchCheck,
+    label: t("nav.productResearch"),
+    active: route.path.includes("/product-research"),
+  },
+  {
     to: "/models",
     icon: Sparkles,
     label: t("nav.models"),
@@ -80,21 +85,6 @@ const navItems = computed(() => [
     active: route.path.includes("/clone"),
   },
   {
-    to: "/production",
-    icon: Rocket,
-    label: t("nav.products"),
-    active:
-      route.path.includes("/production") ||
-      route.path.includes("/tasks") ||
-      route.path.includes("/templates"),
-  },
-  {
-    to: "/live-slicer",
-    icon: ScissorsLineDashed,
-    label: t("nav.liveSlicer"),
-    active: route.path.includes("/live-slicer"),
-  },
-  {
     to: "/publish",
     icon: Send,
     label: t("nav.publish"),
@@ -110,16 +100,6 @@ const helpItems = computed(() => [
     desc: t("shell.helpProducts"),
   },
   { to: "/clone", title: t("nav.clone"), desc: t("shell.helpClone") },
-  {
-    to: "/production",
-    title: t("nav.products"),
-    desc: t("shell.helpProduction"),
-  },
-  {
-    to: "/live-slicer",
-    title: t("nav.liveSlicer"),
-    desc: t("shell.helpSlicer"),
-  },
   { to: "/publish", title: t("nav.publish"), desc: t("nav.publish") },
 ]);
 

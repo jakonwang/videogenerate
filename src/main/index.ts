@@ -48,6 +48,7 @@ import { registerTiktokCreatorOutreachIpc } from './ipc/registerTiktokCreatorOut
 import { registerProductWatermarkIpc } from './ipc/registerProductWatermarkIpc'
 import { registerAssetLibraryIpc } from './ipc/registerAssetLibraryIpc'
 import { registerProductReplacementIpc } from './ipc/registerProductReplacementIpc'
+import { registerProductResearchIpc } from './ipc/registerProductResearchIpc'
 import { productReplacementService } from './modules/product-replacement/service'
 import { agentOsService } from './modules/agent-os/service'
 import { productImageMaterialsService } from './modules/product-image-materials/service'
@@ -62,6 +63,7 @@ import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalize
 import { gmvMaxScheduler } from './modules/tiktok-gmv-max/scheduler'
 import { gmvMaxMcpClient } from './modules/tiktok-gmv-max/mcpClient'
 import { closeGmvMaxSqlite } from './modules/tiktok-gmv-max/sqlite'
+import { productResearchService } from './modules/product-research/service'
 
 // Keep fatal startup errors available before Electron app paths are initialized.
 const earlyDiagnosticPath = join(process.env.TEMP || process.cwd(), 'VideoGenerate-startup.log')
@@ -275,15 +277,13 @@ async function wireMediaProtocol() {
     try {
       const u = new URL(request.url)
       if (u.hostname !== 'file') return new Response('not found', { status: 404 })
-      const filePath = decodeURIComponent(u.searchParams.get('path') ?? '')
+      const filePath = u.searchParams.get('path') ?? ''
       if (!filePath) return new Response('bad request', { status: 400 })
       const fileStat = await stat(filePath)
       const size = fileStat.size
       const range = request.headers.get('range')
       const mime = guessMimeByPath(filePath)
 
-      if (range) {
-        const match = /^bytes=(\d*)-(\d*)$/i.exec(range.trim())
       // `&w=` asks for a downscaled, disk-cached thumbnail (see mediaThumbnails.ts).
       const thumbWidth = normalizeThumbnailWidth(u.searchParams.get('w'))
       if (thumbWidth && !range && canThumbnail(filePath)) {
@@ -299,6 +299,8 @@ async function wireMediaProtocol() {
         }
       }
 
+      if (range) {
+        const match = /^bytes=(\d*)-(\d*)$/i.exec(range.trim())
         if (!match) {
           return new Response('range not satisfiable', {
             status: 416,
@@ -1749,6 +1751,7 @@ function wireIpc() {
   registerProductWatermarkIpc(ipcMain)
   registerAssetLibraryIpc(ipcMain)
   registerProductReplacementIpc(ipcMain)
+  registerProductResearchIpc(ipcMain)
   void productReplacementService.recoverOnStartup()
 }
 
@@ -1765,6 +1768,9 @@ app.whenReady().then(async () => {
   app.setPath('crashDumps', crashDumpsDir)
   // Keep startup paths ready before renderer IPC requests begin.
   wireIpc()
+  void productResearchService.ensureServer().catch((error) => {
+    console.error('[product-research] startup failed', error)
+  })
   await wireMediaProtocol()
   createWindow()
   markStartupStage('window-created')
@@ -1856,6 +1862,7 @@ app.on('before-quit', () => {
   void closeTiktokOfficialBrowser()
   void stopPreviewHttpServer()
   void stopWebApiServer()
+  void productResearchService.stop()
   gmvMaxScheduler.stop()
   void backgroundRecordStore.close()
   void gmvMaxWorkerClient.close()

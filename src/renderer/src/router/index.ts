@@ -16,6 +16,16 @@ const router = createRouter({
         { path: "", redirect: { name: "home" } },
         { path: "home", name: "home", component: HomeView },
         {
+          path: "product-research",
+          name: "product-research",
+          component: () => import("@/ui/views/ProductResearchView.vue"),
+        },
+        {
+          path: "product-research/:schemeId",
+          name: "product-research-detail",
+          component: () => import("@/ui/views/ProductResearchDetailView.vue"),
+        },
+        {
           path: "production",
           name: "production",
           component: () => import("@/ui/views/ProductionHomeView.vue"),
@@ -180,3 +190,4 @@ const router = createRouter({
 });
 
 export { router };
+

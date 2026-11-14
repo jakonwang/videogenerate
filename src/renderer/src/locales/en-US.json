@@ -2017,6 +2017,7 @@
   },
   "nav": {
     "home": "Home",
+    "productResearch": "Product Research",
     "products": "Production",
     "templates": "Templates",
     "tasks": "Tasks",
@@ -3481,6 +3482,20 @@
     "previous": "Previous",
     "next": "Next",
     "perPage": "per page",
+    "promptSettings": {
+      "button": "Multi-Angle Prompt",
+      "title": "Multi-Angle Prompt Versions",
+      "desc": "Manage the prompt used to generate product multi-angle analysis boards.",
+      "version": "Version",
+      "name": "Version Name",
+      "content": "Prompt Content",
+      "active": "Active",
+      "save": "Save Changes",
+      "copy": "Copy As New",
+      "activate": "Activate Version",
+      "rollback": "Rollback As New",
+      "close": "Close"
+    },
     "types": {
       "phone_case": "Phone Case",
       "earring": "Earrings",

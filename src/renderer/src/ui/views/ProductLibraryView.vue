@@ -16,8 +16,10 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings2,
   SlidersHorizontal,
   Trash2,
+  X,
 } from 'lucide-vue-next'
 import UiChip from '../components/UiChip.vue'
 
@@ -35,6 +37,14 @@ type ProductType =
 type ProductStatusFilter = 'all' | 'pending' | 'processing' | 'done' | 'failed'
 type ViewMode = 'grid' | 'list'
 type SortMode = 'updated_desc' | 'name_asc' | 'analysis_board_status'
+
+type PromptVersion = {
+  id: string
+  name: string
+  version: number
+  prompt: string
+  active: boolean
+}
 
 type ProductImageAsset = {
   id: string
@@ -78,6 +88,13 @@ const currentPage = ref(1)
 const pageSize = ref(12)
 const creating = reactive({ name: '', type: 'phone_case' as ProductType })
 const actionMenuOpenId = ref('')
+const promptDialogOpen = ref(false)
+const promptVersions = ref<PromptVersion[]>([])
+const selectedPromptVersionId = ref('')
+const promptVersionName = ref('')
+const promptText = ref('')
+const promptBusy = ref(false)
+const promptError = ref('')
 
 const productTypeOptionsV2 = computed<Array<{ value: ProductType; label: string }>>(() =>
   (['phone_case', 'earring', 'necklace', 'ring', 'bracelet', 'clothes', 'bag', 'shoes', 'toy', 'general'] as ProductType[])
@@ -261,6 +278,79 @@ async function refresh() {
   list.value = (await window.api.products.list()) as Product[]
 }
 
+function selectPromptVersion() {
+  const selected = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+  promptVersionName.value = selected?.name || ''
+  promptText.value = selected?.prompt || ''
+}
+
+async function loadPromptVersions(preferredId = '') {
+  promptVersions.value = await window.api.products.listPromptVersions() as PromptVersion[]
+  const selected = promptVersions.value.find((item) => item.id === preferredId)
+    || promptVersions.value.find((item) => item.active)
+    || promptVersions.value[0]
+  selectedPromptVersionId.value = selected?.id || ''
+  selectPromptVersion()
+}
+
+async function openPromptDialog() {
+  promptDialogOpen.value = true
+  promptError.value = ''
+  promptBusy.value = true
+  try {
+    await loadPromptVersions()
+  } catch (error: any) {
+    promptError.value = String(error?.message || error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+async function savePromptVersion(asCopy = false) {
+  promptBusy.value = true
+  promptError.value = ''
+  try {
+    const saved = await window.api.products.savePromptVersion({
+      id: asCopy ? undefined : selectedPromptVersionId.value,
+      name: promptVersionName.value,
+      prompt: promptText.value,
+    }) as PromptVersion
+    await loadPromptVersions(saved.id)
+  } catch (error: any) {
+    promptError.value = String(error?.message || error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+async function activatePromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptBusy.value = true
+  promptError.value = ''
+  try {
+    const active = await window.api.products.activatePromptVersion(selectedPromptVersionId.value) as PromptVersion
+    await loadPromptVersions(active.id)
+  } catch (error: any) {
+    promptError.value = String(error?.message || error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+async function rollbackPromptVersion() {
+  if (!selectedPromptVersionId.value) return
+  promptBusy.value = true
+  promptError.value = ''
+  try {
+    const active = await window.api.products.rollbackPromptVersion(selectedPromptVersionId.value) as PromptVersion
+    await loadPromptVersions(active.id)
+  } catch (error: any) {
+    promptError.value = String(error?.message || error)
+  } finally {
+    promptBusy.value = false
+  }
+}
+
 async function createProduct() {
   const fallbackName = `${t('productLibrary.unnamed')}_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`
   const name = creating.name.trim() || fallbackName
@@ -329,6 +419,10 @@ onBeforeUnmount(() => {
           <p>{{ t('productLibrary.desc') }}</p>
         </div>
         <div class="products-create-card">
+          <button class="products-hero__settings" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
+            <Settings2 class="h-4 w-4" />
+            <span>{{ t('productLibrary.promptSettings.button') }}</span>
+          </button>
           <div class="products-create-card__fields">
             <input
               v-model="creating.name"
@@ -501,6 +595,8 @@ onBeforeUnmount(() => {
                 v-if="resolveProductCoverPath(product)"
                 :src="thumbnailUrl(resolveProductCoverPath(product), 320)"
                 class="product-card__image"
+                loading="lazy"
+                decoding="async"
               />
               <div v-else class="product-card__empty">
                 <FileImage class="h-8 w-8" />
@@ -588,6 +684,43 @@ onBeforeUnmount(() => {
         </footer>
       </section>
     </section>
+
+    <div v-if="promptDialogOpen" class="prompt-dialog-backdrop" data-testid="product-prompt-dialog" @click.self="promptDialogOpen = false">
+      <section class="prompt-dialog" role="dialog" aria-modal="true" :aria-label="t('productLibrary.promptSettings.title')">
+        <header class="prompt-dialog__header">
+          <div>
+            <h2>{{ t('productLibrary.promptSettings.title') }}</h2>
+            <p>{{ t('productLibrary.promptSettings.desc') }}</p>
+          </div>
+          <button type="button" :aria-label="t('productLibrary.promptSettings.close')" @click="promptDialogOpen = false"><X class="h-5 w-5" /></button>
+        </header>
+        <div class="prompt-dialog__body">
+          <label>
+            <span>{{ t('productLibrary.promptSettings.version') }}</span>
+            <select v-model="selectedPromptVersionId" data-testid="product-prompt-version-select" @change="selectPromptVersion">
+              <option v-for="version in promptVersions" :key="version.id" :value="version.id">
+                V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${t('productLibrary.promptSettings.active')}` : '' }}
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>{{ t('productLibrary.promptSettings.name') }}</span>
+            <input v-model="promptVersionName" data-testid="product-prompt-name-input" type="text" maxlength="120" />
+          </label>
+          <label class="prompt-dialog__content">
+            <span>{{ t('productLibrary.promptSettings.content') }}</span>
+            <textarea v-model="promptText" data-testid="product-prompt-content-input" rows="15" spellcheck="false"></textarea>
+          </label>
+          <p v-if="promptError" class="prompt-dialog__error">{{ promptError }}</p>
+        </div>
+        <footer class="prompt-dialog__footer">
+          <button type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ t('productLibrary.promptSettings.rollback') }}</button>
+          <button type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ t('productLibrary.promptSettings.copy') }}</button>
+          <button type="button" :disabled="promptBusy || !selectedPromptVersionId || !promptText.trim()" @click="savePromptVersion(false)">{{ t('productLibrary.promptSettings.save') }}</button>
+          <button class="prompt-dialog__activate" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('productLibrary.promptSettings.activate') }}</button>
+        </footer>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -595,8 +728,6 @@ onBeforeUnmount(() => {
 .products-page {
   display: grid;
   gap: 14px;
-                loading="lazy"
-                decoding="async"
   padding: 4px 6px 20px;
 }
 
@@ -645,9 +776,102 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  min-width: min(540px, 100%);
+  min-width: min(720px, 100%);
   -webkit-app-region: no-drag;
 }
+
+.products-hero__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(123, 142, 201, 0.22);
+  border-radius: 14px;
+  background: rgba(18, 25, 45, 0.94);
+  color: #dce6ff;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.prompt-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 18, 0.74);
+  backdrop-filter: blur(8px);
+}
+
+.prompt-dialog {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgba(123, 142, 201, 0.24);
+  border-radius: 20px;
+  background: #11182b;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
+}
+
+.prompt-dialog__header,
+.prompt-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.prompt-dialog__header {
+  border-bottom: 1px solid rgba(123, 142, 201, 0.16);
+}
+
+.prompt-dialog__header h2,
+.prompt-dialog__header p {
+  margin: 0;
+}
+
+.prompt-dialog__header h2 { color: #ffffff; font-size: 19px; }
+.prompt-dialog__header p { margin-top: 5px; color: #91a5cf; font-size: 12px; }
+.prompt-dialog__header button { display: grid; place-items: center; border: 0; background: transparent; color: #a9b8d8; }
+
+.prompt-dialog__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 20px;
+}
+
+.prompt-dialog__body label { display: grid; gap: 7px; color: #9eb0d6; font-size: 12px; font-weight: 700; }
+.prompt-dialog__content, .prompt-dialog__error { grid-column: 1 / -1; }
+.prompt-dialog__body input, .prompt-dialog__body select, .prompt-dialog__body textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(123, 142, 201, 0.2);
+  border-radius: 12px;
+  background: #0b1120;
+  padding: 11px 12px;
+  color: #edf3ff;
+  outline: none;
+}
+.prompt-dialog__body textarea { resize: vertical; line-height: 1.5; }
+.prompt-dialog__error { margin: 0; color: #ff7f91; font-size: 12px; }
+.prompt-dialog__footer { justify-content: flex-end; border-top: 1px solid rgba(123, 142, 201, 0.16); }
+.prompt-dialog__footer button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(123, 142, 201, 0.2);
+  border-radius: 11px;
+  background: #182139;
+  color: #dce6ff;
+  font-weight: 800;
+}
+.prompt-dialog__footer button:disabled { opacity: 0.48; }
+.prompt-dialog__footer .prompt-dialog__activate { border-color: transparent; background: linear-gradient(135deg, #795dff, #9b6cff); color: #ffffff; }
 
 .products-create-card__fields {
   display: grid;

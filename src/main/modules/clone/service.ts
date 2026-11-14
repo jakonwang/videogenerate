@@ -33,6 +33,7 @@ import {
   submitTask as submitAi666Task,
 } from './unifiedVideo'
 import { productsRepo } from '../products/repo'
+import { productAnalysisBoardPromptVersionService } from '../products/promptVersions'
 import { templatesRepo } from '../templates/repo'
 import { getMediaInfo } from '../media/info'
 import { generateThumbnailJpg } from '../media/thumbnail'
@@ -4155,7 +4156,7 @@ async function refreshProductCanonicalSourceFromLibrary(input: { productId: stri
   if (!productRefs.length) throw new Error('当前商品没有可用于生成标准源的图片')
   const productKey = String(product.id || input.productId).trim()
   const signature = computeProductReferenceSignature(productRefs)
-  const prompt = getProductCanonicalSourcePrompt()
+  const prompt = (await productAnalysisBoardPromptVersionService.getActive()).prompt
   const directPath = String(productRefs[0] || '').trim()
   const boardFilePrefix = input.force ? `${product.id}_analysis_board_${now()}` : product.id
   const processingProduct = await productsRepo.upsert({
@@ -4229,6 +4230,7 @@ async function refreshProductCanonicalSourceFromLibrary(input: { productId: stri
           outDir: join(getAppPaths().tmpDir, 'product-library-analysis-board', processingProduct.id),
           filePrefix: boardFilePrefix,
           allowFallback: false,
+          prompt,
         })
         latestProductState = await productsRepo.upsert({
           ...latestProductState,

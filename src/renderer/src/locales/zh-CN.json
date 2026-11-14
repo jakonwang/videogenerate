@@ -1979,6 +1979,7 @@
   },
   "nav": {
     "home": "首页",
+    "productResearch": "\u9009\u54c1",
     "products": "生产",
     "templates": "模板",
     "tasks": "任务",
@@ -3454,6 +3455,20 @@
     "previous": "上一页",
     "next": "下一页",
     "perPage": "条 / 页",
+    "promptSettings": {
+      "button": "\u591a\u89d2\u5ea6\u56fe\u63d0\u793a\u8bcd",
+      "title": "\u591a\u89d2\u5ea6\u56fe\u63d0\u793a\u8bcd\u7248\u672c\u7ba1\u7406",
+      "desc": "\u7ba1\u7406\u5546\u54c1\u591a\u89d2\u5ea6\u5206\u6790\u753b\u677f\u751f\u6210\u65f6\u4f7f\u7528\u7684\u63d0\u793a\u8bcd\u3002",
+      "version": "\u7248\u672c",
+      "name": "\u7248\u672c\u540d\u79f0",
+      "content": "\u63d0\u793a\u8bcd\u5185\u5bb9",
+      "active": "\u5f53\u524d\u542f\u7528",
+      "save": "\u4fdd\u5b58\u4fee\u6539",
+      "copy": "\u590d\u5236\u65b0\u7248\u672c",
+      "activate": "\u542f\u7528\u6b64\u7248\u672c",
+      "rollback": "\u56de\u6eda\u4e3a\u65b0\u7248\u672c",
+      "close": "\u5173\u95ed"
+    },
     "types": {
       "phone_case": "手机壳",
       "earring": "耳环",

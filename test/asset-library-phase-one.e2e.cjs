@@ -20,7 +20,7 @@ async function main() {
     await writeFile(join(libraryDir, 'index.json'), JSON.stringify({
       folders: [{ id: 'folder-one', name: 'Folder One', parentId: null, createdAt: 1, updatedAt: 1 }],
       assets: [
-        { id: 'asset-one', name: 'Alpha.png', fileName: 'Alpha.png', filePath: firstPath, type: 'image', mimeType: 'image/png', size: pixel.length, source: 'desktop', createdAt: 1, folderId: null },
+        { id: 'asset-one', name: 'Camera_XHS_17941208966951040g2sg324ar27vs0ahg5q803b9sivj80rgk608.jpg', fileName: 'Alpha.png', filePath: firstPath, type: 'image', mimeType: 'image/png', size: pixel.length, source: 'desktop', createdAt: 1, folderId: null },
         { id: 'asset-two', name: 'Beta.png', fileName: 'Beta.png', filePath: secondPath, type: 'image', mimeType: 'image/png', size: pixel.length, source: 'desktop', createdAt: 2, folderId: null },
       ],
     }, null, 2), 'utf8')
@@ -74,9 +74,23 @@ async function main() {
     assert.match(await page.locator('.asset-editor-tabs').innerText(), /\u4fee\u6539\u5c3a\u5bf8/)
     assert.match(await page.locator('.asset-editor-tabs').innerText(), /\u88c1\u526a/)
     assert.match(await page.locator('.asset-editor-tabs').innerText(), /\u53bb\u6c34\u5370/)
+    const editorBox = await page.locator('.asset-editor').boundingBox()
+    const editorInputs = await page.locator('.asset-editor-fields input').all()
+    assert.ok(editorBox)
+    for (const input of editorInputs) {
+      const inputBox = await input.boundingBox()
+      assert.ok(inputBox)
+      assert.ok(inputBox.x >= editorBox.x && inputBox.x + inputBox.width <= editorBox.x + editorBox.width)
+    }
     await page.locator('.asset-editor .asset-modal-close').click()
     await page.locator('[data-asset-id="asset-one"]').click({ button: 'right' })
     await page.getByRole('button', { name: '\u91cd\u547d\u540d', exact: true }).click()
+    const renameDialogBox = await page.locator('.asset-rename-dialog').boundingBox()
+    const renameInputBox = await page.locator('.asset-rename-dialog input').boundingBox()
+    const renameFooterBox = await page.locator('.asset-rename-dialog footer').boundingBox()
+    assert.ok(renameDialogBox && renameInputBox && renameFooterBox)
+    assert.ok(renameInputBox.x >= renameDialogBox.x && renameInputBox.x + renameInputBox.width <= renameDialogBox.x + renameDialogBox.width)
+    assert.ok(renameFooterBox.x >= renameDialogBox.x && renameFooterBox.x + renameFooterBox.width <= renameDialogBox.x + renameDialogBox.width)
     await page.locator('.asset-folder-dialog input').fill('Renamed Alpha.png')
     await page.locator('.asset-folder-dialog button[type="submit"]').click()
     await page.waitForFunction(() => document.body.innerText.includes('Renamed Alpha.png'))
