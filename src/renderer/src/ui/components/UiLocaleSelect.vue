@@ -19,7 +19,7 @@ const model = computed({
 <template>
   <label class="locale-select" :title="t('common.language')">
     <Languages class="locale-select__icon" />
-    <select v-model="model" class="vg-select vg-select--sm locale-select__control" :aria-label="t('common.language')">
+    <select v-model="model" class="vg-select vg-select--sm locale-select__control" data-testid="app-locale-select" :aria-label="t('common.language')">
       <option v-for="o in settings.localeOptions" :key="o.value" :value="o.value">
         {{ o.label }}
       </option>

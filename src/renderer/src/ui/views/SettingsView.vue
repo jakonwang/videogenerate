@@ -729,7 +729,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="vg-scope vg-page settings" :class="{ 'is-storage-section': settingsSection === 'storage-management' }">
+  <div class="vg-scope vg-page settings" data-testid="settings-page" :class="{ 'is-storage-section': settingsSection === 'storage-management' }">
     <header class="vg-page-head">
       <span class="vg-page-head__icon"><SettingsIcon :size="20" /></span>
       <div class="vg-page-head__text">

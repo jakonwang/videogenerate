@@ -165,4 +165,14 @@ function navigate(to: string) {
 .vg-nav.is-collapsed .vg-nav__label,
 .vg-nav.is-collapsed .vg-nav__section-title { display: none; }
 .vg-nav.is-collapsed .vg-nav__section { margin-top: 8px; padding-top: 8px; }
+
+/* Narrow windows always use the icon rail (matches the previous shell behaviour). */
+@media (max-width: 1180px) {
+  .vg-nav { padding: 12px 8px; }
+  .vg-nav__item { justify-content: center; padding: 0; }
+  .vg-nav__item.is-active::before { left: -8px; }
+  .vg-nav__label,
+  .vg-nav__section-title { display: none; }
+  .vg-nav__section { margin-top: 8px; padding-top: 8px; }
+}
 </style>

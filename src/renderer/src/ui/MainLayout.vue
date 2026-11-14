@@ -195,6 +195,7 @@ onMounted(() => {
           <UiLocaleSelect v-if="!appSidebarCollapsed" />
           <button
             class="shell-foot__btn"
+            data-testid="app-settings-button"
             :class="{ 'is-active': route.path.startsWith('/settings') }"
             type="button"
             :title="appSidebarCollapsed ? t('nav.settings') : undefined"
@@ -372,6 +373,14 @@ onMounted(() => {
 .app-shell.is-sidebar-collapsed .shell-foot__label,
 .app-shell.is-sidebar-collapsed .shell-foot__user-copy { display: none; }
 .app-shell.is-sidebar-collapsed .shell-foot__user { flex-direction: column; gap: 8px; padding: 6px 0 0; }
+
+@media (max-width: 1180px) {
+  .shell-foot__btn { justify-content: center; padding: 0; }
+  .shell-foot__label,
+  .shell-foot__user-copy,
+  .app-shell :deep(.locale-select) { display: none; }
+  .shell-foot__user { flex-direction: column; gap: 8px; padding: 6px 0 0; }
+}
 
 /* ===== Clone workflow topbar (kept until the clone workspace is migrated) ===== */
 .app-shell :deep(.ds-topbar) {

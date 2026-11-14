@@ -43,7 +43,7 @@ async function main() {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.waitForSelector('[data-testid="product-image-materials-title"]', { timeout: 30000 })
 
-    const localeSelect = page.locator('select.ui-select')
+    const localeSelect = page.locator('[data-testid="app-locale-select"]')
     await localeSelect.selectOption('zh-CN')
     await assertText(page, '[data-testid="product-image-materials-title"]', '\u5546\u54c1\u56fe\u7247\u7d20\u6750')
     const columns = await page.locator('.pick-row--three').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)

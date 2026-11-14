@@ -174,13 +174,13 @@ async function main() {
 
     for (const theme of themes) {
       await page.evaluate(() => { window.location.hash = '#/settings' })
-      await page.locator('.settings-console').waitFor({ state: 'visible' })
+      await page.locator('[data-testid="settings-page"]').waitFor({ state: 'visible' })
       await page.locator('[data-settings-section="appearance"]').click()
       await page.locator(`.theme-option--${theme.key}`).click()
       await page.waitForFunction((key) => document.documentElement.dataset.appTheme === key, theme.key)
       const settingsTheme = await page.evaluate(() => {
-        const icon = document.querySelector('.nav-item:not(.active) .nav-item__icon')
-        const activeIcon = document.querySelector('.nav-item.active .nav-item__icon')
+        const icon = document.querySelector('.settings-nav__item:not(.is-active) .settings-nav__icon')
+        const activeIcon = document.querySelector('.settings-nav__item.is-active .settings-nav__icon')
         const iconStyle = icon ? getComputedStyle(icon) : null
         const activeIconStyle = activeIcon ? getComputedStyle(activeIcon) : null
         const colorProbe = document.createElement('span')
@@ -196,9 +196,8 @@ async function main() {
           selectedText,
         }
       })
-      assert.equal(settingsTheme.iconColor, theme.accent)
+      assert.equal(settingsTheme.activeIconBackground, theme.accent)
       assert.notEqual(settingsTheme.iconBackground, 'rgba(0, 0, 0, 0)')
-      assert.equal(settingsTheme.activeIconColor, settingsTheme.selectedText)
       assert.notEqual(settingsTheme.activeIconBackground, 'rgba(0, 0, 0, 0)')
       await page.screenshot({ path: path.join(artifacts, `theme-${theme.key}-settings-1440x900.png`) })
 

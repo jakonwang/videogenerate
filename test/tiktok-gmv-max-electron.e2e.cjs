@@ -101,7 +101,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width <= 74)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:app-sidebar-collapsed:v1')), 'true')
     const collapsedMainNavFit = await page.evaluate(() => {
-      const button = document.querySelector('.app-sidebar-footer-action')
+      const button = document.querySelector('[data-testid="app-settings-button"]')
       const icon = button?.querySelector('svg')
       if (!button || !icon) return { centeredSettingsIcon: false, containedSettingsIcon: false }
       const buttonBox = button.getBoundingClientRect()
@@ -793,11 +793,11 @@ async function main() {
       tabsVisible: document.querySelector('.gmv-tabs')?.getBoundingClientRect().bottom > 0,
       featureNavWidth: document.querySelector('[data-testid="gmv-feature-nav"]')?.getBoundingClientRect().width || 0,
       appSidebarWidth: document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width || 0,
-      visibleSidebarLabels: Array.from(document.querySelectorAll('.ds-sidebar__item span, .ds-sidebar__section-title, .app-sidebar-footer-action span, .app-sidebar-user .min-w-0, .app-sidebar-collapse span')).filter((item) => {
+      visibleSidebarLabels: Array.from(document.querySelectorAll('.vg-nav__label, .vg-nav__section-title, .shell-foot__label, .shell-foot__user-copy')).filter((item) => {
         const style = getComputedStyle(item)
         return style.display !== 'none' && item.getBoundingClientRect().width > 0
       }).length,
-      centeredSidebarIcons: Array.from(document.querySelectorAll('.ds-sidebar__item')).every((item) => {
+      centeredSidebarIcons: Array.from(document.querySelectorAll('.vg-nav__item')).every((item) => {
         const icon = item.querySelector('svg')
         if (!icon) return true
         const itemBox = item.getBoundingClientRect()
@@ -805,7 +805,7 @@ async function main() {
         return Math.abs((itemBox.left + itemBox.width / 2) - (iconBox.left + iconBox.width / 2)) <= 1
       }),
       centeredSettingsIcon: (() => {
-        const button = document.querySelector('.app-sidebar-footer-action')
+        const button = document.querySelector('[data-testid="app-settings-button"]')
         const icon = button?.querySelector('svg')
         if (!button || !icon) return false
         const buttonBox = button.getBoundingClientRect()

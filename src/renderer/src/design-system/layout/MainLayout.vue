@@ -44,6 +44,7 @@ const props = defineProps<{
   transition: grid-template-columns .18s ease;
 }
 .vg-shell.is-collapsed { --vg-sidebar-width: 64px; }
+@media (max-width: 1180px) { .vg-shell { --vg-sidebar-width: 64px; } }
 
 .ds-shell__main {
   min-width: 0;
