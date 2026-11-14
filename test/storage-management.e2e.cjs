@@ -48,7 +48,20 @@ async function main() {
     await page.waitForSelector('[data-storage-category="safe_cache"]', { timeout: 60_000 })
     const initialRowsMs = Date.now() - storageOpenStartedAt
     assert.ok(initialRowsMs < 2000, `Storage rows took ${initialRowsMs}ms to render`)
-    assert.equal(await page.locator('[data-storage-category]').count(), 10)
+    // Hermes runtime/session categories were removed from storage management in v5.0.125.
+    assert.deepEqual(
+      (await page.locator('[data-storage-category]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-storage-category')))).sort(),
+      [
+        'business_records',
+        'completed_project_artifacts',
+        'configuration_credentials',
+        'diagnostic_logs',
+        'managed_source_assets',
+        'preview_files',
+        'safe_cache',
+        'temporary_files',
+      ],
+    )
 
     const safeRow = page.locator('[data-storage-category="safe_cache"]')
     await page.waitForFunction(() => !document.querySelector('[data-storage-category="safe_cache"] .row-scanning'))

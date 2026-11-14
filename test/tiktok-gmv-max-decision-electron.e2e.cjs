@@ -57,7 +57,8 @@ async function main() {
     await page.locator('[data-testid="gmv-tab-sop"]').click()
     await page.locator('[data-testid="gmv-decision-center"]').waitFor({ state: 'visible' })
     assert.equal(await page.locator('.gmv-task-header h1').innerText(), '增长')
-    assert.ok(await page.locator('[data-testid="gmv-cockpit-scopebar"]').isVisible())
+    // v5.0.77 replaced the cockpit scope bar with the decision scope selector.
+    assert.ok(await page.locator('[data-testid="gmv-decision-scope"]').isVisible())
     assert.ok(await page.locator('[data-testid="gmv-today-plan"]').isVisible())
 
     await page.locator('[data-testid="gmv-tab-actions"]').click()

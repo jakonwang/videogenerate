@@ -17173,13 +17173,15 @@ html[data-app-theme] body #app .outreach-page .tab-layout textarea:focus {
 /* Final monochrome workbench pass. Keep this block last so view-local styles cannot reintroduce dark surfaces. */
 html:is([data-app-theme='light-teal'], [data-app-theme='mono']) {
   color-scheme: light;
-  --mono-ink: #111111;
-  --mono-copy: #2f2f2f;
-  --mono-muted: #6b6b6b;
-  --mono-line: #dedede;
-  --mono-line-strong: #b7b7b7;
-  --mono-soft: #f5f5f5;
-  --mono-hover: #ededed;
+  /* These used to be fixed greys, which made light-teal render with mono's colours.
+     Point them at the active theme's tokens so each light theme keeps its own palette. */
+  --mono-ink: var(--theme-text);
+  --mono-copy: var(--theme-text);
+  --mono-muted: var(--theme-text-secondary);
+  --mono-line: var(--theme-border);
+  --mono-line-strong: var(--theme-border-control);
+  --mono-soft: var(--theme-panel-soft);
+  --mono-hover: var(--theme-control-hover);
 }
 
 html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body,

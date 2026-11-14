@@ -20,6 +20,14 @@ async function captureWindow(electronApp, outputPath, clip) {
   await writeFile(outputPath, Buffer.from(base64, 'base64'))
 }
 
+// v2 keeps the global filter bar (search / store / dates) collapsed behind the scope toggle.
+async function ensureGlobalFilters(page) {
+  const filters = page.locator('[data-testid="gmv-global-filters"]')
+  if (await filters.isVisible().catch(() => false)) return
+  await page.locator('[data-testid="gmv-global-filter-toggle"]').click()
+  await filters.waitFor({ state: 'visible' })
+}
+
 async function main() {
   const root = path.resolve(__dirname, '..')
   const artifacts = path.join(root, 'test-artifacts', 'tiktok-gmv-max')
@@ -77,10 +85,11 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.waitForTimeout(500)
     assert.equal(await page.locator('.gmv-alert--danger').count(), 0)
-    assert.equal(await page.locator('.gmv-commandbar').isVisible(), true)
+    // v2 replaced the command bar with the control strip.
+    assert.equal(await page.locator('[data-testid="gmv-control-strip"]').isVisible(), true)
     const featureNav = page.locator('[data-testid="gmv-feature-nav"]')
     const featureNavToggle = page.locator('[data-testid="gmv-feature-nav-toggle"]')
-    assert.equal(await featureNav.locator('.gmv-tab').count(), 10)
+    assert.equal(await featureNav.locator('[data-testid^="gmv-tab-"]:not([data-testid="gmv-tab-help"])').count(), 10)
     assert.ok((await featureNav.boundingBox())?.width >= 200)
     await captureWindow(electronApp, path.join(artifacts, 'feature-navigation.png'))
     await featureNavToggle.click()
@@ -339,6 +348,7 @@ async function main() {
     if (await healthList.count()) assert.doesNotMatch(await healthList.innerText(), /\broi_guard\b/)
 
     await page.locator('[data-testid="gmv-tab-campaigns"]').click()
+    await ensureGlobalFilters(page)
     assert.equal(await page.locator('[data-testid="gmv-pacing-overview"]').isVisible(), true)
     assert.equal(await page.locator('[data-testid="gmv-pacing-overview"] article').count(), 4)
     assert.equal(await page.locator('.gmv-date-field input[type="date"]').count(), 2)
@@ -405,6 +415,7 @@ async function main() {
       assert.equal(await experimentBoard.locator('.gmv-experiment-outcomes').isVisible(), true)
       await captureWindow(electronApp, path.join(artifacts, 'creative-experiment.png'))
       const scopedStoreId = await page.evaluate(async (campaignId) => (await window.api.tiktokGmvMax.getCampaignWorkspace({ campaignId })).campaign.storeId, firstCampaignId)
+      await ensureGlobalFilters(page)
       const alternateStoreId = await page.locator('.gmv-commandbar > select').locator('option').evaluateAll((options, currentStoreId) => options.map((option) => option.value).find((value) => value !== 'all' && value !== currentStoreId) || '', scopedStoreId)
       if (alternateStoreId) {
         await page.locator('.gmv-commandbar > select').selectOption(alternateStoreId)

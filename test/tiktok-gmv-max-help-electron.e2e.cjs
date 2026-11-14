@@ -41,7 +41,8 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.locator('[data-testid="gmv-tab-help"]').click()
     await page.locator('[data-testid="gmv-help-center"]').waitFor({ state: 'visible' })
-    assert.equal(await page.locator('[data-testid="gmv-feature-nav"] .gmv-tab').count(), 10)
+    // v2 navigation: ten feature entries (overview, growth children, sop, audit, settings) plus the help entry.
+    assert.equal(await page.locator('[data-testid="gmv-feature-nav"] [data-testid^="gmv-tab-"]:not([data-testid="gmv-tab-help"])').count(), 10)
     assert.equal(await page.locator('.gmv-commandbar').count(), 0)
     assert.equal(await page.locator('[data-testid="gmv-catalog-strip"]').count(), 0)
     assert.equal((await page.locator('[data-testid="gmv-help-center"]').innerText()).includes('gmvMaxHelp.'), false)

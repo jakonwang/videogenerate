@@ -44,10 +44,10 @@ async function main() {
     { tab: 'help', title: null },
   ]
   const themes = [
+    // The three themes offered in Settings (themes.css tokens: --theme-shell / --theme-panel / --theme-accent).
     { key: 'dark-teal', shell: 'rgb(9, 14, 24)', panel: 'rgb(17, 19, 30)', accent: 'rgb(20, 184, 166)' },
-    { key: 'soft-mint', shell: 'rgb(243, 250, 248)', panel: 'rgb(255, 255, 255)', accent: 'rgb(47, 148, 119)' },
-    { key: 'warm-paper', shell: 'rgb(246, 239, 223)', panel: 'rgb(255, 250, 240)', accent: 'rgb(173, 91, 0)' },
-    { key: 'clear-sky', shell: 'rgb(247, 247, 255)', panel: 'rgb(255, 255, 255)', accent: 'rgb(59, 130, 246)' },
+    { key: 'light-teal', shell: 'rgb(245, 246, 248)', panel: 'rgb(255, 255, 255)', accent: 'rgb(0, 135, 90)' },
+    { key: 'mono', shell: 'rgb(247, 247, 248)', panel: 'rgb(255, 255, 255)', accent: 'rgb(23, 23, 23)' },
   ]
 
   try {
