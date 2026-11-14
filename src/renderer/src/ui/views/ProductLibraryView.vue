@@ -4,9 +4,11 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
+  AlertTriangle,
   Boxes,
   CheckCircle2,
-  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   FileImage,
   FolderOpen,
@@ -17,11 +19,9 @@ import {
   RefreshCw,
   Search,
   Settings2,
-  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-vue-next'
-import UiChip from '../components/UiChip.vue'
 
 type ProductType =
   | 'phone_case'
@@ -270,6 +270,15 @@ function productAnalysisStatusLabel(product: Product) {
   return productAnalysisSummary(product) ? t('productLibrary.dna.done') : t('productLibrary.dna.pending')
 }
 
+/** Map legacy chip tones to vg-pill tones. */
+function chipTone(tone: string) {
+  if (tone === 'success') return 'green'
+  if (tone === 'info') return 'blue'
+  if (tone === 'danger') return 'red'
+  if (tone === 'warning') return 'amber'
+  return 'gray'
+}
+
 function productAnalysisTone(product: Product) {
   return productAnalysisSummary(product) ? 'success' : 'warning'
 }
@@ -411,1115 +420,286 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="products-page" data-testid="product-library-page">
-    <section class="products-shell">
-      <header class="products-hero">
-        <div class="products-hero__copy">
-          <h1>{{ t('productLibrary.title') }}</h1>
-          <p>{{ t('productLibrary.desc') }}</p>
+  <div class="vg-scope vg-page pl" data-testid="product-library-page">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><Boxes :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ t('productLibrary.title') }}</h1>
+        <p>{{ t('productLibrary.desc') }}</p>
+      </div>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
+          <Settings2 :size="15" /> {{ t('productLibrary.promptSettings.button') }}
+        </button>
+      </div>
+    </header>
+
+    <!-- Quick create -->
+    <section class="vg-card pl-create">
+      <span class="pl-create__icon"><Plus :size="18" /></span>
+      <input
+        v-model="creating.name"
+        class="vg-input pl-create__name"
+        data-testid="product-create-name-input"
+        type="text"
+        maxlength="80"
+        :placeholder="t('productLibrary.namePlaceholder')"
+        @keydown.enter.prevent="createProduct"
+      />
+      <label class="pl-create__type">
+        <span class="vg-muted">{{ t('productLibrary.productType') }}</span>
+        <select v-model="creating.type" class="vg-select" data-testid="product-create-type-select">
+          <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <button class="vg-btn vg-btn--primary" data-testid="product-create-submit" type="button" @click="createProduct">
+        <Plus :size="15" /> {{ t('productLibrary.create') }}
+      </button>
+    </section>
+
+    <section class="vg-stats">
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--violet"><Boxes :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.stats.total') }}</span><span class="vg-stat__value" data-testid="product-library-total">{{ list.length }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--amber"><Clock3 :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.status.pending') }}</span><span class="vg-stat__value">{{ pendingCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon"><CheckCircle2 :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.status.done') }}</span><span class="vg-stat__value">{{ readyCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--red"><AlertTriangle :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.status.failed') }}</span><span class="vg-stat__value">{{ issueOnlyCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--blue"><RefreshCw :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.stats.recent') }}</span><span class="vg-stat__value">{{ recentCount }}</span></span>
+      </div>
+    </section>
+
+    <section class="vg-card pl-board">
+      <div class="vg-toolbar">
+        <label class="vg-search pl-search">
+          <Search :size="15" />
+          <input v-model="query" class="vg-input" :placeholder="t('productLibrary.searchPlaceholder')" data-testid="product-library-search-input" />
+        </label>
+        <select v-model="typeFilter" class="vg-select" :title="t('productLibrary.productType')" data-testid="product-library-type-filter-select">
+          <option value="all">{{ t('productLibrary.allTypes') }}</option>
+          <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+        <span class="vg-toolbar__spacer"></span>
+        <select v-model="sortMode" class="vg-select" data-testid="product-library-sort-select">
+          <option value="updated_desc">{{ t('productLibrary.sort.updated') }}</option>
+          <option value="name_asc">{{ t('productLibrary.sort.name') }}</option>
+          <option value="analysis_board_status">{{ t('productLibrary.sort.analysis') }}</option>
+        </select>
+        <div class="vg-seg">
+          <button type="button" class="vg-icon-btn" :class="{ 'is-active': viewMode === 'grid' }" :aria-pressed="viewMode === 'grid'" @click="viewMode = 'grid'"><Grid2X2 :size="16" /></button>
+          <button type="button" class="vg-icon-btn" :class="{ 'is-active': viewMode === 'list' }" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'"><List :size="16" /></button>
         </div>
-        <div class="products-create-card">
-          <button class="products-hero__settings" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
-            <Settings2 class="h-4 w-4" />
-            <span>{{ t('productLibrary.promptSettings.button') }}</span>
-          </button>
-          <div class="products-create-card__fields">
-            <input
-              v-model="creating.name"
-              class="products-create-card__input"
-              data-testid="product-create-name-input"
-              type="text"
-              maxlength="80"
-              :placeholder="t('productLibrary.namePlaceholder')"
-              @keydown.enter.prevent="createProduct"
+      </div>
+
+      <div class="vg-seg vg-seg--sm pl-tabs">
+        <button
+          v-for="tab in statusTabs"
+          :key="tab.key"
+          class="vg-seg__btn"
+          :class="{ 'is-active': statusFilter === tab.key }"
+          type="button"
+          @click="statusFilter = tab.key"
+        >
+          {{ tab.label }} <span class="vg-count">{{ tab.count }}</span>
+        </button>
+      </div>
+
+      <div
+        v-if="filteredProducts.length"
+        class="pl-grid"
+        :class="{ 'pl-grid--list': viewMode === 'list' }"
+        data-testid="product-library-grid"
+      >
+        <article
+          v-for="product in pagedProducts"
+          :key="product.id"
+          class="pl-card"
+          :data-testid="`product-library-item-${product.id}`"
+        >
+          <button class="pl-card__media" type="button" @click="openDetail(product.id)">
+            <img
+              v-if="resolveProductCoverPath(product)"
+              :src="thumbnailUrl(resolveProductCoverPath(product), 320)"
+              alt=""
+              loading="lazy"
+              decoding="async"
             />
-            <label class="products-create-card__type">
-              <span>{{ t('productLibrary.productType') }}</span>
-              <select v-model="creating.type" data-testid="product-create-type-select">
-                <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-              <ChevronDown class="products-create-card__icon h-4 w-4" />
-            </label>
-          </div>
-          <button class="products-hero__create" data-testid="product-create-submit" type="button" @click="createProduct">
-            <Plus class="h-4 w-4" />
-            <span>{{ t('productLibrary.create') }}</span>
-          </button>
-        </div>
-      </header>
-
-      <section class="stats-grid">
-        <article class="stat-card">
-          <div class="stat-card__icon stat-card__icon--purple"><Boxes class="h-5 w-5" /></div>
-          <div class="stat-card__body">
-            <span>{{ t('productLibrary.stats.total') }}</span>
-            <strong data-testid="product-library-total">{{ list.length }}</strong>
-            <small>{{ t('productLibrary.stats.allProducts') }}</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-card__icon stat-card__icon--amber"><Clock3 class="h-5 w-5" /></div>
-          <div class="stat-card__body">
-            <span>{{ t('productLibrary.status.pending') }}</span>
-            <strong>{{ pendingCount }}</strong>
-            <small>{{ t('productLibrary.stats.pendingDesc') }}</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-card__icon stat-card__icon--green"><CheckCircle2 class="h-5 w-5" /></div>
-          <div class="stat-card__body">
-            <span>{{ t('productLibrary.status.done') }}</span>
-            <strong>{{ readyCount }}</strong>
-            <small>{{ t('productLibrary.stats.doneDesc') }}</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-card__icon stat-card__icon--red"><Boxes class="h-5 w-5" /></div>
-          <div class="stat-card__body">
-            <span>{{ t('productLibrary.status.failed') }}</span>
-            <strong>{{ issueOnlyCount }}</strong>
-            <small>{{ t('productLibrary.stats.failedDesc') }}</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-card__icon stat-card__icon--blue"><RefreshCw class="h-5 w-5" /></div>
-          <div class="stat-card__body">
-            <span>{{ t('productLibrary.stats.recent') }}</span>
-            <strong>{{ recentCount }}</strong>
-            <small>{{ t('productLibrary.stats.recentDesc') }}</small>
-          </div>
-        </article>
-      </section>
-
-      <section class="board-card">
-        <div class="filters-row">
-          <div class="search-field">
-            <Search class="h-4 w-4" />
-            <input
-              v-model="query"
-              class="search-field__input"
-              :placeholder="t('productLibrary.searchPlaceholder')"
-              data-testid="product-library-search-input"
-            />
-          </div>
-
-          <label class="select-field">
-            <span>{{ t('productLibrary.productType') }}</span>
-            <select v-model="typeFilter" data-testid="product-library-type-filter-select">
-              <option value="all">{{ t('productLibrary.allTypes') }}</option>
-              <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-            <ChevronDown class="select-field__icon h-4 w-4" />
-          </label>
-
-          <label class="select-field">
-            <span>{{ t('productLibrary.statusLabel') }}</span>
-            <select v-model="statusFilter">
-              <option value="all">{{ t('productLibrary.allStatuses') }}</option>
-              <option value="pending">{{ t('productLibrary.status.pending') }}</option>
-              <option value="processing">{{ t('productLibrary.status.processing') }}</option>
-              <option value="done">{{ t('productLibrary.status.done') }}</option>
-              <option value="failed">{{ t('productLibrary.status.failed') }}</option>
-            </select>
-            <ChevronDown class="select-field__icon h-4 w-4" />
-          </label>
-
-          <button class="filter-button" type="button">
-            <SlidersHorizontal class="h-4 w-4" />
-            <span>{{ t('productLibrary.filter') }}</span>
+            <FileImage v-else :size="30" />
           </button>
 
-          <div class="toolbar-right">
-            <div class="view-toggle">
-              <button
-                type="button"
-                class="view-toggle__button"
-                :class="{ 'view-toggle__button--active': viewMode === 'grid' }"
-                @click="viewMode = 'grid'"
-              >
-                <Grid2X2 class="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                class="view-toggle__button"
-                :class="{ 'view-toggle__button--active': viewMode === 'list' }"
-                @click="viewMode = 'list'"
-              >
-                <List class="h-4 w-4" />
-              </button>
+          <div class="pl-card__body">
+            <div class="pl-card__title">
+              <strong :title="product.name">{{ product.name }}</strong>
+              <span class="vg-muted vg-num">ID {{ product.id.slice(0, 8) }}</span>
             </div>
 
-            <label class="sort-field">
-              <select v-model="sortMode" data-testid="product-library-sort-select">
-                <option value="updated_desc">{{ t('productLibrary.sort.updated') }}</option>
-                <option value="name_asc">{{ t('productLibrary.sort.name') }}</option>
-                <option value="analysis_board_status">{{ t('productLibrary.sort.analysis') }}</option>
-              </select>
-              <ChevronDown class="sort-field__icon h-4 w-4" />
-            </label>
-          </div>
-        </div>
+            <div class="vg-row pl-card__chips">
+              <span class="vg-chip">{{ productTypeLabelV2(product.type) }}</span>
+              <span class="vg-pill vg-pill--dot" :class="`vg-pill--${chipTone(productBusinessStatusTone(product))}`">{{ productBusinessStatusLabel(product) }}</span>
+              <span class="vg-pill" :class="`vg-pill--${chipTone(productAnalysisTone(product))}`">{{ productAnalysisStatusLabel(product) }}</span>
+            </div>
 
-        <div class="tabs-row">
-          <button
-            v-for="tab in statusTabs"
-            :key="tab.key"
-            class="tab-chip"
-            :class="{ 'tab-chip--active': statusFilter === tab.key }"
-            type="button"
-            @click="statusFilter = tab.key"
-          >
-            <span>{{ tab.label }}</span>
-            <em>{{ tab.count }}</em>
-          </button>
-        </div>
+            <div class="pl-card__analysis">
+              <span>{{ t('productLibrary.analysisSummary') }}</span>
+              <p>{{ productAnalysisSummary(product) || t('productLibrary.analysisEmpty') }}</p>
+            </div>
 
-        <div
-          v-if="filteredProducts.length"
-          class="products-grid"
-          :class="{ 'products-grid--list': viewMode === 'list' }"
-          data-testid="product-library-grid"
-        >
-          <article
-            v-for="product in pagedProducts"
-            :key="product.id"
-            class="product-card"
-            :data-testid="`product-library-item-${product.id}`"
-          >
-            <button class="product-card__preview" type="button" @click="openDetail(product.id)">
-              <img
-                v-if="resolveProductCoverPath(product)"
-                :src="thumbnailUrl(resolveProductCoverPath(product), 320)"
-                class="product-card__image"
-                loading="lazy"
-                decoding="async"
-              />
-              <div v-else class="product-card__empty">
-                <FileImage class="h-8 w-8" />
-              </div>
-            </button>
+            <div class="pl-card__meta">
+              <span><FileImage :size="13" /> {{ t('productLibrary.imageCount', { count: productImageCount(product) }) }}</span>
+              <span><Clock3 :size="13" /> {{ formatDateTime(product.analysisBoardUpdatedAt ?? product.canonicalSourceUpdatedAt ?? product.updatedAt) }}</span>
+            </div>
 
-            <div class="product-card__body">
-              <div class="product-card__title-wrap">
-                <strong class="product-card__title">{{ product.name }}</strong>
-                <span class="product-card__id">ID: {{ product.id.slice(0, 8) }}</span>
-              </div>
-
-              <div class="product-card__chips">
-                <UiChip tone="neutral">{{ productTypeLabelV2(product.type) }}</UiChip>
-                <UiChip :tone="productBusinessStatusTone(product)">{{ productBusinessStatusLabel(product) }}</UiChip>
-                <UiChip :tone="productAnalysisTone(product)">{{ productAnalysisStatusLabel(product) }}</UiChip>
-              </div>
-
-              <div class="product-card__analysis">
-                <span>{{ t('productLibrary.analysisSummary') }}</span>
-                <p>{{ productAnalysisSummary(product) || t('productLibrary.analysisEmpty') }}</p>
-              </div>
-
-              <div class="product-card__meta">
-                <span><FileImage class="h-3.5 w-3.5" /> {{ t('productLibrary.imageCount', { count: productImageCount(product) }) }}</span>
-                <span><Clock3 class="h-3.5 w-3.5" /> {{ formatDateTime(product.analysisBoardUpdatedAt ?? product.canonicalSourceUpdatedAt ?? product.updatedAt) }}</span>
-              </div>
-
-              <div class="product-card__actions">
-                <button class="product-card__primary" type="button" @click="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
-                <button class="product-card__secondary" type="button" @click="openDetail(product.id)">{{ t('productLibrary.continue') }}</button>
-                <div class="product-card__menu">
-                  <button class="product-card__ghost" type="button" :aria-label="t('productLibrary.moreActions')" @click.stop="toggleActionMenu(product.id)">
-                    <MoreHorizontal class="h-4 w-4" />
-                  </button>
-                  <div v-if="actionMenuOpenId === product.id" class="product-card__menu-panel">
-                    <button type="button" @click.stop="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
-                    <button type="button" class="is-danger" @click.stop="removeProduct(product)">
-                      <Trash2 class="h-4 w-4" />
-                      <span>{{ t('productLibrary.delete') }}</span>
-                    </button>
-                  </div>
+            <div class="pl-card__actions">
+              <button class="vg-btn vg-btn--primary vg-btn--sm" type="button" @click="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
+              <button class="vg-btn vg-btn--sm" type="button" @click="openDetail(product.id)">{{ t('productLibrary.continue') }}</button>
+              <div class="vg-menu-wrap pl-card__more">
+                <button class="vg-icon-btn" type="button" :aria-label="t('productLibrary.moreActions')" @click.stop="toggleActionMenu(product.id)">
+                  <MoreHorizontal :size="16" />
+                </button>
+                <div v-if="actionMenuOpenId === product.id" class="vg-menu vg-menu--up">
+                  <button type="button" @click.stop="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
+                  <button type="button" class="danger" @click.stop="removeProduct(product)"><Trash2 :size="14" /> {{ t('productLibrary.delete') }}</button>
                 </div>
               </div>
             </div>
-          </article>
-        </div>
-
-        <div v-else class="products-empty" data-testid="product-library-empty">
-          <div class="products-empty__icon"><FolderOpen class="h-8 w-8" /></div>
-          <div class="products-empty__copy">
-            <strong>{{ query ? t('productLibrary.empty.noMatch') : t('productLibrary.empty.title') }}</strong>
-            <p>{{ query ? t('productLibrary.empty.noMatchDesc') : t('productLibrary.empty.desc') }}</p>
           </div>
-          <button class="products-empty__create" type="button" @click="createProduct">
-            <Plus class="h-4 w-4" />
-            <span>{{ t('productLibrary.create') }}</span>
+        </article>
+      </div>
+
+      <div v-else class="vg-empty" data-testid="product-library-empty">
+        <span class="vg-empty__icon"><FolderOpen :size="24" /></span>
+        <h3>{{ query ? t('productLibrary.empty.noMatch') : t('productLibrary.empty.title') }}</h3>
+        <p>{{ query ? t('productLibrary.empty.noMatchDesc') : t('productLibrary.empty.desc') }}</p>
+        <button class="vg-btn vg-btn--primary" type="button" @click="createProduct"><Plus :size="15" /> {{ t('productLibrary.create') }}</button>
+      </div>
+
+      <footer v-if="filteredProducts.length" class="vg-pager">
+        <div class="vg-pager__group">
+          <span>{{ t('productLibrary.perPage') }}</span>
+          <select v-model.number="pageSize" class="vg-select vg-select--sm">
+            <option :value="12">12</option>
+            <option :value="24">24</option>
+            <option :value="48">48</option>
+          </select>
+        </div>
+        <div class="vg-pager__group">
+          <button class="vg-pg" type="button" :disabled="currentPage <= 1" :aria-label="t('productLibrary.previous')" @click="prevPage"><ChevronLeft :size="15" /></button>
+          <button
+            v-for="page in visiblePages"
+            :key="page"
+            class="vg-pg"
+            :class="{ 'is-active': currentPage === page }"
+            type="button"
+            @click="setPage(page)"
+          >
+            {{ page }}
           </button>
+          <button class="vg-pg" type="button" :disabled="currentPage >= totalPages" :aria-label="t('productLibrary.next')" @click="nextPage"><ChevronRight :size="15" /></button>
         </div>
-
-        <footer v-if="filteredProducts.length" class="pagination-row">
-          <div class="pagination-nav">
-            <button class="pagination-button" type="button" :disabled="currentPage <= 1" @click="prevPage">{{ t('productLibrary.previous') }}</button>
-            <button
-              v-for="page in visiblePages"
-              :key="page"
-              class="pagination-button"
-              :class="{ 'pagination-button--active': currentPage === page }"
-              type="button"
-              @click="setPage(page)"
-            >
-              {{ page }}
-            </button>
-            <button class="pagination-button" type="button" :disabled="currentPage >= totalPages" @click="nextPage">{{ t('productLibrary.next') }}</button>
-          </div>
-          <label class="page-size-button">
-            <select v-model.number="pageSize" class="page-size-select">
-              <option :value="12">12</option>
-              <option :value="24">24</option>
-              <option :value="48">48</option>
-            </select>
-            <span>{{ t('productLibrary.perPage') }}</span>
-            <ChevronDown class="h-4 w-4" />
-          </label>
-        </footer>
-      </section>
+      </footer>
     </section>
 
-    <div v-if="promptDialogOpen" class="prompt-dialog-backdrop" data-testid="product-prompt-dialog" @click.self="promptDialogOpen = false">
-      <section class="prompt-dialog" role="dialog" aria-modal="true" :aria-label="t('productLibrary.promptSettings.title')">
-        <header class="prompt-dialog__header">
-          <div>
-            <h2>{{ t('productLibrary.promptSettings.title') }}</h2>
-            <p>{{ t('productLibrary.promptSettings.desc') }}</p>
+    <Teleport to="body">
+      <div v-if="promptDialogOpen" class="vg-scope vg-backdrop" data-testid="product-prompt-dialog" @click.self="promptDialogOpen = false">
+        <section class="vg-dialog vg-dialog--wide" role="dialog" aria-modal="true" :aria-label="t('productLibrary.promptSettings.title')">
+          <header class="vg-dialog__head">
+            <div class="vg-dialog__title">
+              <span class="vg-dialog__title-icon"><Settings2 :size="19" /></span>
+              <div>
+                <h2>{{ t('productLibrary.promptSettings.title') }}</h2>
+                <p>{{ t('productLibrary.promptSettings.desc') }}</p>
+              </div>
+            </div>
+            <button class="vg-icon-btn" type="button" :aria-label="t('productLibrary.promptSettings.close')" @click="promptDialogOpen = false"><X :size="18" /></button>
+          </header>
+          <div class="vg-dialog__body">
+            <div class="vg-form-grid">
+              <div class="vg-field">
+                <label for="pl-prompt-version">{{ t('productLibrary.promptSettings.version') }}</label>
+                <select id="pl-prompt-version" v-model="selectedPromptVersionId" class="vg-select" data-testid="product-prompt-version-select" @change="selectPromptVersion">
+                  <option v-for="version in promptVersions" :key="version.id" :value="version.id">
+                    V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${t('productLibrary.promptSettings.active')}` : '' }}
+                  </option>
+                </select>
+              </div>
+              <div class="vg-field">
+                <label for="pl-prompt-name">{{ t('productLibrary.promptSettings.name') }}</label>
+                <input id="pl-prompt-name" v-model="promptVersionName" class="vg-input" data-testid="product-prompt-name-input" type="text" maxlength="120" />
+              </div>
+              <div class="vg-field span-all">
+                <label for="pl-prompt-content">{{ t('productLibrary.promptSettings.content') }}</label>
+                <textarea id="pl-prompt-content" v-model="promptText" class="vg-textarea pl-prompt__text" data-testid="product-prompt-content-input" rows="15" spellcheck="false"></textarea>
+              </div>
+            </div>
+            <div v-if="promptError" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ promptError }}</span></div>
           </div>
-          <button type="button" :aria-label="t('productLibrary.promptSettings.close')" @click="promptDialogOpen = false"><X class="h-5 w-5" /></button>
-        </header>
-        <div class="prompt-dialog__body">
-          <label>
-            <span>{{ t('productLibrary.promptSettings.version') }}</span>
-            <select v-model="selectedPromptVersionId" data-testid="product-prompt-version-select" @change="selectPromptVersion">
-              <option v-for="version in promptVersions" :key="version.id" :value="version.id">
-                V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${t('productLibrary.promptSettings.active')}` : '' }}
-              </option>
-            </select>
-          </label>
-          <label>
-            <span>{{ t('productLibrary.promptSettings.name') }}</span>
-            <input v-model="promptVersionName" data-testid="product-prompt-name-input" type="text" maxlength="120" />
-          </label>
-          <label class="prompt-dialog__content">
-            <span>{{ t('productLibrary.promptSettings.content') }}</span>
-            <textarea v-model="promptText" data-testid="product-prompt-content-input" rows="15" spellcheck="false"></textarea>
-          </label>
-          <p v-if="promptError" class="prompt-dialog__error">{{ promptError }}</p>
-        </div>
-        <footer class="prompt-dialog__footer">
-          <button type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ t('productLibrary.promptSettings.rollback') }}</button>
-          <button type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ t('productLibrary.promptSettings.copy') }}</button>
-          <button type="button" :disabled="promptBusy || !selectedPromptVersionId || !promptText.trim()" @click="savePromptVersion(false)">{{ t('productLibrary.promptSettings.save') }}</button>
-          <button class="prompt-dialog__activate" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('productLibrary.promptSettings.activate') }}</button>
-        </footer>
-      </section>
-    </div>
+          <footer class="vg-dialog__foot">
+            <button class="vg-btn vg-btn--ghost" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ t('productLibrary.promptSettings.rollback') }}</button>
+            <div class="vg-dialog__foot-actions">
+              <button class="vg-btn" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ t('productLibrary.promptSettings.copy') }}</button>
+              <button class="vg-btn" type="button" :disabled="promptBusy || !selectedPromptVersionId || !promptText.trim()" @click="savePromptVersion(false)">{{ t('productLibrary.promptSettings.save') }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('productLibrary.promptSettings.activate') }}</button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.products-page {
-  display: grid;
-  gap: 14px;
-  padding: 4px 6px 20px;
-}
-
-.products-shell {
-  display: grid;
-  gap: 16px;
-  border: 1px solid rgba(111, 130, 193, 0.14);
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(95, 83, 190, 0.1), transparent 28%),
-    rgba(13, 20, 38, 0.96);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 20px 48px rgba(2, 6, 20, 0.28);
-  padding: 14px;
-}
-
-.products-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.products-hero__copy {
-  display: grid;
-  gap: 6px;
-}
-
-.products-hero__copy h1 {
-  margin: 0;
-  color: #ffffff;
-  font-size: 26px;
-  line-height: 1.04;
-  font-weight: 900;
-}
-
-.products-hero__copy p {
-  margin: 0;
-  color: #99abd4;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.products-create-card {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  min-width: min(720px, 100%);
-  -webkit-app-region: no-drag;
-}
-
-.products-hero__settings {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 14px;
-  border: 1px solid rgba(123, 142, 201, 0.22);
-  border-radius: 14px;
-  background: rgba(18, 25, 45, 0.94);
-  color: #dce6ff;
-  font-size: 13px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.prompt-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(2, 6, 18, 0.74);
-  backdrop-filter: blur(8px);
-}
-
-.prompt-dialog {
-  width: min(760px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  border: 1px solid rgba(123, 142, 201, 0.24);
-  border-radius: 20px;
-  background: #11182b;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
-}
-
-.prompt-dialog__header,
-.prompt-dialog__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 20px;
-}
-
-.prompt-dialog__header {
-  border-bottom: 1px solid rgba(123, 142, 201, 0.16);
-}
-
-.prompt-dialog__header h2,
-.prompt-dialog__header p {
-  margin: 0;
-}
-
-.prompt-dialog__header h2 { color: #ffffff; font-size: 19px; }
-.prompt-dialog__header p { margin-top: 5px; color: #91a5cf; font-size: 12px; }
-.prompt-dialog__header button { display: grid; place-items: center; border: 0; background: transparent; color: #a9b8d8; }
-
-.prompt-dialog__body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  padding: 20px;
-}
-
-.prompt-dialog__body label { display: grid; gap: 7px; color: #9eb0d6; font-size: 12px; font-weight: 700; }
-.prompt-dialog__content, .prompt-dialog__error { grid-column: 1 / -1; }
-.prompt-dialog__body input, .prompt-dialog__body select, .prompt-dialog__body textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid rgba(123, 142, 201, 0.2);
-  border-radius: 12px;
-  background: #0b1120;
-  padding: 11px 12px;
-  color: #edf3ff;
-  outline: none;
-}
-.prompt-dialog__body textarea { resize: vertical; line-height: 1.5; }
-.prompt-dialog__error { margin: 0; color: #ff7f91; font-size: 12px; }
-.prompt-dialog__footer { justify-content: flex-end; border-top: 1px solid rgba(123, 142, 201, 0.16); }
-.prompt-dialog__footer button {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid rgba(123, 142, 201, 0.2);
-  border-radius: 11px;
-  background: #182139;
-  color: #dce6ff;
-  font-weight: 800;
-}
-.prompt-dialog__footer button:disabled { opacity: 0.48; }
-.prompt-dialog__footer .prompt-dialog__activate { border-color: transparent; background: linear-gradient(135deg, #795dff, #9b6cff); color: #ffffff; }
-
-.products-create-card__fields {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 148px;
-  align-items: end;
-  gap: 10px;
-  flex: 1 1 auto;
-  -webkit-app-region: no-drag;
-}
-
-.products-create-card__input,
-.products-create-card__type select {
-  width: 100%;
-  height: 44px;
-  min-height: 44px;
-  box-sizing: border-box;
-  border: 1px solid rgba(123, 142, 201, 0.16);
-  border-radius: 14px;
-  background: rgba(18, 25, 45, 0.94);
-  padding: 0 14px;
-  color: #eef3ff;
-  font-size: 13px;
-  outline: none;
-  -webkit-app-region: no-drag;
-}
-
-.products-create-card__input {
-  align-self: end;
-}
-
-.products-create-card__input::placeholder {
-  color: #7f93bf;
-}
-
-.products-create-card__type {
-  position: relative;
-  display: grid;
-  gap: 4px;
-  align-content: end;
-  -webkit-app-region: no-drag;
-}
-
-.products-create-card__type span {
-  color: #9cb0da;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 14px;
-}
-
-.products-create-card__type select {
-  appearance: none;
-  padding-right: 38px;
-}
-
-.products-create-card__icon {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  color: #8ea4d7;
-  pointer-events: none;
-}
-
-.products-hero__create {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-width: 168px;
-  height: 44px;
-  min-height: 44px;
-  box-sizing: border-box;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #795dff, #9b6cff);
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 800;
-  box-shadow: 0 14px 34px rgba(90, 63, 255, 0.28);
-  -webkit-app-region: no-drag;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.stat-card,
-.board-card,
-.product-card,
-.products-empty,
-.pagination-row {
-  border: 1px solid rgba(111, 130, 193, 0.14);
-  background: rgba(18, 25, 45, 0.94);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 82px;
-  padding: 14px 16px;
-  border-radius: 16px;
-}
-
-.stat-card__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-}
-
-.stat-card__icon--purple {
-  background: rgba(103, 79, 255, 0.14);
-  color: #896fff;
-}
-
-.stat-card__icon--amber {
-  background: rgba(255, 181, 64, 0.14);
-  color: #ffbc45;
-}
-
-.stat-card__icon--green {
-  background: rgba(54, 212, 118, 0.14);
-  color: #41d87a;
-}
-
-.stat-card__icon--red {
-  background: rgba(255, 100, 100, 0.14);
-  color: #ff7474;
-}
-
-.stat-card__icon--blue {
-  background: rgba(70, 125, 255, 0.14);
-  color: #5e96ff;
-}
-
-.stat-card__body {
-  display: grid;
-  gap: 3px;
-}
-
-.stat-card__body span,
-.stat-card__body small {
-  color: #99abd4;
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.stat-card__body strong {
-  color: #ffffff;
-  font-size: 26px;
-  line-height: 1;
-  font-weight: 900;
-}
-
-.board-card {
-  display: grid;
-  gap: 16px;
-  border-radius: 20px;
-  padding: 14px;
-}
-
-.filters-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) 216px 216px 110px minmax(0, 292px);
-  gap: 12px;
-  align-items: end;
-}
-
-.search-field,
-.select-field,
-.filter-button,
-.sort-field,
-.view-toggle,
-.pagination-button,
-.page-size-button,
-.product-card__primary,
-.product-card__secondary,
-.product-card__ghost,
-.products-empty__create {
-  border: 1px solid rgba(123, 142, 201, 0.16);
-  background: rgba(15, 22, 41, 0.92);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
-}
-
-.search-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 46px;
-  padding: 0 14px;
-  border-radius: 14px;
-  color: #93a6d0;
-}
-
-.search-field__input {
-  flex: 1;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: #ffffff;
-  font-size: 14px;
-}
-
-.search-field__input::placeholder {
-  color: #7c8eb8;
-}
-
-.select-field,
-.sort-field {
-  position: relative;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  min-height: 46px;
-  padding: 6px 14px;
-  border-radius: 14px;
-}
-
-.select-field span {
-  color: #93a6d0;
-  font-size: 11px;
-}
-
-.select-field select,
-.sort-field select {
-  width: 100%;
-  appearance: none;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.select-field__icon,
-.sort-field__icon {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #90a4cf;
-  pointer-events: none;
-}
-
-.filter-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 46px;
-  border-radius: 14px;
-  color: #eef2ff;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.view-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px;
-  border-radius: 14px;
-}
-
-.view-toggle__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 34px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #9cb0da;
-}
-
-.view-toggle__button--active {
-  background: linear-gradient(135deg, #6d52ff, #8d66ff);
-  color: #ffffff;
-}
-
-.tabs-row {
-  display: flex;
-  align-items: center;
-  gap: 26px;
-  padding: 2px 8px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.tab-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  background: transparent;
-  color: #b1bddd;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.tab-chip em {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #d9e2ff;
-  font-size: 12px;
-  font-style: normal;
-}
-
-.tab-chip--active {
-  color: #9d80ff;
-}
-
-.tab-chip--active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -15px;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #7c5cff, #9d72ff);
-}
-
-.products-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.products-grid--list {
-  grid-template-columns: 1fr;
-}
-
-.product-card {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr);
-  gap: 14px;
-  border-radius: 18px;
-  padding: 10px;
-}
-
-.product-card__preview {
-  width: 130px;
-  height: 118px;
-  border: 0;
-  border-radius: 14px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.product-card__image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.product-card__empty {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  color: #8fa2cc;
-}
-
-.product-card__body {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  align-content: start;
-}
-
-.product-card__title-wrap {
-  display: grid;
-  gap: 6px;
-}
-
-.product-card__title {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  color: #ffffff;
-  font-size: 16px;
-  line-height: 1.2;
-  font-weight: 800;
-}
-
-.product-card__id {
-  color: #9eb1db;
-  font-size: 12px;
-}
-
-.product-card__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.product-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  color: #b8c6e5;
-  font-size: 12px;
-}
-
-.product-card__analysis {
-  display: grid;
-  gap: 5px;
-  padding: 10px 12px;
-  border: 1px solid rgba(123, 142, 201, 0.12);
-  border-radius: 12px;
-  background: rgba(13, 20, 37, 0.72);
-}
-
-.product-card__analysis span {
-  color: #93a6d0;
-  font-size: 11px;
-}
-
-.product-card__analysis p {
-  margin: 0;
-  color: #e8efff;
-  font-size: 12px;
-  line-height: 1.55;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.product-card__meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.product-card__actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 46px;
-  gap: 8px;
-}
-
-.product-card__menu {
-  position: relative;
-}
-
-.product-card__primary,
-.product-card__secondary,
-.product-card__ghost,
-.products-empty__create,
-.pagination-button,
-.page-size-button {
-  min-height: 40px;
-  border-radius: 12px;
-  color: #eef2ff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.product-card__primary,
-.products-empty__create,
-.pagination-button--active {
-  border-color: transparent;
-  background: linear-gradient(135deg, #6d52ff, #8d66ff);
-  color: #ffffff;
-}
-
-.product-card__menu-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  z-index: 20;
-  display: grid;
-  gap: 4px;
-  min-width: 138px;
-  padding: 6px;
-  border: 1px solid rgba(123, 142, 201, 0.18);
-  border-radius: 14px;
-  background: rgba(13, 20, 37, 0.98);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
-}
-
-.product-card__menu-panel button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  padding: 0 10px;
-  color: #edf2ff;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-}
-
-.product-card__menu-panel button.is-danger {
-  color: #ff9999;
-}
-
-.products-empty {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  padding: 42px 20px;
-  border-radius: 18px;
-}
-
-.products-empty__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 70px;
-  height: 70px;
-  border-radius: 999px;
-  background: rgba(103, 79, 255, 0.1);
-  color: #9075ff;
-}
-
-.products-empty__copy {
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.products-empty__copy strong {
-  color: #ffffff;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.products-empty__copy p {
-  margin: 0;
-  color: #99abd4;
-  font-size: 13px;
-}
-
-.pagination-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  border-radius: 18px;
-  padding: 14px 18px 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.pagination-nav {
-  display: inline-flex;
-  gap: 8px;
-}
-
-.pagination-button {
-  min-width: 40px;
-}
-
-.pagination-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.page-size-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-}
-
-.page-size-select {
-  appearance: none;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: #eef2ff;
-  font-size: 13px;
-  font-weight: 700;
-  padding-right: 12px;
-}
-
-@media (max-width: 1600px) {
-  .products-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1360px) {
-  .filters-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .toolbar-right {
-    justify-content: flex-start;
-  }
-
-  .products-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 960px) {
-  .products-hero,
-  .filters-row,
-  .toolbar-right,
-  .tabs-row,
-  .stats-grid,
-  .products-grid {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .product-card {
-    grid-template-columns: 1fr;
-  }
-
-  .products-create-card {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .product-card__preview {
-    width: 100%;
-    height: 220px;
-  }
-}
+.pl { width: min(1408px, 100%); margin: 0 auto; }
+
+/* Quick create bar */
+.pl-create { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; }
+.pl-create__icon { width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--vg-accent-soft); color: var(--vg-accent); flex-shrink: 0; }
+.pl-create__name { flex: 1 1 260px; }
+.pl-create__type { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
+
+/* Board */
+.pl-board { display: flex; flex-direction: column; gap: 12px; }
+.pl-search { flex: 1 1 280px; max-width: 420px; }
+.pl-tabs { padding-bottom: 12px; border-bottom: 1px solid var(--theme-divider); }
+
+/* Grid */
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pl-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel); transition: border-color .15s, box-shadow .15s; }
+.pl-card:hover { border-color: var(--vg-accent-line); box-shadow: var(--theme-shadow-float); }
+.pl-card__media { display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 10; padding: 0; border: 0; border-bottom: 1px solid var(--theme-border); background: var(--theme-panel-soft); color: var(--theme-text-muted); cursor: pointer; overflow: hidden; }
+.pl-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s; }
+.pl-card:hover .pl-card__media img { transform: scale(1.03); }
+.pl-card__body { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; flex: 1; min-width: 0; }
+.pl-card__title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.pl-card__title strong { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-card__title span { font-size: 11px; flex-shrink: 0; }
+.pl-card__chips { gap: 6px; }
+.pl-card__analysis { padding: 8px 10px; border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); }
+.pl-card__analysis span { font-size: 11px; font-weight: 600; color: var(--theme-text-muted); }
+.pl-card__analysis p { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--theme-text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pl-card__meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--theme-text-muted); }
+.pl-card__meta span { display: inline-flex; align-items: center; gap: 4px; }
+.pl-card__actions { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--theme-divider); }
+.pl-card__more { margin-left: auto; }
+
+/* List view */
+.pl-grid--list { grid-template-columns: 1fr; gap: 8px; }
+.pl-grid--list .pl-card { flex-direction: row; }
+.pl-grid--list .pl-card__media { width: 168px; aspect-ratio: auto; border-bottom: 0; border-right: 1px solid var(--theme-border); flex-shrink: 0; }
+.pl-grid--list .pl-card__body { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.pl-grid--list .pl-card__title { flex: 1 1 220px; flex-direction: column; align-items: flex-start; gap: 2px; }
+.pl-grid--list .pl-card__analysis { flex: 1 1 100%; order: 5; }
+.pl-grid--list .pl-card__actions { margin-top: 0; padding-top: 0; border-top: 0; }
+
+.pl-prompt__text { min-height: 280px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 </style>
