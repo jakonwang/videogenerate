@@ -65,7 +65,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="prd-page prd-detail">
+  <div class="vg-scope prd-page prd-detail">
     <div v-if="loading" class="prd-empty prd-detail__state"><Loader2 :size="26" class="prd-spin" /><p>正在加载方案…</p></div>
     <div v-else-if="loadError || !scheme" class="prd-empty prd-detail__state">
       <h3>无法打开方案</h3>

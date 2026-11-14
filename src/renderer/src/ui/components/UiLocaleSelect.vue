@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Languages } from 'lucide-vue-next'
 import { useAppSettingsStore } from '@/stores/appSettings'
 import type { AppLocale } from '../../../../shared/locale'
 
@@ -16,15 +17,35 @@ const model = computed({
 </script>
 
 <template>
-  <label class="flex flex-col gap-1">
-    <span class="text-[10px] font-medium tracking-wide text-white/40">{{ t('common.language') }}</span>
-    <select
-      v-model="model"
-      class="ui-select w-full cursor-pointer rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs text-white/90 outline-none transition hover:border-white/15 focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/30"
-    >
-      <option v-for="o in settings.localeOptions" :key="o.value" :value="o.value" class="bg-[#18181B] text-white">
+  <label class="locale-select" :title="t('common.language')">
+    <Languages class="locale-select__icon" />
+    <select v-model="model" class="vg-select vg-select--sm locale-select__control" :aria-label="t('common.language')">
+      <option v-for="o in settings.localeOptions" :key="o.value" :value="o.value">
         {{ o.label }}
       </option>
     </select>
   </label>
 </template>
+
+<style scoped>
+.locale-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.locale-select__icon {
+  position: absolute;
+  left: 10px;
+  width: 15px;
+  height: 15px;
+  color: var(--theme-text-muted);
+  pointer-events: none;
+}
+.locale-select__control {
+  width: 100%;
+  height: 32px;
+  padding-left: 32px;
+  background: var(--theme-panel-soft);
+}
+</style>

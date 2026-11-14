@@ -48,7 +48,7 @@ async function main() {
     await page.evaluate(() => { window.location.hash = '#/product-research' })
     await page.locator('.research-page').waitFor({ state: 'visible' })
 
-    const navigation = await page.locator('.ds-sidebar__nav > button').evaluateAll((buttons) => (
+    const navigation = await page.locator('[data-testid="app-sidebar"] .vg-nav__item').evaluateAll((buttons) => (
       buttons.map((button) => button.getAttribute('title') || '')
     ))
     assert.deepEqual(navigation.slice(0, 2), ['\u9996\u9875', '\u9009\u54c1'])

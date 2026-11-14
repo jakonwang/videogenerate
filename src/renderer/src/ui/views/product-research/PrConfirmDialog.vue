@@ -15,7 +15,7 @@ const emit = defineEmits<{ close: []; confirm: [] }>()
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="prd-backdrop" @click.self="!busy && emit('close')">
+    <div v-if="open" class="vg-scope prd-backdrop" @click.self="!busy && emit('close')">
       <div class="prd-dialog" role="alertdialog" aria-modal="true">
         <div class="prd-dialog__head">
           <div class="prd-dialog__title">
@@ -39,5 +39,5 @@ const emit = defineEmits<{ close: []; confirm: [] }>()
 </template>
 
 <style scoped>
-.confirm-icon--danger { background: color-mix(in srgb, #f87171 14%, transparent) !important; border-color: color-mix(in srgb, #f87171 40%, transparent) !important; color: #f87171 !important; }
+.confirm-icon--danger { background: color-mix(in srgb, var(--theme-tone-red) 14%, transparent); border-color: color-mix(in srgb, var(--theme-tone-red) 40%, transparent); color: var(--theme-tone-red); }
 </style>

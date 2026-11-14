@@ -142,3 +142,47 @@ html[data-app-theme='light-teal'] {
   --color-border-strong: #d5dae1;
   --color-primary-selected: var(--theme-control-selected);
 }
+
+/*
+ * Semantic tone colours used by the vg- UI kit (pills, stats, status text).
+ * Each value is tuned to stay readable on --theme-panel in its own theme, so
+ * components never hard-code a hue that only works in dark mode.
+ */
+:root,
+html[data-app-theme='dark-teal'] {
+  --theme-accent-hover: #2dd4bf;
+  --theme-tone-green: #2dd4bf;
+  --theme-tone-blue: #60a5fa;
+  --theme-tone-amber: #fbbf24;
+  --theme-tone-red: #f87171;
+  --theme-tone-violet: #a78bfa;
+  --theme-tone-gray: #94a3b8;
+  --theme-solid-blue: #2563eb;
+  --theme-solid-amber: #d97706;
+  --theme-solid-red: #dc2626;
+}
+
+html[data-app-theme='light-teal'] {
+  --theme-tone-green: #00875a;
+  --theme-tone-blue: #2563eb;
+  --theme-tone-amber: #b45309;
+  --theme-tone-red: #c2413b;
+  --theme-tone-violet: #7c3aed;
+  --theme-tone-gray: #6b7280;
+  --theme-solid-blue: #2563eb;
+  --theme-solid-amber: #d97706;
+  --theme-solid-red: #dc2626;
+}
+
+html[data-app-theme='mono'] {
+  --theme-accent-hover: #2b2f2c;
+  --theme-tone-green: #21664d;
+  --theme-tone-blue: #3b5b8c;
+  --theme-tone-amber: #7b6330;
+  --theme-tone-red: #9a453d;
+  --theme-tone-violet: #6d5a8c;
+  --theme-tone-gray: #737780;
+  --theme-solid-blue: #3b5b8c;
+  --theme-solid-amber: #7b6330;
+  --theme-solid-red: #9a453d;
+}

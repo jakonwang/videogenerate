@@ -378,7 +378,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="prd-page pr-list">
+  <div class="vg-scope prd-page pr-list">
     <!-- Hero -->
     <header class="pr-hero">
       <div class="pr-hero__icon"><ShoppingCart :size="34" /></div>
@@ -664,7 +664,7 @@ onBeforeUnmount(() => {
       @confirm="runConfirm"
     />
     <Teleport to="body">
-      <div v-if="sopGuideOpen" class="prd-backdrop" @click.self="sopGuideOpen = false">
+      <div v-if="sopGuideOpen" class="vg-scope prd-backdrop" @click.self="sopGuideOpen = false">
         <div class="prd-dialog prd-dialog--wide">
           <div class="prd-dialog__head">
             <div><h2>选品 SOP 流程</h2><p>每个方案独立维护数据，按 5 个阶段推进，任意阶段都可以回退调整。</p></div>

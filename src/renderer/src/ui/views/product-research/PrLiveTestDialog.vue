@@ -89,7 +89,7 @@ function save() {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="prd-backdrop" @click.self="emit('close')">
+    <div v-if="open" class="vg-scope prd-backdrop" @click.self="emit('close')">
       <div class="prd-dialog prd-dialog--wide" role="dialog" aria-modal="true">
         <div class="prd-dialog__head">
           <div class="prd-dialog__title">

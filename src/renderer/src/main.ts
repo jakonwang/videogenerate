@@ -6,6 +6,7 @@ import { router } from './router'
 import './styles.css'
 import './design-system/themes.css'
 import './design-system/theme-components.css'
+import './design-system/ui-kit.css'
 
 window.addEventListener('error', (event) => {
   console.error('[renderer-error]', {

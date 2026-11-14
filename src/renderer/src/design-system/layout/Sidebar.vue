@@ -1,165 +1,168 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 
-const router = useRouter()
+type NavItem = { to: string; label: string; active?: boolean; icon?: any }
 
 defineProps<{
-  items: Array<{
-    to: string
-    label: string
-    active?: boolean
-    icon?: any
-  }>
-  sections?: Array<{
-    title: string
-    items: Array<{
-      to: string
-      label: string
-      active?: boolean
-      icon?: any
-    }>
-  }>
+  items: NavItem[]
+  sections?: Array<{ title: string; items: NavItem[] }>
+  collapsed?: boolean
 }>()
+
+const router = useRouter()
 
 function navigate(to: string) {
   void router.push(to)
 }
-
 </script>
 
 <template>
-  <aside class="ds-sidebar">
-    <nav class="ds-sidebar__nav">
+  <aside class="vg-scope vg-nav" data-testid="app-sidebar" :class="{ 'is-collapsed': collapsed }">
+    <nav class="vg-nav__list" aria-label="main">
       <button
         v-for="item in items"
         :key="item.to"
         type="button"
-        class="ds-sidebar__item"
+        class="vg-nav__item"
         :class="{ 'is-active': item.active }"
         :title="item.label"
-        style="-webkit-app-region: no-drag"
+        :aria-current="item.active ? 'page' : undefined"
         @click="navigate(item.to)"
       >
-        <component :is="item.icon" v-if="item.icon" class="h-4 w-4" />
-        <span>{{ item.label }}</span>
+        <component :is="item.icon" v-if="item.icon" class="vg-nav__icon" />
+        <span class="vg-nav__label">{{ item.label }}</span>
       </button>
 
-      <div v-for="section in sections || []" :key="section.title" class="ds-sidebar__section">
-        <div class="ds-sidebar__section-title">{{ section.title }}</div>
-        <div class="ds-sidebar__section-items">
-          <button
-            v-for="item in section.items"
-            :key="item.to"
-            type="button"
-            class="ds-sidebar__item ds-sidebar__item--sub"
-            :class="{ 'is-active': item.active }"
-            :title="item.label"
-            style="-webkit-app-region: no-drag"
-            @click="navigate(item.to)"
-          >
-            <component :is="item.icon" v-if="item.icon" class="h-4 w-4" />
-            <span>{{ item.label }}</span>
-          </button>
-        </div>
+      <div v-for="section in sections || []" :key="section.title" class="vg-nav__section">
+        <div class="vg-nav__section-title">{{ section.title }}</div>
+        <button
+          v-for="item in section.items"
+          :key="item.to"
+          type="button"
+          class="vg-nav__item"
+          :class="{ 'is-active': item.active }"
+          :title="item.label"
+          :aria-current="item.active ? 'page' : undefined"
+          @click="navigate(item.to)"
+        >
+          <component :is="item.icon" v-if="item.icon" class="vg-nav__icon" />
+          <span class="vg-nav__label">{{ item.label }}</span>
+        </button>
       </div>
     </nav>
-    <slot name="footer" />
+    <div class="vg-nav__footer">
+      <slot name="footer" />
+    </div>
   </aside>
 </template>
 
 <style scoped>
-.ds-sidebar {
+.vg-nav {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   min-height: 0;
+  height: 100%;
+  padding: 12px 10px;
+  background: var(--theme-sidebar);
+  border-right: 1px solid var(--theme-border);
+  overflow: hidden;
 }
 
-.ds-sidebar__nav {
+.vg-nav__list {
   flex: 1 1 auto;
   min-height: 0;
-  display: grid !important;
-  align-content: start !important;
-  justify-content: start !important;
-  overflow: auto;
-  padding-right: 2px;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
   scrollbar-width: none;
 }
+.vg-nav__list::-webkit-scrollbar { display: none; }
 
-.ds-sidebar__nav::-webkit-scrollbar { display: none; }
-
-.ds-sidebar__section {
-  display: grid;
-  gap: 8px;
-  padding-top: 8px;
-}
-
-.ds-sidebar__section-title {
-  padding: 0 8px;
-  color: rgba(226, 232, 240, 0.72);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.ds-sidebar__section-items {
-  display: grid;
-  gap: 6px;
-}
-
-.ds-sidebar__item--sub {
-  margin-left: 0;
-}
-
-.sidebar-brand-v2 {
+.vg-nav__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 56px;
-  padding: 6px 6px 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  -webkit-app-region: no-drag;
 }
-
-.sidebar-brand-v2__icon {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
+.vg-nav__item:hover {
+  background: var(--theme-control-hover);
+  color: var(--theme-text);
 }
-
-.sidebar-brand-v2__icon-image {
-  width: 34px;
-  height: 34px;
-  display: block;
-  border-radius: 10px;
-  object-fit: contain;
-  object-position: center;
+.vg-nav__item:focus-visible {
+  outline: 2px solid var(--vg-accent-line);
+  outline-offset: -2px;
 }
-
-.sidebar-brand-v2__copy {
-  min-width: 0;
-  display: grid;
-  align-content: center;
-  gap: 3px;
-}
-
-.sidebar-brand-v2__title {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  white-space: nowrap;
-}
-
-.sidebar-brand-v2__subtitle {
-  margin: 0;
-  color: rgba(162, 178, 204, 0.82);
-  font-size: 9px;
+.vg-nav__item.is-active {
+  background: var(--vg-accent-soft);
+  color: var(--vg-accent);
   font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+}
+.vg-nav__item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--vg-accent);
+}
+.vg-nav__icon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+.vg-nav__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.vg-nav__section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-divider);
+}
+.vg-nav__section-title {
+  padding: 0 12px 4px;
+  color: var(--theme-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+.vg-nav__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--theme-divider);
+}
+
+/* Collapsed: icon rail */
+.vg-nav.is-collapsed { padding: 12px 8px; }
+.vg-nav.is-collapsed .vg-nav__item { justify-content: center; padding: 0; }
+.vg-nav.is-collapsed .vg-nav__item.is-active::before { left: -8px; }
+.vg-nav.is-collapsed .vg-nav__label,
+.vg-nav.is-collapsed .vg-nav__section-title { display: none; }
+.vg-nav.is-collapsed .vg-nav__section { margin-top: 8px; padding-top: 8px; }
 </style>

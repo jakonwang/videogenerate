@@ -90,7 +90,7 @@ async function main() {
     await featureNavToggle.click()
     await page.waitForFunction(() => document.querySelector('[data-testid="gmv-feature-nav"]')?.getBoundingClientRect().width >= 200)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:gmv-max:nav-collapsed:v1')), 'false')
-    const appSidebar = page.locator('.ds-sidebar')
+    const appSidebar = page.locator('[data-testid="app-sidebar"]')
     const appSidebarToggle = page.locator('[data-testid="app-sidebar-toggle"]')
     assert.ok((await appSidebar.boundingBox())?.width >= 180)
     await appSidebarToggle.click()
@@ -98,7 +98,7 @@ async function main() {
       localStorage.getItem('videogenerate:app-sidebar-collapsed:v1') === 'true'
       && document.querySelector('.app-shell')?.classList.contains('is-sidebar-collapsed')
     ))
-    await page.waitForFunction(() => document.querySelector('.ds-sidebar')?.getBoundingClientRect().width <= 74)
+    await page.waitForFunction(() => document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width <= 74)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:app-sidebar-collapsed:v1')), 'true')
     const collapsedMainNavFit = await page.evaluate(() => {
       const button = document.querySelector('.app-sidebar-footer-action')
@@ -125,7 +125,7 @@ async function main() {
       localStorage.getItem('videogenerate:app-sidebar-collapsed:v1') === 'false'
       && !document.querySelector('.app-shell')?.classList.contains('is-sidebar-collapsed')
     ))
-    await page.waitForFunction(() => document.querySelector('.ds-sidebar')?.getBoundingClientRect().width >= 180)
+    await page.waitForFunction(() => document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width >= 180)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:app-sidebar-collapsed:v1')), 'false')
     assert.equal(await page.evaluate(() => typeof window.api.tiktokGmvMax.approveBatch), 'function')
     assert.equal(await page.evaluate(() => typeof window.api.tiktokGmvMax.setEmergencyStop), 'function')
@@ -792,7 +792,7 @@ async function main() {
       headerVisible: document.querySelector('.gmv-header')?.getBoundingClientRect().bottom > 0,
       tabsVisible: document.querySelector('.gmv-tabs')?.getBoundingClientRect().bottom > 0,
       featureNavWidth: document.querySelector('[data-testid="gmv-feature-nav"]')?.getBoundingClientRect().width || 0,
-      appSidebarWidth: document.querySelector('.ds-sidebar')?.getBoundingClientRect().width || 0,
+      appSidebarWidth: document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width || 0,
       visibleSidebarLabels: Array.from(document.querySelectorAll('.ds-sidebar__item span, .ds-sidebar__section-title, .app-sidebar-footer-action span, .app-sidebar-user .min-w-0, .app-sidebar-collapse span')).filter((item) => {
         const style = getComputedStyle(item)
         return style.display !== 'none' && item.getBoundingClientRect().width > 0

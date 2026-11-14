@@ -7,7 +7,7 @@ defineProps<{ toast: { id: number; text: string; tone: 'info' | 'success' | 'err
 <template>
   <Teleport to="body">
     <Transition name="prd-toast">
-      <div v-if="toast" :key="toast.id" class="prd-toast" :class="`prd-toast--${toast.tone}`" role="status">
+      <div v-if="toast" :key="toast.id" class="vg-scope prd-toast" :class="`prd-toast--${toast.tone}`" role="status">
         <CheckCircle2 v-if="toast.tone === 'success'" :size="16" />
         <AlertCircle v-else-if="toast.tone === 'error'" :size="16" />
         <Info v-else :size="16" />

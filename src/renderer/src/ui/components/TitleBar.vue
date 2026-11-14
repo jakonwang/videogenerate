@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { CheckCircle2, FolderOpen, ListChecks, Minus, RefreshCcw, Square, X } from 'lucide-vue-next'
+import { Copy, FolderOpen, ListChecks, Minus, RefreshCcw, Square, X } from 'lucide-vue-next'
 import brandIconAsset from '../../../../../resources/icon-brand-green.png'
 
 const { t, locale: i18nLocale } = useI18n()
@@ -63,225 +63,136 @@ async function close() {
 </script>
 
 <template>
-  <header class="app-titlebar">
-    <div class="app-titlebar__brand" style="-webkit-app-region: drag">
-      <img :src="brandIconAsset" alt="VideoGenerate" class="app-titlebar__logo" />
-      <div class="app-titlebar__brand-copy">
-        <div class="app-titlebar__brand-line">
-          <strong>VideoGenerate</strong>
-          <span class="app-titlebar__ready-dot"></span>
-          <span>{{ t('titleBar.ready') }}</span>
-        </div>
-        <small>{{ t('titleBar.productSubtitle') }}</small>
-      </div>
+  <header class="vg-scope vg-titlebar" @dblclick.self="toggleMax">
+    <div class="vg-titlebar__brand">
+      <img :src="brandIconAsset" alt="" class="vg-titlebar__logo" />
+      <strong class="vg-titlebar__name">VideoGenerate</strong>
+      <span class="vg-titlebar__divider" aria-hidden="true"></span>
+      <span class="vg-titlebar__subtitle">{{ t('titleBar.productSubtitle') }}</span>
     </div>
 
-    <div class="app-titlebar__actions" style="-webkit-app-region: no-drag">
-      <button class="app-titlebar__action" type="button" :disabled="refreshing" @click="refreshStatus">
-        <RefreshCcw :class="['app-titlebar__action-icon', { 'is-spinning': refreshing }]" />
-        <span class="app-titlebar__action-copy">
-          <strong>{{ t('titleBar.refreshStatus') }}</strong>
-          <small>{{ t('titleBar.lastRefresh') }}: {{ refreshedAt }}</small>
-        </span>
+    <div class="vg-titlebar__drag" @dblclick="toggleMax"></div>
+
+    <div class="vg-titlebar__actions">
+      <span class="vg-pill vg-pill--green vg-pill--dot vg-titlebar__status">{{ t('titleBar.localWorkspace') }} · {{ t('titleBar.ready') }}</span>
+      <button
+        class="vg-btn vg-btn--ghost vg-btn--sm"
+        type="button"
+        :disabled="refreshing"
+        :title="`${t('titleBar.lastRefresh')}: ${refreshedAt}`"
+        @click="refreshStatus"
+      >
+        <RefreshCcw :class="['vg-titlebar__icon', { 'vg-spin': refreshing }]" />
+        <span>{{ t('titleBar.refreshStatus') }}</span>
       </button>
-      <div class="app-titlebar__status">
-        <CheckCircle2 class="app-titlebar__status-icon" />
-        <span>{{ t('titleBar.localWorkspace') }}</span>
-      </div>
-      <button class="app-titlebar__action app-titlebar__action--compact" type="button" @click="openTasks">
-        <ListChecks class="app-titlebar__action-icon" />
+      <button class="vg-btn vg-btn--ghost vg-btn--sm" type="button" @click="openTasks">
+        <ListChecks class="vg-titlebar__icon" />
         <span>{{ t('titleBar.taskCenter') }}</span>
       </button>
-      <button class="app-titlebar__action app-titlebar__action--compact" type="button" @click="openDataDirectory">
-        <FolderOpen class="app-titlebar__action-icon" />
+      <button class="vg-btn vg-btn--ghost vg-btn--sm" type="button" @click="openDataDirectory">
+        <FolderOpen class="vg-titlebar__icon" />
         <span>{{ t('titleBar.openDataDirectory') }}</span>
       </button>
     </div>
 
-    <div class="app-titlebar__window-controls" style="-webkit-app-region: no-drag">
-      <button type="button" @click="minimize" :title="t('titleBar.minimize')"><Minus /></button>
-      <button type="button" @click="toggleMax" :title="t('titleBar.maximize')"><Square /></button>
-      <button class="app-titlebar__close" type="button" @click="close" :title="t('titleBar.close')"><X /></button>
+    <div class="vg-titlebar__window">
+      <button type="button" :title="t('titleBar.minimize')" :aria-label="t('titleBar.minimize')" @click="minimize"><Minus /></button>
+      <button type="button" :title="t('titleBar.maximize')" :aria-label="t('titleBar.maximize')" @click="toggleMax">
+        <Copy v-if="maximized" class="vg-titlebar__restore" />
+        <Square v-else />
+      </button>
+      <button class="is-close" type="button" :title="t('titleBar.close')" :aria-label="t('titleBar.close')" @click="close"><X /></button>
     </div>
   </header>
 </template>
 
 <style scoped>
-.app-titlebar {
+.vg-titlebar {
   position: relative;
   z-index: 100;
-  display: grid;
-  grid-template-columns: 208px minmax(0, 1fr) 132px;
-  align-items: stretch;
-  min-height: 62px;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  flex-shrink: 0;
+  padding-left: 16px;
+  background: var(--theme-sidebar);
   border-bottom: 1px solid var(--theme-border);
-  background: var(--theme-panel);
   color: var(--theme-text);
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
-.app-titlebar__brand {
+.vg-titlebar__brand {
   display: flex;
-  min-width: 0;
   align-items: center;
   gap: 10px;
-  padding: 8px 14px 8px 20px;
-}
-
-.app-titlebar__logo {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border-radius: 12px;
-}
-
-.app-titlebar__brand-copy { min-width: 0; }
-
-.app-titlebar__brand-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.app-titlebar__brand-line strong { font-size: 15px; font-weight: 800; letter-spacing: 0.01em; }
-.app-titlebar__brand-line span:last-child { color: rgba(203, 213, 225, 0.7); font-size: 10px; }
-
-.app-titlebar__ready-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #20cbb7;
-  box-shadow: 0 0 10px rgba(32, 203, 183, 0.5);
-}
-
-.app-titlebar__brand-copy small {
-  display: block;
-  margin-top: 4px;
-  color: rgba(148, 163, 184, 0.72);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-:global(html[data-app-theme='light-teal']) .app-titlebar__brand-line span:last-child,
-:global(html[data-app-theme='light-teal']) .app-titlebar__brand-copy small,
-:global(html[data-app-theme='mono']) .app-titlebar__brand-line span:last-child,
-:global(html[data-app-theme='mono']) .app-titlebar__brand-copy small {
-  color: var(--theme-text-muted);
-}
-
-.app-titlebar__actions {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px 8px;
-  overflow: hidden;
 }
-
-.app-titlebar__action,
-.app-titlebar__status {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px;
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  border-radius: 10px;
-  background: rgba(18, 25, 40, 0.82);
-  color: rgba(226, 232, 240, 0.8);
-  font-size: 11px;
-  font-weight: 700;
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+.vg-titlebar__logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
-
-.app-titlebar__action:hover {
-  border-color: rgba(139, 92, 246, 0.24);
-  background: rgba(27, 35, 54, 0.96);
-  color: #ffffff;
-}
-
-.app-titlebar__action:disabled { cursor: default; opacity: 0.7; }
-.app-titlebar__action-icon,
-.app-titlebar__status-icon { width: 14px; height: 14px; flex: 0 0 auto; }
-.app-titlebar__action-copy { display: grid; gap: 1px; text-align: left; }
-.app-titlebar__action-copy strong { font-size: 11px; line-height: 1.1; }
-
-.app-titlebar__action-copy small {
-  color: rgba(148, 163, 184, 0.62);
-  font-size: 8px;
-  font-weight: 500;
-  line-height: 1.1;
+.vg-titlebar__name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.01em;
   white-space: nowrap;
 }
-
-.app-titlebar__status-icon { color: #20cbb7; }
-.app-titlebar__action--compact { white-space: nowrap; }
-
-.app-titlebar__window-controls {
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
+.vg-titlebar__divider {
+  width: 1px;
+  height: 14px;
+  background: var(--theme-border-control);
+}
+.vg-titlebar__subtitle {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.app-titlebar__window-controls button {
-  display: grid;
-  width: 44px;
-  place-items: center;
+.vg-titlebar__drag {
+  flex: 1;
+  align-self: stretch;
+}
+
+.vg-titlebar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 10px;
+  -webkit-app-region: no-drag;
+}
+.vg-titlebar__status { margin-right: 6px; }
+.vg-titlebar__icon { width: 15px; height: 15px; }
+
+.vg-titlebar__window {
+  display: flex;
+  align-self: stretch;
+  border-left: 1px solid var(--theme-divider);
+  -webkit-app-region: no-drag;
+}
+.vg-titlebar__window button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
   border: 0;
   background: transparent;
-  color: rgba(226, 232, 240, 0.66);
-  transition: background 150ms ease, color 150ms ease;
-}
-
-.app-titlebar__window-controls button:hover { background: rgba(255, 255, 255, 0.06); color: #ffffff; }
-.app-titlebar__window-controls .app-titlebar__close:hover { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
-.app-titlebar__window-controls svg { width: 15px; height: 15px; }
-.is-spinning { animation: titlebar-spin 700ms linear infinite; }
-
-:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__action,
-:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__status {
-  border-color: var(--theme-border);
-  background: var(--theme-control);
   color: var(--theme-text-secondary);
+  cursor: pointer;
+  transition: background .12s, color .12s;
 }
+.vg-titlebar__window button :deep(svg) { width: 15px; height: 15px; }
+.vg-titlebar__window button .vg-titlebar__restore { width: 13px; height: 13px; transform: scaleX(-1); }
+.vg-titlebar__window button:hover { background: var(--theme-control-hover); color: var(--theme-text); }
+.vg-titlebar__window button.is-close:hover { background: #e81123; color: #fff; }
 
-:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__action:hover {
-  border-color: var(--theme-accent);
-  background: var(--theme-control-hover);
-  color: var(--theme-text);
-}
-
-:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__action-copy small {
-  color: var(--theme-text-muted);
-}
-
-:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__window-controls button {
-  color: var(--theme-text-muted);
-}
-
-:global(html:is([data-app-theme='light-teal'], [data-app-theme='mono'])) .app-titlebar__window-controls button:hover {
-  background: var(--theme-control-hover);
-  color: var(--theme-text);
-}
-
-@keyframes titlebar-spin { to { transform: rotate(360deg); } }
-
-@media (max-width: 2200px) {
-  .app-titlebar { grid-template-columns: 208px minmax(0, 1fr) 112px; }
-  .app-titlebar__actions { min-width: 0; justify-content: flex-end; }
-  .app-titlebar__status,
-  .app-titlebar__action--compact span { display: none; }
-  .app-titlebar__action--compact { width: 42px; justify-content: center; padding: 0; }
-  .app-titlebar__window-controls button { width: 36px; }
-}
-
-@media (max-width: 820px) {
-  .app-titlebar__action-copy,
-  .app-titlebar__brand-copy small { display: none; }
-  .app-titlebar__action { width: 36px; justify-content: center; padding: 0; }
+@media (max-width: 1180px) {
+  .vg-titlebar__subtitle,
+  .vg-titlebar__divider,
+  .vg-titlebar__actions .vg-btn span { display: none; }
 }
 </style>
