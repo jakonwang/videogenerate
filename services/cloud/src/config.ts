@@ -1,0 +1,84 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+
+function env(name: string, fallback = ''): string {
+  const value = process.env[name]
+  return value === undefined ? fallback : value.trim()
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = env(name)
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const DAY = 24 * 60 * 60 * 1000
+
+export type CloudConfig = ReturnType<typeof loadCloudConfig>
+
+export function loadCloudConfig() {
+  const dataDir = resolve(env('CLOUD_DATA_DIR', join(process.cwd(), 'services', 'cloud', 'data')))
+  const keysDir = join(dataDir, 'keys')
+  const isProduction = env('NODE_ENV') === 'production'
+  const mockPay = env('CLOUD_PAY_MOCK') === '1'
+
+  return {
+    isProduction,
+    host: env('CLOUD_HOST', '127.0.0.1'),
+    port: envInt('CLOUD_PORT', 18300),
+    dataDir,
+    dbPath: join(dataDir, 'cloud.sqlite'),
+    keysDir,
+    /** 对外访问根地址，用于拼支付回调地址，如 https://api.example.com */
+    publicBaseUrl: env('CLOUD_PUBLIC_BASE_URL').replace(/\/+$/, ''),
+    /** 允许跨域访问的前端来源（管理后台、用户 Web 端），逗号分隔 */
+    corsOrigins: env('CLOUD_CORS_ORIGINS', 'http://127.0.0.1:18280,http://localhost:18280')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+    /** 反向代理后取真实 IP */
+    trustProxy: env('CLOUD_TRUST_PROXY') === '1',
+    allowRegistration: env('CLOUD_ALLOW_REGISTRATION', '1') === '1',
+
+    entitlementPrivateKeyPath: env('CLOUD_ENTITLEMENT_PRIVATE_KEY', join(keysDir, 'entitlement-private.pem')),
+    /** 普通用户令牌离线可用时长 */
+    entitlementTtlMs: envInt('CLOUD_ENTITLEMENT_TTL_DAYS', 7) * DAY,
+    /** 不受限账号令牌离线可用时长 */
+    unlimitedEntitlementTtlMs: envInt('CLOUD_UNLIMITED_TTL_DAYS', 30) * DAY,
+
+    sessionTtlMs: envInt('CLOUD_SESSION_TTL_DAYS', 30) * DAY,
+    adminSessionTtlMs: envInt('CLOUD_ADMIN_SESSION_TTL_HOURS', 12) * 60 * 60 * 1000,
+
+    loginMaxFailures: 5,
+    loginLockMs: 15 * 60 * 1000,
+    /** 用户自助解绑设备：30 天内最多次数 */
+    deviceUnbindPer30d: envInt('CLOUD_DEVICE_UNBIND_PER_30D', 3),
+
+    orderExpireMs: 30 * 60 * 1000,
+    /** 仅本地联调：模拟支付。生产环境即使设置也会拒绝启动 */
+    mockPay,
+
+    wechat: {
+      mchid: env('WECHATPAY_MCHID'),
+      appid: env('WECHATPAY_APPID'),
+      merchantSerialNo: env('WECHATPAY_SERIAL_NO'),
+      merchantPrivateKeyPath: env('WECHATPAY_PRIVATE_KEY_PATH', join(keysDir, 'wechatpay_apiclient_key.pem')),
+      apiV3Key: env('WECHATPAY_APIV3_KEY'),
+      platformPublicKeyPath: env('WECHATPAY_PLATFORM_PUBLIC_KEY_PATH', join(keysDir, 'wechatpay_platform_public.pem')),
+      platformSerial: env('WECHATPAY_PLATFORM_SERIAL'),
+      apiBase: env('WECHATPAY_API_BASE', 'https://api.mch.weixin.qq.com'),
+    },
+    alipay: {
+      appId: env('ALIPAY_APP_ID'),
+      appPrivateKeyPath: env('ALIPAY_APP_PRIVATE_KEY_PATH', join(keysDir, 'alipay_app_private.pem')),
+      alipayPublicKeyPath: env('ALIPAY_PUBLIC_KEY_PATH', join(keysDir, 'alipay_public.pem')),
+      /** 沙箱：https://openapi-sandbox.dl.alipaydev.com/gateway.do */
+      gateway: env('ALIPAY_GATEWAY', 'https://openapi.alipay.com/gateway.do'),
+    },
+  }
+}
+
+export function readKeyFile(path: string): string | null {
+  if (!path || !existsSync(path)) return null
+  return readFileSync(path, 'utf8')
+}

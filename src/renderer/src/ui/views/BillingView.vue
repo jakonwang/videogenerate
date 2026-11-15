@@ -1,223 +1,197 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { CheckCircle2, Coins, CreditCard, Crown, History, Info, LoaderCircle, ReceiptText, RefreshCw, UserRound, Wallet, Zap } from 'lucide-vue-next'
-import {
-  type BillingOrder,
-  type SubscriptionPlan,
-  type WalletTransaction,
-  webApiClient,
-} from '@/lib/webApiClient'
-import { useWebSessionStore } from '@/stores/webSession'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
+import { CalendarClock, Crown, LaptopMinimal, LoaderCircle, LogOut, ReceiptText, RefreshCw, ShieldCheck, UserRound, WifiOff } from 'lucide-vue-next'
+import type { CloudDevice, CloudOrder } from '../../../../shared/cloud/types'
+import CloudPurchasePanel from '../components/cloud/CloudPurchasePanel.vue'
+import { useCloudAuthStore } from '@/stores/cloudAuth'
 
-const webSession = useWebSessionStore()
+const PERMANENT_AT = 253402214400000
+
 const { t, locale } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const cloudAuth = useCloudAuthStore()
 
 const loading = ref(false)
-const paying = ref('')
-const plans = ref<SubscriptionPlan[]>([])
-const orders = ref<BillingOrder[]>([])
-const transactions = ref<WalletTransaction[]>([])
-const feedback = ref('')
+const devices = ref<CloudDevice[]>([])
+const maxDevices = ref(0)
+const orders = ref<CloudOrder[]>([])
+const supportContact = ref('')
+const message = ref<{ tone: 'accent' | 'danger'; text: string } | null>(null)
+const unbinding = ref('')
 
-const walletBalance = computed(() => webSession.wallet?.balanceCredits ?? 0)
-const activePlan = computed(() => webSession.subscription?.planName || t('billing.notActive'))
+const status = computed(() => cloudAuth.status)
+const lockedFeature = computed(() => (typeof route.query.feature === 'string' ? route.query.feature : ''))
 
-const computePackOptions = computed(() => [
-  { credits: 100, priceHint: t('billing.packs.light') },
-  { credits: 300, priceHint: t('billing.packs.regular') },
-  { credits: 1000, priceHint: t('billing.packs.batch') },
-])
-
-function formatTime(value?: number) {
-  if (!value) return '--'
+function formatTime(value?: number | null) {
+  if (!value) return '—'
+  if (value >= PERMANENT_AT) return t('cloud.membership.permanent')
   return new Date(value).toLocaleString(locale.value)
 }
 
-function orderTypeLabel(type: BillingOrder['type']) {
-  return type === 'subscription' ? t('billing.order.subscription') : t('billing.order.compute')
-}
+const planLabel = computed(() => {
+  const s = status.value
+  if (!s) return '—'
+  if (s.mode === 'off' && !s.loggedIn) return t('cloud.membership.internalBuild')
+  if (s.unlimited) return t('cloud.membership.unlimited')
+  return s.planName || t('cloud.membership.none')
+})
 
-function transactionTone(type: WalletTransaction['type']) {
-  return type === 'compute_charge' ? 'is-negative' : 'is-positive'
-}
+const expiresLabel = computed(() => {
+  const s = status.value
+  if (!s) return '—'
+  if (s.unlimited) return t('cloud.membership.unlimited')
+  return formatTime(s.planExpiresAt)
+})
 
-async function refresh() {
+async function load() {
   loading.value = true
   try {
-    const [planRows, orderRows, transactionRows] = await Promise.all([
-      webApiClient.listPlans(),
-      webApiClient.listOrders(),
-      webApiClient.listTransactions(),
-      webSession.refreshProfile(),
-    ])
-    plans.value = planRows
-    orders.value = orderRows
-    transactions.value = transactionRows
+    await cloudAuth.refresh()
+    if (!status.value?.loggedIn) return
+    const [me, orderList, config] = await Promise.all([window.api.cloud.me(), window.api.cloud.listOrders(), window.api.cloud.getConfig()])
+    if (me.ok) {
+      devices.value = me.devices
+      maxDevices.value = me.entitlement.maxDevices
+    }
+    if (orderList.ok) orders.value = orderList.items
+    if (config.ok) supportContact.value = String(config.values['support.contact'] ?? '')
   } finally {
     loading.value = false
   }
 }
 
-async function createAndPayOrder(input: { type: 'subscription' | 'compute_pack'; planId?: string; credits?: number }) {
-  paying.value = input.planId || String(input.credits || input.type)
-  feedback.value = ''
+async function unbind(device: CloudDevice) {
+  if (!window.confirm(t('cloud.membership.unbindConfirm'))) return
+  unbinding.value = device.id
+  message.value = null
   try {
-    const created = await webApiClient.createOrder({
-      ...input,
-      paymentChannel: 'mock_wechat',
-    })
-    await webApiClient.payMockOrder(created.order.id)
-    feedback.value = input.type === 'subscription' ? t('billing.messages.subscribed') : t('billing.messages.recharged')
-    await refresh()
-  } catch (error: any) {
-    feedback.value = error?.message ?? String(error)
+    const result = await window.api.cloud.unbindDevice(device.id)
+    if (!result.ok) {
+      message.value = { tone: 'danger', text: result.error }
+      return
+    }
+    devices.value = result.devices
+    cloudAuth.setStatus(result.status)
+    if (device.machineId === status.value?.machineId && status.value.mode === 'enforced') void router.replace('/login')
   } finally {
-    paying.value = ''
+    unbinding.value = ''
   }
 }
 
-onMounted(() => {
-  void refresh()
-})
+async function logout() {
+  if (!window.confirm(t('cloud.membership.logoutConfirm'))) return
+  const result = await window.api.cloud.logout()
+  if (result.ok) cloudAuth.setStatus(result.status)
+  devices.value = []
+  orders.value = []
+  if (result.ok && result.status.mode === 'enforced') void router.replace('/login')
+}
+
+onMounted(() => void load())
 </script>
 
 <template>
-  <div class="vg-scope vg-page billing">
+  <div class="vg-scope vg-page membership" data-testid="membership-page">
     <header class="vg-page-head">
-      <span class="vg-page-head__icon"><Wallet :size="20" /></span>
+      <span class="vg-page-head__icon"><ShieldCheck :size="20" /></span>
       <div class="vg-page-head__text">
-        <h1>{{ t('billing.title') }}</h1>
-        <p>{{ t('billing.desc') }}</p>
+        <h1>{{ t('cloud.membership.title') }}</h1>
+        <p>{{ t('cloud.membership.desc') }}</p>
       </div>
       <div class="vg-page-head__actions">
-        <button class="vg-btn" type="button" :disabled="loading" @click="refresh">
+        <button class="vg-btn" type="button" :disabled="loading" @click="load">
           <LoaderCircle v-if="loading" :size="15" class="vg-spin" />
           <RefreshCw v-else :size="15" />
-          {{ t('billing.refresh') }}
+          {{ t('cloud.membership.refresh') }}
         </button>
+        <button v-if="status?.loggedIn" class="vg-btn vg-btn--ghost" type="button" data-testid="membership-logout" @click="logout">
+          <LogOut :size="15" /> {{ t('cloud.membership.logout') }}
+        </button>
+        <RouterLink v-else class="vg-btn vg-btn--primary" to="/login">{{ t('cloud.login.submitLogin') }}</RouterLink>
       </div>
     </header>
 
-    <div v-if="feedback" class="vg-notice vg-notice--accent"><CheckCircle2 :size="16" /><span>{{ feedback }}</span></div>
+    <div v-if="lockedFeature" class="vg-notice vg-notice--warning"><span>{{ t('cloud.membership.featureLocked') }}</span></div>
+    <div v-if="status?.offline && status.tokenExpiresAt" class="vg-notice vg-notice--warning">
+      <WifiOff :size="15" /><span>{{ t('cloud.membership.offline', { time: formatTime(status.tokenExpiresAt) }) }}</span>
+    </div>
+    <div v-if="status?.mode === 'off'" class="vg-notice"><span>{{ t('cloud.membership.internalBuild') }}</span></div>
+    <div v-if="message" class="vg-notice" :class="message.tone === 'danger' ? 'vg-notice--danger' : 'vg-notice--accent'"><span>{{ message.text }}</span></div>
 
     <section class="vg-stats">
       <div class="vg-stat">
         <span class="vg-stat__icon"><UserRound :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('billing.currentAccount') }}</span><span class="vg-stat__value billing__stat-text">{{ webSession.displayName }}</span></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('cloud.membership.account') }}</span><span class="vg-stat__value membership__stat-text">{{ status?.account || '—' }}</span></span>
       </div>
       <div class="vg-stat">
         <span class="vg-stat__icon vg-stat__icon--violet"><Crown :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('billing.currentPlan') }}</span><span class="vg-stat__value billing__stat-text">{{ activePlan }}</span></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('cloud.membership.plan') }}</span><span class="vg-stat__value membership__stat-text" data-testid="membership-plan">{{ planLabel }}</span></span>
       </div>
       <div class="vg-stat">
-        <span class="vg-stat__icon vg-stat__icon--amber"><Coins :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('billing.balance') }}</span><span class="vg-stat__value">{{ walletBalance }}</span></span>
+        <span class="vg-stat__icon vg-stat__icon--amber"><CalendarClock :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('cloud.membership.expires') }}</span><span class="vg-stat__value membership__stat-text">{{ expiresLabel }}</span></span>
       </div>
     </section>
 
-    <div class="vg-split billing__layout">
+    <div class="vg-split membership__layout">
       <div class="vg-stack">
-        <section class="vg-card">
-          <div class="vg-card__head">
-            <span class="vg-card__title"><Crown :size="16" /> {{ t('billing.plans.title') }} <small>{{ t('billing.plans.desc') }}</small></span>
-          </div>
-          <div class="vg-grid billing__plans">
-            <article v-for="plan in plans" :key="plan.id" class="vg-card vg-card--soft billing-plan">
-              <strong class="billing-plan__name">{{ plan.name }}</strong>
-              <div class="billing-plan__price"><b>¥{{ plan.priceCny }}</b> <span>/ {{ t('billing.days', { count: plan.durationDays }) }}</span></div>
-              <span class="vg-chip">{{ t('billing.plans.credits', { count: plan.monthlyComputeCredits }) }}</span>
-              <button class="vg-btn vg-btn--primary vg-btn--block" type="button" :disabled="paying === plan.id" @click="createAndPayOrder({ type: 'subscription', planId: plan.id })">
-                <CreditCard :size="15" /> {{ paying === plan.id ? t('billing.paying') : t('billing.subscribe') }}
-              </button>
-            </article>
-            <div v-if="!plans.length" class="vg-empty"><p>--</p></div>
-          </div>
-        </section>
+        <CloudPurchasePanel v-if="status?.loggedIn && !status.unlimited" @activated="load" />
 
-        <section class="vg-card">
+        <section v-if="status?.loggedIn" class="vg-card vg-card--flush">
           <div class="vg-card__head">
-            <span class="vg-card__title"><Zap :size="16" /> {{ t('billing.packs.title') }} <small>{{ t('billing.packs.desc') }}</small></span>
-          </div>
-          <div class="vg-grid vg-grid--3">
-            <article v-for="pack in computePackOptions" :key="pack.credits" class="vg-card vg-card--soft billing-plan">
-              <strong class="billing-plan__name">{{ t('billing.creditCount', { count: pack.credits }) }}</strong>
-              <span class="vg-muted">{{ pack.priceHint }}</span>
-              <button class="vg-btn vg-btn--soft vg-btn--block" type="button" :disabled="paying === String(pack.credits)" @click="createAndPayOrder({ type: 'compute_pack', credits: pack.credits })">
-                <Zap :size="15" /> {{ paying === String(pack.credits) ? t('billing.recharging') : t('billing.recharge') }}
-              </button>
-            </article>
-          </div>
-        </section>
-
-        <section class="vg-card vg-card--flush">
-          <div class="vg-card__head">
-            <span class="vg-card__title"><ReceiptText :size="16" /> {{ t('billing.order.title') }} <small>{{ t('billing.order.desc') }}</small></span>
+            <span class="vg-card__title"><ReceiptText :size="16" /> {{ t('cloud.membership.ordersTitle') }}</span>
           </div>
           <table v-if="orders.length" class="vg-table">
-            <thead>
-              <tr>
-                <th>{{ t('billing.order.type') }}</th>
-                <th class="num">{{ t('billing.order.amount') }}</th>
-                <th>{{ t('billing.order.status') }}</th>
-                <th>{{ t('billing.order.time') }}</th>
-              </tr>
-            </thead>
             <tbody>
-              <tr v-for="order in orders.slice(0, 12)" :key="order.id">
-                <td>{{ orderTypeLabel(order.type) }}</td>
-                <td class="num">¥{{ order.amountCny }}</td>
-                <td><span class="vg-pill vg-pill--dot" :class="order.status === 'paid' ? 'vg-pill--green' : 'vg-pill--amber'">{{ order.status }}</span></td>
+              <tr v-for="order in orders.slice(0, 12)" :key="order.orderNo">
+                <td>{{ order.planName }}</td>
+                <td class="num">¥{{ (order.amountFen / 100).toFixed(2) }}</td>
+                <td>
+                  <span class="vg-pill vg-pill--dot" :class="order.status === 'paid' ? 'vg-pill--green' : order.status === 'refunded' ? 'vg-pill--red' : 'vg-pill--amber'">
+                    {{ t(`cloud.orderStatus.${order.status}`) }}
+                  </span>
+                </td>
                 <td class="vg-secondary vg-num">{{ formatTime(order.paidAt || order.createdAt) }}</td>
               </tr>
             </tbody>
           </table>
-          <div v-else class="vg-empty"><p>{{ t('billing.order.empty') }}</p></div>
+          <div v-else class="vg-empty"><p>{{ t('cloud.membership.noOrders') }}</p></div>
         </section>
       </div>
 
       <aside class="vg-stack">
-        <section class="vg-card">
+        <section v-if="status?.loggedIn" class="vg-card">
           <div class="vg-card__head">
-            <span class="vg-card__title"><History :size="16" /> {{ t('billing.transactions.title') }}</span>
+            <span class="vg-card__title">
+              <LaptopMinimal :size="16" /> {{ t('cloud.membership.devices') }}
+              <small>{{ maxDevices === 0 ? t('cloud.membership.devicesUnlimited') : t('cloud.membership.devicesDesc', { max: maxDevices }) }}</small>
+            </span>
           </div>
-          <p class="vg-muted billing__desc">{{ t('billing.transactions.desc') }}</p>
-          <div v-if="transactions.length" class="vg-list">
-            <div v-for="item in transactions.slice(0, 12)" :key="item.id" class="vg-list__item">
+          <div class="vg-list">
+            <div v-for="device in devices" :key="device.id" class="vg-list__item">
               <span class="vg-list__main">
-                <span class="vg-list__title">{{ item.note }}</span>
-                <span class="vg-list__sub">{{ formatTime(item.createdAt) }}</span>
+                <span class="vg-list__title">
+                  {{ device.name || device.id }}
+                  <span v-if="device.machineId === status?.machineId" class="vg-pill vg-pill--accent">{{ t('cloud.membership.thisDevice') }}</span>
+                </span>
+                <span class="vg-list__sub">{{ device.platform }} · {{ t('cloud.membership.lastSeen', { time: formatTime(device.lastSeenAt) }) }}</span>
               </span>
-              <b class="vg-num" :class="transactionTone(item.type)">{{ item.amountCredits > 0 ? `+${item.amountCredits}` : item.amountCredits }}</b>
+              <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost" :disabled="unbinding === device.id" @click="unbind(device)">{{ t('cloud.membership.unbind') }}</button>
             </div>
-          </div>
-          <div v-else class="vg-empty"><p>{{ t('billing.transactions.empty') }}</p></div>
-        </section>
-
-        <section class="vg-card">
-          <div class="vg-card__head">
-            <span class="vg-card__title"><Info :size="16" /> {{ t('billing.notes.title') }}</span>
-          </div>
-          <div class="vg-stack billing__notes">
-            <div class="vg-notice"><CheckCircle2 :size="15" /><span>{{ t('billing.notes.membership') }}</span></div>
-            <div class="vg-notice"><CheckCircle2 :size="15" /><span>{{ t('billing.notes.payment') }}</span></div>
+            <div v-if="!devices.length" class="vg-empty"><p>—</p></div>
           </div>
         </section>
+        <p v-if="supportContact" class="vg-muted membership__support">{{ t('cloud.membership.support', { contact: supportContact }) }}</p>
       </aside>
     </div>
   </div>
 </template>
 
 <style scoped>
-.billing { width: min(1408px, 100%); margin: 0 auto; }
-.billing__stat-text { font-size: 16px; overflow: hidden; text-overflow: ellipsis; }
-.billing__plans { --vg-grid-min: 200px; }
-.billing-plan { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-.billing-plan__name { font-size: 15px; font-weight: 700; }
-.billing-plan__price b { font-size: 22px; font-weight: 800; color: var(--vg-accent); }
-.billing-plan__price span { font-size: 12px; color: var(--theme-text-muted); }
-.billing__desc { font-size: 12px; margin-bottom: 8px; }
-.billing__notes { gap: 8px; }
-.is-positive { color: var(--vg-green); }
-.is-negative { color: var(--vg-red); }
+.membership { width: min(1408px, 100%); margin: 0 auto; }
+.membership__stat-text { font-size: 16px; overflow: hidden; text-overflow: ellipsis; }
+.membership__support { font-size: 12px; }
 </style>

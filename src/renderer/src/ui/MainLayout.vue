@@ -25,6 +25,7 @@ import AssetLibraryPickerHost from "./components/AssetLibraryPickerHost.vue";
 import { useCloneTopbarStore } from "@/stores/cloneTopbar";
 import { useDesignInspectorStore } from "@/stores/designInspector";
 import { useWebSessionStore } from "@/stores/webSession";
+import { featureForPath, useCloudAuthStore } from "@/stores/cloudAuth";
 
 const route = useRoute();
 const router = useRouter();
@@ -46,10 +47,17 @@ const showCloneWorkflowTopbar = computed(
     cloneTopbarVisible.value &&
     cloneTopbarItems.value.length > 0,
 );
-const topUserName = computed(() => "VideoGenerate");
-const topUserPlan = computed(() => t("shell.localMode"));
+const cloudAuth = useCloudAuthStore();
+void cloudAuth.ensureLoaded();
+const topUserName = computed(() => cloudAuth.status?.displayName || cloudAuth.status?.account || "VideoGenerate");
+const topUserPlan = computed(() => {
+  const status = cloudAuth.status;
+  if (!status?.loggedIn) return status?.mode === "enforced" ? t("cloud.reason.not_logged_in") : t("shell.localMode");
+  if (status.unlimited) return t("cloud.membership.unlimited");
+  return status.planName || t("cloud.membership.none");
+});
 
-const navItems = computed(() => [
+const allNavItems = computed(() => [
   {
     to: "/home",
     icon: House,
@@ -93,6 +101,9 @@ const navItems = computed(() => [
     active: route.path.includes("/publish"),
   },
 ]);
+
+/** 后台关闭的模块不出现在导航里 */
+const navItems = computed(() => allNavItems.value.filter((item) => cloudAuth.hasFeature(featureForPath(item.to))));
 
 const helpItems = computed(() => [
   { to: "/models", title: t("nav.models"), desc: t("shell.helpModels") },
@@ -204,7 +215,15 @@ onMounted(() => {
             <Settings class="shell-foot__icon" />
             <span class="shell-foot__label">{{ t("nav.settings") }}</span>
           </button>
-          <div class="shell-foot__user" :title="appSidebarCollapsed ? `${topUserName} · ${topUserPlan}` : undefined">
+          <div
+            class="shell-foot__user shell-foot__user--link"
+            data-testid="app-account-entry"
+            role="button"
+            tabindex="0"
+            :title="appSidebarCollapsed ? `${topUserName} · ${topUserPlan}` : t('cloud.membership.title')"
+            @click="go('/billing')"
+            @keydown.enter="go('/billing')"
+          >
             <span class="vg-avatar shell-foot__avatar">{{ topUserName.slice(0, 1).toUpperCase() }}</span>
             <span class="shell-foot__user-copy">
               <strong>{{ topUserName }}</strong>
@@ -217,7 +236,8 @@ onMounted(() => {
               :title="appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse')"
               :aria-label="appSidebarCollapsed ? t('appNavigation.expand') : t('appNavigation.collapse')"
               :aria-expanded="!appSidebarCollapsed"
-              @click="toggleAppSidebar"
+              @click.stop="toggleAppSidebar"
+              @keydown.enter.stop
             >
               <component :is="appSidebarCollapsed ? PanelLeftOpen : PanelLeftClose" class="shell-foot__icon" />
             </button>
@@ -245,6 +265,14 @@ onMounted(() => {
           </div>
         </template>
 
+        <div v-if="cloudAuth.status?.updateRequired || cloudAuth.status?.announcement" class="vg-scope app-cloud-banners">
+          <div v-if="cloudAuth.status?.updateRequired" class="vg-notice vg-notice--warning" data-testid="app-update-required">
+            <span>{{ t("cloud.banner.updateRequired", { version: cloudAuth.status.minVersion }) }}</span>
+          </div>
+          <div v-if="cloudAuth.status?.announcement" class="vg-notice vg-notice--accent" data-testid="app-announcement">
+            <span>{{ cloudAuth.status.announcement }}</span>
+          </div>
+        </div>
         <RouterView />
       </DsMainLayout>
     </div>
@@ -372,6 +400,8 @@ onMounted(() => {
 .app-shell.is-sidebar-collapsed .shell-foot__btn { justify-content: center; padding: 0; }
 .app-shell.is-sidebar-collapsed .shell-foot__label,
 .app-shell.is-sidebar-collapsed .shell-foot__user-copy { display: none; }
+.shell-foot__user--link { cursor: pointer; border-radius: 10px; transition: background-color .15s; }
+.shell-foot__user--link:hover { background: var(--theme-hover, rgba(127, 127, 127, 0.08)); }
 .app-shell.is-sidebar-collapsed .shell-foot__user { flex-direction: column; gap: 8px; padding: 6px 0 0; }
 
 @media (max-width: 1180px) {
@@ -584,4 +614,5 @@ onMounted(() => {
   flex: 1 1 auto;
 }
 
+.app-cloud-banners { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px 0; }
 </style>

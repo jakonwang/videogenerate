@@ -9,6 +9,13 @@ import type {
   SaveInventorySkuInput,
 } from '../main/modules/dianxiaomi-inventory/types'
 import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
+import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
+import type { CloudDevice, CloudMeResponse, CloudOrder, CloudPage, CloudPayChannel, CloudPlansResponse } from '../shared/cloud/types'
+
+type CloudIpcResult<T> = ({ ok: true } & T) | { ok: false; error: string; code: string; details?: unknown }
+type CloudActivation = { ok: true } | { ok: false; reason: CloudLicenseStatus['reason']; message: string; devices?: CloudDevice[]; maxDevices?: number }
+type CloudAuthResult = { status: CloudLicenseStatus; activation: CloudActivation }
+
 
 function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) {
   return {
@@ -1276,19 +1283,29 @@ const api = {
     },
   },
 
-  license: {
-    getMachineId: () =>
-      ipcRenderer.invoke('license:getMachineId') as Promise<{
-        ok: boolean
-        machineId: string
-        error?: string
-      }>,
-    verify: (licenseKey: string) =>
-      ipcRenderer.invoke('license:verify', licenseKey) as Promise<{
-        code: number
-        msg: string
-        data?: { valid?: boolean; expire_time?: string }
-      }>,
+  cloud: {
+    getStatus: () => ipcRenderer.invoke('cloud:getStatus') as Promise<CloudLicenseStatus>,
+    refresh: () => ipcRenderer.invoke('cloud:refresh') as Promise<CloudLicenseStatus>,
+    login: (input: { account: string; password: string }) => ipcRenderer.invoke('cloud:login', input) as Promise<CloudIpcResult<CloudAuthResult>>,
+    register: (input: { account: string; password: string; displayName?: string }) =>
+      ipcRenderer.invoke('cloud:register', input) as Promise<CloudIpcResult<CloudAuthResult>>,
+    logout: () => ipcRenderer.invoke('cloud:logout') as Promise<CloudIpcResult<{ status: CloudLicenseStatus }>>,
+    me: () => ipcRenderer.invoke('cloud:me') as Promise<CloudIpcResult<CloudMeResponse>>,
+    unbindDevice: (deviceId: string) =>
+      ipcRenderer.invoke('cloud:unbindDevice', deviceId) as Promise<CloudIpcResult<{ devices: CloudDevice[]; activation: CloudActivation; status: CloudLicenseStatus }>>,
+    listPlans: () => ipcRenderer.invoke('cloud:listPlans') as Promise<CloudIpcResult<CloudPlansResponse>>,
+    createOrder: (input: { planCode: string; channel: CloudPayChannel }) =>
+      ipcRenderer.invoke('cloud:createOrder', input) as Promise<CloudIpcResult<{ order: CloudOrder }>>,
+    getOrder: (orderNo: string) => ipcRenderer.invoke('cloud:getOrder', orderNo) as Promise<CloudIpcResult<{ order: CloudOrder; status: CloudLicenseStatus }>>,
+    mockPay: (orderNo: string) => ipcRenderer.invoke('cloud:mockPay', orderNo) as Promise<CloudIpcResult<{ order: CloudOrder; status: CloudLicenseStatus }>>,
+    listOrders: () => ipcRenderer.invoke('cloud:listOrders') as Promise<CloudIpcResult<CloudPage<CloudOrder>>>,
+    redeem: (code: string) => ipcRenderer.invoke('cloud:redeem', code) as Promise<CloudIpcResult<{ status: CloudLicenseStatus }>>,
+    getConfig: () => ipcRenderer.invoke('cloud:getConfig') as Promise<CloudIpcResult<{ values: Record<string, unknown>; version: string }>>,
+    onStatusChanged: (handler: (status: CloudLicenseStatus) => void) => {
+      const listener = (_event: unknown, status: CloudLicenseStatus) => handler(status)
+      ipcRenderer.on('cloud:statusChanged', listener)
+      return () => ipcRenderer.off('cloud:statusChanged', listener)
+    },
   },
 }
 

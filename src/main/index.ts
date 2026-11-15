@@ -1,3 +1,4 @@
+import './lib/ipcGuardBootstrap'
 import { app, BrowserWindow, ipcMain, dialog, protocol, Menu, Tray, nativeImage, screen, crashReporter } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
@@ -13,6 +14,7 @@ import { analyzeVideoFolderAndSuggestTemplate } from './modules/style/analyzeVid
 import { normalizeAppLocale, type AppLocale } from '../shared/locale'
 import { defaultOpenDialogTitle } from './lib/dialogDefaults'
 import { registerUpdaterIpc, setupAutoUpdater } from './lib/updater'
+import { initCloudLicense, maskManagedCredentialsForRenderer, overlayManagedCredentials, registerCloudLicenseIpc, registerManagedCredentialsBridge } from './lib/cloudLicense'
 import { collectVideoFilesFromDropRoots } from './lib/collectVideoFiles'
 import { listBundledLuts } from './lib/luts'
 import { importUserFonts, listUserFontFiles, userFontsDir } from './lib/userFonts'
@@ -1605,15 +1607,13 @@ function wireIpc() {
     },
   )
   ipcMain.handle('clone:getModelCredentials', async () => {
-    return await cloneService.getModelCredentials()
+    // 后台统一下发密钥时，渲染进程只能看到掩码
+    return maskManagedCredentialsForRenderer(await cloneService.getModelCredentials())
   })
   ipcMain.handle('clone:getRuntimeOptions', async () => {
     return await cloneService.getRuntimeOptions()
   })
-  ipcMain.handle(
-    'clone:setModelCredentials',
-    async (
-      _e,
+  const saveModelCredentialsPayload = async (
       payload: {
         seedanceApiKey?: string
         seedanceHost?: string
@@ -1716,8 +1716,15 @@ function wireIpc() {
         gaoruiHub: payload?.gaoruiHub,
         apifoxHub: payload?.apifoxHub,
       })
-    },
-  )
+    }
+  registerManagedCredentialsBridge({
+    load: () => cloneService.getModelCredentials() as Promise<Record<string, unknown>>,
+    save: (payload) => saveModelCredentialsPayload(payload as Parameters<typeof saveModelCredentialsPayload>[0]),
+  })
+  ipcMain.handle('clone:setModelCredentials', async (_e, payload: Parameters<typeof saveModelCredentialsPayload>[0]) => {
+    // 托管模式下：用户改的其它字段照常保存，后台负责的字段始终以后台为准
+    return await saveModelCredentialsPayload(overlayManagedCredentials(payload as Record<string, unknown>) as Parameters<typeof saveModelCredentialsPayload>[0])
+  })
   ipcMain.handle(
     'clone:setRuntimeOptions',
     async (
@@ -1769,6 +1776,9 @@ app.whenReady().then(async () => {
   const crashDumpsDir = join(getAppPaths().dataDir, 'crashDumps')
   await mkdir(crashDumpsDir, { recursive: true })
   app.setPath('crashDumps', crashDumpsDir)
+  registerCloudLicenseIpc()
+  await initCloudLicense()
+  markStartupStage('cloud-license-ready')
   // Keep startup paths ready before renderer IPC requests begin.
   wireIpc()
   void productResearchService.ensureServer().catch((error) => {

@@ -9,6 +9,9 @@ import gmvMaxHelpViVN from './locales/gmv-max-help/vi-VN.json'
 import creatorHubZhCN from './locales/creator-hub/zh-CN.json'
 import creatorHubEnUS from './locales/creator-hub/en-US.json'
 import creatorHubViVN from './locales/creator-hub/vi-VN.json'
+import cloudZhCN from './locales/cloud/zh-CN.json'
+import cloudEnUS from './locales/cloud/en-US.json'
+import cloudViVN from './locales/cloud/vi-VN.json'
 import { autoUiEnUS, autoUiViVN, autoUiZhCN } from './locales/auto-ui'
 
 export const i18n = createI18n({
@@ -16,8 +19,8 @@ export const i18n = createI18n({
   locale: getInitialAppLocale(),
   fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': { ...zhCN, gmvMaxHelp: gmvMaxHelpZhCN, creatorHub: creatorHubZhCN, autoUi: autoUiZhCN },
-    'en-US': { ...enUS, gmvMaxHelp: gmvMaxHelpEnUS, creatorHub: creatorHubEnUS, autoUi: autoUiEnUS },
-    'vi-VN': { ...viVN, gmvMaxHelp: gmvMaxHelpViVN, creatorHub: creatorHubViVN, autoUi: autoUiViVN },
+    'zh-CN': { ...zhCN, gmvMaxHelp: gmvMaxHelpZhCN, creatorHub: creatorHubZhCN, cloud: cloudZhCN, autoUi: autoUiZhCN },
+    'en-US': { ...enUS, gmvMaxHelp: gmvMaxHelpEnUS, creatorHub: creatorHubEnUS, cloud: cloudEnUS, autoUi: autoUiEnUS },
+    'vi-VN': { ...viVN, gmvMaxHelp: gmvMaxHelpViVN, creatorHub: creatorHubViVN, cloud: cloudViVN, autoUi: autoUiViVN },
   },
 })

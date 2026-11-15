@@ -1,0 +1,91 @@
+{
+  "login": {
+    "title": "Sign in to TiktokCut",
+    "subtitle": "Sign in to use every feature included in your plan",
+    "registerTitle": "Create account",
+    "registerSubtitle": "After signing up, buy a plan or redeem a code to get started",
+    "account": "Phone or email",
+    "password": "Password",
+    "passwordHint": "At least 8 characters",
+    "displayName": "Nickname (optional)",
+    "submitLogin": "Sign in",
+    "submitRegister": "Sign up and sign in",
+    "toRegister": "No account? Sign up",
+    "toLogin": "Have an account? Sign in",
+    "loggingIn": "Signing in…",
+    "registering": "Signing up…",
+    "server": "Cloud service: {url}"
+  },
+  "reason": {
+    "ok": "License active",
+    "not_logged_in": "Please sign in",
+    "no_entitlement": "This account has no active plan. Buy a plan or redeem a code.",
+    "device_limit": "Device limit reached for this plan. Unbind another device first.",
+    "expired": "Offline license expired. Connect to the internet to refresh.",
+    "invalid_token": "License is invalid. Please sign in again.",
+    "clock_rollback": "System clock looks wrong. Fix the time and refresh online.",
+    "account_disabled": "This account has been disabled. Please contact support."
+  },
+  "membership": {
+    "title": "Account & plan",
+    "desc": "Plan status, devices, purchase and redeem codes",
+    "account": "Account",
+    "plan": "Plan",
+    "expires": "Expires",
+    "unlimited": "Unlimited",
+    "permanent": "Lifetime",
+    "none": "None",
+    "refresh": "Refresh",
+    "logout": "Sign out",
+    "logoutConfirm": "You will need to sign in again on this device. Sign out?",
+    "offline": "Offline – using the local license (valid until {time})",
+    "internalBuild": "Internal build: no restrictions",
+    "devices": "Devices",
+    "devicesDesc": "Up to {max}",
+    "devicesUnlimited": "Unlimited devices",
+    "thisDevice": "This device",
+    "lastSeen": "Last used {time}",
+    "unbind": "Unbind",
+    "unbindConfirm": "The device will need to sign in again, and self-service unbinds are limited per 30 days. Continue?",
+    "buyTitle": "Buy a plan",
+    "buyDesc": "Scan to pay. Activates automatically and stacks with your current plan.",
+    "days": "{count} days",
+    "forever": "Lifetime",
+    "deviceCount": "{count} devices",
+    "deviceUnlimited": "Unlimited devices",
+    "buy": "Buy",
+    "noChannels": "Online payment is not available yet. Contact support or use a redeem code.",
+    "scanTitle": "Scan to pay {amount}",
+    "scanHint": "Scan with {channel}. Your plan activates automatically after payment.",
+    "waiting": "Waiting for payment…",
+    "paid": "Payment received. Your plan is active.",
+    "closed": "Order expired. Please place a new order.",
+    "mockPay": "Simulate payment (test)",
+    "cancel": "Close",
+    "redeemTitle": "Redeem code",
+    "redeemPlaceholder": "Enter code, e.g. ABCD-EFGH-JKLM-NPQR",
+    "redeem": "Redeem",
+    "redeemed": "Code redeemed. Your plan is active.",
+    "ordersTitle": "My orders",
+    "noOrders": "No orders yet",
+    "featureLocked": "Your plan does not include this feature. Please upgrade.",
+    "support": "Support: {contact}"
+  },
+  "channel": {
+    "wechat": "WeChat Pay",
+    "alipay": "Alipay",
+    "mock": "Test payment"
+  },
+  "orderStatus": {
+    "paid": "Paid",
+    "pending": "Pending",
+    "closed": "Closed",
+    "refunded": "Refunded"
+  },
+  "settings": {
+    "managedNotice": "These settings are managed by your administrator and synced to this device automatically. Contact your administrator to change them."
+  },
+  "banner": {
+    "updateRequired": "This version is outdated. Please update to {version} or later."
+  }
+}

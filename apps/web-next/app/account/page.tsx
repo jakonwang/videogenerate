@@ -1,169 +1,93 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { CreditCard, FolderKanban, RefreshCcw, ShieldCheck, Wallet } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useEffect } from 'react'
+import { ArrowRight, CalendarClock, Crown, Download, KeyRound, MonitorSmartphone } from 'lucide-react'
 
-import { AppShell } from '@/components/app/app-shell'
-import { ErrorState, LoadingState } from '@/components/app/page-state'
-import { ProtectedPageGate } from '@/components/app/protected-page-gate'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { useAuthGuard } from '@/hooks/use-auth-guard'
-import { apiClient } from '@/lib/api-client'
-import { formatDateTime } from '@/lib/utils'
-import { useSessionStore } from '@/store/session-store'
+import { AccountCard, AccountPageTitle } from '@/components/account-center/account-shell'
+import { PERMANENT_AT, formatDate, useCloudUser } from '@/lib/cloud-user'
 
-export default function AccountPage() {
-  const router = useRouter()
-  const auth = useAuthGuard()
-  const sessionUser = useSessionStore((state) => state.user)
-  const sessionSubscription = useSessionStore((state) => state.subscription)
-  const sessionWallet = useSessionStore((state) => state.wallet)
+const DAY = 24 * 60 * 60 * 1000
 
-  const profileQuery = useQuery({
-    queryKey: ['profile'],
-    queryFn: () => apiClient.getProfile(),
-  })
+export default function AccountOverviewPage() {
+  const { me, load } = useCloudUser()
 
-  const gate = ProtectedPageGate({
-    auth,
-    restoringTitle: '正在恢复账户会话',
-    restoringDescription: '系统正在同步账户资料、订阅信息和钱包余额。',
-  })
+  useEffect(() => {
+    void load(true)
+  }, [load])
 
-  if (gate) return gate
+  if (!me) return null
+  const { entitlement, devices, user } = me
+  const daysLeft =
+    entitlement.expiresAt && entitlement.expiresAt < PERMANENT_AT ? Math.max(0, Math.ceil((entitlement.expiresAt - Date.now()) / DAY)) : null
+  const expiringSoon = entitlement.active && !entitlement.unlimited && daysLeft !== null && daysLeft <= 7
 
-  const user = profileQuery.data?.user || sessionUser
-  const subscription = profileQuery.data?.subscription || sessionSubscription
-  const wallet = profileQuery.data?.wallet || sessionWallet
-  const userName = user?.displayName || user?.phone || '当前用户'
-  const hasFallbackData = Boolean(sessionUser || sessionSubscription || sessionWallet)
+  const statusText = entitlement.unlimited ? '不受限' : entitlement.active ? '生效中' : user.planExpiresAt ? '已过期' : '未开通'
+  const statusColor = entitlement.active ? 'var(--success)' : 'var(--warning)'
 
   return (
-    <AppShell>
-      <div className="page-shell">
-        <section className="panel grid gap-4 px-6 py-5">
-          <div className="page-header">
-            <div className="page-header__copy">
-              <h1 className="page-title">账户中心</h1>
-              <p className="body-copy max-w-3xl">这里聚合账户身份、订阅状态、算力余额和运行环境说明，不再堆叠传统后台式设置页。</p>
+    <div className="grid gap-5">
+      <AccountPageTitle title="概览" desc="会员状态、设备与快捷操作" />
+
+      <section className="relative overflow-hidden rounded-2xl border border-[var(--primary-border)] bg-[var(--bg-panel)] p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[var(--primary-soft)] blur-3xl" />
+        <div className="relative grid gap-6 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="grid gap-3">
+            <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <Crown className="h-4 w-4 text-[var(--primary)]" /> 当前会员
+              <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ color: statusColor, background: `color-mix(in srgb, ${statusColor} 14%, transparent)` }}>
+                {statusText}
+              </span>
             </div>
-            <div className="page-header__actions">
-              <Button variant="secondary" onClick={() => profileQuery.refetch()} disabled={profileQuery.isFetching}>
-                <RefreshCcw className="h-4 w-4" />
-                {profileQuery.isFetching ? '刷新中...' : '刷新信息'}
-              </Button>
+            <div className="text-[30px] font-semibold tracking-[-0.02em]">{entitlement.planName || '尚未开通会员'}</div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[var(--text-secondary)]">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarClock className="h-4 w-4" />
+                {entitlement.unlimited ? '长期有效' : entitlement.expiresAt ? `到期 ${formatDate(entitlement.expiresAt)}` : '—'}
+                {daysLeft !== null && entitlement.active ? `（剩余 ${daysLeft} 天）` : ''}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <MonitorSmartphone className="h-4 w-4" />
+                已绑定 {devices.length} / {entitlement.maxDevices === 0 ? '不限' : entitlement.maxDevices} 台
+              </span>
             </div>
+            {expiringSoon ? <p className="text-sm text-[var(--warning)]">会员即将到期，续费后时长自动叠加。</p> : null}
           </div>
-        </section>
+          {!entitlement.unlimited ? (
+            <Link href="/account/buy" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-6 text-sm font-semibold text-white transition hover:bg-[var(--primary-hover)]">
+              {entitlement.active ? '续费' : '立即开通'} <ArrowRight className="h-4 w-4" />
+            </Link>
+          ) : null}
+        </div>
+      </section>
 
-        {profileQuery.isPending && !hasFallbackData ? (
-          <LoadingState title="正在加载账户资料" description="请稍候，系统正在读取当前账户、订阅和钱包信息。" />
-        ) : null}
-
-        {profileQuery.isError && !hasFallbackData ? (
-          <ErrorState
-            title="账户资料加载失败"
-            description={profileQuery.error instanceof Error ? profileQuery.error.message : '当前无法读取账户资料，请稍后重试。'}
-            onRetry={() => void profileQuery.refetch()}
-          />
-        ) : null}
-
-        {!profileQuery.isPending && !profileQuery.isError && !user ? (
-          <ErrorState
-            title="账户资料暂不可用"
-            description="当前没有读取到有效的账户资料，请重新登录后再试。"
-            onRetry={() => void profileQuery.refetch()}
-          />
-        ) : null}
-
-        {user ? (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid gap-4">
-            <Card className="grid gap-5 p-5">
-              <div className="flex items-center gap-4">
-                <div className="grid h-16 w-16 place-items-center rounded-full bg-[linear-gradient(135deg,rgba(109,93,255,0.95),rgba(34,211,238,0.45))] text-xl font-semibold text-white">
-                  {userName.slice(0, 1)}
-                </div>
-                <div className="grid gap-1">
-                  <strong className="text-[22px] font-semibold text-[var(--text-main)]">{userName}</strong>
-                  <span className="text-sm text-[var(--text-muted)]">ID: {user?.id || '10086'}</span>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <Metric label="手机号" value={user?.phone || '未绑定'} />
-                <Metric label="当前套餐" value={subscription?.planName || '专业会员'} />
-                <Metric label="剩余算力" value={`${wallet?.balanceCredits ?? 0}`} />
-              </div>
-            </Card>
-
-            <Card className="grid gap-4 p-5">
-              <h2 className="section-title">账户动作</h2>
-              <div className="grid gap-3 md:grid-cols-3">
-                <ActionCard icon={<CreditCard className="h-5 w-5" />} title="查看账单" desc="进入会员与算力页面查看订单、支付和套餐。" onClick={() => router.push('/billing')} />
-                <ActionCard icon={<FolderKanban className="h-5 w-5" />} title="任务中心" desc="回到任务列表页，继续筛选和切换项目。" onClick={() => router.push('/clone')} />
-                <ActionCard icon={<Wallet className="h-5 w-5" />} title="算力状态" desc="查看当前余额和最近消费记录。" onClick={() => router.push('/billing')} />
-              </div>
-            </Card>
-          </div>
-
-          <aside className="grid gap-4">
-            <Card className="grid gap-4 p-5">
-              <h2 className="section-title">环境状态</h2>
-              <Metric label="订阅更新时间" value={formatDateTime(subscription?.updatedAt)} />
-              <Metric label="接口环境" value="商业化 Web API" />
-              <Metric label="运行平台" value="Windows 开发 / Linux 部署" />
-              <Metric label="账户状态" value={user?.status === 'disabled' ? '已停用' : '正常'} />
-            </Card>
-
-            <Card className="grid gap-3 p-5">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-400/12 text-emerald-300">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-[var(--text-main)]">当前会话正常</div>
-                  <div className="text-[12px] text-[var(--text-muted)]">账户、订阅和钱包信息均由统一 API 提供。</div>
-                </div>
-              </div>
-            </Card>
-          </aside>
-        </section>
-        ) : null}
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          { href: '/download', icon: Download, title: '下载客户端', desc: '安装后用本账号登录即可使用' },
+          { href: '/account/redeem', icon: KeyRound, title: '使用兑换码', desc: '输入兑换码直接开通会员' },
+          { href: '/account/devices', icon: MonitorSmartphone, title: '管理设备', desc: '换电脑时解绑旧设备' },
+        ].map(({ href, icon: Icon, title, desc }) => (
+          <Link
+            key={href}
+            href={href}
+            className="group grid gap-2 rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-5 transition hover:border-[var(--primary-border)]"
+          >
+            <Icon className="h-5 w-5 text-[var(--primary)]" />
+            <span className="flex items-center gap-1 font-semibold">
+              {title} <ArrowRight className="h-4 w-4 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+            </span>
+            <span className="text-sm text-[var(--text-secondary)]">{desc}</span>
+          </Link>
+        ))}
       </div>
-    </AppShell>
-  )
-}
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card-surface grid gap-1 p-3">
-      <span className="eyebrow">{label}</span>
-      <strong className="text-sm text-[var(--text-main)]">{value}</strong>
+      <AccountCard title="使用说明">
+        <ol className="grid gap-2 text-sm text-[var(--text-secondary)]">
+          <li>1. 下载并安装 Windows 客户端。</li>
+          <li>2. 打开客户端，用 {user.account} 登录。</li>
+          <li>3. AI 平台和模型已由我们统一配置，登录后即可开始复刻、批量生成视频。</li>
+        </ol>
+      </AccountCard>
     </div>
-  )
-}
-
-function ActionCard({
-  icon,
-  title,
-  desc,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc: string
-  onClick: () => void
-}) {
-  return (
-    <button type="button" onClick={onClick} className="soft-card soft-card--panel grid gap-3 text-left transition hover:border-[rgba(109,93,255,0.42)]">
-      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[rgba(109,93,255,0.12)] text-violet-200">{icon}</div>
-      <div className="stack-title">
-        <strong className="text-sm text-[var(--text-main)]">{title}</strong>
-        <span className="stack-copy">{desc}</span>
-      </div>
-    </button>
   )
 }

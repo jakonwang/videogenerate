@@ -1,0 +1,163 @@
+/*
+ * 管理后台主题：与桌面客户端共用同一套设计语言。
+ * 颜色令牌照搬 src/renderer/src/design-system/themes.css 的 dark-teal / light-teal，
+ * 组件样式直接复用桌面端的 ui-kit.css（.vg-*），这里只补充后台工作台外壳。
+ */
+
+.admin-app {
+  color-scheme: dark;
+  --theme-root: #070910;
+  --theme-shell: #090e18;
+  --theme-sidebar: #080c15;
+  --theme-panel: #11131e;
+  --theme-panel-soft: #151827;
+  --theme-input: #0d101b;
+  --theme-border: #1d2633;
+  --theme-border-control: #344154;
+  --theme-divider: #202a38;
+  --theme-text: #eef2f7;
+  --theme-text-secondary: #c6cfdb;
+  --theme-text-muted: #8c99ac;
+  --theme-accent: #14b8a6;
+  --theme-accent-hover: #2dd4bf;
+  --theme-accent-soft: #123f3b;
+  --theme-control: #171c2a;
+  --theme-control-hover: #20283a;
+  --theme-control-selected: #123f3b;
+  --theme-control-selected-text: #5eead4;
+  --theme-on-accent: #ffffff;
+  --theme-danger: #ef4444;
+  --theme-overlay: rgba(4, 8, 16, 0.68);
+  --theme-shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.38);
+  --theme-shadow-float: 0 12px 28px rgba(0, 0, 0, 0.24);
+  --theme-tone-green: #2dd4bf;
+  --theme-tone-blue: #60a5fa;
+  --theme-tone-amber: #fbbf24;
+  --theme-tone-red: #f87171;
+  --theme-tone-violet: #a78bfa;
+  --theme-tone-gray: #94a3b8;
+  --theme-solid-blue: #2563eb;
+  --theme-solid-amber: #d97706;
+  --theme-solid-red: #dc2626;
+
+  --admin-topbar-h: 48px;
+  --admin-sidebar-w: 216px;
+
+  min-height: 100vh;
+  background: var(--theme-shell);
+  color: var(--theme-text);
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.admin-app[data-theme='light'] {
+  color-scheme: light;
+  --theme-root: #f5f6f8;
+  --theme-shell: #f5f6f8;
+  --theme-sidebar: #ffffff;
+  --theme-panel: #ffffff;
+  --theme-panel-soft: #f8f9fa;
+  --theme-input: #ffffff;
+  --theme-border: #e5e7eb;
+  --theme-border-control: #d5dae1;
+  --theme-divider: #edf0f2;
+  --theme-text: #181b20;
+  --theme-text-secondary: #626b76;
+  --theme-text-muted: #737b86;
+  --theme-accent: #00875a;
+  --theme-accent-hover: #006b49;
+  --theme-accent-soft: #e5f4ec;
+  --theme-control: #ffffff;
+  --theme-control-hover: #f3f4f6;
+  --theme-control-selected: #e5f4ec;
+  --theme-control-selected-text: #005f40;
+  --theme-danger: #c2413b;
+  --theme-overlay: rgba(24, 33, 29, 0.34);
+  --theme-shadow-dialog: 0 24px 64px rgba(24, 33, 29, 0.14);
+  --theme-shadow-float: 0 12px 28px rgba(24, 33, 29, 0.1);
+  --theme-tone-green: #00875a;
+  --theme-tone-blue: #2563eb;
+  --theme-tone-amber: #b45309;
+  --theme-tone-red: #c2413b;
+  --theme-tone-violet: #7c3aed;
+  --theme-tone-gray: #6b7280;
+}
+
+.admin-app ::selection { background: color-mix(in srgb, var(--theme-accent) 30%, transparent); }
+.admin-app * { scrollbar-width: thin; scrollbar-color: var(--theme-border-control) transparent; }
+
+/* ===== 工作台外壳：顶栏 + 侧栏 + 内容 ===== */
+.admin-shell { display: grid; grid-template-rows: var(--admin-topbar-h) minmax(0, 1fr); height: 100vh; }
+.admin-topbar {
+  display: flex; align-items: center; gap: 14px; padding: 0 14px 0 16px;
+  background: var(--theme-root); border-bottom: 1px solid var(--theme-border); min-width: 0;
+}
+.admin-brand { display: inline-flex; align-items: center; gap: 10px; width: calc(var(--admin-sidebar-w) - 16px); flex-shrink: 0; color: var(--theme-text); text-decoration: none; }
+.admin-brand__mark {
+  width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--theme-accent); color: var(--theme-on-accent);
+}
+.admin-brand__name { font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+.admin-brand__tag { font-size: 11px; font-weight: 600; color: var(--theme-text-muted); padding-left: 10px; border-left: 1px solid var(--theme-border); }
+.admin-crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--theme-text-muted); }
+.admin-crumbs b { color: var(--theme-text); font-weight: 600; }
+.admin-topbar__right { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.admin-user { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 4px; border-radius: 8px; border: 1px solid var(--theme-border); background: var(--theme-panel); font-size: 12px; color: var(--theme-text); }
+.admin-user .vg-avatar { width: 24px; height: 24px; font-size: 11px; }
+.admin-user small { color: var(--theme-text-muted); }
+
+.admin-body { display: grid; grid-template-columns: var(--admin-sidebar-w) minmax(0, 1fr); min-height: 0; }
+.admin-nav {
+  display: flex; flex-direction: column; gap: 4px; min-height: 0; padding: 12px 10px;
+  background: var(--theme-sidebar); border-right: 1px solid var(--theme-border); overflow-y: auto;
+}
+.admin-nav__group { display: flex; flex-direction: column; gap: 2px; }
+.admin-nav__group + .admin-nav__group { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--theme-divider); }
+.admin-nav__section { margin: 0 0 6px; padding: 0 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--theme-text-muted); }
+.admin-nav__item {
+  position: relative; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px;
+  border-radius: 8px; color: var(--theme-text-secondary); font-size: 13.5px; font-weight: 500; text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.admin-nav__item:hover { background: var(--theme-control-hover); color: var(--theme-text); }
+.admin-nav__item.is-active { background: var(--vg-accent-soft); color: var(--vg-accent); font-weight: 600; }
+.admin-nav__item.is-active::before { content: ''; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--vg-accent); }
+.admin-nav__item svg { width: 17px; height: 17px; flex-shrink: 0; }
+.admin-nav__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-nav__badge { margin-left: auto; }
+.admin-nav__foot { margin-top: auto; padding: 10px 12px 2px; border-top: 1px solid var(--theme-divider); font-size: 11px; color: var(--theme-text-muted); display: grid; gap: 4px; }
+
+.admin-main { min-width: 0; min-height: 0; overflow-y: auto; }
+.admin-main > .vg-page { max-width: 1440px; margin: 0 auto; padding: 18px 24px 32px; gap: 14px; }
+
+/* 页内辅助 */
+.admin-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--theme-divider); }
+.admin-filters .vg-search { flex: 1 1 260px; max-width: 360px; }
+.admin-filters .vg-select { width: 128px; }
+.admin-table-card .vg-table th:first-child, .admin-table-card .vg-table td:first-child { padding-left: 16px; }
+.admin-table-card .vg-table th:last-child, .admin-table-card .vg-table td:last-child { padding-right: 16px; }
+.admin-table-card .vg-pager { padding: 10px 16px 12px; border-top: 1px solid var(--theme-divider); }
+.admin-mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 12px; }
+.admin-link { color: var(--vg-accent); text-decoration: none; font-weight: 500; }
+.admin-link:hover { text-decoration: underline; }
+.admin-sub { display: block; font-size: 12px; color: var(--theme-text-muted); }
+.admin-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 14px; }
+.admin-form-actions { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+.admin-tile { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel-soft); min-width: 0; }
+.admin-tile__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.admin-tile__head b { font-size: 14px; }
+.admin-tile__head small { color: var(--theme-text-muted); font-size: 12px; }
+.admin-tile__head .vg-pill { margin-left: auto; }
+
+@media (max-width: 1100px) {
+  .admin-app { --admin-sidebar-w: 64px; }
+  .admin-nav { padding: 12px 8px; }
+  .admin-nav__item { justify-content: center; padding: 0; }
+  .admin-nav__item.is-active::before { left: -8px; }
+  .admin-nav__label, .admin-nav__section, .admin-nav__foot, .admin-brand__tag, .admin-brand__name { display: none; }
+  .admin-brand { width: auto; }
+  .admin-main > .vg-page { padding: 14px 16px 24px; }
+}
+@media (max-width: 640px) {
+  .admin-user small, .admin-crumbs { display: none; }
+}

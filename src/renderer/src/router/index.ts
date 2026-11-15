@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 import MainLayout from "@/ui/MainLayout.vue";
 import HomeView from "@/ui/views/HomeView.vue";
+import { featureForPath, useCloudAuthStore } from "@/stores/cloudAuth";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -8,6 +9,12 @@ const router = createRouter({
     {
       path: "/auth",
       redirect: { name: "home" },
+    },
+    {
+      path: "/login",
+      name: "login",
+      component: () => import("@/ui/views/CloudLoginView.vue"),
+      meta: { public: true },
     },
     {
       path: "/",
@@ -192,6 +199,22 @@ const router = createRouter({
       ],
     },
   ],
+});
+
+/**
+ * 商业版授权守卫：未登录 / 会员无效 → 登录页；套餐不含该功能 → 会员页。
+ * 真正的限制在主进程（IPC 与本地 API 守卫），这里负责引导用户。
+ */
+router.beforeEach(async (to) => {
+  if (to.meta.public) return true;
+  const cloudAuth = useCloudAuthStore();
+  const status = await cloudAuth.ensureLoaded();
+  if (status.mode !== "enforced") return true;
+  if (!status.licensed) return { name: "login", query: { next: to.fullPath } };
+  if (to.name !== "billing" && !cloudAuth.hasFeature(featureForPath(to.path))) {
+    return { name: "billing", query: { feature: featureForPath(to.path) ?? "" } };
+  }
+  return true;
 });
 
 export { router };

@@ -1,239 +1,213 @@
 import Link from 'next/link'
 import {
   ArrowRight,
+  BarChart3,
   CheckCircle2,
-  Clock3,
+  Clapperboard,
   Download,
-  FolderKanban,
-  Layers3,
-  PlayCircle,
+  FileText,
+  Film,
+  Images,
+  Layers,
   Sparkles,
-  Stars,
+  UsersRound,
   Wand2,
 } from 'lucide-react'
 
-import { MarketingShell } from '@/components/marketing/marketing-shell'
+import { PlanCards } from '@/components/site/plan-cards'
+import { SectionHeading, SiteShell } from '@/components/site/site-shell'
 
-const quickStats = [
-  ['24h', '最新任务回写'],
-  ['12+', '推荐视频模板'],
-  ['3x', '批量交付提效'],
-] as const
-
-const recentTasks = [
+const FEATURES = [
   {
-    title: '夏季防晒喷雾投放视频',
-    stage: '脚本生成完成 · 等待分镜图',
-    status: '进行中',
-    tone: 'running',
-    meta: '负责人 Ava · 2 分钟前更新',
-  },
-  {
-    title: '零食直播切片矩阵',
-    stage: '已输出 18 条高光片段',
-    status: '桌面端执行',
-    tone: 'desktop',
-    meta: '任务批次 B-12 · 今日 09:40',
-  },
-  {
-    title: '品牌口播模板升级',
-    stage: '模板参数已沉淀，可批量复用',
-    status: '已完成',
-    tone: 'done',
-    meta: '由产品模板库同步',
-  },
-] as const
-
-const recommendedTemplates = [
-  {
-    title: '高转化口播模板',
-    description: '适合新品卖点拆解、3 段式节奏推进与评论区引导。',
-    badge: '转化优先',
-  },
-  {
-    title: '直播切片模板',
-    description: '自动抽取高互动片段，适合矩阵号二次分发。',
-    badge: '桌面执行',
-  },
-  {
-    title: '达人混剪模板',
-    description: '适合参考视频复刻、镜头替换与商品图快速挂载。',
-    badge: '批量生产',
-  },
-] as const
-
-const valueCards = [
-  {
-    title: '参考视频一键拆解',
-    copy: '自动提取爆款结构、镜头节奏与文案逻辑，直接衔接脚本和分镜生产。',
     icon: Sparkles,
+    title: '爆款视频复刻',
+    desc: '丢进一条爆款视频，自动拆解脚本结构，生成多个改写版本，再出分镜图、分镜视频，合成完整成片。',
   },
   {
-    title: '任务中心可视化推进',
-    copy: '把脚本、分镜、视频、导出统一纳入同一任务面板，方便团队追踪与协同。',
-    icon: FolderKanban,
+    icon: Layers,
+    title: '批量生产',
+    desc: '一个商品一次出几十条不同版本，排队生成、失败自动重试，关掉电脑也不会丢任务。',
   },
   {
-    title: '模板资产持续复用',
-    copy: '高转化结构、模特设定与商品素材沉淀为长期资产，适合商业化规模复制。',
-    icon: Layers3,
+    icon: UsersRound,
+    title: 'AI 模特与素材库',
+    desc: '把 AI 模特、商品图、视频片段沉淀成可复用资产，保证同一商品的人物与外观一致。',
   },
-] as const
+  {
+    icon: BarChart3,
+    title: 'TikTok 运营插件',
+    desc: 'GMV Max 投放诊断、达人建联管理、商品上架助手，生产和运营在一个软件里完成。',
+  },
+]
 
-export default function MarketingHomePage() {
+const STEPS = [
+  { icon: Film, title: '上传参考视频', desc: '支持本地文件或 TikTok 链接' },
+  { icon: FileText, title: '生成脚本变体', desc: '保留爆款节奏，换成你的商品' },
+  { icon: Images, title: '分镜图与分镜视频', desc: '锁定商品外观，逐镜头生成' },
+  { icon: Clapperboard, title: '一键合成成片', desc: '字幕、配乐、转场自动完成' },
+]
+
+const FAQ = [
+  { q: '需要自己准备 AI 平台的 Key 吗？', a: '不需要。会员登录客户端后，模型和存储由我们统一配置并自动同步，打开就能用。' },
+  { q: '一个会员能在几台电脑上用？', a: '按套餐不同可绑定 1–3 台电脑。换电脑时可以在用户中心自助解绑旧设备。' },
+  { q: '没网的时候能用吗？', a: '登录过的电脑在会员有效期内可以离线使用数天，联网后自动续期。AI 生成本身需要联网。' },
+  { q: '怎么付款？', a: '支持微信、支付宝扫码支付，到账后自动开通；也可以使用兑换码开通。续费时长自动叠加。' },
+]
+
+function PipelinePreview() {
   return (
-    <MarketingShell active="home">
-      <section className="marketing-hero-grid">
-        <div className="marketing-panel-surface marketing-hero-panel">
-          <div className="marketing-kicker-chip inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold">
-            <Stars className="h-3.5 w-3.5" />
-            AI Video Operating System
+    <div className="relative rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-5 shadow-[0_40px_100px_rgba(0,0,0,0.25)]">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Wand2 className="h-4 w-4 text-[var(--primary)]" /> 复刻任务 · 夏季连衣裙
+        </div>
+        <span className="rounded-full bg-[color-mix(in_srgb,var(--success)_14%,transparent)] px-2.5 py-1 text-xs font-medium text-[var(--success)]">生成中 68%</span>
+      </div>
+      <div className="grid gap-2.5">
+        {[
+          { label: '脚本分析', state: 'done' },
+          { label: '脚本变体 × 6', state: 'done' },
+          { label: '分镜图 24 / 24', state: 'done' },
+          { label: '分镜视频 15 / 24', state: 'running' },
+          { label: '成片合成', state: 'waiting' },
+        ].map((row) => (
+          <div key={row.label} className="flex items-center gap-3 rounded-xl border border-[var(--border-base)] bg-[var(--bg-panel-soft)] px-3.5 py-3 text-sm">
+            {row.state === 'done' ? (
+              <CheckCircle2 className="h-4 w-4 text-[var(--success)]" />
+            ) : row.state === 'running' ? (
+              <span className="relative flex h-4 w-4 items-center justify-center">
+                <span className="absolute h-3 w-3 animate-ping rounded-full bg-[var(--primary)] opacity-40" />
+                <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
+              </span>
+            ) : (
+              <span className="h-4 w-4 rounded-full border border-[var(--border-strong)]" />
+            )}
+            <span className={row.state === 'waiting' ? 'text-[var(--text-muted)]' : ''}>{row.label}</span>
+            {row.state === 'running' ? (
+              <span className="ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-[var(--border-base)]">
+                <span className="block h-full w-[62%] rounded-full bg-[var(--primary)]" />
+              </span>
+            ) : null}
           </div>
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-4 gap-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="aspect-[9/16] rounded-lg border border-[var(--border-base)] bg-[linear-gradient(160deg,var(--bg-card),var(--bg-panel-soft))]"
+            style={{ opacity: 1 - i * 0.18 }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
 
-          <div className="grid gap-4">
-            <h1 className="m-0 max-w-4xl text-[clamp(40px,5vw,68px)] font-bold leading-[1.02] tracking-[-0.07em] text-[var(--text-main)]">
-              让 AI 帮你生成视频
-            </h1>
-            <p className="m-0 max-w-3xl text-sm leading-8 text-[var(--text-secondary)] md:text-[15px]">
-              从参考分析、脚本生成、分镜设计到成片导出，把视频生产压缩进一套高级感更强、可追踪、可批量复制的工作流中，适合品牌团队、代运营和内容矩阵一起使用。
-            </p>
-          </div>
-
+export default function HomePage() {
+  return (
+    <SiteShell>
+      <section className="mx-auto grid w-full max-w-[1200px] items-center gap-12 px-4 pb-20 pt-16 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:pt-24">
+        <div className="grid gap-7">
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border-base)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" /> 面向 TikTok 商家与内容团队
+          </span>
+          <h1 className="text-[clamp(2.2rem,5vw,3.6rem)] font-semibold leading-[1.08] tracking-[-0.035em]">
+            一条爆款视频，
+            <br />
+            批量变成你的带货视频
+          </h1>
+          <p className="max-w-[520px] text-[17px] leading-relaxed text-[var(--text-secondary)]">
+            TiktokCut 自动拆解爆款脚本、生成分镜与视频、合成成片。你只负责选品和挑片，剩下的交给 AI 流水线。
+          </p>
           <div className="flex flex-wrap gap-3">
-            <Link
-              href="/product"
-              className="inline-flex min-h-[46px] items-center gap-2 rounded-2xl border border-[rgba(109,93,255,0.42)] bg-[linear-gradient(135deg,#7c6bff,#9b6bff)] px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(109,93,255,0.35)]"
-            >
-              查看产品能力
-              <ArrowRight className="h-4 w-4" />
+            <Link href="/download" className="inline-flex h-12 items-center gap-2 rounded-xl bg-[var(--primary)] px-6 text-[15px] font-semibold text-white transition hover:bg-[var(--primary-hover)]">
+              <Download className="h-4 w-4" /> 免费下载客户端
             </Link>
-            <Link href="/download" className="marketing-ghost-button inline-flex min-h-[46px] items-center gap-2 rounded-2xl px-5 text-sm font-semibold">
-              <Download className="h-4 w-4" />
-              下载桌面客户端
+            <Link
+              href="/pricing"
+              className="inline-flex h-12 items-center gap-2 rounded-xl border border-[var(--border-strong)] px-6 text-[15px] font-semibold transition hover:border-[var(--primary-border)]"
+            >
+              查看价格 <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--text-muted)]">
+            <span>✓ 无需配置 AI Key</span>
+            <span>✓ 微信 / 支付宝扫码开通</span>
+            <span>✓ Windows 客户端</span>
+          </div>
+        </div>
+        <PipelinePreview />
+      </section>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            {quickStats.map(([value, label]) => (
-              <div key={label} className="marketing-card-surface rounded-[22px] px-5 py-4">
-                <div className="text-[30px] font-semibold leading-none text-[var(--text-main)]">{value}</div>
-                <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</div>
-              </div>
+      <section id="features" className="scroll-mt-20 border-t border-[var(--border-base)] bg-[var(--bg-shell)]">
+        <div className="mx-auto grid w-full max-w-[1200px] gap-10 px-4 py-20 sm:px-6">
+          <SectionHeading eyebrow="核心功能" title="从找爆款到出成片，一个软件搞定" desc="不是视频编辑器，而是一条替你干活的视频生产线。" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {FEATURES.map(({ icon: Icon, title, desc }) => (
+              <article key={title} className="grid gap-3 rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-6">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="text-lg font-semibold">{title}</h3>
+                <p className="text-[15px] leading-relaxed text-[var(--text-secondary)]">{desc}</p>
+              </article>
             ))}
           </div>
         </div>
+      </section>
 
-        <div className="marketing-dashboard-panel">
-          <div className="marketing-dashboard-shell">
-            <div className="marketing-dashboard-sidebar">
-              <div className="marketing-dashboard-brand">
-                <div className="marketing-dashboard-brand-mark" />
-                <div>
-                  <strong>VideoGen</strong>
-                  <span>Public Workspace</span>
-                </div>
+      <section className="mx-auto grid w-full max-w-[1200px] gap-10 px-4 py-20 sm:px-6">
+        <SectionHeading eyebrow="工作流程" title="四步出片" />
+        <ol className="grid gap-4 md:grid-cols-4">
+          {STEPS.map(({ icon: Icon, title, desc }, index) => (
+            <li key={title} className="relative grid gap-3 rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-5">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--bg-panel-soft)] text-[var(--ai-blue)]">
+                  <Icon className="h-[18px] w-[18px]" />
+                </span>
+                <span className="text-sm font-semibold tabular-nums text-[var(--text-muted)]">0{index + 1}</span>
               </div>
+              <h3 className="font-semibold">{title}</h3>
+              <p className="text-sm text-[var(--text-secondary)]">{desc}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-              <div className="marketing-dashboard-menu">
-                <div className="is-active">
-                  <PlayCircle className="h-4 w-4" />
-                  创作中心
-                </div>
-                <div>
-                  <Wand2 className="h-4 w-4" />
-                  爆款复刻
-                </div>
-                <div>
-                  <Layers3 className="h-4 w-4" />
-                  模板市场
-                </div>
-                <div>
-                  <FolderKanban className="h-4 w-4" />
-                  任务回放
-                </div>
-              </div>
-            </div>
-
-            <div className="marketing-dashboard-main">
-              <div className="marketing-dashboard-banner">
-                <div>
-                  <span>Recent Tasks</span>
-                  <h2>最近任务</h2>
-                </div>
-                <div className="marketing-dashboard-banner-chip">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  实时同步
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                {recentTasks.map((task) => (
-                  <div key={task.title} className="marketing-task-card">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="grid gap-1">
-                        <strong className="text-sm text-[var(--text-main)]">{task.title}</strong>
-                        <p className="m-0 text-xs leading-6 text-[var(--text-secondary)]">{task.stage}</p>
-                      </div>
-                      <span className={`marketing-status-pill marketing-status-pill--${task.tone}`}>{task.status}</span>
-                    </div>
-                    <span className="text-[11px] text-[var(--text-muted)]">{task.meta}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <span className="text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">Recommended</span>
-                    <h3 className="mt-2 text-base font-semibold text-[var(--text-main)]">推荐模板</h3>
-                  </div>
-                  <Link href="/product" className="text-sm text-[var(--ai-blue)]">
-                    查看全部
-                  </Link>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  {recommendedTemplates.map((template) => (
-                    <div key={template.title} className="marketing-template-card">
-                      <span className="marketing-template-badge">{template.badge}</span>
-                      <strong className="text-sm text-[var(--text-main)]">{template.title}</strong>
-                      <p className="m-0 text-xs leading-6 text-[var(--text-secondary)]">{template.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+      <section className="border-t border-[var(--border-base)] bg-[var(--bg-shell)]">
+        <div className="mx-auto grid w-full max-w-[1200px] gap-10 px-4 py-20 sm:px-6">
+          <SectionHeading center eyebrow="价格" title="按时长订阅，功能全开" desc="所有套餐都包含全部功能，区别只在时长和可绑定的电脑数量。" />
+          <PlanCards />
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {valueCards.map((item) => {
-          const Icon = item.icon
-          return (
-            <div key={item.title} className="marketing-card-surface grid gap-3 rounded-[22px] p-6">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(135deg,rgba(124,107,255,0.2),rgba(34,211,238,0.14))] text-violet-300">
-                <Icon className="h-5 w-5" />
-              </div>
-              <strong className="text-base text-[var(--text-main)]">{item.title}</strong>
-              <p className="m-0 text-sm leading-7 text-[var(--text-secondary)]">{item.copy}</p>
-            </div>
-          )
-        })}
-      </section>
-
-      <section className="marketing-panel-surface grid gap-5 rounded-[28px] p-8 max-[960px]:p-6">
-        <div className="grid gap-2">
-          <div className="marketing-kicker-chip inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Public Site Positioning
-          </div>
-          <h2 className="m-0 text-2xl font-semibold text-[var(--text-main)]">公开首页负责建立信任，产品页负责讲清生产方式</h2>
-          <p className="m-0 max-w-3xl text-sm leading-7 text-[var(--text-secondary)]">
-            首页聚焦视觉吸引力、最近任务与模板推荐，强化高级感与产品可用性；产品页继续展开链路、模块与桌面端执行边界，形成完整转化叙事。
-          </p>
+      <section className="mx-auto grid w-full max-w-[880px] gap-8 px-4 py-20 sm:px-6">
+        <SectionHeading center title="常见问题" />
+        <div className="grid gap-3">
+          {FAQ.map((item) => (
+            <details key={item.q} className="group rounded-xl border border-[var(--border-base)] bg-[var(--bg-panel)] px-5 py-4 [&_summary::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
+                {item.q}
+                <span className="text-xl leading-none text-[var(--text-muted)] transition group-open:rotate-45">+</span>
+              </summary>
+              <p className="mt-3 text-[15px] leading-relaxed text-[var(--text-secondary)]">{item.a}</p>
+            </details>
+          ))}
         </div>
       </section>
-    </MarketingShell>
+
+      <section className="mx-auto w-full max-w-[1200px] px-4 pb-20 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-[var(--primary-border)] bg-[var(--primary-soft)] px-8 py-10">
+          <div className="grid gap-2">
+            <h2 className="text-2xl font-semibold tracking-[-0.02em]">今天就开始批量出片</h2>
+            <p className="text-[var(--text-secondary)]">下载客户端，注册账号，扫码开通会员即可使用。</p>
+          </div>
+          <Link href="/download" className="inline-flex h-12 items-center gap-2 rounded-xl bg-[var(--primary)] px-6 font-semibold text-white transition hover:bg-[var(--primary-hover)]">
+            <Download className="h-4 w-4" /> 下载客户端
+          </Link>
+        </div>
+      </section>
+    </SiteShell>
   )
 }

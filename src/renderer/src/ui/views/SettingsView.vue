@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCloudAuthStore } from '@/stores/cloudAuth'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -263,6 +264,10 @@ const sectionGroups = [
 ] as const
 
 const isModelSettingsSection = computed(() => ['platforms', 'capabilities', 'qiniu'].includes(settingsSection.value))
+const cloudAuth = useCloudAuthStore()
+void cloudAuth.ensureLoaded()
+/** 平台 Key / 模型 / 七牛由后台统一下发时，这几个分区只读 */
+const managedLocked = computed(() => Boolean(cloudAuth.status?.managedSettings) && isModelSettingsSection.value)
 
 const providerMeta: Record<PlatformKey, { label: string; hostLabel: string; hostPlaceholder: string; keyName: SecretKey }> = {
   grsai: {
@@ -746,7 +751,7 @@ onBeforeUnmount(() => {
         <button class="vg-btn vg-btn--sm" type="button" @click="refreshModelSettings">
           <RefreshCw :size="14" /> {{ t('settings.actions.refresh') }}
         </button>
-        <button v-if="isModelSettingsSection" class="vg-btn vg-btn--primary vg-btn--sm" type="button" :disabled="modelSettingsBusy" @click="saveModelSettings">
+        <button v-if="isModelSettingsSection" class="vg-btn vg-btn--primary vg-btn--sm" type="button" :disabled="modelSettingsBusy || managedLocked" @click="saveModelSettings">
           <Save :size="14" /> {{ modelSettingsBusy ? t('settings.actions.saving') : t('settings.actions.saveSettings') }}
         </button>
       </div>
@@ -789,7 +794,10 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <main class="settings__main">
+      <main class="settings__main" :class="{ 'is-managed-locked': managedLocked }" :inert="managedLocked || undefined">
+        <div v-if="managedLocked" class="vg-notice vg-notice--accent settings__managed-notice" data-testid="settings-managed-notice">
+          <Info :size="16" /><span>{{ t('cloud.settings.managedNotice') }}</span>
+        </div>
         <!-- Appearance -->
         <template v-if="settingsSection === 'appearance'">
           <section class="vg-card">
@@ -1120,4 +1128,6 @@ onBeforeUnmount(() => {
   .settings__layout, .settings__layout.has-side-panel { grid-template-columns: 1fr; }
   .settings-nav, .settings__side { position: static; grid-column: auto; }
 }
+.settings__main.is-managed-locked > :not(.settings__managed-notice) { opacity: .55; }
+.settings__managed-notice { margin-bottom: 12px; }
 </style>

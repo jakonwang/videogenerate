@@ -53,3 +53,6 @@ out/main/resources/fonts/
 resources/live-photo-quality/models/
 resources/live-photo-quality/python/
 resources/live-photo-quality/__pycache__/
+
+# cloud service runtime data (sqlite db, signing keys)
+/services/cloud/data/

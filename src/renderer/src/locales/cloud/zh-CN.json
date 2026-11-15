@@ -1,0 +1,91 @@
+{
+  "login": {
+    "title": "登录 TiktokCut",
+    "subtitle": "登录账号后即可使用全部已开通的功能",
+    "registerTitle": "注册账号",
+    "registerSubtitle": "注册后购买会员或使用兑换码即可开始使用",
+    "account": "手机号或邮箱",
+    "password": "密码",
+    "passwordHint": "至少 8 位",
+    "displayName": "昵称（可选）",
+    "submitLogin": "登录",
+    "submitRegister": "注册并登录",
+    "toRegister": "没有账号？注册",
+    "toLogin": "已有账号？登录",
+    "loggingIn": "登录中…",
+    "registering": "注册中…",
+    "server": "云端服务：{url}"
+  },
+  "reason": {
+    "ok": "授权有效",
+    "not_logged_in": "请先登录",
+    "no_entitlement": "当前账号还没有有效会员，请购买或使用兑换码",
+    "device_limit": "当前会员的设备数已满，请先解绑其它设备",
+    "expired": "离线授权已过期，请联网刷新",
+    "invalid_token": "授权凭证无效，请重新登录",
+    "clock_rollback": "检测到系统时间异常，请校准时间后联网刷新",
+    "account_disabled": "账号已被停用，请联系客服"
+  },
+  "membership": {
+    "title": "账号与会员",
+    "desc": "会员状态、绑定设备、购买与兑换",
+    "account": "当前账号",
+    "plan": "会员套餐",
+    "expires": "到期时间",
+    "unlimited": "不受限",
+    "permanent": "永久",
+    "none": "未开通",
+    "refresh": "刷新",
+    "logout": "退出登录",
+    "logoutConfirm": "退出后本机需要重新登录才能使用，确定退出？",
+    "offline": "当前离线，正在使用本地授权（到 {time} 前有效）",
+    "internalBuild": "内部版：不限制功能",
+    "devices": "绑定设备",
+    "devicesDesc": "最多 {max} 台",
+    "devicesUnlimited": "不限设备数",
+    "thisDevice": "本机",
+    "lastSeen": "最近使用 {time}",
+    "unbind": "解绑",
+    "unbindConfirm": "解绑后该设备需要重新登录，30 天内自助解绑次数有限。确定解绑？",
+    "buyTitle": "购买会员",
+    "buyDesc": "扫码支付，到账后自动开通，可叠加续期",
+    "days": "{count} 天",
+    "forever": "永久",
+    "deviceCount": "{count} 台设备",
+    "deviceUnlimited": "不限设备",
+    "buy": "购买",
+    "noChannels": "暂未开通在线支付，请联系客服或使用兑换码",
+    "scanTitle": "扫码支付 {amount}",
+    "scanHint": "请使用{channel}扫码，支付完成后自动开通",
+    "waiting": "等待支付…",
+    "paid": "支付成功，会员已开通",
+    "closed": "订单已过期，请重新下单",
+    "mockPay": "模拟支付成功（测试）",
+    "cancel": "关闭",
+    "redeemTitle": "兑换码",
+    "redeemPlaceholder": "输入兑换码，例如 ABCD-EFGH-JKLM-NPQR",
+    "redeem": "兑换",
+    "redeemed": "兑换成功，会员已开通",
+    "ordersTitle": "我的订单",
+    "noOrders": "暂无订单",
+    "featureLocked": "当前会员不包含该功能，请升级套餐",
+    "support": "客服：{contact}"
+  },
+  "channel": {
+    "wechat": "微信",
+    "alipay": "支付宝",
+    "mock": "模拟支付"
+  },
+  "orderStatus": {
+    "paid": "已支付",
+    "pending": "待支付",
+    "closed": "已关闭",
+    "refunded": "已退款"
+  },
+  "settings": {
+    "managedNotice": "这些设置由管理员统一配置并自动同步到本机，无需自己填写 Key。如需修改请联系管理员。"
+  },
+  "banner": {
+    "updateRequired": "当前版本过旧，请更新到 {version} 或更高版本后使用。"
+  }
+}

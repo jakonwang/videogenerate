@@ -2,6 +2,7 @@ import type http from 'node:http'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { webPlatformService } from './service'
+import { isDevelopmentEnv } from '../../lib/appEnv'
 import { livePhotoService } from '../live-photo/service'
 import { productImageMaterialsService } from '../product-image-materials/service'
 import { videoParserDownloadService } from '../video-parser-download/service'
@@ -380,6 +381,12 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
     }
 
     if (req.method === 'POST' && pathname.startsWith('/payments/notify/')) {
+      // 旧的本地模拟支付回调：不验签、谁都能调。真实收款已迁到云端服务（services/cloud，带验签），
+      // 这里只在开发环境保留给旧的 web-next 联调页面使用。
+      if (!isDevelopmentEnv()) {
+        json(res, 410, { ok: false, error: '本地支付回调已停用，请使用云端服务支付' })
+        return
+      }
       const orderId = pathname.split('/').pop() || ''
       const body = await readBodyClean(req)
       const result = await webPlatformService.payOrder(orderId, {

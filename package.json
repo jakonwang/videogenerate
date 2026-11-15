@@ -15,6 +15,10 @@
     "dev:web": "vite --config apps/web/vite.config.ts",
     "dev:web-next": "cd apps/web-next && next dev --hostname 127.0.0.1 --port 18280",
     "dev:api": "tsx services/api/server.ts",
+    "dev:cloud": "tsx watch --env-file-if-exists=services/cloud/dev.env services/cloud/server.ts",
+    "start:cloud": "tsx services/cloud/server.ts",
+    "cloud:keygen": "tsx services/cloud/scripts/keygen.ts",
+    "cloud:create-admin": "tsx services/cloud/scripts/create-admin.ts",
     "build": "electron-vite build && node scripts/copy-font-resources.mjs",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "build:web-next": "cd apps/web-next && next build",
@@ -22,6 +26,7 @@
     "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json",
     "typecheck:web-next": "tsc --noEmit -p apps/web-next/tsconfig.json",
     "typecheck:api": "tsc --noEmit -p services/api/tsconfig.json",
+    "typecheck:cloud": "tsc --noEmit -p services/cloud/tsconfig.json",
     "start:web-next": "cd apps/web-next && next start --hostname 0.0.0.0 --port 18280",
     "preflight:staging": "node scripts/deploy-preflight.mjs staging",
     "preflight:production": "node scripts/deploy-preflight.mjs production",
@@ -59,6 +64,8 @@
     "test:clone-shot-video-force-regenerate-bypass-submission-lock": "tsx test/clone-shot-video-force-regenerate-bypass-submission-lock.smoke.ts",
     "dist": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --win --dir",
+    "dist:internal": "node scripts/dist-internal.mjs",
+    "dev:enforced": "node scripts/with-env.mjs VG_LICENSE_MODE=enforced -- npm run dev",
     "preview": "electron-vite preview",
     "lint": "eslint .",
     "test:web-next-clone-flow": "node test/web-next-clone-flow.e2e.cjs",
@@ -111,7 +118,9 @@
     "test:batch-subtitle-bitmap": "tsx test/batch-subtitle-bitmap.smoke.ts",
     "test:batch-subtitle-ass": "tsx test/batch-subtitle-ass.smoke.ts",
     "test:tiktok-listing-grs-image-aspect-ratio": "tsx test/tiktok-listing-grs-image-aspect-ratio.smoke.ts",
-    "test:tiktok-listing-prompts": "tsx test/tiktok-listing-prompts.smoke.ts"
+    "test:tiktok-listing-prompts": "tsx test/tiktok-listing-prompts.smoke.ts",
+    "test:cloud": "tsx test/cloud-service.smoke.ts",
+    "test:cloud-license:e2e": "node test/cloud-license-electron.e2e.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
