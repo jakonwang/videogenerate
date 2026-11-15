@@ -830,7 +830,7 @@
   },
   "auth": {
     "title": "Kich hoat ban quyen",
-    "subtitle": "Nhap ma ban quyen de tiep tuc su dung VideoGenerate",
+    "subtitle": "Nhap ma ban quyen de tiep tuc su dung TiktokCut",
     "machineId": "Ma may",
     "licenseKey": "Ma ban quyen",
     "licensePlaceholder": "Nhap ma ban quyen",
@@ -976,7 +976,7 @@
     },
     "hermesManagement": {
       "title": "Quan ly Hermes",
-      "subtitle": "Quan ly runtime, mo hinh, ky nang, kenh, bo nho va ban sao luu trong VideoGenerate.",
+      "subtitle": "Quan ly runtime, mo hinh, ky nang, kenh, bo nho va ban sao luu trong TiktokCut.",
       "tabs": {
         "runtime": "Runtime",
         "models": "Mo hinh",
@@ -1065,7 +1065,7 @@
       "cancel": "Huy ghep doi",
       "actionComplete": "Thao tac hoan tat.",
       "unknownError": "Thao tac that bai. Thu lai.",
-      "restartRequired": "Dich vu may tinh chua duoc cap nhat. Hay thoat hoan toan va khoi dong lai VideoGenerate."
+      "restartRequired": "Dich vu may tinh chua duoc cap nhat. Hay thoat hoan toan va khoi dong lai TiktokCut."
     },
     "actions": {
       "checkUpdates": "Kiem tra cap nhat",
@@ -2730,7 +2730,7 @@
       "modelAuthenticationRequired": "Hermes dang chay, nhung xac thuc mo hinh khong hop le hoac chua duoc cau hinh. Hay cap nhat trong cai dat mo hinh cua khong gian nay.",
       "modelSettings": {
         "title": "Cai dat mo hinh",
-        "subtitle": "Cau hinh Hermes ngay trong VideoGenerate",
+        "subtitle": "Cau hinh Hermes ngay trong TiktokCut",
         "provider": "Nha cung cap",
         "customProvider": "Diem cuoi tuong thich tuy chinh",
         "endpoint": "Dia chi dich vu",

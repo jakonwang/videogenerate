@@ -1790,7 +1790,7 @@ app.whenReady().then(async () => {
   try {
     crashReporter.start({
         productName: 'TiktokCut',
-      companyName: 'VideoGenerate',
+      companyName: 'TiktokCut',
       submitURL: '',
       uploadToServer: false,
       compress: false,
@@ -1856,7 +1856,7 @@ app.whenReady().then(async () => {
         })
         if (!mainWindow || mainWindow.isDestroyed()) {
           dialog.showErrorBox(
-            'VideoGenerate Startup Failed',
+            'TiktokCut Startup Failed',
             String(error?.message ?? error ?? 'Unknown startup error'),
           )
         }

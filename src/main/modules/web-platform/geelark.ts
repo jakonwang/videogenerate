@@ -266,7 +266,7 @@ async function createPublishTask(userId: string, input: {
 }) {
   const config = await requireConfig(userId)
   const payload = {
-    planName: 'VideoGenerate 发布任务',
+    planName: 'TiktokCut 发布任务',
     taskType: 1,
     list: [
       {

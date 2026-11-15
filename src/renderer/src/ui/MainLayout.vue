@@ -49,7 +49,7 @@ const showCloneWorkflowTopbar = computed(
 );
 const cloudAuth = useCloudAuthStore();
 void cloudAuth.ensureLoaded();
-const topUserName = computed(() => cloudAuth.status?.displayName || cloudAuth.status?.account || "VideoGenerate");
+const topUserName = computed(() => cloudAuth.status?.displayName || cloudAuth.status?.account || "TiktokCut");
 const topUserPlan = computed(() => {
   const status = cloudAuth.status;
   if (!status?.loggedIn) return status?.mode === "enforced" ? t("cloud.reason.not_logged_in") : t("shell.localMode");

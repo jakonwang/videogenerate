@@ -2604,7 +2604,7 @@
   },
   "auth": {
     "title": "License Activation",
-    "subtitle": "Enter your license key to continue using VideoGenerate",
+    "subtitle": "Enter your license key to continue using TiktokCut",
     "machineId": "Machine ID",
     "licenseKey": "License Key",
     "licensePlaceholder": "Enter your license key",
@@ -2752,7 +2752,7 @@
     },
     "hermesManagement": {
       "title": "Hermes Management",
-      "subtitle": "Manage the runtime, models, skills, channels, memory, and backups without leaving VideoGenerate.",
+      "subtitle": "Manage the runtime, models, skills, channels, memory, and backups without leaving TiktokCut.",
       "tabs": {
         "runtime": "Runtime",
         "models": "Models",
@@ -2841,7 +2841,7 @@
       "cancel": "Cancel pairing",
       "actionComplete": "Action completed.",
       "unknownError": "The operation failed. Try again.",
-      "restartRequired": "The desktop service is out of date. Fully quit and restart VideoGenerate."
+      "restartRequired": "The desktop service is out of date. Fully quit and restart TiktokCut."
     },
     "actions": {
       "checkUpdates": "Check Updates",
@@ -3962,13 +3962,13 @@
       "diagnostics": "Runtime diagnostics",
       "runtimeHint": "Hermes is required for the home workspace.",
       "idleTitle": "What should your AI employees handle?",
-      "idleSubtitle": "Ask a question or assign a complete workflow. Hermes can reason, use skills and memory, delegate work, and call approved VideoGenerate capabilities.",
+      "idleSubtitle": "Ask a question or assign a complete workflow. Hermes can reason, use skills and memory, delegate work, and call approved TiktokCut capabilities.",
       "sessionUnavailable": "The Hermes session could not be created.",
       "generationFailed": "Hermes could not complete this response.",
       "modelAuthenticationRequired": "Hermes is running, but its model authentication is invalid or missing. Open the model settings in this workspace to update it.",
       "modelSettings": {
         "title": "Model settings",
-        "subtitle": "Configure Hermes inference without leaving VideoGenerate",
+        "subtitle": "Configure Hermes inference without leaving TiktokCut",
         "provider": "Provider",
         "customProvider": "Custom compatible endpoint",
         "endpoint": "Endpoint URL",

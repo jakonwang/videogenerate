@@ -66,7 +66,7 @@ async function close() {
   <header class="vg-scope vg-titlebar" @dblclick.self="toggleMax">
     <div class="vg-titlebar__brand">
       <img :src="brandIconAsset" alt="" class="vg-titlebar__logo" />
-      <strong class="vg-titlebar__name">VideoGenerate</strong>
+      <strong class="vg-titlebar__name">TiktokCut</strong>
       <span class="vg-titlebar__divider" aria-hidden="true"></span>
       <span class="vg-titlebar__subtitle">{{ t('titleBar.productSubtitle') }}</span>
     </div>

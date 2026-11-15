@@ -62,6 +62,8 @@ npm run dev:enforced
 
 ## 生产部署
 
+完整的服务器部署、客户端打包与自动更新流程见 `docs/commercial-deployment.md`；Nginx / PM2 / 环境变量模板在 `services/cloud/deploy/`。
+
 1. 在安全的机器上执行 `npm run cloud:keygen`：把私钥 `data/keys/entitlement-private.pem` 放到服务器，把生成的公钥文件提交进仓库，再打包桌面端。**换密钥后旧版客户端会全部失效。**
 2. 用 Nginx 反向代理并开启 HTTPS，设置 `CLOUD_TRUST_PROXY=1`。
 3. 用 pm2 或 systemd 运行 `npm run start:cloud`，并设置 `NODE_ENV=production`。

@@ -1,21 +1,22 @@
 import { app, ipcMain, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { getAppEnv, isDevelopmentEnv } from './appEnv'
 
+/** 更新服务器地址在打包时写入（VG_UPDATE_BASE_URL），见 docs/commercial-deployment.md */
+declare const __VG_UPDATE_BASE_URL__: string | undefined
 const DEFAULT_GENERIC_URL = 'https://YOUR_UPDATE_URL'
 
 let getMainWindow: () => BrowserWindow | null = () => null
 
 function resolveUpdateBaseUrl(): string {
-  return (process.env.VG_UPDATE_BASE_URL || DEFAULT_GENERIC_URL).trim().replace(/\/+$/, '')
+  const builtIn = typeof __VG_UPDATE_BASE_URL__ !== 'undefined' ? __VG_UPDATE_BASE_URL__ : ''
+  return (builtIn || DEFAULT_GENERIC_URL).trim().replace(/\/+$/, '')
 }
 
+/** 只有打包后的程序、且打包时配置了真实的更新地址，才启用自动更新 */
 function isUpdaterConfigured(): boolean {
   if (!app.isPackaged) return false
-  const env = getAppEnv()
   const url = resolveUpdateBaseUrl()
-  const envAllowsUpdater = env === 'staging' || env === 'production'
-  return Boolean(envAllowsUpdater && url && !url.includes('YOUR_UPDATE_URL'))
+  return Boolean(url && !url.includes('YOUR_UPDATE_URL') && /^https?:\/\//.test(url))
 }
 
 export function registerUpdaterIpc(getWindow: () => BrowserWindow | null) {
@@ -29,9 +30,6 @@ export function registerUpdaterIpc(getWindow: () => BrowserWindow | null) {
   ipcMain.handle('updater:checkForUpdates', async () => {
     if (!app.isPackaged) {
       return { ok: false, reason: 'not_packaged' as const }
-    }
-    if (isDevelopmentEnv()) {
-      return { ok: false, reason: 'dev_env_disabled' as const }
     }
     if (!isUpdaterConfigured()) {
       return { ok: false, reason: 'url_not_configured' as const }
@@ -50,7 +48,7 @@ export function setupAutoUpdater(getWindow: () => BrowserWindow | null) {
   if (!isUpdaterConfigured()) {
     if (app.isPackaged) {
       console.warn(
-        `[updater] auto update disabled: env=${getAppEnv()} requires staging/production with a real VG_UPDATE_BASE_URL`,
+        '[updater] auto update disabled: build with VG_UPDATE_BASE_URL=https://<update-host>/<path> to enable',
       )
     }
     return

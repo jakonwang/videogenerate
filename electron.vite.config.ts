@@ -11,8 +11,9 @@ import { resolve } from 'node:path'
 export default defineConfig(({ command }) => {
   const licenseMode = process.env.VG_LICENSE_MODE === 'off' || process.env.VG_LICENSE_MODE === 'enforced' ? process.env.VG_LICENSE_MODE : command === 'build' ? 'enforced' : 'off'
   const cloudApiBase = (process.env.VG_CLOUD_API_BASE || 'http://127.0.0.1:18300').trim()
+  const updateBaseUrl = (process.env.VG_UPDATE_BASE_URL || '').trim()
   if (command === 'build') {
-    console.log(`[build] license mode: ${licenseMode}, cloud api: ${cloudApiBase}`)
+    console.log(`[build] license mode: ${licenseMode}, cloud api: ${cloudApiBase}, update url: ${updateBaseUrl || '(none, auto update off)'}`)
     if (licenseMode === 'enforced' && /127\.0\.0\.1|localhost/.test(cloudApiBase)) {
       console.warn('[build] 警告：商业版的云端地址仍是本机地址，发布前请设置 VG_CLOUD_API_BASE=https://你的云端域名')
     }
@@ -22,6 +23,7 @@ export default defineConfig(({ command }) => {
     define: {
       __VG_LICENSE_MODE__: JSON.stringify(licenseMode),
       __VG_CLOUD_API_BASE__: JSON.stringify(cloudApiBase),
+      __VG_UPDATE_BASE_URL__: JSON.stringify(updateBaseUrl),
     },
     build: {
       rollupOptions: {
