@@ -11,9 +11,10 @@ import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import { useCloneProjectWorkspace } from '@/composables/useCloneProjectWorkspace'
 import { useCloneRouteProject } from '@/composables/useCloneRouteProject'
 import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
-import { hasStoredWebToken, webApiClient, type GeelarkPublishAccount } from '@/lib/webApiClient'
+import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { storeToRefs } from 'pinia'
+import { AlertTriangle, ArrowRight, Check, Clapperboard, Copy, Download, Eye, FileText, Film, FolderOpen, Hand, Image as ImageIcon, Info, Lightbulb, Link2, LoaderCircle, Lock, LockOpen, Maximize2, Package, Play, RefreshCw, Replace, RotateCw, Save, Search, Send, SlidersHorizontal, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-vue-next'
 
 const { t: tr } = useI18n()
 const route = useRoute()
@@ -468,10 +469,6 @@ const regeneratingStoryboardShotIds = ref<string[]>([])
 const regeneratingFailedStoryboardFrames = ref(false)
 const selectedStoryboardShotIds = ref<string[]>([])
 const queryingStoryboardFrames = ref(false)
-const geelarkPublishModalOpen = ref(false)
-const geelarkPublishSubmitting = ref(false)
-const geelarkAccounts = ref<GeelarkPublishAccount[]>([])
-const geelarkPublishMessage = ref('')
 const variantCount = ref(3)
 const selectedStageKey = ref<StageItem['key'] | ''>('')
 const selectedShotId = ref('')
@@ -493,19 +490,9 @@ const shotVideoPromptPreviewLoadedShotId = ref('')
 const identityGridPromptPreviewLoading = ref(false)
 const identityGridPromptPreviewError = ref('')
 const identityGridPromptPreview = ref<IdentityGridPromptPreview | null>(null)
-const geelarkPublishForm = reactive({
-  publishAccountId: '',
-  videoDesc: '',
-  productId: '',
-  productTitle: '',
-  scheduleAt: '',
-  needShareLink: false,
-})
-
 function closeTransientModalOverlays() {
   modelModalOpen.value = false
   productModalOpen.value = false
-  geelarkPublishModalOpen.value = false
 }
 
 function closePromptPreviewOverlays() {
@@ -921,9 +908,6 @@ const storyboardFrameStateSignature = computed(() =>
   ),
 )
 const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath || '')
-const selectedGeelarkAccount = computed(
-  () => geelarkAccounts.value.find((item) => item.id === geelarkPublishForm.publishAccountId) || null,
-)
 const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), tr('autoUi.k_1507374d9548')))
 const localComposeErrorText = computed(() => safeText(current.value?.finalCompose?.error || composeLocalError.value, ''))
 const composeHealthFlagLabelMap: Record<string, string> = {
@@ -1516,6 +1500,13 @@ const analyzeGlobalSections = computed(() => {
   ].filter((item) => item.desc)
 })
 const analyzeReversePrompt = computed(() => safeText(current.value?.blueprint?.globalScript?.reversePrompt, ''))
+/** "01  0.0s-3.2s Close-up…" → { time: '0.0s-3.2s', text: 'Close-up…' } for the script list. */
+function splitScriptLine(line: string) {
+  const body = String(line || '').replace(/^\s*\d{1,3}\s+/, '').trim()
+  const match = /^(\d+(?:\.\d+)?s\s*[-–~]\s*\d+(?:\.\d+)?s)\s*(.*)$/.exec(body)
+  return match ? { time: match[1].replace(/\s+/g, ''), text: match[2] || body } : { time: '', text: body }
+}
+
 const analyzeScriptLines = computed(() => {
   const blueprintShotLines = (current.value?.blueprint?.shots || [])
     .slice()
@@ -3464,28 +3455,6 @@ async function composeFinalVideo() {
   await composeFinalVideoInWorkspace()
 }
 
-async function openGeelarkPublishModal() {
-  if (!finalOutputPath.value) {
-    geelarkPublishMessage.value = tr('autoUi.k_2ead337584f9')
-    return
-  }
-  errorText.value = ''
-  geelarkPublishMessage.value = ''
-  try {
-    geelarkAccounts.value = await webApiClient.listGeelarkPublisherAccounts()
-    if (!geelarkPublishForm.publishAccountId && geelarkAccounts.value.length) {
-      geelarkPublishForm.publishAccountId = geelarkAccounts.value[0].id
-    }
-    if (!geelarkPublishForm.scheduleAt) {
-      const next = new Date(Date.now() + 10 * 60 * 1000)
-      geelarkPublishForm.scheduleAt = next.toISOString().slice(0, 16)
-    }
-    geelarkPublishModalOpen.value = true
-  } catch (error: any) {
-    geelarkPublishMessage.value = error?.message ?? String(error)
-  }
-}
-
 async function pickComposeOutputDir() {
   const dir = await window.api.pickDir({ title: tr('autoUi.k_ebcc859bd923') })
   if (!dir) return
@@ -3502,38 +3471,6 @@ async function openFinalOutput() {
 async function revealFinalOutput() {
   if (!finalOutputPath.value) return
   await window.api.shell.showItemInFolder(finalOutputPath.value)
-}
-
-async function submitGeelarkPublish() {
-  if (!current.value?.id || !finalOutputPath.value) {
-    geelarkPublishMessage.value = tr('autoUi.k_8eed551d0ade')
-    return
-  }
-  if (!geelarkPublishForm.publishAccountId) {
-    geelarkPublishMessage.value = tr('autoUi.k_b75809f9a5d3')
-    return
-  }
-  geelarkPublishSubmitting.value = true
-  geelarkPublishMessage.value = ''
-  try {
-    await webApiClient.publishGeelarkVideo({
-      cloneProjectId: current.value.id,
-      videoPath: finalOutputPath.value,
-      publishAccountId: geelarkPublishForm.publishAccountId,
-      videoDesc: geelarkPublishForm.videoDesc || undefined,
-      productId: geelarkPublishForm.productId || undefined,
-      productTitle: geelarkPublishForm.productTitle || undefined,
-      scheduleAt: geelarkPublishForm.scheduleAt ? new Date(geelarkPublishForm.scheduleAt).getTime() : Date.now(),
-      needShareLink: Boolean(geelarkPublishForm.needShareLink),
-    })
-    geelarkPublishMessage.value = tr('autoUi.k_73a4cf5d0400')
-    geelarkPublishModalOpen.value = false
-    void router.push('/plugins/geelark-publisher')
-  } catch (error: any) {
-    geelarkPublishMessage.value = error?.message ?? String(error)
-  } finally {
-    geelarkPublishSubmitting.value = false
-  }
 }
 
 function openTiktokCreativeStudio() {
@@ -3940,1103 +3877,713 @@ onUnmounted(() => {
 
 <template>
   <div class="clone-page">
-    <section class="workspace-grid">
-      <div class="main-column">
-        <article v-if="visibleStageKey === 'analyze'" class="panel panel-reference">
-          <div class="analyze-workbench">
-            <section class="analyze-hero-card">
-              <div class="analyze-hero-card__head">
-                <div class="analyze-hero-card__copy">
-                  <h2>{{ tr('autoUi.k_070160e04cfa') }}</h2>
-                  <p>{{ tr('autoUi.k_3e20340c353f') }}</p>
-                </div>
-                <div class="analyze-hero-card__controls">
-                  <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')"> {{ tr('autoUi.k_cd3b2229aab1') }} </button>
-                  <button
-                    class="primary-button small"
-                    type="button"
-                    :disabled="loading"
-                    @click="referenceSourcePath ? createBlueprint() : pickReferenceVideo()"
-                  >
-                    {{ analyzePrimaryButtonLabel }}
-                  </button>
-                </div>
-              </div>
+    <section class="workspace-grid cw-shell">
+      <div class="main-column vg-scope cw">
+        <!-- ================= 01 参考分析 ================= -->
+        <article v-if="visibleStageKey === 'analyze'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">01</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_070160e04cfa') }}</h2>
+              <p>{{ tr('autoUi.k_3e20340c353f') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading" @click="pickReferenceVideo">
+                <Upload :size="15" />{{ referenceSourcePath ? tr('autoUi.k_afe2bfaa6eee') : tr('autoUi.k_f743536d6df3') }}
+              </button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading" @click="referenceSourcePath ? createBlueprint() : pickReferenceVideo()">
+                <Sparkles :size="15" />{{ analyzePrimaryButtonLabel }}
+              </button>
+            </div>
+          </header>
 
-              <div class="analyze-main-grid">
-                <div class="analyze-video-card">
-                  <div class="analyze-video-card__head">
-                    <strong>{{ tr('autoUi.k_ce9406ae8fc8') }}</strong>
-                    <span>{{ referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a') }}</span>
-                  </div>
-                  <div class="video-shell analyze-video-shell">
-                    <video v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" controls preload="metadata"></video>
-                    <CloneStateCard
-                      v-else
-                      class="empty-state"
-                      :title="tr('autoUi.k_8704840e5b6a')"
-                      :description="tr('autoUi.k_8542c9c4c761')"
-                    />
-                  </div>
-                  <div class="analyze-video-card__actions">
-                    <button class="ghost-button small secondary-action" type="button" :disabled="loading" @click="pickReferenceVideo">
-                      {{ referenceSourcePath ? tr('autoUi.k_afe2bfaa6eee') : tr('autoUi.k_f743536d6df3') }}
-                    </button>
-                  </div>
-                  <div class="analyze-video-meta-card">
-                    <strong>{{ tr('autoUi.k_2be1fa57c981') }}</strong>
-                    <div class="analyze-video-meta-card__grid">
-                      <span>{{ tr('autoUi.k_1275f6feb703') }}</span>
-                      <strong>{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, tr('autoUi.k_937d465574eb')) }}</strong>
-                      <span>{{ tr('autoUi.k_3c7800e243ac') }}</span>
-                      <strong>{{ storyBeats.length || 0 }}</strong>
-                      <span>{{ tr('autoUi.k_62e951a692ff') }}</span>
-                      <strong>{{ analyzeStageProgress >= 100 ? tr('autoUi.k_1f481168be32') : loading ? tr('autoUi.k_2c2a1493ca90') : tr('autoUi.k_605dc7e35e02') }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="analyze-results-card">
-                  <div class="analyze-results-card__head">
-                    <strong>{{ tr('autoUi.k_bc2c6108be10') }}</strong>
-                    <span>{{ storyBeats.length ? tr('autoUi.k_411bdad5dc98', { p0: storyBeats.length }) : tr('autoUi.k_28bbf71875ea') }}</span>
-                  </div>
-                  <div class="analyze-results-tabs">
-                    <button class="analyze-results-tabs__item is-active" type="button">{{ tr('autoUi.k_bc2c6108be10') }}</button>
-                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_9044a92e7bea') }}</button>
-                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_6734561fef5b') }}</button>
-                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_856af808c18a') }}</button>
-                  </div>
-                  <div class="analyze-results-card__section">
-                    <div class="analyze-results-card__section-head">
-                      <strong>{{ tr('autoUi.k_ed3891236489') }}</strong>
-                      <span>{{ tr('autoUi.k_08e62304a021') }} {{ storyBeats.length || 0 }} {{ tr('autoUi.k_6bc35039a31e') }}</span>
-                    </div>
-                    <div v-if="storyBeats.length" class="analyze-structure-track">
-                      <div
-                        v-for="(item, index) in storyBeats.slice(0, 5)"
-                        :key="item.id"
-                        class="analyze-structure-node"
-                        :class="{ 'is-highlight': index === 0 }"
-                      >
-                        <span class="analyze-structure-node__index">{{ storyBeatDisplayIndex(item, index) }}</span>
-                        <strong>{{ storyBeatRangeText(item, index) }}</strong>
-                        <span>{{ localizePurpose(item.purpose) }}</span>
-                        <small>{{ shotReferenceLabel(item) }}</small>
-                      </div>
-                    </div>
-                    <CloneStateCard
-                      v-else
-                      class="empty-state small-empty"
-                      :title="tr('autoUi.k_6390364017f6')"
-                      :description="tr('autoUi.k_7db04ef30936')"
-                    />
-                  </div>
-
-                  <div class="analyze-results-card__section">
-                    <div class="analyze-results-card__section-head">
-                      <strong>{{ tr('autoUi.k_2a33eaa96d0e') }}</strong>
-                      <span>{{ analyzeScriptLines.length ? tr('autoUi.k_75f7d1c9ae4f', { p0: analyzeScriptLines.length }) : tr('autoUi.k_472b66a0f2d0') }}</span>
-                    </div>
-                    <div v-if="analyzeScriptLines.length" class="analyze-script-lines analyze-script-lines--compact">
-                      <p v-for="(line, index) in analyzeScriptLines.slice(0, 6)" :key="`${index}-${line}`">{{ line }}</p>
-                    </div>
-                    <p v-else class="analyze-results-card__empty-copy">{{ analyzeScriptPreview }}</p>
-                  </div>
-                </div>
-
-                <div class="analyze-project-info-card">
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_4166d1b1467c') }}</strong>
-                    </div>
-                    <div class="analyze-project-field">
-                      <span>{{ tr('autoUi.k_3e7255522b33') }}</span>
-                      <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, tr('autoUi.k_96cb64ae6045')) }}</strong>
-                    </div>
-                    <div class="analyze-project-pills">
-                      <em>{{ current?.runMode === 'auto' ? tr('autoUi.k_49c1cdf32be8') : tr('autoUi.k_e1a420acee0f') }}</em>
-                      <em>{{ hasBoundModel ? tr('autoUi.k_9fa4faa55db6') : tr('autoUi.k_ca3dd55eb098') }}</em>
-                      <em>{{ effectiveProductRefs.length ? tr('autoUi.k_c8b458421614', { p0: effectiveProductRefs.length }) : tr('autoUi.k_ab8274a60c22') }}</em>
-                    </div>
-                  </div>
-
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_77c468a45a48') }}</strong>
-                    </div>
-                    <div class="variant-asset-card">
-                      <div class="variant-asset-card__media variant-asset-card__media--model">
-                        <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
-                        <span v-else>{{ tr('autoUi.k_39dab49974bf') }}</span>
-                      </div>
-                      <div class="variant-summary-card__copy">
-                        <span>{{ tr('autoUi.k_200b9dbfd963') }}</span>
-                        <strong>{{ safeText(modelSnapshot?.name, tr('autoUi.k_53e2db70167f')) }}</strong>
-                        <p>{{ modelSnapshot?.id ? tr('autoUi.k_4d9e8c358e49') : tr('autoUi.k_b1a363b419c5') }}</p>
-                      </div>
-                    </div>
-                    <button class="ghost-button small secondary-action full-width" type="button" :disabled="modelLoading" @click="modelModalOpen = true">{{ tr('autoUi.k_be7dc2544329') }}</button>
-                  </div>
-
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_188d1e2d5f79') }}</strong>
-                      <span class="status-pill" :class="productSanitizationStatusClass">{{ productSanitizationStatusLabel }}</span>
-                    </div>
-                    <div class="variant-summary-card__copy">
-                      <span>{{ tr('autoUi.k_caa411888696') }}</span>
-                      <strong>{{ boundProductDisplayName }}</strong>
-                      <p>{{ cloneProductBindingHint }}</p>
-                    </div>
-                    <div class="variant-asset-card">
-                      <div class="variant-asset-card__media variant-asset-card__media--model">
-                        <img v-if="selectedProductPreview" :src="selectedProductPreview" alt="product-preview" />
-                        <span v-else>{{ tr('autoUi.k_004922066efd') }}</span>
-                      </div>
-                      <div class="variant-summary-card__copy">
-                        <span>{{ tr('autoUi.k_b609537c0a3f') }}</span>
-                        <strong>{{ selectedProductDisplayName }}</strong>
-                        <p>{{ selectedProductBindingHint }}</p>
-                      </div>
-                    </div>
-                    <div class="variant-product-actions">
-                      <button class="ghost-button small secondary-action full-width" type="button" @click="productModalOpen = true">{{ tr('autoUi.k_f4d8d03ce5b4') }}</button>
-                      <button class="ghost-button small secondary-action" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct">{{ tr('autoUi.k_4f59a65e8f54') }}</button>
-                    </div>
-                    <div class="analyze-project-field">
-                      <span>{{ tr('autoUi.k_c417c63c9408') }}</span>
-                      <strong>{{ cloneProductSnapshotLabel }}</strong>
-                    </div>
-                    <p v-if="originalProductRefs.length || effectiveProductRefs.length" class="analyze-project-field__hint">
-                      {{ cloneProductSnapshotHint }}
-                    </p>
-                    <div v-if="originalProductRefs.length || effectiveProductRefs.length" class="variant-product-toggle">
-                      <button
-                        class="ghost-button small secondary-action"
-                        type="button"
-                        :class="{ active: productRefPreviewMode === 'sanitized' }"
-                        :disabled="!effectiveProductRefs.length"
-                        @click="productRefPreviewMode = 'sanitized'"
-                      > {{ tr('autoUi.k_7f3a812a9479') }} </button>
-                      <button
-                        class="ghost-button small secondary-action"
-                        type="button"
-                        :class="{ active: productRefPreviewMode === 'original' }"
-                        :disabled="!originalProductRefs.length"
-                        @click="productRefPreviewMode = 'original'"
-                      > {{ tr('autoUi.k_a0217cd1e435') }} </button>
-                    </div>
-                    <div v-if="visibleProductThumbs.length" class="variant-product-strip">
-                      <span v-for="item in visibleProductThumbs.slice(0, 4)" :key="item" class="variant-product-strip__item">
-                        <img :src="previewImage(item)" alt="product-reference" />
-                        <button
-                          v-if="productRefPreviewMode !== 'original'"
-                          class="variant-product-strip__remove"
-                          type="button"
-                          :disabled="loading"
-                          @click.stop.prevent="removeProductImage(item)"
-                        > {{ tr('autoUi.k_3755f56f2f83') }} </button>
-                      </span>
-                    </div>
-                    <div v-if="visibleProductThumbs.length" class="variant-product-meta">
-                      <span>{{ cloneProductSnapshotLabel }}{{ tr('autoUi.k_de61aa8e1cbc') }}</span>
-                      <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), tr('autoUi.k_1b089e8482c7')) }}</strong>
-                    </div>
-                    <div class="variant-product-actions">
-                      <button class="ghost-button small danger-action" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages">{{ tr('autoUi.k_f8290c92d783') }}</button>
-                    </div>
-                  </div>
-
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_8f1a3358e56e') }}</strong>
-                      <span>{{ productAnalysisSections.length ? tr('autoUi.k_00f111551681') : tr('autoUi.k_86ba72ec4975') }}</span>
-                    </div>
-                    <div v-if="productAnalysisSnapshot" class="product-analysis-card">
-                      <div class="product-analysis-card__summary">
-                        <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
-                        <strong>{{ safeText(productAnalysisSnapshot.category, tr('autoUi.k_face982a4aae')) }}</strong>
-                      </div>
-                      <div class="product-analysis-card__list">
-                        <div v-for="item in productAnalysisSections" :key="item.key" class="product-analysis-card__item">
-                          <span>{{ item.title }}</span>
-                          <strong>{{ item.desc }}</strong>
-                        </div>
-                      </div>
-                      <div v-if="productAnalysisSnapshot.matchingRules.length" class="product-analysis-card__rules">
-                        <span>{{ tr('autoUi.k_f1c3fed4770a') }}</span>
-                        <div class="product-analysis-card__tags">
-                          <em v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</em>
-                        </div>
-                      </div>
-                    </div>
-                    <CloneStateCard
-                      v-else
-                      class="empty-state small-empty"
-                      :title="tr('autoUi.k_f372a7d84008')"
-                      :description="tr('autoUi.k_d650f5947a1e')"
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        </article>
-
-        <article v-if="visibleStageKey === 'variant'" class="panel">
-          <div class="variant-workbench">
-            <CloneStageHeader :tag="tr('autoUi.k_6766ae37d5ac')" :title="tr('autoUi.k_239d48dea044')" :description="tr('autoUi.k_e48255e2ceca')">
-              <template #actions>
-                <button class="ghost-button small secondary-action" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
-                  {{ autoFlowRunning ? tr('autoUi.k_fb63b65d5637') : current?.runMode === 'auto' ? tr('autoUi.k_263d2e2109a4') : tr('autoUi.k_df815f635a0d') }}
+          <div class="cw-analyze">
+            <!-- reference video -->
+            <section class="cw-card cw-analyze__video">
+              <header class="cw-card__head">
+                <h3>{{ tr('autoUi.k_ce9406ae8fc8') }}</h3>
+                <span class="cw-card__hint" :title="referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a')">{{ referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a') }}</span>
+              </header>
+              <div class="cw-player cw-player--portrait">
+                <video v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" controls preload="metadata"></video>
+                <button v-else class="cw-drop" type="button" :disabled="loading" @click="pickReferenceVideo">
+                  <span class="cw-drop__icon"><Upload :size="22" /></span>
+                  <strong>{{ tr('autoUi.k_8704840e5b6a') }}</strong>
+                  <small>{{ tr('autoUi.k_8542c9c4c761') }}</small>
                 </button>
-                <label class="inline-control">
-                  <span>{{ tr('autoUi.k_b9ae89319036') }}</span>
-                  <input v-model.number="variantCount" class="count-input" type="number" min="1" max="6" />
-                </label>
-                <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants">{{ tr('autoUi.k_ed70ccdd3b92') }}</button>
-              </template>
-            </CloneStageHeader>
-
-            <div class="variant-layout">
-              <aside class="variant-summary-panel">
-                <CloneDataCard class="variant-summary-card">
-                  <div class="variant-summary-card__copy">
-                    <span>{{ tr('autoUi.k_4a2fcce5030a') }}</span>
-                    <strong>{{ scriptVariants.length }}</strong>
-                    <p>{{ tr('autoUi.k_79c74f41ca9e') }} {{ scriptVariants.length }} {{ tr('autoUi.k_98c1b3e34c1b') }}</p>
-                  </div>
-                </CloneDataCard>
-                <CloneDataCard class="variant-summary-card">
-                  <div class="variant-summary-card__copy">
-                    <span>{{ tr('autoUi.k_7f06ec27ae46') }}</span>
-                    <strong>{{ selectedVariantId ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_53e2db70167f') }}</strong>
-                    <p>{{ selectedVariantId ? tr('autoUi.k_a53e25aa8df1') : tr('autoUi.k_e96de04f49c6') }}</p>
-                  </div>
-                </CloneDataCard>
-                <CloneDataCard class="variant-summary-card variant-summary-card--highlight">
-                  <div class="variant-summary-card__copy">
-                    <span>{{ tr('autoUi.k_8221bf9d729f') }}</span>
-                    <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_4363468b43bf')) }}</strong>
-                    <p>{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_51dcc484cd16')) }}</p>
-                  </div>
-                </CloneDataCard>
-              </aside>
-
-              <section class="variant-main-panel">
-                <div v-if="scriptVariants.length" class="variant-hero-card">
-                  <div class="variant-hero-card__score">
-                    <span>{{ selectedVariantCandidate?.score?.toFixed(1) || '0.0' }}</span>
-                  </div>
-                  <div class="variant-hero-card__copy">
-                    <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_758dc6dc197b')) }}</strong>
-                    <p>{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_75bafc33692e')) }}</p>
-                    <small>{{ safeText(selectedVariantCandidate?.reason, tr('autoUi.k_b413cad5257d')) }}</small>
-                  </div>
-                  <button
-                    class="ghost-button small secondary-action"
-                    type="button"
-                    :disabled="!selectedVariantCandidate"
-                    @click="selectedVariantCandidate ? selectScriptVariant(selectedVariantCandidate.id) : undefined"
-                  > {{ tr('autoUi.k_96fe1ffdfa89') }} </button>
+              </div>
+              <dl class="cw-kv">
+                <div><dt>{{ tr('autoUi.k_1275f6feb703') }}</dt><dd :title="isDraftingNewProject ? referenceVideoPath : current?.referenceVideoName">{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, tr('autoUi.k_937d465574eb')) }}</dd></div>
+                <div><dt>{{ tr('autoUi.k_3c7800e243ac') }}</dt><dd>{{ storyBeats.length || 0 }}</dd></div>
+                <div>
+                  <dt>{{ tr('autoUi.k_62e951a692ff') }}</dt>
+                  <dd><span class="cw-state" :class="analyzeStageProgress >= 100 ? 'cw-state--ok' : loading ? 'cw-state--run' : 'cw-state--idle'"><i />{{ analyzeStageProgress >= 100 ? tr('autoUi.k_1f481168be32') : loading ? tr('autoUi.k_2c2a1493ca90') : tr('autoUi.k_605dc7e35e02') }}</span></dd>
                 </div>
+              </dl>
+            </section>
 
-                <div class="variant-list-panel">
-                  <button
-                    v-for="item in scriptVariants"
-                    :key="item.id"
-                    class="variant-card variant-card--row"
-                    :class="{ selected: selectedVariantId === item.id }"
-                    type="button"
-                    @click="selectScriptVariant(item.id)"
-                  >
-                    <div class="variant-score">{{ item.score.toFixed(1) }}</div>
-                    <div class="variant-copy">
-                      <div class="variant-copy__head">
-                        <strong>{{ item.title }}</strong>
-                        <span>{{ selectedVariantId === item.id ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_ed15fd8c6ccb') }}</span>
-                      </div>
-                      <p>{{ item.summary }}</p>
-                      <small>{{ item.reason }}</small>
-                      <div v-if="item.shotScripts?.length" class="variant-shot-lines">
-                        <div v-for="shot in item.shotScripts" :key="`${item.id}-${shot.shotId}`" class="variant-shot-line">
-                          <strong>{{ safeText(shot.timeRange, tr('autoUi.k_65f2f856e95d', { p0: shot.shotIndex + 1 })) }}</strong>
-                          <span>{{ shot.scriptText }}</span>
-                        </div>
-                      </div>
+            <!-- analysis -->
+            <div class="cw-stack cw-analyze__result">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_ed3891236489') }}</h3>
+                  <span class="cw-card__hint">{{ storyBeats.length ? tr('autoUi.k_411bdad5dc98', { p0: storyBeats.length }) : tr('autoUi.k_28bbf71875ea') }}</span>
+                </header>
+                <div v-if="storyBeats.length" class="cw-beats">
+                  <div v-for="(item, index) in storyBeats" :key="item.id" class="cw-beat">
+                    <div class="cw-beat__top">
+                      <span class="cw-beat__no">{{ storyBeatDisplayIndex(item, index) }}</span>
+                      <span class="cw-beat__time">{{ storyBeatRangeText(item, index) }}</span>
                     </div>
-                  </button>
-                  <CloneStateCard
-                    v-if="!scriptVariants.length"
-                    class="empty-state section-empty"
-                    :title="tr('autoUi.k_1f81d16ba9a3')"
-                    :description="tr('autoUi.k_bd3fa57462c3')"
-                  />
+                    <strong>{{ localizePurpose(item.purpose) }}</strong>
+                    <small>{{ shotReferenceLabel(item) }}</small>
+                  </div>
                 </div>
+                <CloneStateCard v-else class="empty-state small-empty" :title="tr('autoUi.k_6390364017f6')" :description="tr('autoUi.k_7db04ef30936')" />
+              </section>
+
+              <section class="cw-card cw-card--grow">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_2a33eaa96d0e') }}</h3>
+                  <span class="cw-card__hint">{{ analyzeScriptLines.length ? tr('autoUi.k_75f7d1c9ae4f', { p0: analyzeScriptLines.length }) : tr('autoUi.k_472b66a0f2d0') }}</span>
+                </header>
+                <ol v-if="analyzeScriptLines.length" class="cw-script">
+                  <li v-for="(line, index) in analyzeScriptLines" :key="`${index}-${line}`">
+                    <span class="cw-script__no">{{ String(index + 1).padStart(2, '0') }}</span>
+                    <div>
+                      <span v-if="splitScriptLine(line).time" class="cw-script__time">{{ splitScriptLine(line).time }}</span>
+                      <p>{{ splitScriptLine(line).text }}</p>
+                    </div>
+                  </li>
+                </ol>
+                <p v-else class="cw-muted-copy">{{ analyzeScriptPreview }}</p>
               </section>
             </div>
-          </div>
-        </article>
 
-        <article v-if="visibleStageKey === 'identity-grid'" class="panel panel-storyboard-design">
-          <div class="storyboard-stage-hero">
-            <div class="storyboard-stage-hero__copy">
-              <strong>{{ tr('autoUi.k_54f65b6b0c67') }}</strong>
-              <p>{{ tr('autoUi.k_4da3b7faacaa') }}</p>
-              <small class="storyboard-stage-hero__hint">{{ tr('autoUi.k_5467275a0a9c') }}</small>
-            </div>
-            <div class="storyboard-stage-hero__actions">
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="identityGridPromptPreviewLoading || !current?.id" @click="loadIdentityGridPromptPreview(true, true)">
-                {{ identityGridPromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_896a398739bb') }}
-              </button>
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', tr('autoUi.k_abc7750ecb1f'))"> {{ tr('autoUi.k_57459c07244a') }} </button>
-              <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !current?.id || !hasBoundModel || !effectiveProductRefs.length" @click="generateProjectIdentityGrid">
-                {{ hasProjectIdentityGrid ? tr('autoUi.k_e33a423416a9') : tr('autoUi.k_7d1e8e131273') }}
-              </button>
-            </div>
-          </div>
-          <div class="storyboard-preview-card storyboard-preview-card--identity-grid">
-            <div class="storyboard-preview-card__head">
-              <div>
-                <strong>{{ tr('autoUi.k_ca9a6d04438b') }}</strong>
-                <span>{{ current?.projectIdentityGridStatus === 'done' ? tr('autoUi.k_f2afde8960a6') : current?.projectIdentityGridStatus === 'generating' ? tr('autoUi.k_57c08c730a51') : current?.projectIdentityGridStatus === 'failed' ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_aef4104370ae') }}</span>
-              </div>
-              <button class="ghost-button small" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">{{ tr('autoUi.k_c5f3b41eeba8') }}</button>
-            </div>
-            <div class="identity-grid-preview-layout">
-              <button
-                class="storyboard-preview-media storyboard-preview-media--identity-grid storyboard-preview-media--clickable"
-                type="button"
-                :disabled="!current?.projectIdentityGridPath"
-                @click="openIdentityGridPreview"
-              >
-                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" :alt="tr('autoUi.k_54f65b6b0c67')">
-                <div v-else class="storyboard-preview-media__empty storyboard-preview-media__empty--identity-grid">
-                  <strong>{{ tr('autoUi.k_be185dd5a7c7') }}</strong>
-                  <span>{{ tr('autoUi.k_4e8bd6a46ac7') }}</span>
+            <!-- project side -->
+            <aside class="cw-stack cw-analyze__side">
+              <section class="cw-card">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_4166d1b1467c') }}</h3></header>
+                <div class="cw-field">
+                  <span>{{ tr('autoUi.k_3e7255522b33') }}</span>
+                  <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, tr('autoUi.k_96cb64ae6045')) }}</strong>
                 </div>
-                <span v-if="current?.projectIdentityGridPath" class="storyboard-preview-media__hint">{{ tr('autoUi.k_f27060c8e9f6') }}</span>
-              </button>
-              <div class="identity-grid-preview-aside">
-                <div class="identity-grid-preview-copy">
-                  <strong>{{ tr('autoUi.k_a2645b7a4aea') }}</strong>
-                  <p>{{ tr('autoUi.k_c2d8cda2bae5') }}</p>
+                <div class="cw-flags">
+                  <span class="cw-flag" :class="current?.runMode === 'auto' ? 'is-on' : ''"><Sparkles v-if="current?.runMode === 'auto'" :size="12" /><Hand v-else :size="12" />{{ current?.runMode === 'auto' ? tr('autoUi.k_49c1cdf32be8') : tr('autoUi.k_e1a420acee0f') }}</span>
+                  <span class="cw-flag" :class="hasBoundModel ? 'is-on' : 'is-off'"><UserRound :size="12" />{{ hasBoundModel ? tr('autoUi.k_9fa4faa55db6') : tr('autoUi.k_ca3dd55eb098') }}</span>
+                  <span class="cw-flag" :class="effectiveProductRefs.length ? 'is-on' : 'is-off'"><ImageIcon :size="12" />{{ effectiveProductRefs.length ? tr('autoUi.k_c8b458421614', { p0: effectiveProductRefs.length }) : tr('autoUi.k_ab8274a60c22') }}</span>
                 </div>
-                <div class="storyboard-preview-meta storyboard-preview-meta--identity-grid">
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_1b089e8482c7') }}</span>
-                    <strong>{{ effectiveProductRefs.length }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_39dab49974bf') }}</span>
-                    <strong>{{ hasBoundModel ? tr('autoUi.k_b3addb5e3f54') : tr('autoUi.k_143b1332cb1f') }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_7c49c8f25a7a') }}</span>
-                    <strong>{{ (current?.projectIdentityGridPromptPreview?.gridUsagePlan || []).join(' / ') || '--' }}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </article>
+              </section>
 
-        <article v-if="visibleStageKey === 'grid'" class="panel panel-storyboard-design">
-          <div class="storyboard-stage-hero">
-            <div class="storyboard-stage-hero__copy">
-              <strong>{{ tr('autoUi.k_3a87e98554a1') }}</strong>
-              <p>{{ tr('autoUi.k_37f4224e223f') }}</p>
-              <small class="storyboard-stage-hero__hint">{{ tr('autoUi.k_a2480e598930') }}</small>
-            </div>
-            <div class="storyboard-stage-hero__actions">
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject"> {{ tr('autoUi.k_61bc0b0ca8b1') }} </button>
-              <button
-                class="ghost-button storyboard-stage-hero__button"
-                type="button"
-                :disabled="loading || regeneratingFailedStoryboardFrames || !failedStoryboardFrames.length"
-                @click="regenerateFailedStoryboardFrames"
-              >
-                {{ failedStoryboardActionText }}
-              </button>
-              <button
-                class="ghost-button storyboard-stage-hero__button"
-                type="button"
-                :disabled="loading || !selectedStoryboardShotIds.length || selectedStoryboardShotIds.every((shotId) => regeneratingStoryboardShotIds.includes(shotId))"
-                @click="regenerateSelectedStoryboardFrames"
-              >
-                {{ selectedStoryboardActionText }}
-              </button>
-              <button
-                class="ghost-button storyboard-stage-hero__button"
-                type="button"
-                :disabled="loading || queryingStoryboardFrames || !pendingStoryboardFrames.length"
-                @click="batchQueryPendingStoryboardFrames"
-              >
-                {{ pendingStoryboardActionText }}
-              </button>
-              <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="storyboardFrames.length ? enterVideoStageAndAutoSubmit('manual_next_step') : generateStoryboardGrids()">
-                {{ storyboardFrames.length ? tr('autoUi.k_ea0ef2ae7245') : tr('autoUi.k_266542f0ab19') }}
-              </button>
-            </div>
-          </div>
-
-          <div class="storyboard-design-layout">
-            <section class="storyboard-column storyboard-column--frames">
-              <div class="storyboard-column__head">
-                <div class="storyboard-column__copy"></div>
-                <em>{{ storyboardDesignRows.length }} {{ tr('autoUi.k_bce2ef61514a') }}</em>
-              </div>
-
-              <div class="storyboard-design-table">
-                <div class="storyboard-design-table__head">
-                  <span>
-                    <input
-                      type="checkbox"
-                      :checked="storyboardDesignRows.length > 0 && selectedStoryboardShotIds.length === storyboardDesignRows.length"
-                      @change="toggleSelectAllStoryboardShots"
-                    >
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_77c468a45a48') }}</h3>
+                  <button class="vg-btn vg-btn--sm" type="button" :disabled="modelLoading" @click="modelModalOpen = true">{{ tr('autoUi.k_be7dc2544329') }}</button>
+                </header>
+                <div class="cw-entity">
+                  <span class="cw-entity__media">
+                    <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
+                    <UserRound v-else :size="22" />
                   </span>
+                  <div class="cw-entity__copy">
+                    <small>{{ tr('autoUi.k_200b9dbfd963') }}</small>
+                    <strong>{{ safeText(modelSnapshot?.name, tr('autoUi.k_53e2db70167f')) }}</strong>
+                    <span>{{ modelSnapshot?.id ? tr('autoUi.k_4d9e8c358e49') : tr('autoUi.k_b1a363b419c5') }}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_188d1e2d5f79') }}</h3>
+                  <span class="cw-state" :class="productSanitizationStatusClass === 'success' ? 'cw-state--ok' : productSanitizationStatusClass === 'danger' ? 'cw-state--err' : productSanitizationStatusClass === 'working' ? 'cw-state--run' : 'cw-state--idle'"><i />{{ productSanitizationStatusLabel }}</span>
+                </header>
+                <div class="cw-entity">
+                  <span class="cw-entity__media">
+                    <img v-if="selectedProductPreview" :src="selectedProductPreview" alt="product-preview" />
+                    <Package v-else :size="22" />
+                  </span>
+                  <div class="cw-entity__copy">
+                    <small>{{ tr('autoUi.k_caa411888696') }}</small>
+                    <strong :title="boundProductDisplayName">{{ boundProductDisplayName }}</strong>
+                    <span>{{ cloneProductBindingHint }}</span>
+                  </div>
+                </div>
+                <div class="cw-subtle">
+                  <small>{{ tr('autoUi.k_b609537c0a3f') }}</small>
+                  <strong :title="selectedProductDisplayName">{{ selectedProductDisplayName }}</strong>
+                  <span>{{ selectedProductBindingHint }}</span>
+                </div>
+                <div class="cw-btnrow">
+                  <button class="vg-btn vg-btn--sm" type="button" @click="productModalOpen = true"><Package :size="14" />{{ tr('autoUi.k_f4d8d03ce5b4') }}</button>
+                  <button class="vg-btn vg-btn--sm vg-btn--soft" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct"><Link2 :size="14" />{{ tr('autoUi.k_4f59a65e8f54') }}</button>
+                </div>
+                <div class="cw-field cw-field--row">
+                  <span>{{ tr('autoUi.k_c417c63c9408') }}</span>
+                  <strong>{{ cloneProductSnapshotLabel }}</strong>
+                </div>
+                <p v-if="originalProductRefs.length || effectiveProductRefs.length" class="cw-note">{{ cloneProductSnapshotHint }}</p>
+                <div v-if="originalProductRefs.length || effectiveProductRefs.length" class="cw-seg">
+                  <button type="button" :class="{ 'is-on': productRefPreviewMode === 'sanitized' }" :disabled="!effectiveProductRefs.length" @click="productRefPreviewMode = 'sanitized'">{{ tr('autoUi.k_7f3a812a9479') }}</button>
+                  <button type="button" :class="{ 'is-on': productRefPreviewMode === 'original' }" :disabled="!originalProductRefs.length" @click="productRefPreviewMode = 'original'">{{ tr('autoUi.k_a0217cd1e435') }}</button>
+                </div>
+                <div v-if="visibleProductThumbs.length" class="cw-thumbs">
+                  <span v-for="item in visibleProductThumbs.slice(0, 8)" :key="item" class="cw-thumbs__item" :title="item.split(/[/\\\\]/).pop()">
+                    <img :src="previewImage(item)" alt="product-reference" />
+                    <button v-if="productRefPreviewMode !== 'original'" class="cw-thumbs__remove" type="button" :disabled="loading" :title="tr('autoUi.k_3755f56f2f83')" @click.stop.prevent="removeProductImage(item)"><X :size="12" /></button>
+                  </span>
+                </div>
+                <button class="vg-btn vg-btn--sm vg-btn--ghost cw-danger-link" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages"><Trash2 :size="14" />{{ tr('autoUi.k_f8290c92d783') }}</button>
+              </section>
+
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_8f1a3358e56e') }}</h3>
+                  <span class="cw-card__hint">{{ productAnalysisSections.length ? tr('autoUi.k_00f111551681') : tr('autoUi.k_86ba72ec4975') }}</span>
+                </header>
+                <template v-if="productAnalysisSnapshot">
+                  <div class="cw-field cw-field--row">
+                    <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
+                    <strong>{{ safeText(productAnalysisSnapshot.category, tr('autoUi.k_face982a4aae')) }}</strong>
+                  </div>
+                  <dl class="cw-kv cw-kv--stack">
+                    <div v-for="item in productAnalysisSections" :key="item.key"><dt>{{ item.title }}</dt><dd>{{ item.desc }}</dd></div>
+                  </dl>
+                  <div v-if="productAnalysisSnapshot.matchingRules.length" class="cw-rules">
+                    <small>{{ tr('autoUi.k_f1c3fed4770a') }}</small>
+                    <div><span v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</span></div>
+                  </div>
+                </template>
+                <CloneStateCard v-else class="empty-state small-empty" :title="tr('autoUi.k_f372a7d84008')" :description="tr('autoUi.k_d650f5947a1e')" />
+              </section>
+            </aside>
+          </div>
+        </article>
+
+        <!-- ================= 02 脚本生成 ================= -->
+        <article v-if="visibleStageKey === 'variant'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">02</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_239d48dea044') }}</h2>
+              <p>{{ tr('autoUi.k_e48255e2ceca') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
+                <Play :size="15" />{{ autoFlowRunning ? tr('autoUi.k_fb63b65d5637') : current?.runMode === 'auto' ? tr('autoUi.k_263d2e2109a4') : tr('autoUi.k_df815f635a0d') }}
+              </button>
+              <label class="cw-count">
+                <span>{{ tr('autoUi.k_b9ae89319036') }}</span>
+                <input v-model.number="variantCount" type="number" min="1" max="6" />
+              </label>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants"><Sparkles :size="15" />{{ tr('autoUi.k_ed70ccdd3b92') }}</button>
+            </div>
+          </header>
+
+          <div class="cw-split">
+            <section class="cw-stack">
+              <div class="cw-metrics">
+                <div class="cw-metric"><span>{{ tr('autoUi.k_4a2fcce5030a') }}</span><strong>{{ scriptVariants.length }}</strong><small>{{ tr('autoUi.k_79c74f41ca9e') }} {{ scriptVariants.length }} {{ tr('autoUi.k_98c1b3e34c1b') }}</small></div>
+                <div class="cw-metric"><span>{{ tr('autoUi.k_7f06ec27ae46') }}</span><strong :class="selectedVariantId ? 'is-ok' : ''">{{ selectedVariantId ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_53e2db70167f') }}</strong><small>{{ selectedVariantId ? tr('autoUi.k_a53e25aa8df1') : tr('autoUi.k_e96de04f49c6') }}</small></div>
+              </div>
+
+              <div v-if="scriptVariants.length" class="cw-variants">
+                <button
+                  v-for="item in scriptVariants"
+                  :key="item.id"
+                  class="cw-variant"
+                  :class="{ 'is-selected': selectedVariantId === item.id }"
+                  type="button"
+                  @click="selectScriptVariant(item.id)"
+                >
+                  <span class="cw-score" :style="{ '--score': Math.max(0, Math.min(10, item.score)) * 10 }"><b>{{ item.score.toFixed(1) }}</b></span>
+                  <div class="cw-variant__body">
+                    <div class="cw-variant__title">
+                      <strong>{{ item.title }}</strong>
+                      <span class="cw-state" :class="selectedVariantId === item.id ? 'cw-state--ok' : 'cw-state--idle'"><i />{{ selectedVariantId === item.id ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_ed15fd8c6ccb') }}</span>
+                    </div>
+                    <p>{{ item.summary }}</p>
+                    <small class="cw-variant__reason">{{ item.reason }}</small>
+                    <ol v-if="item.shotScripts?.length && selectedVariantId === item.id" class="cw-variant__shots">
+                      <li v-for="shot in item.shotScripts" :key="`${item.id}-${shot.shotId}`">
+                        <span>{{ safeText(shot.timeRange, tr('autoUi.k_65f2f856e95d', { p0: shot.shotIndex + 1 })) }}</span>
+                        <p>{{ String(shot.scriptText || '').startsWith(String(shot.timeRange || '~')) ? String(shot.scriptText).slice(String(shot.timeRange).length).trim() : shot.scriptText }}</p>
+                      </li>
+                    </ol>
+                    <small v-else-if="item.shotScripts?.length" class="cw-variant__more">{{ item.shotScripts.length }} {{ tr('autoUi.k_bce2ef61514a') }}</small>
+                  </div>
+                </button>
+              </div>
+              <CloneStateCard v-else class="empty-state section-empty" :title="tr('autoUi.k_1f81d16ba9a3')" :description="tr('autoUi.k_bd3fa57462c3')" />
+            </section>
+
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card cw-card--accent">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_8221bf9d729f') }}</h3></header>
+                <div class="cw-hero-score">
+                  <span class="cw-score cw-score--lg" :style="{ '--score': Math.max(0, Math.min(10, selectedVariantCandidate?.score || 0)) * 10 }"><b>{{ selectedVariantCandidate?.score?.toFixed(1) || '0.0' }}</b></span>
+                  <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_758dc6dc197b')) }}</strong>
+                </div>
+                <p class="cw-body-copy">{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_75bafc33692e')) }}</p>
+                <p class="cw-note">{{ safeText(selectedVariantCandidate?.reason, tr('autoUi.k_b413cad5257d')) }}</p>
+                <button class="vg-btn vg-btn--primary vg-btn--block" type="button" :disabled="!selectedVariantCandidate" @click="selectedVariantCandidate ? selectScriptVariant(selectedVariantCandidate.id) : undefined">
+                  <Check :size="15" />{{ tr('autoUi.k_96fe1ffdfa89') }}
+                </button>
+              </section>
+            </aside>
+          </div>
+        </article>
+
+        <!-- ================= 03 身份定妆图 ================= -->
+        <article v-if="visibleStageKey === 'identity-grid'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">03</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_54f65b6b0c67') }}</h2>
+              <p>{{ tr('autoUi.k_4da3b7faacaa') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="identityGridPromptPreviewLoading || !current?.id" @click="loadIdentityGridPromptPreview(true, true)">
+                <FileText :size="15" />{{ identityGridPromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_896a398739bb') }}
+              </button>
+              <button class="vg-btn" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', tr('autoUi.k_abc7750ecb1f'))">
+                <Copy :size="15" />{{ tr('autoUi.k_57459c07244a') }}
+              </button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id || !hasBoundModel || !effectiveProductRefs.length" @click="generateProjectIdentityGrid">
+                <Sparkles :size="15" />{{ hasProjectIdentityGrid ? tr('autoUi.k_e33a423416a9') : tr('autoUi.k_7d1e8e131273') }}
+              </button>
+            </div>
+          </header>
+          <p class="cw-banner"><Info :size="14" />{{ tr('autoUi.k_5467275a0a9c') }}</p>
+
+          <div class="cw-identity">
+            <section class="cw-card">
+              <header class="cw-card__head">
+                <h3>{{ tr('autoUi.k_ca9a6d04438b') }}</h3>
+                <span class="cw-state" :class="current?.projectIdentityGridStatus === 'done' ? 'cw-state--ok' : current?.projectIdentityGridStatus === 'generating' ? 'cw-state--run' : current?.projectIdentityGridStatus === 'failed' ? 'cw-state--err' : 'cw-state--idle'"><i />{{ current?.projectIdentityGridStatus === 'done' ? tr('autoUi.k_f2afde8960a6') : current?.projectIdentityGridStatus === 'generating' ? tr('autoUi.k_57c08c730a51') : current?.projectIdentityGridStatus === 'failed' ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_aef4104370ae') }}</span>
+              </header>
+              <button class="cw-canvas" type="button" :disabled="!current?.projectIdentityGridPath" @click="openIdentityGridPreview">
+                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" :alt="tr('autoUi.k_54f65b6b0c67')">
+                <span v-else class="cw-canvas__empty"><ImageIcon :size="26" /><strong>{{ tr('autoUi.k_be185dd5a7c7') }}</strong><small>{{ tr('autoUi.k_4e8bd6a46ac7') }}</small></span>
+                <span v-if="current?.projectIdentityGridPath" class="cw-canvas__zoom"><Maximize2 :size="13" />{{ tr('autoUi.k_f27060c8e9f6') }}</span>
+              </button>
+            </section>
+            <aside class="cw-stack">
+              <section class="cw-card">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_a2645b7a4aea') }}</h3></header>
+                <p class="cw-body-copy">{{ tr('autoUi.k_c2d8cda2bae5') }}</p>
+                <dl class="cw-kv">
+                  <div><dt>{{ tr('autoUi.k_1b089e8482c7') }}</dt><dd>{{ effectiveProductRefs.length }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_39dab49974bf') }}</dt><dd><span class="cw-state" :class="hasBoundModel ? 'cw-state--ok' : 'cw-state--err'"><i />{{ hasBoundModel ? tr('autoUi.k_b3addb5e3f54') : tr('autoUi.k_143b1332cb1f') }}</span></dd></div>
+                </dl>
+                <div v-if="(current?.projectIdentityGridPromptPreview?.gridUsagePlan || []).length" class="cw-usage">
+                  <small>{{ tr('autoUi.k_7c49c8f25a7a') }}</small>
+                  <ul><li v-for="plan in current?.projectIdentityGridPromptPreview?.gridUsagePlan || []" :key="plan">{{ plan }}</li></ul>
+                </div>
+              </section>
+              <button class="vg-btn vg-btn--primary vg-btn--block vg-btn--lg" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">{{ tr('autoUi.k_c5f3b41eeba8') }}<ArrowRight :size="16" /></button>
+            </aside>
+          </div>
+        </article>
+
+        <!-- ================= 04 分镜设计 ================= -->
+        <article v-if="visibleStageKey === 'grid'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">04</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_3a87e98554a1') }}</h2>
+              <p>{{ tr('autoUi.k_37f4224e223f') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject"><Save :size="15" />{{ tr('autoUi.k_61bc0b0ca8b1') }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="storyboardFrames.length ? enterVideoStageAndAutoSubmit('manual_next_step') : generateStoryboardGrids()">
+                {{ storyboardFrames.length ? tr('autoUi.k_ea0ef2ae7245') : tr('autoUi.k_266542f0ab19') }}<ArrowRight :size="15" />
+              </button>
+            </div>
+          </header>
+
+          <div class="cw-split cw-split--wide">
+            <section class="cw-card cw-card--flush">
+              <div class="cw-toolbar">
+                <label class="cw-check">
+                  <input type="checkbox" :checked="storyboardDesignRows.length > 0 && selectedStoryboardShotIds.length === storyboardDesignRows.length" @change="toggleSelectAllStoryboardShots" />
+                  <span>{{ selectedStoryboardShotIds.length ? `${selectedStoryboardShotIds.length} / ${storyboardDesignRows.length}` : `${storyboardDesignRows.length} ${tr('autoUi.k_bce2ef61514a')}` }}</span>
+                </label>
+                <span class="cw-toolbar__spacer" />
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || regeneratingFailedStoryboardFrames || !failedStoryboardFrames.length" @click="regenerateFailedStoryboardFrames"><RotateCw :size="13" />{{ failedStoryboardActionText }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !selectedStoryboardShotIds.length || selectedStoryboardShotIds.every((shotId) => regeneratingStoryboardShotIds.includes(shotId))" @click="regenerateSelectedStoryboardFrames"><RotateCw :size="13" />{{ selectedStoryboardActionText }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || queryingStoryboardFrames || !pendingStoryboardFrames.length" @click="batchQueryPendingStoryboardFrames"><Search :size="13" />{{ pendingStoryboardActionText }}</button>
+              </div>
+              <p class="cw-banner cw-banner--inset"><Info :size="14" />{{ tr('autoUi.k_a2480e598930') }}</p>
+
+              <div class="cw-table cw-table--frames">
+                <div class="cw-table__head">
+                  <span />
                   <span>{{ tr('autoUi.k_c7d1925fd5af') }}</span>
                   <span>{{ tr('autoUi.k_695dd5f4b7d4') }}</span>
                   <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
                   <span>{{ tr('autoUi.k_6867f7b4537a') }}</span>
                   <span>{{ tr('autoUi.k_3be5bb46d065') }}</span>
                   <span>{{ tr('autoUi.k_5e64b9174ce0') }}</span>
-                  <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
+                  <span class="is-end">{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
                 </div>
-
-                <div class="storyboard-design-table__body">
-                  <div
-                    v-for="row in storyboardDesignRows"
-                    :key="row.shotId"
-                    class="storyboard-design-row"
-                    :class="{ 'is-active': selectedShotId === row.shotId, 'is-working': row.isRegenerating }"
-                    role="button"
-                    tabindex="0"
-                    @click="selectedShotId = row.shotId"
-                    @keydown.enter.prevent="selectedShotId = row.shotId"
-                    @keydown.space.prevent="selectedShotId = row.shotId"
-                  >
-                    <span class="storyboard-design-cell storyboard-design-cell--select" @click.stop>
-                      <input
-                        type="checkbox"
-                        :checked="selectedStoryboardShotIds.includes(row.shotId)"
-                        @change="toggleStoryboardShotSelection(row.shotId)"
-                      >
+                <div
+                  v-for="row in storyboardDesignRows"
+                  :key="row.shotId"
+                  class="cw-row"
+                  :class="{ 'is-active': selectedShotId === row.shotId, 'is-working': row.isRegenerating, 'is-failed': Boolean(row.error) }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectedShotId = row.shotId"
+                  @keydown.enter.prevent="selectedShotId = row.shotId"
+                  @keydown.space.prevent="selectedShotId = row.shotId"
+                >
+                  <span class="cw-row__check" @click.stop><input type="checkbox" :checked="selectedStoryboardShotIds.includes(row.shotId)" @change="toggleStoryboardShotSelection(row.shotId)" /></span>
+                  <span class="cw-index"><b>{{ String(row.shotIndex).padStart(2, '0') }}</b><small>{{ row.scriptCode }}</small></span>
+                  <span class="cw-frame">
+                    <span class="cw-frame__thumb">
+                      <img v-if="row.imagePath" :src="previewImage(row.imagePath, row.updatedAt)" :alt="safeText(shotLabel(row.shotId), tr('autoUi.k_fcad7fe371b8'))">
+                      <span v-else class="cw-frame__empty">{{ row.isRegenerating ? tr('autoUi.k_57c08c730a51') : row.error ? tr('autoUi.k_3e3c8068bb0e') : tr('autoUi.k_aef4104370ae') }}</span>
                     </span>
-                    <span class="storyboard-design-cell storyboard-design-cell--index">
-                      <strong>{{ String(row.shotIndex).padStart(2, '0') }}</strong>
-                      <small>{{ row.scriptCode }}</small>
+                    <span class="cw-frame__copy">
+                      <strong :title="row.promptText">{{ row.promptText }}</strong>
+                      <span class="cw-words"><em v-for="word in row.tags" :key="`${row.shotId}-${word}`">{{ word }}</em></span>
+                      <small v-if="row.isRegenerating" class="is-run">{{ tr('autoUi.k_b99b4b26222c') }}</small>
+                      <small v-if="row.retryCount > 0">{{ tr('autoUi.k_a3477f849226') }} {{ row.retryCount }} {{ tr('autoUi.k_5e5b8169eee6') }}</small>
                     </span>
-
-                    <span class="storyboard-design-cell storyboard-design-cell--prompt">
-                      <span class="storyboard-design-thumb">
-                        <img v-if="row.imagePath" :src="previewImage(row.imagePath, row.updatedAt)" :alt="safeText(shotLabel(row.shotId), tr('autoUi.k_fcad7fe371b8'))">
-                        <span v-else class="storyboard-design-thumb__empty">{{ row.isRegenerating ? tr('autoUi.k_57c08c730a51') : row.error ? tr('autoUi.k_3e3c8068bb0e') : tr('autoUi.k_aef4104370ae') }}</span>
-                      </span>
-                      <span class="storyboard-design-copy">
-                        <strong>{{ row.promptText }}</strong>
-                        <span class="storyboard-design-tags">
-                          <em v-for="tag in row.tags" :key="`${row.shotId}-${tag}`">{{ tag }}</em>
-                        </span>
-                        <small v-if="row.isRegenerating" class="storyboard-design-copy__status storyboard-design-copy__status--working">{{ tr('autoUi.k_b99b4b26222c') }}</small>
-                        <small v-if="row.retryCount > 0">{{ tr('autoUi.k_a3477f849226') }} {{ row.retryCount }} {{ tr('autoUi.k_5e5b8169eee6') }}</small>
-                      </span>
-                    </span>
-
-                    <span class="storyboard-design-cell">
-                      <span class="storyboard-design-status-pill" :class="{ 'storyboard-design-status-pill--working': row.isRegenerating }">
-                        {{ row.statusText }}
-                      </span>
-                    </span>
-                    <span class="storyboard-design-cell">{{ row.sceneText }}</span>
-                    <span class="storyboard-design-cell">{{ row.cameraText }}</span>
-                    <span class="storyboard-design-cell storyboard-design-cell--voice">{{ row.voiceText }}</span>
-                    <span class="storyboard-design-cell storyboard-design-cell--actions">
-                      <button
-                        class="ghost-button small icon-button"
-                        type="button"
-                        :disabled="!shotFrameMap[row.shotId]?.imagePath"
-                        :title="tr('autoUi.k_de61aa8e1cbc')"
-                        @click.stop="shotFrameMap[row.shotId] && openFramePreview(shotFrameMap[row.shotId])"
-                      >
-                        ◱
-                      </button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="toggleFrameLock(row.shotId)" :title="row.locked ? tr('autoUi.k_eafaffdf18b7') : tr('autoUi.k_8a91cefeb3fb')">
-                        {{ row.locked ? tr('autoUi.k_d2feb31d47eb') : tr('autoUi.k_a9e2a2864404') }}
-                      </button>
-                      <button
-                        class="ghost-button small"
-                        type="button"
-                        :disabled="shotImagePromptPreviewLoading || row.isRegenerating"
-                        @click.stop="selectedShotId = row.shotId; loadShotImagePromptPreview(row.shotId, true, true)"
-                        :title="tr('autoUi.k_ca445a4a0ad9')"
-                      > {{ tr('autoUi.k_2f0bb1238738') }} </button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading || row.isRegenerating || regeneratingFailedStoryboardFrames" @click.stop="regenerateStoryboardFrame(row.shotId)" :title="row.isRegenerating ? tr('autoUi.k_487e1c4e2927') : tr('autoUi.k_2e19057052a3')">
-                        {{ row.isRegenerating ? '…' : '↻' }}
-                      </button>
-                    </span>
-                  </div>
+                  </span>
+                  <span><span class="cw-state" :class="row.isRegenerating ? 'cw-state--run' : row.error ? 'cw-state--err' : row.imagePath ? 'cw-state--ok' : 'cw-state--idle'"><i />{{ row.statusText }}</span></span>
+                  <span class="cw-cell">{{ row.sceneText }}</span>
+                  <span class="cw-cell">{{ row.cameraText }}</span>
+                  <span class="cw-cell cw-cell--muted">{{ row.voiceText }}</span>
+                  <span class="cw-actions">
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!shotFrameMap[row.shotId]?.imagePath" :title="tr('autoUi.k_de61aa8e1cbc')" @click.stop="shotFrameMap[row.shotId] && openFramePreview(shotFrameMap[row.shotId])"><Maximize2 :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-on': row.locked }" type="button" :disabled="loading" :title="row.locked ? tr('autoUi.k_eafaffdf18b7') : tr('autoUi.k_8a91cefeb3fb')" @click.stop="toggleFrameLock(row.shotId)"><Lock v-if="row.locked" :size="14" /><LockOpen v-else :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="shotImagePromptPreviewLoading || row.isRegenerating" :title="tr('autoUi.k_ca445a4a0ad9')" @click.stop="selectedShotId = row.shotId; loadShotImagePromptPreview(row.shotId, true, true)"><FileText :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="loading || row.isRegenerating || regeneratingFailedStoryboardFrames" :title="row.isRegenerating ? tr('autoUi.k_487e1c4e2927') : tr('autoUi.k_2e19057052a3')" @click.stop="regenerateStoryboardFrame(row.shotId)"><LoaderCircle v-if="row.isRegenerating" :size="14" class="vg-spin" /><RotateCw v-else :size="14" /></button>
+                  </span>
                 </div>
               </div>
             </section>
 
-            <aside class="storyboard-preview-panel">
-              <div class="storyboard-preview-card">
-                <div class="storyboard-preview-card__head">
-                  <div>
-                    <strong>{{ tr('autoUi.k_76917c58e1ee') }}</strong>
-                    <span>{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_0601c4d9d5c0') }}</span>
-                  </div>
-                  <button
-                    class="ghost-button small"
-                    type="button"
-                    :disabled="!selectedStoryboardFrame?.imagePath"
-                    @click="selectedStoryboardFrame && openFramePreview(selectedStoryboardFrame)"
-                  > {{ tr('autoUi.k_c5d7f819baf3') }} </button>
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_76917c58e1ee') }}</h3>
+                  <span class="cw-card__hint">{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_0601c4d9d5c0') }}</span>
+                  <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!selectedStoryboardFrame?.imagePath" :title="tr('autoUi.k_c5d7f819baf3')" @click="selectedStoryboardFrame && openFramePreview(selectedStoryboardFrame)"><Maximize2 :size="14" /></button>
+                </header>
+                <div class="cw-player cw-player--portrait cw-player--image">
+                  <img v-if="selectedStoryboardFrame?.imagePath" :src="previewImage(selectedStoryboardFrame.imagePath, selectedStoryboardFrame.updatedAt)" :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), tr('autoUi.k_76917c58e1ee'))">
+                  <span v-else class="cw-canvas__empty"><ImageIcon :size="24" /><strong>{{ selectedStoryboardRow?.error ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_4363468b43bf') }}</strong><small>{{ selectedStoryboardRow?.error || tr('autoUi.k_961be9633733') }}</small></span>
                 </div>
-
-                <div class="storyboard-preview-media">
-                  <img
-                    v-if="selectedStoryboardFrame?.imagePath"
-                    :src="previewImage(selectedStoryboardFrame.imagePath, selectedStoryboardFrame.updatedAt)"
-                    :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), tr('autoUi.k_76917c58e1ee'))"
-                  >
-                  <div v-else class="storyboard-preview-media__empty">
-                    <strong>{{ selectedStoryboardRow?.error ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_4363468b43bf') }}</strong>
-                    <span>{{ selectedStoryboardRow?.error || tr('autoUi.k_961be9633733') }}</span>
-                  </div>
+                <p v-if="selectedStoryboardRow" class="cw-body-copy cw-body-copy--strong">{{ selectedStoryboardRow.promptText }}</p>
+                <dl class="cw-kv">
+                  <div><dt>{{ tr('autoUi.k_29d0552d2e4c') }}</dt><dd>{{ selectedStoryboardRow?.durationText || '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_6867f7b4537a') }}</dt><dd>{{ selectedStoryboardRow?.sceneText || '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_3be5bb46d065') }}</dt><dd>{{ selectedStoryboardRow?.cameraText || '--' }}</dd></div>
+                </dl>
+                <div v-if="selectedStoryboardRow?.tags?.length" class="cw-words"><em v-for="word in selectedStoryboardRow?.tags || []" :key="`preview-${word}`">{{ word }}</em></div>
+                <div v-if="selectedStoryboardErrorText" class="cw-alert">
+                  <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_ce8a92e25f09') }} · {{ selectedStoryboardErrorTitle }}</strong>
+                  <p>{{ selectedStoryboardErrorText }}</p>
+                  <small>{{ tr('autoUi.k_aba23c4b2667') }}：{{ selectedStoryboardErrorAdvice }}</small>
+                  <button v-if="selectedStoryboardErrorAction === 'go-models' || selectedStoryboardErrorAction === 'go-identity-grid'" class="vg-btn vg-btn--sm" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
                 </div>
-
-                <div v-if="selectedStoryboardRow" class="storyboard-preview-copy">
-                  <strong>{{ selectedStoryboardRow.promptText }}</strong>
-                  <span>{{ selectedStoryboardRow.voiceText }}</span>
-                </div>
-
-                <div class="storyboard-preview-meta">
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
-                    <strong>{{ selectedStoryboardRow?.durationText || '--' }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_6867f7b4537a') }}</span>
-                    <strong>{{ selectedStoryboardRow?.sceneText || '--' }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_3be5bb46d065') }}</span>
-                    <strong>{{ selectedStoryboardRow?.cameraText || '--' }}</strong>
-                  </div>
-                </div>
-
-                <div class="storyboard-preview-tags">
-                  <em v-for="tag in selectedStoryboardRow?.tags || []" :key="`preview-${tag}`">{{ tag }}</em>
-                </div>
-                <div v-if="selectedStoryboardErrorText" class="storyboard-preview-error">
-                  <div class="storyboard-preview-error__head">
-                    <strong>{{ tr('autoUi.k_ce8a92e25f09') }}</strong>
-                    <span>{{ selectedStoryboardErrorTitle }}</span>
-                  </div>
-                  <div class="storyboard-preview-error__body">
-                    <p>{{ selectedStoryboardErrorText }}</p>
-                  </div>
-                  <div class="storyboard-preview-error__advice">
-                    <span>{{ tr('autoUi.k_aba23c4b2667') }}</span>
-                    <p>{{ selectedStoryboardErrorAdvice }}</p>
-                  </div>
-                  <div v-if="selectedStoryboardErrorAction === 'go-models' || selectedStoryboardErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
-                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="storyboard-preview-card storyboard-preview-card--script">
-                <div class="storyboard-preview-card__head">
-                  <div>
-                    <strong>{{ tr('autoUi.k_79d85c0b1ac0') }}</strong>
-                    <span>{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : tr('autoUi.k_104ca25508ce') }}</span>
-                  </div>
-                  <button
-                    class="ghost-button small"
-                    type="button"
-                    :disabled="shotImagePromptPreviewLoading || !selectedStoryboardRow"
-                    @click="loadShotImagePromptPreview(selectedStoryboardRow?.shotId, true, true)"
-                  >
-                    {{ shotImagePromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_ca445a4a0ad9') }}
-                  </button>
-                </div>
-                <div class="storyboard-preview-script">
-                  <p>{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || tr('autoUi.k_aa90b861324e') }}</p>
-                </div>
-              </div>
+              </section>
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_79d85c0b1ac0') }}</h3>
+                  <span class="cw-card__hint">{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : tr('autoUi.k_104ca25508ce') }}</span>
+                </header>
+                <p class="cw-body-copy">{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || tr('autoUi.k_aa90b861324e') }}</p>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="shotImagePromptPreviewLoading || !selectedStoryboardRow" @click="loadShotImagePromptPreview(selectedStoryboardRow?.shotId, true, true)"><FileText :size="14" />{{ shotImagePromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_ca445a4a0ad9') }}</button>
+              </section>
             </aside>
           </div>
         </article>
 
-        <article v-if="visibleStageKey === 'video'" class="panel panel-video-stage">
-          <CloneStageHeader
-            class="video-stage-header"
-            tag=""
-            :title="tr('cloneView.videoStage.title')"
-            :description="videoStageDescription"
-          >
-            <template #actions>
-              <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">{{ tr('cloneView.videoStage.primaryAction') }}</button>
-              <button class="ghost-button small" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}</button>
-            </template>
-              <template #aux>
-                <span>{{ tr('autoUi.k_d7f0f988776f') }}{{ runModeLabel }}</span>
-                <span>{{ tr('autoUi.k_75d859e8ba00') }}{{ shotVideoOutputs.length }} {{ tr('autoUi.k_7800d67eeb34') }}{{ failedShotOutputs.length }}</span>
-              </template>
-            </CloneStageHeader>
+        <!-- ================= 05 分镜视频 ================= -->
+        <article v-if="visibleStageKey === 'video'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">05</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('cloneView.videoStage.title') }}</h2>
+              <p>{{ videoStageDescription }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id" @click="generateShotVideos"><Clapperboard :size="15" />{{ tr('cloneView.videoStage.primaryAction') }}</button>
+            </div>
+          </header>
 
-          <div class="video-render-hints-card">
-            <div class="video-render-hints-card__copy">
-              <strong>{{ tr('autoUi.k_0b14bbf64906') }}</strong>
+          <div class="cw-settings">
+            <div class="cw-settings__copy">
+              <strong><SlidersHorizontal :size="14" />{{ tr('autoUi.k_0b14bbf64906') }}</strong>
               <span>{{ tr('autoUi.k_7fb18dbeec08') }}</span>
             </div>
-            <div class="video-render-hints-card__controls">
-              <label class="video-render-hints-card__field">
-                <span>{{ tr('autoUi.k_c27f341ce598') }}</span>
-                <select
-                  :value="videoRenderAspectRatio"
-                  :disabled="loading || !current?.id || savingVideoRenderHints"
-                  @change="handleVideoAspectRatioChange(($event.target as HTMLSelectElement).value as VideoRenderAspectRatio)"
-                >
-                  <option value="9:16">9:16</option>
-                  <option value="16:9">16:9</option>
-                </select>
-              </label>
-              <label class="video-render-hints-card__field">
-                <span>{{ tr('autoUi.k_94a6711f2408') }}</span>
-                <select
-                  :value="videoRenderResolution"
-                  :disabled="loading || !current?.id || savingVideoRenderHints"
-                  @change="handleVideoResolutionChange(($event.target as HTMLSelectElement).value as VideoRenderResolution)"
-                >
-                  <option v-for="item in filteredVideoRenderResolutionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-                </select>
-              </label>
-            </div>
+            <span class="cw-settings__meta">{{ tr('autoUi.k_d7f0f988776f') }}{{ runModeLabel }} · {{ tr('autoUi.k_75d859e8ba00') }}{{ shotVideoOutputs.length }} {{ tr('autoUi.k_7800d67eeb34') }}{{ failedShotOutputs.length }}</span>
+            <label class="cw-select">
+              <span>{{ tr('autoUi.k_c27f341ce598') }}</span>
+              <select class="vg-input vg-select vg-input--sm" :value="videoRenderAspectRatio" :disabled="loading || !current?.id || savingVideoRenderHints" @change="handleVideoAspectRatioChange(($event.target as HTMLSelectElement).value as VideoRenderAspectRatio)">
+                <option value="9:16">9:16</option>
+                <option value="16:9">16:9</option>
+              </select>
+            </label>
+            <label class="cw-select">
+              <span>{{ tr('autoUi.k_94a6711f2408') }}</span>
+              <select class="vg-input vg-select vg-input--sm" :value="videoRenderResolution" :disabled="loading || !current?.id || savingVideoRenderHints" @change="handleVideoResolutionChange(($event.target as HTMLSelectElement).value as VideoRenderResolution)">
+                <option v-for="item in filteredVideoRenderResolutionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+              </select>
+            </label>
           </div>
 
-          <div v-if="shotVideoOutputs.length" class="shot-workbench shot-workbench--reference">
-            <div class="video-stage-layout video-stage-layout--workarea">
-                <div class="video-stage-main">
-                  <div class="shot-reference-layout">
-                    <section class="shot-table-panel">
-                      <div class="shot-table-head">
-                      <div class="shot-table-actions">
-                        <button class="ghost-button small" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos">
-                          {{ failedShotActionText }}
-                        </button>
-                        <button class="ghost-button small" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos"> {{ tr('autoUi.k_cc874aad6450') }} </button>
-                        <button class="ghost-button small" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">{{ tr('autoUi.k_b89f115ab421') }}</button>
-                      </div>
-                    </div>
+          <div v-if="shotVideoOutputs.length" class="cw-split cw-split--wide">
+            <section class="cw-card cw-card--flush">
+              <div class="cw-toolbar">
+                <div class="cw-seg cw-seg--inline">
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'all' }" @click="selectedShotFilter = 'all'">{{ tr('cloneView.videoStage.filters.all') }} <em>{{ shotVideoOutputs.length }}</em></button>
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'ready' }" @click="selectedShotFilter = 'ready'">{{ tr('cloneView.videoStage.filters.ready') }} <em>{{ completedShotCount }}</em></button>
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'failed' }" @click="selectedShotFilter = 'failed'">{{ tr('cloneView.videoStage.filters.failed') }} <em>{{ failedShotOutputs.length }}</em></button>
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'pending' }" @click="selectedShotFilter = 'pending'">{{ tr('cloneView.videoStage.filters.pending') }} <em>{{ pendingShotCount }}</em></button>
+                </div>
+                <span class="cw-toolbar__spacer" />
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos"><RotateCw :size="13" />{{ failedShotActionText }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos"><Search :size="13" />{{ tr('autoUi.k_cc874aad6450') }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus"><RefreshCw :size="13" />{{ tr('autoUi.k_b89f115ab421') }}</button>
+              </div>
+              <div class="cw-statline">
+                <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
+                <span>{{ tr('cloneView.videoStage.stats.failedPending') }} <b>{{ failedShotOutputs.length }}</b></span>
+                <span>{{ tr('autoUi.k_e4baf28f5192') }}<b>{{ continueQueryableShotCount }}</b></span>
+                <span>{{ tr('autoUi.k_366462f4d6fb') }}<b>{{ missingTaskIdShotCount }}</b></span>
+                <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">{{ tr('autoUi.k_76a00d6e4987') }}<b>{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</b></span>
+                <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">{{ tr('autoUi.k_b0578cac28c2') }}<b>{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</b></span>
+              </div>
 
-                    <div class="shot-table-toolbar">
-                      <div class="shot-table-summary">
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'all' }" type="button" @click="selectedShotFilter = 'all'">{{ tr('cloneView.videoStage.filters.all') }} {{ shotVideoOutputs.length }}</button>
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'ready' }" type="button" @click="selectedShotFilter = 'ready'">{{ tr('cloneView.videoStage.filters.ready') }} {{ completedShotCount }}</button>
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'failed' }" type="button" @click="selectedShotFilter = 'failed'">{{ tr('cloneView.videoStage.filters.failed') }} {{ failedShotOutputs.length }}</button>
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'pending' }" type="button" @click="selectedShotFilter = 'pending'">{{ tr('cloneView.videoStage.filters.pending') }} {{ pendingShotCount }}</button>
-                      </div>
-                      <div class="shot-table-stats">
-                        <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
-                        <span>{{ tr('cloneView.videoStage.stats.failedPending') }}：{{ failedShotOutputs.length }}</span>
-                        <span>{{ tr('autoUi.k_e4baf28f5192') }}{{ continueQueryableShotCount }}</span>
-                        <span>{{ tr('autoUi.k_366462f4d6fb') }}{{ missingTaskIdShotCount }}</span>
-                        <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">{{ tr('autoUi.k_76a00d6e4987') }}{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</span>
-                        <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">{{ tr('autoUi.k_b0578cac28c2') }}{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</span>
-                      </div>
-                    </div>
-
-                    <div class="shot-reference-scroll">
-                      <div class="shot-reference-header" role="row">
-                        <span>{{ tr('cloneView.videoStage.columns.shot') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.frame') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.script') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.duration') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.motion') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.actions') }}</span>
-                      </div>
-
-                      <div class="shot-table-body shot-table-body--reference">
-                        <div
-                          v-for="item in filteredShotOutputs"
-                          :key="item.shotId"
-                          v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId]"
-                          class="shot-reference-row"
-                          :class="{
-                            active: selectedShotOutput?.shotId === item.shotId,
-                            ready: Boolean(item.videoPath),
-                            failed: item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error),
-                          }"
-                          @click="selectedShotId = item.shotId"
-                          @keydown.enter.prevent="selectedShotId = item.shotId"
-                          @keydown.space.prevent="selectedShotId = item.shotId"
-                          role="button"
-                          tabindex="0"
-                        >
-                          <span class="shot-reference-cell shot-reference-cell--index">
-                            <strong>{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</strong>
-                            <small>{{ tr('autoUi.k_21468aa05330', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }) }}</small>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--thumb">
-                            <span v-if="shotFrameMap[item.shotId]?.imagePath" class="shot-thumb shot-thumb--large">
-                              <img
-                                :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)"
-                                :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))"
-                              />
-                            </span>
-                            <span v-else class="shot-thumb shot-thumb--large shot-thumb--empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--copy">
-                            <strong>{{ shotScriptSummary(item.shotId) }}</strong>
-                            <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}</small>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--metric">
-                            <strong>{{ formatDuration(item.durationSec) }}</strong>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--metric">
-                            <strong>{{ shotReferenceLabel(storyBeats.find((beat) => beat.id === item.shotId)) }}</strong>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--status">
-                            <span
-                              class="queue-dot"
-                              :class="`queue-dot--${describeShotSyncState(item).tone === 'success' ? 'success' : describeShotSyncState(item).tone === 'danger' ? 'danger' : describeShotSyncState(item).tone === 'warning' ? 'working' : 'idle'}`"
-                            ></span>
-                            <span class="shot-reference-status-copy">
-                              <strong>{{ describeShotSyncState(item).title }}</strong>
-                              <small>{{ describeShotSyncState(item).detail }}</small>
-                              <small v-if="typeof item.retryCount === 'number'">{{ shotRetryStatusText(item) }}</small>
-                            </span>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--actions">
-                            <button class="ghost-button small action-button" type="button" @click.stop="selectedShotId = item.shotId">{{ tr('autoUi.k_de61aa8e1cbc') }}</button>
-                            <button
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="shotVideoPromptPreviewLoading"
-                              @click.stop="selectedShotId = item.shotId; loadShotVideoPromptPreview(item.shotId, true, true)"
-                            > {{ tr('autoUi.k_2f0bb1238738') }} </button>
-                            <button
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="!current?.id || regeneratingShotVideoIds.includes(item.shotId)"
-                              @click.stop="regenerateShotClip(item.shotId)"
-                            >
-                              {{ regeneratingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_7038c8e1829a') : tr('autoUi.k_2e19057052a3') }}
-                            </button>
-                            <button
-                              v-if="canForceDownloadShot(item)"
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="forceDownloadingShotVideoIds.includes(item.shotId)"
-                              @click.stop="forceDownloadShotVideoResult(item.shotId)"
-                            >
-                              {{ forceDownloadingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_8185f33c5e78') : tr('autoUi.k_ef3781caac2d') }}
-                            </button>
-                            <button
-                              v-if="canContinueSyncShot(item)"
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="loading"
-                              @click.stop="syncFailedShotVideo(item.shotId)"
-                            > {{ tr('autoUi.k_59588f0c7deb') }} </button>
-                            <button
-                              v-else-if="canRepairShotTaskId(item)"
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="loading || !current?.id"
-                              @click.stop="refreshRemoteStatus"
-                            > {{ tr('autoUi.k_c669d0d0cdfc') }} </button>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
+              <div class="cw-table cw-table--videos">
+                <div class="cw-table__head" role="row">
+                  <span>{{ tr('cloneView.videoStage.columns.shot') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.frame') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.script') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.duration') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.motion') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
+                  <span class="is-end">{{ tr('cloneView.videoStage.columns.actions') }}</span>
+                </div>
+                <div
+                  v-for="item in filteredShotOutputs"
+                  :key="item.shotId"
+                  v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId, regeneratingShotVideoIds.includes(item.shotId), forceDownloadingShotVideoIds.includes(item.shotId), loading]"
+                  class="cw-row"
+                  :class="{ 'is-active': selectedShotOutput?.shotId === item.shotId, 'is-failed': item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error) }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectedShotId = item.shotId"
+                  @keydown.enter.prevent="selectedShotId = item.shotId"
+                  @keydown.space.prevent="selectedShotId = item.shotId"
+                >
+                  <span class="cw-index"><b>{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</b><small>{{ tr('autoUi.k_21468aa05330', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }) }}</small></span>
+                  <span class="cw-frame__thumb cw-frame__thumb--sm">
+                    <img v-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)" :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))" />
+                    <span v-else class="cw-frame__empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
+                    <span v-if="item.videoPath" class="cw-frame__play"><Play :size="12" /></span>
+                  </span>
+                  <span class="cw-frame__copy">
+                    <strong :title="shotScriptSummary(item.shotId)">{{ shotScriptSummary(item.shotId) }}</strong>
+                    <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}</small>
+                  </span>
+                  <span class="cw-cell cw-num">{{ formatDuration(item.durationSec) }}</span>
+                  <span class="cw-cell">{{ shotReferenceLabel(storyBeats.find((beat) => beat.id === item.shotId)) }}</span>
+                  <span class="cw-shotstate">
+                    <span class="cw-state" :class="`cw-state--${describeShotSyncState(item).tone === 'success' ? 'ok' : describeShotSyncState(item).tone === 'danger' ? 'err' : describeShotSyncState(item).tone === 'warning' ? 'run' : 'idle'}`"><i />{{ describeShotSyncState(item).title }}</span>
+                    <small>{{ describeShotSyncState(item).detail }}<template v-if="typeof item.retryCount === 'number'"> · {{ shotRetryStatusText(item) }}</template></small>
+                  </span>
+                  <span class="cw-actions">
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_de61aa8e1cbc')" @click.stop="selectedShotId = item.shotId"><Eye :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="shotVideoPromptPreviewLoading" :title="tr('autoUi.k_2f0bb1238738')" @click.stop="selectedShotId = item.shotId; loadShotVideoPromptPreview(item.shotId, true, true)"><FileText :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!current?.id || regeneratingShotVideoIds.includes(item.shotId)" :title="regeneratingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_7038c8e1829a') : tr('autoUi.k_2e19057052a3')" @click.stop="regenerateShotClip(item.shotId)"><LoaderCircle v-if="regeneratingShotVideoIds.includes(item.shotId)" :size="14" class="vg-spin" /><RotateCw v-else :size="14" /></button>
+                    <button v-if="canForceDownloadShot(item)" class="vg-btn vg-btn--sm" type="button" :disabled="forceDownloadingShotVideoIds.includes(item.shotId)" @click.stop="forceDownloadShotVideoResult(item.shotId)">{{ forceDownloadingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_8185f33c5e78') : tr('autoUi.k_ef3781caac2d') }}</button>
+                    <button v-if="canContinueSyncShot(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading" @click.stop="syncFailedShotVideo(item.shotId)">{{ tr('autoUi.k_59588f0c7deb') }}</button>
+                    <button v-else-if="canRepairShotTaskId(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click.stop="refreshRemoteStatus">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
+                  </span>
                 </div>
               </div>
+            </section>
 
-              <div class="video-stage-preview">
-                <CloneConsoleSidebar :tag="tr('cloneView.videoStage.previewTag')" :title="tr('cloneView.videoStage.previewTitle')">
-                  <div class="feedback-stack feedback-stack--preview">
-                    <section class="sidebar-section sidebar-section--preview">
-                      <div class="sidebar-section__head">
-                        <strong>{{ tr('cloneView.videoStage.previewTag') }}</strong>
-                        <small>{{ safeText(stageItems.find((item) => item.key === visibleStageKey)?.title, '--') }}</small>
-                      </div>
-                      <div class="sidebar-preview-shell">
-                        <div v-if="selectedShotOutput" class="sidebar-preview-shell__hud">
-                          <span>{{ `${tr('cloneView.videoStage.columns.shot')} ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` }}</span>
-                          <span>{{ formatDuration(selectedShotOutput?.durationSec) }}</span>
-                        </div>
-                        <video v-if="selectedShotOutput?.videoPath" :src="mediaUrl(selectedShotOutput.videoPath)" controls preload="metadata"></video>
-                        <CloneStateCard
-                          v-else
-                          class="empty-state small-empty"
-                          tone="pending"
-                          :title="tr('cloneView.videoStage.emptyPreviewTitle')"
-                          :description="tr('cloneView.videoStage.emptyPreviewDescription')"
-                        />
-                      </div>
-                      <CloneDataCard class="meta-card" size="large">
-                        <span>{{ tr('cloneView.videoStage.currentShot') }}</span>
-                        <strong>{{ safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('cloneView.videoStage.notSelected')) }}</strong>
-                        <em>{{ shotScriptSummary(selectedShotOutput?.shotId) }}</em>
-                      </CloneDataCard>
-                      <CloneDataCard class="meta-card sidebar-script-card">
-                        <span>{{ tr('cloneView.videoStage.scriptTitle') }}</span>
-                        <strong>{{ safeText(selectedStoryBeat?.purpose, tr('cloneView.videoStage.noScript')) }}</strong>
-                        <em>{{ tr('cloneView.videoStage.motionLabel') }}：{{ shotReferenceLabel(selectedStoryBeat) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</em>
-                      </CloneDataCard>
-                      <CloneDataCard class="meta-card sidebar-frame-card">
-                        <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
-                        <div v-if="selectedShotFrame?.imagePath" class="sidebar-frame-thumb">
-                          <img
-                            :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)"
-                            :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))"
-                          />
-                        </div>
-                        <div v-else class="sidebar-frame-thumb sidebar-frame-thumb--empty">{{ tr('cloneView.videoStage.noReferenceFrame') }}</div>
-                      </CloneDataCard>
-                      <CloneDataCard class="meta-card compact-meta-grid">
-                        <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
-                        <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</strong>
-                        <span>{{ tr('autoUi.k_68e297c888ef') }}</span>
-                        <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</strong>
-                        <span>{{ tr('autoUi.k_9d2c439d0b11') }}</span>
-                        <strong>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</strong>
-                        <span>{{ tr('cloneView.videoStage.modelLabel') }}</span>
-                        <strong>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</strong>
-                        <span>{{ tr('cloneView.videoStage.taskIdLabel') }}</span>
-                        <strong>{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</strong>
-                      </CloneDataCard>
-                      <div v-if="selectedShotVideoErrorText" class="storyboard-preview-error">
-                        <div class="storyboard-preview-error__head">
-                          <strong>{{ tr('autoUi.k_ce8a92e25f09') }}</strong>
-                          <span>{{ selectedShotVideoErrorTitle }}</span>
-                        </div>
-                        <div class="storyboard-preview-error__body">
-                          <p>{{ selectedShotVideoErrorText }}</p>
-                        </div>
-                        <div class="storyboard-preview-error__advice">
-                          <span>{{ tr('autoUi.k_aba23c4b2667') }}</span>
-                          <p>{{ selectedShotVideoErrorAdvice }}</p>
-                        </div>
-                        <div v-if="selectedShotVideoErrorAction === 'go-models' || selectedShotVideoErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
-                          <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                </CloneConsoleSidebar>
-              </div>
-            </div>
-
-            <div class="compose-fallback-bar">
-              <div class="compose-fallback-copy">
-                <strong>{{ tr('autoUi.k_1099e21fef55') }}</strong>
-                <span>{{ tr('autoUi.k_b4618efa3ca7') }}</span>
-              </div>
-              <button
-                class="primary-button small"
-                type="button"
-                :disabled="loading"
-                @click.stop="selectStage('compose')"
-              > {{ tr('autoUi.k_6a9b747fac2c') }} </button>
-            </div>
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('cloneView.videoStage.previewTitle') }}</h3>
+                  <span v-if="selectedShotOutput" class="cw-card__hint">{{ `${tr('cloneView.videoStage.columns.shot')} ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` }} · {{ formatDuration(selectedShotOutput?.durationSec) }}</span>
+                </header>
+                <div class="cw-player cw-player--portrait">
+                  <video v-if="selectedShotOutput?.videoPath" :src="mediaUrl(selectedShotOutput.videoPath)" controls preload="metadata"></video>
+                  <span v-else class="cw-canvas__empty"><Clapperboard :size="24" /><strong>{{ tr('cloneView.videoStage.emptyPreviewTitle') }}</strong><small>{{ tr('cloneView.videoStage.emptyPreviewDescription') }}</small></span>
+                </div>
+                <div class="cw-field">
+                  <span>{{ tr('cloneView.videoStage.currentShot') }}</span>
+                  <strong>{{ safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('cloneView.videoStage.notSelected')) }}</strong>
+                  <small>{{ shotScriptSummary(selectedShotOutput?.shotId) }}</small>
+                </div>
+                <div class="cw-field">
+                  <span>{{ tr('cloneView.videoStage.scriptTitle') }}</span>
+                  <strong>{{ safeText(selectedStoryBeat?.purpose, tr('cloneView.videoStage.noScript')) }}</strong>
+                  <small>{{ tr('cloneView.videoStage.motionLabel') }}：{{ shotReferenceLabel(selectedStoryBeat) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</small>
+                </div>
+                <div v-if="selectedShotFrame?.imagePath" class="cw-field">
+                  <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
+                  <span class="cw-frame__thumb cw-frame__thumb--wide"><img :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)" :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))" /></span>
+                </div>
+                <dl class="cw-kv">
+                  <div><dt>{{ tr('cloneView.videoStage.columns.status') }}</dt><dd>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_68e297c888ef') }}</dt><dd>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_9d2c439d0b11') }}</dt><dd>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</dd></div>
+                  <div><dt>{{ tr('cloneView.videoStage.modelLabel') }}</dt><dd>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</dd></div>
+                  <div><dt>{{ tr('cloneView.videoStage.taskIdLabel') }}</dt><dd class="cw-mono">{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</dd></div>
+                </dl>
+                <div v-if="selectedShotVideoErrorText" class="cw-alert">
+                  <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_ce8a92e25f09') }} · {{ selectedShotVideoErrorTitle }}</strong>
+                  <p>{{ selectedShotVideoErrorText }}</p>
+                  <small>{{ tr('autoUi.k_aba23c4b2667') }}：{{ selectedShotVideoErrorAdvice }}</small>
+                  <button v-if="selectedShotVideoErrorAction === 'go-models' || selectedShotVideoErrorAction === 'go-identity-grid'" class="vg-btn vg-btn--sm" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
+                </div>
+              </section>
+            </aside>
           </div>
 
-          <CloneStateCard
-            v-else
-            class="empty-state section-empty"
-            :title="tr('autoUi.k_b7ec5f2532fc')"
-            :description="tr('autoUi.k_7b060ff47103')"
-          />
+          <div v-if="shotVideoOutputs.length" class="cw-nextbar">
+            <div><strong>{{ tr('autoUi.k_1099e21fef55') }}</strong><span>{{ tr('autoUi.k_b4618efa3ca7') }}</span></div>
+            <button class="vg-btn vg-btn--primary" type="button" :disabled="loading" @click.stop="selectStage('compose')">{{ tr('autoUi.k_6a9b747fac2c') }}<ArrowRight :size="15" /></button>
+          </div>
+          <CloneStateCard v-else class="empty-state section-empty" :title="tr('autoUi.k_b7ec5f2532fc')" :description="tr('autoUi.k_7b060ff47103')" />
         </article>
 
-        <article v-if="visibleStageKey === 'compose'" class="panel panel-compose-stage">
-          <CloneStageHeader tag="" :title="tr('autoUi.k_780ee868bcca')" :description="tr('autoUi.k_302215860a11')">
-            <template #aux>
-              <span>{{ tr('autoUi.k_794c95d23fb2') }}{{ gatePassAllowed ? tr('autoUi.k_dcc4233255ab') : tr('autoUi.k_a00db105bd49') }}</span>
-              <span>{{ finalOutputPath ? tr('autoUi.k_26876a1765af') : tr('autoUi.k_942a589f6e38') }}</span>
-            </template>
-          </CloneStageHeader>
+        <!-- ================= 06 成片合成 ================= -->
+        <article v-if="visibleStageKey === 'compose'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">06</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_780ee868bcca') }}</h2>
+              <p>{{ tr('autoUi.k_302215860a11') }}</p>
+            </div>
+            <div class="cw-head__meta">
+              <span class="cw-state" :class="gatePassAllowed ? 'cw-state--ok' : 'cw-state--run'"><i />{{ tr('autoUi.k_794c95d23fb2') }}{{ gatePassAllowed ? tr('autoUi.k_dcc4233255ab') : tr('autoUi.k_a00db105bd49') }}</span>
+              <span class="cw-state" :class="finalOutputPath ? 'cw-state--ok' : 'cw-state--idle'"><i />{{ finalOutputPath ? tr('autoUi.k_26876a1765af') : tr('autoUi.k_942a589f6e38') }}</span>
+            </div>
+          </header>
 
-          <div class="compose-studio">
-            <div class="compose-studio__main">
-              <section class="compose-stage-card">
-                <div class="compose-stage-card__media" :class="composeAspectClass" @contextmenu.prevent="hasFreshFinalCompose && finalOutputPath && revealFinalOutput()">
+          <div class="cw-split cw-split--compose">
+            <div class="cw-stack">
+              <section class="cw-card cw-card--theater">
+                <div class="cw-theater" :class="composeAspectClass" @contextmenu.prevent="hasFreshFinalCompose && finalOutputPath && revealFinalOutput()">
                   <video v-if="composePreviewPath" :src="composePreviewMediaUrl" :poster="composePreviewPosterUrl || undefined" controls preload="metadata"></video>
-                  <CloneStateCard
-                    v-else
-                    class="empty-state"
-                    :title="tr('autoUi.k_0ac754b27412')"
-                    :description="composePreviewHint"
-                  />
+                  <span v-else class="cw-canvas__empty"><Film :size="26" /><strong>{{ tr('autoUi.k_0ac754b27412') }}</strong><small>{{ composePreviewHint }}</small></span>
                 </div>
               </section>
 
-              <section class="compose-sequence-card">
-                <div class="compose-sequence-card__head">
-                  <div class="compose-list-copy">
-                    <strong>{{ tr('autoUi.k_ab7bce9cbbe7') }}</strong>
-                    <p>{{ tr('autoUi.k_4cdcbc82fa16') }}</p>
-                  </div>
-                  <div class="compose-list-actions">
-                    <span class="mini-pill mini-pill--ghost">{{ shotVideoOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
-                    <button class="ghost-button small" type="button" :disabled="loading || !selectedShotOutput" @click="replaceShotVideo(selectedShotOutput?.shotId || '')">{{ tr('autoUi.k_e33ea5f87622') }}</button>
-                  </div>
-                </div>
-
-                <div v-if="shotVideoOutputs.length" class="compose-sequence-strip">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_ab7bce9cbbe7') }}</h3>
+                  <span class="cw-card__hint">{{ tr('autoUi.k_4cdcbc82fa16') }}</span>
+                  <span class="cw-count-mark">{{ shotVideoOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
+                </header>
+                <div v-if="shotVideoOutputs.length" class="cw-strip">
                   <div
                     v-for="item in shotVideoOutputs"
                     :key="`${item.shotId}-studio`"
                     v-memo="[item.shotId, item.videoPath, item.status, item.error, item.durationSec, selectedShotOutput?.shotId === item.shotId, shotFrameMap[item.shotId]?.imagePath]"
-                    class="compose-sequence-item"
-                    :class="{ active: selectedShotOutput?.shotId === item.shotId }"
+                    class="cw-strip__item"
+                    :class="{ 'is-active': selectedShotOutput?.shotId === item.shotId }"
+                    role="button"
+                    tabindex="0"
                     @click="selectedShotId = item.shotId"
                     @keydown.enter.prevent="selectedShotId = item.shotId"
                     @keydown.space.prevent="selectedShotId = item.shotId"
-                    role="button"
-                    tabindex="0"
                   >
-                    <span class="compose-sequence-item__index">{{ (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }}</span>
-                    <span class="compose-sequence-item__thumb">
-                      <img
-                        v-if="shotFrameMap[item.shotId]?.imagePath"
-                        :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)"
-                        alt="shot-frame"
-                        loading="lazy"
-                      />
-                      <span v-else>{{ tr('autoUi.k_6fd0592e6878') }}</span>
+                    <span class="cw-strip__media">
+                      <img v-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)" alt="shot-frame" loading="lazy" />
+                      <span v-else class="cw-frame__empty">{{ tr('autoUi.k_6fd0592e6878') }}</span>
+                      <b>{{ (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }}</b>
                     </span>
-                    <div class="compose-sequence-item__meta">
-                      <strong>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_24f7d6982256', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 })) }}</strong>
-                      <small>{{ formatDuration(item.durationSec) }}</small>
-                    </div>
+                    <strong>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_24f7d6982256', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 })) }}</strong>
+                    <small>{{ formatDuration(item.durationSec) }}</small>
                   </div>
                 </div>
-
-                <div v-if="selectedShotOutput" class="compose-sequence-detail">
-                  <div class="compose-sequence-detail__copy">
-                    <span class="panel-tag">{{ tr('autoUi.k_103c08e0b996') }}</span>
+                <div v-if="selectedShotOutput" class="cw-detailbar">
+                  <div>
+                    <small>{{ tr('autoUi.k_103c08e0b996') }}</small>
                     <strong>{{ safeText(shotLabel(selectedShotOutput.shotId), tr('autoUi.k_103c08e0b996')) }}</strong>
-                    <small>{{ shotScriptSummary(selectedShotOutput.shotId) }}</small>
+                    <span>{{ shotScriptSummary(selectedShotOutput.shotId) }}</span>
                   </div>
-                  <div class="compose-sequence-detail__actions">
-                    <button
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="loading || !selectedShotOutput"
-                      @click="selectedShotOutput && replaceShotVideo(selectedShotOutput.shotId)"
-                    > {{ tr('autoUi.k_e33ea5f87622') }} </button>
-                    <button
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="loading || !canContinueSyncShot(selectedShotOutput)"
-                      @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"
-                    > {{ tr('autoUi.k_0f80598c1ffa') }} </button>
-                    <button
-                      v-if="canRepairShotTaskId(selectedShotOutput)"
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="loading || !current?.id"
-                      @click="refreshRemoteStatus"
-                    > {{ tr('autoUi.k_c669d0d0cdfc') }} </button>
+                  <div class="cw-btnrow">
+                    <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !selectedShotOutput" @click="selectedShotOutput && replaceShotVideo(selectedShotOutput.shotId)"><Replace :size="13" />{{ tr('autoUi.k_e33ea5f87622') }}</button>
+                    <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !canContinueSyncShot(selectedShotOutput)" @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"><Search :size="13" />{{ tr('autoUi.k_0f80598c1ffa') }}</button>
+                    <button v-if="canRepairShotTaskId(selectedShotOutput)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
                   </div>
                 </div>
-
-                <CloneStateCard
-                  v-else
-                  class="empty-state section-empty"
-                  :title="tr('autoUi.k_52198bfdbee3')"
-                  :description="tr('autoUi.k_fcdc361d35ed')"
-                />
+                <CloneStateCard v-else class="empty-state section-empty" :title="tr('autoUi.k_52198bfdbee3')" :description="tr('autoUi.k_fcdc361d35ed')" />
               </section>
             </div>
 
-            <aside class="compose-studio__side">
-              <section class="compose-side-card final-delivery-side">
-                <div class="compose-side-card__head">
-                  <strong>{{ tr('autoUi.k_7aaa2f87edf4') }}</strong>
-                  <small>{{ tr('autoUi.k_df429736ba90') }}</small>
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card cw-card--accent">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_09d1dbd189c8') }}</h3></header>
+                <div class="cw-metrics cw-metrics--3">
+                  <div class="cw-metric"><span>{{ tr('autoUi.k_29d0552d2e4c') }}</span><strong>{{ composeDurationDisplay }}</strong></div>
+                  <div class="cw-metric"><span>{{ tr('autoUi.k_fd20702c73d1') }}</span><strong>{{ composeEstimatedSize }}</strong></div>
+                  <div class="cw-metric"><span>{{ tr('autoUi.k_a9704e1997b9') }}</span><strong :title="composeExportTimeText">{{ composeExportTimeText }}</strong></div>
                 </div>
-                <div class="compose-option-group">
+                <button class="vg-btn vg-btn--primary vg-btn--block vg-btn--lg" type="button" :disabled="!hasFreshFinalCompose || !finalOutputPath" @click="revealFinalOutput"><Download :size="16" />{{ composeExportActionLabel }}</button>
+                <div class="cw-btnrow cw-btnrow--fill">
+                  <button class="vg-btn" :class="{ 'cw-warn': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo"><RefreshCw :size="14" />{{ finalButtonLabel }}</button>
+                  <button class="vg-btn" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio"><Send :size="14" />{{ tr('autoUi.k_f0effeae0cf7') }}</button>
+                </div>
+              </section>
+
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_7aaa2f87edf4') }}</h3>
+                  <span class="cw-card__hint">{{ tr('autoUi.k_df429736ba90') }}</span>
+                </header>
+                <div class="cw-field">
                   <span>{{ tr('autoUi.k_305c965ad310') }}</span>
-                  <div class="compose-output-dir">
-                    <strong>{{ finalOutputDirText }}</strong>
-                    <button class="ghost-button small" type="button" :disabled="loading" @click="pickComposeOutputDir">{{ tr('autoUi.k_ed358091bc9c') }}</button>
+                  <div class="cw-path">
+                    <FolderOpen :size="14" /><strong :title="finalOutputDirText">{{ finalOutputDirText }}</strong>
+                    <button class="vg-btn vg-btn--sm" type="button" :disabled="loading" @click="pickComposeOutputDir">{{ tr('autoUi.k_ed358091bc9c') }}</button>
                   </div>
                 </div>
               </section>
 
-              <section class="compose-side-card compose-estimate-card">
-                <div class="compose-side-card__head">
-                  <strong>{{ tr('autoUi.k_09d1dbd189c8') }}</strong>
-                </div>
-                <div class="compose-export-grid">
-                  <div class="compose-export-stat">
-                    <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
-                    <strong>{{ composeDurationDisplay }}</strong>
-                  </div>
-                  <div class="compose-export-stat">
-                    <span>{{ tr('autoUi.k_fd20702c73d1') }}</span>
-                    <strong>{{ composeEstimatedSize }}</strong>
-                  </div>
-                  <div class="compose-export-stat">
-                    <span>{{ tr('autoUi.k_a9704e1997b9') }}</span>
-                    <strong>{{ composeExportTimeText }}</strong>
-                  </div>
-                </div>
-                <div class="compose-side-actions">
-                  <button class="primary-button compose-export-button" type="button" :disabled="!hasFreshFinalCompose || !finalOutputPath" @click="revealFinalOutput">
-                    {{ composeExportActionLabel }}
-                  </button>
-                  <button class="ghost-button compose-side-button" :class="{ 'is-warning': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo">
-                    {{ finalButtonLabel }}
-                  </button>
-                  <button class="ghost-button compose-side-button" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio"> {{ tr('autoUi.k_f0effeae0cf7') }} </button>
-                </div>
+              <div v-if="localComposeErrorText" class="cw-alert">
+                <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_408228b05be1') }}</strong>
+                <p>{{ localComposeErrorText }}</p>
+              </div>
+
+              <section v-if="composeSummaryStats || composeHealthFlags.length || composeHealthRecommendations.length || composeHealthVerdictText" class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_906e2b8b14d2') }}</h3>
+                  <span class="cw-state" :class="composeHealthFlagLabels.length ? 'cw-state--run' : 'cw-state--ok'"><i />{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.length : '✓' }}</span>
+                </header>
+                <p v-if="composeHealthVerdictText" class="cw-body-copy cw-body-copy--strong">{{ composeHealthVerdictText }}</p>
+                <div class="cw-words"><em v-for="label in composeHealthFlagLabels.length ? composeHealthFlagLabels : [tr('autoUi.k_438a2458e735')]" :key="label">{{ label }}</em></div>
+                <dl class="cw-kv">
+                  <div v-if="composeSummaryStats?.totalShots"><dt>{{ tr('autoUi.k_e3c71dbd0f6e').replace(/[:：]\s*$/, '') }}</dt><dd>{{ composeSummaryStats.totalShots }}{{ tr('autoUi.k_bfbf845243b4') }}{{ composeStageCountText }}</dd></div>
+                  <div v-if="composeAverageClipDurationText"><dt>{{ tr('autoUi.k_5b8be1da2596').replace(/[:：]\s*$/, '') }}</dt><dd>{{ composeAverageClipDurationText }}</dd></div>
+                </dl>
+                <small v-if="composeSummaryStats" class="cw-note">{{ tr('autoUi.k_c6965fe469f4') }}{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}{{ tr('autoUi.k_112fd0c2aff9') }}{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}{{ tr('autoUi.k_e30d73d034d5') }}{{ Number(composeSummaryStats.productPriorityCount || 0) }}{{ tr('autoUi.k_e985a4d66628') }}{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
+                <ul v-if="composeHealthRecommendations.length" class="cw-advice"><li v-for="item in composeHealthRecommendations" :key="item">{{ item }}</li></ul>
               </section>
 
-              <CloneDataCard v-if="localComposeErrorText" class="meta-card" tone="danger">
-                <span>{{ tr('autoUi.k_408228b05be1') }}</span>
-                <strong>{{ localComposeErrorText }}</strong>
-              </CloneDataCard>
-              <CloneDataCard v-if="composeSummaryStats || composeHealthFlags.length || composeHealthRecommendations.length || composeHealthVerdictText" class="meta-card">
-                <span>{{ tr('autoUi.k_906e2b8b14d2') }}</span>
-                <strong v-if="composeHealthVerdictText">{{ composeHealthVerdictText }}</strong>
-                <strong>{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.join(' / ') : tr('autoUi.k_438a2458e735') }}</strong>
-                <small v-if="composeSummaryStats?.totalShots">{{ tr('autoUi.k_e3c71dbd0f6e') }}{{ composeSummaryStats.totalShots }}{{ tr('autoUi.k_bfbf845243b4') }}{{ composeStageCountText }}</small>
-                <small v-if="composeAverageClipDurationText">{{ tr('autoUi.k_5b8be1da2596') }}{{ composeAverageClipDurationText }}</small>
-                <small v-if="composeSummaryStats">{{ tr('autoUi.k_c6965fe469f4') }}{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}{{ tr('autoUi.k_112fd0c2aff9') }}{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}{{ tr('autoUi.k_e30d73d034d5') }}{{ Number(composeSummaryStats.productPriorityCount || 0) }}{{ tr('autoUi.k_e985a4d66628') }}{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
-                <small v-for="item in composeHealthRecommendations" :key="item">{{ item }}</small>
-              </CloneDataCard>
-              <CloneDataCard v-if="previewPipelineReportPath" class="meta-card">
+              <div v-if="previewPipelineReportPath" class="cw-field cw-field--row cw-field--plain">
                 <span>{{ tr('autoUi.k_68ad7f89e687') }}</span>
-                <strong>{{ shortPath(previewPipelineReportPath) }}</strong>
-              </CloneDataCard>
+                <strong class="cw-mono" :title="previewPipelineReportPath">{{ shortPath(previewPipelineReportPath) }}</strong>
+              </div>
+              <p class="cw-banner"><Lightbulb :size="14" />{{ tr('autoUi.k_f5d8e9430ad5') }} {{ tr('autoUi.k_34be97c09b46') }}</p>
             </aside>
           </div>
-
-          <section class="compose-tip-card">
-            <span class="compose-tip-card__icon">✧</span>
-            <div>
-              <strong>{{ tr('autoUi.k_ce6897595b74') }}</strong>
-              <p>{{ tr('autoUi.k_f5d8e9430ad5') }}</p>
-              <p>{{ tr('autoUi.k_34be97c09b46') }}</p>
-            </div>
-          </section>
         </article>
-
       </div>
-
     </section>
 
     <RuntimeLogDialog
@@ -5423,79 +4970,6 @@ onUnmounted(() => {
           </CloneMediaCard>
         </div>
         <div v-else class="prompt-preview-empty"> {{ tr('autoUi.k_4638e45ae2ad') }} </div>
-      </div>
-    </div>
-
-    <div v-if="geelarkPublishModalOpen" class="modal-mask" @click.self="geelarkPublishModalOpen = false">
-      <div class="modal-panel">
-        <div class="panel-head">
-          <div>
-            <span class="panel-tag">{{ tr('autoUi.k_6adb64a596d8') }}</span>
-            <h2>{{ tr('autoUi.k_533305d1af7c') }}</h2>
-          </div>
-          <button class="ghost-button small" type="button" @click="geelarkPublishModalOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
-        </div>
-
-        <div class="publish-modal-grid">
-          <label class="publish-field publish-field--full">
-            <span>{{ tr('autoUi.k_f9d9425f7924') }}</span>
-            <strong>{{ safeText(shortPath(finalOutputPath), tr('autoUi.k_40cf5c1ab780')) }}</strong>
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_f6afab4f2d29') }}</span>
-            <select v-model="geelarkPublishForm.publishAccountId" class="field-control">
-              <option value="">{{ tr('autoUi.k_107c18a5bb99') }}</option>
-              <option v-for="item in geelarkAccounts" :key="item.id" :value="item.id">
-                {{ item.name }}
-              </option>
-            </select>
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_3f8afdc8504e') }}</span>
-            <strong>{{ selectedGeelarkAccount?.cloudPhoneName || tr('autoUi.k_3bf179d8d045') }}</strong>
-          </label>
-
-          <label class="publish-field publish-field--full">
-            <span>{{ tr('autoUi.k_d6c3ef6ebcd3') }}</span>
-            <textarea v-model="geelarkPublishForm.videoDesc" class="field-control field-control--textarea" :placeholder="tr('autoUi.k_5a38b0c89b33')"></textarea>
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_dffd0cb74c18') }}</span>
-            <input v-model="geelarkPublishForm.productId" class="field-control" type="text" :placeholder="tr('autoUi.k_53e32830a538')" />
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_d415beaceafd') }}</span>
-            <input v-model="geelarkPublishForm.productTitle" class="field-control" type="text" :placeholder="tr('autoUi.k_53e32830a538')" />
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_9c735206b1c6') }}</span>
-            <input v-model="geelarkPublishForm.scheduleAt" class="field-control" type="datetime-local" />
-          </label>
-
-          <button
-            type="button"
-            class="toggle-button"
-            :class="{ 'is-active': geelarkPublishForm.needShareLink }"
-            @click="geelarkPublishForm.needShareLink = !geelarkPublishForm.needShareLink"
-          >
-            <span>{{ geelarkPublishForm.needShareLink ? tr('autoUi.k_485e3bbb5e66') : tr('autoUi.k_e2f19210dbbf') }}</span>
-          </button>
-        </div>
-
-        <div v-if="geelarkPublishMessage" class="inline-form-message">
-          {{ geelarkPublishMessage }}
-        </div>
-
-        <div class="panel-actions">
-          <button class="primary-button" type="button" :disabled="geelarkPublishSubmitting" @click="submitGeelarkPublish">
-            {{ geelarkPublishSubmitting ? tr('autoUi.k_3a1624e3e681') : tr('autoUi.k_e9d29123e9e3') }}
-          </button>
-        </div>
       </div>
     </div>
   </div>

@@ -6,8 +6,6 @@ html[data-app-theme] body #app .app-shell {
 html[data-app-theme] body #app .app-shell :is(
   .billing-page,
   .inventory-page,
-  .publish-center-page,
-  .geelark-settings-page,
   .clone-task-list-page,
   .clone-page,
   .live-photo-page,
@@ -383,7 +381,6 @@ html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-s
   .live-slicer-head,
   .preview-layout,
   .preview-panel,
-  .publish-center-page,
   .publisher-page,
   .music-library-dialog__panel,
   .asset-picker-dialog__panel,
@@ -403,8 +400,7 @@ html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-s
   .products-page,
   .templates-page,
   .live-slicer-workbench,
-  .tiktok-page,
-  .publish-center-page
+  .tiktok-page
 ) :is(h1, h2, h3, h4, strong, label, .text-white, .text-slate-900) {
   color: var(--theme-text) !important;
   -webkit-text-fill-color: var(--theme-text) !important;
@@ -416,8 +412,7 @@ html:is([data-app-theme='light-teal'], [data-app-theme='mono']) body #app .app-s
   .products-page,
   .templates-page,
   .live-slicer-workbench,
-  .tiktok-page,
-  .publish-center-page
+  .tiktok-page
 ) :is(p, small, .text-slate-300, .text-slate-400, .text-slate-500, .text-gray-500, .text-muted) {
   color: var(--theme-text-muted) !important;
   -webkit-text-fill-color: var(--theme-text-muted) !important;
@@ -1146,17 +1141,6 @@ html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :
   -webkit-text-fill-color: var(--theme-text) !important;
 }
 
-html[data-app-theme='light-teal'] body #app .app-shell .publish-center-page :is(
-  .music-library-button,
-  .publisher-music-library-button,
-  [class*='music-library']
-) {
-  background: var(--theme-panel) !important;
-  border-color: var(--theme-border-control) !important;
-  color: var(--theme-text) !important;
-  box-shadow: none !important;
-}
-
 html[data-app-theme='light-teal'] body #app .app-shell .live-slicer-workbench .live-eyebrow,
 html[data-app-theme='light-teal'] body #app .app-shell .live-slicer-workbench .live-kicker {
   color: var(--theme-accent) !important;
@@ -1617,13 +1601,6 @@ html[data-app-theme='light-teal'] body #app .app-shell .production-create-page :
   border-color: var(--theme-border-control) !important;
   color: var(--theme-text) !important;
   -webkit-text-fill-color: var(--theme-text) !important;
-}
-
-html[data-app-theme='light-teal'] body #app .app-shell .publish-center-page :is(.music-library-button, .publisher-music-library-button, [class*='music-library']) {
-  background: var(--theme-panel) !important;
-  border-color: var(--theme-border-control) !important;
-  color: var(--theme-text) !important;
-  box-shadow: none !important;
 }
 
 html[data-app-theme='light-teal'] body #app .app-shell .tiktok-page.publish-mode .publisher-music-library-button {

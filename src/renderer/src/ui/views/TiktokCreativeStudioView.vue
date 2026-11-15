@@ -7,8 +7,13 @@ import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
 import {
+  Activity,
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowRight,
   Captions,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -17,12 +22,14 @@ import {
   Code2,
   Download,
   FileImage,
+  FileUp,
   Filter,
   FolderOpen,
   Grid2x2,
   Headphones,
   Heart,
   ImagePlus,
+  Info,
   KeyRound,
   LayoutGrid,
   List,
@@ -34,6 +41,7 @@ import {
   Pause,
   Pencil,
   Plus,
+  Power,
   Play,
   RefreshCcw,
   ScanLine,
@@ -478,6 +486,20 @@ const filteredItems = computed(() =>
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(filteredItems.value.length / libraryPageSize)),
 );
+const libraryFilterOptions = ["all", "running", "failed", "paused", "success_not_exported", "success_exported", "success_not_subtitled"] as const;
+const libraryFilterCounts = computed(() => {
+  const counts: Record<string, number> = { all: allShots.value.length, running: 0, failed: 0, paused: 0, success_not_exported: 0, success_exported: 0, success_not_subtitled: 0 };
+  for (const { shot } of allShots.value) {
+    if (shot.status === "running" || shot.remoteStatus === "processing" || shot.remoteStatus === "queued") counts.running += 1;
+    if (shot.status === "failed") counts.failed += 1;
+    if (shot.status === "requires_manual" || shot.remoteStatus === "paused_auth" || shot.remoteStatus === "paused_error") counts.paused += 1;
+    if (shot.status === "completed") {
+      if (shot.exportedVideoPath) counts.success_exported += 1; else counts.success_not_exported += 1;
+      if (!shot.subtitleVideoPath && !shot.subtitleAppliedAt) counts.success_not_subtitled += 1;
+    }
+  }
+  return counts;
+});
 const pagedItems = computed(() =>
   filteredItems.value.slice(
     (libraryPage.value - 1) * libraryPageSize,
@@ -962,7 +984,7 @@ function statusTone(shot: Shot) {
         ? "status-paused"
         : "status-processing";
 }
-function libraryFilterLabel() {
+function libraryFilterLabel(value: string = libraryFilter.value) {
   const labels: Record<string, string> = {
     all: tr("autoUi.k_778fc8f99453"),
     failed: tr("autoUi.k_3e3c8068bb0e"),
@@ -973,7 +995,15 @@ function libraryFilterLabel() {
     running: tr("autoUi.k_fcb979ef0b91"),
     paused: tr("autoUi.k_130448bce675"),
   };
-  return labels[libraryFilter.value] || labels.all;
+  return labels[value] || labels.all;
+}
+function shotStateClass(shot: Shot) {
+  const tone = statusTone(shot);
+  return tone === "status-completed" ? "ts-state--ok" : tone === "status-failed" ? "ts-state--err" : tone === "status-paused" ? "ts-state--warn" : "ts-state--run";
+}
+function setLibraryFilter(value: typeof libraryFilter.value) {
+  libraryFilter.value = value;
+  libraryPage.value = 1;
 }
 function accountState(account: Account) {
   if (!account.enabled) return tr("autoUi.k_6c7dcbb73a59");
@@ -988,6 +1018,13 @@ function accountState(account: Account) {
     });
   if (account.state === "error") return tr("autoUi.k_92d705e913f9");
   return tr("autoUi.k_b681ca1274b8");
+}
+function accountTone(account: Account) {
+  if (!account.enabled) return "";
+  if (account.state === "ready") return "ts-state--ok";
+  if (account.state === "insufficient_credit") return "ts-state--warn";
+  if (account.state === "expired" || account.state === "error") return "ts-state--err";
+  return "ts-state--run";
 }
 function setPromptVersion(id: string) {
   const item = promptVersions.value.find((version) => version.id === id);
@@ -2975,63 +3012,39 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="tiktok-page plugin-workspace-standard"
-    :class="{ 'publish-mode': activeTab === 'publish' }"
+    :class="{ 'publish-mode': activeTab === 'publish', 'ts-page': !props.publisherOnly && activeTab !== 'publish' }"
   >
-    <section v-if="!props.publisherOnly" class="live-workspace-head">
-      <div class="live-workspace-intro">
-        <div class="live-workspace-icon"><Sparkles class="h-5 w-5" /></div>
-        <div class="live-workspace-copy">
+    <section v-if="!props.publisherOnly" class="vg-scope ts-top">
+      <header class="ts-head">
+        <div class="ts-head__icon"><Sparkles :size="22" /></div>
+        <div class="ts-head__text">
           <h1>TikTok Creative Studio</h1>
           <p>{{ tr("autoUi.k_c5d1c075a08a") }}</p>
         </div>
-        <div class="live-workspace-actions">
-          <button
-            class="ghost-button back-button"
-            type="button"
-            @click="router.push('/plugins')"
-          >
-            <ChevronLeft class="h-4 w-4" />{{
-              tr("autoUi.k_3966f952c1c0")
-            }}</button
-          ><button
-            class="ghost-button refresh-button"
-            type="button"
-            :disabled="loading"
-            @click="refresh()"
-          >
-            <RefreshCcw class="h-4 w-4" />{{ tr("autoUi.k_38108eaa1d32") }}
+        <div class="ts-head__actions">
+          <button class="vg-btn" type="button" @click="router.push('/plugins')">
+            <ChevronLeft :size="15" />{{ tr("autoUi.k_3966f952c1c0") }}
+          </button>
+          <button class="vg-btn" type="button" :disabled="loading" @click="refresh()">
+            <RefreshCcw :size="15" :class="{ 'vg-spin': loading }" />{{ tr("autoUi.k_38108eaa1d32") }}
           </button>
         </div>
-      </div>
-      <section class="tab-bar live-workspace-tabs">
-        <button
-          class="tab-button"
-          :class="{ active: activeTab === 'reference' }"
-          type="button"
-          @click="setActiveTab('reference')"
-        >
-          <ImagePlus class="h-4 w-4" />{{ tr("autoUi.k_3a73e3f67a57") }}</button
-        ><button
-          class="tab-button"
-          :class="{ active: activeTab === 'library' }"
-          type="button"
-          @click="setActiveTab('library')"
-        >
-          <FolderOpen class="h-4 w-4" />{{ tr("autoUi.k_21eb39d9da89") }}
-          <span class="live-tab-count">{{ completedCount }}</span></button
-        ><button
-          class="tab-button account-tab"
-          type="button"
-          @click="accountDialogOpen = true"
-        >
-          <KeyRound class="h-4 w-4" />{{ tr("autoUi.k_9d4ca7f307e7") }}
-          <span class="live-tab-count">{{ accounts.length }}</span>
+      </header>
+      <nav class="ts-tabs" aria-label="Creative Studio">
+        <button class="ts-tab" :class="{ 'is-active': activeTab === 'reference' }" type="button" @click="setActiveTab('reference')">
+          <ImagePlus :size="15" />{{ tr("autoUi.k_3a73e3f67a57") }}
         </button>
-        <button class="tab-button" type="button" @click="retrySettingsOpen = true">
-          <Settings class="h-4 w-4" />{{ tr("tiktokCreative.retry.guard") }}
-          <span class="live-tab-count">{{ creativeSettings.imageRetryLimit }}</span>
+        <button class="ts-tab" :class="{ 'is-active': activeTab === 'library' }" type="button" @click="setActiveTab('library')">
+          <FolderOpen :size="15" />{{ tr("autoUi.k_21eb39d9da89") }}<em>{{ completedCount }}</em>
         </button>
-      </section>
+        <span class="ts-tabs__spacer" />
+        <button class="ts-util" type="button" @click="accountDialogOpen = true">
+          <KeyRound :size="14" />{{ tr("autoUi.k_9d4ca7f307e7") }}<em>{{ accounts.length }}</em>
+        </button>
+        <button class="ts-util" type="button" @click="retrySettingsOpen = true">
+          <ShieldCheck :size="14" />{{ tr("tiktokCreative.retry.guard") }}<em>{{ creativeSettings.imageRetryLimit }}</em>
+        </button>
+      </nav>
     </section>
     <div v-if="notice" class="publisher-toast publisher-toast-success" role="status">
       <CheckCircle2 class="h-4 w-4" /><span>{{ notice }}</span>
@@ -5286,954 +5299,430 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-    <section v-if="activeTab === 'reference'" class="workspace-grid">
-      <article class="panel-card reference-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">1</div>
-            <strong>{{ tr("autoUi.k_70076b55a369") }}</strong>
-          </div>
-          <span class="panel-head-note">{{ tr("autoUi.k_e6f568ddd540") }}</span>
-        </div>
-        <div class="generation-mode-control">
-          <span class="generation-mode-control__label">{{ tr("tiktokCreative.generationMode.label") }}</span>
-          <div class="generation-mode-control__options" role="group" :aria-label="tr('tiktokCreative.generationMode.label')">
-            <button type="button" :class="{ active: generationMode === 'reference_to_video' }" @click="generationMode = 'reference_to_video'">
-              {{ tr("tiktokCreative.generationMode.referenceToVideo") }}
+    <section v-if="activeTab === 'reference'" class="vg-scope ts-create">
+      <div class="ts-main">
+        <!-- reference images -->
+        <article class="ts-card ts-block">
+          <header class="ts-block__head">
+            <div class="ts-block__title">
+              <h2>{{ tr("autoUi.k_2132324c5c89") }}<em v-if="referenceImagePaths.length">{{ referenceImagePaths.length }}</em></h2>
+              <p>{{ tr("autoUi.k_4b7af20133a5") }}</p>
+            </div>
+            <div class="ts-block__tools">
+              <button class="vg-btn vg-btn--sm" type="button" data-testid="tiktok-pick-reference" @click="pickReferenceImages"><ImagePlus :size="14" />{{ tr("autoUi.k_f961c4d8b29f") }}</button>
+              <button class="vg-btn vg-btn--sm" type="button" @click="pickReferenceImagesFromAssetLibrary"><FolderOpen :size="14" />从素材库选图</button>
+              <button class="vg-btn vg-btn--sm" type="button" @click="openMaterialPicker"><LayoutGrid :size="14" />{{ tr("autoUi.k_f94d4eba3cbe") }}<em class="ts-btn-count">{{ materials.length }}</em></button>
+            </div>
+          </header>
+
+          <div v-if="referenceImagePaths.length" class="ts-refs">
+            <figure v-for="path in referenceImagePaths" :key="path" class="ts-ref" :title="path">
+              <img :src="previewSrc(path)" alt="reference" />
+              <figcaption>{{ fileName(path) }}</figcaption>
+              <button type="button" class="ts-ref__remove" :title="tr('autoUi.k_3755f56f2f83')" @click="referenceImagePaths = referenceImagePaths.filter((item) => item !== path)"><X :size="12" /></button>
+            </figure>
+            <button type="button" class="ts-ref ts-ref--add" @click="pickReferenceImages">
+              <span><Plus :size="20" /></span>
+              <small>{{ tr("autoUi.k_f961c4d8b29f") }}</small>
             </button>
-            <button type="button" :class="{ active: generationMode === 'image_to_video' }" @click="generationMode = 'image_to_video'">
-              {{ tr("tiktokCreative.generationMode.imageToVideo") }}
-            </button>
           </div>
-          <div v-if="generationMode === 'image_to_video'" class="generation-mode-control__details">
-            <div class="generation-mode-control__copy">
-              <span class="generation-mode-control__eyebrow">{{ tr("tiktokCreative.generationMode.zoomPercentLabel") }}</span>
-              <small class="generation-mode-control__hint">
-                {{ tr("tiktokCreative.generationMode.imageToVideoHint", { p0: zoomPercent }) }}
-              </small>
-            </div>
-            <div class="generation-mode-control__zoom" role="group" :aria-label="tr('tiktokCreative.generationMode.zoomPercentLabel')">
-              <button
-                v-for="option in zoomPercentOptions"
-                :key="option"
-                type="button"
-                :class="{ active: zoomPercent === option }"
-                @click="zoomPercent = option"
-              >{{ option }}%</button>
-            </div>
-          </div>
-        </div>
-        <div class="field-stack">
-          <div class="field">
-            <span>{{ tr("autoUi.k_2132324c5c89") }}</span>
-            <div class="reference-source-grid">
-              <button
-                class="reference-source-card"
-                type="button"
-                data-testid="tiktok-pick-reference"
-                @click="pickReferenceImages"
-              >
-                <template v-if="referenceImagePaths[0]"
-                  ><img
-                    class="reference-source-card__preview"
-                    :src="previewSrc(referenceImagePaths[0])"
-                    alt="reference"
-                  />
-                  <div class="reference-source-card__copy">
-                    <strong>{{ tr("autoUi.k_a2256c3c5407") }}</strong
-                    ><small>{{ fileName(referenceImagePaths[0]) }}</small
-                    ><span
-                      >{{ referenceImagePaths.length }}
-                      {{ tr("autoUi.k_279cc8e03fe0") }}</span
-                    >
-                  </div></template
-                ><template v-else
-                  ><div class="reference-source-card__icon">
-                    <ImagePlus class="h-7 w-7" />
-                  </div>
-                  <div class="reference-source-card__copy">
-                    <strong>{{ tr("autoUi.k_f961c4d8b29f") }}</strong
-                    ><small>{{ tr("autoUi.k_4b7af20133a5") }}</small>
-                  </div></template
-                ></button
-              ><button
-                class="reference-source-card"
-                type="button"
-                @click="pickReferenceImagesFromAssetLibrary"
-              >
-                <div class="reference-source-card__icon">
-                  <ImagePlus class="h-7 w-7" />
+          <button v-else class="ts-dropzone" type="button" @click="pickReferenceImages">
+            <span class="ts-dropzone__icon"><ImagePlus :size="22" /></span>
+            <span class="ts-dropzone__copy">
+              <strong>{{ tr("autoUi.k_f961c4d8b29f") }}</strong>
+              <small>{{ tr("autoUi.k_4b7af20133a5") }} · 也可以从素材库或衍生图中选择</small>
+            </span>
+          </button>
+          <footer v-if="referenceImagePaths.length" class="ts-block__foot">
+            <span>{{ referenceImagePaths.length }} {{ tr("autoUi.k_279cc8e03fe0") }}</span>
+            <button type="button" class="ts-link" @click="referenceImagePaths = []"><Trash2 :size="12" />清空</button>
+          </footer>
+        </article>
+
+        <!-- generation settings -->
+        <article class="ts-card ts-block">
+          <header class="ts-block__head">
+            <div class="ts-block__title"><h2>生成设置</h2><p>{{ tr("autoUi.k_e6f568ddd540") }}</p></div>
+          </header>
+          <div class="ts-form">
+            <div class="ts-form__row">
+              <span class="ts-form__label">{{ tr("tiktokCreative.generationMode.label") }}</span>
+              <div class="ts-form__control">
+                <div class="ts-seg" role="group" :aria-label="tr('tiktokCreative.generationMode.label')">
+                  <button type="button" :class="{ 'is-on': generationMode === 'reference_to_video' }" @click="generationMode = 'reference_to_video'">{{ tr("tiktokCreative.generationMode.referenceToVideo") }}</button>
+                  <button type="button" :class="{ 'is-on': generationMode === 'image_to_video' }" @click="generationMode = 'image_to_video'">{{ tr("tiktokCreative.generationMode.imageToVideo") }}</button>
                 </div>
-                <div class="reference-source-card__copy">
-                  <strong>从素材库选图</strong>
-                  <small>选择电脑或手机上传的图片</small>
-                </div>
-              </button
-              ><button
-                class="reference-source-card"
-                type="button"
-                @click="openMaterialPicker"
-              >
-                <div class="reference-source-card__icon">
-                  <LayoutGrid class="h-7 w-7" />
-                </div>
-                <div class="reference-source-card__copy">
-                  <strong>{{ tr("autoUi.k_f94d4eba3cbe") }}</strong
-                  ><small>{{ tr("autoUi.k_64b63cea9090") }}</small
-                  ><span
-                    >{{ materials.length }}
-                    {{ tr("autoUi.k_2aac253f0f33") }}</span
-                  >
-                </div>
-              </button>
-            </div>
-          </div>
-          <div v-if="referenceImagePaths.length" class="clone-shot-list">
-            <div
-              v-for="path in referenceImagePaths"
-              :key="path"
-              class="clone-shot-row reference-task-row"
-            >
-              <div class="clone-shot-copy">
-                <strong>{{ fileName(path) }}</strong
-                ><small>{{ path }}</small>
               </div>
-              <button
-                class="ghost-button small danger"
-                type="button"
-                @click="
-                  referenceImagePaths = referenceImagePaths.filter(
-                    (item) => item !== path,
-                  )
-                "
-              >
-                <Trash2 class="h-4 w-4" />{{ tr("autoUi.k_3755f56f2f83") }}
-              </button>
+            </div>
+            <div v-if="generationMode === 'image_to_video'" class="ts-form__row">
+              <span class="ts-form__label">{{ tr("tiktokCreative.generationMode.zoomPercentLabel") }}</span>
+              <div class="ts-form__control">
+                <div class="ts-seg" role="group" :aria-label="tr('tiktokCreative.generationMode.zoomPercentLabel')">
+                  <button v-for="option in zoomPercentOptions" :key="option" type="button" :class="{ 'is-on': zoomPercent === option }" @click="zoomPercent = option">{{ option }}%</button>
+                </div>
+                <small class="ts-form__hint">{{ tr("tiktokCreative.generationMode.imageToVideoHint", { p0: zoomPercent }) }}</small>
+              </div>
+            </div>
+            <div class="ts-form__row">
+              <span class="ts-form__label">{{ tr("autoUi.k_004922066efd") }}</span>
+              <div class="ts-form__control">
+                <button class="ts-product" type="button" @click="productPickerOpen = true">
+                  <span class="ts-product__thumb">
+                    <img v-if="selectedProduct?.coverImagePath" :src="previewSrc(selectedProduct.coverImagePath)" alt="product" />
+                    <Package v-else :size="16" />
+                  </span>
+                  <span class="ts-product__name" :class="{ 'is-empty': !selectedProduct }">{{ selectedProduct?.name || tr("autoUi.k_f4d8d03ce5b4") }}</span>
+                  <ChevronDown :size="15" />
+                </button>
+              </div>
             </div>
           </div>
-          <label class="field"
-            ><span>{{ tr("autoUi.k_004922066efd") }}</span
-            ><button
-              class="product-picker product-picker-button"
-              type="button"
-              @click="productPickerOpen = true"
-            >
-              <div v-if="selectedProduct?.coverImagePath" class="product-thumb">
-                <img
-                  :src="previewSrc(selectedProduct.coverImagePath)"
-                  alt="product"
-                />
-              </div>
-              <div v-else class="product-thumb">
-                <Package class="h-4 w-4" />
-              </div>
-              <span class="product-picker-name">{{
-                selectedProduct?.name || tr("autoUi.k_f4d8d03ce5b4")
-              }}</span
-              ><ChevronDown class="picker-arrow h-4 w-4" /></button
-          ></label>
+        </article>
+
+        <!-- sticky action bar -->
+        <div class="ts-actionbar">
+          <div class="ts-actionbar__summary">
+            <span :class="{ 'is-ok': referenceImagePaths.length }"><Check v-if="referenceImagePaths.length" :size="13" /><i v-else />{{ tr("autoUi.k_2132324c5c89") }} {{ referenceImagePaths.length }}</span>
+            <span :class="{ 'is-ok': selectedProductId }"><Check v-if="selectedProductId" :size="13" /><i v-else />{{ selectedProduct?.name || tr("autoUi.k_004922066efd") }}</span>
+            <small><ShieldCheck :size="13" />{{ tr("autoUi.k_b8ef551f9203") }}</small>
+          </div>
           <button
-            class="primary-button create-button"
+            class="vg-btn vg-btn--primary vg-btn--lg ts-create-btn"
             type="button"
             data-testid="tiktok-create-reference"
-            :disabled="
-              creating || !referenceImagePaths.length || !selectedProductId
-            "
+            :disabled="creating || !referenceImagePaths.length || !selectedProductId"
             @click="createTasks"
           >
-            <LoaderCircle
-              v-if="creating"
-              class="h-4 w-4 animate-spin"
-            /><Sparkles v-else class="h-4 w-4" />{{
-              creating
-                ? tr("autoUi.k_14b16d7121c1")
-                : tr("autoUi.k_dbb37b794ab3", {
-                    p0: referenceImagePaths.length,
-                  })
-            }}
+            <LoaderCircle v-if="creating" :size="16" class="vg-spin" /><Sparkles v-else :size="16" />
+            {{ creating ? tr("autoUi.k_14b16d7121c1") : tr("autoUi.k_dbb37b794ab3", { p0: referenceImagePaths.length }) }}
           </button>
-          <div class="safe-note">
-            <ShieldCheck class="h-4 w-4" />{{ tr("autoUi.k_b8ef551f9203") }}
-          </div>
         </div>
-      </article>
-      <article class="panel-card rules-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">2</div>
-            <strong>{{ tr("autoUi.k_491d668880f6") }}</strong>
-          </div>
-          <span class="panel-head-note">{{ tr("autoUi.k_f25fdbd62c22") }}</span>
-        </div>
-        <div class="rules-box">
-          <div class="rule-row">
-            <div class="rule-icon">A</div>
-            <p>{{ tr("autoUi.k_8d16eb3cd4d4") }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">+</div>
-            <p>{{ tr("autoUi.k_98daa93daba9") }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">O</div>
-            <p>{{ tr("autoUi.k_d6908a205702") }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">*</div>
-            <p>{{ tr("autoUi.k_9b8309e541c9") }}</p>
-          </div>
-        </div>
-        <div class="output-note">
-          <div class="output-note-head">{{ tr("autoUi.k_d0117a565ea2") }}</div>
-          <p>{{ tr("autoUi.k_606d9a364dc7") }}</p>
-          <strong
-            >{{ enabledAccounts.length }} {{ tr("autoUi.k_95cab73b3bfa") }}
-            {{ runningCount }} {{ tr("autoUi.k_81897da3eeee") }}</strong
-          >
-        </div>
-        <div class="quality-control-card">
-          <div class="quality-control-card__head">
-            <div>
-              <strong>{{ tr("autoUi.k_e81f36aaa278") }}</strong
-              ><small>{{ tr("autoUi.k_467d65d2340b") }}</small>
+      </div>
+
+      <aside class="ts-side">
+        <section class="ts-card ts-block ts-block--compact">
+          <header class="ts-block__head">
+            <div class="ts-block__title">
+              <h2>{{ tr("autoUi.k_d0117a565ea2") }}</h2>
+              <p>{{ tr("autoUi.k_f25fdbd62c22") }}</p>
             </div>
-            <ShieldCheck class="h-5 w-5" />
+            <button class="vg-btn vg-btn--sm" type="button" @click="accountDialogOpen = true"><KeyRound :size="13" />{{ tr("autoUi.k_9d4ca7f307e7") }}</button>
+          </header>
+          <div class="ts-stats">
+            <div><strong>{{ enabledAccounts.length }}<small>/{{ accounts.length }}</small></strong><span>{{ tr("autoUi.k_9d4ca7f307e7") }}</span></div>
+            <button type="button" @click="setActiveTab('library')"><strong :class="{ 'is-live': runningCount > 0 }">{{ runningCount }}</strong><span>{{ tr("autoUi.k_fcb979ef0b91") }}</span></button>
+            <button type="button" @click="retrySettingsOpen = true"><strong>{{ creativeSettings.imageRetryLimit }}</strong><span>{{ tr("tiktokCreative.retry.guard") }}</span></button>
           </div>
-          <div class="prompt-version-editor">
-            <div class="prompt-kind-tabs" role="tablist">
-              <button class="ghost-button small" :class="{ active: promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ tr("promptKind.image") }}</button>
-              <button class="ghost-button small" :class="{ active: promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ tr("promptKind.video") }}</button>
+          <details class="ts-rules">
+            <summary>{{ tr("autoUi.k_491d668880f6") }}<ChevronDown :size="14" /></summary>
+            <p class="ts-note">{{ tr("autoUi.k_606d9a364dc7") }}</p>
+            <ul>
+              <li><Check :size="13" />{{ tr("autoUi.k_8d16eb3cd4d4") }}</li>
+              <li><Check :size="13" />{{ tr("autoUi.k_98daa93daba9") }}</li>
+              <li><Check :size="13" />{{ tr("autoUi.k_d6908a205702") }}</li>
+              <li><Check :size="13" />{{ tr("autoUi.k_9b8309e541c9") }}</li>
+            </ul>
+          </details>
+        </section>
+
+        <section class="ts-card ts-block ts-prompt">
+          <header class="ts-block__head">
+            <div class="ts-block__title">
+              <h2>{{ tr("autoUi.k_e81f36aaa278") }}</h2>
+              <p>{{ tr("autoUi.k_467d65d2340b") }}</p>
             </div>
-            <label class="field"
-              ><span>{{ tr("autoUi.k_e3ba534bb0ab") }}</span
-              ><select
-                v-model="selectedPromptVersionId"
-                @change="setPromptVersion(selectedPromptVersionId)"
-              >
-                <option
-                  v-for="version in promptVersions"
-                  :key="version.id"
-                  :value="version.id"
-                >
-                  V{{ version.version }} · {{ version.name
-                  }}{{ version.active ? tr("autoUi.k_b34ff6018a6b") : "" }}
-                </option>
-              </select></label
-            ><label class="field"
-              ><span>{{ tr("autoUi.k_ebb9cdd84ccb") }}</span
-              ><input v-model="promptEditorName" type="text" /></label
-            ><label class="field prompt-version-editor__prompt"
-              ><span>{{ tr("autoUi.k_b077056206b1") }}</span
-              ><textarea
-                v-model="promptEditorText"
-                rows="7"
-                spellcheck="false"
-              />
+          </header>
+          <div class="ts-seg ts-seg--full" role="tablist">
+            <button type="button" role="tab" :class="{ 'is-on': promptKind === 'image' }" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ tr("promptKind.image") }}</button>
+            <button type="button" role="tab" :class="{ 'is-on': promptKind === 'video' }" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ tr("promptKind.video") }}</button>
+          </div>
+          <div class="ts-prompt__grid">
+            <label class="vg-field">
+              <span class="vg-field__label">{{ tr("autoUi.k_e3ba534bb0ab") }}</span>
+              <select v-model="selectedPromptVersionId" class="vg-input vg-select" @change="setPromptVersion(selectedPromptVersionId)">
+                <option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} · {{ version.name }}{{ version.active ? tr("autoUi.k_b34ff6018a6b") : "" }}</option>
+              </select>
             </label>
-            <div class="prompt-version-actions">
-              <button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('update')"
-              >
-                {{ tr("autoUi.k_f89efe3911d8") }}</button
-              ><button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('copy')"
-              >
-                {{ tr("autoUi.k_e13a96ddf104") }}</button
-              ><button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('activate')"
-              >
-                {{ tr("autoUi.k_05bfda1ea7be") }}</button
-              ><button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('rollback')"
-              >
-                {{ tr("autoUi.k_cb9de5c45477") }}
-              </button>
-            </div>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ tr("autoUi.k_ebb9cdd84ccb") }}</span>
+              <input v-model="promptEditorName" class="vg-input" type="text" />
+            </label>
           </div>
-        </div>
-      </article>
+          <label class="vg-field">
+            <span class="vg-field__label">{{ tr("autoUi.k_b077056206b1") }}</span>
+            <textarea v-model="promptEditorText" class="vg-textarea ts-prompt__text" rows="9" spellcheck="false" />
+          </label>
+          <div class="ts-prompt__actions">
+            <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptVersionBusy" @click="savePrompt('rollback')">{{ tr("autoUi.k_cb9de5c45477") }}</button>
+            <span class="ts-prompt__spacer" />
+            <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy" @click="savePrompt('copy')">{{ tr("autoUi.k_e13a96ddf104") }}</button>
+            <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy" @click="savePrompt('activate')">{{ tr("autoUi.k_05bfda1ea7be") }}</button>
+            <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="promptVersionBusy" @click="savePrompt('update')">{{ tr("autoUi.k_f89efe3911d8") }}</button>
+          </div>
+        </section>
+      </aside>
     </section>
 
-    <section v-if="activeTab === 'library'" class="library-layout">
-      <div class="library-headline">
-        <div class="library-summary-row">
-          <div class="library-heading-cluster">
-            <div class="library-title-row">
-              <FolderOpen class="h-5 w-5" /><strong>{{
-                tr("autoUi.k_21eb39d9da89")
-              }}</strong
-              ><span class="library-count"
-                >{{ filteredItems.length }}
-                {{ tr("autoUi.k_64728a772742") }}</span
-              >
-            </div>
-            <span class="library-subtitle">{{
-              tr("autoUi.k_ec4fb1482924")
-            }}</span>
+    <section v-if="activeTab === 'library'" class="vg-scope ts-library">
+      <div class="ts-card ts-card--flush">
+        <div class="ts-libbar">
+          <div class="ts-libbar__title">
+            <h2>{{ tr("autoUi.k_21eb39d9da89") }}</h2>
+            <span>{{ filteredItems.length }} {{ tr("autoUi.k_64728a772742") }} · {{ tr("autoUi.k_ec4fb1482924") }}</span>
           </div>
-          <div class="library-head-tools">
-            <div class="library-view-toggle">
-              <button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'grid' }"
-                type="button"
-                @click="libraryViewMode = 'grid'"
-              >
-                <Grid2x2 class="h-4 w-4" /></button
-              ><button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'list' }"
-                type="button"
-                @click="libraryViewMode = 'list'"
-              >
-                <List class="h-4 w-4" />
-              </button>
-            </div>
-            <div class="library-pagination">
-              <button
-                class="library-page-button"
-                type="button"
-                :disabled="libraryPage <= 1"
-                @click="libraryPage--"
-              >
-                <ChevronLeft class="h-4 w-4" /></button
-              ><span>{{ libraryPage }} / {{ totalPages }}</span
-              ><button
-                class="library-page-button"
-                type="button"
-                :disabled="libraryPage >= totalPages"
-                @click="libraryPage++"
-              >
-                <ChevronRight class="h-4 w-4" />
-              </button>
-            </div>
+          <div class="ts-viewtoggle" role="group">
+            <button type="button" :class="{ 'is-on': libraryViewMode === 'grid' }" @click="libraryViewMode = 'grid'"><Grid2x2 :size="15" /></button>
+            <button type="button" :class="{ 'is-on': libraryViewMode === 'list' }" @click="libraryViewMode = 'list'"><List :size="15" /></button>
           </div>
         </div>
-        <div class="library-toolbar">
-          <div class="library-action-group">
-            <button class="toolbar-button" type="button" @click="cycleFilter">
-              <Filter class="h-4 w-4" />{{ tr("autoUi.k_21bd315911db") }}
-              {{
-                libraryFilter === "all"
-                  ? tr("autoUi.k_778fc8f99453")
-                  : libraryFilter === "completed"
-                    ? tr("autoUi.k_e99b48a29bdf")
-                    : libraryFilter === "running"
-                      ? tr("autoUi.k_fcb979ef0b91")
-                      : libraryFilter === "failed"
-                        ? tr("autoUi.k_3e3c8068bb0e")
-                        : tr("autoUi.k_130448bce675")
-              }}</button
-            ><button
-              class="toolbar-button"
-              type="button"
-              :disabled="!filteredItems.length"
-              @click="selectAllFiltered"
-            >
-              <CheckCircle2 class="h-4 w-4" />{{
-                selectedShotIds.length &&
-                selectedShotIds.length === filteredItems.length
-                  ? tr("autoUi.k_f02e9439542f")
-                  : tr("autoUi.k_3fca9c80cc8a")
-              }}
-            </button>
-          </div>
-          <div class="library-output-actions">
-            <button
-              class="toolbar-button batch-delete-button"
-              type="button"
-              :disabled="!selectedShotIds.length"
-              @click="openBatchDelete"
-            >
-              <Trash2 class="h-4 w-4" />{{ tr("autoUi.k_4edb066d4627")
-              }}{{ selectedShotIds.length }})</button
-            ><button
-              class="toolbar-button"
-              type="button"
-              :disabled="!subtitleEligibleItems.length"
-              @click="openSubtitleDialog"
-            >
-              <Captions class="h-4 w-4" />{{ tr("autoUi.k_4d25c03db6e0")
-              }}{{ subtitleEligibleItems.length }})</button
-            ><button
-              class="primary-button"
-              type="button"
-              :disabled="!selectedShotIds.length"
-              @click="exportSelected"
-            >
-              <Download class="h-4 w-4" />{{ tr("autoUi.k_6bd41d31e000")
-              }}{{ selectedShotIds.length }})
-            </button><button
-              v-if="selectedShotIds.length"
-              class="toolbar-button"
-              type="button"
-              @click="revertSelectedSubtitles"
-            >
-              <Captions class="h-4 w-4" />{{ tr("tiktokCreative.revertSubtitles") }}
-            </button>
-          </div>
-        </div>
-      </div>
-      <div v-if="!pagedItems.length" class="panel-card empty-card">
-        <FileImage class="h-8 w-8" /><strong>{{
-          tr("autoUi.k_15652e6de74c")
-        }}</strong>
-        <p>{{ tr("autoUi.k_54226874b463") }}</p>
-      </div>
-      <div v-else-if="libraryViewMode === 'grid'" class="live-console-grid">
-        <article
-          v-for="{ task, shot } in pagedItems"
-          :key="shot.shotId"
-          class="live-console-card"
-          :class="{ selected: selectedShotIds.includes(shot.shotId) }"
-        >
-          <div class="live-console-card__head">
-            <label class="live-console-row__check"
-              ><input
-                type="checkbox"
-                :checked="selectedShotIds.includes(shot.shotId)"
-                @change="toggleSelected(shot.shotId)" /><span
-            /></label>
-            <div class="live-console-card__badges">
-              <span
-                class="live-console-row__status"
-                :class="statusTone(shot)"
-                >{{ statusLabel(shot) }}</span
-              ><span
-                v-if="publishedShotMap.has(shot.shotId)"
-                class="publisher-published-badge"
-                >已发布 ·
-                {{
-                  formatTime(publishedShotMap.get(shot.shotId).updatedAt)
-                }}</span
-              ><span
-                v-if="shot.exportedAt"
-                class="exported-badge"
-                :title="formatTime(shot.exportedAt)"
-                ><Download class="h-3 w-3" />{{
-                  tr("autoUi.k_d3eaaf60ed1c")
-                }}</span
-              >
-            </div>
-          </div>
+        <div class="ts-filters" role="tablist">
           <button
-            class="live-console-card__preview"
+            v-for="option in libraryFilterOptions"
+            :key="option"
             type="button"
-            :disabled="shot.status !== 'completed' || !shot.resultVideoPath"
-            @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"
-          >
-            <div class="live-console-row__thumb">
-              <img
-                v-if="shotPreviewPath(shot)"
-                :src="previewSrc(shotPreviewPath(shot))"
-                alt="poster"
-              />
-              <div v-else class="live-console-row__thumb-empty">
-                <FileImage class="h-5 w-5" />
-              </div>
-              <span v-if="shot.status === 'completed'" class="preview-play"
-                ><Play class="h-4 w-4"
-              /></span>
-            </div>
-          </button>
-          <div class="live-console-card__metrics">
-            <div :title="tr('autoUi.k_d0d81b3ff3b0')">
-              <span>{{ tr("autoUi.k_e2d53a6d3a6a") }}</span
-              ><strong
-                >{{ shot.imageRetryCount || 0 }}/{{
-                  shot.imageRetryLimit ?? 2
-                }}</strong
-              >
-            </div>
-            <div :title="tr('autoUi.k_7b260b7dc1e5')">
-              <span>{{ tr("autoUi.k_82f516820cfe") }}</span
-              ><strong>{{ qualityScore(shot) }}</strong>
-            </div>
-          </div>
-          <div class="live-console-card__body">
-            <div class="live-console-row__titleline">
-              <h3>{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</h3>
-              <span class="live-console-row__source">{{
-                tr("autoUi.k_5149ae9c3017")
-              }}</span
-              ><span
-                v-if="shot.subtitleVideoPath"
-                class="live-console-row__source"
-                >{{ tr("autoUi.k_83e422384f7f") }}</span
-              >
-            </div>
-            <div class="live-console-row__meta">
-              <Clock3 class="h-3 w-3" /><span
-                >{{ tr("autoUi.k_fcbd0932929e") }}
-                {{ formatTime(shot.createdAt) }}</span
-              >
-            </div>
-            <div class="live-console-row__subtitle">
-              {{ fileName(shot.referenceImagePath || shot.imagePath) }}
-            </div>
-            <div v-if="shot.lastError" class="live-console-row__error">
-              <AlertTriangle class="h-3 w-3" /><span
-                class="live-console-row__error-text"
-                >{{ shot.lastError }}</span
-              >
-            </div>
-          </div>
-          <div class="live-console-row__actions">
-            <button
-              class="live-console-row__link live-console-row__link--primary"
-              :title="tr('autoUi.k_faea8c1db9cc')"
-              type="button"
-              @click.stop="openDetail(task, shot)"
-            >
-              <PanelBottomOpen class="h-4 w-4" />{{
-                tr("autoUi.k_faea8c1db9cc")
-              }}</button
-            ><button
-              class="live-console-row__link"
-              :title="tr('autoUi.k_1f9ac54b152b')"
-              type="button"
-              @click.stop="
-                detailTask = task;
-                detailShot = shot;
-                detailTab = 'request';
-              "
-            >
-              <Code2 class="h-4 w-4" />{{ tr("autoUi.k_1f9ac54b152b") }}</button
-            ><button
-              class="live-console-row__link"
-              :title="tr('autoUi.k_b923b26d335a')"
-              type="button"
-              @click.stop="openLogs(task, shot)"
-            >
-              <Logs class="h-4 w-4" />{{ tr("autoUi.k_4de50894b8c1") }}</button
-            ><button
-              v-if="shot.resultVideoPath"
-              class="live-console-row__action live-console-row__action--play"
-              :title="tr('autoUi.k_21925350deba')"
-              type="button"
-              @click.stop="
-                openVideo(shot.subtitleVideoPath || shot.resultVideoPath)
-              "
-            >
-              <Play class="h-4 w-4" /></button
-            ><div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision">
-              <button
-                v-if="canRetryImageOnce(shot)"
-                class="image-retry-decision__button"
-                :title="tr('autoUi.k_031c7e12ddae')"
-                type="button"
-                @click.stop="retryShot(task, shot)"
-              >
-                <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}
+            class="ts-filter"
+            :class="{ 'is-active': libraryFilter === option }"
+            @click="setLibraryFilter(option)"
+          >{{ libraryFilterLabel(option) }}<em>{{ libraryFilterCounts[option] }}</em></button>
+        </div>
+        <div class="ts-actionsbar">
+          <label class="ts-check">
+            <input type="checkbox" :checked="Boolean(filteredItems.length) && selectedShotIds.length === filteredItems.length" :disabled="!filteredItems.length" @change="selectAllFiltered" />
+            <span>{{ selectedShotIds.length ? `${selectedShotIds.length} / ${filteredItems.length}` : (selectedShotIds.length && selectedShotIds.length === filteredItems.length ? tr("autoUi.k_f02e9439542f") : tr("autoUi.k_3fca9c80cc8a")) }}</span>
+          </label>
+          <span class="ts-actionsbar__spacer" />
+          <button v-if="selectedShotIds.length" class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles"><Captions :size="14" />{{ tr("tiktokCreative.revertSubtitles") }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="!subtitleEligibleItems.length" @click="openSubtitleDialog"><Captions :size="14" />{{ tr("autoUi.k_4d25c03db6e0") }}{{ subtitleEligibleItems.length }})</button>
+          <button class="vg-btn vg-btn--sm ts-danger" type="button" :disabled="!selectedShotIds.length" @click="openBatchDelete"><Trash2 :size="14" />{{ tr("autoUi.k_4edb066d4627") }}{{ selectedShotIds.length }})</button>
+          <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="!selectedShotIds.length" @click="exportSelected"><Download :size="14" />{{ tr("autoUi.k_6bd41d31e000") }}{{ selectedShotIds.length }})</button>
+        </div>
+
+        <div v-if="!pagedItems.length" class="ts-empty">
+          <span class="ts-empty__icon"><FileImage :size="26" /></span>
+          <strong>{{ tr("autoUi.k_15652e6de74c") }}</strong>
+          <p>{{ tr("autoUi.k_54226874b463") }}</p>
+          <button class="vg-btn vg-btn--primary" type="button" @click="setActiveTab('reference')"><Sparkles :size="15" />{{ tr("autoUi.k_3a73e3f67a57") }}</button>
+        </div>
+
+        <div v-else-if="libraryViewMode === 'grid'" class="ts-grid">
+          <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="ts-item" :class="{ 'is-selected': selectedShotIds.includes(shot.shotId) }">
+            <div class="ts-item__media">
+              <button class="ts-item__preview" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)">
+                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot))" alt="poster" />
+                <FileImage v-else :size="22" />
+                <span v-if="shot.status === 'completed'" class="ts-item__play"><Play :size="16" /></span>
               </button>
-              <button
-                v-if="canContinueWithVideo(shot)"
-                class="image-retry-decision__button image-retry-decision__button--primary"
-                :title="tr('tiktokCreative.retry.continueWithVideo')"
-                type="button"
-                @click.stop="continueWithVideo(task, shot)"
-              >
-                <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}
+              <label class="ts-check ts-item__check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /></label>
+              <span class="ts-state ts-item__state" :class="shotStateClass(shot)"><i />{{ statusLabel(shot) }}</span>
+            </div>
+            <div class="ts-item__body">
+              <div class="ts-item__title">
+                <strong :title="task.productName || tr('autoUi.k_0c5cc87ef67f')">{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</strong>
+              </div>
+              <div class="ts-item__marks">
+                <span class="ts-mark">{{ tr("autoUi.k_5149ae9c3017") }}</span>
+                <span v-if="shot.subtitleVideoPath" class="ts-mark">{{ tr("autoUi.k_83e422384f7f") }}</span>
+                <span v-if="shot.exportedAt" class="ts-mark ts-mark--ok exported-badge" :title="formatTime(shot.exportedAt)"><Download :size="11" />{{ tr("autoUi.k_d3eaaf60ed1c") }}</span>
+                <span v-if="publishedShotMap.has(shot.shotId)" class="ts-mark ts-mark--ok">已发布 · {{ formatTime(publishedShotMap.get(shot.shotId).updatedAt) }}</span>
+              </div>
+              <dl class="ts-item__stats">
+                <div :title="tr('autoUi.k_d0d81b3ff3b0')"><dt>{{ tr("autoUi.k_e2d53a6d3a6a") }}</dt><dd>{{ shot.imageRetryCount || 0 }}/{{ shot.imageRetryLimit ?? 2 }}</dd></div>
+                <div :title="tr('autoUi.k_7b260b7dc1e5')"><dt>{{ tr("autoUi.k_82f516820cfe") }}</dt><dd>{{ qualityScore(shot) }}</dd></div>
+              </dl>
+              <div class="ts-item__meta"><Clock3 :size="12" />{{ formatTime(shot.createdAt) }}</div>
+              <div class="ts-item__meta" :title="shot.referenceImagePath || shot.imagePath"><FileImage :size="12" />{{ fileName(shot.referenceImagePath || shot.imagePath) }}</div>
+              <div v-if="shot.lastError" class="ts-item__error" :title="shot.lastError"><AlertTriangle :size="12" /><span>{{ shot.lastError }}</span></div>
+              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision ts-decision">
+                <button v-if="canRetryImageOnce(shot)" class="vg-btn vg-btn--sm" :title="tr('autoUi.k_031c7e12ddae')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="13" />{{ tr('autoUi.k_031c7e12ddae') }}</button>
+                <button v-if="canContinueWithVideo(shot)" class="vg-btn vg-btn--sm vg-btn--primary" :title="tr('tiktokCreative.retry.continueWithVideo')" type="button" @click.stop="continueWithVideo(task, shot)"><Play :size="13" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}</button>
+              </div>
+            </div>
+            <footer class="ts-item__foot">
+              <button class="vg-btn vg-btn--sm" type="button" @click.stop="openDetail(task, shot)"><PanelBottomOpen :size="13" />{{ tr("autoUi.k_faea8c1db9cc") }}</button>
+              <span class="ts-item__spacer" />
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_1f9ac54b152b')" type="button" @click.stop="detailTask = task; detailShot = shot; detailTab = 'request';"><Code2 :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_b923b26d335a')" type="button" @click.stop="openLogs(task, shot)"><Logs :size="14" /></button>
+              <button v-if="canCorrectRegion(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_323968104a8c')" type="button" @click.stop="openRegionEditor(task, shot)"><ScanLine :size="14" /></button>
+              <button v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_e2d53a6d3a6a')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="tr('autoUi.k_3755f56f2f83')" type="button" @click.stop="removeShot(task, shot)"><Trash2 :size="14" /></button>
+            </footer>
+          </article>
+        </div>
+
+        <div v-else class="ts-list">
+          <div class="ts-list__head">
+            <span />
+            <span>{{ tr("autoUi.k_0c5cc87ef67f") }}</span>
+            <span>{{ tr("autoUi.k_e2d53a6d3a6a") }}</span>
+            <span>{{ tr("autoUi.k_82f516820cfe") }}</span>
+            <span>{{ tr("autoUi.k_fcbd0932929e") }}</span>
+            <span class="is-end" />
+          </div>
+          <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="ts-row" :class="{ 'is-selected': selectedShotIds.includes(shot.shotId) }">
+            <label class="ts-check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /></label>
+            <div class="ts-row__main">
+              <button class="ts-row__thumb" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)">
+                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot))" alt="poster" /><FileImage v-else :size="16" />
               </button>
-            </div><button
-              v-if="canCorrectRegion(shot)"
-              class="live-console-row__action live-console-row__action--region"
-              :title="tr('autoUi.k_323968104a8c')"
-              type="button"
-              @click.stop="openRegionEditor(task, shot)"
-            >
-              <ScanLine class="h-4 w-4" /></button
-            ><button
-              v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)"
-              class="live-console-row__action"
-              :title="tr('autoUi.k_e2d53a6d3a6a')"
-              type="button"
-              @click.stop="retryShot(task, shot)"
-            >
-              <RefreshCcw class="h-4 w-4" /></button
-            ><button
-              class="live-console-row__action live-console-row__action--danger"
-              :title="tr('autoUi.k_3755f56f2f83')"
-              type="button"
-              @click.stop="removeShot(task, shot)"
-            >
-              <Trash2 class="h-4 w-4" />
-            </button>
+              <div class="ts-row__copy">
+                <div class="ts-row__title">
+                  <strong>{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</strong>
+                  <span class="ts-state" :class="shotStateClass(shot)"><i />{{ statusLabel(shot) }}</span>
+                </div>
+                <div class="ts-item__marks">
+                  <span class="ts-mark">{{ shot.resultVideoPath ? tr("autoUi.k_d50aa9bb954a") : tr("autoUi.k_e528ba2c704f") }}</span>
+                  <span v-if="shot.exportedAt" class="ts-mark ts-mark--ok exported-badge" :title="formatTime(shot.exportedAt)"><Download :size="11" />{{ tr("autoUi.k_d3eaaf60ed1c") }}</span>
+                  <span v-if="shot.subtitleAppliedAt" class="ts-mark">{{ tr("autoUi.k_aaa5f2e9f006") }} {{ formatTime(shot.subtitleAppliedAt) }}</span>
+                  <span class="ts-row__file">{{ fileName(shot.referenceImagePath || shot.imagePath) }}</span>
+                </div>
+                <div v-if="shot.lastError" class="ts-item__error" :title="shot.lastError"><AlertTriangle :size="12" /><span>{{ shot.lastError }}</span></div>
+              </div>
+            </div>
+            <span class="ts-row__num">{{ shot.imageRetryCount || 0 }}/{{ shot.imageRetryLimit ?? 2 }}</span>
+            <span class="ts-row__num">{{ qualityScore(shot) }}</span>
+            <span class="ts-row__time">{{ formatTime(shot.createdAt) }}</span>
+            <div class="ts-row__actions">
+              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision ts-decision">
+                <button v-if="canRetryImageOnce(shot)" class="vg-btn vg-btn--sm" :title="tr('autoUi.k_031c7e12ddae')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="13" />{{ tr('autoUi.k_031c7e12ddae') }}</button>
+                <button v-if="canContinueWithVideo(shot)" class="vg-btn vg-btn--sm vg-btn--primary" :title="tr('tiktokCreative.retry.continueWithVideo')" type="button" @click.stop="continueWithVideo(task, shot)"><Play :size="13" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}</button>
+              </div>
+              <button class="vg-btn vg-btn--sm" type="button" @click="openDetail(task, shot)">{{ tr("autoUi.k_faea8c1db9cc") }}</button>
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_1f9ac54b152b')" type="button" @click="detailTask = task; detailShot = shot; detailTab = 'request';"><Code2 :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_b923b26d335a')" type="button" @click="openLogs(task, shot)"><Logs :size="14" /></button>
+              <button v-if="shot.resultVideoPath" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_21925350deba')" type="button" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"><Play :size="14" /></button>
+              <button v-if="canCorrectRegion(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_323968104a8c')" type="button" @click="openRegionEditor(task, shot)"><ScanLine :size="14" /></button>
+              <button v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_e2d53a6d3a6a')" type="button" @click="retryShot(task, shot)"><RefreshCcw :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="tr('autoUi.k_3755f56f2f83')" type="button" @click="removeShot(task, shot)"><Trash2 :size="14" /></button>
+            </div>
+          </article>
+        </div>
+
+        <footer v-if="pagedItems.length" class="ts-pager">
+          <span>{{ libraryPage }} / {{ totalPages }}</span>
+          <div>
+            <button class="vg-icon-btn" type="button" :disabled="libraryPage <= 1" @click="libraryPage--"><ChevronLeft :size="16" /></button>
+            <button class="vg-icon-btn" type="button" :disabled="libraryPage >= totalPages" @click="libraryPage++"><ChevronRight :size="16" /></button>
           </div>
-        </article>
-      </div>
-      <div v-else class="live-console-list">
-        <article
-          v-for="{ task, shot } in pagedItems"
-          :key="shot.shotId"
-          class="live-console-row"
-          :class="{ selected: selectedShotIds.includes(shot.shotId) }"
-        >
-          <label class="live-console-row__check"
-            ><input
-              type="checkbox"
-              :checked="selectedShotIds.includes(shot.shotId)"
-              @change="toggleSelected(shot.shotId)" /><span
-          /></label>
-          <div class="live-console-row__preview">
-            <div class="live-console-row__thumb">
-              <img
-                v-if="shotPreviewPath(shot)"
-                :src="previewSrc(shotPreviewPath(shot))"
-                alt="poster"
-              /><FileImage v-else class="h-5 w-5" />
-            </div>
-          </div>
-          <div class="live-console-row__main">
-            <div class="live-console-row__task">
-              <div class="live-console-row__titleline">
-                <h3>{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</h3>
-                <span class="live-console-row__source">{{
-                  tr("autoUi.k_5149ae9c3017")
-                }}</span
-                ><span
-                  v-if="shot.subtitleVideoPath"
-                  class="live-console-row__source"
-                  >{{ tr("autoUi.k_83e422384f7f") }}</span
-                >
-              </div>
-              <div class="live-console-row__meta">
-                <Clock3 class="h-3 w-3" /><span
-                  >{{ tr("autoUi.k_fcbd0932929e") }}
-                  {{ formatTime(shot.createdAt) }}</span
-                >
-              </div>
-              <div class="live-console-row__subtitle">
-                {{ fileName(shot.referenceImagePath || shot.imagePath) }}
-              </div>
-              <div class="live-console-list__metrics">
-                <span
-                  >{{ tr("autoUi.k_e2d53a6d3a6a") }}
-                  {{ shot.imageRetryCount || 0 }}/{{
-                    shot.imageRetryLimit ?? 2
-                  }}</span
-                ><span
-                  >{{ tr("autoUi.k_82f516820cfe") }}
-                  {{ qualityScore(shot) }}</span
-                >
-              </div>
-              <div v-if="shot.lastError" class="live-console-row__error">
-                <AlertTriangle class="h-3 w-3" /><span
-                  class="live-console-row__error-text"
-                  >{{ shot.lastError }}</span
-                >
-              </div>
-            </div>
-            <div class="live-console-row__side">
-              <span
-                class="live-console-row__status"
-                :class="statusTone(shot)"
-                >{{ statusLabel(shot) }}</span
-              >
-            </div>
-          </div>
-          <div class="live-console-row__bottom">
-            <div class="live-console-row__quickrefs">
-              <span class="live-console-row__quickchip">{{
-                shot.resultVideoPath
-                  ? tr("autoUi.k_d50aa9bb954a")
-                  : tr("autoUi.k_e528ba2c704f")
-              }}</span
-              ><span
-                v-if="shot.exportedAt"
-                class="exported-badge"
-                :title="formatTime(shot.exportedAt)"
-                ><Download class="h-3 w-3" />{{
-                  tr("autoUi.k_d3eaaf60ed1c")
-                }}</span
-              ><span
-                v-if="shot.subtitleAppliedAt"
-                class="live-console-row__quickchip"
-                >{{ tr("autoUi.k_aaa5f2e9f006") }}
-                {{ formatTime(shot.subtitleAppliedAt) }}</span
-              >
-            </div>
-            <div class="live-console-row__actions">
-              <button
-                class="live-console-row__link live-console-row__link--primary"
-                type="button"
-                @click="openDetail(task, shot)"
-              >
-                {{ tr("autoUi.k_faea8c1db9cc") }}</button
-              ><button
-                class="live-console-row__link"
-                type="button"
-                @click="
-                  detailTask = task;
-                  detailShot = shot;
-                  detailTab = 'request';
-                "
-              >
-                <Code2 class="h-4 w-4" />{{
-                  tr("autoUi.k_1f9ac54b152b")
-                }}</button
-              ><button
-                class="live-console-row__link"
-                type="button"
-                @click="openLogs(task, shot)"
-              >
-                <Logs class="h-4 w-4" />{{
-                  tr("autoUi.k_b923b26d335a")
-                }}</button
-              ><button
-                v-if="shot.resultVideoPath"
-                class="live-console-row__action live-console-row__action--play"
-                type="button"
-                @click="
-                  openVideo(shot.subtitleVideoPath || shot.resultVideoPath)
-                "
-              >
-                <Play class="h-4 w-4" /></button
-              ><div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision">
-                <button
-                  v-if="canRetryImageOnce(shot)"
-                  class="image-retry-decision__button"
-                  :title="tr('autoUi.k_031c7e12ddae')"
-                  type="button"
-                  @click.stop="retryShot(task, shot)"
-                >
-                  <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}
-                </button>
-                <button
-                  v-if="canContinueWithVideo(shot)"
-                  class="image-retry-decision__button image-retry-decision__button--primary"
-                  :title="tr('tiktokCreative.retry.continueWithVideo')"
-                  type="button"
-                  @click.stop="continueWithVideo(task, shot)"
-                >
-                  <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}
-                </button>
-              </div><button
-                v-if="canCorrectRegion(shot)"
-                class="live-console-row__action live-console-row__action--region"
-                :title="tr('autoUi.k_323968104a8c')"
-                type="button"
-                @click="openRegionEditor(task, shot)"
-              >
-                <ScanLine class="h-4 w-4" /></button
-              ><button
-              v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)"
-                class="live-console-row__action"
-                :title="tr('autoUi.k_e2d53a6d3a6a')"
-                type="button"
-                @click="retryShot(task, shot)"
-              >
-                <RefreshCcw class="h-4 w-4" /></button
-              ><button
-                class="live-console-row__action live-console-row__action--danger"
-                type="button"
-                @click="removeShot(task, shot)"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </article>
+        </footer>
       </div>
     </section>
 
-    <div v-if="accountDialogOpen" class="live-subtitle-dialog">
-      <div class="live-subtitle-dialog__panel account-dialog">
-        <div class="live-subtitle-dialog__head">
-          <div class="live-subtitle-dialog__titleblock">
-            <strong>{{ tr("autoUi.k_9d4ca7f307e7") }}</strong>
+    <div v-if="accountDialogOpen" class="vg-scope vg-backdrop ts-acct-mask" @click.self="accountDialogOpen = false">
+      <section class="ts-acct" role="dialog" aria-modal="true" :aria-label="tr('autoUi.k_9d4ca7f307e7')">
+        <header class="ts-acct__head">
+          <span class="ts-acct__icon"><KeyRound :size="20" /></span>
+          <div class="ts-acct__title">
+            <h2>{{ tr("autoUi.k_9d4ca7f307e7") }}</h2>
             <p>{{ tr("autoUi.k_630c37504d70") }}</p>
           </div>
-          <button
-            class="live-subtitle-dialog__close"
-            type="button"
-            @click="accountDialogOpen = false"
-          >
-            <X class="h-4 w-4" />
-          </button>
-        </div>
-        <div class="account-toolbar">
-          <label class="account-search">
-            <Search class="h-4 w-4" />
-            <input v-model="accountSearch" type="search" :placeholder="tr('tiktokCreative.account.search')" @input="accountPage = 1" />
-          </label>
-          <select v-model="accountStatusFilter" class="account-filter" @change="accountPage = 1">
-            <option value="all">{{ tr("tiktokCreative.account.allStatus") }}</option>
-            <option value="enabled">{{ tr("tiktokCreative.account.enabled") }}</option>
-            <option value="disabled">{{ tr("tiktokCreative.account.disabled") }}</option>
-          </select>
-          <button class="primary-button account-add-button" type="button" @click="resetAccountForm">
-            <Plus class="h-4 w-4" />{{ tr("tiktokCreative.account.add") }}
-          </button>
-        </div>
-        <div class="account-layout">
-          <div class="account-list">
-            <div class="account-list-header" aria-hidden="true">
-              <span>#</span>
-              <span>{{ tr("autoUi.k_3f2da24264f0") }}</span>
-              <span>{{ tr("tiktokCreative.account.cookieInfo") }}</span>
-              <span>{{ tr("tiktokCreative.account.statusLabel") }}</span>
-              <span>{{ tr("tiktokCreative.account.actions") }}</span>
+          <div class="ts-acct__sum">
+            <span class="ts-state ts-state--ok"><i />{{ accounts.filter((item) => item.enabled && item.state === "ready").length }} 可用</span>
+            <span class="ts-state ts-state--err"><i />{{ accounts.filter((item) => item.enabled && item.state !== "ready").length }} 异常</span>
+            <span class="ts-state"><i />{{ accounts.filter((item) => !item.enabled).length }} 已停用</span>
+          </div>
+          <button class="vg-icon-btn" type="button" :aria-label="tr('autoUi.k_6c14bd7f6f9e')" @click="accountDialogOpen = false"><X :size="18" /></button>
+        </header>
+
+        <div class="ts-acct__body">
+          <!-- list -->
+          <div class="ts-acct__list">
+            <div class="ts-acct__toolbar">
+              <label class="vg-search ts-acct__search">
+                <Search :size="15" />
+                <input v-model="accountSearch" class="vg-input vg-input--sm" type="search" :placeholder="tr('tiktokCreative.account.search')" @input="accountPage = 1" />
+              </label>
+              <div class="ts-seg">
+                <button type="button" :class="{ 'is-on': accountStatusFilter === 'all' }" @click="accountStatusFilter = 'all'; accountPage = 1">{{ tr("tiktokCreative.account.allStatus") }}</button>
+                <button type="button" :class="{ 'is-on': accountStatusFilter === 'enabled' }" @click="accountStatusFilter = 'enabled'; accountPage = 1">{{ tr("tiktokCreative.account.enabled") }}</button>
+                <button type="button" :class="{ 'is-on': accountStatusFilter === 'disabled' }" @click="accountStatusFilter = 'disabled'; accountPage = 1">{{ tr("tiktokCreative.account.disabled") }}</button>
+              </div>
+              <span class="ts-acct__spacer" />
+              <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" @click="resetAccountForm"><Plus :size="14" />{{ tr("tiktokCreative.account.add") }}</button>
             </div>
-            <article
-              v-for="account in pagedAccounts"
-              :key="account.id"
-              class="account-row"
-              :class="{
-                disabled: !account.enabled,
-                editing: editingAccountId === account.id,
-              }"
-            >
-              <div class="account-order">
-                <button
-                  type="button"
-                  :disabled="account.priority <= 0"
-                  @click="moveAccount(account, -1)"
-                >
-                  ↑</button
-                ><button
-                  type="button"
-                  :disabled="account.priority >= accounts.length - 1"
-                  @click="moveAccount(account, 1)"
-                >
-                  ↓
-                </button>
+
+            <div class="ts-acct__rows">
+              <article
+                v-for="account in pagedAccounts"
+                :key="account.id"
+                class="ts-acct-row"
+                :class="{ 'is-off': !account.enabled, 'is-editing': editingAccountId === account.id }"
+              >
+                <div class="ts-acct-row__order">
+                  <button type="button" :disabled="account.priority <= 0" :title="tr('tiktokCreative.account.priority')" @click="moveAccount(account, -1)"><ArrowUp :size="12" /></button>
+                  <b>{{ account.priority + 1 }}</b>
+                  <button type="button" :disabled="account.priority >= accounts.length - 1" :title="tr('tiktokCreative.account.priority')" @click="moveAccount(account, 1)"><ArrowDown :size="12" /></button>
+                </div>
+                <span class="ts-acct-row__avatar">{{ (account.name || "?").replace(/^\d+-?/, "").slice(0, 1).toUpperCase() || "#" }}</span>
+                <div class="ts-acct-row__main">
+                  <strong :title="account.name">{{ account.name }}</strong>
+                  <small :title="account.id">{{ account.id }}</small>
+                </div>
+                <div class="ts-acct-row__cookie">
+                  <strong>{{ account.cookieCount }}</strong>
+                  <small>Cookie</small>
+                </div>
+                <div class="ts-acct-row__state">
+                  <span class="ts-state" :class="accountTone(account)"><i />{{ accountState(account) }}</span>
+                  <small v-if="account.lastError" class="is-err" :title="account.lastError">{{ account.lastError }}</small>
+                  <small v-else>{{ account.enabled ? tr("tiktokCreative.account.ready") : tr("tiktokCreative.account.paused") }}</small>
+                </div>
+                <div class="ts-acct-row__actions">
+                  <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_a7f814c0a40d')" @click="editAccount(account)"><Pencil :size="14" /></button>
+                  <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_0b5d7ed54bee')" @click="testAccount(account)"><Activity :size="14" /></button>
+                  <button class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-on': account.enabled }" type="button" :title="account.enabled ? tr('autoUi.k_d989e55188c9') : tr('autoUi.k_d4e9ca3dd494')" @click="toggleAccount(account)"><Power :size="14" /></button>
+                  <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" :title="tr('autoUi.k_3755f56f2f83')" @click="removeAccount(account)"><Trash2 :size="14" /></button>
+                </div>
+              </article>
+
+              <div v-if="!accounts.length" class="ts-acct__empty">
+                <span><KeyRound :size="22" /></span>
+                <strong>{{ tr("autoUi.k_e610551a276a") }}</strong>
               </div>
-              <div class="account-main">
-                <strong>{{ account.name }}</strong>
-                <small>{{ account.id }}</small>
+              <div v-else-if="!pagedAccounts.length" class="ts-acct__empty">
+                <span><Search :size="22" /></span>
+                <strong>{{ tr("tiktokCreative.account.noMatch") }}</strong>
               </div>
-              <div class="account-meta">
-                <strong>{{ account.cookieCount }} {{ tr("autoUi.k_69fd1d0af720") }}</strong>
-                <small>{{ tr("tiktokCreative.account.priority") }} {{ account.priority + 1 }}</small>
-              </div>
-              <div class="account-status-column">
-                <span class="account-state" :class="account.state">{{ accountState(account) }}</span>
-                <small v-if="account.lastError" class="account-error">{{ account.lastError }}</small>
-                <small v-else>{{ account.enabled ? tr("tiktokCreative.account.ready") : tr("tiktokCreative.account.paused") }}</small>
-              </div>
-              <div class="account-actions">
-                <button
-                  class="ghost-button small"
-                  type="button"
-                  @click="editAccount(account)"
-                >
-                  <Pencil class="h-3 w-3" />{{
-                    tr("autoUi.k_a7f814c0a40d")
-                  }}</button
-                ><button
-                  class="ghost-button small"
-                  type="button"
-                  @click="testAccount(account)"
-                >
-                  {{ tr("autoUi.k_0b5d7ed54bee") }}</button
-                ><button
-                  class="ghost-button small"
-                  type="button"
-                  @click="toggleAccount(account)"
-                >
-                  {{
-                    account.enabled
-                      ? tr("autoUi.k_d989e55188c9")
-                      : tr("autoUi.k_d4e9ca3dd494")
-                  }}</button
-                ><button
-                  class="ghost-button small danger"
-                  type="button"
-                  @click="removeAccount(account)"
-                >
-                  {{ tr("autoUi.k_3755f56f2f83") }}
-                </button>
-              </div>
-            </article>
-            <div v-if="!accounts.length" class="account-empty">
-              {{ tr("autoUi.k_e610551a276a") }}
             </div>
-            <div v-else-if="!pagedAccounts.length" class="account-empty">
-              {{ tr("tiktokCreative.account.noMatch") }}
-            </div>
-            <div class="account-pagination" v-else>
+
+            <footer v-if="pagedAccounts.length" class="ts-acct__pager">
               <span>{{ (accountPage - 1) * accountPageSize + 1 }}-{{ Math.min(accountPage * accountPageSize, filteredAccounts.length) }} / {{ filteredAccounts.length }}</span>
-              <div>
-                <button type="button" :disabled="accountPage <= 1" @click="accountPage -= 1"><ChevronLeft class="h-4 w-4" /></button>
-                <strong>{{ accountPage }}</strong>
-                <button type="button" :disabled="accountPage >= accountPageCount" @click="accountPage += 1"><ChevronRight class="h-4 w-4" /></button>
+              <div class="ts-acct__pages">
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="accountPage <= 1" @click="accountPage -= 1"><ChevronLeft :size="15" /></button>
+                <b>{{ accountPage }} / {{ accountPageCount }}</b>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="accountPage >= accountPageCount" @click="accountPage += 1"><ChevronRight :size="15" /></button>
               </div>
-              <select v-model.number="accountPageSize" @change="accountPage = 1"><option :value="8">8 / {{ tr("tiktokCreative.account.page") }}</option><option :value="12">12 / {{ tr("tiktokCreative.account.page") }}</option></select>
-            </div>
+              <select v-model.number="accountPageSize" class="vg-input vg-select vg-input--sm ts-acct__size" @change="accountPage = 1"><option :value="8">8 / {{ tr("tiktokCreative.account.page") }}</option><option :value="12">12 / {{ tr("tiktokCreative.account.page") }}</option></select>
+            </footer>
           </div>
-          <div class="account-form">
-            <strong>{{
-              editingAccountId
-                ? tr("autoUi.k_0009f81b767d")
-                : tr("autoUi.k_0d153e759c07")
-            }}</strong
-            ><label
-              >{{ tr("autoUi.k_3f2da24264f0")
-              }}<input
-                v-model="accountName"
-                type="text"
-                :placeholder="tr('autoUi.k_60ee315308b4')" /></label
-            ><label
-              >Cookie JSON<textarea
-                v-model="accountCookieJson"
-                rows="10"
-                :placeholder="
-                  editingAccountId
-                    ? tr('autoUi.k_bcb70996dabc')
-                    : tr('autoUi.k_70105d955b7f')
-                "
-              /></label
-            ><small v-if="editingAccountId" class="account-form-hint">{{
-              tr("autoUi.k_e75603d5853b")
-            }}</small
-            ><button
-              class="ghost-button small"
-              type="button"
-              @click="importCookieFile"
-            >
-              {{ tr("autoUi.k_58333db9405c") }}
-            </button>
-            <div class="dialog-actions">
-              <button
-                class="ghost-button"
-                type="button"
-                @click="resetAccountForm"
-              >
-                {{
-                  editingAccountId
-                    ? tr("autoUi.k_c698df948dd9")
-                    : tr("autoUi.k_84fcd70d4280")
-                }}</button
-              ><button
-                class="primary-button"
-                type="button"
-                :disabled="!editingAccountId && !accountCookieJson.trim()"
-                @click="saveAccount"
-              >
-                {{
-                  editingAccountId
-                    ? tr("autoUi.k_60b4ae9082a3")
-                    : tr("autoUi.k_dea49eba6b37")
-                }}
-              </button>
+
+          <!-- form -->
+          <aside class="ts-acct__form">
+            <div class="ts-acct__form-head">
+              <h3>{{ editingAccountId ? tr("autoUi.k_0009f81b767d") : tr("autoUi.k_0d153e759c07") }}</h3>
+              <span class="ts-state" :class="editingAccountId ? 'ts-state--run' : 'ts-state--ok'"><i />{{ editingAccountId ? tr("autoUi.k_a7f814c0a40d") : tr("tiktokCreative.account.add") }}</span>
             </div>
-          </div>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ tr("autoUi.k_3f2da24264f0") }}</span>
+              <input v-model="accountName" class="vg-input" type="text" :placeholder="tr('autoUi.k_60ee315308b4')" />
+            </label>
+            <label class="vg-field ts-acct__cookie">
+              <span class="vg-field__label">
+                Cookie JSON
+                <button class="ts-acct__import" type="button" @click.prevent="importCookieFile"><FileUp :size="13" />{{ tr("autoUi.k_58333db9405c") }}</button>
+              </span>
+              <textarea v-model="accountCookieJson" class="vg-textarea" spellcheck="false" :placeholder="editingAccountId ? tr('autoUi.k_bcb70996dabc') : tr('autoUi.k_70105d955b7f')" />
+            </label>
+            <p v-if="editingAccountId" class="ts-acct__hint"><Info :size="13" />{{ tr("autoUi.k_e75603d5853b") }}</p>
+            <p v-else class="ts-acct__hint"><ShieldCheck :size="13" />{{ tr("autoUi.k_630c37504d70") }}</p>
+            <div class="ts-acct__form-actions">
+              <button class="vg-btn" type="button" @click="resetAccountForm">{{ editingAccountId ? tr("autoUi.k_c698df948dd9") : tr("autoUi.k_84fcd70d4280") }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="!editingAccountId && !accountCookieJson.trim()" @click="saveAccount"><Check :size="15" />{{ editingAccountId ? tr("autoUi.k_60b4ae9082a3") : tr("autoUi.k_dea49eba6b37") }}</button>
+            </div>
+          </aside>
         </div>
-      </div>
+      </section>
     </div>
+
     <div v-if="materialDialogOpen" class="live-subtitle-dialog">
       <div class="live-subtitle-dialog__panel">
         <div class="live-subtitle-dialog__head">

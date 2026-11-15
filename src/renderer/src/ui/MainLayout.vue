@@ -16,6 +16,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  ArrowLeft,
+  Check,
 } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import TitleBar from "./components/TitleBar.vue";
@@ -212,7 +214,7 @@ onMounted(() => {
             :title="appSidebarCollapsed ? t('nav.settings') : undefined"
             @click="go('/settings')"
           >
-            <Settings class="shell-foot__icon" />
+            <span class="shell-foot__tile"><Settings class="shell-foot__icon" /></span>
             <span class="shell-foot__label">{{ t("nav.settings") }}</span>
           </button>
           <div
@@ -246,22 +248,32 @@ onMounted(() => {
 
         <template v-if="showCloneWorkflowTopbar" #topbar>
           <div class="app-topbar-shell has-clone-workflow">
-            <div class="app-topbar-clone">
-              <div class="app-topbar-clone__nav">
-                <template v-for="(item, index) in cloneTopbarItems" :key="item.key">
+            <nav class="vg-scope cwf" aria-label="clone workflow">
+              <button type="button" class="cwf-back" :title="t('cloneUi.backToList')" @click="router.push('/clone')">
+                <ArrowLeft class="cwf-back__icon" />
+                <span>{{ t("cloneUi.backToList") }}</span>
+              </button>
+              <span class="cwf-divider" />
+              <ol class="cwf-steps">
+                <li v-for="(item, index) in cloneTopbarItems" :key="item.key" class="cwf-steps__item">
                   <button
-                    class="app-topbar-clone__step"
+                    class="cwf-step"
                     :class="{ 'is-done': item.done, 'is-active': item.active }"
                     type="button"
+                    :title="item.desc || item.title"
+                    :aria-current="item.active ? 'step' : undefined"
                     @click="requestCloneStage(item.key)"
                   >
-                    <span class="app-topbar-clone__index">{{ item.done ? "✓" : index + 1 }}</span>
-                    <span class="app-topbar-clone__label">{{ item.title }}</span>
+                    <span class="cwf-step__index">
+                      <Check v-if="item.done && !item.active" class="cwf-step__check" />
+                      <template v-else>{{ index + 1 }}</template>
+                    </span>
+                    <span class="cwf-step__label">{{ item.title }}</span>
                   </button>
-                  <span v-if="index < cloneTopbarItems.length - 1" class="app-topbar-clone__arrow"></span>
-                </template>
-              </div>
-            </div>
+                  <span v-if="index < cloneTopbarItems.length - 1" class="cwf-line" :class="{ 'is-done': item.done }" />
+                </li>
+              </ol>
+            </nav>
           </div>
         </template>
 
@@ -351,31 +363,105 @@ onMounted(() => {
 .shell-foot__btn {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
-  color: var(--theme-text-secondary);
-  font-size: 13px;
+  color: color-mix(in srgb, var(--theme-text) 86%, transparent);
+  font-size: 14px;
   font-weight: 500;
+  letter-spacing: .02em;
   cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background .15s, color .15s, border-color .15s;
 }
-.shell-foot__btn:hover { background: var(--theme-control-hover); color: var(--theme-text); }
-.shell-foot__btn.is-active { background: var(--vg-accent-soft); color: var(--vg-accent); font-weight: 600; }
-.shell-foot__icon { width: 17px; height: 17px; flex-shrink: 0; }
+.shell-foot__tile {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--theme-text) 8%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  color: var(--theme-text-secondary);
+  transition: all .15s;
+}
+.shell-foot__btn:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); color: var(--theme-text); }
+.shell-foot__btn:hover .shell-foot__tile { color: var(--theme-text); border-color: color-mix(in srgb, var(--theme-text) 14%, transparent); }
+.shell-foot__btn.is-active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 18%, transparent), color-mix(in srgb, var(--theme-accent) 4%, transparent));
+  border-color: color-mix(in srgb, var(--theme-accent) 24%, transparent);
+  color: var(--theme-text);
+  font-weight: 600;
+}
+.shell-foot__btn.is-active .shell-foot__tile {
+  border-color: transparent;
+  background: var(--theme-accent);
+  color: var(--theme-on-accent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--theme-accent) 38%, transparent);
+}
+.shell-foot__icon { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 1.9; }
+
+/* Language picker rendered as a nav row with an icon tile */
+.app-shell :deep(.vg-nav__footer .locale-select::before) {
+  content: '';
+  position: absolute;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--theme-text) 8%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  pointer-events: none;
+}
+.app-shell :deep(.vg-nav__footer .locale-select__icon) {
+  left: 15px;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  color: var(--theme-text-secondary);
+}
+.app-shell :deep(.vg-nav__footer .locale-select__control) {
+  height: 40px;
+  padding-left: 47px;
+  border-color: transparent;
+  border-radius: 10px;
+  background-color: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--theme-text) 86%, transparent);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+.app-shell :deep(.vg-nav__footer .locale-select__control:hover) {
+  background-color: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  color: var(--theme-text);
+}
 
 .shell-foot__user {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 8px 6px 2px 8px;
+  margin-top: 6px;
+  padding: 8px 6px 8px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 1.5%, transparent));
 }
-.shell-foot__avatar { width: 30px; height: 30px; font-size: 13px; }
+.shell-foot__avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 9px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 100%, #ffffff 12%), color-mix(in srgb, var(--theme-accent) 100%, #000000 30%));
+  color: var(--theme-on-accent);
+}
 .shell-foot__user-copy {
   display: flex;
   flex-direction: column;
@@ -392,24 +478,28 @@ onMounted(() => {
   white-space: nowrap;
 }
 .shell-foot__user-copy small {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--theme-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.shell-foot__collapse { color: var(--theme-text-secondary); }
 
 /* Collapsed rail */
 .app-shell.is-sidebar-collapsed .shell-foot__btn { justify-content: center; padding: 0; }
 .app-shell.is-sidebar-collapsed .shell-foot__label,
 .app-shell.is-sidebar-collapsed .shell-foot__user-copy { display: none; }
-.shell-foot__user--link { cursor: pointer; border-radius: 10px; transition: background-color .15s; }
-.shell-foot__user--link:hover { background: var(--theme-hover, rgba(127, 127, 127, 0.08)); }
-.app-shell.is-sidebar-collapsed .shell-foot__user { flex-direction: column; gap: 8px; padding: 6px 0 0; }
+.shell-foot__user--link { cursor: pointer; transition: background-color .12s, border-color .12s; }
+.shell-foot__user--link:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); }
+.app-shell.is-sidebar-collapsed .shell-foot__user { flex-direction: column; gap: 6px; padding: 6px 0; border-color: transparent; background: transparent; }
 
 @media (max-width: 1180px) {
   .shell-foot__btn { justify-content: center; padding: 0; }
   .shell-foot__label,
   .shell-foot__user-copy,
   .app-shell :deep(.locale-select) { display: none; }
-  .shell-foot__user { flex-direction: column; gap: 8px; padding: 6px 0 0; }
+  .shell-foot__user { flex-direction: column; gap: 6px; padding: 6px 0; border-color: transparent; background: transparent; }
 }
 
 /* ===== Clone workflow topbar (kept until the clone workspace is migrated) ===== */
@@ -615,4 +705,31 @@ onMounted(() => {
 }
 
 .app-cloud-banners { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px 0; }
+
+/* ---------- clone workflow step bar ---------- */
+.cwf { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 14px 6px 8px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-lg, 14px); background: var(--theme-panel); }
+.cwf-back { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 8px; border: 0; border-radius: 9px; background: transparent; color: var(--theme-text-secondary); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+.cwf-back:hover { background: var(--theme-panel-soft); color: var(--theme-text); }
+.cwf-back__icon { width: 16px; height: 16px; }
+.cwf-divider { width: 1px; height: 22px; background: var(--theme-divider); flex-shrink: 0; }
+.cwf-steps { display: flex; align-items: center; flex: 1; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.cwf-steps__item { display: flex; align-items: center; flex: 1 1 0; min-width: 0; }
+.cwf-steps__item:last-child { flex: 0 0 auto; }
+.cwf-step { display: inline-flex; align-items: center; gap: 8px; min-width: 0; height: 36px; padding: 0 12px 0 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--theme-text-muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.cwf-step:hover { background: var(--theme-panel-soft); color: var(--theme-text); }
+.cwf-step__index { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border: 1.5px solid var(--theme-border-control); border-radius: 50%; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; transition: all .15s; }
+.cwf-step__check { width: 13px; height: 13px; stroke-width: 3; }
+.cwf-step__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.cwf-step.is-done { color: var(--theme-text-secondary); }
+.cwf-step.is-done .cwf-step__index { border-color: transparent; background: var(--vg-accent-soft); color: var(--vg-accent); }
+.cwf-step.is-active { border-color: var(--vg-accent-line); background: var(--vg-accent-soft); color: var(--theme-text); }
+.cwf-step.is-active .cwf-step__index { border-color: var(--vg-accent); background: var(--vg-accent); color: var(--theme-on-accent); box-shadow: 0 0 0 4px var(--vg-accent-soft); }
+.cwf-step.is-active .cwf-step__label { font-weight: 700; }
+.cwf-line { flex: 1; min-width: 12px; height: 2px; margin: 0 6px; border-radius: 2px; background: var(--theme-divider); }
+.cwf-line.is-done { background: color-mix(in srgb, var(--vg-accent) 55%, transparent); }
+@media (max-width: 1280px) {
+  .cwf-back span { display: none; }
+  .cwf-step:not(.is-active) .cwf-step__label { display: none; }
+  .cwf-step { padding-right: 6px; }
+}
 </style>

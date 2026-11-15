@@ -1,24 +1,23 @@
 <script setup lang="ts">
 import { thumbnailUrl } from '@/lib/localMedia'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AlertTriangle,
+  ArrowRight,
   Boxes,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock3,
+  Dna,
   FileImage,
   FolderOpen,
-  Grid2X2,
+  LayoutGrid,
   List,
   MoreHorizontal,
   Plus,
-  RefreshCw,
   Search,
-  Settings2,
+  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-vue-next'
@@ -88,6 +87,8 @@ const currentPage = ref(1)
 const pageSize = ref(12)
 const creating = reactive({ name: '', type: 'phone_case' as ProductType })
 const actionMenuOpenId = ref('')
+const createOpen = ref(false)
+const createNameInput = ref<HTMLInputElement | null>(null)
 const promptDialogOpen = ref(false)
 const promptVersions = ref<PromptVersion[]>([])
 const selectedPromptVersionId = ref('')
@@ -118,10 +119,6 @@ const pendingCount = computed(
     list.value.filter((item) => productImageCount(item) > 0 && !(item.analysisBoardStatus || item.canonicalSourceStatus)).length +
     list.value.filter((item) => productImageCount(item) > 0 && (item.analysisBoardStatus || item.canonicalSourceStatus) === 'idle').length,
 )
-const recentCount = computed(() =>
-  list.value.filter((item) => Date.now() - Number(item.updatedAt || 0) < 7 * 24 * 3600 * 1000).length,
-)
-
 const statusTabs = computed(() => [
   { key: 'all' as ProductStatusFilter, label: t('common.all'), count: list.value.length },
   { key: 'pending' as ProductStatusFilter, label: t('productLibrary.status.pending'), count: pendingCount.value },
@@ -279,8 +276,8 @@ function chipTone(tone: string) {
   return 'gray'
 }
 
-function productAnalysisTone(product: Product) {
-  return productAnalysisSummary(product) ? 'success' : 'warning'
+function productUpdatedAt(product: Product) {
+  return product.analysisBoardUpdatedAt ?? product.canonicalSourceUpdatedAt ?? product.updatedAt
 }
 
 async function refresh() {
@@ -371,6 +368,7 @@ async function createProduct() {
   })) as Product
   creating.name = ''
   creating.type = 'phone_case'
+  createOpen.value = false
   await refresh()
   void router.push(`/products/${created.id}`)
 }
@@ -403,9 +401,15 @@ function toggleActionMenu(productId: string) {
   actionMenuOpenId.value = actionMenuOpenId.value === productId ? '' : productId
 }
 
+function openCreate() {
+  createOpen.value = !createOpen.value
+  if (createOpen.value) void nextTick(() => createNameInput.value?.focus())
+}
+
 function handleDocumentClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
-  if (target?.closest('.product-card__menu')) return
+  if (!target?.closest('.pl-create')) createOpen.value = false
+  if (target?.closest('.pl-card__more')) return
   actionMenuOpenId.value = ''
 }
 

@@ -2070,7 +2070,8 @@
       "creatorManagement": "Creator Management",
       "inventoryAnalysis": "Inventory Analytics",
       "download": "Download",
-      "videoProcessing": "Video Processing"
+      "videoProcessing": "Video Processing",
+      "listing": "Product Listing"
     },
     "actions": {
       "openWorkspace": "Open Workspace",
@@ -2142,9 +2143,13 @@
         "name": "Video Batch Subtitle",
         "description": "Recognize, style, burn in, and export video subtitles."
       },
-      "geelark-publisher": {
-        "name": "Geelark Publisher",
-        "description": "Submit clone outputs to Geelark cloud-phone publishing workflows from a dedicated workspace."
+      "tiktok-creator-hub": {
+        "name": "TikTok Creator Hub",
+        "description": "Multi-shop creator management: sample requests, per-creator fulfillment rate and sample costs, synced read-only from TikTok Shop Affiliate."
+      },
+      "tiktok-listing-helper": {
+        "name": "TikTok Listing Helper",
+        "description": "Generate TikTok listing images, titles and descriptions from product photos, and export Excel templates in batches."
       }
     },
     "detail": { "eyebrow": "Plugin Detail", "status": "Status", "category": "Category", "path": "Path" }
@@ -2282,104 +2287,6 @@
       "selectOutput": "Choose an export folder first."
     },
     "messages": { "templateSaved": "Template saved.", "processed": "Complete: {success} succeeded, {failed} failed." }
-  },
-  "geelarkPublishCenter": {
-    "hero": {
-      "back": "Back To Plugin Market",
-      "title": "Publishing Workspace",
-      "desc": "Publish, manage, and track plugin tasks and configuration.",
-      "loading": "Loading publishing center data..."
-    },
-    "gate": {
-      "error": "The GeeLark plugin is not installed and enabled.",
-      "title": "Publishing Center Locked",
-      "desc": "Return to plugin settings and complete a real GeeLark installation and activation first.",
-      "back": "Back To Plugin Settings"
-    }
-  },
-  "geelarkPublisher": {
-    "hero": {
-      "eyebrow": "GeeLark Publishing Settings",
-      "title": "Configure the plugin and accounts before opening the publishing center",
-      "desc": "This page manages plugin activation, API settings, and publishing accounts. Videos and publishing tasks are handled in a separate workspace."
-    },
-    "loading": "Loading GeeLark settings...",
-    "stats": {
-      "pluginStatus": "Plugin Status",
-      "accounts": "Publishing Accounts",
-      "accountsDesc": "Accounts currently available for publishing",
-      "cloudPhones": "Cloud Phones",
-      "cloudPhonesDesc": "Cloud phone devices loaded from GeeLark"
-    },
-    "status": {
-      "enabled": "Enabled",
-      "disabled": "Disabled",
-      "installed": "Plugin Installed",
-      "notInstalled": "Plugin Not Installed",
-      "saved": "Saved",
-      "notSaved": "Not Saved",
-      "notSelected": "Not Selected"
-    },
-    "setup": {
-      "eyebrow": "Plugin Setup",
-      "title": "The GeeLark plugin is not enabled",
-      "desc": "Install and enable the plugin before configuring the API, binding accounts, or opening the publishing center."
-    },
-    "config": {
-      "eyebrow": "API Configuration",
-      "appIdPlaceholder": "Enter the GeeLark App ID",
-      "timeout": "Request Timeout (ms)",
-      "keepSecret": "Leave blank to keep the saved secret",
-      "keepToken": "Optional. Leave blank to keep the saved token",
-      "currentStatus": "Current Status"
-    },
-    "center": {
-      "eyebrow": "Publishing Entry",
-      "title": "Publishing Center",
-      "cardTitle": "Publishing now has a dedicated workspace",
-      "desc": "Ready videos, AI titles, music presets, and recent publishing tasks are managed on a separate page."
-    },
-    "accounts": {
-      "eyebrow": "Account Binding",
-      "title": "Publishing Accounts And Cloud Phones",
-      "name": "Account Name",
-      "namePlaceholder": "Example: TikTok US 01",
-      "accountId": "GeeLark Account ID",
-      "accountIdPlaceholder": "Optional account identifier",
-      "bindPhone": "Bind Cloud Phone",
-      "selectPhone": "Select a cloud phone",
-      "status": "Status",
-      "remark": "Notes",
-      "remarkPlaceholder": "Record the account purpose, region, or product category",
-      "currentDevice": "Current Device",
-      "updatedAt": "Updated",
-      "empty": "No publishing accounts yet. Add an account first."
-    },
-    "actions": {
-      "openCenter": "Open Publishing Center",
-      "installEnable": "Install And Enable Plugin",
-      "saveConfig": "Save Configuration",
-      "enterCenter": "Enter Publishing Center",
-      "refreshing": "Refreshing...",
-      "refreshPhones": "Refresh Cloud Phones",
-      "updateAccount": "Update Account",
-      "addAccount": "Add Account",
-      "cancelEdit": "Cancel Edit",
-      "edit": "Edit",
-      "delete": "Delete"
-    },
-    "messages": {
-      "pluginEnabled": "The GeeLark plugin is installed and enabled.",
-      "configSaved": "GeeLark configuration saved.",
-      "configSavedLocal": "GeeLark configuration saved locally.",
-      "phonesRefreshed": "Cloud phone list refreshed.",
-      "phonesUnavailable": "This runtime does not provide the cloud phone API.",
-      "accountUpdated": "Publishing account updated.",
-      "accountCreated": "Publishing account created.",
-      "accountSavedLocal": "Publishing account saved locally.",
-      "accountDeleted": "Publishing account deleted.",
-      "accountDeletedLocal": "Publishing account removed locally."
-    }
   },
   "livePhoto": {
     "hero": {
@@ -3319,6 +3226,7 @@
     "pagination": { "summary": "{count} total, showing {start}-{end}" }
   },
   "modelLibrary": {
+    "spec": { "total": "Total models", "ready": "Ready", "generating": "Generating", "failed": "Failed", "profile": "Profile", "gender": "Gender", "age": "Age range", "market": "Market", "skin": "Skin tone", "hair": "Hair", "outfit": "Outfit", "mood": "Mood", "scene": "Scene", "gallery": "Multi-angle assets", "images": "{count} images", "copyId": "Copy ID", "meta": "Record", "selectHint": "Select a model to view details", "updated": "Updated {time}" },
     "title": "Model Library",
     "desc": "Manage AI models, filter appearances and scenes, and bind them to clone projects.",
     "import": "Import Model",
@@ -4466,8 +4374,5 @@
     "strategy": { "profit": "Profit protection", "profitHint": "Protect break-even ROI and profit floor", "budget": "Budget protection", "budgetHint": "Limit budget increases and abnormal spend", "roi": "ROI protection", "roiHint": "Limit each change and enforce observation lock", "data": "Data protection", "dataHint": "Block missing, stale, and incomplete data", "permission": "Execution permissions", "permissionHint": "Every platform change still requires approval" },
     "audit": { "execution": "Execution records", "results": "Result evaluation", "exceptions": "Exceptions", "before": "Before", "after": "After", "improved": "Effective", "stable": "Stable", "invalid": "Ineffective", "noResults": "No results available", "noExceptions": "No exceptions" },
     "settings": { "subtitle": "Manage connections, data, costs, strategies, permissions, notifications, and safety status.", "connection": "TikTok connection", "sync": "Data sync", "cost": "Cost and profit", "strategy": "ROI and strategies", "permissions": "Platform permissions", "notifications": "Notifications", "emergency": "Emergency stop", "configured": "Configured", "notConfigured": "Needs setup", "open": "Open settings", "syncNow": "Sync now", "staleItems": "items need fresh data", "emergencyHint": "Platform writes are active and can be stopped immediately", "costHint": "Manage product costs, store defaults, and profit boundaries", "strategyHint": "Manage ROI, budget, and data protection rules", "permissionHint": "{enabled} of {total} capabilities available" }
-  },
-  "tiktokCreatorOutreach": {
-      "title": "Creator outreach workspace", "subtitle": "Manage creator discovery, invitations, and messages from one compact workspace.", "noShop": "No shop selected", "addAccount": "Add shop", "refresh": "Refresh data", "connected": "Connected", "actionRequired": "Action required", "apiConnected": "API connected", "authorizationRequired": "Authorization required", "authorize": "Authorize shop", "configured": "Configured", "setupRequired": "Setup required", "saveSettings": "Save settings", "shopConnections": "Shop connections", "connectHint": "Add a TikTok Shop to begin.", "connectShop": "Connect shop", "local": "Local store", "crossBorder": "Cross-border", "oauthHint": "Each shop uses an isolated OAuth authorization.", "quickTitle": "Quick start", "quickHint": "Choose a workflow and keep the key actions in the current view.", "quickCreators": "Search and filter creators that match your criteria.", "quickInvite": "Create invitation plans and run them in batches.", "quickMessage": "Send template messages to invited creators.", "prepareInvites": "Prepare invitations", "prepareMessages": "Prepare messages", "totalCreators": "Total creators", "batchSize": "Batch size", "batchHint": "Automatically split into official batches of 50 or less.", "invitedOnly": "Invited creators only", "invitedOnlyHint": "Use invited creators returned by the API.", "invitationName": "Invitation name", "expiry": "Expiry date", "contentType": "Content type", "productIds": "Product IDs", "baseCommission": "Base commission", "adCommission": "Ad commission", "productLabel": "Product name", "invitationMessage": "Invitation message", "messageTemplate": "Message template", "variables": "Variables: creatorName, productName, shopName, commissionRate", "preview": "Preview", "batchOf": "Batch {current} of {total}", "confirmBatch": "Confirm and run batch", "queue": "Execution queue", "batchesReady": "batches ready", "currentBatch": "Current batch", "creators": "creators", "activityTitle": "Recent API activity", "noActivity": "No activity for the selected shop yet.", "apiSettings": "Partner Center API settings", "syncing": "Syncing", "ready": "Ready", "taskQueueKicker": "TASK QUEUE", "createTask": "Create task", "taskSource": "Creator source", "sourceMarketplace": "Marketplace filters", "sourceSpecified": "Specified creators", "sourceLibrary": "My creator library", "specifiedCreatorsLabel": "Creator IDs, usernames, or URLs", "specifiedCreatorsHint": "One creator ID, username, or profile URL per line", "taskCompleted": "completed", "startTask": "Start", "resumeTask": "Resume", "pauseTask": "Pause", "cancelTask": "Cancel", "retryFailed": "Retry failed", "saveSelected": "Save to library", "taskStatus": { "draft": "Draft", "preview": "Ready", "running": "Running", "paused": "Paused", "completed": "Completed", "cancelled": "Cancelled", "failed": "Failed" }, "metrics": { "authorization": "Authorization", "quota": "Outreach quota", "remaining": "remaining this period", "inbox": "Inbox", "attention": "conversations requiring attention", "sync": "Last sync", "official": "official API status" }, "tabs": { "overview": "Overview", "creators": "Creators", "campaign": "Campaign", "messages": "Messages", "activity": "Activity", "settings": "Settings" }, "errors": { "shopNotAuthorized": "This shop has not completed OAuth authorization. Save valid Partner Center API settings, then authorize this shop.", "apiNotConfigured": "Save the Partner Center API settings first.", "invalidAppKey": "The App Key is invalid. Enter the App Key generated in Partner Center.", "invalidCallback": "The OAuth callback is invalid. Enter an HTTPS URL registered in Partner Center.", "appSecretRequired": "Enter the App Secret generated in Partner Center." }
   }
 }

@@ -2632,7 +2632,8 @@
       "creatorManagement": "达人管理",
       "inventoryAnalysis": "库存分析",
       "download": "下载",
-      "videoProcessing": "视频处理"
+      "videoProcessing": "视频处理",
+      "listing": "商品上架"
     },
     "actions": {
       "openWorkspace": "打开工作台",
@@ -2704,9 +2705,13 @@
         "name": "视频批量字幕",
         "description": "完成字幕识别、样式设置、烧录和导出。"
       },
-      "geelark-publisher": {
-        "name": "Geelark 发布工具",
-        "description": "在专用工作台中把复刻成片提交到 Geelark 云手机发布流程。"
+      "tiktok-creator-hub": {
+        "name": "TikTok 达人中心",
+        "description": "多店铺达人管理：样品申请、单个达人的履约率与样品成本，从 TikTok Shop 联盟只读同步。"
+      },
+      "tiktok-listing-helper": {
+        "name": "TikTok 商品上架助手",
+        "description": "上传商品实拍图后生成 TikTok 上架图片、标题、描述，并批量导出 Excel 模板。"
       }
     },
     "detail": { "eyebrow": "插件详情", "status": "状态", "category": "分类", "path": "路径" }
@@ -2842,104 +2847,6 @@
       "selectOutput": "请先选择导出目录。"
     },
     "messages": { "templateSaved": "模板已保存。", "processed": "处理完成：成功 {success} 张，失败 {failed} 张。" }
-  },
-  "geelarkPublishCenter": {
-    "hero": {
-      "back": "返回插件市场",
-      "title": "发布工作台",
-      "desc": "发布、管理和跟踪插件任务与配置。",
-      "loading": "正在加载发布中心数据..."
-    },
-    "gate": {
-      "error": "GeeLark 插件尚未安装并启用。",
-      "title": "发布中心已锁定",
-      "desc": "请先返回插件设置，完成真实安装并启用 GeeLark 插件。",
-      "back": "返回插件设置"
-    }
-  },
-  "geelarkPublisher": {
-    "hero": {
-      "eyebrow": "GeeLark 发布设置",
-      "title": "先配置插件与账号，再进入独立发布中心",
-      "desc": "此页面负责 GeeLark 插件启用、接口配置和发布账号绑定。待发布视频与发布任务在独立工作台中处理。"
-    },
-    "loading": "正在加载 GeeLark 配置...",
-    "stats": {
-      "pluginStatus": "插件状态",
-      "accounts": "发布账号",
-      "accountsDesc": "当前可用于发布的账号数量",
-      "cloudPhones": "云手机",
-      "cloudPhonesDesc": "已拉取的云手机设备数量"
-    },
-    "status": {
-      "enabled": "已启用",
-      "disabled": "未启用",
-      "installed": "插件已安装",
-      "notInstalled": "插件未安装",
-      "saved": "已保存",
-      "notSaved": "未保存",
-      "notSelected": "未选择"
-    },
-    "setup": {
-      "eyebrow": "插件准备",
-      "title": "GeeLark 插件尚未启用",
-      "desc": "请先安装并启用插件，再继续配置 API、绑定账号和进入发布中心。"
-    },
-    "config": {
-      "eyebrow": "接口配置",
-      "appIdPlaceholder": "填写 GeeLark App ID",
-      "timeout": "请求超时（毫秒）",
-      "keepSecret": "留空则保持已有密钥不变",
-      "keepToken": "可选，留空则保持已有 Token 不变",
-      "currentStatus": "当前状态"
-    },
-    "center": {
-      "eyebrow": "发布入口",
-      "title": "独立发布中心",
-      "cardTitle": "发布列表已拆为单独界面",
-      "desc": "待发布复刻视频、AI 标题、音乐候选和最近发布任务都在独立页面处理。"
-    },
-    "accounts": {
-      "eyebrow": "账号绑定",
-      "title": "发布账号与云手机",
-      "name": "账号名称",
-      "namePlaceholder": "例如：TK 美区 01",
-      "accountId": "GeeLark 账号 ID",
-      "accountIdPlaceholder": "可选，用于定位账号",
-      "bindPhone": "绑定云手机",
-      "selectPhone": "请选择云手机",
-      "status": "状态",
-      "remark": "备注",
-      "remarkPlaceholder": "记录账号用途、地区或商品方向",
-      "currentDevice": "当前设备",
-      "updatedAt": "更新时间",
-      "empty": "还没有发布账号，请先新增账号。"
-    },
-    "actions": {
-      "openCenter": "打开发布中心",
-      "installEnable": "安装并启用插件",
-      "saveConfig": "保存配置",
-      "enterCenter": "进入发布中心",
-      "refreshing": "刷新中...",
-      "refreshPhones": "刷新云手机",
-      "updateAccount": "更新账号",
-      "addAccount": "新增账号",
-      "cancelEdit": "取消编辑",
-      "edit": "编辑",
-      "delete": "删除"
-    },
-    "messages": {
-      "pluginEnabled": "GeeLark 插件已安装并启用。",
-      "configSaved": "GeeLark 配置已保存。",
-      "configSavedLocal": "GeeLark 配置已保存到本地。",
-      "phonesRefreshed": "云手机列表已刷新。",
-      "phonesUnavailable": "当前运行实例未提供云手机接口。",
-      "accountUpdated": "发布账号已更新。",
-      "accountCreated": "发布账号已创建。",
-      "accountSavedLocal": "发布账号已保存到本地。",
-      "accountDeleted": "发布账号已删除。",
-      "accountDeletedLocal": "发布账号已从本地删除。"
-    }
   },
   "livePhoto": {
     "hero": {
@@ -3292,6 +3199,7 @@
     "pagination": { "summary": "共 {count} 条，当前显示 {start}-{end}" }
   },
   "modelLibrary": {
+    "spec": { "total": "模特总数", "ready": "已就绪", "generating": "生成中", "failed": "生成失败", "profile": "形象档案", "gender": "性别", "age": "年龄段", "market": "目标市场", "skin": "肤色", "hair": "发型", "outfit": "穿搭", "mood": "气质", "scene": "场景", "gallery": "多角度素材", "images": "{count} 张", "copyId": "复制 ID", "meta": "记录信息", "selectHint": "选择一个模特查看详情", "updated": "更新于 {time}" },
     "title": "模特库",
     "desc": "管理 AI 数字模特，筛选形象与场景，并绑定到复刻项目。",
     "import": "导入模特",
@@ -4439,8 +4347,5 @@
     "strategy": { "profit": "利润保护", "profitHint": "守住盈亏平衡 ROI 和利润底线", "budget": "预算保护", "budgetHint": "限制单次预算增幅和异常消耗", "roi": "ROI 保护", "roiHint": "限制单次调整并执行观察锁", "data": "数据保护", "dataHint": "阻断缺失、过期和不完整数据", "permission": "执行权限", "permissionHint": "所有平台变更仍需人工审批" },
     "audit": { "execution": "执行记录", "results": "结果评估", "exceptions": "异常记录", "before": "调整前", "after": "调整后", "improved": "有效", "stable": "稳定", "invalid": "无效", "noResults": "暂无可评估结果", "noExceptions": "暂无异常记录" },
     "settings": { "subtitle": "集中管理连接、数据、成本、策略、权限、通知和安全状态。", "connection": "TikTok 连接", "sync": "数据同步", "cost": "成本与利润", "strategy": "ROI 与自动策略", "permissions": "平台权限", "notifications": "通知配置", "emergency": "紧急停止", "configured": "已配置", "notConfigured": "待配置", "open": "打开设置", "syncNow": "立即同步", "staleItems": "项数据需要更新", "emergencyHint": "当前平台写入正常，需要时可立即停止", "costHint": "管理商品成本、店铺默认成本和利润边界", "strategyHint": "管理 ROI、预算和数据保护规则", "permissionHint": "{enabled} / {total} 项能力可用" }
-  },
-  "tiktokCreatorOutreach": {
-      "title": "达人联系工作台", "subtitle": "在一个紧凑工作区管理达人搜索、邀约和消息。", "noShop": "未选择店铺", "addAccount": "添加店铺", "refresh": "刷新数据", "connected": "已连接", "actionRequired": "需要操作", "apiConnected": "API 已连接", "authorizationRequired": "需要授权", "authorize": "授权店铺", "configured": "已配置", "setupRequired": "需要配置", "saveSettings": "保存设置", "shopConnections": "店铺连接", "connectHint": "添加 TikTok Shop 店铺开始操作。", "connectShop": "连接店铺", "local": "本土店", "crossBorder": "跨境店", "oauthHint": "每个店铺使用独立的 OAuth 授权。", "quickTitle": "快速开始", "quickHint": "选择一个工作流，所有关键操作都在当前页面完成。", "quickCreators": "搜索并筛选符合条件的达人。", "quickInvite": "创建邀约计划并按批次执行。", "quickMessage": "向已邀约达人发送模板消息。", "prepareInvites": "准备邀约", "prepareMessages": "准备消息", "totalCreators": "达人总数", "batchSize": "单批数量", "batchHint": "自动拆分为不超过 50 人的官方批次。", "invitedOnly": "仅已邀约达人", "invitedOnlyHint": "只使用 API 返回的已邀约达人。", "invitationName": "邀约名称", "expiry": "截止日期", "contentType": "内容类型", "productIds": "商品 ID", "baseCommission": "基础佣金", "adCommission": "广告佣金", "productLabel": "商品名称", "invitationMessage": "邀约内容", "messageTemplate": "消息模板", "variables": "变量：creatorName、productName、shopName、commissionRate", "preview": "预览", "batchOf": "第 {current} / {total} 批", "confirmBatch": "确认并执行本批", "queue": "执行队列", "batchesReady": "个批次已准备", "currentBatch": "当前批次", "creators": "位达人", "activityTitle": "最近 API 活动", "noActivity": "当前店铺暂无活动记录", "apiSettings": "Partner Center API 设置", "syncing": "同步中", "ready": "就绪", "taskQueueKicker": "任务队列", "createTask": "创建任务", "taskSource": "达人来源", "sourceMarketplace": "筛选达人库", "sourceSpecified": "指定达人", "sourceLibrary": "我的达人库", "specifiedCreatorsLabel": "达人 ID、用户名或链接", "specifiedCreatorsHint": "每行一个达人标识，支持 ID、用户名或主页链接", "taskCompleted": "已完成", "startTask": "开始", "resumeTask": "继续", "pauseTask": "暂停", "cancelTask": "取消", "retryFailed": "重试失败项", "saveSelected": "加入达人库", "taskStatus": { "draft": "草稿", "preview": "待确认", "running": "执行中", "paused": "已暂停", "completed": "已完成", "cancelled": "已取消", "failed": "失败" }, "metrics": { "authorization": "授权状态", "quota": "邀约额度", "remaining": "本周期剩余", "inbox": "收件箱", "attention": "需要关注的会话", "sync": "最近同步", "official": "官方 API 状态" }, "tabs": { "overview": "总览", "creators": "达人", "campaign": "邀约计划", "messages": "消息", "activity": "活动", "settings": "设置" }, "errors": { "shopNotAuthorized": "当前店铺尚未完成 OAuth 授权。请先保存正确的 Partner Center API 配置，再授权此店铺。", "apiNotConfigured": "请先在设置中保存 Partner Center API 配置。", "invalidAppKey": "App Key 无效。请填写 Partner Center 生成的 App Key。", "invalidCallback": "OAuth 回调地址无效。请填写已在 Partner Center 注册的 HTTPS 地址。", "appSecretRequired": "请填写 Partner Center 生成的 App Secret。" }
   }
 }

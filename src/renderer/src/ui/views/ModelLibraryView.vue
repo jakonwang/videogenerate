@@ -14,7 +14,10 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronDown,
+  CheckCircle2,
+  Copy,
+  AlertCircle,
+  Users,
   Download,
   Grid2x2,
   ImagePlus,
@@ -22,7 +25,6 @@ import {
   LoaderCircle,
   MoreHorizontal,
   Search,
-  Star,
   Wand2,
   X,
   Pencil,
@@ -463,6 +465,56 @@ const allCurrentPageSelected = computed(() => pagedLibrary.value.length > 0 && p
 const selectedModel = computed(() => {
   return library.value.find((item) => item.id === selectedId.value) ?? pagedLibrary.value[0] ?? sortedLibrary.value[0] ?? null
 })
+
+const statusStats = computed(() => {
+  const rows = library.value
+  return [
+    { key: 'all' as const, label: t('modelLibrary.spec.total'), value: rows.length, tone: 'total' },
+    { key: 'done' as const, label: t('modelLibrary.spec.ready'), value: rows.filter((item) => item.status === 'done').length, tone: 'ready' },
+    { key: 'generating' as const, label: t('modelLibrary.spec.generating'), value: rows.filter((item) => item.status === 'generating').length, tone: 'generating' },
+    { key: 'failed' as const, label: t('modelLibrary.spec.failed'), value: rows.filter((item) => item.status === 'failed').length, tone: 'failed' },
+  ]
+})
+
+const activeImageIndex = ref(0)
+watch(selectedId, () => {
+  activeImageIndex.value = 0
+})
+const selectedImages = computed(() => {
+  const item = selectedModel.value
+  if (!item) return [] as string[]
+  const list = [item.coverImagePath, ...(item.imagePaths || [])].map((p) => String(p || '').trim()).filter(Boolean)
+  return Array.from(new Set(list))
+})
+const selectedHeroImage = computed(() => selectedImages.value[activeImageIndex.value] || selectedImages.value[0] || '')
+const selectedSpecs = computed(() => {
+  const item = selectedModel.value
+  if (!item) return []
+  return [
+    { key: 'gender', label: t('modelLibrary.spec.gender'), value: item.gender },
+    { key: 'age', label: t('modelLibrary.spec.age'), value: item.ageRange },
+    { key: 'market', label: t('modelLibrary.spec.market'), value: item.market },
+    { key: 'skin', label: t('modelLibrary.spec.skin'), value: item.skinTone },
+    { key: 'hair', label: t('modelLibrary.spec.hair'), value: item.hairStyle },
+    { key: 'outfit', label: t('modelLibrary.spec.outfit'), value: item.outfitStyle },
+    { key: 'mood', label: t('modelLibrary.spec.mood'), value: item.mood },
+    { key: 'scene', label: t('modelLibrary.spec.scene'), value: item.sceneStyle },
+  ].filter((row) => String(row.value || '').trim())
+})
+
+function setStatusFilter(value: LibraryStatusFilter) {
+  activeTab.value = 'all'
+  statusFilter.value = value
+}
+
+function cardMeta(item: ModelIdentityLibraryItem) {
+  return [item.ageRange, item.market].map((v) => String(v || '').trim()).filter(Boolean).join(' · ') || productTypeTag(item.productType)
+}
+
+function relativeDate(timestamp?: number) {
+  if (!timestamp) return '--'
+  return new Date(timestamp).toLocaleDateString(locale.value)
+}
 
 const pages = computed(() => Array.from({ length: Math.min(totalPages.value, 4) }, (_, index) => index + 1))
 
@@ -1115,13 +1167,13 @@ watch([activeTab, statusFilter, search], () => {
 
 <template>
   <div class="vg-scope vg-page ml" data-testid="models-library-page">
-    <header class="vg-page-head">
-      <span class="vg-page-head__icon"><Sparkles :size="20" /></span>
-      <div class="vg-page-head__text">
+    <header class="ml-head">
+      <div class="ml-head__text">
+        <span class="ml-head__eyebrow"><Sparkles :size="13" /> AI Model Studio</span>
         <h1>{{ t('modelLibrary.title') }}</h1>
         <p>{{ t('modelLibrary.desc') }}</p>
       </div>
-      <div class="vg-page-head__actions">
+      <div class="ml-head__actions">
         <button type="button" class="vg-btn" @click="openCreatePanel"><Download :size="15" /> {{ t('modelLibrary.import') }}</button>
         <button type="button" class="vg-btn vg-btn--primary" data-testid="models-open-create" @click="openCreatePanel">
           <Wand2 :size="15" /> {{ t('modelLibrary.create') }}
@@ -1129,52 +1181,51 @@ watch([activeTab, statusFilter, search], () => {
       </div>
     </header>
 
+    <div class="ml-stats">
+      <button
+        v-for="stat in statusStats"
+        :key="stat.key"
+        type="button"
+        class="ml-stat"
+        :class="[`is-${stat.tone}`, { 'is-active': statusFilter === stat.key && activeTab === 'all' }]"
+        @click="setStatusFilter(stat.key)"
+      >
+        <span class="ml-stat__icon">
+          <Users v-if="stat.tone === 'total'" :size="16" />
+          <CheckCircle2 v-else-if="stat.tone === 'ready'" :size="16" />
+          <LoaderCircle v-else-if="stat.tone === 'generating'" :size="16" />
+          <AlertCircle v-else :size="16" />
+        </span>
+        <span class="ml-stat__body">
+          <b class="vg-num">{{ stat.value }}</b>
+          <small>{{ stat.label }}</small>
+        </span>
+      </button>
+    </div>
+
     <div class="ml-layout" :class="{ 'has-detail': selectedModel }">
       <!-- Catalog -->
-      <section class="vg-card ml-catalog">
-        <div class="vg-toolbar">
-          <div class="vg-seg vg-seg--sm">
-            <button
-              v-for="tab in tabItems"
-              :key="tab.key"
-              type="button"
-              class="vg-seg__btn"
-              :class="{ 'is-active': activeTab === tab.key }"
-              @click="activeTab = tab.key"
-            >
-              {{ tab.label }} <span class="vg-count">{{ tab.count }}</span>
-            </button>
-          </div>
-          <span class="vg-toolbar__spacer"></span>
-          <select v-model="statusFilter" class="vg-select vg-select--sm" :aria-label="statusFilterLabel">
-            <option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-          <select v-model="productType" class="vg-select vg-select--sm" :aria-label="productTypeLabel">
-            <option v-for="option in productTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+      <section class="ml-catalog">
+        <div class="ml-toolbar">
           <label class="vg-search ml-search">
-            <Search :size="14" />
-            <input v-model="search" class="vg-input vg-input--sm" type="text" :placeholder="t('modelLibrary.searchPlaceholder')" />
+            <Search :size="15" />
+            <input v-model="search" class="vg-input" type="text" :placeholder="t('modelLibrary.searchPlaceholder')" />
           </label>
-          <div class="vg-row ml-view">
-            <button type="button" class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-active': viewMode === 'grid' }" @click="viewMode = 'grid'"><Grid2x2 :size="15" /></button>
-            <button type="button" class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><LayoutList :size="15" /></button>
-          </div>
-        </div>
-
-        <div class="ml-summary">
-          <span class="ml-summary__count"><b>{{ sortedLibrary.length }}</b> {{ t('modelLibrary.modelsUnit') }}</span>
-          <span class="vg-muted">{{ t('modelLibrary.availableSummary') }}</span>
+          <span class="ml-toolbar__count"><b class="vg-num">{{ sortedLibrary.length }}</b> {{ t('modelLibrary.modelsUnit') }}</span>
           <span class="vg-toolbar__spacer"></span>
-          <span v-if="selectedIds.length" class="vg-pill vg-pill--accent">
-            {{ t('modelLibrary.selectedCount', { count: selectedIds.length }) }} · {{ allCurrentPageSelected ? t('modelLibrary.pageSelected') : t('modelLibrary.selecting') }}
-          </span>
-          <button type="button" class="vg-btn vg-btn--sm" @click="toggleSelectCurrentPage">
+          <template v-if="selectedIds.length">
+            <span class="ml-toolbar__selected">{{ t('modelLibrary.selectedCount', { count: selectedIds.length }) }}</span>
+            <button type="button" class="vg-btn vg-btn--danger vg-btn--sm" :disabled="dialogBusy" @click="deleteModelsBatch">
+              <Trash2 :size="14" /> {{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.batchDelete', { count: selectedIds.length }) }}
+            </button>
+          </template>
+          <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="toggleSelectCurrentPage">
             {{ allCurrentPageSelected ? t('modelLibrary.unselectPage') : t('modelLibrary.selectPage') }}
           </button>
-          <button v-if="selectedIds.length" type="button" class="vg-btn vg-btn--danger vg-btn--sm" :disabled="dialogBusy" @click="deleteModelsBatch">
-            <Trash2 :size="14" /> {{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.batchDelete', { count: selectedIds.length }) }}
-          </button>
+          <div class="ml-view">
+            <button type="button" class="ml-view__btn" :class="{ 'is-active': viewMode === 'grid' }" @click="viewMode = 'grid'"><Grid2x2 :size="15" /></button>
+            <button type="button" class="ml-view__btn" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><LayoutList :size="15" /></button>
+          </div>
         </div>
 
         <div v-if="pagedLibrary.length" class="ml-grid" :class="{ 'is-list': viewMode === 'list' }">
@@ -1182,54 +1233,50 @@ watch([activeTab, statusFilter, search], () => {
             v-for="(item, index) in pagedLibrary"
             :key="item.id"
             class="ml-card"
-            :class="{ 'is-active': selectedId === item.id, 'is-checked': selectedSet.has(item.id) }"
+            :class="{ 'is-active': selectedModel?.id === item.id, 'is-checked': selectedSet.has(item.id) }"
             @click="selectedId = item.id"
           >
             <div class="ml-card__media">
-              <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="thumbnailUrl(item.coverImagePath || item.imagePaths?.[0], 320)" :alt="item.name" loading="lazy" decoding="async" />
+              <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="thumbnailUrl(item.coverImagePath || item.imagePaths?.[0], 360)" :alt="item.name" loading="lazy" decoding="async" />
               <span v-else class="ml-card__fallback">AI</span>
+              <span v-if="item.status !== 'done'" class="ml-card__badge" :class="modelStatusTone(item.status)">
+                <LoaderCircle v-if="item.status === 'generating'" :size="12" class="vg-spin" />
+                {{ modelStatusText(item.status) }}
+              </span>
               <label class="ml-card__check" @click.stop>
                 <input type="checkbox" :checked="selectedSet.has(item.id)" @change="toggleSelected(item.id)" />
               </label>
-              <button type="button" class="ml-card__copy" :title="t('modelLibrary.details.id')" @click.stop="copyText(item.id, t('modelLibrary.messages.idCopied'))">
-                <Star :size="14" />
-              </button>
             </div>
 
             <div class="ml-card__body">
-              <div class="ml-card__head">
-                <h3 :title="modelTitle(item, index)">{{ modelTitle(item, index) }}</h3>
-                <div class="vg-menu-wrap">
-                  <button type="button" class="vg-icon-btn vg-icon-btn--sm" @click.stop="toggleActionMenu(item.id)"><MoreHorizontal :size="15" /></button>
-                  <div v-if="openActionMenu === item.id" class="vg-menu">
-                    <button type="button" @click="assignModelToProject(item)">{{ t('modelLibrary.actions.assign') }}</button>
-                    <button type="button" @click="openRenameDialog(item)">{{ t('modelLibrary.actions.rename') }}</button>
-                    <button type="button" @click="copyText(item.name || modelTitle(item, index), t('modelLibrary.messages.nameCopied'))">{{ t('modelLibrary.actions.copyName') }}</button>
-                    <button type="button" @click="revealModelImage(item)">{{ t('modelLibrary.actions.revealCover') }}</button>
-                    <button type="button" class="danger" @click="openDeleteDialog(item)">{{ t('modelLibrary.actions.delete') }}</button>
-                  </div>
+              <div class="ml-card__main">
+                <h3 :title="modelTitle(item, index)">
+                  <span class="ml-dot" :class="modelStatusTone(item.status)"></span>
+                  <span class="vg-ellipsis">{{ modelTitle(item, index) }}</span>
+                </h3>
+                <p class="ml-card__meta" :title="cardMeta(item)">{{ cardMeta(item) }}</p>
+              </div>
+              <span v-if="viewMode === 'list'" class="ml-card__date vg-num">{{ relativeDate(item.updatedAt || item.createdAt) }}</span>
+              <div class="vg-menu-wrap">
+                <button type="button" class="vg-icon-btn vg-icon-btn--sm" @click.stop="toggleActionMenu(item.id)"><MoreHorizontal :size="15" /></button>
+                <div v-if="openActionMenu === item.id" class="vg-menu" @click.stop>
+                  <button type="button" @click="assignModelToProject(item)">{{ t('modelLibrary.actions.assign') }}</button>
+                  <button type="button" @click="openRenameDialog(item)">{{ t('modelLibrary.actions.rename') }}</button>
+                  <button type="button" @click="copyText(item.name || modelTitle(item, index), t('modelLibrary.messages.nameCopied')); closeActionMenu()">{{ t('modelLibrary.actions.copyName') }}</button>
+                  <button type="button" @click="revealModelImage(item); closeActionMenu()">{{ t('modelLibrary.actions.revealCover') }}</button>
+                  <button type="button" class="danger" @click="openDeleteDialog(item)">{{ t('modelLibrary.actions.delete') }}</button>
                 </div>
-              </div>
-              <div class="vg-row ml-card__status">
-                <span class="vg-pill vg-pill--dot" :class="statusPill(item.status)">{{ modelStatusText(item.status) }}</span>
-                <span class="vg-pill vg-pill--violet">Pro</span>
-              </div>
-              <p class="ml-card__provider">{{ t('modelLibrary.modelProvider') }}: {{ languageText(item) }}</p>
-              <div class="ml-tags">
-                <span class="vg-chip" :title="item.mood || t('modelLibrary.defaults.mood')">{{ item.mood || t('modelLibrary.defaults.mood') }}</span>
-                <span class="vg-chip" :title="item.sceneStyle || t('modelLibrary.defaults.scene')">{{ item.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
-                <span class="vg-chip" :title="item.skinTone || t('modelLibrary.defaults.skin')">{{ item.skinTone || t('modelLibrary.defaults.skin') }}</span>
               </div>
             </div>
           </article>
         </div>
-        <div v-else class="vg-empty">
+        <div v-else class="vg-empty ml-empty">
           <span class="vg-empty__icon"><Sparkles :size="24" /></span>
           <p>{{ t('modelLibrary.empty') }}</p>
           <button type="button" class="vg-btn vg-btn--primary" @click="openCreatePanel"><Wand2 :size="15" /> {{ t('modelLibrary.create') }}</button>
         </div>
 
-        <footer class="vg-pager">
+        <footer v-if="sortedLibrary.length" class="vg-pager ml-pager">
           <div class="vg-pager__group">
             <span>{{ t('modelLibrary.totalCount', { count: sortedLibrary.length }) }}</span>
             <select v-model="pageSize" class="vg-select vg-select--sm" :aria-label="pageSizeLabel">
@@ -1245,32 +1292,42 @@ watch([activeTab, statusFilter, search], () => {
       </section>
 
       <!-- Detail -->
-      <aside v-if="selectedModel" class="vg-card ml-detail">
-        <div class="ml-detail__top">
-          <div class="ml-detail__cover">
-            <img v-if="selectedModel.coverImagePath || selectedModel.imagePaths?.[0]" :src="thumbnailUrl(selectedModel.coverImagePath || selectedModel.imagePaths?.[0], 480)" :alt="selectedModel.name" decoding="async" />
-            <span v-else class="ml-card__fallback">AI</span>
-          </div>
-          <button type="button" class="vg-icon-btn ml-detail__close" :aria-label="t('common.cancel')" @click="selectedId = ''"><X :size="16" /></button>
+      <aside v-if="selectedModel" class="ml-detail">
+        <div class="ml-detail__hero">
+          <img v-if="selectedHeroImage" :src="thumbnailUrl(selectedHeroImage, 720)" :alt="selectedModel.name" decoding="async" @dblclick="openModelImage(selectedModel)" />
+          <span v-else class="ml-card__fallback">AI</span>
+          <button type="button" class="ml-detail__close" :aria-label="t('common.cancel')" @click="selectedId = ''"><X :size="15" /></button>
         </div>
+        <div v-if="selectedImages.length > 1" class="ml-detail__thumbs">
+          <button
+            v-for="(image, imageIndex) in selectedImages.slice(0, 6)"
+            :key="`${selectedModel.id}-${imageIndex}`"
+            type="button"
+            class="ml-detail__thumb"
+            :class="{ 'is-active': selectedHeroImage === image }"
+            @click="activeImageIndex = imageIndex"
+          >
+            <img :src="thumbnailUrl(image, 160)" :alt="`${selectedModel.name}-${imageIndex}`" decoding="async" />
+          </button>
+        </div>
+
         <div class="ml-detail__title">
-          <h2>{{ selectedModel.name || t('modelLibrary.unnamed') }}</h2>
-          <div class="vg-row">
+          <div class="ml-detail__name">
+            <h2>{{ selectedModel.name || t('modelLibrary.unnamed') }}</h2>
             <span class="vg-pill vg-pill--dot" :class="statusPill(selectedModel.status)">{{ modelStatusText(selectedModel.status) }}</span>
-            <span class="vg-pill vg-pill--violet">Pro</span>
           </div>
-          <p class="vg-secondary ml-detail__summary">{{ modelMetrics(selectedModel) }}</p>
+          <p>{{ t('modelLibrary.spec.updated', { time: formatDate(selectedModel.updatedAt || selectedModel.createdAt) }) }}</p>
         </div>
 
         <div class="ml-detail__actions">
           <button type="button" class="vg-btn vg-btn--primary" @click="openCloneWithModel(selectedModel)">{{ t('modelLibrary.actions.use') }}</button>
-          <button type="button" class="vg-btn" @click="openRenameDialog(selectedModel)">{{ t('modelLibrary.actions.edit') }}</button>
+          <button type="button" class="vg-btn" @click="openRenameDialog(selectedModel)"><Pencil :size="14" /> {{ t('modelLibrary.actions.edit') }}</button>
           <div class="vg-menu-wrap">
-            <button type="button" class="vg-icon-btn" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)"><MoreHorizontal :size="16" /></button>
-            <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="vg-menu">
+            <button type="button" class="vg-btn ml-detail__more" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)"><MoreHorizontal :size="16" /></button>
+            <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="vg-menu" @click.stop>
               <button type="button" @click="assignModelToProject(selectedModel)">{{ t('modelLibrary.actions.assign') }}</button>
-              <button type="button" @click="openModelImage(selectedModel)">{{ t('modelLibrary.actions.openCover') }}</button>
-              <button type="button" @click="revealModelImage(selectedModel)">{{ t('modelLibrary.actions.revealCover') }}</button>
+              <button type="button" @click="openModelImage(selectedModel); closeActionMenu()">{{ t('modelLibrary.actions.openCover') }}</button>
+              <button type="button" @click="revealModelImage(selectedModel); closeActionMenu()">{{ t('modelLibrary.actions.revealCover') }}</button>
               <button type="button" class="danger" @click="openDeleteDialog(selectedModel)">{{ t('modelLibrary.actions.delete') }}</button>
             </div>
           </div>
@@ -1278,44 +1335,33 @@ watch([activeTab, statusFilter, search], () => {
 
         <div v-if="selectedModel.error" class="vg-notice vg-notice--danger"><span>{{ selectedModel.error }}</span></div>
 
-        <section class="ml-detail__section">
-          <h4>{{ t('modelLibrary.details.basic') }}</h4>
-          <dl class="vg-kv ml-detail__kv">
-            <dt>{{ t('modelLibrary.details.id') }}</dt><dd class="vg-num">{{ selectedModel.id || '--' }}</dd>
-            <dt>{{ t('modelLibrary.details.createdAt') }}</dt><dd>{{ formatDate(selectedModel.createdAt) }}</dd>
-            <dt>{{ t('modelLibrary.details.updatedAt') }}</dt><dd>{{ formatDate(selectedModel.updatedAt) }}</dd>
-            <dt>{{ t('modelLibrary.modelProvider') }}</dt><dd>{{ languageText(selectedModel) }}</dd>
-            <dt>{{ t('modelLibrary.details.generationStatus') }}</dt><dd>{{ modelStatusText(selectedModel.status) }}</dd>
+        <section v-if="selectedSpecs.length" class="ml-detail__section">
+          <h4>{{ t('modelLibrary.spec.profile') }}</h4>
+          <dl class="ml-spec">
+            <div v-for="row in selectedSpecs" :key="row.key" class="ml-spec__item">
+              <dt>{{ row.label }}</dt>
+              <dd :title="row.value">{{ row.value }}</dd>
+            </div>
           </dl>
         </section>
 
         <section class="ml-detail__section">
-          <h4>{{ t('modelLibrary.details.tags') }}</h4>
-          <div class="vg-row ml-detail__tags">
-            <span class="vg-chip">{{ selectedModel.mood || t('modelLibrary.defaults.mood') }}</span>
-            <span class="vg-chip">{{ selectedModel.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
-            <span class="vg-chip">{{ selectedModel.skinTone || t('modelLibrary.defaults.skin') }}</span>
-            <span class="vg-chip">{{ selectedModel.gender || t('modelLibrary.defaults.gender') }}</span>
-            <span class="vg-chip">{{ productTypeTag(selectedModel.productType) }}</span>
-          </div>
+          <h4>{{ t('modelLibrary.details.description') }}</h4>
+          <p class="ml-detail__desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
         </section>
 
         <section class="ml-detail__section">
-          <h4>{{ t('modelLibrary.details.description') }}</h4>
-          <p class="vg-secondary ml-detail__desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
-        </section>
-
-        <section v-if="selectedModel.imagePaths?.length" class="ml-detail__section">
-          <h4>{{ t('modelLibrary.details.preview') }}</h4>
-          <div class="ml-detail__strip">
-            <img
-              v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)"
-              :key="`${selectedModel.id}-${imageIndex}`"
-              :src="thumbnailUrl(image, 240)"
-              :alt="`${selectedModel.name}-${imageIndex}`"
-              decoding="async"
-            />
-          </div>
+          <h4>{{ t('modelLibrary.spec.meta') }}</h4>
+          <dl class="ml-meta">
+            <dt>{{ t('modelLibrary.details.id') }}</dt>
+            <dd class="ml-meta__id">
+              <code :title="selectedModel.id">{{ selectedModel.id || '--' }}</code>
+              <button type="button" class="vg-icon-btn vg-icon-btn--sm" :title="t('modelLibrary.spec.copyId')" @click="copyText(selectedModel.id, t('modelLibrary.messages.idCopied'))"><Copy :size="13" /></button>
+            </dd>
+            <dt>{{ t('modelLibrary.modelProvider') }}</dt><dd>{{ languageText(selectedModel) }}</dd>
+            <dt>{{ t('modelLibrary.details.createdAt') }}</dt><dd class="vg-num">{{ formatDate(selectedModel.createdAt) }}</dd>
+            <dt>{{ t('modelLibrary.spec.gallery') }}</dt><dd>{{ t('modelLibrary.spec.images', { count: selectedImages.length }) }}</dd>
+          </dl>
         </section>
       </aside>
     </div>
@@ -1538,63 +1584,118 @@ watch([activeTab, statusFilter, search], () => {
 </template>
 
 <style scoped>
-.ml { width: min(1480px, 100%); margin: 0 auto; }
-.ml-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
-.ml-layout.has-detail { grid-template-columns: minmax(0, 1fr) 340px; }
+.ml { width: min(1560px, 100%); margin: 0 auto; gap: 18px; padding-top: 22px; }
+
+/* Header */
+.ml-head { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+.ml-head__text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ml-head__eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--vg-accent); }
+.ml-head h1 { font-size: 26px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; color: var(--theme-text); }
+.ml-head p { font-size: 13px; color: var(--theme-text-muted); }
+.ml-head__actions { margin-left: auto; display: inline-flex; gap: 10px; }
+.ml-head__actions .vg-btn { height: 38px; padding: 0 18px; border-radius: 10px; }
+
+/* Stats */
+.ml-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ml-stat { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); color: var(--theme-text); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; --tone: var(--theme-text-secondary); }
+.ml-stat.is-total { --tone: var(--vg-accent); }
+.ml-stat.is-ready { --tone: var(--vg-green); }
+.ml-stat.is-generating { --tone: var(--vg-blue); }
+.ml-stat.is-failed { --tone: var(--vg-red); }
+.ml-stat:hover { border-color: var(--theme-border-control); }
+.ml-stat.is-active { border-color: color-mix(in srgb, var(--tone) 55%, transparent); background: color-mix(in srgb, var(--tone) 7%, var(--theme-panel)); }
+.ml-stat__icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, transparent); flex-shrink: 0; }
+.ml-stat__body { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.ml-stat__body b { font-size: 20px; font-weight: 700; }
+.ml-stat__body small { font-size: 12px; color: var(--theme-text-muted); margin-top: 3px; }
+
+/* Layout */
+.ml-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.ml-layout.has-detail { grid-template-columns: minmax(0, 1fr) 360px; }
 
 /* Catalog */
-.ml-catalog { display: flex; flex-direction: column; gap: 12px; }
-.ml-search { width: 220px; }
-.ml-view { gap: 2px; }
-.ml-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--theme-divider); border-bottom: 1px solid var(--theme-divider); font-size: 12px; }
-.ml-summary__count { font-size: 13px; color: var(--theme-text-secondary); }
-.ml-summary__count b { font-size: 18px; font-weight: 800; color: var(--theme-text); margin-right: 2px; }
+.ml-catalog { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ml-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ml-search { width: 300px; }
+.ml-search .vg-input { height: 36px; border-radius: 10px; background: var(--theme-panel); }
+.ml-toolbar__count { font-size: 12px; color: var(--theme-text-muted); }
+.ml-toolbar__count b { font-size: 14px; color: var(--theme-text); margin-right: 2px; }
+.ml-toolbar__selected { font-size: 12px; color: var(--vg-accent); font-weight: 600; }
+.ml-view { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-panel); }
+.ml-view__btn { display: grid; place-items: center; width: 28px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; }
+.ml-view__btn:hover { color: var(--theme-text); }
+.ml-view__btn.is-active { background: var(--theme-panel-soft); color: var(--theme-text); box-shadow: inset 0 0 0 1px var(--theme-border); }
 
-.ml-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-.ml-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-.ml-card:hover { border-color: var(--vg-accent-line); box-shadow: var(--theme-shadow-float); }
-.ml-card.is-active { border-color: var(--vg-accent); box-shadow: 0 0 0 3px var(--vg-accent-soft); }
-.ml-card__media { position: relative; aspect-ratio: 4 / 5; background: var(--theme-panel-soft); overflow: hidden; }
-.ml-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Grid cards */
+.ml-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 22px 18px; }
+.ml-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; cursor: pointer; }
+.ml-card__media { position: relative; aspect-ratio: 3 / 4; border-radius: 14px; overflow: hidden; background: var(--theme-panel-soft); outline: 1px solid var(--theme-border); outline-offset: -1px; transition: box-shadow .2s, outline-color .2s; }
+.ml-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .35s ease; }
+.ml-card:hover .ml-card__media img { transform: scale(1.03); }
+.ml-card:hover .ml-card__media { box-shadow: var(--theme-shadow-float); }
+.ml-card.is-active .ml-card__media { outline: 2px solid var(--vg-accent); outline-offset: 2px; }
 .ml-card__fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; color: var(--vg-accent); background: var(--vg-accent-soft); }
-.ml-card__check, .ml-card__copy { position: absolute; top: 8px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--theme-border-control); background: color-mix(in srgb, var(--theme-panel) 88%, transparent); color: var(--theme-text-secondary); cursor: pointer; opacity: 0; transition: opacity .15s; }
-.ml-card__check { left: 8px; }
-.ml-card__copy { right: 8px; }
-.ml-card:hover .ml-card__check, .ml-card:hover .ml-card__copy, .ml-card.is-checked .ml-card__check { opacity: 1; }
-.ml-card__copy:hover { color: var(--vg-amber); }
-.ml-card__body { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px 12px; min-width: 0; }
-.ml-card__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.ml-card__head h3 { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ml-card__status { gap: 6px; }
-.ml-card__provider { font-size: 11px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ml-tags { display: flex; gap: 4px; overflow: hidden; }
-.ml-tags .vg-chip { max-width: 110px; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 18px; }
+.ml-card__badge { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #fff; background: rgba(15, 18, 24, .62); backdrop-filter: blur(8px); }
+.ml-card__badge.is-failed { background: color-mix(in srgb, var(--vg-red) 82%, #000); }
+.ml-card__check { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(15, 18, 24, .5); backdrop-filter: blur(8px); cursor: pointer; opacity: 0; transition: opacity .15s; }
+.ml-card:hover .ml-card__check, .ml-card.is-checked .ml-card__check { opacity: 1; }
+.ml-card.is-checked .ml-card__media { outline: 2px solid var(--vg-accent); outline-offset: 2px; }
+.ml-card__body { display: flex; align-items: flex-start; gap: 8px; padding: 0 2px; min-width: 0; }
+.ml-card__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ml-card__main h3 { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--theme-text); min-width: 0; }
+.ml-card__meta { font-size: 12px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ml-card__date { font-size: 12px; color: var(--theme-text-muted); white-space: nowrap; }
+.ml-card .vg-menu-wrap .vg-icon-btn { margin-top: -3px; }
+.ml-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--vg-gray); }
+.ml-dot.is-done { background: var(--vg-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vg-green) 18%, transparent); }
+.ml-dot.is-generating { background: var(--vg-blue); }
+.ml-dot.is-failed { background: var(--vg-red); }
 
 /* List view */
-.ml-grid.is-list { grid-template-columns: 1fr; gap: 8px; }
-.ml-grid.is-list .ml-card { flex-direction: row; }
-.ml-grid.is-list .ml-card__media { width: 96px; aspect-ratio: 4 / 5; flex-shrink: 0; }
-.ml-grid.is-list .ml-card__body { flex: 1; justify-content: center; }
+.ml-grid.is-list { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); overflow: visible; }
+.ml-grid.is-list .ml-card { flex-direction: row; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--theme-divider); }
+.ml-grid.is-list .ml-card:last-child { border-bottom: 0; }
+.ml-grid.is-list .ml-card:hover { background: var(--theme-panel-soft); }
+.ml-grid.is-list .ml-card.is-active { background: var(--vg-accent-soft); }
+.ml-grid.is-list .ml-card__media { width: 48px; border-radius: 8px; flex-shrink: 0; }
+.ml-grid.is-list .ml-card.is-active .ml-card__media { outline-width: 1px; outline-offset: -1px; }
+.ml-grid.is-list .ml-card__badge, .ml-grid.is-list .ml-card__check { display: none; }
+.ml-grid.is-list .ml-card__body { flex: 1; align-items: center; }
+
+.ml-empty { border: 1px dashed var(--theme-border-control); border-radius: 14px; padding: 60px 16px; }
+.ml-pager { padding-top: 14px; border-top: 1px solid var(--theme-divider); }
 
 /* Detail */
-.ml-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - var(--app-titlebar-height) - 40px); overflow-y: auto; }
-.ml-detail__top { position: relative; }
-.ml-detail__cover { position: relative; aspect-ratio: 4 / 3; border-radius: var(--vg-radius-sm); overflow: hidden; background: var(--theme-panel-soft); }
-.ml-detail__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.ml-detail__close { position: absolute; top: 8px; right: 8px; background: color-mix(in srgb, var(--theme-panel) 88%, transparent); border-color: var(--theme-border); }
-.ml-detail__title { display: flex; flex-direction: column; gap: 6px; }
-.ml-detail__title h2 { font-size: 17px; font-weight: 800; }
-.ml-detail__summary { font-size: 12px; line-height: 1.5; }
-.ml-detail__actions { display: flex; align-items: center; gap: 8px; }
-.ml-detail__actions .vg-btn--primary { flex: 1; }
-.ml-detail__section { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--theme-divider); }
-.ml-detail__section h4 { font-size: 12px; font-weight: 700; color: var(--theme-text-muted); letter-spacing: .02em; }
-.ml-detail__kv { font-size: 12px; gap: 6px 12px; }
-.ml-detail__kv dd { text-align: right; }
-.ml-detail__tags { gap: 6px; }
-.ml-detail__desc { font-size: 12px; line-height: 1.6; }
-.ml-detail__strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.ml-detail__strip img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; border: 1px solid var(--theme-border); }
+.ml-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; padding: 14px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); max-height: calc(100vh - var(--app-titlebar-height) - 40px); overflow-y: auto; scrollbar-width: thin; }
+.ml-detail__hero { position: relative; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--theme-panel-soft); }
+.ml-detail__hero img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.ml-detail__close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; color: #fff; background: rgba(15, 18, 24, .5); backdrop-filter: blur(8px); cursor: pointer; }
+.ml-detail__close:hover { background: rgba(15, 18, 24, .75); }
+.ml-detail__thumbs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: -6px; }
+.ml-detail__thumb { padding: 0; aspect-ratio: 1; border: 0; border-radius: 7px; overflow: hidden; background: var(--theme-panel-soft); cursor: pointer; opacity: .6; outline: 1px solid var(--theme-border); outline-offset: -1px; transition: opacity .15s; }
+.ml-detail__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ml-detail__thumb:hover { opacity: 1; }
+.ml-detail__thumb.is-active { opacity: 1; outline: 2px solid var(--vg-accent); }
+.ml-detail__title { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; }
+.ml-detail__name { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ml-detail__name h2 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ml-detail__title p { font-size: 12px; color: var(--theme-text-muted); }
+.ml-detail__actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+.ml-detail__actions .vg-btn { height: 38px; border-radius: 10px; }
+.ml-detail__more { width: 38px; padding: 0; }
+.ml-detail__section { display: flex; flex-direction: column; gap: 10px; padding: 14px 2px 0; border-top: 1px solid var(--theme-divider); }
+.ml-detail__section h4 { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--theme-text-muted); }
+.ml-spec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.ml-spec__item { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: 9px; background: var(--theme-panel-soft); min-width: 0; }
+.ml-spec__item dt { font-size: 11px; color: var(--theme-text-muted); }
+.ml-spec__item dd { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--theme-text); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ml-detail__desc { font-size: 12.5px; line-height: 1.7; color: var(--theme-text-secondary); }
+.ml-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 9px 16px; margin: 0; font-size: 12.5px; }
+.ml-meta dt { color: var(--theme-text-muted); }
+.ml-meta dd { margin: 0; text-align: right; color: var(--theme-text); min-width: 0; }
+.ml-meta__id { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.ml-meta__id code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--theme-text-secondary); }
+.ml-meta__id .vg-icon-btn { margin: -4px -4px -4px 0; }
 
 /* Create dialog */
 .ml-create { max-height: 92vh; }
@@ -1627,6 +1728,7 @@ watch([activeTab, statusFilter, search], () => {
 @media (max-width: 1180px) {
   .ml-layout.has-detail { grid-template-columns: minmax(0, 1fr); }
   .ml-detail { position: static; max-height: none; }
+  .ml-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ml-create__body { grid-template-columns: 1fr; }
 }
 </style>

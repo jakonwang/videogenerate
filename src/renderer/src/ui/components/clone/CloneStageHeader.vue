@@ -50,16 +50,17 @@ defineProps<{
 
 .stage-head__main h2 {
   margin: 0;
-  font-size: 16px;
-  line-height: 1.15;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .stage-head__main p {
   margin: 0;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  line-height: 1.4;
-  max-width: 520px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  max-width: 640px;
 }
 
 .stage-head__actions {
@@ -83,9 +84,9 @@ defineProps<{
 }
 
 .stage-head__aux :deep(span) {
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  line-height: 1.4;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 @media (max-width: 1220px) {

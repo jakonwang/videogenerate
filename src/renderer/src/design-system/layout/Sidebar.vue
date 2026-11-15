@@ -29,12 +29,14 @@ function navigate(to: string) {
         :aria-current="item.active ? 'page' : undefined"
         @click="navigate(item.to)"
       >
-        <component :is="item.icon" v-if="item.icon" class="vg-nav__icon" />
+        <span v-if="item.icon" class="vg-nav__tile">
+          <component :is="item.icon" class="vg-nav__icon" />
+        </span>
         <span class="vg-nav__label">{{ item.label }}</span>
       </button>
 
       <div v-for="section in sections || []" :key="section.title" class="vg-nav__section">
-        <div class="vg-nav__section-title">{{ section.title }}</div>
+        <div class="vg-nav__section-title"><span>{{ section.title }}</span></div>
         <button
           v-for="item in section.items"
           :key="item.to"
@@ -45,7 +47,9 @@ function navigate(to: string) {
           :aria-current="item.active ? 'page' : undefined"
           @click="navigate(item.to)"
         >
-          <component :is="item.icon" v-if="item.icon" class="vg-nav__icon" />
+          <span v-if="item.icon" class="vg-nav__tile">
+            <component :is="item.icon" class="vg-nav__icon" />
+          </span>
           <span class="vg-nav__label">{{ item.label }}</span>
         </button>
       </div>
@@ -58,13 +62,19 @@ function navigate(to: string) {
 
 <style scoped>
 .vg-nav {
+  --nav-ink: color-mix(in srgb, var(--theme-text) 86%, transparent);
+  --nav-hover: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  --nav-tile: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  --nav-tile-line: color-mix(in srgb, var(--theme-text) 8%, transparent);
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
   min-height: 0;
   height: 100%;
-  padding: 12px 10px;
-  background: var(--theme-sidebar);
+  padding: 12px 10px 10px;
+  background:
+    radial-gradient(120% 40% at 0% 0%, color-mix(in srgb, var(--theme-accent) 7%, transparent), transparent 70%),
+    var(--theme-sidebar);
   border-right: 1px solid var(--theme-border);
   overflow: hidden;
 }
@@ -74,7 +84,7 @@ function navigate(to: string) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -84,49 +94,70 @@ function navigate(to: string) {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   width: 100%;
-  height: 38px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
-  color: var(--theme-text-secondary);
-  font-size: 13.5px;
+  color: var(--nav-ink);
+  font-size: 14px;
   font-weight: 500;
+  letter-spacing: .02em;
   text-align: left;
   cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background .15s, color .15s, border-color .15s;
   -webkit-app-region: no-drag;
 }
 .vg-nav__item:hover {
-  background: var(--theme-control-hover);
+  background: var(--nav-hover);
   color: var(--theme-text);
 }
 .vg-nav__item:focus-visible {
   outline: 2px solid var(--vg-accent-line);
   outline-offset: -2px;
 }
-.vg-nav__item.is-active {
-  background: var(--vg-accent-soft);
-  color: var(--vg-accent);
-  font-weight: 600;
+
+.vg-nav__tile {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--nav-tile-line);
+  border-radius: 8px;
+  background: var(--nav-tile);
+  color: var(--theme-text-secondary);
+  transition: background .15s, color .15s, border-color .15s, box-shadow .15s;
 }
-.vg-nav__item.is-active::before {
-  content: '';
-  position: absolute;
-  left: -10px;
-  top: 9px;
-  bottom: 9px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--vg-accent);
+.vg-nav__item:hover .vg-nav__tile {
+  color: var(--theme-text);
+  border-color: color-mix(in srgb, var(--theme-text) 14%, transparent);
 }
 .vg-nav__icon {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
 }
+
+.vg-nav__item.is-active {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--theme-accent) 18%, transparent),
+    color-mix(in srgb, var(--theme-accent) 4%, transparent));
+  border-color: color-mix(in srgb, var(--theme-accent) 24%, transparent);
+  color: var(--theme-text);
+  font-weight: 600;
+}
+.vg-nav__item.is-active .vg-nav__tile {
+  border-color: transparent;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--theme-accent) 100%, #ffffff 12%),
+    color-mix(in srgb, var(--theme-accent) 100%, #000000 22%));
+  color: var(--theme-on-accent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--theme-accent) 38%, transparent);
+}
+
 .vg-nav__label {
   min-width: 0;
   overflow: hidden;
@@ -137,42 +168,46 @@ function navigate(to: string) {
 .vg-nav__section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--theme-divider);
+  gap: 3px;
+  margin-top: 18px;
 }
 .vg-nav__section-title {
-  padding: 0 12px 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 6px;
   color: var(--theme-text-muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .04em;
+  letter-spacing: .12em;
+}
+.vg-nav__section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--theme-divider);
 }
 
 .vg-nav__footer {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
+  margin-top: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--theme-divider);
 }
 
 /* Collapsed: icon rail */
-.vg-nav.is-collapsed { padding: 12px 8px; }
 .vg-nav.is-collapsed .vg-nav__item { justify-content: center; padding: 0; }
-.vg-nav.is-collapsed .vg-nav__item.is-active::before { left: -8px; }
 .vg-nav.is-collapsed .vg-nav__label,
 .vg-nav.is-collapsed .vg-nav__section-title { display: none; }
-.vg-nav.is-collapsed .vg-nav__section { margin-top: 8px; padding-top: 8px; }
+.vg-nav.is-collapsed .vg-nav__section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--theme-divider); }
 
 /* Narrow windows always use the icon rail (matches the previous shell behaviour). */
 @media (max-width: 1180px) {
-  .vg-nav { padding: 12px 8px; }
   .vg-nav__item { justify-content: center; padding: 0; }
-  .vg-nav__item.is-active::before { left: -8px; }
   .vg-nav__label,
   .vg-nav__section-title { display: none; }
-  .vg-nav__section { margin-top: 8px; padding-top: 8px; }
+  .vg-nav__section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--theme-divider); }
 }
 </style>

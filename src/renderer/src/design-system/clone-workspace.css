@@ -1,0 +1,93 @@
+/*
+ * Clone project workspace — layout fixes and polish.
+ * Loaded after styles.css / theme-components.css and written with the same selector
+ * weight as the theme layer, so these rules win without needing !important.
+ */
+
+/* ---------- Storyboard design (step 4): keep every column on screen ---------- */
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-table__head,
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row {
+  grid-template-columns: 24px 60px minmax(220px, 2.6fr) 60px 70px minmax(64px, .7fr) minmax(96px, 1fr) max-content;
+  gap: 10px;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-row {
+  border-radius: 12px;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-cell--actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .storyboard-design-cell--actions button {
+  flex-shrink: 0;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+}
+
+/* ---------- Shot videos (step 5): fit the table instead of forcing a 1100px row ---------- */
+html[data-app-theme] body #app .app-shell .clone-page .shot-reference-header,
+html[data-app-theme] body #app .app-shell .clone-page .shot-reference-row {
+  min-width: 0;
+  grid-template-columns: 52px 80px minmax(160px, 1fr) 60px 88px 112px max-content;
+  gap: 10px;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .shot-reference-cell--actions {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .shot-reference-cell--actions button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ---------- Analyze (step 1): long product ids / model names must not become headlines ---------- */
+html[data-app-theme] body #app .app-shell .clone-page .analyze-project-info-card .variant-summary-card__copy strong {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+/* ---------- Shared rhythm ---------- */
+html[data-app-theme] body #app .app-shell .clone-page {
+  --clone-radius: 14px;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page .status-pill {
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page :is(video, img) {
+  -webkit-user-drag: none;
+}
+
+/*
+ * The theme layer gives `border-radius: 999px` to every [class*='tag'] so tags render as pills.
+ * "stage" contains "tag", so stage containers (video-stage-preview, storyboard-stage-hero…) were
+ * turned into giant pills, and with overflow:hidden their corners clipped real content.
+ * Restore normal radii for those elements while leaving genuine pills/tags alone.
+ */
+html[data-app-theme] body #app .app-shell
+  [class*='stage']:not([class*='pill']):not([class*='badge']):not([class*='chip']):not([class*='-tag']):not([class*='_tag']):not([class*='tag-']) {
+  border-radius: 14px !important;
+}
+
+html[data-app-theme] body #app .app-shell
+  :is(button, a)[class*='stage']:not([class*='pill']):not([class*='badge']):not([class*='chip']):not([class*='-tag']):not([class*='_tag']):not([class*='tag-']) {
+  border-radius: 8px !important;
+}
+
+html[data-app-theme] body #app .app-shell .clone-page
+  :is(.panel-video-stage, .video-stage-layout, .clone-stage-header, .storyboard-stage-hero__copy) {
+  border-radius: 0 !important;
+}

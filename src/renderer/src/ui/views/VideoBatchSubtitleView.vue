@@ -52,7 +52,6 @@ const pluginChecking = ref(true)
 const pluginReady = ref(false)
 const runningJob = ref(false)
 const controllingJob = ref(false)
-const pushingToGeelark = ref(false)
 const showAllOutputs = ref(false)
 const notice = ref('')
 const errorText = ref('')
@@ -1032,24 +1031,6 @@ async function controlQueueJob(job: BatchSubtitleJob, action: 'pause' | 'resume'
   }
 }
 
-async function pushToGeelark() {
-  if (!selectedJobId.value) {
-    errorText.value = tr('autoUi.k_3c87aaf622b1')
-    return
-  }
-  pushingToGeelark.value = true
-  errorText.value = ''
-  try {
-    const result = await webApiClient.pushBatchSubtitleOutputsToGeelarkPool(selectedJobId.value)
-    notice.value = tr('autoUi.k_82a2909e8fe7', { p0: result.outputCount })
-    await loadAll()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    pushingToGeelark.value = false
-  }
-}
-
 function loadJobIntoDraft(job: BatchSubtitleJob) {
   draft.name = job.name
   draft.titleRenderMode = job.titleRenderMode || 'overlay_image'
@@ -1686,12 +1667,6 @@ onBeforeUnmount(() => {
           </article>
         </div>
 
-        <button class="publish-button" type="button" :disabled="pushingToGeelark" @click="pushToGeelark">
-          <LoaderCircle v-if="pushingToGeelark" class="h-4 w-4 animate-spin" />
-          <Play v-else class="h-4 w-4" />
-          <span>{{ pushingToGeelark ? tr('autoUi.k_a2c7d6921412') : tr('autoUi.k_1e8bebacd67c', { p0: successfulOutputs.length }) }}</span>
-        </button>
-
         <section v-if="failedOutputSummary.length" class="failed-summary">
           <div class="section-heading">
             <div>
@@ -2062,7 +2037,6 @@ onBeforeUnmount(() => {
 .preview-thumbs__item,
 .preview-thumbs__more,
 .row-action,
-.publish-button,
 .align-segment button,
 .mode-pills button {
   border: 0;
@@ -2133,8 +2107,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--theme-text) 7%, transparent);
 }
 
-.primary-button,
-.publish-button {
+.primary-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2151,14 +2124,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 18px 40px rgba(108, 88, 244, 0.28);
 }
 
-.publish-button {
-  width: 100%;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-tone-violet) 96%, transparent));
-  box-shadow: 0 18px 40px rgba(89, 66, 209, 0.24);
-}
 
 .primary-button:disabled,
-.publish-button:disabled,
 .minor-button:disabled,
 .row-action:disabled,
 .strategy-card:disabled {

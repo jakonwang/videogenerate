@@ -21,9 +21,9 @@ withDefaults(
 
 <style scoped>
 .data-card {
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid var(--theme-border);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
+  background: var(--theme-panel-soft);
 }
 
 .data-card--large {

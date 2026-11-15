@@ -35,7 +35,7 @@ const props = defineProps<{
 
 <style scoped>
 .vg-shell {
-  --vg-sidebar-width: 216px;
+  --vg-sidebar-width: 224px;
   display: grid;
   grid-template-columns: var(--vg-sidebar-width) minmax(0, 1fr);
   height: 100%;

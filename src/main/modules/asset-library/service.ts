@@ -205,13 +205,13 @@ class AssetLibraryService {
     if (!item) throw new Error('Asset not found.')
     if (!isInside(roots().files, item.filePath)) throw new Error('Asset path is outside the managed library.')
     if (item.type === 'video') {
-      const thumbnailPath = await generateThumbnailJpg({ filePath: item.filePath, atSec: 0.5, width: 360, height: 270 })
+      const thumbnailPath = await generateThumbnailJpg({ filePath: item.filePath, atSec: 0.5, width: 480, height: 360 })
       if (!thumbnailPath) throw new Error('Video thumbnail generation failed.')
       const thumbnail = await readFile(thumbnailPath)
       return `data:image/jpeg;base64,${thumbnail.toString('base64')}`
     }
     const buffer = await readFile(item.filePath)
-    const thumbnail = await sharp(buffer).rotate().resize({ width: 360, height: 270, fit: 'inside', withoutEnlargement: true }).webp({ quality: 72 }).toBuffer()
+    const thumbnail = await sharp(buffer).rotate().resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true }).webp({ quality: 76 }).toBuffer()
     return `data:image/webp;base64,${thumbnail.toString('base64')}`
   }
 
@@ -270,6 +270,11 @@ class AssetLibraryService {
   async listFolders(parentId: string | null = null) {
     const index = await this.readIndex()
     return index.folders.filter((folder) => !folder.deletedAt && folder.parentId === parentId).sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async listAllFolders() {
+    const index = await this.readIndex()
+    return index.folders.filter((folder) => !folder.deletedAt).sort((a, b) => a.name.localeCompare(b.name))
   }
 
   async getFolderPath(folderId: string | null) {
