@@ -46,8 +46,8 @@ async function main() {
     const localeSelect = page.locator('[data-testid="app-locale-select"]')
     await localeSelect.selectOption('zh-CN')
     await assertText(page, '[data-testid="product-image-materials-title"]', '\u5546\u54c1\u56fe\u7247\u7d20\u6750')
-    const columns = await page.locator('.pick-row--three').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)
-    assert.equal(columns, 3)
+    await page.locator('[data-testid="product-image-materials-local-videos"]').waitFor()
+    await page.locator('[data-testid="product-image-materials-queue"]').waitFor()
 
     await page.locator('[data-testid="product-image-materials-library-videos"]').click()
     await page.locator('[data-testid="asset-library-picker"]').waitFor()
@@ -67,7 +67,7 @@ async function main() {
     await page.locator('[data-testid="asset-picker-select-qa-video"]').click()
     await page.locator('[data-testid="asset-picker-confirm"]').click()
     await page.locator('[data-testid="asset-library-picker"]').waitFor({ state: 'hidden' })
-    await page.locator('.picked-list').getByText('qa-video.mp4').waitFor()
+    await page.locator('[data-testid="product-image-materials-picked"]').getByText('qa-video.mp4').waitFor()
 
     const videoUsage = await page.evaluate(async () => {
       const items = await window.api.assetLibrary.list({ type: 'video' })
@@ -75,27 +75,17 @@ async function main() {
     })
     assert.equal(videoUsage, 'used')
 
-    await page.locator('.tab-button').filter({ hasText: '\u56fe\u751f\u56fe' }).click()
-    const emptyPanelSize = await page.locator('.source-picker-panel').evaluate((element) => {
-      const panel = element.getBoundingClientRect()
-      const preview = element.querySelector('.source-picker-preview')?.getBoundingClientRect()
-      return { panelHeight: panel.height, previewWidth: preview?.width, previewHeight: preview?.height }
-    })
-    assert.ok(emptyPanelSize.panelHeight <= 172)
-    assert.equal(emptyPanelSize.previewWidth, emptyPanelSize.previewHeight)
-    const localButtonColors = await page.locator('[data-testid="product-image-materials-local-image"]').evaluate((element) => ({
-      background: getComputedStyle(element).backgroundColor,
-      text: getComputedStyle(element.querySelector('span')).color,
-    }))
-    assert.equal(localButtonColors.background, 'rgb(13, 117, 104)')
-    assert.equal(localButtonColors.text, 'rgb(255, 255, 255)')
+    await page.locator('.pm-tab').filter({ hasText: '\u56fe\u751f\u56fe' }).click()
+    const emptyPreview = await page.locator('[data-testid="product-image-materials-source-preview"]').boundingBox()
+    assert.ok(emptyPreview && emptyPreview.height > 0)
+    await page.locator('[data-testid="product-image-materials-local-image"]').waitFor()
     await page.screenshot({ path: emptySourceScreenshotPath, type: 'png' })
     await page.locator('[data-testid="product-image-materials-library-image"]').click()
     await page.locator('[data-testid="asset-picker-select-qa-image"]').waitFor()
     assert.equal(await page.locator('[data-testid="asset-picker-select-qa-video"]').count(), 0)
     await page.locator('[data-testid="asset-picker-select-qa-image"]').click()
     await page.locator('[data-testid="asset-picker-confirm"]').click()
-    await page.locator('.source-picker-panel').getByText('qa-image.png').waitFor()
+    await page.locator('.pm-source-img').getByText('qa-image.png').waitFor()
     await page.locator('[data-testid="product-image-materials-source-preview"] img').waitFor()
     await page.locator('[data-testid="product-image-materials-clear-image"]').click()
     await page.locator('[data-testid="product-image-materials-source-preview"] img').waitFor({ state: 'hidden' })

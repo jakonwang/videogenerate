@@ -27,6 +27,7 @@ import {
   PanelBottomOpen,
   PanelTopOpen,
   Package,
+  Pause,
   Play,
   RefreshCcw,
   ScanLine,
@@ -233,7 +234,7 @@ type SubtitleCaptionStyle = {
 }
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const uiText = computed(() => ({
   workspaceTitle: 'Live Photo',
@@ -295,6 +296,13 @@ const uiText = computed(() => ({
   referenceCreatedSuffix: t('livePhoto.workspace.referenceCreatedSuffix'),
   runtimeLogTitlePrefix: t('livePhoto.workspace.runtimeLogTitle'),
 }))
+
+/** Short labels for the reference-source buttons (previously hard-coded Chinese). */
+const lpText = computed(() => {
+  if (locale.value === 'en-US') return { localPick: 'Upload images', assetLibrary: 'From asset library' }
+  if (locale.value === 'vi-VN') return { localPick: 'Tai anh len', assetLibrary: 'Tu thu vien' }
+  return { localPick: '继续添加', assetLibrary: '从素材库选择' }
+})
 
 const loading = ref(false)
 const creatingReference = ref(false)
@@ -593,6 +601,16 @@ function liveTaskStatusTone(item: LivePhotoItem) {
   if (item.packagingStatus === 'failed') return 'is-danger'
   if (item.packagingStatus === 'processing' || autoStatus === 'running') return 'is-running'
   return 'is-draft'
+}
+
+/** Status dot class for the redesigned workspace (`.lp-state--*`). */
+function lpTone(item: LivePhotoItem) {
+  const tone = liveTaskStatusTone(item)
+  if (tone === 'is-success') return 'lp-state--ok'
+  if (tone === 'is-danger') return 'lp-state--err'
+  if (tone === 'is-warning') return 'lp-state--warn'
+  if (tone === 'is-running') return 'lp-state--run'
+  return ''
 }
 
 function liveTaskStepTone(step?: LivePhotoItem['workflow']['currentStep']) {
@@ -2082,720 +2100,370 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 </script>
 
 <template>
-  <div class="live-photo-page plugin-workspace-standard" data-testid="live-photo-page">
-    <section class="live-workspace-head">
-      <div class="live-workspace-intro">
-        <div class="live-workspace-icon">
-          <Sparkles class="h-5 w-5" />
-        </div>
-        <div class="live-workspace-copy">
-          <h1>{{ uiText.workspaceTitle }}</h1>
-          <p>{{ uiText.workspaceHint }}</p>
-        </div>
-        <div class="live-workspace-actions">
-          <button class="ghost-button back-button" data-testid="live-photo-back" type="button" @click="router.push('/plugins?tab=installed&plugin=live-photo-generator')">
-            <ChevronLeft class="h-4 w-4" />
-            {{ t('livePhoto.hero.back') }}
-          </button>
-          <button class="ghost-button refresh-button" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
-            <RefreshCcw class="h-4 w-4" />
-            {{ t('livePhoto.hero.refresh') }}
-          </button>
-        </div>
-      </div>
+  <div class="live-photo-page lp" data-testid="live-photo-page">
+    <div class="vg-scope lp-main">
+      <!-- ============ head + tabs ============ -->
+      <section class="lp-top">
+        <header class="lp-head">
+          <div class="lp-head__icon"><Sparkles :size="20" /></div>
+          <div class="lp-head__text">
+            <h1>{{ uiText.workspaceTitle }}</h1>
+            <p>{{ uiText.workspaceHint }}</p>
+          </div>
+          <div class="lp-head__actions">
+            <button class="vg-btn" data-testid="live-photo-back" type="button" @click="router.push('/plugins?tab=installed&plugin=live-photo-generator')">
+              <ChevronLeft :size="15" />{{ t('livePhoto.hero.back') }}
+            </button>
+            <button class="vg-btn" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
+              <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />{{ t('livePhoto.hero.refresh') }}
+            </button>
+          </div>
+        </header>
 
-      <section class="tab-bar live-workspace-tabs">
-        <button class="tab-button" data-testid="live-photo-tab-reference" :class="{ active: activeTab === 'reference' }" type="button" @click="activeTab = 'reference'">
-          <ImagePlus class="h-4 w-4" />
-          <span>{{ uiText.tabReference }}</span>
-        </button>
-        <button class="tab-button" data-testid="live-photo-tab-library" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
-          <FolderOpen class="h-4 w-4" />
-          <span>{{ uiText.tabLibrary }}</span>
-          <span class="live-tab-count">{{ libraryStats.total }}</span>
-        </button>
-        <button class="tab-button" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
-          <Settings class="h-4 w-4" />
-          <span>{{ t('livePhoto.workspace.retryGuard') }}</span>
-          <span class="live-tab-count">{{ livePhotoSettings.retryLimit ?? 0 }}</span>
-        </button>
+        <nav class="lp-tabs" role="tablist">
+          <button class="lp-tab" data-testid="live-photo-tab-reference" :class="{ 'is-active': activeTab === 'reference' }" role="tab" type="button" @click="activeTab = 'reference'">
+            <ImagePlus :size="15" />{{ uiText.tabReference }}
+          </button>
+          <button class="lp-tab" data-testid="live-photo-tab-library" :class="{ 'is-active': activeTab === 'library' }" role="tab" type="button" @click="activeTab = 'library'">
+            <FolderOpen :size="15" />{{ uiText.tabLibrary }}<em>{{ libraryStats.total }}</em>
+          </button>
+          <span class="lp-tabs__spacer" />
+          <button class="lp-util" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
+            <Settings :size="14" />{{ t('livePhoto.workspace.retryGuard') }}<em>{{ livePhotoSettings.retryLimit ?? 0 }}</em>
+          </button>
+        </nav>
       </section>
-    </section>
 
-    <div v-if="notice" class="banner banner-success" data-testid="live-photo-notice">{{ notice }}</div>
-    <div v-if="errorText" class="banner banner-error" data-testid="live-photo-error">{{ errorText }}</div>
-
-    <section v-if="activeTab === 'reference'" class="workspace-grid">
-      <article class="panel-card reference-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">1</div>
-            <strong>{{ uiText.referenceTitle }}</strong>
-          </div>
-          <span class="panel-head-note">{{ uiText.referenceNote }}</span>
-        </div>
-
-        <div class="field-stack">
-          <div class="field">
-            <span>{{ uiText.referenceImage }}</span>
-            <div class="reference-source-grid">
-              <button class="reference-source-card" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
-                <template v-if="primaryReferenceImage">
-                  <img class="reference-source-card__preview" :src="previewSrc(primaryReferenceImage)" alt="reference preview" />
-                  <div class="reference-source-card__copy">
-                    <strong>{{ uiText.referenceUploadTitle }}</strong>
-                    <small>{{ fileNameOf(primaryReferenceImage) }}</small>
-                    <span>{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</span>
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="reference-source-card__icon">
-                    <ImagePlus class="h-7 w-7" />
-                  </div>
-                  <div class="reference-source-card__copy">
-                    <strong>{{ uiText.referenceUploadTitle }}</strong>
-                    <small>{{ uiText.referenceUploadDesc }}</small>
-                  </div>
-                </template>
-              </button>
-              <button class="reference-source-card" type="button" @click="pickReferenceImageFromLibrary">
-                <div class="reference-source-card__icon"><ImagePlus class="h-7 w-7" /></div>
-                <div class="reference-source-card__copy"><strong>从素材库选择</strong><small>使用电脑或手机上传的图片</small></div>
-              </button>
-
-              <button class="reference-source-card" data-testid="live-photo-open-material-picker" type="button" @click="openMaterialPicker">
-                <div class="reference-source-card__icon">
-                  <LayoutGrid class="h-7 w-7" />
-                </div>
-                <div class="reference-source-card__copy">
-                  <strong>{{ uiText.materialLibrarySelect }}</strong>
-                  <small>{{ uiText.materialLibraryDesc }}</small>
-                  <span>{{ unboundMaterialOptions.length }} {{ uiText.itemUnit }}</span>
-                </div>
-              </button>
-            </div>
-            <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
-          </div>
-
-          <div v-if="referenceTaskRows.length" class="field">
-            <span>{{ uiText.pendingTasks }}</span>
-            <div class="clone-shot-list">
-              <div v-for="row in referenceTaskRows" :key="row.id" class="clone-shot-row active reference-task-row" :class="{ missing: row.missing }">
-                <div class="clone-shot-copy">
-                  <strong>{{ row.fileName }}</strong>
-                  <small>{{ row.path }}</small>
-                  <span v-if="row.missing" class="missing-pill">{{ uiText.missingImage }}</span>
-                </div>
-                <button class="ghost-button small danger" type="button" @click="removeReferenceImage(row.path)">
-                  <Trash2 class="h-4 w-4" />
-                  {{ uiText.delete }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="referenceCreatedItems.length" class="field">
-            <span>{{ uiText.referenceTaskList }}</span>
-            <div class="reference-status-list">
-              <article v-for="item in referenceCreatedItems" :key="item.id" class="reference-status-card">
-                <div class="reference-status-top">
-                  <strong>{{ referenceTaskTitle(item) }}</strong>
-                  <span class="status-pill" :class="`status-${item.packagingStatus}`">{{ itemStatusLabel(item.packagingStatus) }}</span>
-                </div>
-                <div class="reference-status-meta">
-                  <span>{{ item.productSnapshot?.name || '--' }}</span>
-                  <span>{{ formatTime(item.updatedAt) }}</span>
-                </div>
-                <small>{{ liveTaskMetaSummary(item) }}</small>
-              </article>
-            </div>
-          </div>
-
-          <label class="field">
-            <span>{{ uiText.product }}</span>
-            <button class="product-picker product-picker-button" data-testid="live-photo-product-select" type="button" @click="productPickerOpen = true">
-              <div v-if="selectedProduct?.coverImagePath" class="product-thumb">
-                <img :src="previewSrc(selectedProduct.coverImagePath)" alt="product cover" />
-              </div>
-              <div v-else class="product-thumb product-thumb-fallback">
-                <Package class="h-4 w-4" />
-              </div>
-              <span class="product-picker-name">{{ selectedProduct?.name || t('livePhoto.workspace.selectProduct') }}</span>
-              <ChevronDown class="picker-arrow h-4 w-4" />
-            </button>
-          </label>
-
-          <div class="field">
-            <span>{{ t('livePhoto.workspace.primaryImage') }}</span>
-            <div v-if="selectedProductLivePhotoRef" class="live-photo-master-ref">
-              <button class="live-photo-master-ref__preview" type="button" @click="openPath(selectedProductLivePhotoRef)">
-                <img :src="previewSrc(selectedProductLivePhotoRef)" alt="live photo master reference" />
-              </button>
-              <div class="live-photo-master-ref__copy">
-                <strong>{{ fileNameOf(selectedProductLivePhotoRef) }}</strong>
-                <small>{{ selectedProductLivePhotoRef }}</small>
-              </div>
-            </div>
-            <div v-else class="live-photo-master-ref live-photo-master-ref--missing">
-              <AlertTriangle class="h-4 w-4" />
-              <span>{{ t('livePhoto.workspace.primaryImageRequired') }}</span>
-            </div>
-          </div>
-
-          <button class="primary-button create-button" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto" @click="createReferenceItem">
-            <Sparkles class="h-4 w-4" />
-            {{ creatingReference ? t('livePhoto.actions.creating') : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
-          </button>
-
-          <div class="safe-note">
-            <ShieldCheck class="h-4 w-4" />
-            <span>{{ uiText.referenceSafe }}</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel-card rules-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">2</div>
-            <strong>{{ uiText.rulesTitle }}</strong>
-          </div>
-          <span class="panel-head-note">{{ uiText.rulesVersion }}</span>
-        </div>
-        <div class="rules-box">
-          <div class="rule-row">
-            <div class="rule-icon">A</div>
-            <p>{{ uiText.ruleIdentity }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">+</div>
-            <p>{{ uiText.ruleReplace }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">O</div>
-            <p>{{ uiText.ruleMotion }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">*</div>
-            <p>{{ uiText.rulePackage }}</p>
-          </div>
-        </div>
-        <div class="output-note">
-          <div class="output-note-head">{{ uiText.outputTitle }}</div>
-          <p>{{ uiText.outputDesc }}</p>
-        </div>
-        <div class="quality-control-card">
-          <div class="prompt-version-editor">
-            <div class="prompt-kind-tabs" role="tablist">
-              <button class="ghost-button small" :class="{ active: promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ t('promptKind.image') }}</button>
-              <button class="ghost-button small" :class="{ active: promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ t('promptKind.video') }}</button>
-            </div>
-            <label class="field">
-              <span>{{ t('livePhoto.workspace.promptVersion') }}</span>
-              <select v-model="selectedPromptVersionId" @change="selectPromptVersion(selectedPromptVersionId)">
-                <option v-for="version in promptVersions" :key="version.id" :value="version.id">
-                  V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${t('livePhoto.workspace.activeVersion')}` : '' }}
-                </option>
-              </select>
-            </label>
-            <label class="field">
-              <span>{{ t('livePhoto.workspace.versionName') }}</span>
-              <input v-model="promptEditorName" type="text" placeholder="Live Photo Product Replacement" />
-            </label>
-            <label class="field prompt-version-editor__prompt">
-              <span>{{ t('livePhoto.workspace.promptContent') }}</span>
-              <textarea v-model="promptEditorText" rows="7" spellcheck="false"></textarea>
-            </label>
-            <div class="prompt-version-actions">
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">{{ t('livePhoto.workspace.updateVersion') }}</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">{{ t('livePhoto.workspace.copyVersion') }}</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('livePhoto.workspace.activateVersion') }}</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ t('livePhoto.workspace.rollbackVersion') }}</button>
-            </div>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <section v-else class="library-layout">
-      <div class="library-headline">
-        <div class="library-summary-row">
-          <div class="library-heading-cluster">
-            <div class="library-title-row">
-              <strong>{{ uiText.libraryTitle }}</strong>
-              <span class="library-count">{{ libraryStats.total }} {{ uiText.itemUnit }}</span>
-            </div>
-            <div class="library-overview">
-              <div class="library-overview__card is-running">
-                <span>{{ t('livePhoto.workspace.running') }}</span>
-                <strong>{{ libraryStats.running }}</strong>
-              </div>
-              <div class="library-overview__card is-failed">
-                <span>{{ t('livePhoto.status.failed') }}</span>
-                <strong>{{ libraryStats.failed }}</strong>
-              </div>
-              <div class="library-overview__card is-paused">
-                <span>{{ t('livePhoto.workspace.paused') }}</span>
-                <strong>{{ libraryStats.paused }}</strong>
-              </div>
-              <div class="library-overview__card is-selected">
-                <span>{{ t('livePhoto.workspace.selected') }}</span>
-                <strong>{{ selectedLibraryItems.length }}</strong>
-              </div>
-            </div>
-          </div>
-          <div class="library-head-tools">
-            <div class="library-view-toggle" :aria-label="t('livePhoto.workspace.viewMode')">
-              <button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'grid' }"
-                type="button"
-                :aria-label="t('livePhoto.workspace.gridView')"
-                :aria-pressed="libraryViewMode === 'grid'"
-                @click="libraryViewMode = 'grid'"
-              >
-                <Grid2x2 class="h-4 w-4" />
-              </button>
-              <button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'list' }"
-                type="button"
-                :aria-label="t('livePhoto.workspace.listView')"
-                :aria-pressed="libraryViewMode === 'list'"
-                @click="libraryViewMode = 'list'"
-              >
-                <List class="h-4 w-4" />
-              </button>
-            </div>
-            <div class="library-pagination">
-              <button class="library-page-button" type="button" :aria-label="t('livePhoto.workspace.previousPage')" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">
-                <ChevronLeft class="h-4 w-4" />
-              </button>
-              <span class="library-pagination__text">{{ libraryPage }} / {{ libraryTotalPages }}</span>
-              <button class="library-page-button" type="button" :aria-label="t('livePhoto.workspace.nextPage')" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">
-                <ChevronRight class="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="status-filter-tabs">
-          <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" :class="{ active: libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
-        </div>
-        <div class="library-toolbar">
-          <div class="library-action-group">
-            <button class="toolbar-button" type="button" :disabled="!filteredLibraryItems.length" @click="toggleSelectAllFiltered">
-              <CheckCircle2 class="h-4 w-4" />
-              {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? t('livePhoto.workspace.clearFiltered') : t('livePhoto.workspace.selectFiltered') }}
-            </button>
-          </div>
-          <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-group library-task-actions">
-            <button v-if="retryableFailedLibraryItems.length" class="toolbar-button" type="button" @click="retryFailedItems">
-              <RefreshCcw class="h-4 w-4" />
-              {{ t('livePhoto.workspace.retryFailed') }} {{ retryableFailedLibraryItems.length ? `(${retryableFailedLibraryItems.length})` : '' }}
-            </button>
-            <button v-if="pausedLibraryItems.length" class="toolbar-button" type="button" @click="resumePausedItems">
-              <Play class="h-4 w-4" />
-              {{ t('livePhoto.workspace.resumePaused') }} {{ pausedLibraryItems.length ? `(${pausedLibraryItems.length})` : '' }}
-            </button>
-            <button v-if="runningLibraryItems.length" class="toolbar-button" type="button" @click="pauseRunningItems">
-              <LoaderCircle class="h-4 w-4" />
-              {{ t('livePhoto.workspace.pauseRunning') }} {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
-            </button>
-          </div>
-          <div v-if="selectedLibraryIds.length" class="library-output-actions">
-            <button
-              class="toolbar-button batch-delete-button"
-              type="button"
-              @click="openBatchDelete"
-            >
-              <Trash2 class="h-4 w-4" />
-              {{ t('livePhoto.workspace.batchDelete') }} ({{ selectedLibraryIds.length }})
-            </button>
-            <button
-              v-if="subtitleEligibleSelectedCount"
-              class="toolbar-button"
-              type="button"
-              @click="openBatchSubtitleDialog"
-            >
-              <Sparkles class="h-4 w-4" />
-              {{ t('livePhoto.workspace.batchSubtitles') }} {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
-            </button>
-            <button v-if="subtitleRevertEligibleSelectedCount" class="toolbar-button" type="button" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
-            <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting" @click="exportSelected">
-              <Package class="h-4 w-4" />
-              {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
-            </button>
-          </div>
-        </div>
+      <div v-if="notice" class="vg-notice vg-notice--accent lp-flash" data-testid="live-photo-notice">
+        <CheckCircle2 :size="15" /><span>{{ notice }}</span>
+        <button class="vg-icon-btn vg-icon-btn--sm" type="button" @click="notice = ''"><X :size="13" /></button>
+      </div>
+      <div v-if="errorText" class="vg-notice vg-notice--danger lp-flash" data-testid="live-photo-error">
+        <AlertTriangle :size="15" /><span>{{ errorText }}</span>
+        <button class="vg-icon-btn vg-icon-btn--sm" type="button" @click="errorText = ''"><X :size="13" /></button>
       </div>
 
-      <div v-if="!filteredLibraryItems.length" class="panel-card empty-card" data-testid="live-photo-empty">
-        <strong>{{ t('livePhoto.library.emptyTitle') }}</strong>
-        <p>{{ t('livePhoto.library.emptyDesc') }}</p>
-      </div>
+      <!-- ============ 从参考图创建 ============ -->
+      <section v-if="activeTab === 'reference'" class="lp-create">
+        <div class="lp-col">
+          <article class="lp-card">
+            <header class="lp-card__head">
+              <span class="lp-num">1</span>
+              <div class="lp-card__title">
+                <h2>{{ uiText.referenceTitle }}</h2>
+                <p>{{ uiText.referenceNote }}</p>
+              </div>
+            </header>
 
-      <div v-else-if="libraryViewMode === 'list'" class="live-console-list">
-        <article v-for="item in pagedLibraryItems" :key="item.id" class="live-console-row" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
-          <label class="live-console-row__check">
-            <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
-            <span></span>
-          </label>
+            <div class="lp-field">
+              <div class="lp-field__label">
+                <span>{{ uiText.referenceImage }}</span>
+                <small v-if="referenceImagePaths.length" class="vg-num">{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</small>
+              </div>
 
-            <div class="live-console-row__preview">
-              <div class="live-console-row__thumb">
-                  <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" loading="lazy" decoding="async" />
-                <div v-else class="live-console-row__thumb-empty">
-                  <FileImage class="h-5 w-5" />
+              <div v-if="referenceTaskRows.length" class="lp-refs">
+                <div v-for="row in referenceTaskRows" :key="row.id" class="lp-ref" :class="{ 'is-missing': row.missing }" :title="row.path">
+                  <img v-if="!row.missing" :src="previewSrc(row.path)" alt="" loading="lazy" decoding="async" />
+                  <span v-else class="lp-ref__missing"><AlertTriangle :size="16" />{{ uiText.missingImage }}</span>
+                  <span class="lp-ref__name">{{ row.fileName }}</span>
+                  <button class="lp-ref__remove" type="button" :title="uiText.delete" :aria-label="uiText.delete" @click="removeReferenceImage(row.path)"><X :size="12" /></button>
                 </div>
-                <button
-                  v-if="livePhotoDisplayVideoPath(item)"
-                  class="preview-play"
-                  type="button"
-                  :aria-label="t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' })"
-                  @click.stop="openVideoDialog(item)"
-                >
-                  <Play class="h-4 w-4" />
+                <button class="lp-ref lp-ref--add" type="button" @click="pickReferenceImage"><ImagePlus :size="18" /></button>
+              </div>
+              <button v-else class="lp-drop" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
+                <span class="lp-drop__icon"><ImagePlus :size="22" /></span>
+                <strong>{{ uiText.referenceUploadTitle }}</strong>
+                <small>{{ uiText.referenceUploadDesc }}</small>
+              </button>
+
+              <div class="lp-row lp-row--fill">
+                <button v-if="referenceTaskRows.length" class="vg-btn" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
+                  <ImagePlus :size="15" />{{ lpText.localPick }}
+                </button>
+                <button class="vg-btn" type="button" @click="pickReferenceImageFromLibrary">
+                  <FolderOpen :size="15" />{{ lpText.assetLibrary }}
+                </button>
+                <button class="vg-btn" data-testid="live-photo-open-material-picker" type="button" @click="openMaterialPicker">
+                  <LayoutGrid :size="15" />{{ uiText.materialLibrarySelect }}<em class="lp-btn-count">{{ unboundMaterialOptions.length }}</em>
                 </button>
               </div>
+              <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
             </div>
 
-            <div class="live-console-row__main">
-              <div class="live-console-row__task">
-                <div class="live-console-row__titleline">
-                  <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                  <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
-                  <span v-if="itemHasSubtitle(item)" class="live-console-row__source">{{ t('autoUi.k_83e422384f7f') }}</span>
-                </div>
-                <div class="live-console-row__meta">
-                  <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
-                  <span class="live-console-row__dot"></span>
-                  <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
-                  <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
-                  <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || t('autoUi.k_2a83614918bc') }}</span>
-                </div>
-                <div class="live-console-row__subtitle">
-                  <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
-                </div>
-                <div v-if="liveTaskErrorSummary(item)" class="live-console-row__error">
-                  <AlertTriangle class="h-3.5 w-3.5" />
-                  <span class="live-console-row__error-text">{{ liveTaskErrorSummary(item) }}</span>
-                </div>
-              </div>
-
-              <div class="live-console-row__side">
-                <div class="live-console-row__statuswrap">
-                  <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
-                  <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-                </div>
-                <div class="live-console-row__updated-inline">
-                  <Clock3 class="h-3.5 w-3.5" />
-                  <span>{{ formatTime(item.updatedAt) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="live-console-row__bottom">
-              <div class="live-console-row__quickrefs">
-                <span class="live-console-row__quickchip">{{ t('autoUi.k_a0f61f08d796') }} {{ item.imagePromptPreview?.referenceImagePaths?.length || 0 }}</span>
-                <span class="live-console-row__quickchip">{{ t('autoUi.k_6925f0298cba') }} {{ item.videoPromptPreview?.referenceImagePaths?.length || 0 }}</span>
-                <span class="live-console-row__quickchip">{{ liveTaskProgressPercent(item) }}%</span>
-                <span class="live-console-row__quickchip">{{ liveTaskAutoSummary(item) }}</span>
-                <span class="live-console-row__quickchip">{{ t('autoUi.k_0a2489f651ae') }} {{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-                <span v-if="extractLivePhotoTaskId(item)" class="live-console-row__quickchip">{{ t('autoUi.k_9b53e535acea') }} {{ extractLivePhotoTaskId(item) }}</span>
-                <span v-if="liveTaskWaitingHint(item)" class="live-console-row__quickchip live-console-row__quickchip--accent">{{ liveTaskWaitingHint(item) }}</span>
-              </div>
-
-              <div class="live-console-row__actions">
-                <button class="live-console-row__link live-console-row__link--primary" type="button" @click.stop="openTaskDetail(item)">
-                  <PanelBottomOpen class="h-4 w-4" /> {{ t('autoUi.k_faea8c1db9cc') }} </button>
-                <button class="live-console-row__link" type="button" @click.stop="openRuntimeLogs(item)">
-                  <Logs class="h-4 w-4" /> {{ t('autoUi.k_b923b26d335a') }} </button>
-                <button
-                  class="live-console-row__link"
-                  type="button"
-                  :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="openSingleSubtitleDialog(item)"
-                >
-                  <Sparkles class="h-4 w-4" /> {{ t('autoUi.k_aaa5f2e9f006') }} </button>
-                <button
-                  v-if="itemHasAppliedSubtitle(item)"
-                  class="live-console-row__link"
-                  type="button"
-                  :disabled="subtitleDialogBusy"
-                  @click.stop="revertSubtitleFromItem(item)"
-                > {{ t('autoUi.k_6d32dea55ea6') }} </button>
-                <button
-                  :data-testid="`live-photo-preview-${item.id}`"
-                  class="live-console-row__action live-console-row__action--play"
-                  type="button"
-                  :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="openVideoDialog(item)"
-                >
-                  <Play class="h-4 w-4" />
+            <div class="lp-field">
+              <div class="lp-field__label"><span>{{ uiText.product }}</span></div>
+              <div class="lp-product">
+                <button class="lp-product__pick" data-testid="live-photo-product-select" type="button" @click="productPickerOpen = true">
+                  <span class="lp-product__thumb">
+                    <img v-if="selectedProduct?.coverImagePath" :src="previewSrc(selectedProduct.coverImagePath)" alt="" />
+                    <Package v-else :size="16" />
+                  </span>
+                  <span class="lp-product__name">
+                    <strong>{{ selectedProduct?.name || t('livePhoto.workspace.selectProduct') }}</strong>
+                    <small v-if="selectedProduct">{{ selectedProduct.type }}</small>
+                  </span>
+                  <ChevronDown :size="15" class="lp-product__chev" />
                 </button>
-                <button
-                  :data-testid="`live-photo-metadata-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="!item.packagingMetadataBridgePath"
-                  @click.stop="openPath(item.packagingMetadataBridgePath)"
-                >
-                  <Package class="h-4 w-4" />
-                </button>
-                <button
-                  :data-testid="`live-photo-reveal-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="showPath(livePhotoDisplayVideoPath(item))"
-                >
-                  <FolderOpen class="h-4 w-4" />
-                </button>
-                <button
-                  v-if="canCorrectReplacementRegion(item)"
-                  :data-testid="`live-photo-region-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :title="t('autoUi.k_329d5e81ce23')"
-                  @click.stop="openReplacementRegionEditor(item)"
-                >
-                  <ScanLine class="h-4 w-4" />
-                </button>
-                <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
-                  <button
-                    v-if="canRetryImageOnce(item)"
-                    :data-testid="`live-photo-retry-${item.id}`"
-                    class="image-retry-decision__button"
-                    :title="t('autoUi.k_031c7e12ddae')"
-                    type="button"
-                    :disabled="item.packagingStatus === 'processing'"
-                    @click.stop="retryItem(item)"
-                  >
-                    <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_031c7e12ddae') }}
+                <div class="lp-master" :class="{ 'is-missing': !selectedProductLivePhotoRef }">
+                  <button v-if="selectedProductLivePhotoRef" class="lp-master__thumb" type="button" :title="selectedProductLivePhotoRef" @click="openPath(selectedProductLivePhotoRef)">
+                    <img :src="previewSrc(selectedProductLivePhotoRef)" alt="" />
                   </button>
-                  <button
-                    v-if="canContinueWithVideo(item)"
-                    class="image-retry-decision__button image-retry-decision__button--primary"
-                    :title="t('livePhoto.workspace.continueWithVideo')"
-                    type="button"
-                    @click.stop="continueWithVideo(item)"
-                  >
-                    <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideoShort') }}
-                  </button>
+                  <span v-else class="lp-master__thumb"><AlertTriangle :size="15" /></span>
+                  <span class="lp-master__text">
+                    <small>{{ t('livePhoto.workspace.primaryImage') }}</small>
+                    <strong v-if="selectedProductLivePhotoRef" :title="selectedProductLivePhotoRef">{{ fileNameOf(selectedProductLivePhotoRef) }}</strong>
+                    <strong v-else>{{ t('livePhoto.workspace.primaryImageRequired') }}</strong>
+                  </span>
                 </div>
-                <button
-                  v-if="!canRetryImageOnce(item)"
-                  :data-testid="`live-photo-retry-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="item.packagingStatus === 'processing'"
-                  @click.stop="retryItem(item)"
-                >
-                  <RefreshCcw class="h-4 w-4" />
-                </button>
-                <button
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="item.packagingStatus === 'completed'"
-                  @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
-                >
-                  <component :is="item.autoFlowStatus?.paused ? Play : LoaderCircle" class="h-4 w-4" />
-                </button>
-                <button
-                  :data-testid="`live-photo-remove-${item.id}`"
-                  class="live-console-row__action live-console-row__action--danger"
-                  type="button"
-                  @click.stop="removeItem(item.id)"
-                >
-                  <Trash2 class="h-4 w-4" />
-                </button>
               </div>
             </div>
-        </article>
-      </div>
-      <div v-else class="live-console-grid">
-        <article v-for="item in pagedLibraryItems" :key="item.id" class="live-console-card" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
-          <div class="live-console-card__head">
-            <label class="live-console-row__check">
-              <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
-              <span></span>
+
+            <footer class="lp-card__foot">
+              <span class="lp-safe"><ShieldCheck :size="14" />{{ uiText.referenceSafe }}</span>
+              <button class="vg-btn vg-btn--primary vg-btn--lg" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto" @click="createReferenceItem">
+                <LoaderCircle v-if="creatingReference" :size="16" class="vg-spin" />
+                <Sparkles v-else :size="16" />
+                {{ creatingReference ? t('livePhoto.actions.creating') : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
+              </button>
+            </footer>
+          </article>
+
+          <article v-if="referenceCreatedItems.length" class="lp-card lp-card--flush">
+            <header class="lp-card__bar">
+              <h3>{{ uiText.referenceTaskList }}<em>{{ referenceCreatedItems.length }}</em></h3>
+              <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="activeTab = 'library'">{{ uiText.tabLibrary }}<ChevronRight :size="14" /></button>
+            </header>
+            <div class="lp-recent">
+              <div v-for="item in referenceCreatedItems" :key="item.id" class="lp-recent__row">
+                <span class="lp-recent__thumb">
+                  <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />
+                  <FileImage v-else :size="15" />
+                </span>
+                <div class="lp-recent__main">
+                  <strong :title="referenceTaskTitle(item)">{{ referenceTaskTitle(item) }}</strong>
+                  <small>{{ item.productSnapshot?.name || '--' }} · {{ liveTaskMetaSummary(item) }}</small>
+                </div>
+                <span class="vg-num lp-recent__time">{{ formatTime(item.updatedAt) }}</span>
+                <span class="lp-state" :class="lpTone(item)"><i />{{ itemStatusLabel(item.packagingStatus) }}</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="lp-col">
+          <article class="lp-card">
+            <header class="lp-card__head">
+              <span class="lp-num">2</span>
+              <div class="lp-card__title">
+                <h2>{{ uiText.rulesTitle }}</h2>
+                <p>{{ uiText.outputDesc }}</p>
+              </div>
+              <span class="vg-chip">{{ uiText.rulesVersion }}</span>
+            </header>
+            <ol class="lp-rules">
+              <li><span>1</span>{{ uiText.ruleIdentity }}</li>
+              <li><span>2</span>{{ uiText.ruleReplace }}</li>
+              <li><span>3</span>{{ uiText.ruleMotion }}</li>
+              <li><span>4</span>{{ uiText.rulePackage }}</li>
+            </ol>
+          </article>
+
+          <article class="lp-card">
+            <header class="lp-card__head">
+              <span class="lp-num">3</span>
+              <div class="lp-card__title">
+                <h2>{{ t('livePhoto.workspace.promptVersion') }}</h2>
+              </div>
+              <div class="lp-seg" role="tablist">
+                <button :class="{ 'is-on': promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ t('promptKind.image') }}</button>
+                <button :class="{ 'is-on': promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ t('promptKind.video') }}</button>
+              </div>
+            </header>
+            <div class="vg-form-grid">
+              <label class="vg-field">
+                <span class="vg-field__label">{{ t('livePhoto.workspace.promptVersion') }}</span>
+                <select v-model="selectedPromptVersionId" class="vg-select" @change="selectPromptVersion(selectedPromptVersionId)">
+                  <option v-for="version in promptVersions" :key="version.id" :value="version.id">
+                    V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${t('livePhoto.workspace.activeVersion')}` : '' }}
+                  </option>
+                </select>
+              </label>
+              <label class="vg-field">
+                <span class="vg-field__label">{{ t('livePhoto.workspace.versionName') }}</span>
+                <input v-model="promptEditorName" class="vg-input" type="text" placeholder="Live Photo Product Replacement" />
+              </label>
+            </div>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ t('livePhoto.workspace.promptContent') }}</span>
+              <textarea v-model="promptEditorText" class="vg-textarea lp-prompt" rows="10" spellcheck="false" />
             </label>
-            <div class="live-console-row__statuswrap">
-              <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
-              <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+            <footer class="lp-card__foot">
+              <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><RefreshCcw :size="13" />{{ t('livePhoto.workspace.rollbackVersion') }}</button>
+              <div class="lp-row">
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">{{ t('livePhoto.workspace.copyVersion') }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('livePhoto.workspace.activateVersion') }}</button>
+                <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">{{ t('livePhoto.workspace.updateVersion') }}</button>
+              </div>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============ 库 / 导出 ============ -->
+      <section v-else class="lp-card lp-card--flush lp-library">
+        <header class="lp-bar">
+          <div class="lp-bar__title">
+            <h2>{{ uiText.libraryTitle }}<em class="vg-num">{{ libraryStats.total }} {{ uiText.itemUnit }}</em></h2>
+            <div class="lp-stats">
+              <span class="lp-stat lp-stat--run"><i />{{ t('livePhoto.workspace.running') }} <b class="vg-num">{{ libraryStats.running }}</b></span>
+              <span class="lp-stat lp-stat--err"><i />{{ t('livePhoto.status.failed') }} <b class="vg-num">{{ libraryStats.failed }}</b></span>
+              <span class="lp-stat lp-stat--warn"><i />{{ t('livePhoto.workspace.paused') }} <b class="vg-num">{{ libraryStats.paused }}</b></span>
             </div>
           </div>
-
-          <button
-            class="live-console-card__preview"
-            type="button"
-            :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' }) : t('autoUi.k_fe0ccc53ab2b')"
-            @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
-          >
-            <div class="live-console-row__thumb">
-              <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" loading="lazy" decoding="async" />
-              <div v-else class="live-console-row__thumb-empty">
-                <FileImage class="h-5 w-5" />
-              </div>
-              <span v-if="livePhotoDisplayVideoPath(item)" class="preview-play" aria-hidden="true">
-                <Play class="h-4 w-4" />
-              </span>
+          <div class="lp-bar__tools">
+            <div class="lp-seg">
+              <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" :class="{ 'is-on': libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
             </div>
+            <div class="lp-seg" :aria-label="t('livePhoto.workspace.viewMode')">
+              <button :class="{ 'is-on': libraryViewMode === 'grid' }" type="button" :aria-label="t('livePhoto.workspace.gridView')" :aria-pressed="libraryViewMode === 'grid'" @click="libraryViewMode = 'grid'"><Grid2x2 :size="14" /></button>
+              <button :class="{ 'is-on': libraryViewMode === 'list' }" type="button" :aria-label="t('livePhoto.workspace.listView')" :aria-pressed="libraryViewMode === 'list'" @click="libraryViewMode = 'list'"><List :size="14" /></button>
+            </div>
+          </div>
+        </header>
+
+        <div class="lp-selbar" :class="{ 'is-live': selectedLibraryIds.length }">
+          <label class="lp-check">
+            <input type="checkbox" :disabled="!filteredLibraryItems.length" :checked="!!selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length" @change="toggleSelectAllFiltered" />
+            <span>{{ t('livePhoto.workspace.selectFiltered') }}</span>
+          </label>
+          <span class="vg-muted">{{ t('livePhoto.workspace.selected') }} <b class="vg-num">{{ selectedLibraryIds.length }}</b></span>
+          <template v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length">
+            <span class="lp-selbar__sep" />
+            <button v-if="retryableFailedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="retryFailedItems">
+              <RefreshCcw :size="13" />{{ t('livePhoto.workspace.retryFailed') }} ({{ retryableFailedLibraryItems.length }})
+            </button>
+            <button v-if="pausedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="resumePausedItems">
+              <Play :size="13" />{{ t('livePhoto.workspace.resumePaused') }} ({{ pausedLibraryItems.length }})
+            </button>
+            <button v-if="runningLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="pauseRunningItems">
+              <Pause :size="13" />{{ t('livePhoto.workspace.pauseRunning') }} ({{ runningLibraryItems.length }})
+            </button>
+          </template>
+          <span class="vg-toolbar__spacer" />
+          <template v-if="selectedLibraryIds.length">
+            <button v-if="subtitleRevertEligibleSelectedCount" class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
+            <button v-if="subtitleEligibleSelectedCount" class="vg-btn vg-btn--sm" type="button" @click="openBatchSubtitleDialog">
+              <Captions :size="13" />{{ t('livePhoto.workspace.batchSubtitles') }} ({{ subtitleEligibleSelectedCount }})
+            </button>
+            <button class="vg-btn vg-btn--sm vg-btn--danger" type="button" @click="openBatchDelete">
+              <Trash2 :size="13" />{{ t('livePhoto.workspace.batchDelete') }} ({{ selectedLibraryIds.length }})
+            </button>
+          </template>
+          <button class="vg-btn vg-btn--sm vg-btn--primary" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
+            <Package :size="13" />{{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
           </button>
+        </div>
 
-          <div class="live-console-card__body">
-            <div class="live-console-row__task">
-              <div class="live-console-row__titleline">
-                <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
-                <span v-if="itemHasSubtitle(item)" class="live-console-row__source">{{ t('autoUi.k_83e422384f7f') }}</span>
+        <div v-if="!filteredLibraryItems.length" class="vg-empty lp-empty" data-testid="live-photo-empty">
+          <span class="vg-empty__icon"><FolderOpen :size="22" /></span>
+          <h3>{{ t('livePhoto.library.emptyTitle') }}</h3>
+          <p>{{ t('livePhoto.library.emptyDesc') }}</p>
+          <button class="vg-btn vg-btn--primary" type="button" @click="activeTab = 'reference'"><ImagePlus :size="15" />{{ uiText.tabReference }}</button>
+        </div>
+
+        <div v-else class="lp-items" :class="libraryViewMode === 'list' ? 'lp-items--list' : 'lp-items--grid'">
+          <article v-for="item in pagedLibraryItems" :key="item.id" class="lp-item" :class="{ 'is-on': selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
+            <div class="lp-item__media">
+              <button
+                class="lp-item__thumb"
+                type="button"
+                :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' }) : t('autoUi.k_fe0ccc53ab2b')"
+                @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
+              >
+                <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />
+                <FileImage v-else :size="22" />
+                <span v-if="livePhotoDisplayVideoPath(item)" class="preview-play" aria-hidden="true"><Play :size="16" /></span>
+              </button>
+              <label class="lp-item__check">
+                <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
+              </label>
+            </div>
+
+            <div class="lp-item__body">
+              <div class="lp-item__titleline">
+                <h3 :title="item.sourceShotLabel || item.productSnapshot?.name || item.id">{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
+                <span class="lp-state" :class="lpTone(item)"><i />{{ liveTaskStatusLabel(item) }}</span>
               </div>
-              <div class="live-console-row__meta">
-                <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
-                <span class="live-console-row__dot"></span>
-                <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
-                <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
-                <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || t('autoUi.k_2a83614918bc') }}</span>
+              <div class="lp-item__meta">
+                <span class="vg-chip">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
+                <span v-if="itemHasSubtitle(item)" class="vg-chip">{{ t('autoUi.k_83e422384f7f') }}</span>
+                <span class="lp-item__text">{{ taskSourceSummary(item) }} · {{ metadataModeLabel(item) }}</span>
               </div>
-              <div class="live-console-row__subtitle">
-                <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
+              <div v-if="liveTaskErrorSummary(item)" class="lp-item__error" :title="liveTaskErrorSummary(item)">
+                <AlertTriangle :size="13" /><span>{{ liveTaskErrorSummary(item) }}</span>
               </div>
-              <div v-if="liveTaskErrorSummary(item)" class="live-console-row__error">
-                <AlertTriangle class="h-3.5 w-3.5" />
-                <span class="live-console-row__error-text">{{ liveTaskErrorSummary(item) }}</span>
+              <div v-else-if="liveTaskWaitingHint(item)" class="lp-item__hint">{{ liveTaskWaitingHint(item) }}</div>
+              <div class="lp-item__progress">
+                <div class="vg-progress">
+                  <div class="vg-progress__bar"><div class="vg-progress__fill" :class="{ 'vg-progress__fill--fail': lpTone(item) === 'lp-state--err' }" :style="{ width: `${liveTaskProgressPercent(item)}%` }" /></div>
+                </div>
+                <span class="lp-item__step">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+                <span class="vg-num lp-item__time"><Clock3 :size="12" />{{ formatTime(item.updatedAt) }}</span>
               </div>
             </div>
 
-            <div class="live-console-row__progress">
-              <div class="live-console-row__progress-copy">
-                <strong>{{ item.workflow?.currentStep ? workflowStepIndex(item.workflow.currentStep) + 1 : 1 }}/{{ livePhotoSteps.length }}</strong>
-                <span>{{ formatElapsed(item.createdAt) }}</span>
-              </div>
-              <div class="live-console-row__progress-track">
-                <span :style="{ width: `${Math.max(16, ((workflowStepIndex(item.workflow?.currentStep) + 1) / livePhotoSteps.length) * 100)}%` }"></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="live-console-card__footer">
-            <div class="live-console-row__updated-inline">
-              <Clock3 class="h-3.5 w-3.5" />
-              <span>{{ formatTime(item.updatedAt) }}</span>
-            </div>
-            <div class="live-console-row__actions">
-              <button class="live-console-row__action" type="button" @click.stop="openTaskDetail(item)">
-                <PanelBottomOpen class="h-4 w-4" />
-              </button>
-              <button class="live-console-row__action" type="button" @click.stop="openRuntimeLogs(item)">
-                <Logs class="h-4 w-4" />
-              </button>
-              <button
-                class="live-console-row__action"
-                type="button"
-                :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="openSingleSubtitleDialog(item)"
-              >
-                <Sparkles class="h-4 w-4" />
-              </button>
-              <button
-                v-if="itemHasAppliedSubtitle(item)"
-                class="live-console-row__action"
-                type="button"
-                :disabled="subtitleDialogBusy"
-                @click.stop="revertSubtitleFromItem(item)"
-              >
-                <RefreshCcw class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-preview-${item.id}`"
-                class="live-console-row__action live-console-row__action--play"
-                type="button"
-                :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="openVideoDialog(item)"
-              >
-                <Play class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-metadata-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :disabled="!item.packagingMetadataBridgePath"
-                @click.stop="openPath(item.packagingMetadataBridgePath)"
-              >
-                <Package class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-reveal-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="showPath(livePhotoDisplayVideoPath(item))"
-              >
-                <FolderOpen class="h-4 w-4" />
-              </button>
-              <button
-                v-if="canCorrectReplacementRegion(item)"
-                :data-testid="`live-photo-region-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :title="t('autoUi.k_329d5e81ce23')"
-                @click.stop="openReplacementRegionEditor(item)"
-              >
-                <ScanLine class="h-4 w-4" />
-              </button>
+            <div class="lp-item__actions">
               <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
                 <button
                   v-if="canRetryImageOnce(item)"
                   :data-testid="`live-photo-retry-${item.id}`"
-                  class="image-retry-decision__button"
+                  class="vg-btn vg-btn--xs"
                   :title="t('autoUi.k_031c7e12ddae')"
                   type="button"
                   :disabled="item.packagingStatus === 'processing'"
                   @click.stop="retryItem(item)"
                 >
-                  <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_031c7e12ddae') }}
+                  <RefreshCcw :size="12" />{{ t('autoUi.k_031c7e12ddae') }}
                 </button>
                 <button
                   v-if="canContinueWithVideo(item)"
-                  class="image-retry-decision__button image-retry-decision__button--primary"
+                  class="vg-btn vg-btn--xs vg-btn--primary"
                   :title="t('livePhoto.workspace.continueWithVideo')"
                   type="button"
                   @click.stop="continueWithVideo(item)"
                 >
-                  <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideoShort') }}
+                  <Play :size="12" />{{ t('livePhoto.workspace.continueWithVideoShort') }}
                 </button>
               </div>
-              <button
-                v-if="!canRetryImageOnce(item)"
-                :data-testid="`live-photo-retry-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :disabled="item.packagingStatus === 'processing'"
-                @click.stop="retryItem(item)"
-              >
-                <RefreshCcw class="h-4 w-4" />
-              </button>
-              <button
-                class="live-console-row__action"
-                type="button"
-                :disabled="item.packagingStatus === 'completed'"
-                @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
-              >
-                <component :is="item.autoFlowStatus?.paused ? Play : LoaderCircle" class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-remove-${item.id}`"
-                class="live-console-row__action live-console-row__action--danger"
-                type="button"
-                @click.stop="removeItem(item.id)"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
+              <div class="lp-item__icons">
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_faea8c1db9cc')" @click.stop="openTaskDetail(item)"><PanelBottomOpen :size="14" /></button>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_b923b26d335a')" @click.stop="openRuntimeLogs(item)"><Logs :size="14" /></button>
+                <button :data-testid="`live-photo-preview-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.preview" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="openVideoDialog(item)"><Play :size="14" /></button>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_aaa5f2e9f006')" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="openSingleSubtitleDialog(item)"><Captions :size="14" /></button>
+                <button v-if="itemHasAppliedSubtitle(item)" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_6d32dea55ea6')" :disabled="subtitleDialogBusy" @click.stop="revertSubtitleFromItem(item)"><RefreshCcw :size="14" /></button>
+                <button :data-testid="`live-photo-metadata-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.metadata" :disabled="!item.packagingMetadataBridgePath" @click.stop="openPath(item.packagingMetadataBridgePath)"><Package :size="14" /></button>
+                <button :data-testid="`live-photo-reveal-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.reveal" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="showPath(livePhotoDisplayVideoPath(item))"><FolderOpen :size="14" /></button>
+                <button v-if="canCorrectReplacementRegion(item)" :data-testid="`live-photo-region-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_329d5e81ce23')" @click.stop="openReplacementRegionEditor(item)"><ScanLine :size="14" /></button>
+                <button v-if="!canRetryImageOnce(item)" :data-testid="`live-photo-retry-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.regenerate" :disabled="item.packagingStatus === 'processing'" @click.stop="retryItem(item)"><RefreshCcw :size="14" /></button>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="item.autoFlowStatus?.paused ? t('livePhoto.workspace.resumePaused') : t('livePhoto.workspace.pauseRunning')" :disabled="item.packagingStatus === 'completed'" @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)">
+                  <component :is="item.autoFlowStatus?.paused ? Play : Pause" :size="14" />
+                </button>
+                <button :data-testid="`live-photo-remove-${item.id}`" class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" :title="uiText.delete" @click.stop="removeItem(item.id)"><Trash2 :size="14" /></button>
+              </div>
             </div>
+          </article>
+        </div>
+
+        <footer v-if="filteredLibraryItems.length" class="vg-pager lp-pager">
+          <span class="vg-num">{{ libraryTotal || filteredLibraryItems.length }} {{ uiText.itemUnit }}</span>
+          <div class="vg-pager__group">
+            <button class="vg-pg" type="button" :aria-label="t('livePhoto.workspace.previousPage')" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)"><ChevronLeft :size="14" /></button>
+            <span class="vg-num lp-pager__pos">{{ libraryPage }} / {{ libraryTotalPages }}</span>
+            <button class="vg-pg" type="button" :aria-label="t('livePhoto.workspace.nextPage')" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)"><ChevronRight :size="14" /></button>
           </div>
-        </article>
-      </div>
-    </section>
+        </footer>
+      </section>
+    </div>
 
     <div
       v-if="materialPickerOpen"

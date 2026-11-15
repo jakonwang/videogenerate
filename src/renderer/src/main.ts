@@ -10,6 +10,8 @@ import './design-system/ui-kit.css'
 import './design-system/clone-workspace.css'
 import './design-system/clone-studio.css'
 import './design-system/creative-studio.css'
+import './design-system/product-materials.css'
+import './design-system/live-photo.css'
 
 window.addEventListener('error', (event) => {
   console.error('[renderer-error]', {

@@ -7,23 +7,35 @@ import {
   Check,
   Boxes,
   ChevronLeft,
+  CircleCheck,
   CloudUpload,
+  Copy,
   Download,
   Eye,
+  FileVideo,
+  Film,
   FolderOpen,
+  History,
   Image as ImageIcon,
+  ImagePlus,
   Images,
-  Info,
+  Layers,
   Link2,
+  ListPlus,
   RefreshCcw,
+  RotateCcw,
+  Save,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
-  Tags,
   Trash2,
   TriangleAlert,
+  Wand2,
   X,
 } from 'lucide-vue-next'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
+import MaterialPager from '../components/product-materials/MaterialPager.vue'
+import MaterialTile from '../components/product-materials/MaterialTile.vue'
 
 type Category = 'necklace' | 'ring' | 'earring' | 'bracelet'
 type UsageStatus = 'unused' | 'used'
@@ -532,6 +544,66 @@ const promptUi = computed(() => {
   }
 })
 
+/** Labels introduced by the redesigned layout. */
+const uiText = computed(() => {
+  if (locale.value === 'zh-CN') return {
+    source: '视频来源', selected: '已选', videos: '个视频', remove: '移除', history: '最近批次', imagesUnit: '张图',
+    queueEmpty: '在左侧选择视频并加入队列，处理进度会在这里实时更新。',
+    promptDesc: '生成时使用当前选中的版本，可保存、复制或回滚。',
+    sourceEmpty: '先在「拆解视频」中处理视频，拆解出的图片会出现在这里。',
+  }
+  if (locale.value === 'vi-VN') return {
+    source: 'Nguon video', selected: 'Da chon', videos: 'video', remove: 'Bo', history: 'Batch gan day', imagesUnit: 'anh',
+    queueEmpty: 'Chon video ben trai va them vao hang doi; tien trinh se cap nhat tai day.',
+    promptDesc: 'Phien ban dang chon se duoc dung khi tao anh.',
+    sourceEmpty: 'Hay tach video truoc; anh tach ra se hien thi tai day.',
+  }
+  return {
+    source: 'Video source', selected: 'Selected', videos: 'videos', remove: 'Remove', history: 'Recent batches', imagesUnit: 'images',
+    queueEmpty: 'Pick videos on the left and queue them; progress updates here automatically.',
+    promptDesc: 'The selected version is used for generation. Save, copy or roll back anytime.',
+    sourceEmpty: 'Break down a video first; extracted frames will show up here.',
+  }
+})
+
+const promptPanelOpen = ref(false)
+const activePromptLabel = computed(() => {
+  const current = promptVersions.value.find((item) => item.id === selectedPromptVersionId.value)
+  return current ? `V${current.version}` : '-'
+})
+const olderBatches = computed(() => batches.value.slice(1, 6))
+
+function stateClass(status: BatchItem['status'] | BatchItem['sourceItems'][number]['status']) {
+  if (status === 'completed') return 'pm-state--ok'
+  if (status === 'failed') return 'pm-state--err'
+  if (status === 'partial_failed') return 'pm-state--warn'
+  if (status === 'processing') return 'pm-state--run'
+  return ''
+}
+
+function batchProgress(batch: BatchItem) {
+  if (!batch.totalVideos) return 0
+  return Math.round(((batch.completedVideos + batch.failedVideos) / batch.totalVideos) * 100)
+}
+
+function fileName(path: string) {
+  return String(path || '').split(/[\\/]/).pop() || path
+}
+
+function removePickedVideo(path: string) {
+  pickedVideos.value = pickedVideos.value.filter((item) => item !== path)
+}
+
+function setLibraryCategory(value: 'all' | Category) {
+  filterCategory.value = value
+  void loadAll()
+}
+
+function setLibraryUsage(value: 'all' | UsageStatus) {
+  filterUsageStatus.value = value
+  void loadAll()
+}
+
 const canSubmit = computed(() => pickedVideos.value.length > 0 && !submitting.value)
 const downloadableParserVideos = computed(() =>
   parserVideos.value.filter((item) => item.status === 'completed' && item.localVideoPath),
@@ -648,13 +720,6 @@ function sourceStatusLabel(status: BatchItem['sourceItems'][number]['status']) {
   if (status === 'processing') return 'Processing'
   if (status === 'completed') return 'Completed'
   return 'Failed'
-}
-
-function batchStatusTone(status: BatchItem['status']) {
-  if (status === 'completed') return 'is-success'
-  if (status === 'failed') return 'is-danger'
-  if (status === 'partial_failed') return 'is-warning'
-  return 'is-info'
 }
 
 function shortMaterialId(id: string) {
@@ -1156,2205 +1221,564 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="materials-workbench plugin-workspace-standard">
-    <header class="hero-card">
-      <div class="hero-card__content">
-        <div class="hero-card__eyebrow">
-          <div class="hero-card__eyebrow-icon">
-            <Boxes class="icon icon--small" />
-          </div>
-          <span>{{ copy.kicker }}</span>
+  <div class="vg-scope pm">
+    <!-- ============ head + tabs ============ -->
+    <section class="pm-top">
+      <header class="pm-head">
+        <div class="pm-head__icon"><Sparkles :size="20" /></div>
+        <div class="pm-head__text">
+          <h1 data-testid="product-image-materials-title">{{ copy.pluginName }}</h1>
+          <p>{{ copy.workspaceHint }}</p>
         </div>
-        <h1>{{ copy.title }}</h1>
-        <p>{{ copy.subtitle }}</p>
-      </div>
-    </header>
-
-    <div v-if="notice" class="notice notice--success">{{ notice }}</div>
-    <div v-if="errorText" class="notice notice--danger">{{ errorText }}</div>
-
-    <section class="workspace-card">
-      <div class="workspace-card__head">
-        <div class="workspace-card__intro">
-          <div class="workspace-card__icon">
-            <Sparkles class="icon" />
-          </div>
-          <div class="workspace-card__copy">
-            <div class="workspace-card__title" data-testid="product-image-materials-title">{{ copy.pluginName }}</div>
-            <div class="workspace-card__hint">{{ copy.workspaceHint }}</div>
-          </div>
-          <div class="workspace-card__actions">
-            <button class="ghost-button workspace-action-button" data-testid="product-image-materials-back" type="button" @click="router.push('/plugins?tab=installed&plugin=product-image-materials')">
-              <ChevronLeft class="icon icon--small" />
-              {{ copy.backPlugin }}
-            </button>
-            <button class="ghost-button workspace-action-button" data-testid="product-image-materials-refresh" type="button" :disabled="loading" @click="loadAll">
-              <RefreshCcw class="icon icon--small" />
-              {{ copy.refresh }}
-            </button>
-          </div>
-        </div>
-
-        <div class="tabs-shell">
-          <button class="tab-button" :class="{ active: activeTab === 'batch' }" type="button" @click="activeTab = 'batch'">
-            <Sparkles class="icon icon--small" />
-            <span>{{ copy.batchTab }}</span>
+        <div class="pm-head__actions">
+          <button class="vg-btn" data-testid="product-image-materials-back" type="button" @click="router.push('/plugins?tab=installed&plugin=product-image-materials')">
+            <ChevronLeft :size="15" />{{ copy.backPlugin }}
           </button>
-          <button class="tab-button" :class="{ active: activeTab === 'image-to-image' }" type="button" @click="activeTab = 'image-to-image'">
-            <ImageIcon class="icon icon--small" />
-            <span>{{ copy.imageToImageTab }}</span>
-          </button>
-          <button class="tab-button" :class="{ active: activeTab === 'background' }" type="button" @click="activeTab = 'background'">
-            <ImageIcon class="icon icon--small" />
-            <span>{{ generationCopy.tab }}</span>
-            <span class="tab-badge">{{ backgroundSourceMaterials.length }}</span>
-          </button>
-          <button class="tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
-            <ImageIcon class="icon icon--small" />
-            <span>{{ libraryDisplayCopy.tab }}</span>
-            <span class="tab-badge">{{ derivedMaterialCount }}</span>
+          <button class="vg-btn" data-testid="product-image-materials-refresh" type="button" :disabled="loading" @click="loadAll">
+            <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />{{ copy.refresh }}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div v-if="activeTab === 'batch'" class="workspace-grid">
-        <section class="panel panel--feature">
-          <div class="section-head">
-            <div class="section-head__badge">1</div>
-            <div>
-              <h2>{{ copy.createBatch }}</h2>
-              <p>{{ copy.createBatchDesc }}</p>
-            </div>
-          </div>
-
-          <div class="form-grid form-grid--single">
-            <label>
-              <span>{{ copy.category }}</span>
-              <select v-model="selectedCategory" class="input">
-                <option v-for="item in categories" :key="item" :value="item">{{ categoryLabel(item) }}</option>
-              </select>
-              <small class="field-hint field-hint--placeholder" aria-hidden="true">.</small>
-            </label>
-          </div>
-
-          <div class="tabs-shell tabs-shell--submode">
-            <button class="tab-button" :class="{ active: batchSourceMode === 'upload' }" type="button" @click="batchSourceMode = 'upload'">
-              <CloudUpload class="icon icon--small" />
-              <span>{{ copy.uploadMyVideo }}</span>
-            </button>
-            <button class="tab-button" :class="{ active: batchSourceMode === 'downloaded' }" type="button" @click="batchSourceMode = 'downloaded'">
-              <Download class="icon icon--small" />
-              <span>{{ copy.chooseDownloadedVideo }}</span>
-              <span class="tab-badge">{{ downloadableParserVideos.length }}</span>
-            </button>
-          </div>
-
-          <template v-if="batchSourceMode === 'upload'">
-            <button class="upload-dropzone" type="button" @click="pickVideos">
-              <CloudUpload class="icon upload-dropzone__icon" />
-              <strong>{{ copy.pickZoneTitle }}</strong>
-              <span>{{ copy.pickZoneDesc }}</span>
-              <span>{{ copy.pickZoneFormats }}</span>
-            </button>
-
-            <div class="pick-row pick-row--three">
-              <button class="primary-button" data-testid="product-image-materials-local-videos" type="button" @click="pickVideos">
-                <FolderOpen class="icon" />
-                {{ copy.pickVideos }}
-              </button>
-              <button class="primary-button primary-button--soft" data-testid="product-image-materials-library-videos" type="button" @click="pickVideosFromAssetLibrary">
-                <Images class="icon" />
-                {{ copy.pickAssetVideos }}
-              </button>
-              <button class="primary-button primary-button--soft" type="button" :disabled="!canSubmit" @click="submitBatch">
-                <RefreshCcw v-if="submitting" class="icon spin" />
-                <Boxes v-else class="icon" />
-                {{ copy.queueBatch }}
-              </button>
-            </div>
-
-            <div class="picked-list">
-              <div v-if="!pickedVideos.length" class="empty-copy">{{ copy.noVideosSelected }}</div>
-              <button v-for="item in pickedVideos" :key="item" class="path-chip" type="button" @click="showInFolder(item)">
-                {{ item }}
-              </button>
-            </div>
-          </template>
-
-          <template v-else>
-            <div v-if="!downloadableParserVideos.length" class="empty-copy">
-              {{ copy.noDownloadedVideos }}
-            </div>
-            <div v-else class="parser-video-grid">
-              <article
-                v-for="item in pagedDownloadableParserVideos"
-                :key="item.id"
-                class="parser-video-card"
-                :class="{ 'is-selected': selectedParserVideoIds.includes(item.id) }"
-                @click="toggleParserVideoSelection(item.id)"
-              >
-                <img v-if="parserVideoThumb(item)" :src="parserVideoThumb(item)" alt="video thumbnail" class="parser-video-card__thumb" loading="lazy" decoding="async" />
-                <div v-else class="parser-video-card__placeholder">VIDEO</div>
-                <div class="parser-video-card__body">
-                  <strong>{{ parserVideoLabel(item) }}</strong>
-                  <span>{{ item.author || item.videoId }}</span>
-                  <span>{{ item.usedStatus === 'used' ? copy.used : copy.unused }}</span>
-                </div>
-              </article>
-            </div>
-
-            <div v-if="downloadableParserVideos.length > parserVideoPageSize" class="library-pagination">
-              <div class="library-pagination__nav">
-                <button class="ghost-button ghost-button--toolbar" type="button" :disabled="parserVideoPage <= 1" @click="parserVideoPage -= 1">
-                  {{ paginationCopy.prev }}
-                </button>
-                <span class="library-pagination__text">{{ parserVideoPage }} / {{ parserVideoTotalPages }}</span>
-                <button class="ghost-button ghost-button--toolbar" type="button" :disabled="parserVideoPage >= parserVideoTotalPages" @click="parserVideoPage += 1">
-                  {{ paginationCopy.next }}
-                </button>
-              </div>
-              <div class="library-pagination__size">
-                <span>{{ paginationCopy.perPage }}</span>
-                <select v-model.number="parserVideoPageSize" class="input input--compact library-pagination__select">
-                  <option :value="8">8</option>
-                  <option :value="12">12</option>
-                  <option :value="16">16</option>
-                  <option :value="24">24</option>
-                </select>
-                <span>{{ paginationCopy.items }}</span>
-              </div>
-            </div>
-
-            <div class="pick-row">
-              <button class="primary-button primary-button--soft" type="button" :disabled="!canSubmitDownloadedBatch" @click="submitBatch">
-                <RefreshCcw v-if="submitting" class="icon spin" />
-                <Boxes v-else class="icon" />
-                {{ copy.queueBatch }}
-              </button>
-            </div>
-
-            <div class="picked-list">
-              <div v-if="!selectedDownloadedVideos.length" class="empty-copy">{{ copy.noDownloadedVideosSelected }}</div>
-              <button
-                v-for="item in selectedDownloadedVideos"
-                :key="item.id"
-                class="path-chip"
-                type="button"
-                @click.stop="showInFolder(item.localVideoPath || '')"
-              >
-                {{ item.localVideoPath || item.videoId }}
-              </button>
-            </div>
-          </template>
-        </section>
-
-        <section class="panel panel--queue">
-          <div class="section-head section-head--queue">
-            <div class="section-head__badge">2</div>
-            <div class="section-head__content">
-              <h2>{{ copy.queue }}</h2>
-              <p>{{ copy.queueDesc }}</p>
-            </div>
-            <button class="ghost-button ghost-button--inline" type="button" @click="loadAll">
-              <RefreshCcw class="icon" />
-              {{ copy.refresh }}
-            </button>
-          </div>
-
-          <div v-if="loading && !batches.length" class="empty-copy">{{ copy.loadingBatches }}</div>
-          <div v-else-if="!batches.length" class="empty-copy">{{ copy.noBatches }}</div>
-          <template v-else-if="latestBatch">
-            <article class="queue-card">
-              <div class="queue-card__head">
-                <div class="queue-card__title">
-                  <span class="queue-card__type">{{ copy.batches }}</span>
-                  <strong>{{ formatDateTime(latestBatch.updatedAt) }}</strong>
-                </div>
-                <span class="status-pill" :class="batchStatusTone(latestBatch.status)">{{ batchStatusLabel(latestBatch.status) }}</span>
-              </div>
-
-              <div class="queue-card__stats">
-                <div class="queue-stat">
-                  <div class="queue-stat__value">{{ latestBatch.totalVideos }}</div>
-                  <div class="queue-stat__label">{{ copy.total }}</div>
-                </div>
-                <div class="queue-stat">
-                  <div class="queue-stat__value">{{ latestBatch.completedVideos }}</div>
-                  <div class="queue-stat__label">{{ copy.done }}</div>
-                </div>
-                <div class="queue-stat">
-                  <div class="queue-stat__value">{{ latestBatch.failedVideos }}</div>
-                  <div class="queue-stat__label">{{ copy.failed }}</div>
-                </div>
-                <div class="queue-stat">
-                  <div class="queue-stat__value">{{ latestBatch.generatedImageCount }}</div>
-                  <div class="queue-stat__label">{{ copy.images }}</div>
-                </div>
-              </div>
-
-              <div class="queue-card__files">
-                <div v-for="item in latestBatch.sourceItems" :key="item.id" class="queue-file">
-                  <div class="queue-file__name">
-                    <span>{{ item.sourceVideoName }}</span>
-                    <span class="status-pill status-pill--small" :class="batchStatusTone(item.status === 'completed' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'processing' ? 'processing' : 'queued')">
-                      {{ sourceStatusLabel(item.status) }}
-                    </span>
-                  </div>
-                  <div class="queue-file__meta">{{ copy.images }} {{ item.generatedCount }} / {{ copy.skipped }} {{ item.skippedCount }}</div>
-                </div>
-              </div>
-
-              <button
-                v-if="latestBatch.status === 'failed' || latestBatch.status === 'partial_failed'"
-                class="ghost-button"
-                type="button"
-                :disabled="actionBusyId === latestBatch.id"
-                @click="retryBatch(latestBatch.id)"
-              >
-                <TriangleAlert class="icon" />
-                {{ copy.retryFailed }}
-              </button>
-            </article>
-
-            <div class="queue-tip">
-              <ShieldCheck class="icon icon--small" />
-              <span>{{ copy.queueTip }}</span>
-            </div>
-          </template>
-        </section>
-      </div>
-
-      <section v-else-if="activeTab === 'image-to-image'" class="panel panel--library">
-        <div class="section-head section-head--library">
-          <div class="section-head__lead">
-            <div class="section-head__badge section-head__badge--image"><ImageIcon class="icon icon--small" /></div>
-            <div><h2>{{ copy.imageToImageTab }}</h2><p>{{ generationCopy.hint }}</p></div>
-          </div>
-        </div>
-        <div class="image-generation-grid">
-          <div class="source-picker-panel" :class="{ 'source-picker-panel--selected': sourceImagePath }">
-            <button class="source-picker-preview" data-testid="product-image-materials-source-preview" type="button" @click="pickSourceImage">
-              <img v-if="sourceImagePreviewSrc" :src="sourceImagePreviewSrc" :alt="sourceImageName" />
-              <span v-else class="source-picker-placeholder">
-                <ImageIcon class="source-picker-placeholder__icon" />
-              </span>
-            </button>
-            <div class="source-picker-content">
-              <div class="source-picker-copy">
-                <span>{{ promptUi.source }}</span>
-                <strong :title="sourceImageName">{{ sourceImageName || promptUi.empty }}</strong>
-                <small>{{ promptUi.sourceHint }}</small>
-              </div>
-              <button v-if="sourceImagePath" class="source-picker-clear" data-testid="product-image-materials-clear-image" type="button" :title="promptUi.clearSource" :aria-label="promptUi.clearSource" @click="clearSourceImage">
-                <X class="icon icon--small" />
-              </button>
-              <div class="source-picker-actions">
-                <button class="source-picker-action source-picker-action--local" data-testid="product-image-materials-local-image" style="background: #0d7568 !important; border-color: rgba(107, 235, 211, 0.32) !important; color: #ffffff !important;" type="button" @click="pickSourceImage">
-                  <CloudUpload class="icon icon--small" style="color: #ffffff !important;" />
-                  <span style="color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;">{{ promptUi.localUpload }}</span>
-                </button>
-                <button class="ghost-button source-picker-action" data-testid="product-image-materials-library-image" type="button" @click="pickSourceImageFromAssetLibrary">
-                  <Images class="icon icon--small" />
-                  <span>{{ promptUi.assetLibrary }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="filter-grid">
-            <label><span>{{ promptUi.category }}</span><select v-model="imageCategory" class="input"><option v-for="item in categories" :key="item" :value="item">{{ categoryLabel(item) }}</option></select></label>
-            <label><span>{{ promptUi.count }}</span><input v-model.number="imageVariantCount" class="input" type="number" min="1" max="6" step="1" /></label>
-          </div>
-        </div>
-        <div class="prompt-version-editor">
-          <div class="prompt-version-meta">
-            <label><span>{{ promptUi.version }}</span><select v-model="selectedPromptVersionId" class="input" @change="selectPromptVersion"><option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${promptUi.active}` : '' }}</option></select></label>
-            <label><span>{{ promptUi.name }}</span><input v-model="promptVersionName" class="input" type="text" /></label>
-          </div>
-          <label class="prompt-version-content"><span>{{ promptUi.content }}</span><textarea v-model="promptText" class="input prompt-textarea" rows="5" spellcheck="false"></textarea></label>
-          <div class="prompt-version-actions">
-            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="savePromptVersion()">{{ promptUi.update }}</button>
-            <button class="ghost-button" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ promptUi.copy }}</button>
-            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ promptUi.activate }}</button>
-            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ promptUi.rollback }}</button>
-          </div>
-        </div>
-        <div class="library-toolbar__actions image-generation-actions">
-          <button class="primary-button generate-button" type="button" :disabled="!sourceImagePath || imageGenerating" @click="generateFromUploadedImage"><span class="generate-button__icon"><RefreshCcw class="icon" :class="{ spin: imageGenerating }" /></span><span>{{ promptUi.generate }}</span><span class="generate-button__arrow">&#8594;</span></button>
-        </div>
-      </section>
-
-      <section v-else-if="activeTab === 'background'" class="panel panel--library">
-        <div class="section-head section-head--library">
-          <div class="section-head__lead">
-            <div class="section-head__badge section-head__badge--image">
-              <Sparkles class="icon icon--small" />
-            </div>
-            <div>
-              <h2>{{ generationCopy.tab }}</h2>
-              <p>{{ generationCopy.desc }}</p>
-            </div>
-          </div>
-          <div class="panel__hint">
-            <span>{{ generationCopy.hint }}</span>
-            <Info class="icon icon--tiny" />
-          </div>
-        </div>
-
-        <div class="filter-grid filter-grid--library">
-          <label>
-            <span>{{ generationCopy.materialCount }}</span>
-            <input v-model.number="backgroundMaterialCount" class="input" type="number" min="1" max="6" step="1" />
-          </label>
-          <label>
-            <span>{{ generationCopy.totalOutput }}</span>
-            <input class="input" :value="backgroundTotalOutput" disabled />
-          </label>
-        </div>
-
-        <div class="prompt-version-editor">
-          <div class="prompt-version-meta">
-            <label><span>{{ promptUi.version }}</span><select v-model="selectedPromptVersionId" class="input" @change="selectPromptVersion"><option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} - {{ version.name }}{{ version.active ? ` - ${promptUi.active}` : '' }}</option></select></label>
-            <label><span>{{ promptUi.name }}</span><input v-model="promptVersionName" class="input" type="text" /></label>
-          </div>
-          <label class="prompt-version-content"><span>{{ promptUi.content }}</span><textarea v-model="promptText" class="input prompt-textarea" rows="5" spellcheck="false"></textarea></label>
-          <div class="prompt-version-actions">
-            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="savePromptVersion()">{{ promptUi.update }}</button>
-            <button class="ghost-button" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)">{{ promptUi.copy }}</button>
-            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ promptUi.activate }}</button>
-            <button class="ghost-button" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ promptUi.rollback }}</button>
-          </div>
-        </div>
-
-        <div v-if="backgroundSourceMaterials.length" class="library-toolbar">
-          <div class="library-toolbar__selection">
-            <button class="ghost-button ghost-button--toolbar" type="button" @click="toggleSelectAllBackgroundVisible">
-              {{ allBackgroundVisibleSelected ? generationCopy.clearSelection : generationCopy.sourceOnly }}
-            </button>
-            <span class="library-toolbar__count">{{ generationCopy.selected }} {{ selectedBackgroundMaterialIds.length }}</span>
-          </div>
-          <div class="library-toolbar__actions">
-            <button
-              class="ghost-button library-toolbar__delete"
-              type="button"
-              :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting"
-              @click="clearSelectedBackgroundMaterials"
-            >
-              <Trash2 class="icon" />
-              {{ generationCopy.clearSelection }}
-            </button>
-            <button
-              class="primary-button library-toolbar__export generate-button"
-              type="button"
-              :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting"
-              @click="generateBackgroundVariants"
-            >
-              <span class="generate-button__icon"><RefreshCcw class="icon" :class="{ spin: backgroundSubmitting }" /></span>
-              <span>{{ generationCopy.generate }}</span>
-              <span class="generate-button__arrow">&#8594;</span>
-            </button>
-            <button
-              class="ghost-button library-toolbar__export"
-              type="button"
-              :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting || actionBusyId === 'export-background-materials'"
-              @click="exportSelectedBackgroundMaterials"
-            >
-              <Download class="icon" />
-              {{ libraryBatchCopy.exportSelected }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="!backgroundSourceMaterials.length" class="empty-copy">{{ copy.noMaterials }}</div>
-        <div v-else class="library-results">
-          <div class="album-grid">
-            <article v-for="item in pagedBackgroundMaterials" :key="item.id" class="album-card">
-              <div class="album-card__media">
-                <button class="album-thumb-button" type="button" @click="openMaterialPreview(item)">
-                  <img class="album-thumb" :src="item.qiniuUrl" alt="material" loading="lazy" decoding="async" />
-                </button>
-                <button
-                  class="select-checkbox"
-                  :class="{ 'select-checkbox--active': selectedBackgroundMaterialIds.includes(item.id) }"
-                  type="button"
-                  @click="toggleBackgroundMaterialSelection(item.id)"
-                >
-                  <Check v-if="selectedBackgroundMaterialIds.includes(item.id)" class="icon icon--tiny" />
-                </button>
-                <div class="album-card__overlay">
-                  <span class="status-pill" :class="item.materialOrigin === 'derived' ? 'is-warning' : 'is-success'">
-                    {{ materialOriginLabel(item.materialOrigin) }}
-                  </span>
-                  <div class="album-card__actions-top">
-                    <button class="icon-action" type="button" :title="copy.preview" @click.stop="openMaterialPreview(item)">
-                      <Eye class="icon icon--tiny" />
-                    </button>
-                    <button class="icon-action icon-action--danger" type="button" :title="copy.deleteMaterial" :disabled="actionBusyId === item.id" @click.stop="deleteMaterial(item.id)">
-                      <Trash2 class="icon icon--tiny" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="album-card__body">
-                <div class="album-card__topline">
-                  <strong>{{ shortMaterialId(item.id) }}</strong>
-                  <span class="album-card__category">{{ categoryLabel(item.category) }}</span>
-                </div>
-                <div class="album-card__meta">
-                  <span>{{ backgroundMaterialTitle(item) }}</span>
-                  <span v-if="item.materialOrigin === 'derived'">{{ shortMaterialId(item.derivedFromMaterialId || '') }}</span>
-                </div>
-                <div class="album-card__status-row">
-                  <span class="usage-chip usage-chip--unused">{{ materialOriginLabel(item.materialOrigin) }}</span>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div v-if="backgroundSourceMaterials.length > libraryPageSize" class="library-pagination">
-            <div class="library-pagination__nav">
-              <button class="ghost-button ghost-button--toolbar" type="button" :disabled="backgroundPage <= 1" @click="backgroundPage -= 1">
-                {{ paginationCopy.prev }}
-              </button>
-              <span class="library-pagination__text">{{ backgroundPage }} / {{ backgroundTotalPages }}</span>
-              <button class="ghost-button ghost-button--toolbar" type="button" :disabled="backgroundPage >= backgroundTotalPages" @click="backgroundPage += 1">
-                {{ paginationCopy.next }}
-              </button>
-            </div>
-            <div class="library-pagination__size">
-              <span>{{ paginationCopy.perPage }}</span>
-              <select v-model.number="libraryPageSize" class="input input--compact library-pagination__select">
-                <option :value="24">24</option>
-                <option :value="32">32</option>
-                <option :value="48">48</option>
-                <option :value="64">64</option>
-              </select>
-              <span>{{ paginationCopy.items }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section v-else class="panel panel--library">
-        <div class="section-head section-head--library">
-          <div class="section-head__lead">
-            <div class="section-head__badge section-head__badge--image">
-              <ImageIcon class="icon icon--small" />
-            </div>
-            <div>
-              <h2>{{ libraryDisplayCopy.title }}</h2>
-              <p>{{ libraryDisplayCopy.desc }}</p>
-            </div>
-          </div>
-          <div class="panel__hint">
-            <span>{{ libraryDisplayCopy.hint }}</span>
-            <Info class="icon icon--tiny" />
-          </div>
-        </div>
-
-        <div class="filter-grid filter-grid--library">
-          <label>
-            <span>{{ copy.category }}</span>
-            <select v-model="filterCategory" class="input" @change="loadAll">
-              <option value="all">{{ copy.all }}</option>
-              <option v-for="item in categories" :key="item" :value="item">{{ categoryLabel(item) }}</option>
-            </select>
-          </label>
-
-          <label>
-            <span>{{ copy.status }}</span>
-            <select v-model="filterUsageStatus" class="input" @change="loadAll">
-              <option value="all">{{ copy.all }}</option>
-              <option value="unused">{{ copy.unused }}</option>
-              <option value="used">{{ copy.used }}</option>
-            </select>
-          </label>
-        </div>
-
-        <div v-if="filteredMaterials.length" class="library-toolbar">
-          <div class="library-toolbar__selection">
-            <button class="ghost-button ghost-button--toolbar" type="button" @click="toggleSelectAllVisible">
-              {{ allVisibleSelected ? libraryBatchCopy.clearSelection : libraryBatchCopy.selectAll }}
-            </button>
-            <span class="library-toolbar__count">{{ libraryBatchCopy.selectedCount }} {{ selectedMaterialIds.length }}</span>
-          </div>
-          <div class="library-toolbar__actions">
-            <button
-              class="ghost-button library-toolbar__delete"
-              type="button"
-              :disabled="!selectedMaterialIds.length || actionBusyId === 'delete-materials'"
-              @click="deleteSelectedMaterials"
-            >
-              <Trash2 class="icon" />
-              {{ batchDeleteCopy.action }}
-            </button>
-            <button
-              class="primary-button library-toolbar__export"
-              type="button"
-              :disabled="!selectedMaterialIds.length || actionBusyId === 'export-materials'"
-              @click="exportSelectedMaterials"
-            >
-              <Download class="icon" />
-              {{ libraryBatchCopy.exportSelected }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="!filteredMaterials.length" class="empty-copy">{{ copy.noMaterials }}</div>
-        <div v-else class="library-results">
-          <div class="album-grid">
-            <article v-for="item in pagedMaterials" :key="item.id" class="album-card">
-            <div class="album-card__media">
-              <button class="album-thumb-button" type="button" @click="openMaterialPreview(item)">
-                <img class="album-thumb" :src="item.qiniuUrl" alt="material" loading="lazy" decoding="async" />
-              </button>
-              <button
-                class="select-checkbox"
-                :class="{ 'select-checkbox--active': selectedMaterialIds.includes(item.id) }"
-                type="button"
-                @click="toggleMaterialSelection(item.id)"
-              >
-                <Check v-if="selectedMaterialIds.includes(item.id)" class="icon icon--tiny" />
-              </button>
-              <div class="album-card__overlay">
-                <span class="status-pill" :class="item.usageStatus === 'used' ? 'is-warning' : 'is-success'">
-                  {{ item.usageStatus === 'used' ? copy.used : copy.unused }}
-                </span>
-                <div class="album-card__actions-top">
-                  <button class="icon-action" type="button" :title="copy.preview" @click.stop="openMaterialPreview(item)">
-                    <Eye class="icon icon--tiny" />
-                  </button>
-                  <button class="icon-action" type="button" :title="copy.openUrl" @click="openPublicUrl(item.qiniuUrl)">
-                    <Link2 class="icon icon--tiny" />
-                  </button>
-                  <button class="icon-action" type="button" :title="copy.showFile" @click="showInFolder(item.localImagePath)">
-                    <FolderOpen class="icon icon--tiny" />
-                  </button>
-                  <button class="icon-action icon-action--danger" type="button" :title="copy.deleteMaterial" :disabled="actionBusyId === item.id" @click="deleteMaterial(item.id)">
-                    <Trash2 class="icon icon--tiny" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="album-card__body">
-              <div class="album-card__topline">
-                <strong>{{ shortMaterialId(item.id) }}</strong>
-                <span class="album-card__category">{{ categoryLabel(item.category) }}</span>
-                <span class="album-card__category" :class="{ 'album-card__category--derived': item.materialOrigin === 'derived' }">
-                  {{ materialOriginLabel(item.materialOrigin) }}
-                </span>
-              </div>
-              <div class="album-card__meta">
-                <span>{{ copy.segment }} {{ item.segmentIndex + 1 }}</span>
-                <span>{{ item.frameTimeSec.toFixed(2) }}s</span>
-                <span v-if="item.materialOrigin === 'derived'">{{ generationCopy.derivedFrom }} {{ shortMaterialId(item.derivedFromMaterialId || '') }}</span>
-              </div>
-              <div class="album-card__status-row">
-                <button
-                  class="usage-chip"
-                  :class="item.usageStatus === 'used' ? 'usage-chip--used' : 'usage-chip--unused'"
-                  type="button"
-                  :disabled="actionBusyId === item.id"
-                  @click="setUsageStatus(item.id, item.usageStatus === 'used' ? 'unused' : 'used')"
-                >
-                  {{ item.usageStatus === 'used' ? copy.used : copy.unused }}
-                </button>
-                <button
-                  class="ghost-chip ghost-chip--mini"
-                  type="button"
-                  :disabled="actionBusyId === item.id"
-                  @click="setUsageStatus(item.id, item.usageStatus === 'used' ? 'unused' : 'used')"
-                >
-                  {{ item.usageStatus === 'used' ? copy.unused : copy.used }}
-                </button>
-              </div>
-              <label class="album-card__select">
-                <span><Tags class="icon icon--tiny" /> {{ copy.bindProduct }}</span>
-                <select class="input input--compact" :value="item.boundProductId || ''" @change="bindProduct(item.id, String(($event.target as HTMLSelectElement).value || ''))">
-                  <option value="">{{ copy.unbound }}</option>
-                  <option v-for="product in products" :key="product.id" :value="product.id">
-                    {{ product.name }} ({{ product.type }})
-                  </option>
-                </select>
-              </label>
-            </div>
-            </article>
-          </div>
-
-          <div v-if="filteredMaterials.length > libraryPageSize" class="library-pagination">
-            <div class="library-pagination__nav">
-              <button class="ghost-button ghost-button--toolbar" type="button" :disabled="libraryPage <= 1" @click="libraryPage -= 1">
-                {{ paginationCopy.prev }}
-              </button>
-              <span class="library-pagination__text">{{ libraryPage }} / {{ libraryTotalPages }}</span>
-              <button class="ghost-button ghost-button--toolbar" type="button" :disabled="libraryPage >= libraryTotalPages" @click="libraryPage += 1">
-                {{ paginationCopy.next }}
-              </button>
-            </div>
-            <div class="library-pagination__size">
-              <span>{{ paginationCopy.perPage }}</span>
-              <select v-model.number="libraryPageSize" class="input input--compact library-pagination__select">
-                <option :value="24">24</option>
-                <option :value="32">32</option>
-                <option :value="48">48</option>
-                <option :value="64">64</option>
-              </select>
-              <span>{{ paginationCopy.items }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <nav class="pm-tabs" role="tablist">
+        <button class="pm-tab" :class="{ 'is-active': activeTab === 'batch' }" data-tab="batch" role="tab" type="button" @click="activeTab = 'batch'">
+          <Film :size="15" />{{ copy.batchTab }}
+        </button>
+        <button class="pm-tab" :class="{ 'is-active': activeTab === 'image-to-image' }" data-tab="image-to-image" role="tab" type="button" @click="activeTab = 'image-to-image'">
+          <Wand2 :size="15" />{{ copy.imageToImageTab }}
+        </button>
+        <button class="pm-tab" :class="{ 'is-active': activeTab === 'background' }" data-tab="background" role="tab" type="button" @click="activeTab = 'background'">
+          <ImageIcon :size="15" />{{ generationCopy.tab }}<em>{{ backgroundSourceMaterials.length }}</em>
+        </button>
+        <button class="pm-tab" :class="{ 'is-active': activeTab === 'library' }" data-tab="library" role="tab" type="button" @click="activeTab = 'library'">
+          <Layers :size="15" />{{ libraryDisplayCopy.tab }}<em>{{ derivedMaterialCount }}</em>
+        </button>
+      </nav>
     </section>
 
-    <footer class="footer-card">
-      <ShieldCheck class="icon icon--small" />
-      <span>{{ copy.footer }}</span>
-    </footer>
+    <div v-if="notice" class="vg-notice vg-notice--accent pm-flash">
+      <CircleCheck :size="15" /><span>{{ notice }}</span>
+      <button class="vg-icon-btn vg-icon-btn--sm" type="button" @click="notice = ''"><X :size="13" /></button>
+    </div>
+    <div v-if="errorText" class="vg-notice vg-notice--danger pm-flash">
+      <TriangleAlert :size="15" /><span>{{ errorText }}</span>
+      <button class="vg-icon-btn vg-icon-btn--sm" type="button" @click="errorText = ''"><X :size="13" /></button>
+    </div>
+
+    <!-- ============ 拆解视频 ============ -->
+    <div v-if="activeTab === 'batch'" class="pm-split">
+      <section class="pm-card">
+        <header class="pm-card__head">
+          <span class="pm-num">1</span>
+          <div class="pm-card__title">
+            <h2>{{ copy.createBatch }}</h2>
+            <p>{{ copy.createBatchDesc }}</p>
+          </div>
+        </header>
+
+        <div class="pm-field">
+          <span class="pm-field__label">{{ copy.category }}</span>
+          <div class="pm-seg pm-seg--full">
+            <button v-for="item in categories" :key="item" type="button" :class="{ 'is-on': selectedCategory === item }" @click="selectedCategory = item">
+              {{ categoryLabel(item) }}
+            </button>
+          </div>
+        </div>
+
+        <div class="pm-field">
+          <span class="pm-field__label">{{ uiText.source }}</span>
+          <div class="pm-source">
+            <button class="pm-source__opt" :class="{ 'is-on': batchSourceMode === 'upload' }" type="button" @click="batchSourceMode = 'upload'">
+              <CloudUpload :size="16" />
+              <span>{{ copy.uploadMyVideo }}</span>
+            </button>
+            <button class="pm-source__opt" :class="{ 'is-on': batchSourceMode === 'downloaded' }" type="button" @click="batchSourceMode = 'downloaded'">
+              <Download :size="16" />
+              <span>{{ copy.chooseDownloadedVideo }}</span>
+              <em>{{ downloadableParserVideos.length }}</em>
+            </button>
+          </div>
+        </div>
+
+        <template v-if="batchSourceMode === 'upload'">
+          <button class="pm-drop" type="button" @click="pickVideos">
+            <span class="pm-drop__icon"><CloudUpload :size="22" /></span>
+            <strong>{{ copy.pickZoneTitle }}</strong>
+            <span>{{ copy.pickZoneDesc }}</span>
+            <small>{{ copy.pickZoneFormats }}</small>
+          </button>
+
+          <div class="pm-row">
+            <button class="vg-btn" data-testid="product-image-materials-local-videos" type="button" @click="pickVideos">
+              <FolderOpen :size="15" />{{ copy.pickVideos }}
+            </button>
+            <button class="vg-btn" data-testid="product-image-materials-library-videos" type="button" @click="pickVideosFromAssetLibrary">
+              <Images :size="15" />{{ copy.pickAssetVideos }}
+            </button>
+          </div>
+
+          <div class="pm-files" data-testid="product-image-materials-picked">
+            <div v-if="!pickedVideos.length" class="pm-files__empty">{{ copy.noVideosSelected }}</div>
+            <div v-for="item in pickedVideos" :key="item" class="pm-file">
+              <FileVideo :size="15" class="pm-file__icon" />
+              <button class="pm-file__name" type="button" :title="item" @click="showInFolder(item)">{{ fileName(item) }}</button>
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" :title="uiText.remove" :aria-label="uiText.remove" @click="removePickedVideo(item)">
+                <X :size="13" />
+              </button>
+            </div>
+          </div>
+
+          <footer class="pm-card__foot">
+            <span class="vg-muted">{{ uiText.selected }} <b class="vg-num">{{ pickedVideos.length }}</b> {{ uiText.videos }}</span>
+            <button class="vg-btn vg-btn--primary" data-testid="product-image-materials-queue" type="button" :disabled="!canSubmit" @click="submitBatch">
+              <RefreshCcw v-if="submitting" :size="15" class="vg-spin" />
+              <ListPlus v-else :size="15" />
+              {{ copy.queueBatch }}
+            </button>
+          </footer>
+        </template>
+
+        <template v-else>
+          <div v-if="!downloadableParserVideos.length" class="vg-empty pm-empty">
+            <span class="vg-empty__icon"><Download :size="22" /></span>
+            <p>{{ copy.noDownloadedVideos }}</p>
+          </div>
+          <template v-else>
+            <div class="pm-videos">
+              <button
+                v-for="item in pagedDownloadableParserVideos"
+                :key="item.id"
+                class="pm-video"
+                :class="{ 'is-on': selectedParserVideoIds.includes(item.id) }"
+                type="button"
+                @click="toggleParserVideoSelection(item.id)"
+              >
+                <span class="pm-video__thumb">
+                  <img v-if="parserVideoThumb(item)" :src="parserVideoThumb(item)" alt="" loading="lazy" decoding="async" />
+                  <Film v-else :size="20" />
+                  <span class="pm-video__check"><Check v-if="selectedParserVideoIds.includes(item.id)" :size="12" :stroke-width="3" /></span>
+                  <span v-if="item.usedStatus === 'used'" class="pm-video__used">{{ copy.used }}</span>
+                </span>
+                <span class="pm-video__body">
+                  <strong :title="parserVideoLabel(item)">{{ parserVideoLabel(item) }}</strong>
+                  <small>{{ item.author || item.videoId }}</small>
+                </span>
+              </button>
+            </div>
+            <MaterialPager
+              v-if="downloadableParserVideos.length > 8"
+              v-model:page="parserVideoPage"
+              v-model:page-size="parserVideoPageSize"
+              :total-pages="parserVideoTotalPages"
+              :total="downloadableParserVideos.length"
+              :sizes="[8, 12, 16, 24]"
+              :labels="paginationCopy"
+            />
+          </template>
+
+          <footer class="pm-card__foot">
+            <span class="vg-muted">{{ uiText.selected }} <b class="vg-num">{{ selectedDownloadedVideos.length }}</b> {{ uiText.videos }}</span>
+            <div class="pm-row">
+              <button v-if="selectedDownloadedVideos.length" class="vg-btn vg-btn--ghost" type="button" @click="selectedParserVideoIds = []">{{ libraryBatchCopy.clearSelection }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="!canSubmitDownloadedBatch" @click="submitBatch">
+                <RefreshCcw v-if="submitting" :size="15" class="vg-spin" />
+                <ListPlus v-else :size="15" />
+                {{ copy.queueBatch }}
+              </button>
+            </div>
+          </footer>
+        </template>
+      </section>
+
+      <section class="pm-card">
+        <header class="pm-card__head">
+          <span class="pm-num">2</span>
+          <div class="pm-card__title">
+            <h2>{{ copy.queue }}</h2>
+            <p>{{ copy.queueDesc }}</p>
+          </div>
+          <button class="vg-icon-btn" type="button" :title="copy.refresh" :aria-label="copy.refresh" :disabled="loading" @click="loadAll">
+            <RefreshCcw :size="15" :class="{ 'vg-spin': loading }" />
+          </button>
+        </header>
+
+        <div v-if="loading && !batches.length" class="vg-empty pm-empty"><RefreshCcw :size="20" class="vg-spin" /><p>{{ copy.loadingBatches }}</p></div>
+        <div v-else-if="!latestBatch" class="vg-empty pm-empty">
+          <span class="vg-empty__icon"><Boxes :size="22" /></span>
+          <h3>{{ copy.noBatches }}</h3>
+          <p>{{ uiText.queueEmpty }}</p>
+        </div>
+        <template v-else>
+          <article class="pm-batch">
+            <div class="pm-batch__head">
+              <div class="pm-batch__title">
+                <span class="vg-chip">{{ categoryLabel(latestBatch.category) }}</span>
+                <strong class="vg-num">{{ formatDateTime(latestBatch.updatedAt) }}</strong>
+              </div>
+              <span class="pm-state" :class="stateClass(latestBatch.status)"><i />{{ batchStatusLabel(latestBatch.status) }}</span>
+            </div>
+
+            <div class="vg-progress">
+              <div class="vg-progress__bar">
+                <div class="vg-progress__fill" :class="{ 'vg-progress__fill--fail': latestBatch.status === 'failed' }" :style="{ width: `${batchProgress(latestBatch)}%` }" />
+              </div>
+              <span>{{ batchProgress(latestBatch) }}%</span>
+            </div>
+
+            <div class="pm-metrics">
+              <div class="pm-metric">
+                <span>{{ copy.total }}</span>
+                <strong>{{ latestBatch.totalVideos }}</strong>
+              </div>
+              <div class="pm-metric pm-metric--ok">
+                <span>{{ copy.done }}</span>
+                <strong>{{ latestBatch.completedVideos }}</strong>
+              </div>
+              <div class="pm-metric" :class="{ 'pm-metric--err': latestBatch.failedVideos > 0 }">
+                <span>{{ copy.failed }}</span>
+                <strong>{{ latestBatch.failedVideos }}</strong>
+              </div>
+              <div class="pm-metric">
+                <span>{{ copy.images }}</span>
+                <strong>{{ latestBatch.generatedImageCount }}</strong>
+              </div>
+            </div>
+
+            <div class="pm-files pm-files--flat">
+              <div v-for="item in latestBatch.sourceItems" :key="item.id" class="pm-file pm-file--queue">
+                <FileVideo :size="15" class="pm-file__icon" />
+                <div class="pm-file__main">
+                  <span class="pm-file__text" :title="item.sourceVideoName">{{ item.sourceVideoName }}</span>
+                  <small v-if="item.error" class="pm-file__err" :title="item.error">{{ item.error }}</small>
+                  <small v-else class="vg-num">{{ copy.images }} {{ item.generatedCount }} · {{ copy.skipped }} {{ item.skippedCount }}</small>
+                </div>
+                <span class="pm-state" :class="stateClass(item.status)"><i />{{ sourceStatusLabel(item.status) }}</span>
+              </div>
+            </div>
+
+            <div v-if="latestBatch.status === 'failed' || latestBatch.status === 'partial_failed'" class="pm-row pm-row--end">
+              <button class="vg-btn vg-btn--sm vg-btn--danger" type="button" :disabled="actionBusyId === latestBatch.id" @click="retryBatch(latestBatch.id)">
+                <RotateCcw :size="13" />{{ copy.retryFailed }}
+              </button>
+            </div>
+          </article>
+
+          <div v-if="olderBatches.length" class="pm-history">
+            <div class="pm-history__title">{{ uiText.history }}</div>
+            <div v-for="item in olderBatches" :key="item.id" class="pm-history__row">
+              <span class="vg-chip">{{ categoryLabel(item.category) }}</span>
+              <span class="vg-num pm-history__time">{{ formatDateTime(item.updatedAt) }}</span>
+              <span class="vg-num vg-muted">{{ item.completedVideos }}/{{ item.totalVideos }} · {{ item.generatedImageCount }} {{ uiText.imagesUnit }}</span>
+              <span class="pm-state" :class="stateClass(item.status)"><i />{{ batchStatusLabel(item.status) }}</span>
+              <button v-if="item.status === 'failed' || item.status === 'partial_failed'" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="copy.retryFailed" :disabled="actionBusyId === item.id" @click="retryBatch(item.id)">
+                <RotateCcw :size="13" />
+              </button>
+            </div>
+          </div>
+
+          <div class="vg-notice pm-tip">
+            <ShieldCheck :size="15" />
+            <span>{{ copy.queueTip }}</span>
+          </div>
+        </template>
+      </section>
+    </div>
+
+    <!-- ============ 图生图 ============ -->
+    <div v-else-if="activeTab === 'image-to-image'" class="pm-split pm-split--i2i">
+      <section class="pm-card">
+        <header class="pm-card__head">
+          <span class="pm-num">1</span>
+          <div class="pm-card__title">
+            <h2>{{ promptUi.source }}</h2>
+            <p>{{ generationCopy.hint }}</p>
+          </div>
+        </header>
+
+        <div class="pm-source-img" :class="{ 'has-image': sourceImagePath }">
+          <button class="pm-source-img__preview" data-testid="product-image-materials-source-preview" type="button" @click="pickSourceImage">
+            <img v-if="sourceImagePreviewSrc" :src="sourceImagePreviewSrc" :alt="sourceImageName" />
+            <span v-else class="pm-source-img__empty">
+              <span class="pm-drop__icon"><ImagePlus :size="22" /></span>
+              <strong>{{ promptUi.empty }}</strong>
+              <small>{{ promptUi.sourceHint }}</small>
+            </span>
+          </button>
+          <div v-if="sourceImagePath" class="pm-source-img__bar">
+            <ImageIcon :size="14" />
+            <span :title="sourceImagePath">{{ sourceImageName }}</span>
+            <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" data-testid="product-image-materials-clear-image" type="button" :title="promptUi.clearSource" :aria-label="promptUi.clearSource" @click="clearSourceImage">
+              <X :size="13" />
+            </button>
+          </div>
+        </div>
+
+        <div class="pm-row pm-row--fill">
+          <button class="vg-btn" data-testid="product-image-materials-local-image" type="button" @click="pickSourceImage">
+            <CloudUpload :size="15" /><span>{{ promptUi.localUpload }}</span>
+          </button>
+          <button class="vg-btn" data-testid="product-image-materials-library-image" type="button" @click="pickSourceImageFromAssetLibrary">
+            <Images :size="15" /><span>{{ promptUi.assetLibrary }}</span>
+          </button>
+        </div>
+
+        <div class="pm-field">
+          <span class="pm-field__label">{{ promptUi.category }}</span>
+          <div class="pm-seg pm-seg--full">
+            <button v-for="item in categories" :key="item" type="button" :class="{ 'is-on': imageCategory === item }" @click="imageCategory = item">{{ categoryLabel(item) }}</button>
+          </div>
+        </div>
+        <div class="pm-field">
+          <span class="pm-field__label">{{ promptUi.count }}</span>
+          <div class="pm-seg pm-seg--full">
+            <button v-for="n in 6" :key="n" type="button" :class="{ 'is-on': imageVariantCount === n }" @click="imageVariantCount = n">{{ n }}</button>
+          </div>
+        </div>
+
+        <button class="vg-btn vg-btn--primary vg-btn--lg vg-btn--block" data-testid="product-image-materials-generate" type="button" :disabled="!sourceImagePath || imageGenerating" @click="generateFromUploadedImage">
+          <RefreshCcw v-if="imageGenerating" :size="16" class="vg-spin" />
+          <Wand2 v-else :size="16" />
+          {{ promptUi.generate }}
+          <em class="pm-btn-count">× {{ imageVariantCount }}</em>
+        </button>
+      </section>
+
+      <section class="pm-card">
+        <header class="pm-card__head">
+          <span class="pm-num">2</span>
+          <div class="pm-card__title">
+            <h2>{{ promptUi.title }}</h2>
+            <p>{{ uiText.promptDesc }}</p>
+          </div>
+        </header>
+        <div class="vg-form-grid">
+          <label class="vg-field">
+            <span class="vg-field__label">{{ promptUi.version }}</span>
+            <select v-model="selectedPromptVersionId" class="vg-select" @change="selectPromptVersion">
+              <option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${promptUi.active}` : '' }}</option>
+            </select>
+          </label>
+          <label class="vg-field">
+            <span class="vg-field__label">{{ promptUi.name }}</span>
+            <input v-model="promptVersionName" class="vg-input" type="text" />
+          </label>
+        </div>
+        <label class="vg-field pm-grow">
+          <span class="vg-field__label">{{ promptUi.content }}</span>
+          <textarea v-model="promptText" class="vg-textarea pm-prompt" rows="12" spellcheck="false" />
+        </label>
+        <footer class="pm-card__foot">
+          <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><History :size="13" />{{ promptUi.rollback }}</button>
+          <div class="pm-row">
+            <button class="vg-btn vg-btn--sm" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)"><Copy :size="13" />{{ promptUi.copy }}</button>
+            <button class="vg-btn vg-btn--sm" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion"><CircleCheck :size="13" />{{ promptUi.activate }}</button>
+            <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="savePromptVersion()"><Save :size="13" />{{ promptUi.update }}</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+
+    <!-- ============ 视频拆解图片库 ============ -->
+    <section v-else-if="activeTab === 'background'" class="pm-card pm-card--flush">
+      <header class="pm-bar">
+        <div class="pm-bar__title">
+          <h2>{{ generationCopy.tab }}</h2>
+          <p>{{ generationCopy.desc }}</p>
+        </div>
+        <div class="pm-bar__tools">
+          <span class="pm-inline-label">{{ generationCopy.materialCount }}</span>
+          <div class="pm-seg">
+            <button v-for="n in 6" :key="n" type="button" :class="{ 'is-on': backgroundMaterialCount === n }" @click="backgroundMaterialCount = n">{{ n }}</button>
+          </div>
+          <button class="vg-btn vg-btn--sm" :class="{ 'is-active': promptPanelOpen }" type="button" @click="promptPanelOpen = !promptPanelOpen">
+            <SlidersHorizontal :size="13" />{{ promptUi.version }}
+            <em class="pm-btn-count">{{ activePromptLabel }}</em>
+          </button>
+        </div>
+      </header>
+
+      <div v-if="promptPanelOpen" class="pm-prompt-panel">
+        <div class="vg-form-grid">
+          <label class="vg-field">
+            <span class="vg-field__label">{{ promptUi.version }}</span>
+            <select v-model="selectedPromptVersionId" class="vg-select" @change="selectPromptVersion">
+              <option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${promptUi.active}` : '' }}</option>
+            </select>
+          </label>
+          <label class="vg-field">
+            <span class="vg-field__label">{{ promptUi.name }}</span>
+            <input v-model="promptVersionName" class="vg-input" type="text" />
+          </label>
+        </div>
+        <label class="vg-field">
+          <span class="vg-field__label">{{ promptUi.content }}</span>
+          <textarea v-model="promptText" class="vg-textarea pm-prompt" rows="5" spellcheck="false" />
+        </label>
+        <div class="pm-row pm-row--end">
+          <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><History :size="13" />{{ promptUi.rollback }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="promptBusy || !promptText.trim()" @click="savePromptVersion(true)"><Copy :size="13" />{{ promptUi.copy }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="activatePromptVersion"><CircleCheck :size="13" />{{ promptUi.activate }}</button>
+          <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="savePromptVersion()"><Save :size="13" />{{ promptUi.update }}</button>
+        </div>
+      </div>
+
+      <div v-if="backgroundSourceMaterials.length" class="pm-selbar" :class="{ 'is-live': selectedBackgroundMaterialIds.length }">
+        <label class="pm-check">
+          <input type="checkbox" :checked="allBackgroundVisibleSelected" @change="toggleSelectAllBackgroundVisible" />
+          <span>{{ libraryBatchCopy.selectAll }}</span>
+        </label>
+        <span class="vg-muted">{{ generationCopy.selected }} <b class="vg-num">{{ selectedBackgroundMaterialIds.length }}</b> · {{ generationCopy.totalOutput }} <b class="vg-num">{{ backgroundTotalOutput }}</b></span>
+        <button v-if="selectedBackgroundMaterialIds.length" class="vg-link vg-link--muted" type="button" @click="clearSelectedBackgroundMaterials">{{ generationCopy.clearSelection }}</button>
+        <span class="vg-toolbar__spacer" />
+        <button
+          class="vg-btn vg-btn--sm"
+          type="button"
+          :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting || actionBusyId === 'export-background-materials'"
+          @click="exportSelectedBackgroundMaterials"
+        >
+          <Download :size="13" />{{ libraryBatchCopy.exportSelected }}
+        </button>
+        <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="!selectedBackgroundMaterialIds.length || backgroundSubmitting" @click="generateBackgroundVariants">
+          <RefreshCcw v-if="backgroundSubmitting" :size="13" class="vg-spin" />
+          <Wand2 v-else :size="13" />
+          {{ generationCopy.generate }}
+        </button>
+      </div>
+
+      <div v-if="!backgroundSourceMaterials.length" class="vg-empty pm-empty pm-empty--tall">
+        <span class="vg-empty__icon"><ImageIcon :size="22" /></span>
+        <h3>{{ copy.noMaterials }}</h3>
+        <p>{{ uiText.sourceEmpty }}</p>
+        <button class="vg-btn vg-btn--primary" type="button" @click="activeTab = 'batch'"><Film :size="15" />{{ copy.batchTab }}</button>
+      </div>
+      <div v-else class="pm-gallery-wrap">
+        <div class="pm-gallery">
+          <MaterialTile
+            v-for="item in pagedBackgroundMaterials"
+            :key="item.id"
+            :src="item.qiniuUrl"
+            :title="shortMaterialId(item.id)"
+            :selected="selectedBackgroundMaterialIds.includes(item.id)"
+            @toggle="toggleBackgroundMaterialSelection(item.id)"
+            @preview="openMaterialPreview(item)"
+          >
+            <template #tools>
+              <button class="pm-tool" type="button" :title="copy.preview" @click.stop="openMaterialPreview(item)"><Eye :size="13" /></button>
+              <button class="pm-tool pm-tool--danger" type="button" :title="copy.deleteMaterial" :disabled="actionBusyId === item.id" @click.stop="deleteMaterial(item.id)"><Trash2 :size="13" /></button>
+            </template>
+            <template #aside><span class="vg-chip">{{ categoryLabel(item.category) }}</span></template>
+            <div class="pm-tile__meta">{{ backgroundMaterialTitle(item) }} · <span class="vg-num">{{ item.frameTimeSec.toFixed(2) }}s</span></div>
+          </MaterialTile>
+        </div>
+        <MaterialPager
+          v-if="backgroundSourceMaterials.length > 24"
+          v-model:page="backgroundPage"
+          v-model:page-size="libraryPageSize"
+          :total-pages="backgroundTotalPages"
+          :total="backgroundSourceMaterials.length"
+          :sizes="[24, 32, 48, 64]"
+          :labels="paginationCopy"
+        />
+      </div>
+    </section>
+
+    <!-- ============ 衍生图素材 ============ -->
+    <section v-else class="pm-card pm-card--flush">
+      <header class="pm-bar">
+        <div class="pm-bar__title">
+          <h2>{{ libraryDisplayCopy.title }}</h2>
+          <p>{{ libraryDisplayCopy.desc }}</p>
+        </div>
+        <div class="pm-bar__tools">
+          <div class="pm-seg">
+            <button type="button" :class="{ 'is-on': filterCategory === 'all' }" @click="setLibraryCategory('all')">{{ copy.all }}</button>
+            <button v-for="item in categories" :key="item" type="button" :class="{ 'is-on': filterCategory === item }" @click="setLibraryCategory(item)">{{ categoryLabel(item) }}</button>
+          </div>
+          <div class="pm-seg">
+            <button type="button" :class="{ 'is-on': filterUsageStatus === 'all' }" @click="setLibraryUsage('all')">{{ copy.all }}</button>
+            <button type="button" :class="{ 'is-on': filterUsageStatus === 'unused' }" @click="setLibraryUsage('unused')">{{ copy.unused }}</button>
+            <button type="button" :class="{ 'is-on': filterUsageStatus === 'used' }" @click="setLibraryUsage('used')">{{ copy.used }}</button>
+          </div>
+        </div>
+      </header>
+
+      <div v-if="filteredMaterials.length" class="pm-selbar" :class="{ 'is-live': selectedMaterialIds.length }">
+        <label class="pm-check">
+          <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAllVisible" />
+          <span>{{ libraryBatchCopy.selectAll }}</span>
+        </label>
+        <span class="vg-muted">{{ libraryBatchCopy.selectedCount }} <b class="vg-num">{{ selectedMaterialIds.length }}</b></span>
+        <button v-if="selectedMaterialIds.length" class="vg-link vg-link--muted" type="button" @click="clearSelectedMaterials">{{ libraryBatchCopy.clearSelection }}</button>
+        <span class="vg-toolbar__spacer" />
+        <button class="vg-btn vg-btn--sm vg-btn--danger" type="button" :disabled="!selectedMaterialIds.length || actionBusyId === 'delete-materials'" @click="deleteSelectedMaterials">
+          <Trash2 :size="13" />{{ batchDeleteCopy.action }}
+        </button>
+        <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="!selectedMaterialIds.length || actionBusyId === 'export-materials'" @click="exportSelectedMaterials">
+          <Download :size="13" />{{ libraryBatchCopy.exportSelected }}
+        </button>
+      </div>
+
+      <div v-if="!filteredMaterials.length" class="vg-empty pm-empty pm-empty--tall">
+        <span class="vg-empty__icon"><Layers :size="22" /></span>
+        <h3>{{ copy.noMaterials }}</h3>
+        <p>{{ libraryDisplayCopy.hint }}</p>
+      </div>
+      <div v-else class="pm-gallery-wrap">
+        <div class="pm-gallery">
+          <MaterialTile
+            v-for="item in pagedMaterials"
+            :key="item.id"
+            :src="item.qiniuUrl"
+            :title="shortMaterialId(item.id)"
+            :selected="selectedMaterialIds.includes(item.id)"
+            :flag="item.usageStatus === 'used' ? copy.used : undefined"
+            flag-tone="warn"
+            @toggle="toggleMaterialSelection(item.id)"
+            @preview="openMaterialPreview(item)"
+          >
+            <template #tools>
+              <button class="pm-tool" type="button" :title="copy.preview" @click.stop="openMaterialPreview(item)"><Eye :size="13" /></button>
+              <button class="pm-tool" type="button" :title="copy.openUrl" @click.stop="openPublicUrl(item.qiniuUrl)"><Link2 :size="13" /></button>
+              <button class="pm-tool" type="button" :title="copy.showFile" @click.stop="showInFolder(item.localImagePath)"><FolderOpen :size="13" /></button>
+              <button class="pm-tool pm-tool--danger" type="button" :title="copy.deleteMaterial" :disabled="actionBusyId === item.id" @click.stop="deleteMaterial(item.id)"><Trash2 :size="13" /></button>
+            </template>
+            <template #aside><span class="vg-chip">{{ categoryLabel(item.category) }}</span></template>
+            <div class="pm-tile__meta">{{ generationCopy.derivedFrom }} <span class="vg-num">{{ shortMaterialId(item.derivedFromMaterialId || '') }}</span></div>
+            <div class="pm-tile__row">
+              <button
+                class="pm-usage"
+                :class="{ 'is-used': item.usageStatus === 'used' }"
+                type="button"
+                :disabled="actionBusyId === item.id"
+                :title="item.usageStatus === 'used' ? copy.unused : copy.used"
+                @click="setUsageStatus(item.id, item.usageStatus === 'used' ? 'unused' : 'used')"
+              >
+                <i />{{ item.usageStatus === 'used' ? copy.used : copy.unused }}
+              </button>
+              <select
+                class="vg-select vg-select--sm pm-tile__bind"
+                :title="copy.bindProduct"
+                :value="item.boundProductId || ''"
+                @change="bindProduct(item.id, String(($event.target as HTMLSelectElement).value || ''))"
+              >
+                <option value="">{{ copy.bindProduct }} · {{ copy.unbound }}</option>
+                <option v-for="product in products" :key="product.id" :value="product.id">{{ product.name }} ({{ product.type }})</option>
+              </select>
+            </div>
+          </MaterialTile>
+        </div>
+        <MaterialPager
+          v-if="filteredMaterials.length > 24"
+          v-model:page="libraryPage"
+          v-model:page-size="libraryPageSize"
+          :total-pages="libraryTotalPages"
+          :total="filteredMaterials.length"
+          :sizes="[24, 32, 48, 64]"
+          :labels="paginationCopy"
+        />
+      </div>
+    </section>
 
     <VideoPreviewModal :open="previewOpen" :src="previewSrc" :title="previewTitle" media-type="image" @close="closePreview" />
   </div>
 </template>
-
-<style scoped>
-.materials-workbench {
-  display: grid;
-  gap: 16px;
-  color: var(--theme-text);
-}
-
-.hero-card,
-.workspace-card,
-.footer-card,
-.panel {
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 16%, transparent), transparent 32%),
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 18px 55px rgba(0, 0, 0, 0.24);
-}
-
-.hero-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  padding: 18px 22px;
-}
-
-.hero-card__content {
-  display: grid;
-  gap: 10px;
-  max-width: 620px;
-}
-
-.hero-card__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--theme-text);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.hero-card__eyebrow-icon,
-.workspace-card__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 84%, transparent), color-mix(in srgb, var(--theme-tone-blue) 62%, transparent));
-  box-shadow: 0 12px 28px rgba(93, 93, 255, 0.22);
-}
-
-.hero-card h1 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.2;
-  letter-spacing: -0.03em;
-}
-
-.hero-card p {
-  margin: 0;
-  max-width: 560px;
-  color: var(--theme-text);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.hero-card__stats {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.metric-card {
-  min-width: 132px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 90%, transparent), color-mix(in srgb, var(--theme-panel) 86%, transparent));
-  border: 1px solid var(--theme-border);
-  display: grid;
-  gap: 8px;
-}
-
-.metric-card__icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.metric-card--violet .metric-card__icon {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-violet) 95%, transparent), color-mix(in srgb, var(--theme-tone-blue) 72%, transparent));
-}
-
-.metric-card--blue .metric-card__icon {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 95%, transparent), color-mix(in srgb, var(--theme-tone-blue) 72%, transparent));
-}
-
-.metric-card__value {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.metric-card__label {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.metric-card__sub {
-  color: color-mix(in srgb, var(--theme-tone-blue) 72%, transparent);
-  font-size: 11px;
-}
-
-.workspace-card {
-  padding: 14px;
-  display: grid;
-  gap: 14px;
-}
-
-.workspace-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.workspace-card__intro {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.workspace-card__copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.workspace-card__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.workspace-action-button {
-  min-height: 38px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.workspace-card__title {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.workspace-card__hint {
-  margin-top: 4px;
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.tabs-shell {
-  display: inline-flex;
-  padding: 4px;
-  gap: 4px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 88%, transparent), color-mix(in srgb, var(--theme-panel) 92%, transparent));
-  border: 1px solid var(--theme-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 16px 28px rgba(0, 0, 0, 0.16);
-}
-
-.tab-button {
-  min-width: 118px;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--theme-text);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tab-button.active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 82%, transparent), color-mix(in srgb, var(--theme-tone-blue) 34%, transparent));
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 32%, transparent);
-  color: var(--theme-text);
-  box-shadow: 0 16px 26px rgba(90, 77, 255, 0.2);
-}
-
-.tab-badge {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-text) 12%, transparent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-}
-
-.workspace-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
-}
-
-.panel {
-  min-width: 0;
-  min-height: 100%;
-  padding: 16px;
-}
-
-.panel--feature,
-.panel--queue,
-.panel--library {
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 8%, transparent), transparent 32%),
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
-}
-
-.section-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.section-head__content,
-.section-head__lead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.section-head__badge {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-violet) 95%, transparent), color-mix(in srgb, var(--theme-tone-blue) 72%, transparent));
-  color: var(--theme-text);
-  font-size: 12px;
-  font-weight: 700;
-  flex: 0 0 auto;
-}
-
-.section-head__badge--image {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-tone-blue) 68%, transparent));
-}
-
-.section-head h2 {
-  margin: 0 0 4px;
-  font-size: 14px;
-}
-
-.section-head p {
-  margin: 0;
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.section-head--queue {
-  align-items: flex-start;
-}
-
-.section-head--library {
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.ghost-button--inline {
-  margin-left: auto;
-}
-
-.form-grid,
-.filter-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.image-generation-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
-  gap: 12px;
-  align-items: start;
-  margin-bottom: 14px;
-}
-
-.source-picker-panel {
-  display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
-  gap: 14px;
-  min-height: 152px;
-  padding: 10px;
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
-  background: var(--theme-panel);
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.source-picker-panel--selected {
-  border-color: color-mix(in srgb, var(--theme-accent) 38%, transparent);
-  background: var(--theme-panel);
-}
-
-.source-picker-preview {
-  width: 132px;
-  height: 132px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  background: var(--theme-panel-soft);
-  color: color-mix(in srgb, var(--theme-accent) 82%, transparent);
-  cursor: pointer;
-}
-
-.source-picker-preview:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 58%, transparent);
-}
-
-.source-picker-preview img,
-.source-picker-placeholder {
-  width: 100%;
-  height: 100%;
-}
-
-.source-picker-preview img {
-  display: block;
-  object-fit: cover;
-}
-
-.source-picker-placeholder {
-  display: grid;
-  place-items: center;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 72%, transparent), color-mix(in srgb, var(--theme-panel) 94%, transparent));
-}
-
-.source-picker-placeholder__icon {
-  width: 30px;
-  height: 30px;
-  stroke-width: 1.5;
-}
-
-.source-picker-content {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: 4px 2px 2px 0;
-}
-
-.source-picker-copy {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-  padding-right: 38px;
-}
-
-.source-picker-copy > span {
-  color: var(--theme-accent);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.source-picker-copy > strong {
-  overflow: hidden;
-  color: var(--theme-text);
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.source-picker-copy > small {
-  color: color-mix(in srgb, var(--theme-text) 50%, transparent);
-  font-size: 11px;
-}
-
-.source-picker-clear {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text);
-  cursor: pointer;
-}
-
-.source-picker-clear:hover {
-  border-color: color-mix(in srgb, var(--theme-tone-red) 34%, transparent);
-  color: var(--theme-tone-red);
-}
-
-.source-picker-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: auto;
-}
-
-.source-picker-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 0 10px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.source-picker-action span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.source-picker-action--local {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 32%, transparent);
-  background: var(--theme-accent);
-  color: var(--theme-text) !important;
-  -webkit-text-fill-color: var(--theme-text) !important;
-  box-shadow: 0 8px 18px rgba(8, 104, 92, 0.22);
-}
-
-.source-picker-action--local:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 52%, transparent);
-  background: var(--theme-accent);
-}
-
-.prompt-version-editor {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
-  gap: 10px;
-  padding-top: 14px;
-  border-top: 1px solid var(--theme-border);
-}
-
-.prompt-version-meta {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-
-.prompt-version-content {
-  min-width: 0;
-}
-
-.prompt-version-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  grid-column: 1 / -1;
-}
-
-.prompt-textarea {
-  min-height: 112px;
-  height: 112px;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  line-height: 1.5;
-}
-
-.image-generation-actions {
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-
-.form-grid--single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.filter-grid--library {
-  margin-bottom: 12px;
-}
-
-.library-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.library-toolbar__selection {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.library-toolbar__count {
-  font-size: 11px;
-  color: var(--theme-text);
-}
-
-.library-toolbar__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.ghost-button--toolbar {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-}
-
-.library-toolbar__delete {
-  min-height: 32px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border-color: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
-  color: var(--theme-text);
-}
-
-.library-toolbar__export {
-  min-height: 32px;
-  padding: 0 14px;
-  border-radius: 999px;
-}
-
-.library-results {
-  display: grid;
-  gap: 12px;
-}
-
-.library-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 2px;
-}
-
-.library-pagination__nav,
-.library-pagination__size {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.library-pagination__text,
-.library-pagination__size span {
-  font-size: 12px;
-  color: var(--theme-text);
-}
-
-.library-pagination__select {
-  width: 74px;
-}
-
-label {
-  display: grid;
-  gap: 8px;
-}
-
-label span {
-  font-size: 12px;
-  color: var(--theme-text);
-  font-weight: 600;
-}
-
-.input {
-  width: 100%;
-  padding: 9px 12px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
-  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
-  color: var(--theme-text);
-  font-size: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.input--compact {
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 12px;
-}
-
-.field-hint {
-  color: color-mix(in srgb, var(--theme-text) 50%, transparent);
-  font-size: 11px;
-  line-height: 1.4;
-  min-height: 16px;
-}
-
-.field-hint--placeholder {
-  visibility: hidden;
-}
-
-.upload-dropzone {
-  margin-top: 14px;
-  width: 100%;
-  min-height: 92px;
-  border: 1px dashed color-mix(in srgb, var(--theme-tone-blue) 32%, transparent);
-  border-radius: 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 74%, transparent), color-mix(in srgb, var(--theme-panel-soft) 82%, transparent));
-  display: grid;
-  place-items: center;
-  gap: 4px;
-  padding: 14px 12px;
-  text-align: center;
-  color: var(--theme-text);
-  cursor: pointer;
-}
-
-.upload-dropzone strong {
-  font-size: 13px;
-}
-
-.upload-dropzone span {
-  font-size: 11px;
-  color: color-mix(in srgb, var(--theme-tone-blue) 64%, transparent);
-}
-
-.upload-dropzone__icon {
-  width: 16px;
-  height: 16px;
-}
-
-.pick-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.pick-row--three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.primary-button,
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 38px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.primary-button {
-  background: linear-gradient(135deg, var(--theme-tone-violet), var(--theme-tone-blue));
-  color: var(--theme-text);
-  box-shadow: 0 16px 30px rgba(106, 103, 255, 0.24);
-}
-
-.primary-button--soft,
-.ghost-button {
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  border-color: var(--theme-border);
-  color: var(--theme-text);
-}
-
-.primary-button:disabled,
-.ghost-button:disabled,
-.icon-action:disabled,
-.ghost-chip:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.picked-list {
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.empty-copy {
-  color: var(--theme-text);
-}
-
-.path-chip,
-.queue-file {
-  width: 100%;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-  padding: 8px 10px;
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.path-chip {
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.queue-card {
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 72%, transparent), color-mix(in srgb, var(--theme-tone-blue) 86%, transparent));
-  overflow: hidden;
-}
-
-.queue-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 12px 0;
-}
-
-.queue-card__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.queue-card__type {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-tone-violet) 24%, transparent);
-  color: var(--theme-text);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.queue-card__title strong {
-  font-size: 12px;
-}
-
-.queue-card__stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--theme-border);
-  margin-top: 10px;
-}
-
-.queue-stat {
-  padding: 12px 8px;
-  text-align: center;
-  border-right: 1px solid var(--theme-border);
-}
-
-.queue-stat:last-child {
-  border-right: 0;
-}
-
-.queue-stat__value {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.queue-stat__label {
-  margin-top: 6px;
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.queue-card__files {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px 12px;
-}
-
-.queue-file {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
-}
-
-.queue-file__name {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.queue-file__meta {
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.queue-tip {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  color: var(--theme-text);
-}
-
-.status-pill {
-  align-self: start;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.status-pill--small {
-  min-height: 20px;
-  padding: 0 7px;
-  font-size: 10px;
-}
-
-.status-pill.is-success {
-  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
-  color: var(--theme-accent);
-}
-
-.status-pill.is-warning {
-  background: color-mix(in srgb, var(--theme-tone-amber) 14%, transparent);
-  color: var(--theme-tone-amber);
-}
-
-.status-pill.is-danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 14%, transparent);
-  color: var(--theme-tone-red);
-}
-
-.status-pill.is-info {
-  background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
-  color: var(--theme-tone-blue);
-}
-
-.panel__hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  border: 1px solid var(--theme-border);
-  color: var(--theme-text);
-  font-size: 10px;
-}
-
-.album-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-}
-
-.parser-video-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-}
-
-.parser-video-card {
-  display: grid;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 18px;
-  border: 1px solid var(--theme-border);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-panel) 92%, transparent));
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.parser-video-card:hover,
-.parser-video-card.is-selected {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 42%, transparent);
-  box-shadow: 0 14px 30px rgba(44, 72, 158, 0.22);
-}
-
-.parser-video-card__thumb,
-.parser-video-card__placeholder {
-  width: 100%;
-  aspect-ratio: 9 / 16;
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.parser-video-card__thumb {
-  object-fit: cover;
-}
-
-.parser-video-card__placeholder {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  color: color-mix(in srgb, var(--theme-text) 50%, transparent);
-  letter-spacing: 0.18em;
-  font-size: 11px;
-}
-
-.parser-video-card__body {
-  display: grid;
-  gap: 4px;
-}
-
-.parser-video-card__body strong {
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.parser-video-card__body span {
-  font-size: 11px;
-  color: var(--theme-text);
-}
-
-.album-card {
-  min-width: 0;
-  border-radius: 18px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 98%, transparent), color-mix(in srgb, var(--theme-panel-soft) 98%, transparent)),
-    color-mix(in srgb, var(--theme-panel) 95%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 10px 20px rgba(4, 10, 24, 0.24);
-}
-
-.album-card__media {
-  position: relative;
-  aspect-ratio: 0.98 / 1;
-  overflow: hidden;
-  border-bottom: 1px solid color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
-}
-
-.album-thumb-button {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: zoom-in;
-}
-
-.select-checkbox {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  border: 1px solid var(--theme-border);
-  background: color-mix(in srgb, var(--theme-panel) 68%, transparent);
-  color: var(--theme-text);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(8px);
-}
-
-.select-checkbox--active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 94%, transparent), color-mix(in srgb, var(--theme-tone-blue) 92%, transparent));
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 50%, transparent);
-}
-
-.album-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.25s ease;
-}
-
-.album-card:hover .album-thumb {
-  transform: scale(1.04);
-}
-
-.album-card__overlay {
-  position: absolute;
-  inset: 0;
-  padding: 8px 8px 8px 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 54%, transparent), color-mix(in srgb, var(--theme-panel) 2%, transparent) 42%, color-mix(in srgb, var(--theme-panel) 30%, transparent));
-}
-
-.album-card__actions-top {
-  display: flex;
-  gap: 6px;
-}
-
-.album-card__body {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-}
-
-.album-card__topline,
-.album-card__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
-
-.album-card__topline strong {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.album-card__topline span,
-.album-card__meta span {
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.album-card__category {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 20px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
-  color: var(--theme-text);
-}
-
-.album-card__category--derived {
-  background: color-mix(in srgb, var(--theme-tone-amber) 14%, transparent);
-  color: var(--theme-tone-amber);
-}
-
-.album-card__status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.album-card__select {
-  display: grid;
-  gap: 6px;
-  margin-top: 2px;
-}
-
-.album-card__select span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--theme-text);
-}
-
-.icon-action,
-.ghost-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--theme-border);
-  background: color-mix(in srgb, var(--theme-panel) 34%, transparent);
-  color: var(--theme-text);
-}
-
-.icon-action {
-  width: 26px;
-  height: 26px;
-  backdrop-filter: blur(10px);
-}
-
-.icon-action--danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
-  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
-}
-
-.ghost-chip {
-  padding: 5px 8px;
-  font-size: 11px;
-}
-
-.ghost-chip--mini {
-  min-height: 24px;
-  padding: 0 8px;
-  color: var(--theme-text);
-}
-
-.usage-chip {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.usage-chip--unused {
-  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
-  color: var(--theme-text);
-}
-
-.usage-chip--used {
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  color: var(--theme-accent);
-}
-
-.footer-card {
-  min-height: 50px;
-  padding: 0 18px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--theme-text);
-}
-
-.notice {
-  padding: 12px 14px;
-  border-radius: 14px;
-  font-size: 13px;
-}
-
-.notice--success {
-  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
-  color: var(--theme-accent);
-}
-
-.notice--danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 14%, transparent);
-  color: var(--theme-tone-red);
-}
-
-.icon {
-  width: 16px;
-  height: 16px;
-}
-
-.icon--small {
-  width: 18px;
-  height: 18px;
-}
-
-.icon--tiny {
-  width: 14px;
-  height: 14px;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@media (max-width: 1600px) {
-  .hero-card,
-  .workspace-card__head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .hero-card__stats {
-    width: 100%;
-  }
-
-  .metric-card {
-    flex: 1;
-  }
-
-  .album-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1280px) {
-  .workspace-grid,
-  .image-generation-grid,
-  .prompt-version-editor,
-  .form-grid,
-  .filter-grid,
-  .pick-row {
-    grid-template-columns: 1fr;
-  }
-
-  .queue-card__stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .album-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .hero-card {
-    padding: 24px;
-  }
-
-  .hero-card h1 {
-    font-size: 38px;
-  }
-
-  .metric-card {
-    min-width: 0;
-  }
-
-  .tabs-shell {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .tab-button {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .album-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .hero-card__stats,
-  .queue-card__stats {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-card__stats {
-    display: grid;
-  }
-
-  .album-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .section-head--library,
-  .section-head__lead,
-  .queue-file,
-  .queue-file__name {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .library-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .library-toolbar__selection {
-    justify-content: space-between;
-    width: 100%;
-  }
-
-  .prompt-version-editor {
-    grid-template-columns: 1fr;
-  }
-
-  .prompt-version-actions {
-    grid-column: auto;
-  }
-
-  .source-picker-panel {
-    grid-template-columns: 96px minmax(0, 1fr);
-  }
-
-  .source-picker-preview {
-    width: 96px;
-    height: 96px;
-  }
-
-  .source-picker-actions {
-    grid-template-columns: 1fr;
-    margin-top: 12px;
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Premium workspace treatment: restrained graphite surfaces with one clear accent. */
-.materials-workbench {
-  gap: 12px;
-  color: var(--theme-text);
-}
-
-.hero-card,
-.workspace-card,
-.footer-card,
-.panel {
-  border-color: var(--theme-border);
-  border-radius: 20px;
-  background: var(--theme-panel);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.035);
-}
-
-.workspace-card {
-  background: var(--theme-panel);
-}
-
-.workspace-card__icon,
-.hero-card__eyebrow-icon {
-  background: var(--theme-accent);
-  box-shadow: 0 8px 22px rgba(16, 185, 164, 0.16);
-}
-
-.tabs-shell {
-  padding: 5px;
-  border-radius: 14px;
-  background: var(--theme-panel);
-  border-color: var(--theme-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-}
-
-.tab-button {
-  min-height: 38px;
-  border-radius: 10px;
-  color: var(--theme-text);
-}
-
-.tab-button:hover {
-  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
-  color: var(--theme-text);
-}
-
-.tab-button.active {
-  background: var(--theme-accent);
-  border-color: color-mix(in srgb, var(--theme-accent) 42%, transparent);
-  color: var(--theme-text);
-  box-shadow: 0 8px 20px rgba(11, 118, 103, 0.22);
-}
-
-.tab-badge {
-  background: color-mix(in srgb, var(--theme-text) 12%, transparent);
-  color: var(--theme-accent);
-}
-
-.panel--feature,
-.panel--queue,
-.panel--library {
-  background: var(--theme-panel);
-}
-
-.section-head {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--theme-border);
-}
-
-.section-head__badge,
-.section-head__badge--image {
-  background: var(--theme-accent);
-  box-shadow: 0 7px 18px rgba(16, 185, 164, 0.15);
-}
-
-.section-head h2 {
-  font-size: 15px;
-  letter-spacing: 0.01em;
-}
-
-.section-head p,
-.workspace-card__hint {
-  color: var(--theme-text);
-}
-
-.image-generation-grid {
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.upload-dropzone:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 72%, transparent);
-  background: var(--theme-panel-soft);
-}
-
-.upload-dropzone__icon {
-  color: var(--theme-accent);
-}
-
-.prompt-version-editor {
-  padding: 16px 0 2px;
-  border-top-color: var(--theme-border);
-}
-
-.prompt-version-meta {
-  padding: 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
-  background: var(--theme-panel);
-}
-
-.prompt-version-content {
-  padding: 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
-  background: var(--theme-panel);
-}
-
-.prompt-version-actions {
-  padding-top: 2px;
-}
-
-.input {
-  border-color: var(--theme-border);
-  border-radius: 10px;
-  background: var(--theme-panel);
-  color: var(--theme-text);
-}
-
-.input:hover,
-.input:focus {
-  border-color: color-mix(in srgb, var(--theme-accent) 68%, transparent);
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(53, 186, 165, 0.1);
-}
-
-.primary-button,
-.ghost-button {
-  border-radius: 10px;
-}
-
-.primary-button {
-  background: var(--theme-accent);
-  border-color: color-mix(in srgb, var(--theme-accent) 32%, transparent);
-  box-shadow: 0 8px 18px rgba(8, 104, 92, 0.22);
-}
-
-.primary-button:hover:not(:disabled) {
-  background: var(--theme-accent);
-}
-
-.generate-button {
-  min-height: 46px;
-  min-width: 184px;
-  padding: 0 14px 0 10px;
-  border-radius: 13px;
-  gap: 10px;
-  background: linear-gradient(135deg, var(--theme-accent) 0%, var(--theme-accent) 58%, var(--theme-accent) 100%);
-  border-color: color-mix(in srgb, var(--theme-accent) 52%, transparent);
-  box-shadow: 0 10px 24px rgba(5, 121, 105, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.generate-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--theme-accent) 0%, var(--theme-accent) 58%, var(--theme-accent) 100%);
-  border-color: color-mix(in srgb, var(--theme-accent) 78%, transparent);
-  box-shadow: 0 14px 28px rgba(5, 147, 127, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  transform: translateY(-1px);
-}
-
-.generate-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.generate-button:disabled {
-  opacity: 0.48;
-  box-shadow: none;
-}
-
-.generate-button__icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--theme-panel-soft) 38%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
-}
-
-.generate-button__arrow {
-  margin-left: auto;
-  font-size: 18px;
-  line-height: 1;
-  opacity: 0.82;
-  transition: transform 0.2s ease;
-}
-
-.generate-button:hover:not(:disabled) .generate-button__arrow {
-  transform: translateX(3px);
-}
-
-.image-generation-actions .generate-button {
-  min-width: 208px;
-}
-
-.ghost-button {
-  background: var(--theme-panel-soft);
-  border-color: var(--theme-border);
-  color: var(--theme-text);
-}
-
-.ghost-button:hover:not(:disabled) {
-  background: var(--theme-panel-soft);
-  border-color: color-mix(in srgb, var(--theme-accent) 42%, transparent);
-  color: var(--theme-text);
-}
-</style>
