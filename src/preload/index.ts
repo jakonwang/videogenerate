@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
 import { storageCleanupConfirmation, type StorageCategoryId } from '../shared/storageManagement'
+import type { CreatorHubCreatorProfile, CreatorHubCrmRow, CreatorHubFulfillmentReport, CreatorHubImportCookiesInput, CreatorHubOrder, CreatorHubOverview, CreatorHubProductCost, CreatorHubSample, CreatorHubSettings, CreatorHubShop, CreatorHubSyncJob, CreatorHubSyncProgress, CreatorHubSyncStage, CreatorHubVideo } from '../shared/creatorHub'
 import type {
   InventoryDashboard,
   InventoryDetail,
@@ -906,6 +907,31 @@ const api = {
     getOutreachStatistics: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getOutreachStatistics', accountId),
     getFeatureAvailability: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getFeatureAvailability', accountId),
     listMessageHistory: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listMessageHistory', payload),
+  },
+  tiktokCreatorHub: {
+    listShops: () => ipcRenderer.invoke('plugin:tiktokCreatorHub:listShops') as Promise<CreatorHubShop[]>,
+    importCookies: (payload: CreatorHubImportCookiesInput) => ipcRenderer.invoke('plugin:tiktokCreatorHub:importCookies', payload) as Promise<{ shop: CreatorHubShop; merged: boolean; cookies: number; skipped: number }>,
+    verifyShop: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:verifyShop', id) as Promise<CreatorHubShop>,
+    renameShop: (payload: { id: string; name: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:renameShop', payload) as Promise<CreatorHubShop>,
+    removeShop: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:removeShop', id) as Promise<{ ok: true }>,
+    openBackend: (payload: { id: string; path?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:openBackend', payload) as Promise<{ url: string; loggedIn: boolean }>,
+    syncSamples: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:syncSamples', id) as Promise<CreatorHubSyncJob>,
+    syncShop: (payload: { id: string; stages?: CreatorHubSyncStage[] }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:syncShop', payload) as Promise<CreatorHubSyncJob>,
+    listVideos: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listVideos', shopId) as Promise<Array<CreatorHubVideo & { sampleId?: string }>>,
+    listOrders: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listOrders', shopId) as Promise<CreatorHubOrder[]>,
+    listCrm: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listCrm', shopId) as Promise<CreatorHubCrmRow[]>,
+    saveProfile: (payload: { shopId: string; creatorId: string; tags?: string[]; note?: string; blocked?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveProfile', payload) as Promise<CreatorHubCreatorProfile>,
+    getOverview: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getOverview', shopId) as Promise<CreatorHubOverview>,
+    getSyncProgress: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getSyncProgress', id) as Promise<CreatorHubSyncProgress | null>,
+    listSyncJobs: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listSyncJobs', id) as Promise<CreatorHubSyncJob[]>,
+    listSamples: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listSamples', shopId) as Promise<CreatorHubSample[]>,
+    updateSample: (payload: { id: string; costOverride?: number | null; note?: string | null }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:updateSample', payload) as Promise<CreatorHubSample>,
+    listCosts: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listCosts', shopId) as Promise<CreatorHubProductCost[]>,
+    saveCost: (payload: { shopId: string; productId: string; skuId?: string; productTitle?: string; unitCost: number; shippingCost?: number }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveCost', payload) as Promise<CreatorHubProductCost>,
+    removeCost: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:removeCost', id) as Promise<{ ok: true }>,
+    getSettings: () => ipcRenderer.invoke('plugin:tiktokCreatorHub:getSettings') as Promise<CreatorHubSettings>,
+    saveSettings: (payload: Partial<CreatorHubSettings>) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveSettings', payload) as Promise<CreatorHubSettings>,
+    getFulfillment: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getFulfillment', shopId) as Promise<CreatorHubFulfillmentReport>,
   },
   tiktokGmvMax: {
     getDashboard: (payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getDashboard', payload),

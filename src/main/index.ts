@@ -45,6 +45,8 @@ import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc
 import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
 import { registerDianxiaomiInventoryIpc } from './ipc/registerDianxiaomiInventoryIpc'
 import { registerTiktokCreatorOutreachIpc } from './ipc/registerTiktokCreatorOutreachIpc'
+import { registerTiktokCreatorHubIpc } from './ipc/registerTiktokCreatorHubIpc'
+import { closeCreatorHubDb } from './modules/tiktok-creator-hub/repo'
 import { registerProductWatermarkIpc } from './ipc/registerProductWatermarkIpc'
 import { registerAssetLibraryIpc } from './ipc/registerAssetLibraryIpc'
 import { registerProductReplacementIpc } from './ipc/registerProductReplacementIpc'
@@ -1748,6 +1750,7 @@ function wireIpc() {
   registerTiktokGmvMaxIpc(ipcMain)
   registerDianxiaomiInventoryIpc(ipcMain, () => mainWindow)
   registerTiktokCreatorOutreachIpc(ipcMain)
+  registerTiktokCreatorHubIpc(ipcMain)
   registerProductWatermarkIpc(ipcMain)
   registerAssetLibraryIpc(ipcMain)
   registerProductReplacementIpc(ipcMain)
@@ -1866,5 +1869,6 @@ app.on('before-quit', () => {
   gmvMaxScheduler.stop()
   void backgroundRecordStore.close()
   void gmvMaxWorkerClient.close()
+  closeCreatorHubDb()
   void gmvMaxMcpClient.closeAll().finally(() => closeGmvMaxSqlite())
 })

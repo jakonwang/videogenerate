@@ -46,6 +46,7 @@ const tools = computed(() => [
   { to: '/plugins/dianxiaomi-inventory', icon: Package, title: '店小秘库存分析', description: '跟踪 SKU 库存，预警风险', tone: 'amber' },
   { to: '/plugins/live-photo-generator', icon: PlaySquare, title: '动态照片生成器', description: '将静态图生成 Live Photo', tone: 'red' },
   { to: '/plugins/tiktok-creative-studio', icon: WandSparkles, title: 'TikTok 创意工作室', description: '一键生成创意视频脚本', tone: 'violet' },
+  { to: '/plugins/tiktok-creator-hub', icon: Users, title: '达人管理', description: '寄样管理与达人履约率', tone: 'violet' },
   { to: '/plugins/tiktok-creator-outreach', icon: Users, title: 'TikTok Creator Outreach', description: '达人管理与邀约', tone: 'green' },
   { to: '/plugins/video-parser-download', icon: Download, title: '视频解析下载', description: '解析下载无水印视频', tone: 'blue' },
   { to: '/plugins/video-batch-subtitle', icon: Captions, title: '视频批量字幕', description: '自动识别并生成多语言字幕', tone: 'green' },

@@ -118,6 +118,17 @@ export const pluginDefinitions: PluginDefinition[] = [
     ],
   },
   {
+    id: "tiktok-creator-hub",
+    name: "TikTok Creator Hub",
+    category: "ecommerce_listing",
+    description: "Multi-shop creator management: sample requests, per-creator fulfillment rate and sample costs, synced read-only from TikTok Shop Affiliate.",
+    version: "0.1.0",
+    entryType: "tool",
+    workspacePath: "/plugins/tiktok-creator-hub",
+    usageHint: "Import each shop's cookies (Cookie-Editor JSON), sync samples, then review fulfillment per creator.",
+    configSchema: [],
+  },
+  {
     id: "tiktok-creator-outreach",
     name: "TikTok Creator Outreach",
     category: "ecommerce_listing",

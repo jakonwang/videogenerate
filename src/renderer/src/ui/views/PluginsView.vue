@@ -111,6 +111,13 @@ const fallbackPlugins: PluginSummary[] = [
     enabled: false,
   },
   {
+    id: "tiktok-creator-hub",
+    name: "TikTok Creator Hub",
+    category: "ecommerce_listing",
+    description: "Multi-shop sample management and per-creator fulfillment rate.",
+    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/tiktok-creator-hub", status: "installed", enabled: true,
+  },
+  {
     id: "tiktok-creator-outreach",
     name: "TikTok Creator Outreach",
     category: "ecommerce_listing",
@@ -230,6 +237,8 @@ function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === "product-replacement") return t("plugins.categories.videoProcessing");
   if (plugin.id === "tiktok-gmv-max-optimizer")
     return t("plugins.categories.advertisingOptimization");
+  if (plugin.id === "tiktok-creator-hub")
+    return t("plugins.categories.creatorManagement");
   if (plugin.id === "dianxiaomi-inventory")
     return t("plugins.categories.inventoryAnalysis");
   if (plugin.id === "live-photo-generator")
@@ -249,6 +258,7 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === "product-watermark") return "BW";
   if (plugin.id === "product-replacement") return "PR";
   if (plugin.id === "tiktok-gmv-max-optimizer") return "GM";
+  if (plugin.id === "tiktok-creator-hub") return "CH";
   if (plugin.id === "dianxiaomi-inventory") return "IA";
   if (plugin.id === "product-image-materials") return "IM";
   if (plugin.id === "live-photo-generator") return "LP";
@@ -264,6 +274,7 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === "product-watermark") return "tone-blue";
   if (plugin.id === "product-replacement") return "tone-green";
   if (plugin.id === "tiktok-gmv-max-optimizer") return "tone-cyan";
+  if (plugin.id === "tiktok-creator-hub") return "tone-violet";
   if (plugin.id === "dianxiaomi-inventory") return "tone-green";
   if (plugin.id === "product-image-materials") return "tone-blue";
   if (plugin.id === "live-photo-generator") return "tone-amber";
@@ -289,7 +300,7 @@ function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
 }
 
 function primaryActionText(plugin: PluginSummary) {
-  if (plugin.id === "product-watermark" || plugin.id === "product-replacement") return t("plugins.actions.openWorkspace");
+  if (plugin.id === "product-watermark" || plugin.id === "product-replacement" || plugin.id === "tiktok-creator-hub") return t("plugins.actions.openWorkspace");
   if (plugin.status !== "installed") return t("plugins.actions.install");
   if (!plugin.enabled) return t("plugins.actions.enable");
   return isDirectWorkspacePlugin(plugin)
@@ -374,6 +385,10 @@ function selectPlugin(pluginId: string) {
 }
 
 function usePlugin(plugin: PluginSummary | PluginDetail) {
+  if (plugin.id === "tiktok-creator-hub") {
+    void router.push("/plugins/tiktok-creator-hub");
+    return;
+  }
   if (plugin.id === "product-watermark") {
     void router.push("/plugins/product-watermark");
     return;
@@ -422,7 +437,7 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
 }
 
 function onPrimaryAction(plugin: PluginSummary) {
-  if (plugin.id === "product-watermark" || plugin.id === "product-replacement") {
+  if (plugin.id === "product-watermark" || plugin.id === "product-replacement" || plugin.id === "tiktok-creator-hub") {
     void router.push(plugin.workspacePath);
     return;
   }

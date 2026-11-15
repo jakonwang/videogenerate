@@ -90,6 +90,8 @@
     "test:tiktok-gmv-max-coach": "tsx test/tiktok-gmv-max-coach.smoke.ts",
     "test:tiktok-gmv-max-command-center": "tsx test/tiktok-gmv-max-command-center.smoke.ts",
     "test:tiktok-gmv-max-help": "tsx test/tiktok-gmv-max-help.smoke.ts",
+    "test:tiktok-creator-hub": "tsx test/tiktok-creator-hub.smoke.ts",
+    "test:tiktok-creator-hub:e2e": "node test/tiktok-creator-hub-electron.e2e.cjs",
     "test:tiktok-gmv-max-help-electron": "node test/tiktok-gmv-max-help-electron.e2e.cjs",
     "test:tiktok-gmv-max-electron": "node test/tiktok-gmv-max-electron.e2e.cjs",
     "test:dianxiaomi-inventory": "tsx test/dianxiaomi-inventory.smoke.ts",
