@@ -118,17 +118,6 @@ const fallbackPlugins: PluginSummary[] = [
     version: "0.1.0", entryType: "tool", workspacePath: "/plugins/tiktok-creator-hub", status: "installed", enabled: true,
   },
   {
-    id: "tiktok-creator-outreach",
-    name: "TikTok Creator Outreach",
-    category: "ecommerce_listing",
-    description: "Prepare reviewed TikTok Affiliate creator invitation and message batches.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-creator-outreach",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
     id: "video-parser-download",
     name: "Video Parser Download",
     category: "video_download",
@@ -161,18 +150,6 @@ const fallbackPlugins: PluginSummary[] = [
     version: "0.1.0",
     entryType: "tool",
     workspacePath: "/plugins/video-batch-subtitle",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "geelark-publisher",
-    name: "Geelark Publisher",
-    category: "video_processing",
-    description:
-      "Publish clone outputs to Geelark cloud-phone workflows from a dedicated plugin workspace.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/geelark-publisher",
     status: "uninstalled",
     enabled: false,
   },
@@ -247,8 +224,8 @@ function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
     return t("plugins.categories.videoProcessing");
   if (plugin.id === "tiktok-creative-studio")
     return t("plugins.categories.creativeStudio");
-  if (plugin.id === "geelark-publisher")
-    return t("plugins.categories.publishing");
+  if (plugin.id === "tiktok-listing-helper")
+    return t("plugins.categories.listing");
   if (plugin.category === "video_download")
     return t("plugins.categories.download");
   return t("plugins.categories.videoProcessing");
@@ -263,7 +240,6 @@ function pluginIconText(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === "product-image-materials") return "IM";
   if (plugin.id === "live-photo-generator") return "LP";
   if (plugin.id === "tiktok-creative-studio") return "TT";
-  if (plugin.id === "geelark-publisher") return "GK";
   if (plugin.id === "video-parser-download") return "DL";
   if (plugin.id === "video-batch-watermark") return "WM";
   if (plugin.id === "video-batch-subtitle") return "CC";
@@ -279,7 +255,6 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
   if (plugin.id === "product-image-materials") return "tone-blue";
   if (plugin.id === "live-photo-generator") return "tone-amber";
   if (plugin.id === "tiktok-creative-studio") return "tone-green";
-  if (plugin.id === "geelark-publisher") return "tone-cyan";
   if (plugin.id === "video-parser-download") return "tone-violet";
   if (plugin.id === "video-batch-watermark") return "tone-blue";
   return "tone-green";
@@ -287,7 +262,6 @@ function pluginCardTone(plugin: PluginSummary | PluginDetail) {
 
 function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
   return [
-    "geelark-publisher",
     "tiktok-creative-studio",
     "tiktok-gmv-max-optimizer",
     "live-photo-generator",
@@ -415,14 +389,6 @@ function usePlugin(plugin: PluginSummary | PluginDetail) {
   }
   if (plugin.id === "tiktok-creative-studio") {
     void router.push("/plugins/tiktok-creative-studio");
-    return;
-  }
-  if (plugin.id === "tiktok-creator-outreach") {
-    void router.push("/plugins/tiktok-creator-outreach");
-    return;
-  }
-  if (plugin.id === "geelark-publisher") {
-    void router.push("/plugins/geelark-publisher/publish-center");
     return;
   }
   if (plugin.id === "video-parser-download") {

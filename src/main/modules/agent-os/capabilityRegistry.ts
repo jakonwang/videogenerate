@@ -13,7 +13,6 @@ import { videoParserDownloadService } from '../video-parser-download/service'
 import { tiktokListingService } from '../tiktok-listing/service'
 import { tiktokCreativeStudioService } from '../tiktok-creative-studio/service'
 import { splitVideoToSegmentFiles } from '../media/segmentSplit'
-import { geelarkPublisher } from '../web-platform/geelark'
 import { createBatchTasks } from '../tasks/createBatchTasks'
 import { taskQueue } from '../tasks/queue'
 import { templatesRepo } from '../templates/repo'
@@ -42,8 +41,6 @@ const intentCapabilities: Record<AgentIntentType, AgentCapabilityId> = {
   'Intent.LivePhotoManage': 'LivePhoto.Manage',
   'Intent.SubtitleGenerate': 'Subtitle.Generate',
   'Intent.VideoSlice': 'Video.Slice',
-  'Intent.VideoPublish': 'Video.Publish',
-  'Intent.PublishingManage': 'Publishing.Manage',
   'Intent.SourceVideoImport': 'SourceVideo.Import',
   'Intent.SourceVideoManage': 'SourceVideo.Manage',
   'Intent.ListingGenerate': 'Listing.Generate',
@@ -93,15 +90,6 @@ type AgentCapabilityDependencies = {
   failCreativeShot: typeof tiktokCreativeStudioService.markShotFailed
   removeCreativeTask: typeof tiktokCreativeStudioService.remove
   splitVideo: typeof splitVideoToSegmentFiles
-  publishVideo: typeof webPlatformService.publishGeelarkVideo
-  listPublishAccounts: typeof geelarkPublisher.listAccounts
-  savePublishAccount: typeof geelarkPublisher.upsertAccount
-  removePublishAccount: typeof geelarkPublisher.deleteAccount
-  listPublishTasks: typeof geelarkPublisher.listTasks
-  syncPublishTask: typeof geelarkPublisher.syncTask
-  listMusicPresets: typeof geelarkPublisher.listMusicPresets
-  saveMusicPreset: typeof geelarkPublisher.upsertMusicPreset
-  removeMusicPreset: typeof geelarkPublisher.deleteMusicPreset
   createProductionBatch: typeof createBatchTasks
   enqueueProductionTask: (task: any) => string
   saveProduct: typeof productsRepo.upsert
@@ -170,15 +158,6 @@ const defaultCapabilityDependencies: AgentCapabilityDependencies = {
   failCreativeShot: (input) => tiktokCreativeStudioService.markShotFailed(input),
   removeCreativeTask: (id) => tiktokCreativeStudioService.remove(id),
   splitVideo: (input) => splitVideoToSegmentFiles(input),
-  publishVideo: (token, input) => webPlatformService.publishGeelarkVideo(token, input),
-  listPublishAccounts: (userId) => geelarkPublisher.listAccounts(userId),
-  savePublishAccount: (userId, input) => geelarkPublisher.upsertAccount(userId, input),
-  removePublishAccount: (userId, id) => geelarkPublisher.deleteAccount(userId, id),
-  listPublishTasks: (userId) => geelarkPublisher.listTasks(userId),
-  syncPublishTask: (userId, id) => geelarkPublisher.syncTask(userId, id),
-  listMusicPresets: (userId) => geelarkPublisher.listMusicPresets(userId),
-  saveMusicPreset: (userId, input) => geelarkPublisher.upsertMusicPreset(userId, input),
-  removeMusicPreset: (userId, id) => geelarkPublisher.deleteMusicPreset(userId, id),
   createProductionBatch: (input) => createBatchTasks(input),
   enqueueProductionTask: (task) => {
     taskQueue.enqueue(task)
@@ -1412,181 +1391,6 @@ const videoSliceBinding: AgentCapabilityBinding = {
   },
 }
 
-const publishBinding: AgentCapabilityBinding = {
-  id: 'binding.video.publish.geelark.v1',
-  capabilityId: 'Video.Publish',
-  capabilityVersion: 1,
-  adapterVersion: '1.0.0',
-  priority: 100,
-  lockMode: 'write',
-  resourceType: 'Publish',
-  isHealthy: async () => true,
-  estimateCost: async () => ({ credits: 0 }),
-  execute: async (input, context) => {
-    const source = [...context.dependencyArtifacts].reverse().find((item) => item.kind === 'video' && item.localPath)
-    const videoPath = text(input.videoPath) || text(source?.localPath)
-    const publishAccountId = text(input.publishAccountId)
-    if (!videoPath) return failed('missing_video_artifact', 'No video artifact is available for publishing.')
-    if (!publishAccountId) return failed('missing_publish_account', 'Select a publishing account in the run context.')
-    const result: any = await capabilityDependencies.publishVideo('', {
-      cloneProjectId: text(input.projectId) || text(source?.metadata?.projectId) || undefined,
-      videoPath,
-      publishAccountId,
-      videoDesc: text(input.videoDesc || input.request),
-      productId: text(input.productId) || undefined,
-      scheduleAt: Number(input.scheduleAt || Date.now()),
-    })
-    const artifactId = context.registerArtifact({
-      kind: 'publish_receipt',
-      name: 'Video publishing receipt',
-      uri: `agent-publish://${result.id}`,
-      metadata: { taskId: result.id, status: result.status, publishAccountId },
-      sourceArtifactIds: source ? [source.id] : [],
-      lifecycle: 'published',
-    })
-    return completed({ artifactIds: [artifactId], logs: [`Created publish task ${result.id}`], externalRefs: { publishTaskId: result.id } })
-  },
-}
-
-const publishingManageBinding: AgentCapabilityBinding = {
-  id: 'binding.publishing.manage.local.v1',
-  capabilityId: 'Publishing.Manage',
-  capabilityVersion: 1,
-  adapterVersion: '1.0.0',
-  priority: 100,
-  lockMode: 'write',
-  resourceType: 'Publish',
-  isHealthy: async () => true,
-  estimateCost: async () => ({ credits: 0 }),
-  execute: async (input, context) => {
-    const userId = 'desktop-local'
-    const action = text(input.action)
-    if (action === 'account_save') {
-      const accountId = text(input.publishAccountId || input.accountId)
-      const existing = accountId ? (await capabilityDependencies.listPublishAccounts(userId)).find((item) => item.id === accountId) : undefined
-      if (accountId && !existing) return failed('publish_account_not_found', 'The selected publishing account does not exist.')
-      const name = text(input.name) || existing?.name || ''
-      const cloudPhoneId = text(input.cloudPhoneId) || existing?.cloudPhoneId || ''
-      const cloudPhoneName = text(input.cloudPhoneName) || existing?.cloudPhoneName || ''
-      if (!name || !cloudPhoneId || !cloudPhoneName) {
-        return failed('missing_publish_account_fields', 'Publishing account name, cloud phone identifier, and cloud phone name are required.')
-      }
-      const saved = await capabilityDependencies.savePublishAccount(userId, {
-        ...(existing ? { id: existing.id } : {}),
-        name,
-        cloudPhoneId,
-        cloudPhoneName,
-        geelarkAccountId: text(input.externalAccountId) || existing?.geelarkAccountId,
-        remark: Object.prototype.hasOwnProperty.call(input, 'remark') ? text(input.remark) : existing?.remark,
-        status: text(input.status) === 'disabled' ? 'disabled' : 'active',
-      })
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: saved.name,
-        uri: `agent-publishing-account://${saved.id}`,
-        metadata: { action, publishAccountId: saved.id, status: saved.status, cloudPhoneId: saved.cloudPhoneId },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`${existing ? 'Updated' : 'Created'} publishing account ${saved.id}`], externalRefs: { publishAccountId: saved.id } })
-    }
-
-    if (action === 'account_delete') {
-      const accountId = text(input.publishAccountId || input.accountId)
-      if (!accountId) return failed('missing_publish_account', 'Select a publishing account before deletion.')
-      const existing = (await capabilityDependencies.listPublishAccounts(userId)).find((item) => item.id === accountId)
-      if (!existing) return failed('publish_account_not_found', 'The selected publishing account does not exist.')
-      await capabilityDependencies.removePublishAccount(userId, accountId)
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: `Deleted publishing account ${existing.name}`,
-        uri: `agent-publishing-account-action://${context.step.id}`,
-        metadata: { action, publishAccountId: accountId, deleted: true },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`Deleted publishing account ${accountId}`], externalRefs: { publishAccountId: accountId } })
-    }
-
-    if (action === 'music_save') {
-      const presetId = text(input.musicPresetId || input.presetId)
-      const existing = presetId ? (await capabilityDependencies.listMusicPresets(userId)).find((item) => item.id === presetId) : undefined
-      if (presetId && !existing) return failed('music_preset_not_found', 'The selected music preset does not exist.')
-      const label = text(input.label) || existing?.label || ''
-      const refVideoId = text(input.refVideoId) || existing?.refVideoId || ''
-      if (!label || !refVideoId) return failed('missing_music_preset_fields', 'Music preset label and reference video identifier are required.')
-      const saved = await capabilityDependencies.saveMusicPreset(userId, {
-        ...(existing ? { id: existing.id } : {}),
-        label,
-        refVideoId,
-        remark: Object.prototype.hasOwnProperty.call(input, 'remark') ? text(input.remark) : existing?.remark,
-      })
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: saved.label,
-        uri: `agent-publishing-music://${saved.id}`,
-        metadata: { action, musicPresetId: saved.id, refVideoId: saved.refVideoId },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`${existing ? 'Updated' : 'Created'} music preset ${saved.id}`], externalRefs: { musicPresetId: saved.id } })
-    }
-
-    if (action === 'music_delete') {
-      const presetId = text(input.musicPresetId || input.presetId)
-      if (!presetId) return failed('missing_music_preset', 'Select a music preset before deletion.')
-      const existing = (await capabilityDependencies.listMusicPresets(userId)).find((item) => item.id === presetId)
-      if (!existing) return failed('music_preset_not_found', 'The selected music preset does not exist.')
-      await capabilityDependencies.removeMusicPreset(userId, presetId)
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: `Deleted music preset ${existing.label}`,
-        uri: `agent-publishing-music-action://${context.step.id}`,
-        metadata: { action, musicPresetId: presetId, deleted: true },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`Deleted music preset ${presetId}`], externalRefs: { musicPresetId: presetId } })
-    }
-
-    if (action === 'task_sync') {
-      const taskId = text(input.publishTaskId || input.taskId)
-      if (!taskId) return failed('missing_publish_task', 'Select a publishing task before synchronization.')
-      const existing = (await capabilityDependencies.listPublishTasks(userId)).find((item) => item.id === taskId)
-      if (!existing) return failed('publish_task_not_found', 'The selected publishing task does not exist.')
-      const synced = await capabilityDependencies.syncPublishTask(userId, taskId)
-      const artifactId = context.registerArtifact({
-        kind: 'publish_receipt',
-        name: `Publishing task ${taskId}`,
-        uri: `agent-publish://${taskId}`,
-        metadata: {
-          action,
-          taskId,
-          status: synced.status,
-          failCode: synced.failCode,
-          failDesc: synced.failDesc,
-          lastSyncAt: synced.lastSyncAt,
-          resultImages: synced.resultImages,
-        },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: synced.status === 'completed' ? 'published' : 'referenced',
-      })
-      return completed({
-        status: synced.status === 'failed' ? 'failed' : synced.status === 'waiting' || synced.status === 'in_progress' ? 'accepted' : 'completed',
-        success: synced.status !== 'failed',
-        artifactIds: [artifactId],
-        logs: [`Synchronized publishing task ${taskId}`],
-        warnings: synced.failDesc ? [synced.failDesc] : [],
-        retryable: synced.status === 'failed',
-        externalRefs: { publishTaskId: taskId, externalTaskId: text(synced.geelarkTaskId) },
-        ...(synced.status === 'failed' ? { error: { code: 'publish_task_failed', message: text(synced.failDesc) || 'Publishing task failed.' } } : {}),
-      })
-    }
-
-    return failed('unsupported_publishing_action', 'Choose account_save, account_delete, music_save, music_delete, or task_sync.')
-  },
-}
-
 const exportBinding: AgentCapabilityBinding = {
   id: 'binding.artifact.export.local.v1',
   capabilityId: 'Artifact.Export',
@@ -2438,8 +2242,6 @@ export const capabilityDefinitions: AgentCapabilityDefinition[] = [
   { id: 'LivePhoto.Manage', version: 1, title: 'Manage live photo', description: 'Retry, pause, resume, subtitle, export, or delete existing Live Photo work.', intentType: 'Intent.LivePhotoManage', expectedArtifacts: ['report'], bindings: [livePhotoManageBinding] },
   { id: 'Subtitle.Generate', version: 1, title: 'Generate subtitles', description: 'Create subtitle packaging for an existing video.', intentType: 'Intent.SubtitleGenerate', expectedArtifacts: ['video'], bindings: [subtitleBinding] },
   { id: 'Video.Slice', version: 1, title: 'Split video', description: 'Split a long local video into reusable segment files.', intentType: 'Intent.VideoSlice', expectedArtifacts: ['video'], bindings: [videoSliceBinding] },
-  { id: 'Video.Publish', version: 1, title: 'Publish video', description: 'Submit an approved video to an approved account.', intentType: 'Intent.VideoPublish', expectedArtifacts: ['publish_receipt'], bindings: [publishBinding] },
-  { id: 'Publishing.Manage', version: 1, title: 'Manage publishing', description: 'Manage publishing accounts, music presets, and existing publishing tasks.', intentType: 'Intent.PublishingManage', expectedArtifacts: ['report', 'publish_receipt'], bindings: [publishingManageBinding] },
   { id: 'SourceVideo.Import', version: 1, title: 'Import source videos', description: 'Import source videos from approved sharing links.', intentType: 'Intent.SourceVideoImport', expectedArtifacts: ['source_video'], bindings: [sourceVideoImportBinding] },
   { id: 'SourceVideo.Manage', version: 1, title: 'Manage source videos', description: 'Retry or delete an existing source video.', intentType: 'Intent.SourceVideoManage', expectedArtifacts: ['report'], bindings: [sourceVideoManageBinding] },
   { id: 'Listing.Generate', version: 1, title: 'Generate listing', description: 'Generate listing copy and product images.', intentType: 'Intent.ListingGenerate', expectedArtifacts: ['listing', 'image'], bindings: [listingGenerateBinding] },

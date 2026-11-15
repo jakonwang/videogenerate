@@ -46,7 +46,6 @@ import { registerAgentOsIpc } from './ipc/registerAgentOsIpc'
 import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
 import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
 import { registerDianxiaomiInventoryIpc } from './ipc/registerDianxiaomiInventoryIpc'
-import { registerTiktokCreatorOutreachIpc } from './ipc/registerTiktokCreatorOutreachIpc'
 import { registerTiktokCreatorHubIpc } from './ipc/registerTiktokCreatorHubIpc'
 import { closeCreatorHubDb } from './modules/tiktok-creator-hub/repo'
 import { registerProductWatermarkIpc } from './ipc/registerProductWatermarkIpc'
@@ -1756,7 +1755,6 @@ function wireIpc() {
   registerStorageManagementIpc(ipcMain)
   registerTiktokGmvMaxIpc(ipcMain)
   registerDianxiaomiInventoryIpc(ipcMain, () => mainWindow)
-  registerTiktokCreatorOutreachIpc(ipcMain)
   registerTiktokCreatorHubIpc(ipcMain)
   registerProductWatermarkIpc(ipcMain)
   registerAssetLibraryIpc(ipcMain)

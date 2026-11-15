@@ -28,10 +28,20 @@ function emptyDb(): AgentOsDb {
   }
 }
 
+// Retired with the Geelark publisher plugin; stripped from previously saved data.
+const removedEmployeeIds = new Set(['employee.publish'])
+const removedIds = new Set<string>(['Intent.VideoPublish', 'Intent.PublishingManage', 'Video.Publish', 'Publishing.Manage'])
+
 function normalizeDb(input: AgentOsDb | null | undefined): AgentOsDb {
   const fallback = emptyDb()
   const db = input && typeof input === 'object' ? input : fallback
-  const persistedEmployees = Array.isArray(db.employees) ? db.employees : []
+  const persistedEmployees = (Array.isArray(db.employees) ? db.employees : [])
+    .filter((item) => !removedEmployeeIds.has(item.id))
+    .map((item) => ({
+      ...item,
+      allowedIntents: (item.allowedIntents || []).filter((id) => !removedIds.has(id)),
+      allowedCapabilities: (item.allowedCapabilities || []).filter((id) => !removedIds.has(id)),
+    }))
   const persistedById = new Map(persistedEmployees.map((item) => [item.id, item]))
   const employees = builtInEmployeeManifests.map((manifest) => {
     const persisted = persistedById.get(manifest.id)

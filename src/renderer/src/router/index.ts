@@ -83,11 +83,6 @@ const router = createRouter({
           component: () => import("@/ui/views/PluginsView.vue"),
         },
         {
-          path: "plugins/geelark-publisher",
-          name: "plugin-geelark-publisher",
-          component: () => import("@/ui/views/GeelarkPublisherView.vue"),
-        },
-        {
           path: "plugins/live-photo-generator",
           name: "plugin-live-photo-generator",
           component: () => import("@/ui/views/LivePhotoGeneratorView.vue"),
@@ -123,11 +118,6 @@ const router = createRouter({
           component: () => import("@/ui/views/TiktokCreatorHubView.vue"),
         },
         {
-          path: "plugins/tiktok-creator-outreach",
-          name: "plugin-tiktok-creator-outreach",
-          component: () => import("@/ui/views/TiktokCreatorOutreachView.vue"),
-        },
-        {
           path: "publish",
           name: "publish",
           component: () => import("@/ui/views/TiktokBatchPublisherView.vue"),
@@ -141,11 +131,6 @@ const router = createRouter({
           path: "plugins/tiktok-gmv-max-optimizer",
           name: "plugin-tiktok-gmv-max-optimizer",
           component: () => import("@/ui/views/TiktokGmvMaxOptimizerView.vue"),
-        },
-        {
-          path: "plugins/geelark-publisher/publish-center",
-          name: "plugin-geelark-publish-center",
-          component: () => import("@/ui/views/GeelarkPublishCenterView.vue"),
         },
         {
           path: "plugins/video-parser-download",

@@ -129,17 +129,6 @@ export const pluginDefinitions: PluginDefinition[] = [
     configSchema: [],
   },
   {
-    id: "tiktok-creator-outreach",
-    name: "TikTok Creator Outreach",
-    category: "ecommerce_listing",
-    description: "Use an isolated TikTok Affiliate session to review creators and prepare confirmed invite or message batches.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-creator-outreach",
-    usageHint: "Sign in inside the app, review creator rows, preview a batch, and confirm each external action.",
-    configSchema: [],
-  },
-  {
     id: "tiktok-listing-helper",
     name: "TikTok 商品上架助手",
     category: "ecommerce_listing",
@@ -316,37 +305,6 @@ export const pluginDefinitions: PluginDefinition[] = [
         type: "boolean",
         description:
           "开启后，在 capcut-mate 失败时允许自动回退到 ASS 导出链路。",
-      },
-    ],
-  },
-  {
-    id: "geelark-publisher",
-    name: "Geelark 发布插件",
-    category: "video_processing",
-    description:
-      "用于把复刻成片发布到 Geelark 云手机，并创建 TikTok 发布任务。",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/geelark-publisher",
-    usageHint: "首期支持 Geelark 云手机 TikTok 视频发布与商品挂车入口闭环。",
-    configSchema: [
-      {
-        key: "baseUrl",
-        label: "Geelark Base URL",
-        type: "text",
-        placeholder: "https://openapi.geelark.com",
-      },
-      {
-        key: "appId",
-        label: "App ID",
-        type: "text",
-        placeholder: "your-geelark-app-id",
-      },
-      {
-        key: "requestTimeoutMs",
-        label: "请求超时(ms)",
-        type: "number",
-        placeholder: "30000",
       },
     ],
   },

@@ -39,10 +39,6 @@ export type PluginCategory = 'video_download' | 'video_processing' | 'ecommerce_
 export type PluginEntryType = 'tool'
 
 export type PluginConfigFieldType = 'text' | 'textarea' | 'number' | 'boolean' | 'select'
-export type GeelarkTaskStatus = 'waiting' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'unknown'
-
-export type GeelarkMusicMode = 'library_ref' | 'manual_ref' | 'volume_only'
-
 export type PluginConfigField = {
   key: string
   label: string
@@ -91,107 +87,6 @@ export type PluginDetail = PluginSummary & {
   usageHint: string
   configSchema: PluginConfigField[]
   config: Record<string, unknown>
-}
-
-export type GeelarkPluginConfigPayload = {
-  baseUrl?: string
-  appId?: string
-  appSecret?: string
-  accessToken?: string
-  requestTimeoutMs?: number
-}
-
-export type GeelarkPluginConfigSummary = {
-  baseUrl: string
-  appId: string
-  requestTimeoutMs: number
-  hasAppSecret: boolean
-  hasAccessToken: boolean
-  updatedAt: number
-}
-
-export type GeelarkCloudPhoneSummary = {
-  id: string
-  serialName: string
-  serialNo?: string
-  status: number
-  rpaStatus?: number
-  remark?: string
-  groupName?: string
-  tags?: string[]
-  proxyServer?: string
-}
-
-export type GeelarkPublishAccount = {
-  id: string
-  name: string
-  platform: 'tiktok'
-  geelarkAccountId?: string
-  cloudPhoneId: string
-  cloudPhoneName: string
-  remark?: string
-  status: 'active' | 'disabled'
-  createdAt: number
-  updatedAt: number
-}
-
-export type GeelarkPublishTaskSummary = {
-  id: string
-  pluginId: string
-  cloneProjectId?: string
-  publishAccountId: string
-  cloudPhoneId: string
-  cloudPhoneName?: string
-  sourceVideoPath: string
-  videoDesc?: string
-  productId?: string
-  productTitle?: string
-  refVideoId?: string
-  sameVideoVolume?: number
-  sourceVideoVolume?: number
-  markAI?: boolean
-  musicMode?: GeelarkMusicMode
-  musicLabel?: string
-  scheduleAt: number
-  geelarkTaskId?: string
-  status: GeelarkTaskStatus
-  failCode?: number
-  failDesc?: string
-  createdAt: number
-  updatedAt: number
-  lastSyncAt?: number
-}
-
-export type GeelarkPublishTaskDetail = GeelarkPublishTaskSummary & {
-  resultImages: string[]
-  logs: string[]
-  raw?: unknown
-}
-
-export type GeelarkMusicPreset = {
-  id: string
-  label: string
-  refVideoId: string
-  remark?: string
-  createdAt: number
-  updatedAt: number
-}
-
-export type GeelarkClonePublishCandidate = {
-  cloneProjectId: string
-  sourceType?: 'clone_final' | 'batch_subtitle_output'
-  sourceProjectId?: string
-  sourceJobId?: string
-  sourceOutputId?: string
-  title: string
-  coverAssetPath: string
-  finalOutputPath: string
-  referenceVideoName: string
-  referenceVideoPath: string
-  updatedAt: number
-  publishedStatus: 'unpublished' | 'published' | 'failed'
-  lastPublishTaskId?: string
-  lastPublishStatus?: GeelarkTaskStatus
 }
 
 export type WebUser = {

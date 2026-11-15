@@ -50,12 +50,6 @@ async function main() {
     creativeFailures: 0,
     creativeDeletes: 0,
     videoSlices: 0,
-    publishes: 0,
-    publishAccountSaves: 0,
-    publishAccountDeletes: 0,
-    publishTaskSyncs: 0,
-    musicPresetSaves: 0,
-    musicPresetDeletes: 0,
     batches: 0,
     enqueues: 0,
     products: 0,
@@ -98,24 +92,6 @@ async function main() {
   ])
   const listings: any[] = []
   const creativeTasks: any[] = []
-  const publishAccounts: any[] = []
-  const musicPresets: any[] = []
-  const publishTasks: any[] = [{
-    id: 'publish-task-1',
-    pluginId: 'geelark-publisher',
-    publishAccountId: 'publish-account-managed',
-    cloudPhoneId: 'cloud-phone-1',
-    cloudPhoneName: 'Cloud Phone 1',
-    sourceVideoPath: path.join(root, 'publish-video.mp4'),
-    scheduleAt: Date.now(),
-    geelarkTaskId: 'external-publish-task-1',
-    status: 'waiting',
-    resultImages: [],
-    logs: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }]
-
   function creativeTask(id: string, status = 'draft') {
     return {
       id,
@@ -383,61 +359,6 @@ async function main() {
       const outputPaths = [path.join(targetDir, 'part_000.mp4'), path.join(targetDir, 'part_001.mp4')]
       await Promise.all(outputPaths.map((outputPath) => writeFile(outputPath, Buffer.from('segment'))))
       return outputPaths
-    }) as any,
-    publishVideo: (async (_token: string, input: any) => {
-      calls.publishes += 1
-      return {
-        id: 'publish-created',
-        publishAccountId: input.publishAccountId,
-        sourceVideoPath: input.videoPath,
-        status: 'waiting',
-      }
-    }) as any,
-    listPublishAccounts: (async () => publishAccounts) as any,
-    savePublishAccount: (async (_userId: string, input: any) => {
-      calls.publishAccountSaves += 1
-      const index = publishAccounts.findIndex((item) => item.id === input.id)
-      const saved = {
-        ...(index >= 0 ? publishAccounts[index] : {}),
-        ...input,
-        id: input.id || 'publish-account-managed',
-        platform: 'tiktok',
-        createdAt: index >= 0 ? publishAccounts[index].createdAt : Date.now(),
-        updatedAt: Date.now(),
-      }
-      if (index >= 0) publishAccounts[index] = saved
-      else publishAccounts.push(saved)
-      return saved
-    }) as any,
-    removePublishAccount: (async (_userId: string, id: string) => {
-      calls.publishAccountDeletes += 1
-      publishAccounts.splice(publishAccounts.findIndex((item) => item.id === id), 1)
-    }) as any,
-    listPublishTasks: (async () => publishTasks) as any,
-    syncPublishTask: (async (_userId: string, id: string) => {
-      calls.publishTaskSyncs += 1
-      const task = publishTasks.find((item) => item.id === id)
-      Object.assign(task, { status: 'completed', lastSyncAt: Date.now(), updatedAt: Date.now(), resultImages: ['result.png'] })
-      return task
-    }) as any,
-    listMusicPresets: (async () => musicPresets) as any,
-    saveMusicPreset: (async (_userId: string, input: any) => {
-      calls.musicPresetSaves += 1
-      const index = musicPresets.findIndex((item) => item.id === input.id)
-      const saved = {
-        ...(index >= 0 ? musicPresets[index] : {}),
-        ...input,
-        id: input.id || 'music-preset-managed',
-        createdAt: index >= 0 ? musicPresets[index].createdAt : Date.now(),
-        updatedAt: Date.now(),
-      }
-      if (index >= 0) musicPresets[index] = saved
-      else musicPresets.push(saved)
-      return saved
-    }) as any,
-    removeMusicPreset: (async (_userId: string, id: string) => {
-      calls.musicPresetDeletes += 1
-      musicPresets.splice(musicPresets.findIndex((item) => item.id === id), 1)
     }) as any,
     createProductionBatch: (async ({ count }: { count: number }) => {
       calls.batches += 1
@@ -994,43 +915,6 @@ async function main() {
     assert.equal(calls.videoSlices, 1)
     assert.equal(sliced.artifacts.filter((item) => item.kind === 'video').length, 2)
     assert.equal(sliced.artifacts[0]?.metadata.segmentTimeSec, 30)
-
-    const publishAccount = await execute('Intent.PublishingManage', {
-      action: 'account_save',
-      name: 'Managed account',
-      cloudPhoneId: 'cloud-phone-1',
-      cloudPhoneName: 'Cloud Phone 1',
-      status: 'active',
-    })
-    assert.equal(calls.publishAccountSaves, 1)
-    assert.equal(publishAccount.artifacts.find((item) => item.kind === 'report')?.metadata.publishAccountId, 'publish-account-managed')
-    const publishVideoPath = path.join(root, 'publish-video.mp4')
-    await writeFile(publishVideoPath, Buffer.from('publish-video'))
-    const published = await execute('Intent.VideoPublish', {
-      videoPath: publishVideoPath,
-      publishAccountId: 'publish-account-managed',
-      videoDesc: 'Deterministic publish test',
-    })
-    assert.equal(calls.publishes, 1)
-    assert.equal(published.artifacts.find((item) => item.kind === 'publish_receipt')?.metadata.taskId, 'publish-created')
-
-    const musicPreset = await execute('Intent.PublishingManage', {
-      action: 'music_save',
-      label: 'Managed music',
-      refVideoId: 'music-reference-1',
-    })
-    assert.equal(calls.musicPresetSaves, 1)
-    assert.equal(musicPreset.artifacts.find((item) => item.kind === 'report')?.metadata.musicPresetId, 'music-preset-managed')
-    const syncedPublishTask = await execute('Intent.PublishingManage', {
-      action: 'task_sync',
-      publishTaskId: 'publish-task-1',
-    })
-    assert.equal(calls.publishTaskSyncs, 1)
-    assert.equal(syncedPublishTask.artifacts.find((item) => item.kind === 'publish_receipt')?.metadata.status, 'completed')
-    await execute('Intent.PublishingManage', { action: 'music_delete', musicPresetId: 'music-preset-managed' })
-    assert.equal(calls.musicPresetDeletes, 1)
-    await execute('Intent.PublishingManage', { action: 'account_delete', publishAccountId: 'publish-account-managed' })
-    assert.equal(calls.publishAccountDeletes, 1)
 
     const deletedProduct = await execute('Intent.ProductManage', { action: 'delete', productId })
     assert.equal(calls.productDeletes, 1)

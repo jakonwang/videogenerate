@@ -44,7 +44,6 @@ import type {
   BatchSubtitleTitleStyleMode,
   BatchSubtitleTrack,
   BatchSubtitleViralTitleConfig,
-  GeelarkClonePublishCandidate,
 } from './types'
 import { webPlatformRepo } from './repo'
 import { isWhisperCompatibleConfigured, transcribeWithWhisperCompatible } from './whisperCompatible'
@@ -1968,23 +1967,6 @@ export async function previewBatchSubtitleFrame(input: {
   }
 }
 
-export async function pushBatchSubtitleOutputsToGeelarkPool(input: { userId: string; jobId: string }) {
-  const current = await webPlatformRepo.getBatchSubtitleJob(input.userId, input.jobId)
-  if (!current) throw new Error('批量字幕任务不存在')
-  const publishableOutputs = current.outputs.filter((item) => item.renderStatus === 'success' && item.outputVideoPath)
-  if (!publishableOutputs.length) throw new Error('当前任务暂无可发布的成功输出')
-  const nextOutputs = current.outputs.map((item) => ({
-    ...item,
-    publishReady: item.renderStatus === 'success' && Boolean(item.outputVideoPath),
-    publishStatus: item.renderStatus === 'success' && item.outputVideoPath ? ('queued' as const) : item.publishStatus,
-    updatedAt: now(),
-  }))
-  return await webPlatformRepo.upsertBatchSubtitleJob({
-    ...current,
-    outputs: nextOutputs,
-  })
-}
-
 export async function generateBatchSubtitleTitles(input: {
   userId: string
   prompt: string
@@ -2093,30 +2075,3 @@ export async function generateBatchSubtitleViralTitles(input: {
   }
 }
 
-export async function buildBatchSubtitlePublishCandidates(userId: string): Promise<GeelarkClonePublishCandidate[]> {
-  const outputs = await listBatchSubtitleOutputs(userId)
-  const jobs = await webPlatformRepo.listBatchSubtitleJobs(userId)
-  const jobMap = new Map(jobs.map((item) => [item.id, item]))
-  return outputs
-    .filter((item) => item.publishReady && item.renderStatus === 'success' && item.outputVideoPath)
-    .map((item) => {
-      const job = jobMap.get(item.jobId)
-      const source = job?.sourceItems.find((row) => row.id === item.sourceItemId)
-      return {
-        cloneProjectId: item.id,
-        sourceType: 'batch_subtitle_output' as const,
-        sourceProjectId: source?.sourceProjectId,
-        sourceJobId: item.jobId,
-        sourceOutputId: item.id,
-        title: item.selectedTitle || source?.fileName || item.id,
-        coverAssetPath: String(item.coverImagePath || '').trim(),
-        finalOutputPath: item.outputVideoPath!,
-        referenceVideoName: source?.fileName || '',
-        referenceVideoPath: source?.sourceVideoPath || item.sourceVideoPath,
-        productReferenceImagePaths: [],
-        updatedAt: item.updatedAt,
-        publishedStatus: (item.publishStatus === 'queued' ? 'published' : 'unpublished') as 'published' | 'unpublished',
-      }
-    })
-    .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
-}
