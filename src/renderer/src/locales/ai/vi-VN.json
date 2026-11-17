@@ -726,5 +726,21 @@
   },
   "pages": {
     "productResearch": "Nghiên cứu sản phẩm"
+  },
+  "cloneShot": {
+    "replace": "Thay video",
+    "fromDisk": "Chọn từ máy tính…",
+    "madeElsewhere": "Dùng kết quả đã có",
+    "lineCreative": "tk Creative",
+    "lineLivePhoto": "Ảnh thành video",
+    "use": "Dùng",
+    "inUse": "Đang dùng",
+    "sendCreative": "Làm lại cảnh này bằng tk Creative",
+    "sendCreativeHint": "Tạo từ ảnh phân cảnh của cảnh này và tự thay vào khi xong (tốn tín dụng tài khoản sáng tạo)",
+    "running": "tk Creative đang tạo",
+    "runningAuto": "tk Creative đang tạo, xong sẽ tự thay vào",
+    "lastFailed": "Lần trước thất bại: {error}",
+    "replaced": "Đã thay video cảnh. Có thể ghép lại video cuối.",
+    "projectSent": "Đã gửi {count} ảnh phân cảnh tới tk Creative. Chọn kết quả trong menu Thay video của từng cảnh."
   }
 }

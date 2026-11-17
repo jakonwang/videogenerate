@@ -926,6 +926,22 @@ function wireIpc() {
       return await cloneService.replaceShotVideoForProject(payload)
     },
   )
+  ipcMain.handle('clone:listShotAlternatives', async (_e, payload: { cloneProjectId: string }) => {
+    const { listCloneShotAlternatives } = await import('./modules/clone/crossLineShots')
+    return await listCloneShotAlternatives(payload)
+  })
+  ipcMain.handle('clone:useShotAlternative', async (_e, payload: { cloneProjectId: string; shotId: string; ref: string }) => {
+    const { useCloneShotAlternative } = await import('./modules/clone/crossLineShots')
+    return await useCloneShotAlternative(payload)
+  })
+  ipcMain.handle('clone:sendProjectToCreative', async (_e, payload: { cloneProjectId: string }) => {
+    const { sendCloneProjectToCreative } = await import('./modules/clone/crossLineShots')
+    return await sendCloneProjectToCreative(payload)
+  })
+  ipcMain.handle('clone:sendShotToCreative', async (_e, payload: { cloneProjectId: string; shotId: string }) => {
+    const { sendCloneShotToCreative } = await import('./modules/clone/crossLineShots')
+    return await sendCloneShotToCreative(payload)
+  })
   ipcMain.handle(
     'clone:composeCloneVideo',
     async (
@@ -1764,6 +1780,7 @@ function wireIpc() {
   registerVideoParserDownloadIpc(ipcMain)
   registerAgentOsIpc(ipcMain, () => mainWindow)
   registerContentHubIpc(ipcMain, () => mainWindow)
+  void import('./modules/clone/crossLineShots').then(({ startCloneShotBackfillWatcher }) => startCloneShotBackfillWatcher()).catch((error) => console.warn('[clone] shot backfill watcher failed to start', error))
   registerVideoWatermarkIpc(ipcMain, () => mainWindow)
   registerStorageManagementIpc(ipcMain)
   registerTiktokGmvMaxIpc(ipcMain)

@@ -90,6 +90,18 @@ export type TiktokCreativeShotTask = {
   subtitleAppliedAt?: number
   exportedAt?: number
   exportedVideoPath?: string
+  /** Clone shot this shot was made for (clone → tk创意室). */
+  sourceCloneShotId?: string
+  /** Swap the finished video into that clone shot automatically. */
+  cloneBackfill?: TiktokCreativeCloneBackfill
+}
+
+export type TiktokCreativeCloneBackfill = {
+  /** Content fingerprint of the clone shot's video when sent; auto-swap is skipped if the user changed it since. */
+  baselineFingerprint?: string
+  status: 'waiting' | 'done' | 'skipped' | 'failed'
+  error?: string
+  updatedAt: number
 }
 
 export type TiktokCreativeTask = {

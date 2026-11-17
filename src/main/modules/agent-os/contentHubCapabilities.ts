@@ -253,7 +253,8 @@ const cloneSendShotsBinding: AgentCapabilityBinding = {
       const productId = text(project.productId)
       if (!productId) return failed('clone_project_without_product', '该复刻项目没有绑定商品，无法送去tk创意室。')
       const task: any = await tiktokCreativeStudioService.createFromReference({ referenceImagePaths: framePaths, productId, mode: text(input.mode) === 'image_to_video' ? 'image_to_video' : undefined })
-      await tiktokCreativeStudioRepoPatchSource(task.id, projectId, text(project.title))
+      const { tagCreativeTaskWithCloneShots } = await import('../clone/crossLineShots')
+      await tagCreativeTaskWithCloneShots(task.id, projectId, shotIds, text(project.title))
       for (const shot of task.shots || []) {
         await lineage.record({ fromRef: `clone:${projectId}`, toRef: `creative:${task.id}:${shot.shotId}`, relation: 'sent_to', productId, meta: { runId: context.run.id } })
       }
@@ -272,12 +273,6 @@ const cloneSendShotsBinding: AgentCapabilityBinding = {
   },
 }
 
-async function tiktokCreativeStudioRepoPatchSource(taskId: string, cloneProjectId: string, title: string) {
-  const { tiktokCreativeStudioRepo } = await import('../tiktok-creative-studio/repo')
-  const task = await tiktokCreativeStudioRepo.get(taskId)
-  if (!task) return
-  await tiktokCreativeStudioRepo.upsert({ ...task, sourceCloneProjectId: cloneProjectId, sourceCloneProjectTitle: title || task.sourceCloneProjectTitle })
-}
 
 // ------------------------------------------------------------------ CreativeStudio.CreateFromImages
 const creativeFromImagesBinding: AgentCapabilityBinding = {

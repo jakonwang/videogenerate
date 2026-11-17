@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import CloneConsoleSidebar from '../components/clone/CloneConsoleSidebar.vue'
 import CloneDataCard from '../components/clone/CloneDataCard.vue'
 import CloneMediaCard from '../components/clone/CloneMediaCard.vue'
+import CloneShotReplaceMenu from '../components/clone/CloneShotReplaceMenu.vue'
 import CloneStageHeader from '../components/clone/CloneStageHeader.vue'
 import CloneStateCard from '../components/clone/CloneStateCard.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
@@ -16,7 +17,7 @@ import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
 import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { storeToRefs } from 'pinia'
-import { AlertTriangle, ArrowRight, Check, Clapperboard, Copy, Download, Eye, FileText, Film, FolderOpen, Hand, Image as ImageIcon, Info, Lightbulb, Link2, LoaderCircle, Lock, LockOpen, Maximize2, Package, Play, RefreshCw, Replace, RotateCw, Save, Search, Send, SlidersHorizontal, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-vue-next'
+import { AlertTriangle, ArrowRight, Check, Clapperboard, Copy, Download, Eye, FileText, Film, FolderOpen, Hand, Image as ImageIcon, Info, Lightbulb, Link2, LoaderCircle, Lock, LockOpen, Maximize2, Package, Play, RefreshCw, RotateCw, Save, Search, Send, SlidersHorizontal, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-vue-next'
 
 const { t: tr } = useI18n()
 const route = useRoute()
@@ -3516,15 +3517,29 @@ async function revealFinalOutput() {
   await window.api.shell.showItemInFolder(finalOutputPath.value)
 }
 
-function openTiktokCreativeStudio() {
+async function openTiktokCreativeStudio() {
   if (!current.value?.id) return
-  void router.push({
-    path: '/plugins/tiktok-creative-studio',
-    query: {
-      cloneProjectId: current.value.id,
-      autoCreate: '1',
-    },
-  })
+  try {
+    const result = await window.api.clone.sendProjectToCreative({ cloneProjectId: current.value.id })
+    setStageLog(tr('ai.cloneShot.projectSent', { count: result.shotCount }), 'success')
+    void router.push({ path: '/plugins/tiktok-creative-studio' })
+  } catch (error: any) {
+    onShotAlternativeError(String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+  }
+}
+
+function onShotAlternativeReplaced(project: unknown) {
+  if (project) {
+    applyProject(project as CloneProject)
+    setStageLog(tr('ai.cloneShot.replaced'), 'success')
+  } else {
+    void refreshCurrentProject()
+  }
+}
+
+function onShotAlternativeError(message: string) {
+  errorText.value = message
+  setStageLog(message, 'error')
 }
 
 let timer: number | null = null
@@ -4716,7 +4731,15 @@ onUnmounted(() => {
                     <span>{{ shotScriptSummary(selectedShotOutput.shotId) }}</span>
                   </div>
                   <div class="cw-btnrow">
-                    <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !selectedShotOutput" @click="selectedShotOutput && replaceShotVideo(selectedShotOutput.shotId)"><Replace :size="13" />{{ tr('autoUi.k_e33ea5f87622') }}</button>
+                    <CloneShotReplaceMenu
+                      v-if="current?.id"
+                      :clone-project-id="current.id"
+                      :shot-id="selectedShotOutput.shotId"
+                      :disabled="loading"
+                      @pick-file="replaceShotVideo(selectedShotOutput.shotId)"
+                      @replaced="onShotAlternativeReplaced"
+                      @error="onShotAlternativeError"
+                    />
                     <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !canContinueSyncShot(selectedShotOutput)" @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"><Search :size="13" />{{ tr('autoUi.k_0f80598c1ffa') }}</button>
                     <button v-if="canRepairShotTaskId(selectedShotOutput)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
                   </div>

@@ -326,6 +326,10 @@ const api = {
       shotId: string
       videoPath: string
     }) => ipcRenderer.invoke('clone:replaceShotVideo', payload),
+    listShotAlternatives: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('clone:listShotAlternatives', payload),
+    useShotAlternative: (payload: { cloneProjectId: string; shotId: string; ref: string }) => ipcRenderer.invoke('clone:useShotAlternative', payload),
+    sendProjectToCreative: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('clone:sendProjectToCreative', payload),
+    sendShotToCreative: (payload: { cloneProjectId: string; shotId: string }) => ipcRenderer.invoke('clone:sendShotToCreative', payload),
     composeCloneVideo: (payload: {
       cloneProjectId: string
       outputDir?: string

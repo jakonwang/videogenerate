@@ -726,5 +726,21 @@
   },
   "pages": {
     "productResearch": "选品中心"
+  },
+  "cloneShot": {
+    "replace": "替换视频",
+    "fromDisk": "从电脑选择…",
+    "madeElsewhere": "用已出的结果",
+    "lineCreative": "tk创意室",
+    "lineLivePhoto": "图生视频",
+    "use": "使用",
+    "inUse": "使用中",
+    "sendCreative": "交给 tk创意室 重做这个镜头",
+    "sendCreativeHint": "用这个镜头的分镜图出片，完成后自动换上（会消耗创意账号额度）",
+    "running": "tk创意室出片中",
+    "runningAuto": "tk创意室出片中，完成后自动换上",
+    "lastFailed": "上次出片失败：{error}",
+    "replaced": "镜头视频已替换，可重新合成最终成片。",
+    "projectSent": "已把 {count} 个分镜交给 tk创意室，出片后可在每个镜头的「替换视频」里选用。"
   }
 }

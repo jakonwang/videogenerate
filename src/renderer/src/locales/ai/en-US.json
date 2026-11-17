@@ -726,5 +726,21 @@
   },
   "pages": {
     "productResearch": "Product research"
+  },
+  "cloneShot": {
+    "replace": "Replace video",
+    "fromDisk": "Choose from computer…",
+    "madeElsewhere": "Use a finished result",
+    "lineCreative": "tk Creative",
+    "lineLivePhoto": "Image to video",
+    "use": "Use",
+    "inUse": "In use",
+    "sendCreative": "Remake this shot in tk Creative",
+    "sendCreativeHint": "Generates from this shot's storyboard frame and swaps it in when done (uses creative account credits)",
+    "running": "tk Creative is generating",
+    "runningAuto": "tk Creative is generating; swaps in when done",
+    "lastFailed": "Last attempt failed: {error}",
+    "replaced": "Shot video replaced. You can re-compose the final video.",
+    "projectSent": "Sent {count} storyboard frames to tk Creative. Pick results from each shot's Replace video menu."
   }
 }
