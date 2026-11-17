@@ -9,6 +9,7 @@ import { contentIndex } from './contentIndex'
 import { runHealthCheck, getHealthReport } from './healthCheck'
 import { buildInsights } from './insights'
 import { contentPerformance } from './performance'
+import { DEFAULT_FEISHU_SETTINGS, buildBriefCard, normalizeFeishuSettings, pushBriefToFeishu, sendFeishuMessage, type FeishuPushSettings } from './feishuPush'
 import { productSpine, readPublishTasks } from './productSpine'
 import { reviewInbox } from './reviewInbox'
 import { brandMemoryStore, lineage } from './stores'
@@ -19,6 +20,7 @@ export type AutomationSettings = {
   weeklyReview: { enabled: boolean; weekday: number; hour: number }
   aiSummary: boolean
   desktopNotifications: boolean
+  feishu: FeishuPushSettings
 }
 
 const DEFAULT_SETTINGS: AutomationSettings = {
@@ -26,6 +28,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   weeklyReview: { enabled: true, weekday: 1, hour: 9 },
   aiSummary: true,
   desktopNotifications: true,
+  feishu: DEFAULT_FEISHU_SETTINGS,
 }
 
 function settingsPath() {
@@ -48,6 +51,16 @@ async function readSettings(): Promise<AutomationSettings> {
     },
     aiSummary: raw.aiSummary ?? DEFAULT_SETTINGS.aiSummary,
     desktopNotifications: raw.desktopNotifications ?? DEFAULT_SETTINGS.desktopNotifications,
+    feishu: normalizeFeishuSettings(raw.feishu),
+  }
+}
+
+async function pushBrief(settings: AutomationSettings, brief: Awaited<ReturnType<typeof briefs.generateDaily>>) {
+  try {
+    await pushBriefToFeishu(settings.feishu, brief)
+  } catch (error) {
+    console.warn('[content-hub] feishu push failed', error)
+    notify('飞书推送失败', error instanceof Error ? error.message : String(error))
   }
 }
 
@@ -84,6 +97,7 @@ async function runScheduledAutomations() {
         const brief = await briefs.generateDaily({ summarize: settings.aiSummary })
         const problems = brief.items.filter((item) => item.level !== 'ok').length
         if (problems) notify('TiktokCut 每日简报', brief.headline)
+        await pushBrief(settings, brief)
         await emitChange('brief')
       }
     }
@@ -92,6 +106,7 @@ async function runScheduledAutomations() {
       if (!latest || latest.periodKey !== briefs.weekKey(now)) {
         const brief = await briefs.generateWeekly({ summarize: settings.aiSummary })
         notify('TiktokCut 每周复盘', brief.headline)
+        await pushBrief(settings, brief)
         await emitChange('brief')
       }
     }
@@ -266,11 +281,32 @@ export const contentHubService = {
       weeklyReview: { ...current.weeklyReview, ...(input.weeklyReview || {}) },
       aiSummary: input.aiSummary ?? current.aiSummary,
       desktopNotifications: input.desktopNotifications ?? current.desktopNotifications,
+      feishu: { ...current.feishu, ...(input.feishu || {}) },
     }
+    if (input.feishu?.webhookUrl !== undefined && String(input.feishu.webhookUrl).trim() && !normalizeFeishuSettings(next.feishu).webhookUrl) {
+      throw new Error('飞书 Webhook 地址无效，请粘贴群机器人的完整 Webhook 地址（https://open.feishu.cn/open-apis/bot/v2/hook/...）')
+    }
+    next.feishu = normalizeFeishuSettings(next.feishu)
     next.dailyBrief.hour = clampHour(next.dailyBrief.hour, 8)
     next.weeklyReview.hour = clampHour(next.weeklyReview.hour, 9)
     await writeJsonFile(settingsPath(), next)
     return next
+  },
+
+  async testFeishuPush(input?: Partial<FeishuPushSettings>) {
+    const current = await readSettings()
+    const target = normalizeFeishuSettings({ ...current.feishu, ...(input || {}) })
+    if (!target.webhookUrl) throw new Error('请先填写有效的飞书 Webhook 地址')
+    await sendFeishuMessage(target, { msg_type: 'text', content: { text: 'TiktokCut：飞书推送已连通，之后的每日简报和每周复盘会发到这个群。' } })
+    return { ok: true }
+  },
+  async pushLatestBrief(kind: 'daily' | 'weekly') {
+    const settings = await readSettings()
+    if (!settings.feishu.webhookUrl) throw new Error('请先填写有效的飞书 Webhook 地址')
+    const brief = kind === 'weekly' ? await briefs.latest('weekly') : await briefs.generateDaily({ summarize: settings.aiSummary })
+    if (!brief) throw new Error('还没有每周复盘，可先在数据复盘页生成')
+    await sendFeishuMessage(settings.feishu, buildBriefCard(brief))
+    return { ok: true }
   },
 
   // ---------- products

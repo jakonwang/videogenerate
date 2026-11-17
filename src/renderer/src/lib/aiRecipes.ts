@@ -80,6 +80,20 @@ export const AI_RECIPES: Recipe[] = [
       { key: 'links', type: 'links', labelKey: 'ai.fields.viralLinks', hintKey: 'ai.fields.viralLinksHint', required: true, when: { key: 'referenceMode', equals: 'links' } },
       { key: 'variantCount', type: 'number', labelKey: 'ai.fields.variantCount', hintKey: 'ai.fields.variantCountHint', min: 1, max: 6, defaultValue: 2 },
       { key: 'livePhoto', type: 'toggle', labelKey: 'ai.fields.shotsToLivePhoto', defaultValue: true },
+      { key: 'listing', type: 'toggle', labelKey: 'ai.fields.autopilotListing', hintKey: 'ai.fields.autopilotListingHint', defaultValue: false },
+      { key: 'listingPrice', type: 'text', labelKey: 'ai.fields.listingPrice', hintKey: 'ai.fields.listingPriceHint', required: true, when: { key: 'listing', equals: true } },
+      {
+        key: 'titleLanguage',
+        type: 'select',
+        labelKey: 'ai.fields.listingLanguage',
+        defaultValue: 'en-US',
+        when: { key: 'listing', equals: true },
+        options: [
+          { value: 'en-US', labelKey: 'ai.fields.langEn' },
+          { value: 'vi-VN', labelKey: 'ai.fields.langVi' },
+          { value: 'zh-CN', labelKey: 'ai.fields.langZh' },
+        ],
+      },
       { key: 'autoApprove', type: 'toggle', labelKey: 'ai.fields.autoApprove', hintKey: 'ai.fields.autoApproveHint', defaultValue: false },
       { key: 'startAt', type: 'datetime', labelKey: 'ai.fields.startAt', hintKey: 'ai.fields.startAtHint', when: { key: 'autoApprove', equals: true } },
       { key: 'intervalHours', type: 'number', labelKey: 'ai.fields.intervalHours', min: 0, max: 72, defaultValue: 4, when: { key: 'autoApprove', equals: true } },
@@ -98,6 +112,7 @@ export const AI_RECIPES: Recipe[] = [
         ...(values.livePhoto ? ['Intent.CloneShotsSend'] : []),
         'Intent.OutputsAwait',
         'Intent.ReviewSubmit',
+        ...(values.listing ? ['Intent.ListingGenerate'] : []),
         ...(autoApprove ? ['Intent.PublishDraft'] : []),
         'Intent.InsightsRead',
       ]
@@ -115,6 +130,10 @@ export const AI_RECIPES: Recipe[] = [
         context.productName = String(values.productName || '').trim()
       }
       if (values.source === 'products') context.productIds = Array.isArray(values.productIds) ? values.productIds : []
+      if (values.listing) {
+        context.listingPrice = String(values.listingPrice || '').trim()
+        context.titleLanguage = String(values.titleLanguage || 'en-US')
+      }
       if (useLinks) context.shareUrls = links
       else context.referenceCount = Number(values.referenceCount || 1)
       if (autoApprove) {
@@ -124,7 +143,12 @@ export const AI_RECIPES: Recipe[] = [
       return {
         prompt: t('ai.recipes.autopilot.prompt'),
         context,
-        plan: { intents, summary: t('ai.recipes.autopilot.summary', { publish: autoApprove ? t('ai.recipes.autopilot.summaryPublish') : '' }) },
+        plan: {
+          intents,
+          summary: t('ai.recipes.autopilot.summary', {
+            publish: (values.listing ? t('ai.recipes.autopilot.summaryListing') : '') + (autoApprove ? t('ai.recipes.autopilot.summaryPublish') : ''),
+          }),
+        },
       }
     },
   },

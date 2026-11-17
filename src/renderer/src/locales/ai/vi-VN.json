@@ -206,7 +206,8 @@
       "output": "Kết quả: N video mỗi sản phẩm + Live Photo + bản nháp đăng bài + gợi ý tiếp theo",
       "prompt": "Tự động toàn trình: đưa sản phẩm đến video hoàn chỉnh, kiểm duyệt và bản nháp đăng bài",
       "summary": "Kiểm tra hệ thống → chuẩn bị sản phẩm → tìm video tham khảo → dựng video → chờ xuất video → kiểm duyệt{publish} → tổng kết",
-      "summaryPublish": " → bản nháp đăng bài"
+      "summaryPublish": " → bản nháp đăng bài",
+      "summaryListing": " → nội dung đăng bán"
     }
   },
   "fields": {
@@ -251,7 +252,15 @@
     "referenceCount": "Số video tham khảo cho mỗi sản phẩm",
     "referenceCountHint": "Mỗi video tham khảo tạo một dự án dựng lại cho mỗi sản phẩm",
     "autoApprove": "Tự động duyệt video hoàn chỉnh và tạo bản nháp đăng bài",
-    "autoApproveHint": "Chỉ áp dụng cho kết quả của lần chạy này; bạn vẫn xác nhận đăng bài tại Trung tâm đăng bài"
+    "autoApproveHint": "Chỉ áp dụng cho kết quả của lần chạy này; bạn vẫn xác nhận đăng bài tại Trung tâm đăng bài",
+    "autopilotListing": "Tạo luôn nội dung và ảnh đăng bán",
+    "autopilotListingHint": "Trợ lý đăng bán TikTok viết tiêu đề, mô tả và ảnh cho từng sản phẩm (bông tai / nhẫn / dây chuyền / vòng tay / ốp điện thoại)",
+    "listingPrice": "Giá hiển thị",
+    "listingPriceHint": "Giá theo tiền tệ của shop, ví dụ 9.99",
+    "listingLanguage": "Ngôn ngữ tiêu đề",
+    "langEn": "Tiếng Anh",
+    "langVi": "Tiếng Việt",
+    "langZh": "Tiếng Trung"
   },
   "inbox": {
     "title": "Hộp duyệt",
@@ -495,7 +504,16 @@
       "4": "Thứ năm",
       "5": "Thứ sáu",
       "6": "Thứ bảy"
-    }
+    },
+    "feishu": "Gửi tới nhóm Feishu",
+    "feishuDesc": "Gửi kèm bản tin ngày và tổng kết tuần tới nhóm Feishu/Lark (cài đặt nhóm → bot → bot tùy chỉnh)",
+    "feishuSetup": "Thiết lập",
+    "feishuWebhook": "Địa chỉ Webhook",
+    "feishuWebhookHint": "Thêm bot tùy chỉnh vào nhóm Feishu rồi sao chép địa chỉ webhook của nó.",
+    "feishuSecret": "Khóa ký (không bắt buộc)",
+    "feishuSecretPlaceholder": "Chỉ cần khi bot bật xác minh chữ ký",
+    "feishuTest": "Gửi tin thử",
+    "feishuTestOk": "Đã gửi, hãy xem nhóm Feishu"
   },
   "home": {
     "kicker": "Đội ngũ nội dung bán hàng AI",

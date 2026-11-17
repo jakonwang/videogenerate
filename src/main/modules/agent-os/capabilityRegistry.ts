@@ -22,6 +22,7 @@ import { contentHubCapabilityDefinitions, contentHubIntentCapabilities } from '.
 import { pipelineProductIds, pipelineReferenceVideos } from './pipelineContext'
 import type {
   AgentArtifact,
+  AgentAdapterContext,
   AgentCapabilityBinding,
   AgentCapabilityDefinition,
   AgentCapabilityId,
@@ -1698,7 +1699,12 @@ const listingGenerateBinding: AgentCapabilityBinding = {
   getModelSnapshot: safeModelSnapshot,
   execute: async (input, context) => {
     const listingId = text(input.listingId)
-    if (!listingId) return failed('missing_listing', 'Select a listing record before generation.')
+    if (!listingId) {
+      // Pipelines (autopilot): build a listing record for each product an earlier step prepared.
+      const productIds = pipelineProductIds(input, context)
+      if (!productIds.length) return failed('missing_listing', 'Select a listing record before generation.')
+      return await generateListingsForProducts(productIds, input, context)
+    }
     const item = await capabilityDependencies.generateListing({ id: listingId })
     const listingArtifactId = context.registerArtifact({
       kind: 'listing',
@@ -1742,6 +1748,72 @@ const listingGenerateBinding: AgentCapabilityBinding = {
       externalRefs: { listingId: item.id },
     })
   },
+}
+
+function productListingImage(product: Awaited<ReturnType<typeof productsRepo.list>>[number]) {
+  const images = product.images || []
+  const candidates = [
+    product.coverImagePath,
+    images.find((image) => image.isCover)?.filePath,
+    ...images.map((image) => image.filePath),
+    product.canonicalSourcePath,
+  ]
+  return candidates.map((value) => text(value)).find((value) => value && existsSync(value)) || ''
+}
+
+function listingSkuFor(product: { id: string; name: string }) {
+  const base = text(product.name).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 24)
+  return `${base || 'SKU'}-${product.id.slice(0, 6)}`.toUpperCase()
+}
+
+async function generateListingsForProducts(productIds: string[], input: Record<string, unknown>, context: AgentAdapterContext) {
+  const price = text(input.listingPrice || input.localDisplayPrice)
+  if (!price) return failed('missing_listing_price', 'Add a local display price so listing copy can be generated.')
+  const titleLanguage = listingLanguages.has(text(input.titleLanguage)) ? text(input.titleLanguage) : 'en-US'
+  const products = await productsRepo.list()
+  const existing = await capabilityDependencies.listListings()
+  const results: AgentToolResult[] = []
+  const warnings: string[] = []
+  for (const productId of productIds.slice(0, 12)) {
+    const product = products.find((item) => item.id === productId)
+    if (!product) {
+      warnings.push(`Product ${productId} no longer exists.`)
+      continue
+    }
+    if (!listingCategories.has(product.type)) {
+      warnings.push(`${product.name}: listing copy supports earrings, rings, necklaces, bracelets and phone cases only.`)
+      continue
+    }
+    const sourceImagePath = productListingImage(product)
+    if (!sourceImagePath) {
+      warnings.push(`${product.name}: add a product image before generating listing copy.`)
+      continue
+    }
+    const sku = listingSkuFor(product)
+    const current = existing.find((item) => item.sku === sku)
+    const saved = await capabilityDependencies.saveListing({
+      ...(current ? { id: current.id } : {}),
+      sourceImagePath,
+      referenceImagePaths: (product.images || []).map((image) => image.filePath).filter((path) => path !== sourceImagePath && existsSync(path)).slice(0, 4),
+      category: product.type as any,
+      sku,
+      localDisplayPrice: price,
+      titleLanguage: titleLanguage as any,
+    })
+    results.push(await listingGenerateBinding.execute({ ...input, listingId: saved.id }, context))
+  }
+  if (!results.length) {
+    return failed('no_listing_products', warnings[0] || 'No product in this run can be listed.')
+  }
+  const ok = results.filter((result) => result.success)
+  return completed({
+    success: ok.length > 0,
+    status: ok.length === results.length && !warnings.length ? 'completed' : ok.length ? 'partial' : 'failed',
+    artifactIds: results.flatMap((result) => result.artifactIds),
+    logs: results.flatMap((result) => result.logs),
+    warnings: [...warnings, ...results.flatMap((result) => result.warnings)],
+    ...(ok.length ? {} : { error: results[0]?.error }),
+  })
 }
 
 const listingExportBinding: AgentCapabilityBinding = {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { configureAppPathRuntime } from '../src/main/lib/paths'
@@ -218,6 +218,45 @@ async function main() {
     const livePhotoOnly = await publishBinding.execute({ scope: 'run' }, context([{ id: 'report-1', kind: 'report', metadata: reviewReport.metadata }]))
     assert.equal(livePhotoOnly.success, false, 'Live Photos are not turned into video publish drafts')
     assert.equal((await contentIndex.list({ line: 'publish' })).length, 0, 'no publish drafts were created')
+
+    // Listing copy step: one listing per pipeline product, never with an invented price.
+    const listingRecipe = AI_RECIPES[0]
+    const listingValues = defaultRecipeValues(listingRecipe, { source: 'products', productIds: ['p1'], listing: true })
+    assert.deepEqual(recipeMissingFields(listingRecipe, listingValues).map((field) => field.key), ['listingPrice'], 'price is required for listing copy')
+    const listingBuild = listingRecipe.build({ ...listingValues, listingPrice: '9.99' }, t)
+    assert.ok(listingBuild.plan.intents.includes('Intent.ListingGenerate'))
+    assert.equal(listingBuild.context.listingPrice, '9.99')
+    assert.equal(listingBuild.context.titleLanguage, 'en-US')
+    assert.ok(!listingRecipe.build(defaultRecipeValues(listingRecipe, { source: 'products', productIds: ['p1'] }), t).plan.intents.includes('Intent.ListingGenerate'), 'listing is opt-in')
+
+    const imageDir = path.join(root, 'listing-images')
+    await mkdir(imageDir, { recursive: true })
+    await writeFile(path.join(imageDir, 'ring.png'), 'png')
+    const ring = await productsRepo.upsert({ name: 'Silver Ring', type: 'ring', images: [{ filePath: path.join(imageDir, 'ring.png') } as any] })
+    const bag = await productsRepo.upsert({ name: 'Tote Bag', type: 'bag', images: [{ filePath: path.join(imageDir, 'ring.png') } as any] })
+    const savedListings: any[] = []
+    registry.setAgentCapabilityTestDependencies({
+      listListings: (async () => savedListings) as any,
+      saveListing: (async (input: any) => {
+        const row = { ...input, id: input.id || `listing-${savedListings.length + 1}`, listingImages: [], generationStatus: 'idle' }
+        savedListings.push(row)
+        return row
+      }) as any,
+      generateListing: (async ({ id }: { id: string }) => ({ ...savedListings.find((row) => row.id === id), generatedTitle: 'Silver Ring', generationStatus: 'done', listingImages: [] })) as any,
+    })
+    const listingBinding = await bindingFor('Intent.ListingGenerate')
+    const productArtifacts = [ring, bag].map((product) => ({ id: `a-${product.id}`, kind: 'product', metadata: { productId: product.id } }))
+    const noPrice = await listingBinding.execute({}, context(productArtifacts))
+    assert.equal(noPrice.success, false)
+    assert.equal(noPrice.error?.code, 'missing_listing_price')
+    const listed = await listingBinding.execute({ listingPrice: '9.99' }, context(productArtifacts))
+    assert.equal(listed.success, true, JSON.stringify(listed))
+    assert.equal(listed.status, 'partial', 'unsupported category is reported, not silently dropped')
+    assert.equal(savedListings.length, 1)
+    assert.equal(savedListings[0].category, 'ring')
+    assert.equal(savedListings[0].localDisplayPrice, '9.99')
+    assert.equal(savedListings[0].sourceImagePath, ring.images![0].filePath, 'uses the product library image')
+    assert.ok(listed.warnings.some((warning: string) => /Tote Bag/.test(warning)))
 
     console.log('autopilot-pipeline smoke: ok')
   } finally {

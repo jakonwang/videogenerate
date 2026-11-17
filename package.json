@@ -119,6 +119,7 @@
     "test:product-spine": "tsx test/product-spine.smoke.ts",
     "test:product-spine:e2e": "node test/product-spine.e2e.cjs",
     "test:autopilot-pipeline": "tsx test/autopilot-pipeline.smoke.ts",
+    "test:feishu-brief-push": "tsx test/feishu-brief-push.smoke.ts",
     "test:video-watermark": "tsx test/video-watermark.smoke.ts",
     "test:gmv-max-diagnosis": "tsx test/gmv-max-diagnosis.smoke.ts",
     "test:gmv-max-manual-alerts": "tsx test/gmv-max-manual-alerts.smoke.ts",

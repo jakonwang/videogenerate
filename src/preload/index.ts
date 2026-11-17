@@ -1297,6 +1297,8 @@ const api = {
     listBriefs: (limit?: number) => ipcRenderer.invoke('contentHub:listBriefs', limit),
     getAutomationSettings: () => ipcRenderer.invoke('contentHub:getAutomationSettings'),
     saveAutomationSettings: (payload: any) => ipcRenderer.invoke('contentHub:saveAutomationSettings', payload),
+    testFeishuPush: (payload?: { webhookUrl?: string; secret?: string }) => ipcRenderer.invoke('contentHub:testFeishuPush', payload),
+    pushLatestBrief: (kind: 'daily' | 'weekly') => ipcRenderer.invoke('contentHub:pushLatestBrief', kind),
     importProductFromLink: (payload: { url: string; name?: string; type?: string }) => ipcRenderer.invoke('contentHub:importProductFromLink', payload),
     onChanged: (callback: (payload: { kind: string; counts?: { pending: number; approved: number; redo: number; discarded: number } }) => void) => {
       const handler = (_event: unknown, payload: any) => callback(payload)

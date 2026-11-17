@@ -206,7 +206,8 @@
       "output": "Output: N videos per product + Live Photos + publish drafts + next-step insights",
       "prompt": "Autopilot: take products all the way to finished videos, review and publish drafts",
       "summary": "Health check → prepare products → find references → clone videos → wait for outputs → review{publish} → insights",
-      "summaryPublish": " → publish drafts"
+      "summaryPublish": " → publish drafts",
+      "summaryListing": " → listing copy"
     }
   },
   "fields": {
@@ -251,7 +252,15 @@
     "referenceCount": "Reference videos per product",
     "referenceCountHint": "Each reference video becomes one clone project per product",
     "autoApprove": "Auto-approve finished videos and create publish drafts",
-    "autoApproveHint": "Only applies to outputs of this run; you still confirm publishing in the Publish Center"
+    "autoApproveHint": "Only applies to outputs of this run; you still confirm publishing in the Publish Center",
+    "autopilotListing": "Also generate listing copy and images",
+    "autopilotListingHint": "TikTok listing helper writes a title, description and listing images for each product (earrings / rings / necklaces / bracelets / phone cases)",
+    "listingPrice": "Local display price",
+    "listingPriceHint": "Price in the shop currency, e.g. 9.99",
+    "listingLanguage": "Title language",
+    "langEn": "English",
+    "langVi": "Vietnamese",
+    "langZh": "Chinese"
   },
   "inbox": {
     "title": "Review inbox",
@@ -495,7 +504,16 @@
       "4": "Thursday",
       "5": "Friday",
       "6": "Saturday"
-    }
+    },
+    "feishu": "Push to Feishu group",
+    "feishuDesc": "Also send the daily brief and weekly review to a Feishu/Lark group (group settings → bots → custom bot)",
+    "feishuSetup": "Set up",
+    "feishuWebhook": "Webhook URL",
+    "feishuWebhookHint": "Add a custom bot to the Feishu group and copy its webhook URL.",
+    "feishuSecret": "Signing secret (optional)",
+    "feishuSecretPlaceholder": "Only needed if the bot has signature verification on",
+    "feishuTest": "Send test message",
+    "feishuTestOk": "Sent — check the Feishu group"
   },
   "home": {
     "kicker": "Your AI commerce content team",

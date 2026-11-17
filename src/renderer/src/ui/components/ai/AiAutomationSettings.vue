@@ -2,20 +2,36 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Activity, AlarmClock, CheckCircle2, AlertTriangle, XCircle, RefreshCcw, Save } from 'lucide-vue-next'
+import { Activity, AlarmClock, CheckCircle2, AlertTriangle, XCircle, RefreshCcw, Save, Send } from 'lucide-vue-next'
 
 type Health = { checkedAt: number; level: string; items: Array<{ key: string; level: 'ok' | 'warning' | 'error'; title: string; detail: string; route?: string }> }
 
 const { t } = useI18n()
 const router = useRouter()
-const settings = ref({ dailyBrief: { enabled: true, hour: 8 }, weeklyReview: { enabled: true, weekday: 1, hour: 9 }, aiSummary: true, desktopNotifications: true })
+const settings = ref({
+  dailyBrief: { enabled: true, hour: 8 },
+  weeklyReview: { enabled: true, weekday: 1, hour: 9 },
+  aiSummary: true,
+  desktopNotifications: true,
+  feishu: { enabled: false, webhookUrl: '', secret: '', daily: true, weekly: true },
+})
 const health = ref<Health | null>(null)
 const checking = ref(false)
 const saving = ref(false)
 const saved = ref(false)
+const saveError = ref('')
+const feishuOpen = ref(false)
+const feishuTesting = ref(false)
+const feishuResult = ref<{ ok: boolean; text: string } | null>(null)
+
+function errorText(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error)
+  return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+}
 
 async function load() {
   settings.value = (await window.api.contentHub.getAutomationSettings()) as typeof settings.value
+  feishuOpen.value = settings.value.feishu.enabled
   health.value = (await window.api.contentHub.healthCheck(false)) as Health
 }
 
@@ -30,13 +46,34 @@ async function check() {
 
 async function save() {
   saving.value = true
+  saveError.value = ''
   try {
     settings.value = (await window.api.contentHub.saveAutomationSettings(JSON.parse(JSON.stringify(settings.value)))) as typeof settings.value
     saved.value = true
     window.setTimeout(() => (saved.value = false), 2000)
+  } catch (error) {
+    saveError.value = errorText(error)
   } finally {
     saving.value = false
   }
+}
+
+async function testFeishu() {
+  feishuTesting.value = true
+  feishuResult.value = null
+  try {
+    await window.api.contentHub.testFeishuPush({ webhookUrl: settings.value.feishu.webhookUrl, secret: settings.value.feishu.secret })
+    feishuResult.value = { ok: true, text: t('ai.automation.feishuTestOk') }
+  } catch (error) {
+    feishuResult.value = { ok: false, text: errorText(error) }
+  } finally {
+    feishuTesting.value = false
+  }
+}
+
+function toggleFeishu() {
+  settings.value.feishu.enabled = !settings.value.feishu.enabled
+  if (settings.value.feishu.enabled) feishuOpen.value = true
 }
 
 onMounted(load)
@@ -93,11 +130,34 @@ onMounted(load)
           <button type="button" class="vg-switch auto__switch" :class="{ 'is-on': settings.desktopNotifications }" @click="settings.desktopNotifications = !settings.desktopNotifications"><span class="vg-switch__track"></span></button>
           <div class="auto__copy"><strong>{{ t('ai.automation.notifications') }}</strong><small>{{ t('ai.automation.notificationsDesc') }}</small></div>
         </div>
+        <div class="auto__row">
+          <button type="button" class="vg-switch auto__switch" data-testid="feishu-toggle" :class="{ 'is-on': settings.feishu.enabled }" @click="toggleFeishu"><span class="vg-switch__track"></span></button>
+          <div class="auto__copy"><strong>{{ t('ai.automation.feishu') }}</strong><small>{{ t('ai.automation.feishuDesc') }}</small></div>
+          <button v-if="!feishuOpen" type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="feishuOpen = true">{{ t('ai.automation.feishuSetup') }}</button>
+        </div>
+        <div v-if="feishuOpen" class="auto__feishu" data-testid="feishu-config">
+          <label class="vg-field">
+            <span class="vg-field__label">{{ t('ai.automation.feishuWebhook') }}</span>
+            <input v-model.trim="settings.feishu.webhookUrl" class="vg-input" type="url" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." />
+            <span class="vg-field__hint">{{ t('ai.automation.feishuWebhookHint') }}</span>
+          </label>
+          <label class="vg-field">
+            <span class="vg-field__label">{{ t('ai.automation.feishuSecret') }}</span>
+            <input v-model.trim="settings.feishu.secret" class="vg-input" type="password" autocomplete="off" :placeholder="t('ai.automation.feishuSecretPlaceholder')" />
+          </label>
+          <div class="auto__checks">
+            <label><input v-model="settings.feishu.daily" type="checkbox" /> {{ t('ai.automation.daily') }}</label>
+            <label><input v-model="settings.feishu.weekly" type="checkbox" /> {{ t('ai.automation.weekly') }}</label>
+            <button type="button" class="vg-btn vg-btn--sm" :disabled="feishuTesting || !settings.feishu.webhookUrl" @click="testFeishu"><Send :size="14" /> {{ t('ai.automation.feishuTest') }}</button>
+            <span v-if="feishuResult" class="vg-pill" :class="feishuResult.ok ? 'vg-pill--green' : 'vg-pill--red'">{{ feishuResult.text }}</span>
+          </div>
+        </div>
       </div>
       <p class="vg-field__hint">{{ t('ai.automation.safetyNote') }}</p>
       <div class="vg-row">
         <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :disabled="saving" @click="save"><Save :size="14" /> {{ t('common.save') }}</button>
         <span v-if="saved" class="vg-pill vg-pill--green">{{ t('ai.space.saved') }}</span>
+        <span v-if="saveError" class="vg-pill vg-pill--red">{{ saveError }}</span>
       </div>
     </section>
   </div>
@@ -115,4 +175,7 @@ onMounted(load)
 .auto__copy small { font-size: 12px; color: var(--theme-text-muted); }
 .auto__time { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--theme-text-secondary); }
 .auto__time .vg-input { width: 64px; }
+.auto__feishu { display: flex; flex-direction: column; gap: 10px; padding: 12px; margin-left: 48px; border-radius: 10px; background: var(--theme-panel-soft); border: 1px solid var(--theme-divider); }
+.auto__checks { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--theme-text-secondary); }
+.auto__checks label { display: inline-flex; align-items: center; gap: 6px; }
 </style>

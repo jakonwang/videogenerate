@@ -206,7 +206,8 @@
       "output": "产出：每个商品 N 条成片 + 图生视频 + 发布草稿 + 复盘建议",
       "prompt": "全自动打爆：从商品到成片、审核和发布草稿一次跑完",
       "summary": "体检 → 准备商品 → 找参考爆款 → 复刻成片 → 等待出片 → 审核{publish} → 复盘",
-      "summaryPublish": " → 发布草稿"
+      "summaryPublish": " → 发布草稿",
+      "summaryListing": " → 上架文案"
     }
   },
   "fields": {
@@ -251,7 +252,15 @@
     "referenceCount": "每个商品参考几条爆款",
     "referenceCountHint": "每条参考视频会为每个商品复刻一个项目",
     "autoApprove": "成片自动通过审核并生成发布草稿",
-    "autoApproveHint": "只对本次流水线的产出生效；真正发布仍需你在发布中心确认"
+    "autoApproveHint": "只对本次流水线的产出生效；真正发布仍需你在发布中心确认",
+    "autopilotListing": "同时生成上架文案和主图",
+    "autopilotListingHint": "用 TikTok 上架助手为每个商品生成标题、描述和上架图（耳环 / 戒指 / 项链 / 手链 / 手机壳）",
+    "listingPrice": "本地展示价",
+    "listingPriceHint": "填写站点币种的售价，例如 9.99",
+    "listingLanguage": "标题语言",
+    "langEn": "英语",
+    "langVi": "越南语",
+    "langZh": "中文"
   },
   "inbox": {
     "title": "审核收件箱",
@@ -495,7 +504,16 @@
       "4": "周四",
       "5": "周五",
       "6": "周六"
-    }
+    },
+    "feishu": "推送到飞书群",
+    "feishuDesc": "每日简报和每周复盘同时发到飞书群（群设置 → 群机器人 → 自定义机器人）",
+    "feishuSetup": "设置",
+    "feishuWebhook": "Webhook 地址",
+    "feishuWebhookHint": "在飞书群里添加「自定义机器人」后复制它的 Webhook 地址。",
+    "feishuSecret": "签名密钥（可选）",
+    "feishuSecretPlaceholder": "机器人开启了「签名校验」才需要填",
+    "feishuTest": "发送测试消息",
+    "feishuTestOk": "已发送，请到飞书群查看"
   },
   "home": {
     "kicker": "AI 带货内容团队",

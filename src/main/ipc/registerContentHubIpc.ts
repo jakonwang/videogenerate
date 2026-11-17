@@ -33,6 +33,8 @@ export function registerContentHubIpc(ipcMain: IpcMain, getWindow: () => Browser
   ipcMain.handle('contentHub:listBriefs', async (_event, limit?: number) => await contentHubService.listBriefs(limit))
   ipcMain.handle('contentHub:getAutomationSettings', async () => await contentHubService.getAutomationSettings())
   ipcMain.handle('contentHub:saveAutomationSettings', async (_event, payload) => await contentHubService.saveAutomationSettings(payload))
+  ipcMain.handle('contentHub:testFeishuPush', async (_event, payload) => await contentHubService.testFeishuPush(payload))
+  ipcMain.handle('contentHub:pushLatestBrief', async (_event, kind: 'daily' | 'weekly') => await contentHubService.pushLatestBrief(kind === 'weekly' ? 'weekly' : 'daily'))
 
   ipcMain.handle('contentHub:importProductFromLink', async (_event, payload) => await contentHubService.importProductFromLink(payload))
 
