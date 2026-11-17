@@ -23,7 +23,7 @@ import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from '.
 import { evaluateGmvMaxDecision, resolveGmvMaxDecisionRules } from './decisionEngine'
 import { buildGmvMaxRoiUnlockExperiment, evaluateGmvMaxRoiUnlockExperiment } from './experimentEngine'
 import { assertGmvMaxRemoteCampaignState, matchesGmvMaxRemoteCampaignState, parseGmvMaxRemoteCampaignState } from './executionState'
-import { buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery, type GmvMaxCreativeTarget } from './creativeContract'
+import { buildGmvMaxCreativeBatchUpdateArgs, buildGmvMaxCreativeUpdateArgs, buildGmvMaxCreativeVerificationRequest, resolveGmvMaxCreativeTarget, verifyGmvMaxCreativeDelivery, type GmvMaxCreativeTarget } from './creativeContract'
 import { buildGmvMaxSessionToolCall, enrichGmvMaxSessionActionIdentity, isGmvMaxSessionInputRejection, isUnsupportedGmvMaxSessionAction, refreshGmvMaxCreativeBoostSchedule, verifyGmvMaxSessionState } from './sessionContract'
 import { assertGmvMaxPortfolioEvidenceFresh } from './portfolioFreshness'
 import { buildGmvMaxRealtimeDeltas, buildGmvMaxRealtimeWindowSummary, getGmvMaxSixHourWindow } from './realtimeWindow'
@@ -362,6 +362,11 @@ function creativeTargetsForAction(campaign: GmvMaxCampaign, actionPayload: Recor
     ]
   }
   if (operation !== 'ADD' && operation !== 'REMOVE') throw new Error(`Unsupported TikTok creative operation: ${operation || 'missing'}`)
+  // Manual pushes from the creatives page carry several videos of one campaign in a single action.
+  const creativeIds = Array.isArray(actionPayload?.creativeIds)
+    ? [...new Set(actionPayload.creativeIds.map((value) => text(value)).filter(Boolean))]
+    : []
+  if (creativeIds.length) return creativeIds.map((creativeId) => resolve(creativeId, operation))
   return [resolve(text(actionPayload?.creativeId), operation)]
 }
 
@@ -2004,6 +2009,23 @@ function releaseStaleActionLock(
   return true
 }
 
+/**
+ * Binding to talk to TikTok with for a stored campaign/recommendation. Reconnecting creates new connections and
+ * bindings while campaigns can keep pointing at the old one; when that connection is no longer connected, use a
+ * connected binding for the same advertiser and store instead of failing with "authorization is required".
+ */
+function writableBinding(bindingId: string) {
+  const bindings = gmvMaxRepo.listBindings()
+  const original = bindings.find((entry) => entry.id === bindingId)
+  if (!original) return undefined
+  const states = new Map(gmvMaxRepo.listConnections().map((entry) => [entry.id, entry.state]))
+  if (states.get(original.connectionId) === 'connected') return original
+  return bindings.find((entry) => entry.active
+    && entry.advertiserId === original.advertiserId
+    && entry.storeId === original.storeId
+    && states.get(entry.connectionId) === 'connected') || original
+}
+
 async function executeRecommendation(item: GmvMaxRecommendation) {
   if (gmvMaxService.schedulerState.emergencyStopped) throw new Error('GMV MAX write operations are paused by the emergency stop.')
   if (executingRecommendationIds.has(item.id)) return gmvMaxRepo.getRecommendation(item.id) || item
@@ -2034,7 +2056,7 @@ async function executeRecommendation(item: GmvMaxRecommendation) {
       throw new Error(`Recommendation cannot be executed from status ${current.status}.`)
     }
     const campaign = gmvMaxRepo.listCampaigns().find((entry) => entry.id === current.campaignId)
-    const binding = gmvMaxRepo.listBindings().find((entry) => entry.id === current.bindingId)
+    const binding = writableBinding(current.bindingId)
     if (!campaign || !binding) throw new Error('GMV MAX campaign binding is unavailable.')
     const runtime = await gmvMaxMcpClient.connect(binding.connectionId, false)
     const capability = actionType === 'status' ? 'status_write' : actionType === 'creative' ? 'creative_write' : actionType === 'session' ? 'session_write' : 'campaign_write'
@@ -2088,6 +2110,9 @@ async function executeRecommendation(item: GmvMaxRecommendation) {
         tool = 'gmv_max_creative_update'
         const targets = creativeTargetsForAction(campaign, current.actionPayload)
         if (targets.length === 1) args = buildGmvMaxCreativeUpdateArgs({ advertiserId: binding.advertiserId, campaign, target: targets[0] })
+        else if (targets.length > 1 && text(current.actionPayload?.operation).toUpperCase() !== 'ROTATE') {
+          args = buildGmvMaxCreativeBatchUpdateArgs({ advertiserId: binding.advertiserId, campaign, targets })
+        }
       } else if (actionType === 'session') {
         const actionPayload = enrichGmvMaxSessionActionIdentity(
           current.actionPayload || {},
@@ -4506,7 +4531,7 @@ export const gmvMaxService = {
     for (const lock of gmvMaxRepo.listActionLocks().filter((item) => item.expiresAt <= now)) {
       const recommendation = gmvMaxRepo.listRecommendations().find((item) => item.idempotencyKey === lock.idempotencyKey)
       const campaign = gmvMaxRepo.listCampaigns().find((item) => item.id === lock.campaignId)
-      const binding = campaign && gmvMaxRepo.listBindings().find((item) => item.id === campaign.bindingId)
+      const binding = campaign && writableBinding(campaign.bindingId)
       if (!recommendation || !campaign || !binding) { gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType); continue }
       if (recommendation.platformStateVerified || recommendation.status === 'rejected') {
         gmvMaxRepo.removeActionLock(lock.campaignId, lock.actionType)
@@ -4951,6 +4976,79 @@ export const gmvMaxService = {
   },
 
   async removeListEntry(id: string) { gmvMaxRepo.removeListEntry(id); return true },
+
+  /**
+   * Exclude (REMOVE) or restore (ADD) videos in their GMV MAX campaigns right away, from the creatives page.
+   * One recommendation per campaign carries all of that campaign's videos, so the per-campaign creative lock
+   * (held until TikTok confirms delivery status) is taken once. Execution reuses executeRecommendation:
+   * emergency stop, capability check, audit, deferred delivery verification and rollback all apply.
+   */
+  async pushCreativeChanges(input: { operation: 'REMOVE' | 'ADD'; items: Array<{ campaignId: string; creativeId: string; label?: string }> }) {
+    const operation = text(input?.operation).toUpperCase()
+    if (operation !== 'REMOVE' && operation !== 'ADD') throw new Error('Choose REMOVE or ADD for a creative change.')
+    const items = (Array.isArray(input?.items) ? input.items : [])
+      .map((item) => ({ campaignId: text(item?.campaignId), creativeId: text(item?.creativeId), label: text(item?.label) }))
+      .filter((item) => item.campaignId && item.creativeId)
+    if (!items.length || items.length > 25) throw new Error('Select between 1 and 25 videos per push.')
+    if (this.schedulerState.emergencyStopped) throw new Error('GMV MAX write operations are paused by the emergency stop.')
+
+    const byCampaign = new Map<string, typeof items>()
+    for (const item of items) {
+      const list = byCampaign.get(item.campaignId) || []
+      if (!list.some((entry) => entry.creativeId === item.creativeId)) list.push(item)
+      byCampaign.set(item.campaignId, list)
+    }
+    const results: Array<{ campaignId: string; creativeIds: string[]; status: 'pushed' | 'failed'; recommendationId?: string; error?: string }> = []
+    for (const [campaignId, entries] of byCampaign) {
+      const creativeIds = entries.map((entry) => entry.creativeId)
+      const campaign = gmvMaxRepo.listCampaigns().find((entry) => entry.id === campaignId)
+      if (!campaign) {
+        results.push({ campaignId, creativeIds, status: 'failed', error: 'GMV MAX campaign does not exist.' })
+        continue
+      }
+      // TikTok rejects creative changes in a paused campaign ("Campaign is not enabled"); say so before writing anything.
+      if (String(campaign.operationStatus || '').toUpperCase() !== 'ENABLE') {
+        results.push({ campaignId, creativeIds, status: 'failed', error: 'GMV_MAX_CAMPAIGN_NOT_ENABLED' })
+        continue
+      }
+      // Keep the allow/deny list in step so automatic suggestions don't undo the manual change.
+      for (const entry of entries) {
+        const existing = gmvMaxRepo.listListEntries().filter((list) => list.storeId === campaign.storeId
+          && list.campaignId === campaign.id && list.entityType === 'creative' && list.entityId === entry.creativeId)
+        if (operation === 'REMOVE') {
+          await this.saveListEntry({ storeId: campaign.storeId, campaignId: campaign.id, entityType: 'creative', entityId: entry.creativeId, label: entry.label || entry.creativeId, mode: 'deny' })
+        } else {
+          for (const list of existing) if (list.mode === 'deny') gmvMaxRepo.removeListEntry(list.id)
+        }
+      }
+      const now = Date.now()
+      const key = hash(campaign.id, 'manual-creative', operation, ...[...creativeIds].sort(), now)
+      const policy = policyFor(campaign.id)
+      const recommendation = gmvMaxRepo.saveRecommendation(promoteGmvMaxRecommendationToLive({
+        id: key.slice(0, 32), campaignId: campaign.id, bindingId: campaign.bindingId,
+        kind: operation === 'REMOVE' ? 'scale_down' : 'scale_up', actionType: 'creative', status: 'pending', risk: 'medium', preset: policy.preset,
+        currentBudget: campaign.budget, proposedBudget: campaign.budget,
+        currentRoasBid: campaign.roasBid, proposedRoasBid: campaign.roasBid,
+        reason: operation === 'REMOVE' ? 'Excluded manually from the creatives page.' : 'Restored manually from the creatives page.',
+        evidence: { startDate: '', endDate: '', metricIds: [], consecutiveDays: 0, totalOrders: '0', averageRoi: '0', averageBudgetUtilization: '0', targetRoi: campaign.roasBid, dataFreshness: 'complete' },
+        actionPayload: { operation, creativeIds },
+        rollbackPayload: { operation: operation === 'REMOVE' ? 'ADD' : 'REMOVE', creativeIds },
+        reversible: true, shadow: false, autoExecutable: false,
+        idempotencyKey: key, createdAt: now, updatedAt: now,
+      }, now))
+      try {
+        const executed = await executeRecommendation(recommendation)
+        const failed = executed.status === 'failed'
+        results.push({ campaignId, creativeIds, status: failed ? 'failed' : 'pushed', recommendationId: executed.id, error: failed ? executed.lastError : undefined })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const latest = gmvMaxRepo.getRecommendation(recommendation.id)
+        if (latest && !['failed', 'executed'].includes(latest.status)) gmvMaxRepo.saveRecommendation({ ...latest, status: 'failed', lastError: message, updatedAt: Date.now() })
+        results.push({ campaignId, creativeIds, status: 'failed', recommendationId: recommendation.id, error: message })
+      }
+    }
+    return { operation, results }
+  },
 
   async runBacktest(input?: { campaignId?: string; days?: number }) {
     const days = Math.max(3, Math.min(30, Math.round(Number(input?.days || 30))))

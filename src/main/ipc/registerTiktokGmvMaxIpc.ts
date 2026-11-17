@@ -120,6 +120,13 @@ export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokGmvMax:approve', async (_event, payload: { id: string }) => {
     return await gmvMaxWorkerClient.call('approveRecommendation', [String(payload?.id || '')])
   })
+  ipcMain.handle('plugin:tiktokGmvMax:pushCreativeChanges', async (_event, payload: { operation: string; items: Array<{ campaignId: string; creativeId: string; label?: string }> }) => {
+    const operation = String(payload?.operation || '').toUpperCase() === 'ADD' ? 'ADD' : 'REMOVE'
+    const items = Array.isArray(payload?.items)
+      ? payload.items.map((item) => ({ campaignId: String(item?.campaignId || ''), creativeId: String(item?.creativeId || ''), label: item?.label ? String(item.label) : undefined }))
+      : []
+    return await gmvMaxWorkerClient.call('pushCreativeChanges', [{ operation, items }])
+  })
   ipcMain.handle('plugin:tiktokGmvMax:approveBatch', async (_event, payload: { ids: string[] }) => {
     return await gmvMaxWorkerClient.call('approveRecommendations', [{ ids: Array.isArray(payload?.ids) ? payload.ids.map(String) : [] }])
   })

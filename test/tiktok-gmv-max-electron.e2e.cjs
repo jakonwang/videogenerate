@@ -531,7 +531,7 @@ async function main() {
     assert.equal(await page.locator('[data-testid="gmv-creative-top-earners"]').isVisible(), true)
     assert.equal(await page.locator('[data-testid="gmv-creative-top-wasters"]').isVisible(), true)
     assert.equal(await page.locator('[data-testid="gmv-creative-status-tabs"] button').count(), 5)
-    assert.equal(await page.locator('.gmv-cx-table thead th').count(), 6)
+    assert.equal(await page.locator('.gmv-cx-table thead th').count(), 7)
     assert.equal(await page.locator('.gmv-cx-table .gmv-sort-button').count(), 4)
     assert.equal(await page.locator('.gmv-cx-table tbody tr').count() <= 25, true)
     const advancedCreatives = page.locator('[data-testid="gmv-creative-advanced"]')

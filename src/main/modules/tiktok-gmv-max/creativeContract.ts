@@ -85,6 +85,25 @@ export function buildGmvMaxCreativeUpdateArgs(input: {
   }
 }
 
+/** One gmv_max_creative_update call for several videos of the same campaign and operation. */
+export function buildGmvMaxCreativeBatchUpdateArgs(input: {
+  advertiserId: string
+  campaign: GmvMaxCampaign
+  targets: GmvMaxCreativeTarget[]
+}) {
+  const operations = [...new Set(input.targets.map((target) => target.operation))]
+  if (operations.length !== 1) throw new Error('A creative batch update needs a single ADD or REMOVE operation.')
+  return {
+    advertiser_id: input.advertiserId,
+    campaign_id: input.campaign.id,
+    action: operations[0],
+    item_list: input.targets.map((target) => ({
+      item_id: target.itemId,
+      ...(target.spuIds.length ? { spu_id_list: target.spuIds } : {}),
+    })),
+  }
+}
+
 export function buildGmvMaxCreativeVerificationRequest(input: {
   advertiserId: string
   storeId: string

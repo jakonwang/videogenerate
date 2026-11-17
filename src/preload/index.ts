@@ -1014,6 +1014,7 @@ const api = {
     }) => ipcRenderer.invoke('plugin:tiktokGmvMax:savePolicy', payload),
     approve: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approve', payload),
     approveBatch: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approveBatch', payload),
+    pushCreativeChanges: (payload: { operation: 'REMOVE' | 'ADD'; items: Array<{ campaignId: string; creativeId: string; label?: string }> }) => ipcRenderer.invoke('plugin:tiktokGmvMax:pushCreativeChanges', payload),
     setEmergencyStop: (payload: { stopped: boolean; reason?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:setEmergencyStop', payload),
     reject: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:reject', payload),
     approvePortfolio: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approvePortfolio', payload),

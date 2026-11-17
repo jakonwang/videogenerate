@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-vue-next";
 import { useGmvWorkspace } from "./workspaceContext";
+import GmvCreativePushDialog, { type GmvCreativePushResult, type GmvCreativePushRow } from "../GmvCreativePushDialog.vue";
 
 type Segment = "all" | "earning" | "average" | "no_orders" | "new";
 const SEGMENTS: Segment[] = ["all", "earning", "average", "no_orders", "new"];
@@ -49,6 +50,8 @@ type CreativeRow = {
   roi: string;
   orders: string;
   days?: number;
+  campaignName?: string;
+  status?: string;
   segment?: Exclude<Segment, "all">;
   raw?: Record<string, unknown>;
 };
@@ -56,6 +59,7 @@ type CreativeRow = {
 export default defineComponent({
   name: "GmvCreativesPage",
   components: {
+    GmvCreativePushDialog,
     AlertTriangle,
     ArrowRightLeft,
     Check,
@@ -279,6 +283,181 @@ export default defineComponent({
       return product ? `${id} · ${product}` : id;
     }
 
+    // ---- Exclude / restore and push to TikTok ----
+    const MAX_PUSH = 25;
+    const selected = ref(new Map<string, CreativeRow>());
+    const selectionNotice = ref("");
+    function isSelected(item: CreativeRow) {
+      return selected.value.has(rowKey(item));
+    }
+    function toggleSelect(item: CreativeRow) {
+      const next = new Map(selected.value);
+      selectionNotice.value = "";
+      if (next.has(rowKey(item))) next.delete(rowKey(item));
+      else if (next.size >= MAX_PUSH) selectionNotice.value = ws.t("gmvMaxCreativesSimple.push.limit", { count: MAX_PUSH });
+      else next.set(rowKey(item), item);
+      selected.value = next;
+    }
+    const pageRows = computed(() => (ws.filteredCreatives.value as CreativeRow[]).filter((item) => rowPush(item).action === "exclude"));
+    const allPageSelected = computed(() => pageRows.value.length > 0 && pageRows.value.every((item) => selected.value.has(rowKey(item))));
+    function toggleSelectPage() {
+      const next = new Map(selected.value);
+      selectionNotice.value = "";
+      if (allPageSelected.value) pageRows.value.forEach((item) => next.delete(rowKey(item)));
+      else {
+        for (const item of pageRows.value) {
+          if (next.size >= MAX_PUSH) {
+            selectionNotice.value = ws.t("gmvMaxCreativesSimple.push.limit", { count: MAX_PUSH });
+            break;
+          }
+          next.set(rowKey(item), item);
+        }
+      }
+      selected.value = next;
+    }
+    function clearSelection() {
+      selected.value = new Map();
+      selectionNotice.value = "";
+    }
+
+    // Latest manual or automatic creative change per campaign + video, from the recommendations the view already holds.
+    type PushState = { operation: "REMOVE" | "ADD"; state: "pending" | "failed" | "done"; error?: string; at: number };
+    const pushStates = computed(() => {
+      const map = new Map<string, PushState>();
+      for (const rec of (ws.dashboard.value?.recommendations || []) as Array<Record<string, any>>) {
+        if (rec.actionType !== "creative") continue;
+        const operation = String(rec.actionPayload?.operation || "").toUpperCase();
+        if (operation !== "REMOVE" && operation !== "ADD") continue;
+        const ids: string[] = Array.isArray(rec.actionPayload?.creativeIds)
+          ? rec.actionPayload.creativeIds.map(String)
+          : rec.actionPayload?.creativeId ? [String(rec.actionPayload.creativeId)] : [];
+        let state: PushState["state"] | "" = "";
+        if (rec.status === "failed") state = "failed";
+        else if (["approved", "executing"].includes(rec.status) || (rec.status === "executed" && !rec.platformStateVerified)) state = "pending";
+        else if (rec.status === "executed") state = "done";
+        if (!state) continue;
+        const at = Number(rec.updatedAt) || 0;
+        for (const id of ids) {
+          const key = `${rec.campaignId}:${id}`;
+          const current = map.get(key);
+          if (!current || current.at < at) map.set(key, { operation: operation as PushState["operation"], state, error: rec.lastError, at });
+        }
+      }
+      return map;
+    });
+    const pausedCampaigns = computed(
+      () =>
+        new Set(
+          ((ws.dashboard.value?.campaigns || []) as Array<{ id: string; operationStatus?: string }>)
+            .filter((campaign) => String(campaign.operationStatus || "").toUpperCase() !== "ENABLE")
+            .map((campaign) => campaign.id),
+        ),
+    );
+    // What the row shows: its TikTok state and the one action that makes sense next.
+    function rowPush(item: CreativeRow) {
+      const latest = pushStates.value.get(`${item.campaignId}:${item.creativeId}`);
+      const reportedExcluded = String(item.status || "").toUpperCase() === "EXCLUDED";
+      if (latest?.state === "pending") {
+        return { tag: latest.operation === "REMOVE" ? "excluding" : "restoring", tone: "warning", action: "", error: "" };
+      }
+      // A paused campaign spends nothing, and TikTok refuses creative changes in it.
+      if (pausedCampaigns.value.has(item.campaignId)) {
+        return { tag: "paused", tone: "neutral", action: "", error: "" };
+      }
+      const excluded = latest?.state === "done" ? latest.operation === "REMOVE" : reportedExcluded;
+      const failed = latest?.state === "failed";
+      return {
+        tag: failed ? "failed" : excluded ? "excluded" : "",
+        tone: failed ? "critical" : "neutral",
+        action: excluded ? "restore" : "exclude",
+        error: failed ? latest?.error || "" : "",
+      };
+    }
+
+    const pushDialog = ref<{
+      operation: "REMOVE" | "ADD";
+      rows: GmvCreativePushRow[];
+      items: CreativeRow[];
+      summary: string;
+      phase: "confirm" | "running" | "done";
+      results: GmvCreativePushResult[];
+      error: string;
+    } | null>(null);
+    function openPush(operation: "REMOVE" | "ADD", items: CreativeRow[]) {
+      if (!items.length) return;
+      const spend = items.reduce((sum, item) => sum + spendCny(item), 0);
+      const orders = items.reduce((sum, item) => sum + ws.metricNumber(item.orders), 0);
+      pushDialog.value = {
+        operation,
+        items,
+        rows: items.map((item) => ({
+          key: rowKey(item),
+          campaignId: item.campaignId,
+          creativeId: item.creativeId,
+          title: topLabel(item),
+          campaignName: item.campaignName || item.campaignId,
+          spend: ws.formatCny(item.cost, item.storeId),
+        })),
+        summary: ws.t("gmvMaxCreativesSimple.push.totals", { spend: ws.formatCny(spend, undefined, true), orders: ws.formatInteger(orders) }),
+        phase: "confirm",
+        results: [],
+        error: ws.connected.value ? "" : ws.t("gmvMaxCreativesSimple.push.notConnected"),
+      };
+    }
+    async function confirmPush() {
+      const dialog = pushDialog.value;
+      if (!dialog || dialog.phase !== "confirm") return;
+      dialog.phase = "running";
+      dialog.error = "";
+      try {
+        const response = (await window.api.tiktokGmvMax.pushCreativeChanges({
+          operation: dialog.operation,
+          items: dialog.items.map((item) => ({ campaignId: item.campaignId, creativeId: item.creativeId, label: topLabel(item) })),
+        })) as { results?: GmvCreativePushResult[] };
+        dialog.results = (response?.results || []).map((result) => ({ ...result, error: result.error ? pushErrorText(result.error) : undefined }));
+        if (dialog.results.some((result) => result.status === "pushed")) clearSelection();
+      } catch (error) {
+        dialog.error = pushErrorText(error instanceof Error ? error.message : String(error));
+      } finally {
+        dialog.phase = "done";
+        void ws.refreshWorkspace(false);
+        void ws.loadCreativePage(ws.creativePage.value.page);
+      }
+    }
+    function closePush() {
+      if (pushDialog.value?.phase === "running") return;
+      pushDialog.value = null;
+    }
+    // Detail panel helpers.
+    const copiedId = ref("");
+    let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+    async function copyText(value: string) {
+      try {
+        await navigator.clipboard.writeText(value);
+        copiedId.value = value;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => (copiedId.value = ""), 1500);
+      } catch {
+        copiedId.value = "";
+      }
+    }
+    onBeforeUnmount(() => clearTimeout(copiedTimer));
+    // Authorization is often empty ("-") in the report; only show it when TikTok said something.
+    function authLabel(item: CreativeRow & { authorizationType?: string; authorizationStatus?: string }) {
+      const parts = [item.authorizationType, item.authorizationStatus].map((value) => String(value || "").trim()).filter((value) => value && value !== "-");
+      return parts.join(" ");
+    }
+
+    // TikTok and guard errors in words a seller can act on.
+    function pushErrorText(message: string) {
+      if (/GMV_MAX_ACTION_PENDING_VERIFICATION/.test(message)) return ws.t("gmvMaxCreativesSimple.push.errors.locked");
+      if (/GMV_MAX_CAMPAIGN_NOT_ENABLED|Campaign is not enabled/i.test(message)) return ws.t("gmvMaxCreativesSimple.push.errors.paused");
+      if (/emergency stop/i.test(message)) return ws.t("gmvMaxCreativesSimple.push.errors.emergency");
+      if (/capability is unavailable|creative_write/i.test(message)) return ws.t("gmvMaxCreativesSimple.push.errors.permission");
+      if (/authorization is required|AUTH_EXPIRED/i.test(message)) return ws.t("gmvMaxCreativesSimple.push.notConnected");
+      return message;
+    }
+
     // Plain-language name of a creative suggestion.
     function suggestionLabel(item: { actionType?: string; actionPayload?: Record<string, unknown> }) {
       if (String(item.actionType) === "session") return ws.t("gmvMaxCreativesSimple.operation.BOOST");
@@ -322,6 +501,21 @@ export default defineComponent({
       topWasters,
       topsLoading,
       videoTitle,
+      allPageSelected,
+      authLabel,
+      copiedId,
+      copyText,
+      clearSelection,
+      closePush,
+      confirmPush,
+      isSelected,
+      openPush,
+      pushDialog,
+      rowPush,
+      selected,
+      selectionNotice,
+      toggleSelect,
+      toggleSelectPage,
     };
   },
 });
@@ -448,11 +642,32 @@ export default defineComponent({
       </div>
     </section>
 
+    <!-- Bulk bar: shown while videos are selected -->
+    <div v-if="selected.size" class="gmv-cx-bulk" data-testid="gmv-creative-bulk-bar">
+      <strong>{{ t("gmvMaxCreativesSimple.push.selected", { count: selected.size }) }}</strong>
+      <span v-if="selectionNotice" class="gmv-cx-bulk__notice">{{ selectionNotice }}</span>
+      <div class="gmv-am__spacer"></div>
+      <button class="gmv-cx-link" type="button" @click="clearSelection">{{ t("gmvMaxCreativesSimple.push.clear") }}</button>
+      <button class="gmv-cx-danger-button" type="button" data-testid="gmv-creative-bulk-exclude" @click="openPush('REMOVE', [...selected.values()])">
+        {{ t("gmvMaxCreativesSimple.push.bulkExclude") }}
+      </button>
+    </div>
+
     <!-- 3. The list -->
     <div :class="['gmv-table-wrap', { 'is-loading': creativeLoading }]">
       <table class="gmv-table gmv-cx-table">
         <thead>
           <tr>
+            <th class="gmv-cx-table__check">
+              <input
+                type="checkbox"
+                :checked="allPageSelected"
+                :aria-label="t('gmvMaxCreativesSimple.push.selectPage')"
+                :title="t('gmvMaxCreativesSimple.push.selectPage')"
+                data-testid="gmv-creative-select-page"
+                @change="toggleSelectPage"
+              />
+            </th>
             <th>{{ t("gmvMaxCreativesSimple.columns.video") }}</th>
             <th class="gmv-cx-table__spend">
               <button class="gmv-sort-button" @click="toggleCreativeSort('cost')">
@@ -479,7 +694,20 @@ export default defineComponent({
         </thead>
         <tbody>
           <template v-for="item in filteredCreatives" :key="rowKey(item)">
-            <tr :class="['gmv-cx-row', { 'is-expanded': expandedRow === rowKey(item) }]" @click="toggleRow(rowKey(item))">
+            <tr
+              :class="['gmv-cx-row', { 'is-expanded': expandedRow === rowKey(item), 'is-selected': isSelected(item), 'is-excluded': rowPush(item).tag === 'excluded' }]"
+              @click="toggleRow(rowKey(item))"
+            >
+              <td class="gmv-cx-table__check" @click.stop>
+                <input
+                  v-if="rowPush(item).action === 'exclude'"
+                  type="checkbox"
+                  :checked="isSelected(item)"
+                  :aria-label="t('gmvMaxCreativesSimple.push.selectRow')"
+                  data-testid="gmv-creative-select-row"
+                  @change="toggleSelect(item)"
+                />
+              </td>
               <td>
                 <div class="gmv-cx-video">
                   <button
@@ -505,7 +733,15 @@ export default defineComponent({
                     <Play v-if="creativeVideoAvailable(item)" class="gmv-cx-video__play" />
                   </button>
                   <div class="gmv-cx-video__text">
-                    <span class="gmv-cx-video__title" :title="videoTitle(item)">{{ videoTitle(item) }}</span>
+                    <span class="gmv-cx-video__title" :title="videoTitle(item)">
+                      {{ videoTitle(item) }}
+                      <em
+                        v-if="rowPush(item).tag"
+                        :class="['gmv-cx-tag', `gvt-${rowPush(item).tone}`]"
+                        :title="rowPush(item).error || t(`gmvMaxCreativesSimple.push.tags.${rowPush(item).tag}Hint`)"
+                        data-testid="gmv-creative-push-tag"
+                      >{{ t(`gmvMaxCreativesSimple.push.tags.${rowPush(item).tag}`) }}</em>
+                    </span>
                     <small :title="item.productName">{{ subtitle(item) }}</small>
                   </div>
                 </div>
@@ -522,6 +758,22 @@ export default defineComponent({
               <td class="is-num">{{ formatInteger(item.orders) }}</td>
               <td class="gmv-cx-table__actions">
                 <button
+                  v-if="rowPush(item).action === 'exclude'"
+                  class="gmv-cx-row-button"
+                  type="button"
+                  data-testid="gmv-creative-exclude"
+                  :title="t('gmvMaxCreativesSimple.push.excludeHint')"
+                  @click.stop="openPush('REMOVE', [item])"
+                >{{ t("gmvMaxCreativesSimple.push.exclude") }}</button>
+                <button
+                  v-else-if="rowPush(item).action === 'restore'"
+                  class="gmv-cx-row-button"
+                  type="button"
+                  data-testid="gmv-creative-restore"
+                  :title="t('gmvMaxCreativesSimple.push.restoreHint')"
+                  @click.stop="openPush('ADD', [item])"
+                >{{ t("gmvMaxCreativesSimple.push.restore") }}</button>
+                <button
                   class="gmv-cx-chevron"
                   type="button"
                   :aria-expanded="expandedRow === rowKey(item)"
@@ -534,21 +786,51 @@ export default defineComponent({
               </td>
             </tr>
             <tr v-if="expandedRow === rowKey(item)" class="gmv-cx-detail-row">
-              <td colspan="6">
-                <dl class="gmv-cx-detail">
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.campaign") }}</dt><dd>{{ item.campaignName }}</dd></div>
-                  <div class="is-wide"><dt>{{ t("gmvMaxCreativesSimple.detail.product") }}</dt><dd>{{ item.productName || "-" }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.cpa") }}</dt><dd>{{ formatCny(item.cpa, item.storeId) }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.ctr") }}</dt><dd>{{ formatPercent(item.ctr) }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.cvr") }}</dt><dd>{{ formatPercent(item.conversionRate) }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.play2s") }}</dt><dd>{{ formatPercent(item.play2sRate) }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.play6s") }}</dt><dd>{{ formatPercent(item.playDepth) }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.authorization") }}</dt><dd>{{ item.authorizationType || "-" }} {{ item.authorizationStatus }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.id") }}</dt><dd>{{ item.creativeId }}</dd></div>
-                </dl>
-                <div class="gmv-cx-detail__actions">
-                  <button class="gmv-button gmv-button--secondary" @click="addCreativeToList(item, 'allow')">{{ t("gmvMaxCreativesSimple.actions.keep") }}</button>
-                  <button class="gmv-button gmv-button--secondary" @click="addCreativeToList(item, 'deny')">{{ t("gmvMaxCreativesSimple.actions.stop") }}</button>
+              <td colspan="7">
+                <div class="gmv-cx-detail" data-testid="gmv-creative-detail">
+                  <div class="gmv-cx-detail__product">
+                    <img v-if="coverUrl(item) || productImage(item)" :src="coverUrl(item) || productImage(item)" alt="" referrerpolicy="no-referrer" />
+                    <div class="gmv-cx-detail__product-text">
+                      <span class="gmv-cx-detail__label">{{ t("gmvMaxCreativesSimple.detail.product") }}</span>
+                      <p :title="item.productName">{{ item.productName && item.productName !== "-" ? item.productName : "-" }}</p>
+                      <span class="gmv-cx-detail__meta" :title="item.campaignName">
+                        {{ t("gmvMaxCreativesSimple.detail.campaign") }} · {{ item.campaignName }}
+                      </span>
+                    </div>
+                  </div>
+                  <dl class="gmv-cx-detail__stats">
+                    <div><dt>{{ t("gmvMaxCreativesSimple.detail.cpa") }}</dt><dd>{{ formatCny(item.cpa, item.storeId) }}</dd></div>
+                    <div><dt>{{ t("gmvMaxCreativesSimple.detail.ctr") }}</dt><dd>{{ formatPercent(item.ctr) }}</dd></div>
+                    <div><dt>{{ t("gmvMaxCreativesSimple.detail.cvr") }}</dt><dd>{{ formatPercent(item.conversionRate) }}</dd></div>
+                    <div><dt>{{ t("gmvMaxCreativesSimple.detail.play2s") }}</dt><dd>{{ formatPercent(item.play2sRate) }}</dd></div>
+                    <div><dt>{{ t("gmvMaxCreativesSimple.detail.play6s") }}</dt><dd>{{ formatPercent(item.playDepth) }}</dd></div>
+                  </dl>
+                  <div class="gmv-cx-detail__foot">
+                    <span class="gmv-cx-detail__meta">
+                      {{ t("gmvMaxCreativesSimple.detail.id") }} {{ item.creativeId }}
+                      <button class="gmv-cx-link" type="button" @click.stop="copyText(item.creativeId)">
+                        {{ copiedId === item.creativeId ? t("gmvMaxCreativesSimple.detail.copied") : t("gmvMaxCreativesSimple.detail.copy") }}
+                      </button>
+                    </span>
+                    <span v-if="authLabel(item)" class="gmv-cx-detail__meta">{{ t("gmvMaxCreativesSimple.detail.authorization") }} · {{ authLabel(item) }}</span>
+                    <div class="gmv-am__spacer"></div>
+                    <button v-if="creativeVideoAvailable(item)" class="gmv-cx-row-button is-plain" type="button" @click.stop="openCreativeVideo(item)">
+                      {{ t("gmvMaxCreativesSimple.detail.preview") }}
+                    </button>
+                    <button
+                      v-if="rowPush(item).action === 'exclude'"
+                      class="gmv-cx-row-button"
+                      type="button"
+                      @click.stop="openPush('REMOVE', [item])"
+                    >{{ t("gmvMaxCreativesSimple.push.exclude") }}</button>
+                    <button
+                      v-else-if="rowPush(item).action === 'restore'"
+                      class="gmv-cx-row-button"
+                      type="button"
+                      data-testid="gmv-creative-restore"
+                      @click.stop="openPush('ADD', [item])"
+                    >{{ t("gmvMaxCreativesSimple.push.restore") }}</button>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -961,5 +1243,16 @@ export default defineComponent({
       </section>
     </div>
   </details>
+  <GmvCreativePushDialog
+    v-if="pushDialog"
+    :operation="pushDialog.operation"
+    :rows="pushDialog.rows"
+    :summary="pushDialog.summary"
+    :phase="pushDialog.phase"
+    :results="pushDialog.results"
+    :error="pushDialog.error"
+    @confirm="confirmPush"
+    @close="closePush"
+  />
 </section>
 </template>
