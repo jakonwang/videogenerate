@@ -4,8 +4,8 @@ import type { ContentLine, InsightsReport, LineStats } from './types'
 
 const LINE_LABEL: Record<ContentLine, string> = {
   clone: '复刻',
-  creative: 'TikTok 创意工作室',
-  livephoto: 'Live Photo',
+  creative: 'tk创意室',
+  livephoto: '图生视频',
   production: '批量混剪',
   publish: '发布',
 }

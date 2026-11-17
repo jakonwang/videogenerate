@@ -237,7 +237,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 
 const uiText = computed(() => ({
-  workspaceTitle: 'Live Photo',
+  workspaceTitle: '图生视频',
   workspaceHint: t('livePhoto.workspace.hint'),
   heroTitle: t('livePhoto.hero.title'),
   heroDesc: t('livePhoto.hero.desc'),
@@ -873,7 +873,7 @@ function defaultSubtitleTitleForItems(items: LivePhotoItem[]) {
   return (
     items
       .map((item) => String(item.sourceShotLabel || item.sourceProjectTitle || item.productSnapshot?.name || item.id || '').trim())
-      .find(Boolean) || 'Live Photo'
+      .find(Boolean) || '图生视频'
   )
 }
 
@@ -2374,7 +2374,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
               <button
                 class="lp-item__thumb"
                 type="button"
-                :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' }) : t('autoUi.k_fe0ccc53ab2b')"
+                :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || '图生视频' }) : t('autoUi.k_fe0ccc53ab2b')"
                 @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
               >
                 <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />

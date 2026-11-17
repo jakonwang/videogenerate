@@ -1937,7 +1937,7 @@
     },
     "connection": {
       "title": "TikTok 连接",
-      "subtitle": "OAuth 连接与创意工作室账号完全隔离。"
+      "subtitle": "OAuth 连接与tk创意室账号完全隔离。"
     },
     "scheduler": {
       "title": "调度器",
@@ -2360,7 +2360,7 @@
       },
       "hermes": {
         "label": "Hermes 接入",
-        "desc": "飞书与企业微信 Live Photo 配置"
+        "desc": "飞书与企业微信图生视频配置"
       }
     },
     "storageManagement": {
@@ -2581,12 +2581,12 @@
     },
     "hermes": {
       "title": "Hermes 接入设置",
-      "subtitle": "配置飞书和企业微信凭证，用于 Live Photo 的图片接入与结果回传。",
+      "subtitle": "配置飞书和企业微信凭证，用于图生视频的图片接入与结果回传。",
       "global": {
         "title": "全局",
-        "desc": "用于开启 Hermes Live Photo 接入，并保存 webhook 回调基础地址。",
+        "desc": "用于开启 Hermes 图生视频接入，并保存 webhook 回调基础地址。",
         "fields": {
-          "enabled": "启用 Hermes Live Photo 接入",
+          "enabled": "启用 Hermes 图生视频接入",
           "callbackBaseUrl": "回调基础地址"
         }
       },
@@ -2682,7 +2682,7 @@
       "disabled": "已停用"
     },
     "categories": {
-      "livePhoto": "Live Photo",
+      "livePhoto": "图生视频",
       "creativeStudio": "创意视频",
       "publishing": "发布",
       "advertisingOptimization": "广告优化",
@@ -2743,11 +2743,11 @@
         "description": "跟踪 SKU 库存基准，同步发货数量，预测备货风险。"
       },
       "live-photo-generator": {
-        "name": "Live Photo",
-        "description": "根据商品参考图片创建兼容 Apple 的动态照片，并提供预览和导出。"
+        "name": "图生视频",
+        "description": "根据商品参考图片生成视频，并提供预览和导出。"
       },
       "tiktok-creative-studio": {
-        "name": "TikTok 创意工作室",
+        "name": "tk创意室",
         "description": "读取复刻镜头和提示词，在独立工作台中执行创意视频批次。"
       },
       "video-parser-download": {
@@ -2935,8 +2935,8 @@
   "livePhoto": {
     "hero": {
       "back": "返回插件",
-      "eyebrow": "动态照片插件",
-      "title": "从商品参考图生成可直接导出的动态照片素材。",
+      "eyebrow": "图生视频插件",
+      "title": "从商品参考图生成可直接导出的图生视频素材。",
       "desc": "在专用插件工作台中创建可预览的动图组合，检查提示词锁定，导出 Apple 风格素材包并打开本地输出。",
       "refresh": "刷新",
       "completed": "已完成"
@@ -2965,7 +2965,7 @@
     },
     "library": {
       "title": "库与导出",
-      "emptyTitle": "还没有动态照片任务。",
+      "emptyTitle": "还没有图生视频任务。",
       "emptyDesc": "请先从商品参考图创建任务。",
       "packagingMetadata": "打包元数据",
       "preview": "预览",
@@ -2977,7 +2977,7 @@
     },
     "actions": {
       "creating": "创建中...",
-      "createLivePhoto": "创建动态照片",
+      "createLivePhoto": "创建图生视频",
       "exporting": "导出中...",
       "exportSelected": "导出选中项"
     },
@@ -2998,9 +2998,9 @@
       "exportDirectoryTitle": "选择导出目录"
     },
     "messages": {
-      "referenceCreated": "参考图动态照片任务已创建。",
-      "retried": "动态照片任务已重试。",
-      "regenerated": "动态照片任务已重新生成。",
+      "referenceCreated": "参考图生视频任务已创建。",
+      "retried": "图生视频任务已重试。",
+      "regenerated": "图生视频任务已重新生成。",
       "exportedCount": "已导出 {count} 个项目。"
     },
     "workspace": {
@@ -3022,10 +3022,10 @@
       "pendingTasks": "待创建任务",
       "referenceTaskList": "参考图任务列表",
       "missingImage": "图片已不存在",
-      "createTaskPrefix": "创建动态照片任务",
-      "referenceSafe": "系统会读取商品参考数据，生成替换图后继续生成视频与动态照片素材。",
+      "createTaskPrefix": "创建图生视频任务",
+      "referenceSafe": "系统会读取商品参考数据，生成替换图后继续生成视频与图生视频素材。",
       "outputTitle": "输出说明",
-      "outputDesc": "参考图任务会生成替换图、动态预览视频与动态照片结果，完成后可在素材库统一导出。",
+      "outputDesc": "参考图任务会生成替换图、动态预览视频与图生视频结果，完成后可在素材库统一导出。",
       "previewStats": "预览与统计",
       "settingsTitle": "生成设置",
       "standardPackage": "Apple 动态照片标准包",
@@ -3039,8 +3039,8 @@
       "referenceCreatedPrefix": "已创建",
       "referenceCreatedSuffix": "个参考图任务。",
       "runtimeLogTitle": "运行日志",
-      "primaryImage": "Live Photo 主图",
-      "primaryImageRequired": "当前商品还没有设置 Live Photo 主图，不能创建参考图替换任务。",
+      "primaryImage": "图生视频主图",
+      "primaryImageRequired": "当前商品还没有设置图生视频主图，不能创建参考图替换任务。",
       "qualityGateTitle": "质量门禁与提示词版本",
       "qualityGateDesc": "待执行任务跟随当前启用版本，图片质检通过后才进入视频阶段。",
       "passRate": "通过率",
@@ -3060,7 +3060,7 @@
       "referenceMotion": "参考图默认动作",
       "exportSettingsDesc": "当前导出规格会写入数据库，并在导出阶段参与分辨率、帧率和压缩质量处理。",
       "saving": "保存中...",
-      "saveSettings": "保存动态照片设置",
+      "saveSettings": "保存图生视频设置",
       "running": "运行中",
       "paused": "暂停",
       "successNotExported": "成功未导出",
@@ -3778,8 +3778,8 @@
         "removeConfirm": "把“{name}”及其镜头移出素材池？原视频文件不会被删除。"
       },
       "sourceKind": {
-        "creative_studio": "TikTok 创意工作室",
-        "live_photo": "Live Photo",
+        "creative_studio": "tk创意室",
+        "live_photo": "图生视频",
         "product_asset": "商品素材",
         "clone_output": "AI 复刻成片",
         "import": "导入"
@@ -3791,7 +3791,7 @@
         "failed": "失败"
       },
       "toast": {
-        "noneLinked": "这个商品在「商品库素材」「TikTok 创意工作室」「Live Photo」「AI 复刻」里都还没有视频。请点「导入实拍视频」上传拍摄素材，或先用这些模块为它生成视频后再同步。",
+        "noneLinked": "这个商品在「商品库素材」「tk创意室」「图生视频」「AI 复刻」里都还没有视频。请点「导入实拍视频」上传拍摄素材，或先用这些模块为它生成视频后再同步。",
         "synced": "新增 {count} 个源视频，开始切镜识别。",
         "nothingNew": "没有新的商品素材。",
         "imported": "已导入 {count} 个视频，开始切镜识别。"
@@ -4125,10 +4125,10 @@
         "material": "商品素材",
         "sourceVideo": "来源视频",
         "clone": "视频复刻",
-        "livePhoto": "动态照片",
+        "livePhoto": "图生视频",
         "subtitle": "字幕与切片",
         "listing": "商品刊登",
-        "creative": "创意工作室",
+        "creative": "tk创意室",
         "modelIdentity": "模特资料",
         "template": "生产模板",
         "production": "生产任务",
@@ -4219,11 +4219,11 @@
     },
     "reply": {
       "greeting": "你好。告诉我你想创建、检查、发布或查找什么内容。",
-      "capabilities": "我可以检查商品、整理素材、创建视频和动态照片、生成字幕、发布已批准的视频，并查找已有结果。",
+      "capabilities": "我可以检查商品、整理素材、创建视频和图生视频、生成字幕、发布已批准的视频，并查找已有结果。",
       "thanks": "不客气。准备好后直接发送下一个目标。",
       "assistant_unavailable": "智能助手暂时不可用。我没有把这条对话请求错误创建为工作流，请稍后重试。",
-      "artifact_results": "我找到了最近的 {count} 个动态照片视频，可以直接打开下方结果。",
-      "artifact_empty": "这台设备上暂时没有找到已完成的动态照片视频。",
+      "artifact_results": "我找到了最近的 {count} 个图生视频，可以直接打开下方结果。",
+      "artifact_empty": "这台设备上暂时没有找到已完成的图生视频。",
       "existing_results": "我找到了当前会话中的 {count} 个已有结果。",
       "existing_empty": "当前会话还没有可用结果。",
       "output_directory": "你希望把结果导出到哪个目录？",
@@ -4440,7 +4440,7 @@
     "employeeDescription": {
       "supervisor": "拆解目标，协调专业员工，并汇总最终交付。",
       "material": "检查商品资料并整理可复用素材。",
-      "video": "根据参考内容创建商品视频和动态照片。",
+      "video": "根据参考内容创建商品视频和图生视频。",
       "package": "生成字幕并整理交付产物。",
       "publish": "向已审批账号提交发布任务。"
     },
@@ -4448,7 +4448,7 @@
       "ProductInspect": "检查商品资料",
       "MaterialPrepare": "整理生产素材",
       "CommerceVideoCreate": "创建商品视频",
-      "LivePhotoCreate": "创建动态照片",
+      "LivePhotoCreate": "创建图生视频",
       "SubtitleGenerate": "生成字幕包装",
       "VideoPublish": "提交视频发布",
       "ArtifactInspect": "查看已有结果",
@@ -4511,15 +4511,15 @@
       "listing_generate": "生成商品刊登",
       "listing_list": "查看商品刊登",
       "listing_save": "保存商品刊登",
-      "live_photo_create": "创建动态照片",
-      "live_photo_delete": "删除动态照片",
-      "live_photo_export": "导出动态照片",
-      "live_photo_list": "查看动态照片",
-      "live_photo_pause": "暂停动态照片",
-      "live_photo_resume": "恢复动态照片",
-      "live_photo_retry": "重试动态照片",
-      "live_photo_subtitle_generate": "添加动态照片字幕",
-      "live_photo_subtitle_revert": "移除动态照片字幕",
+      "live_photo_create": "创建图生视频",
+      "live_photo_delete": "删除图生视频",
+      "live_photo_export": "导出图生视频",
+      "live_photo_list": "查看图生视频",
+      "live_photo_pause": "暂停图生视频",
+      "live_photo_resume": "恢复图生视频",
+      "live_photo_retry": "重试图生视频",
+      "live_photo_subtitle_generate": "添加图生视频字幕",
+      "live_photo_subtitle_revert": "移除图生视频字幕",
       "material_batch_retry": "重试素材批次",
       "material_bind_product": "绑定素材商品",
       "material_delete": "删除素材",
@@ -4655,15 +4655,15 @@
           "description": "查看已安装和可用的软件插件"
         },
         "live-photo": {
-          "label": "动态照片",
-          "description": "创建、检查和导出动态照片"
+          "label": "图生视频",
+          "description": "创建、检查和导出图生视频"
         },
         "product-materials": {
           "label": "商品图片素材",
           "description": "准备和管理可复用商品素材"
         },
         "tiktok-creative": {
-          "label": "TikTok 创意工作室",
+          "label": "tk创意室",
           "description": "制作 TikTok 创意视频镜头"
         },
         "tiktok-listing": {
@@ -4709,7 +4709,7 @@
       "commands": {
         "video": "创建电商视频",
         "material": "准备商品素材",
-        "livePhoto": "创建动态照片",
+        "livePhoto": "创建图生视频",
         "subtitle": "生成视频字幕",
         "publish": "发布已审批视频",
         "production": "查看生产状态",
@@ -4735,7 +4735,7 @@
         "settings": "管理 Hermes、模型、技能、渠道和主题"
       },
       "prompts": {
-        "livePhoto": "使用选中的商品参考图创建动态照片。执行前确认数量和动作要求。",
+        "livePhoto": "使用选中的商品参考图创建图生视频。执行前确认数量和动作要求。",
         "subtitle": "为已附加或已选择的视频生成字幕，检查时间轴并准备可导出结果。",
         "production": "检查当前生产队列，汇总进行中任务、失败、阻塞和已完成产物。",
         "research": "使用已连接浏览器调研以下主题，对比可靠来源并提供引用：",

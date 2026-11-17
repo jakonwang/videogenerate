@@ -5023,7 +5023,7 @@ onBeforeUnmount(() => {
               publisherPickerPage = 1;
             "
           >
-            动态照片
+            图生视频
           </button>
           <button
             type="button"
@@ -5034,7 +5034,7 @@ onBeforeUnmount(() => {
               publisherPickerPage = 1;
             "
           >
-            创意工作室
+            tk创意室
           </button>
         </div>
         <div class="publisher-picker-filter">

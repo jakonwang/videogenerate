@@ -24,8 +24,8 @@ function weekKey(date = new Date()) {
 
 const LINE_LABEL: Record<string, string> = {
   clone: '复刻',
-  creative: '创意工作室',
-  livephoto: 'Live Photo',
+  creative: 'tk创意室',
+  livephoto: '图生视频',
   production: '批量混剪',
   publish: '发布',
 }

@@ -5,7 +5,7 @@ type StepLike = { intentType: string; title?: string; input?: Record<string, unk
 /** Rough per-unit costs used for the plan card. Values are deliberately conservative. */
 const UNIT_COST: Record<string, { modelCalls: number; accountCredits: number; minutes: number; unit: string }> = {
   'Intent.CommerceVideoCreate': { modelCalls: 16, accountCredits: 0, minutes: 25, unit: '条复刻视频' },
-  'Intent.LivePhotoCreate': { modelCalls: 3, accountCredits: 0, minutes: 6, unit: '个 Live Photo' },
+  'Intent.LivePhotoCreate': { modelCalls: 3, accountCredits: 0, minutes: 6, unit: '个图生视频' },
   'Intent.LivePhotoFromVideo': { modelCalls: 0, accountCredits: 0, minutes: 1, unit: '个 Live Photo（仅打包）' },
   'Intent.CreativeFromImages': { modelCalls: 2, accountCredits: 1, minutes: 6, unit: '条创意短视频' },
   'Intent.TiktokCreativeManage': { modelCalls: 2, accountCredits: 1, minutes: 6, unit: '条创意短视频' },

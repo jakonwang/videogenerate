@@ -19,7 +19,7 @@
     "publish": "把已经审核通过的视频生成发布草稿"
   },
   "thinking": "正在思考和规划…",
-  "composerPlaceholder": "例如：给「珍珠耳环」做 2 条复刻视频，再把分镜做成 Live Photo",
+  "composerPlaceholder": "例如：给「珍珠耳环」做 2 条复刻视频，再把分镜做成图生视频",
   "composerHint": "Enter 发送 · Shift+Enter 换行 · 可拖入文件",
   "send": "发送",
   "attachFile": "从电脑添加文件",
@@ -31,8 +31,8 @@
     "inbox": "审核收件箱",
     "groupCreate": "创作",
     "groupAssets": "资产",
-    "creativeStudio": "TikTok 创意工作室",
-    "livePhoto": "Live Photo",
+    "creativeStudio": "tk创意室",
+    "livePhoto": "图生视频",
     "production": "批量混剪",
     "publish": "发布中心",
     "insights": "数据复盘",
@@ -44,8 +44,8 @@
   },
   "line": {
     "clone": "复刻",
-    "creative": "创意工作室",
-    "livephoto": "Live Photo",
+    "creative": "tk创意室",
+    "livephoto": "图生视频",
     "production": "批量混剪",
     "publish": "发布"
   },
@@ -76,8 +76,8 @@
     "CommerceVideoCreate": "复刻视频（参考分析→成片）",
     "CloneProjectManage": "管理复刻项目",
     "ModelIdentityManage": "管理模特",
-    "LivePhotoCreate": "生成 Live Photo",
-    "LivePhotoManage": "管理 Live Photo",
+    "LivePhotoCreate": "生成图生视频",
+    "LivePhotoManage": "管理图生视频",
     "SubtitleGenerate": "生成字幕",
     "VideoSlice": "长视频切片",
     "SourceVideoImport": "解析下载参考视频",
@@ -85,7 +85,7 @@
     "ListingGenerate": "生成上架文案",
     "ListingExport": "导出上架表格",
     "ListingManage": "管理上架记录",
-    "TiktokCreativeManage": "管理创意工作室任务",
+    "TiktokCreativeManage": "管理tk创意室任务",
     "ProductionBatchCreate": "创建批量混剪",
     "ProductionQueueControl": "控制混剪队列",
     "ProductionTaskManage": "管理混剪任务",
@@ -96,8 +96,8 @@
     "SystemHealthCheck": "系统体检",
     "AssetSearch": "检索素材库",
     "AssetArchive": "归档到素材库",
-    "CloneShotsSend": "分镜送去创意工作室 / Live Photo",
-    "CreativeFromImages": "创意工作室：场景图换品出片",
+    "CloneShotsSend": "分镜送去tk创意室 / 图生视频",
+    "CreativeFromImages": "tk创意室：场景图换品出片",
     "LivePhotoFromVideo": "视频转 Live Photo",
     "ReviewSubmit": "送入审核收件箱",
     "ProductImportFromLink": "贴链接建商品",
@@ -117,7 +117,7 @@
     "modelCalls": "约 {count} 次模型调用",
     "modelCallsHint": "按配方经验值估算，实际以模型返回为准",
     "accountCredits": "约 {count} 个 TikTok 账号额度",
-    "accountCreditsHint": "创意工作室出片消耗 TikTok 创意账号额度",
+    "accountCreditsHint": "tk创意室出片消耗 TikTok 创意账号额度",
     "minutes": "约 {count} 分钟",
     "awaitingConfirmation": "「{title}」会修改或删除数据，需要你单独确认后才会执行。",
     "confirmStep": "确认执行这一步",
@@ -158,19 +158,19 @@
     "approvalNote": "生成后会先展示计划卡（步骤、预计消耗、耗时），需要你点「执行」才会开始。",
     "pack": {
       "title": "一个商品，一套内容",
-      "desc": "选商品和参考视频，自动复刻成片，并把分镜做成 Live Photo / 创意短视频",
-      "output": "产出：N 条复刻成片 + 分镜 Live Photo",
+      "desc": "选商品和参考视频，自动复刻成片，并把分镜做成图生视频 / 创意短视频",
+      "output": "产出：N 条复刻成片 + 分镜图生视频",
       "prompt": "为这个商品做一套内容：基于 {count} 条参考视频复刻成片，并复用分镜",
       "summary": "复刻 {count} 条参考视频 → 分镜送去其他生产线 → 进入审核收件箱"
     },
     "scene": {
       "title": "场景图批量出片",
-      "desc": "把好看的场景图换成你的商品，用 TikTok 创意账号或模型批量出短视频 / Live Photo",
-      "output": "产出：每张图一条短视频或 Live Photo",
-      "promptCreative": "用创意工作室把 {count} 张场景图换成这个商品并出片",
-      "promptLivePhoto": "把 {count} 张场景图换成这个商品并做成 Live Photo",
+      "desc": "把好看的场景图换成你的商品，用 TikTok 创意账号或模型批量出短视频 / 图生视频",
+      "output": "产出：每张图一条短视频或图生视频",
+      "promptCreative": "用tk创意室把 {count} 张场景图换成这个商品并出片",
+      "promptLivePhoto": "把 {count} 张场景图换成这个商品并做成图生视频",
       "summaryCreative": "{count} 张场景图 → 商品换图 → TikTok 创意账号出片 → 审核",
-      "summaryLivePhoto": "{count} 张场景图 → 商品换图 → 模型出动态 → Live Photo → 审核"
+      "summaryLivePhoto": "{count} 张场景图 → 商品换图 → 模型出动态 → 图生视频 → 审核"
     },
     "viral": {
       "title": "跟拍一条爆款",
@@ -203,7 +203,7 @@
     "autopilot": {
       "title": "全自动打爆",
       "desc": "从选品到发布草稿一条龙：建商品 → 找爆款参考 → 复刻成片 → 质检 → 排期 → 复盘",
-      "output": "产出：每个商品 N 条成片 + Live Photo + 发布草稿 + 复盘建议",
+      "output": "产出：每个商品 N 条成片 + 图生视频 + 发布草稿 + 复盘建议",
       "prompt": "全自动打爆：从商品到成片、审核和发布草稿一次跑完",
       "summary": "体检 → 准备商品 → 找参考爆款 → 复刻成片 → 等待出片 → 审核{publish} → 复盘",
       "summaryPublish": " → 发布草稿"
@@ -220,13 +220,13 @@
     "referenceVideosHint": "每条参考视频复刻一个项目，建议 1–3 条",
     "variantCount": "脚本变体数",
     "variantCountHint": "每个项目生成几版脚本供挑选",
-    "shotsToLivePhoto": "分镜同时做成 Live Photo",
-    "shotsToCreative": "分镜同时送去创意工作室出片（消耗账号额度）",
+    "shotsToLivePhoto": "分镜同时做成图生视频",
+    "shotsToCreative": "分镜同时送去tk创意室出片（消耗账号额度）",
     "sceneImages": "场景图",
     "sceneImagesHint": "可以是别人的商品图、好看的场景图，AI 会换成你的商品",
     "engine": "出片方式",
-    "engineCreative": "TikTok 创意工作室（消耗账号额度）",
-    "engineLivePhoto": "模型 API + Live Photo",
+    "engineCreative": "tk创意室（消耗账号额度）",
+    "engineLivePhoto": "模型 API + 图生视频",
     "viralLinks": "爆款链接",
     "viralLinksHint": "每行一个 TikTok / 抖音分享链接",
     "scheme": "选品方案",
@@ -255,7 +255,7 @@
   },
   "inbox": {
     "title": "审核收件箱",
-    "desc": "AI 产出的成片、短视频和 Live Photo 都在这里。你做选择题：通过 / 重做 / 丢弃。",
+    "desc": "AI 产出的成片、短视频和图生视频都在这里。你做选择题：通过 / 重做 / 丢弃。",
     "tabs": {
       "pending": "待审核",
       "approved": "已通过",
@@ -342,8 +342,8 @@
     },
     "refKind": {
       "clone": "复刻",
-      "creative": "创意工作室",
-      "livephoto": "Live Photo",
+      "creative": "tk创意室",
+      "livephoto": "图生视频",
       "product": "商品",
       "asset": "素材",
       "publish": "发布",
@@ -506,8 +506,8 @@
       "evening": "晚上好，"
     },
     "headline": "今天卖什么？",
-    "sub": "告诉 AI 制片人你的目标，它会规划、调度复刻 / 创意工作室 / Live Photo，并把产出交给你挑选。",
-    "goalPlaceholder": "例如：这周给新到的耳环做 6 条视频和一组 Live Photo",
+    "sub": "告诉 AI 制片人你的目标，它会规划、调度复刻 / tk创意室 / 图生视频，并把产出交给你挑选。",
+    "goalPlaceholder": "例如：这周给新到的耳环做 6 条视频和一组图生视频",
     "goalSubmit": "交给 AI",
     "openWorkspace": "打开工作台",
     "letAi": "让 AI 来做",
@@ -517,11 +517,11 @@
         "desc": "照着爆款视频的结构，做一条带你商品的完整成片"
       },
       "creative": {
-        "title": "TikTok 创意工作室",
+        "title": "tk创意室",
         "desc": "场景图换上你的商品，用 TikTok 创意账号批量出短视频"
       },
       "livephoto": {
-        "title": "Live Photo",
+        "title": "图生视频",
         "desc": "场景图换上你的商品，做成可在手机上「动起来」的照片"
       }
     },
@@ -562,7 +562,7 @@
         },
         "video": {
           "title": "出成片",
-          "sub": "复刻 + Live Photo"
+          "sub": "复刻 + 图生视频"
         },
         "review": {
           "title": "质检",

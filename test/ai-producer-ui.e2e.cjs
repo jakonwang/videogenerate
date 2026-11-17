@@ -37,7 +37,7 @@ async function main() {
 
     // Sidebar: new IA with inbox
     const sidebar = await page.locator('[data-testid="app-sidebar"]').innerText()
-    for (const label of ['工作台', '审核收件箱', '复刻', 'TikTok 创意工作室', 'Live Photo', '发布中心', '数据复盘', '商品库']) {
+    for (const label of ['工作台', '审核收件箱', '复刻', 'tk创意室', '图生视频', '发布中心', '数据复盘', '商品库']) {
       assert.ok(sidebar.includes(label), `sidebar has ${label}`)
     }
 

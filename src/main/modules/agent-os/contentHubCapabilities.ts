@@ -251,7 +251,7 @@ const cloneSendShotsBinding: AgentCapabilityBinding = {
     }
     if (targets.includes('creative')) {
       const productId = text(project.productId)
-      if (!productId) return failed('clone_project_without_product', '该复刻项目没有绑定商品，无法送去创意工作室。')
+      if (!productId) return failed('clone_project_without_product', '该复刻项目没有绑定商品，无法送去tk创意室。')
       const task: any = await tiktokCreativeStudioService.createFromReference({ referenceImagePaths: framePaths, productId, mode: text(input.mode) === 'image_to_video' ? 'image_to_video' : undefined })
       await tiktokCreativeStudioRepoPatchSource(task.id, projectId, text(project.title))
       for (const shot of task.shots || []) {
@@ -259,7 +259,7 @@ const cloneSendShotsBinding: AgentCapabilityBinding = {
       }
       artifactIds.push(context.registerArtifact({
         kind: 'task',
-        name: `创意工作室 · ${(task.shots || []).length} 个分镜`,
+        name: `tk创意室 · ${(task.shots || []).length} 个分镜`,
         uri: `creative://${task.id}`,
         metadata: { creativeTaskId: task.id, cloneProjectId: projectId },
         sourceArtifactIds: [],
@@ -300,7 +300,7 @@ const creativeFromImagesBinding: AgentCapabilityBinding = {
     contentIndex.invalidate()
     const artifactId = context.registerArtifact({
       kind: 'task',
-      name: `创意工作室 · ${(task.shots || []).length} 张场景图`,
+      name: `tk创意室 · ${(task.shots || []).length} 张场景图`,
       uri: `creative://${task.id}`,
       metadata: { creativeTaskId: task.id, productId },
       sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),

@@ -10,8 +10,8 @@ const BACKFILL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 const ARCHIVE_ROOT = 'AI 成片'
 const ARCHIVE_FOLDER: Record<string, string> = {
   clone: '复刻成片',
-  creative: '创意工作室',
-  livephoto: 'Live Photo',
+  creative: 'tk创意室',
+  livephoto: '图生视频',
 }
 
 type ReviewMeta = { installedAt?: number }

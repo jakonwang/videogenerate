@@ -29,7 +29,7 @@ export async function runHealthCheck(): Promise<HealthReport> {
     const capabilities: Array<{ key: 'chat' | 'image' | 'video'; title: string; model: (cfg: any) => string }> = [
       { key: 'chat', title: '对话模型（AI 制片人大脑、脚本分析）', model: (cfg) => String(cfg?.chatModel || '') },
       { key: 'image', title: '图片模型（分镜图、商品换图）', model: (cfg) => String(cfg?.imageModel || cfg?.imageEditModel || '') },
-      { key: 'video', title: '视频模型（分镜视频、Live Photo）', model: (cfg) => String(cfg?.videoModel || cfg?.imageToVideoModel || cfg?.textToVideoModel || '') },
+      { key: 'video', title: '视频模型（分镜视频、图生视频）', model: (cfg) => String(cfg?.videoModel || cfg?.imageToVideoModel || cfg?.textToVideoModel || '') },
     ]
     for (const capability of capabilities) {
       const cfg = resolveApifoxHubCredentials(credentials, capability.key) as any
@@ -57,7 +57,7 @@ export async function runHealthCheck(): Promise<HealthReport> {
     let detail = `${ready.length} 个账号可用`
     if (!enabled.length) {
       level = 'warning'
-      detail = '没有启用的 TikTok 创意账号，创意工作室无法出片'
+      detail = '没有启用的 TikTok 创意账号，tk创意室无法出片'
     } else if (!ready.length) {
       level = 'error'
       detail = '所有账号都不可用（过期 / 额度不足 / 异常）'

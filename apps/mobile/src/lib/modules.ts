@@ -42,7 +42,7 @@ export const MODULES: MobileModule[] = [
   { key: 'clone', name: '复刻', description: '对标视频拆解，AI 生成同款', icon: Copy, group: 'create', phase: 2 },
   { key: 'producer', name: 'AI 制片人', description: '一句话安排整条生产线', icon: Wand2, group: 'create', phase: 2 },
   { key: 'product-images', name: '商品图素材', description: 'AI 生成商品主图、场景图', icon: ImagePlus, group: 'create', phase: 2 },
-  { key: 'live-photo', name: 'Live Photo', description: '商品图生成实况照片', icon: Sparkles, group: 'create', phase: 2 },
+  { key: 'live-photo', name: '图生视频', description: '商品图生成视频', icon: Sparkles, group: 'create', phase: 2 },
   { key: 'review', name: '审核收件箱', description: '审核 AI 生成的素材', icon: Inbox, group: 'create', phase: 2 },
   { key: 'listing', name: '上架助手', description: 'AI 看商品图写标题和描述', icon: Store, group: 'sell', phase: 2, route: '/listings' },
 
@@ -54,7 +54,7 @@ export const MODULES: MobileModule[] = [
   { key: 'publish', name: '发布中心', description: '一键发到 TikTok', icon: Send, group: 'sell', phase: 4 },
   { key: 'insights', name: '数据复盘', description: '视频和商品数据分析', icon: BarChart3, group: 'sell', phase: 4 },
   { key: 'gmv-max', name: 'GMV Max', description: '广告投放优化', icon: Rocket, group: 'sell', phase: 4 },
-  { key: 'creative-studio', name: 'TikTok 创意工作室', description: '官方创意工具', icon: Megaphone, group: 'sell', phase: 4 },
+  { key: 'creative-studio', name: 'tk创意室', description: '官方创意工具', icon: Megaphone, group: 'sell', phase: 4 },
   { key: 'creator-hub', name: '达人中心', description: '达人建联与履约', icon: PackageSearch, group: 'sell', phase: 4 },
 ]
 

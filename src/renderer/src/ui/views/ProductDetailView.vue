@@ -799,7 +799,7 @@ watch(productId, () => {
                     type="button"
                     :title="tr('autoUi.k_5ea5cbe5b672')"
                     @click.stop="setLivePhotoReferenceImage(image.id)"
-                  >Live Photo</button>
+                  >图生视频</button>
                   <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="tr('autoUi.k_3755f56f2f83')" :data-testid="`product-delete-image-${image.id}`" type="button" @click.stop="removeImage(image.id)"><Trash2 :size="14" /></button>
                 </div>
               </article>
