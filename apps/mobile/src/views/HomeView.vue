@@ -8,6 +8,8 @@ import { coverOf, relativeTime, useModels, useProducts } from '@/lib/library'
 import { MODULES, PHASE_LABEL, type MobileModule } from '@/lib/modules'
 import { session } from '@/lib/session'
 import { toast } from '@/lib/toast'
+import { useGenerations } from '@/lib/generate'
+import { useTasks } from '@/lib/tasks'
 
 const router = useRouter()
 const { items: products } = useProducts()
@@ -30,7 +32,11 @@ const plan = computed(() => {
   return { label: `${e.planName || '会员'}${days !== null ? ` · 剩 ${days} 天` : ''}`, tone: days !== null && days <= 7 ? 'amber' : 'green' }
 })
 const recent = computed(() => products.value.slice(0, 6))
-const featured = MODULES.filter((m) => ['research', 'listing', 'clone', 'product-images', 'live-photo', 'mix', 'publish', 'review'].includes(m.key))
+const tasks = useTasks()
+const running = computed(() => tasks.value.filter((task) => task.state === 'running'))
+const failedCount = computed(() => tasks.value.filter((task) => task.state === 'failed').length)
+const toReview = useGenerations((item) => item.status === 'succeeded' && item.review === 'pending')
+const featured = MODULES.filter((m) => ['research', 'producer', 'listing', 'clone', 'product-images', 'live-photo', 'publish', 'review'].includes(m.key))
 
 function open(module: MobileModule) {
   if (module.route) router.push(module.route)
@@ -60,8 +66,8 @@ function open(module: MobileModule) {
         <button type="button" class="stat" @click="router.push('/library?tab=models')">
           <strong>{{ models.length }}</strong><span>模特</span>
         </button>
-        <button type="button" class="stat" @click="toast('任务中心将在第二阶段上线')">
-          <strong>0</strong><span>进行中任务</span>
+        <button type="button" class="stat" @click="router.push(running.length || failedCount || !toReview.length ? '/tasks' : '/review')">
+          <strong>{{ running.length }}</strong><span>{{ failedCount ? `进行中 · ${failedCount} 失败` : toReview.length ? `进行中 · ${toReview.length} 待审` : '进行中' }}</span>
         </button>
       </div>
     </section>

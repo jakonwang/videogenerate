@@ -43,6 +43,10 @@ export function loadCloudConfig() {
     /** 云端 AI 网关：每个账号每分钟 / 每天最多调用次数 */
     aiPerMinute: envInt('CLOUD_AI_PER_MINUTE', 20),
     aiPerDay: envInt('CLOUD_AI_PER_DAY', 500),
+    /** 水印、字幕用的中文字体目录（部署时运行 npm run setup:fonts 准备） */
+    fontsDir: resolve(env('CLOUD_FONTS_DIR', join(process.cwd(), 'resources', 'fonts'))),
+    /** 云端同时执行的图片 / 视频生成任务数 */
+    aiJobConcurrency: envInt('CLOUD_AI_JOB_CONCURRENCY', 4),
     /** 每个账号的多端同步文件空间（图片、视频） */
     syncQuotaBytes: envInt('CLOUD_SYNC_QUOTA_MB', 2048) * 1024 * 1024,
     allowRegistration: env('CLOUD_ALLOW_REGISTRATION', '1') === '1',

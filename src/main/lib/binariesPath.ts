@@ -1,5 +1,14 @@
 import { existsSync } from 'node:fs'
-import { app } from 'electron'
+import type { App } from 'electron'
+
+/** Electron 环境才有 app；云端服务（纯 Node）复用 ffmpeg 定位逻辑时不需要安装 electron */
+function electronApp(): App | undefined {
+  try {
+    return (require('electron') as typeof import('electron')).app
+  } catch {
+    return undefined
+  }
+}
 let ffmpegStatic: any
 let ffprobeStatic: any
 function loadStaticBinaries() {
@@ -15,7 +24,7 @@ function loadStaticBinaries() {
 function resolveAsarUnpackedPath(moduleResolvedPath: string): string {
   if (!moduleResolvedPath) return moduleResolvedPath
   try {
-    if (app.isPackaged && moduleResolvedPath.includes('app.asar') && !moduleResolvedPath.includes('app.asar.unpacked')) {
+    if (electronApp()?.isPackaged && moduleResolvedPath.includes('app.asar') && !moduleResolvedPath.includes('app.asar.unpacked')) {
       const swapped = moduleResolvedPath.replace(/app\.asar([\\/])/g, 'app.asar.unpacked$1')
       if (existsSync(swapped)) return swapped
     }

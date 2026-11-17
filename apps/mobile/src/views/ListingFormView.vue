@@ -4,8 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { Boxes, Copy, LoaderCircle, Sparkles, Trash2 } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncListing } from '@shared/cloud/sync'
 import {
-  buildTiktokListingDescriptionPrompt,
-  buildTiktokListingTitlePrompt,
   TIKTOK_LISTING_CATEGORY_LABELS,
   TIKTOK_LISTING_LANGUAGE_LABELS,
   type TiktokListingCategory,
@@ -16,6 +14,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import ProductPicker from '@/components/ProductPicker.vue'
 import type { ProductItem } from '@/lib/library'
 import { cloud, errorMessage } from '@/lib/session'
+import { writeListingCopy } from '@/lib/listing'
 import { deleteRecord, getRecord, newId, saveRecord } from '@/lib/sync'
 import { toast } from '@/lib/toast'
 
@@ -62,37 +61,16 @@ function applyProduct(product: Pick<ProductItem, 'id' | 'images' | 'type' | 'cov
   picking.value = false
 }
 
-function cleanTitle(text: string) {
-  return text.split('\n').map((line) => line.trim()).find(Boolean)?.replace(/^["'“”「」《》]+|["'“”「」《》]+$/g, '').replace(/^(title|标题)\s*[:：]\s*/i, '').slice(0, 200) || ''
-}
-
 async function generate() {
   if (!form.images.length) {
     toast('请先添加商品图片')
     return
   }
   generating.value = true
-  // The selected cover first, so the model looks at the main product shot.
-  const ordered = [...form.images].sort((a, b) => Number(b.fileId === cover.value) - Number(a.fileId === cover.value))
-  const imageFileIds = ordered.slice(0, 2).map((image) => image.fileId)
-  const detailText = form.price ? `Price: ${form.price}` : undefined
   try {
-    const [title, description] = await Promise.all([
-      cloud.ai.chat({
-        system: 'Only output the final title.',
-        prompt: buildTiktokListingTitlePrompt({ category: form.category, language: form.language, sku: form.sku, detailText }),
-        imageFileIds,
-        purpose: 'listing-title',
-      }),
-      cloud.ai.chat({
-        system: 'Only output the final description.',
-        prompt: buildTiktokListingDescriptionPrompt({ category: form.category, language: form.language, sku: form.sku, detailText }),
-        imageFileIds,
-        purpose: 'listing-description',
-      }),
-    ])
-    form.title = cleanTitle(title.content)
-    form.description = description.content.trim()
+    const copy = await writeListingCopy({ images: form.images, coverFileId: cover.value, category: form.category, language: form.language, sku: form.sku, price: form.price })
+    form.title = copy.title
+    form.description = copy.description
     form.generatedAt = Date.now()
     await save(false)
     toast('已生成，可以直接修改')

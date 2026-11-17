@@ -26,7 +26,7 @@ import type {
   CloudUserRole,
 } from './types'
 import type { ManagedSoftwareSettings } from './managedSettings'
-import type { AiChatRequest, AiChatResponse, AiUsageResponse } from './ai'
+import type { AiChatRequest, AiChatResponse, AiGenerationJob, AiGenerationRequest, AiUsageResponse } from './ai'
 import type { SyncChange, SyncPullResponse, SyncPushResponse, SyncUploadResponse, SyncUsageResponse } from './sync'
 
 export class CloudClientError extends Error {
@@ -127,6 +127,9 @@ export function createCloudClient(options: CloudClientOptions) {
     ai: {
       chat: (input: AiChatRequest) => request<AiChatResponse>('POST', '/api/v1/ai/chat', input, 130_000),
       usage: () => request<AiUsageResponse>('GET', '/api/v1/ai/usage'),
+      createJob: (input: AiGenerationRequest) => request<{ job: AiGenerationJob }>('POST', '/api/v1/ai/jobs', input),
+      getJob: (id: string) => request<{ job: AiGenerationJob }>('GET', `/api/v1/ai/jobs/${encodeURIComponent(id)}`),
+      listJobs: (ids: string[]) => request<{ jobs: AiGenerationJob[] }>('GET', `/api/v1/ai/jobs${qs({ ids: ids.join(',') })}`),
     },
     health: () => request<{ status: string }>('GET', '/api/v1/health'),
     getConfig: () => request<{ values: Record<string, unknown>; version: string }>('GET', '/api/v1/client/config'),

@@ -157,6 +157,28 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
       );
     `,
   },
+  {
+    id: 4,
+    sql: `
+      CREATE TABLE ai_jobs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        input TEXT NOT NULL,
+        output_file_id TEXT,
+        output_mime TEXT,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_ai_jobs_user ON ai_jobs(user_id, created_at);
+    `,
+  },
+  {
+    id: 5,
+    sql: `ALTER TABLE ai_jobs ADD COLUMN result TEXT;`,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

@@ -126,9 +126,10 @@ const selectedMaterialIds = ref<string[]>([])
 const backgroundMaterialCount = ref(3)
 const imageVariantCount = ref(3)
 const imageCategory = ref<Category>('necklace')
-const sourceImagePath = ref('')
-const sourceImageName = computed(() => sourceImagePath.value.split(/[\\/]/).pop() || '')
-const sourceImagePreviewSrc = computed(() => sourceImagePath.value ? `vg://file?path=${encodeURIComponent(sourceImagePath.value)}` : '')
+const sourceImagePaths = ref<string[]>([])
+const imageGenerateProgress = ref({ done: 0, total: 0 })
+function fileBaseName(path: string) { return path.split(/[\\/]/).pop() || '' }
+function filePreviewSrc(path: string) { return `vg://file?path=${encodeURIComponent(path)}` }
 const promptVersions = ref<PromptVersion[]>([])
 const selectedPromptVersionId = ref('')
 const promptVersionName = ref('')
@@ -151,7 +152,7 @@ let loadAllInFlight = false
 const copy = computed(() => {
   if (locale.value === 'vi-VN') {
     return {
-      pluginName: 'Tu lieu hinh anh san pham',
+      pluginName: 'Tao anh tu anh',
       kicker: 'Kho vat lieu hinh anh san pham',
       title: 'Xu ly hang loat, quan ly hieu qua',
       subtitle: 'Tach video theo loat, lay khung hinh giua an toan, tai len Qiniu va duy tri thu vien anh co the tai su dung.',
@@ -218,7 +219,7 @@ const copy = computed(() => {
 
   if (locale.value === 'zh-CN') {
     return {
-      pluginName: '\u5546\u54c1\u56fe\u7247\u7d20\u6750',
+      pluginName: '图生图',
       kicker: '商品图片素材库',
       title: '批量处理，高效管理',
       subtitle: '批量拆分视频，提取安全中帧，上传到七牛，并维护可复用的图片素材库。',
@@ -286,7 +287,7 @@ const copy = computed(() => {
   }
 
   return {
-    pluginName: 'Product Image Materials',
+    pluginName: 'Image to Image',
     kicker: 'Product Image Materials',
     title: 'Batch processing, efficient management',
     subtitle: 'Split videos in batches, extract safe middle frames, upload to Qiniu, and maintain a reusable image-material library.',
@@ -551,18 +552,21 @@ const uiText = computed(() => {
     queueEmpty: '在左侧选择视频并加入队列，处理进度会在这里实时更新。',
     promptDesc: '生成时使用当前选中的版本，可保存、复制或回滚。',
     sourceEmpty: '先在「拆解视频」中处理视频，拆解出的图片会出现在这里。',
+    sourceCount: '已选 {n} 张源图', clearAll: '清空', addMore: '继续添加', sourceFailed: '部分源图生成失败：', sourceMultiHint: '可一次选择多张',
   }
   if (locale.value === 'vi-VN') return {
     source: 'Nguon video', selected: 'Da chon', videos: 'video', remove: 'Bo', history: 'Batch gan day', imagesUnit: 'anh',
     queueEmpty: 'Chon video ben trai va them vao hang doi; tien trinh se cap nhat tai day.',
     promptDesc: 'Phien ban dang chon se duoc dung khi tao anh.',
     sourceEmpty: 'Hay tach video truoc; anh tach ra se hien thi tai day.',
+    sourceCount: 'Da chon {n} anh nguon', clearAll: 'Xoa het', addMore: 'Them anh', sourceFailed: 'Mot so anh nguon that bai:', sourceMultiHint: 'Co the chon nhieu anh',
   }
   return {
     source: 'Video source', selected: 'Selected', videos: 'videos', remove: 'Remove', history: 'Recent batches', imagesUnit: 'images',
     queueEmpty: 'Pick videos on the left and queue them; progress updates here automatically.',
     promptDesc: 'The selected version is used for generation. Save, copy or roll back anytime.',
     sourceEmpty: 'Break down a video first; extracted frames will show up here.',
+    sourceCount: '{n} source images selected', clearAll: 'Clear all', addMore: 'Add more', sourceFailed: 'Some source images failed:', sourceMultiHint: 'Multiple images allowed',
   }
 })
 
@@ -851,38 +855,61 @@ async function pickSourceImage() {
   const paths = await window.api.pickFiles({
     title: promptUi.value.pickSourceTitle,
     filters: [{ name: promptUi.value.imageFilter, extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-    multiple: false,
+    multiple: true,
   })
-  if (Array.isArray(paths) && paths[0]) sourceImagePath.value = paths[0]
+  if (Array.isArray(paths)) addSourceImages(paths)
 }
 
 async function pickSourceImageFromAssetLibrary() {
-  const selected = await openAssetLibraryPicker({ type: 'image', multiple: false, usagePlugin: ASSET_USAGE_PLUGIN })
-  if (selected?.[0]) sourceImagePath.value = selected[0].filePath
+  const selected = await openAssetLibraryPicker({ type: 'image', multiple: true, usagePlugin: ASSET_USAGE_PLUGIN })
+  if (selected?.length) addSourceImages(selected.map((item) => item.filePath))
+}
+
+function addSourceImages(paths: string[]) {
+  const next = [...sourceImagePaths.value]
+  for (const path of paths) if (path && !next.includes(path)) next.push(path)
+  sourceImagePaths.value = next
+}
+
+function removeSourceImage(path: string) {
+  sourceImagePaths.value = sourceImagePaths.value.filter((item) => item !== path)
 }
 
 function clearSourceImage() {
-  sourceImagePath.value = ''
+  sourceImagePaths.value = []
 }
 
 async function generateFromUploadedImage() {
-  if (!sourceImagePath.value || imageGenerating.value) return
+  if (!sourceImagePaths.value.length || imageGenerating.value) return
+  const paths = [...sourceImagePaths.value]
   imageGenerating.value = true
+  imageGenerateProgress.value = { done: 0, total: paths.length }
   errorText.value = ''
   notice.value = ''
+  let generated = 0
+  const failures: string[] = []
   try {
-    const result = await window.api.productImageMaterials.createImageVariants({
-      userId: DESKTOP_USER_ID,
-      sourceImagePath: sourceImagePath.value,
-      category: imageCategory.value,
-      variantCount: Math.max(1, Math.min(6, Math.floor(Number(imageVariantCount.value || 1)))),
-      promptVersionId: selectedPromptVersionId.value,
-      prompt: promptText.value,
-    })
-    notice.value = `${generationCopy.value.success} ${result.count}`
+    for (const path of paths) {
+      try {
+        const result = await window.api.productImageMaterials.createImageVariants({
+          userId: DESKTOP_USER_ID,
+          sourceImagePath: path,
+          category: imageCategory.value,
+          variantCount: Math.max(1, Math.min(6, Math.floor(Number(imageVariantCount.value || 1)))),
+          promptVersionId: selectedPromptVersionId.value,
+          prompt: promptText.value,
+        })
+        generated += Number(result?.count || 0)
+        // Successful sources leave the list, so a retry only re-runs the failed ones.
+        removeSourceImage(path)
+      } catch (error: any) {
+        failures.push(`${fileBaseName(path)}: ${error?.message ?? String(error)}`)
+      }
+      imageGenerateProgress.value = { ...imageGenerateProgress.value, done: imageGenerateProgress.value.done + 1 }
+    }
+    if (generated) notice.value = `${generationCopy.value.success} ${generated}`
+    if (failures.length) errorText.value = `${uiText.value.sourceFailed} ${failures.join('; ')}`
     await loadAll()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
   } finally {
     imageGenerating.value = false
   }
@@ -1495,20 +1522,30 @@ onUnmounted(() => {
           </div>
         </header>
 
-        <div class="pm-source-img" :class="{ 'has-image': sourceImagePath }">
-          <button class="pm-source-img__preview" data-testid="product-image-materials-source-preview" type="button" @click="pickSourceImage">
-            <img v-if="sourceImagePreviewSrc" :src="sourceImagePreviewSrc" :alt="sourceImageName" />
-            <span v-else class="pm-source-img__empty">
+        <div class="pm-source-img" :class="{ 'has-image': sourceImagePaths.length }">
+          <button v-if="!sourceImagePaths.length" class="pm-source-img__preview" data-testid="product-image-materials-source-preview" type="button" @click="pickSourceImage">
+            <span class="pm-source-img__empty">
               <span class="pm-drop__icon"><ImagePlus :size="22" /></span>
               <strong>{{ promptUi.empty }}</strong>
-              <small>{{ promptUi.sourceHint }}</small>
+              <small>{{ promptUi.sourceHint }} · {{ uiText.sourceMultiHint }}</small>
             </span>
           </button>
-          <div v-if="sourceImagePath" class="pm-source-img__bar">
+          <div v-else class="pm-source-grid" data-testid="product-image-materials-source-grid">
+            <div v-for="path in sourceImagePaths" :key="path" class="pm-source-grid__item" :title="path">
+              <img :src="filePreviewSrc(path)" :alt="fileBaseName(path)" />
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger pm-source-grid__remove" type="button" :disabled="imageGenerating" :title="uiText.remove" :aria-label="uiText.remove" @click="removeSourceImage(path)">
+                <X :size="12" />
+              </button>
+            </div>
+            <button class="pm-source-grid__add" type="button" :disabled="imageGenerating" :title="uiText.addMore" @click="pickSourceImage">
+              <ImagePlus :size="18" /><small>{{ uiText.addMore }}</small>
+            </button>
+          </div>
+          <div v-if="sourceImagePaths.length" class="pm-source-img__bar">
             <ImageIcon :size="14" />
-            <span :title="sourceImagePath">{{ sourceImageName }}</span>
-            <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" data-testid="product-image-materials-clear-image" type="button" :title="promptUi.clearSource" :aria-label="promptUi.clearSource" @click="clearSourceImage">
-              <X :size="13" />
+            <span>{{ uiText.sourceCount.replace('{n}', String(sourceImagePaths.length)) }}</span>
+            <button class="vg-btn vg-btn--sm vg-btn--ghost" data-testid="product-image-materials-clear-image" type="button" :disabled="imageGenerating" @click="clearSourceImage">
+              <X :size="13" />{{ uiText.clearAll }}
             </button>
           </div>
         </div>
@@ -1535,11 +1572,12 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <button class="vg-btn vg-btn--primary vg-btn--lg vg-btn--block" data-testid="product-image-materials-generate" type="button" :disabled="!sourceImagePath || imageGenerating" @click="generateFromUploadedImage">
+        <button class="vg-btn vg-btn--primary vg-btn--lg vg-btn--block" data-testid="product-image-materials-generate" type="button" :disabled="!sourceImagePaths.length || imageGenerating" @click="generateFromUploadedImage">
           <RefreshCcw v-if="imageGenerating" :size="16" class="vg-spin" />
           <Wand2 v-else :size="16" />
           {{ promptUi.generate }}
-          <em class="pm-btn-count">× {{ imageVariantCount }}</em>
+          <em v-if="imageGenerating" class="pm-btn-count">{{ imageGenerateProgress.done }}/{{ imageGenerateProgress.total }}</em>
+          <em v-else class="pm-btn-count">{{ sourceImagePaths.length > 1 ? `${sourceImagePaths.length} × ` : '× ' }}{{ imageVariantCount }}</em>
         </button>
       </section>
 

@@ -13,6 +13,8 @@ import {
   type SyncProductType,
   type SyncResearchResult,
   type SyncResearchTask,
+  type SyncGeneration,
+  type SyncListing,
 } from '../../../shared/cloud/sync'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
@@ -20,6 +22,9 @@ import { cloneRepo } from '../clone/repo'
 import type { ModelIdentityLibraryItem } from '../clone/types'
 import { productsRepo } from '../products/repo'
 import { productResearchService } from '../product-research/service'
+import { applyGmvDecision, buildGmvDigest, digestFingerprint, type GmvService } from './gmvBridge'
+import { buildBusinessDigest, businessFingerprint, DEFAULT_BUSINESS_SOURCES, isEmptyBusinessDigest, type BusinessSources } from './businessBridge'
+import { BUSINESS_DIGEST_ID, GMV_DIGEST_ID, type SyncGmvDecision } from '../../../shared/cloud/selling'
 import type { Product, ProductImageAsset } from '../products/types'
 
 /**
@@ -52,6 +57,12 @@ type SyncStateFile = {
   fileHashes: Record<string, { size: number; mtimeMs: number; fileId: string }>
   /** 已确认存在于云端的文件 */
   uploaded: Record<string, true>
+  /** 上次发布的 GMV Max 摘要指纹，没变化就不重复上传 */
+  gmvDigestFingerprint?: string
+  /** 上次发布的经营摘要（数据复盘 / 达人 / 库存 / 创意室）指纹 */
+  businessFingerprint?: string
+  /** 已导入电脑素材库的手机作品（generations 记录 id） */
+  importedGenerations?: Record<string, true>
 }
 
 export type CloudSyncStatus = {
@@ -65,7 +76,7 @@ export type CloudSyncStatus = {
 
 const INTERVAL_MS = 60_000
 const IMAGE_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
-const MIME_EXT: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' }
+const MIME_EXT: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm' }
 const COLLECTION_NAME: Record<Collection, string> = { products: SYNC_COLLECTIONS.products, models: SYNC_COLLECTIONS.models }
 const PRODUCT_TYPES = new Set<SyncProductType>(['phone_case', 'earring', 'necklace', 'ring', 'bracelet', 'clothes', 'bag', 'shoes', 'toy', 'general'])
 
@@ -344,6 +355,151 @@ async function importResearch(session: Session, state: SyncStateFile, changes: S
   return imported.results
 }
 
+/* ------------------------------------------------------------------ GMV Max（手机看摘要、批准建议） */
+
+// Loaded lazily: the GMV Max module is large and only needed when the account uses it.
+let gmvSource: () => Promise<GmvService | null> = async () => {
+  try {
+    return (await import('../tiktok-gmv-max/service')).gmvMaxService as unknown as GmvService
+  } catch {
+    return null
+  }
+}
+
+/** 仅测试使用：替换 GMV Max 服务 */
+export function setCloudSyncGmvSource(source: () => Promise<GmvService | null>) {
+  gmvSource = source
+}
+
+/** 执行手机上的批准 / 拒绝，并把结果写回同一条记录 */
+async function applyGmvDecisions(session: Session, changes: SyncChange[]): Promise<number> {
+  const todo = changes.filter((change) => !change.deleted && change.data && !(change.data as SyncGmvDecision).result)
+  if (!todo.length) return 0
+  const service = await gmvSource()
+  const results: SyncChange[] = []
+  for (const change of todo) {
+    const decision = change.data as SyncGmvDecision
+    const outcome = service ? await applyGmvDecision(service, change.id, decision) : { ...decision, result: 'skipped' as const, resultAt: Date.now(), error: '这台电脑没有开启 GMV Max' }
+    results.push({ collection: SYNC_COLLECTIONS.gmvDecisions, id: change.id, updatedAt: Math.max(Date.now(), change.updatedAt + 1), deleted: false, data: outcome })
+  }
+  if (session.canWrite) await session.client.sync.push(results)
+  return results.length
+}
+
+/** 发布 GMV Max 摘要给手机（只在连接了 GMV Max、内容有变化时上传） */
+async function publishGmvDigest(session: Session, state: SyncStateFile) {
+  const service = await gmvSource()
+  if (!service) return
+  let digest
+  try {
+    digest = await buildGmvDigest(service)
+  } catch {
+    return // GMV Max not set up on this computer
+  }
+  if (!digest.connected && !digest.campaigns.length) return
+  const fingerprint = digestFingerprint(digest)
+  if (fingerprint === state.gmvDigestFingerprint) return
+  await session.client.sync.push([{ collection: SYNC_COLLECTIONS.gmvDigest, id: GMV_DIGEST_ID, updatedAt: Date.now(), deleted: false, data: digest }])
+  state.gmvDigestFingerprint = fingerprint
+}
+
+/* ------------------------------------------------------------------ 经营摘要 */
+
+let businessSources: BusinessSources = DEFAULT_BUSINESS_SOURCES
+
+/** 仅测试使用：替换经营数据来源 */
+export function setCloudSyncBusinessSources(sources: BusinessSources) {
+  businessSources = sources
+}
+
+async function publishBusinessDigest(session: Session, state: SyncStateFile) {
+  const digest = await buildBusinessDigest(businessSources)
+  if (isEmptyBusinessDigest(digest)) return
+  const fingerprint = businessFingerprint(digest)
+  if (fingerprint === state.businessFingerprint) return
+  await session.client.sync.push([{ collection: SYNC_COLLECTIONS.businessDigest, id: BUSINESS_DIGEST_ID, updatedAt: Date.now(), deleted: false, data: digest }])
+  state.businessFingerprint = fingerprint
+}
+
+/* ------------------------------------------------------------------ 手机作品 → 电脑 */
+
+export type PhoneImportTargets = {
+  /** 导入电脑素材库（「手机 App」文件夹） */
+  importAsset: (path: string, name: string) => Promise<void>
+  /** 写进电脑端上架助手（id 固定，重复导入是更新） */
+  saveListing: (input: {
+    id: string
+    sourceImagePath: string
+    referenceImagePaths: string[]
+    category: SyncListing['category']
+    sku: string
+    localDisplayPrice: string
+    titleLanguage: SyncListing['language']
+    generatedTitle: string
+    generatedDescription: string
+  }) => Promise<void>
+}
+
+const PHONE_FOLDER = '手机 App'
+
+let phoneImportTargets: PhoneImportTargets = {
+  importAsset: async (path, name) => {
+    const { assetLibraryService } = await import('../asset-library/service')
+    const folders = await assetLibraryService.listFolders(null)
+    const folder = folders.find((item: { name: string }) => item.name === PHONE_FOLDER) ?? (await assetLibraryService.createFolder(PHONE_FOLDER, null))
+    await assetLibraryService.importFile(path, 'mobile', name, folder.id)
+  },
+  saveListing: async (input) => {
+    const { tiktokListingService } = await import('../tiktok-listing/service')
+    await tiktokListingService.createOrUpdate({ ...input, generationStatus: input.generatedTitle ? 'done' : 'idle', listingImages: [] } as any)
+  },
+}
+
+/** 仅测试使用：替换导入目标 */
+export function setCloudSyncPhoneImportTargets(targets: PhoneImportTargets) {
+  phoneImportTargets = targets
+}
+
+/** 手机上审核通过的作品进电脑素材库；手机写的上架文案进电脑上架助手 */
+async function importPhoneOutputs(session: Session, state: SyncStateFile, changes: SyncChange[]): Promise<number> {
+  let imported = 0
+  state.importedGenerations ??= {}
+  for (const change of changes) {
+    if (change.deleted || !change.data) continue
+    try {
+      if (change.collection === SYNC_COLLECTIONS.generations) {
+        const item = change.data as SyncGeneration
+        if (item.review !== 'approved' || !item.outputFileId || state.importedGenerations[change.id]) continue
+        const path = await downloadImage(session, state, { fileId: item.outputFileId, mime: item.outputMime || (item.kind === 'video' ? 'video/mp4' : 'image/png') })
+        const name = `${item.productName ? `${item.productName}-` : ''}${item.label}${MIME_EXT[item.outputMime || ''] || (item.kind === 'video' ? '.mp4' : '.png')}`
+        await phoneImportTargets.importAsset(path, name.replace(/[\\/:*?"<>|]/g, '_'))
+        state.importedGenerations[change.id] = true
+        imported += 1
+      } else if (change.collection === SYNC_COLLECTIONS.listings) {
+        const listing = change.data as SyncListing
+        if (!listing.images.length) continue
+        const paths: string[] = []
+        for (const image of listing.images.slice(0, 5)) paths.push(await downloadImage(session, state, image))
+        await phoneImportTargets.saveListing({
+          id: `mobile-${change.id}`,
+          sourceImagePath: paths[0]!,
+          referenceImagePaths: paths.slice(1),
+          category: listing.category,
+          sku: listing.sku,
+          localDisplayPrice: listing.price,
+          titleLanguage: listing.language,
+          generatedTitle: listing.title,
+          generatedDescription: listing.description,
+        })
+        imported += 1
+      }
+    } catch (error) {
+      console.warn('[cloud-sync] 导入手机作品失败', change.collection, change.id, (error as Error).message)
+    }
+  }
+  return imported
+}
+
 async function pull(session: Session, state: SyncStateFile): Promise<number> {
   let pulled = 0
   for (;;) {
@@ -352,11 +508,18 @@ async function pull(session: Session, state: SyncStateFile): Promise<number> {
       COLLECTION_NAME.models,
       SYNC_COLLECTIONS.researchTasks,
       SYNC_COLLECTIONS.researchResults,
+      SYNC_COLLECTIONS.gmvDecisions,
+      SYNC_COLLECTIONS.generations,
+      SYNC_COLLECTIONS.listings,
     ])
     const research = page.changes.filter((change) => change.collection === SYNC_COLLECTIONS.researchTasks || change.collection === SYNC_COLLECTIONS.researchResults)
     if (research.length) pulled += await importResearch(session, state, research)
+    const decisions = page.changes.filter((change) => change.collection === SYNC_COLLECTIONS.gmvDecisions)
+    if (decisions.length) pulled += await applyGmvDecisions(session, decisions)
+    const outputs = page.changes.filter((change) => change.collection === SYNC_COLLECTIONS.generations || change.collection === SYNC_COLLECTIONS.listings)
+    if (outputs.length) pulled += await importPhoneOutputs(session, state, outputs)
     for (const change of page.changes) {
-      if (research.includes(change)) continue
+      if (research.includes(change) || decisions.includes(change) || outputs.includes(change)) continue
       const collection: Collection = change.collection === COLLECTION_NAME.models ? 'models' : 'products'
       const links = state.links[collection]
       const link = links[change.id]
@@ -408,6 +571,10 @@ async function runOnce(): Promise<CloudSyncStatus> {
     // Membership lapsed: still receive the phone's data, but the cloud refuses new uploads.
     status.pushed = session.canWrite ? await push(session, state) : 0
     status.pulled = await pull(session, state)
+    if (session.canWrite) {
+      await publishGmvDigest(session, state)
+      await publishBusinessDigest(session, state)
+    }
     status.lastSyncedAt = Date.now()
     status.lastError = ''
   } catch (error) {

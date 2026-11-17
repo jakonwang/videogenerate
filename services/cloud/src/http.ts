@@ -3,6 +3,7 @@ import type { CloudConfig } from './config'
 import type { CloudService } from './service'
 import type { SyncService } from './sync'
 import type { AiService } from './ai'
+import type { GenerationService } from './generate'
 import { SYNC_MAX_FILE_BYTES } from '../../../src/shared/cloud/sync'
 import { CloudError, badRequest } from './security'
 
@@ -54,7 +55,7 @@ function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   return String(req.socket.remoteAddress || '').slice(0, 64)
 }
 
-export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService) {
+export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService) {
   const routes: Array<{ method: string; pattern: RegExp; keys: string[]; handler: Handler; options: RouteOptions }> = []
 
   function route(method: string, path: string, handler: Handler, options: RouteOptions = {}) {
@@ -121,6 +122,14 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   /* ---------------------------------------------------------------- AI 网关（手机 App） */
   route('POST', '/api/v1/ai/chat', (ctx) => ai.chat(member(ctx).id, ctx.body as any))
   route('GET', '/api/v1/ai/usage', (ctx) => ai.usage(user(ctx).id))
+  route('POST', '/api/v1/ai/jobs', (ctx) => ({ job: generation.create(member(ctx).id, ctx.body as any) }))
+  route('GET', '/api/v1/ai/jobs', (ctx) => generation.list(user(ctx).id, String(ctx.url.searchParams.get('ids') || '').split(',')))
+  route('GET', '/api/v1/ai/jobs/:id', (ctx) => ({ job: generation.get(user(ctx).id, ctx.params.id) }))
+  // 平台下载参考图用的签名链接（不需要登录，靠签名和有效期）
+  route('GET', '/api/v1/public-files/:id', (ctx) => {
+    const file = generation.readPublicFile(ctx.params.id, query(ctx))
+    return raw(200, file.body, file.mime, { 'Cache-Control': 'private, max-age=600' })
+  })
 
   /* ---------------------------------------------------------------- 订单 / 兑换 */
   route('POST', '/api/v1/orders', async (ctx) => ({ order: await service.createOrder(user(ctx), ctx.body as any) }))

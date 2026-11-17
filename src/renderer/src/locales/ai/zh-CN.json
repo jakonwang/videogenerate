@@ -535,7 +535,7 @@
     "tools": {
       "parser": "视频解析下载",
       "subtitle": "视频批量字幕",
-      "materials": "商品图片素材",
+      "materials": "图生图",
       "production": "批量混剪",
       "creators": "达人管理",
       "gmv": "GMV MAX 优化器",
@@ -633,7 +633,7 @@
         "desc": "把直播录像或长视频切成可复用的短片段"
       },
       "product-image-materials": {
-        "name": "商品图片素材",
+        "name": "图生图",
         "desc": "从视频中批量截取可复用的商品图片"
       },
       "product-replacement": {

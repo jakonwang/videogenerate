@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { HardDrive, LogOut, RefreshCw, Server, ShieldCheck, Smartphone } from 'lucide-vue-next'
+import { ChevronRight, HardDrive, KeyRound, LogOut, RefreshCw, Server, ShieldCheck, Smartphone } from 'lucide-vue-next'
 import type { SyncUsageResponse } from '@shared/cloud/sync'
 import PageHeader from '@/components/PageHeader.vue'
 import SyncStatus from '@/components/SyncStatus.vue'
@@ -69,10 +69,11 @@ async function logout() {
 
     <section class="m-section">
       <div class="m-card m-list">
-        <div class="m-row">
+        <button type="button" class="m-row" @click="router.push('/membership')">
           <ShieldCheck :size="20" class="m-muted" />
-          <span class="m-row__main"><span class="m-row__title">会员</span><span class="m-row__sub">{{ planText }}</span></span>
-        </div>
+          <span class="m-row__main"><span class="m-row__title">会员中心</span><span class="m-row__sub">{{ planText }}</span></span>
+          <ChevronRight :size="18" class="m-muted" />
+        </button>
         <div class="m-row">
           <HardDrive :size="20" class="m-muted" />
           <span class="m-row__main">
@@ -98,6 +99,11 @@ async function logout() {
           <Smartphone :size="20" class="m-muted" />
           <span class="m-row__main"><span class="m-row__title">本机设备</span><span class="m-row__sub">{{ session.deviceId.slice(0, 18) }}…</span></span>
         </div>
+        <button type="button" class="m-row" @click="router.push('/password')">
+          <KeyRound :size="20" class="m-muted" />
+          <span class="m-row__main"><span class="m-row__title">修改密码</span></span>
+          <ChevronRight :size="18" class="m-muted" />
+        </button>
         <button type="button" class="m-row" @click="clearCache">
           <HardDrive :size="20" class="m-muted" />
           <span class="m-row__main"><span class="m-row__title">清理图片缓存</span><span class="m-row__sub">释放手机空间，图片会在需要时重新下载</span></span>

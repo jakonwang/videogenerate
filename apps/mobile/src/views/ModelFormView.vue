@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Trash2 } from 'lucide-vue-next'
+import { LoaderCircle, Sparkles, Trash2 } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncModel } from '@shared/cloud/sync'
+import GenerationTile from '@/components/GenerationTile.vue'
 import ImageGrid from '@/components/ImageGrid.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { approve, generateModelImage, useGenerations } from '@/lib/generate'
+import { errorMessage } from '@/lib/session'
 import { deleteRecord, getRecord, newId, saveRecord } from '@/lib/sync'
 import { toast } from '@/lib/toast'
 
@@ -32,6 +35,43 @@ onMounted(async () => {
   }
   loaded.value = true
 })
+
+const aiResults = useGenerations((item) => item.purpose === 'model' && item.modelId === id && item.review !== 'rejected')
+const generating = ref(false)
+
+async function generateAi() {
+  if (!form.gender) return toast('先选性别')
+  generating.value = true
+  try {
+    // 先把当前资料存下来，结果通过后要加进这个模特
+    await saveRecord(SYNC_COLLECTIONS.models, id, buildData())
+    await generateModelImage({ modelId: id, model: { ...form, name: form.name.trim() || '新模特' } })
+    toast('已开始生成，约 1 分钟，点结果可审核')
+  } catch (error) {
+    toast(errorMessage(error))
+  } finally {
+    generating.value = false
+  }
+}
+
+async function useResult(item: (typeof aiResults.value)[number]) {
+  if (item.status !== 'succeeded' || !item.outputFileId) return router.push(`/review?focus=${item.id}`)
+  if (item.review === 'approved') return
+  await approve(item)
+  if (!form.images.some((image) => image.fileId === item.outputFileId)) form.images.push({ fileId: item.outputFileId, mime: item.outputMime || 'image/png' })
+  form.coverFileId ||= item.outputFileId
+  toast('已加进形象照片')
+}
+
+function buildData(): SyncModel {
+  return {
+    ...form,
+    name: form.name.trim() || '新模特',
+    description: form.description?.trim() || '',
+    tags: tagsText.value.split(/[\s,，#]+/).map((value) => value.trim()).filter(Boolean),
+    coverFileId: form.coverFileId || form.images[0]?.fileId,
+  }
+}
 
 async function save() {
   if (!canSave.value) {
@@ -75,6 +115,21 @@ async function remove() {
         <div class="m-section__head"><h2 class="m-section__title">形象照片</h2><span class="m-muted hint">{{ form.images.length }} 张</span></div>
         <ImageGrid v-model:images="form.images" v-model:cover="form.coverFileId" aspect="3 / 4" />
         <p class="m-muted hint tip">正脸、半身、全身各一张效果最好，生成视频时用来保持人物一致</p>
+      </section>
+
+      <section class="m-section ai m-card m-card--pad">
+        <div class="ai__head">
+          <span><strong>AI 生成形象</strong><small>按下面的性别、年龄、风格生成一张多角度形象图</small></span>
+          <button type="button" class="m-btn m-btn--sm m-btn--primary" :disabled="generating" @click="generateAi">
+            <LoaderCircle v-if="generating" :size="14" class="m-spin" /><Sparkles v-else :size="14" /> 生成
+          </button>
+        </div>
+        <div v-if="aiResults.length" class="ai__grid">
+          <div v-for="item in aiResults.slice(0, 6)" :key="item.id" class="ai__item">
+            <GenerationTile :item="item" @click="useResult(item)" />
+            <span class="ai__state">{{ item.review === 'approved' ? '已加入' : item.status === 'succeeded' ? '点击加入' : '' }}</span>
+          </div>
+        </div>
       </section>
 
       <section class="m-section">
@@ -123,4 +178,11 @@ async function remove() {
 .tip { margin: 10px 2px 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .row { display: grid; gap: 0; }
+.ai { display: flex; flex-direction: column; gap: 12px; }
+.ai__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ai__head span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ai__head small { color: var(--theme-text-muted); font-size: 12px; }
+.ai__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ai__item { display: flex; flex-direction: column; gap: 4px; }
+.ai__state { color: var(--m-accent-2); font-size: 11px; text-align: center; min-height: 14px; }
 </style>

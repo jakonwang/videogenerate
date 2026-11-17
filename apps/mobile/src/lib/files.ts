@@ -57,6 +57,20 @@ export async function uploadImage(file: Blob): Promise<SyncFileRef> {
   return { fileId: result.fileId, mime: 'image/jpeg', width, height }
 }
 
+/** 原样上传（不压缩、不转格式，例如带透明的 PNG 水印模板） */
+export async function uploadRaw(blob: Blob, mime: string): Promise<SyncFileRef> {
+  const result = await cloud.sync.uploadFile(blob, mime)
+  const store = await cache()
+  await store?.put(cacheKey(result.fileId), new Response(blob, { headers: { 'Content-Type': mime } }))
+  return { fileId: result.fileId, mime }
+}
+
+/** 取回云端文件的二进制（优先本地缓存） */
+export async function fileBlob(fileId: string): Promise<Blob> {
+  const url = await fileUrl(fileId)
+  return (await fetch(url)).blob()
+}
+
 export async function clearFileCache() {
   objectUrls.forEach((url) => void url.then((value) => URL.revokeObjectURL(value)).catch(() => undefined))
   objectUrls.clear()

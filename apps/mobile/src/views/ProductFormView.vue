@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Store, Trash2 } from 'lucide-vue-next'
+import { Clapperboard, ImagePlus, Store, Trash2 } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, SYNC_PRODUCT_TYPE_LABELS, type SyncProduct, type SyncProductType } from '@shared/cloud/sync'
 import ImageGrid from '@/components/ImageGrid.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -77,6 +77,10 @@ async function remove() {
         <button v-if="!isNew && form.images.length" type="button" class="m-btn m-btn--block listing-btn" @click="router.push({ path: '/listings/new', query: { product: id } })">
           <Store :size="18" /> 用这个商品写上架文案
         </button>
+        <div v-if="!isNew && form.images.length" class="ai-row">
+          <button type="button" class="m-btn" @click="router.push({ path: '/product-images', query: { product: id } })"><ImagePlus :size="18" /> 生成商品图</button>
+          <button type="button" class="m-btn" @click="router.push({ path: '/image-to-video', query: { product: id } })"><Clapperboard :size="18" /> 图生视频</button>
+        </div>
       </section>
 
       <section class="m-section">
@@ -115,6 +119,8 @@ async function remove() {
 .hint { font-size: 12px; }
 .tip { margin: 10px 2px 0; }
 .listing-btn { margin-top: 14px; }
+.ai-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.ai-row .m-btn { height: 44px; font-size: 14px; }
 .types { display: flex; flex-wrap: wrap; gap: 8px; }
 .ids { min-height: 72px; font-family: ui-monospace, monospace; font-size: 13px; }
 </style>

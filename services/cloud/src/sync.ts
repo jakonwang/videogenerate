@@ -18,7 +18,7 @@ import { SYNC_COLLECTION_PATTERN, SYNC_MAX_PULL, SYNC_MAX_PUSH, SYNC_MAX_RECORD_
 type RecordRow = { collection: string; id: string; data: string; updated_at: number; deleted: number; seq: number }
 
 const FILE_ID_PATTERN = /^[a-f0-9]{64}$/
-const ALLOWED_MIME = /^(image\/(png|jpeg|webp|gif)|video\/(mp4|quicktime|webm)|audio\/(mpeg|mp4|wav|x-wav))$/
+const ALLOWED_MIME = /^(image\/(png|jpeg|webp|gif)|video\/(mp4|quicktime|webm)|audio\/(mpeg|mp4|wav|x-wav|aac|x-m4a|m4a|ogg))$/
 
 export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaBytes: number; now: () => number }) {
   const { db, now } = deps

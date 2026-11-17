@@ -16,4 +16,44 @@ export type AiChatRequest = {
 
 export type AiChatResponse = { content: string; model: string }
 
+/** 图片 / 视频生成任务（云端后台执行，手机轮询结果） */
+export type AiGenerationKind = 'image' | 'video' | 'analyze-video' | 'compose' | import('./videoTools').VideoToolKind
+
+export type AiGenerationRequest = {
+  kind: AiGenerationKind
+  /** image / video 必填；analyze-video、compose 不需要 */
+  prompt?: string
+  negativePrompt?: string
+  /** 参考图 / 首帧（已上传到云端的 fileId）；图生视频必填 */
+  imageFileIds?: string[]
+  aspectRatio?: '1:1' | '9:16' | '16:9'
+  /** 视频时长（秒） */
+  durationSec?: number
+  purpose?: string
+  /** analyze-video：对标视频 */
+  videoFileId?: string
+  /** analyze-video：脚本语言，如 zh-CN / vi-VN / en-US */
+  locale?: string
+  /** compose：按顺序拼接的片段（视频或图片）；mix：素材池（durationSec 不用） */
+  clips?: Array<{ fileId: string; durationSec: number }>
+  /** 视频工具的参数（水印文字、切片时长、混剪条数等） */
+  options?: import('./videoTools').VideoJobOptions
+  /** parse-link：分享链接 */
+  url?: string
+}
+
+export type AiGenerationJob = {
+  id: string
+  kind: AiGenerationKind
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  purpose?: string
+  outputFileId?: string
+  outputMime?: string
+  error?: string
+  /** analyze-video 的拆解结果（CloneAnalysis）；视频工具的结果（VideoJobResult） */
+  result?: unknown
+  createdAt: number
+  updatedAt: number
+}
+
 export type AiUsageResponse = { usedToday: number; dailyLimit: number; resetsAt: number }

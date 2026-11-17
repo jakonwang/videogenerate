@@ -128,7 +128,7 @@ export function createAiService(deps: {
     return { usedToday: usedToday(userId), dailyLimit: deps.perDay, resetsAt: Math.ceil(now() / DAY_MS) * DAY_MS }
   }
 
-  return { chat, usage }
+  return { chat, usage, quota: { assert: assertQuota, record } }
 }
 
 export type AiService = ReturnType<typeof createAiService>

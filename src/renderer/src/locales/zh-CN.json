@@ -2735,7 +2735,7 @@
         "description": "通过 TikTok for Business MCP 审核并执行受保护的 GMV MAX 预算与目标 ROI 建议。"
       },
       "product-image-materials": {
-        "name": "商品图片素材",
+        "name": "图生图",
         "description": "批量切分视频并生成可复用商品图片素材，支持七牛上传和使用状态管理。"
       },
       "dianxiaomi-inventory": {
@@ -4659,7 +4659,7 @@
           "description": "创建、检查和导出图生视频"
         },
         "product-materials": {
-          "label": "商品图片素材",
+          "label": "图生图",
           "description": "准备和管理可复用商品素材"
         },
         "tiktok-creative": {

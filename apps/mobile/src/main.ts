@@ -8,6 +8,8 @@ import { router } from './router'
 import { initSession } from './lib/session'
 import { requestSync } from './lib/sync'
 import { refreshResearch } from './lib/research'
+import { startPolling } from './lib/generate'
+import { startToolPolling } from './lib/videoTools'
 
 async function boot() {
   if (Capacitor.isNativePlatform()) {
@@ -24,6 +26,9 @@ async function boot() {
     if (document.visibilityState !== 'visible') return
     void requestSync()
     void refreshResearch().catch(() => undefined)
+    // 查一下云端生成任务有没有完成
+    startPolling()
+    startToolPolling()
   })
 }
 
