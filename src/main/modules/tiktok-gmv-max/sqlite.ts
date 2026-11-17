@@ -43,6 +43,15 @@ import type {
   GmvMaxProductProfile,
   GmvMaxCoachRun,
 } from './types'
+import { GMV_MAX_CREATIVE_SEGMENTS, type GmvMaxCreativeSegment } from './types'
+
+/** Adds days to a YYYY-MM-DD string (UTC calendar math, no time zone shift). */
+function shiftIsoDay(day: string, days: number) {
+  const date = new Date(`${day}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime())) return day
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
 
 type Statement = { run(...params: unknown[]): unknown; get(...params: unknown[]): unknown; all(...params: unknown[]): unknown[] }
 type Database = { exec(sql: string): unknown; prepare(sql: string): Statement; close?: () => unknown }
@@ -281,6 +290,8 @@ function getDatabase() {
   migrateCreativeMetricAggregateColumns(database)
   migrateCoachTables(database)
   migrateRealtimeWindowSummaryTables(database)
+  // Lets the creatives page check "any spend before this day" per video without scanning all metrics.
+  database.exec('CREATE INDEX IF NOT EXISTS idx_gmv_creative_metrics_creative_day ON gmv_creative_metrics(creative_id, stat_day);')
   return database
 }
 
@@ -559,6 +570,7 @@ export const gmvMaxRepo = {
     storeId?: string
     source?: string
     state?: string
+    segment?: string
     search?: string
     minSpend?: number
     minOrders?: number
@@ -582,6 +594,9 @@ export const gmvMaxRepo = {
 
     const filters: string[] = []
     const filterParameters: Array<string | number> = []
+    // Metric filters shared by the fast aggregate query and the enriched query.
+    const metricFilters: string[] = []
+    const metricParameters: Array<string | number> = []
     const search = String(input?.search || '').trim().toLowerCase()
     if (search) {
       filters.push(`(LOWER(sample_payload) LIKE ? OR LOWER(campaign_name) LIKE ? OR LOWER(asset_name) LIKE ?)`)
@@ -594,11 +609,13 @@ export const gmvMaxRepo = {
       filters.push(`(intelligence_state IN (${placeholders}) OR derived_label IN (${placeholders}))`)
       filterParameters.push(...states, ...states)
     }
-    if (Number(input?.minSpend) > 0) { filters.push('cost >= ?'); filterParameters.push(Number(input?.minSpend)) }
-    if (Number(input?.minOrders) > 0) { filters.push('orders >= ?'); filterParameters.push(Number(input?.minOrders)) }
-    if (Number(input?.minRoi) > 0) { filters.push('roi >= ?'); filterParameters.push(Number(input?.minRoi)) }
-    if (Number(input?.maxCpa) > 0) { filters.push('cpa <= ?'); filterParameters.push(Number(input?.maxCpa)) }
-    if (Number(input?.minCtr) > 0) { filters.push('ctr >= ?'); filterParameters.push(Number(input?.minCtr)) }
+    if (Number(input?.minSpend) > 0) { metricFilters.push('cost >= ?'); metricParameters.push(Number(input?.minSpend)) }
+    if (Number(input?.minOrders) > 0) { metricFilters.push('orders >= ?'); metricParameters.push(Number(input?.minOrders)) }
+    if (Number(input?.minRoi) > 0) { metricFilters.push('roi >= ?'); metricParameters.push(Number(input?.minRoi)) }
+    if (Number(input?.maxCpa) > 0) { metricFilters.push('cpa <= ?'); metricParameters.push(Number(input?.maxCpa)) }
+    if (Number(input?.minCtr) > 0) { metricFilters.push('ctr >= ?'); metricParameters.push(Number(input?.minCtr)) }
+    filters.push(...metricFilters)
+    filterParameters.push(...metricParameters)
 
     const sortExpressions: Record<string, string> = {
       creativeName: 'asset_name', grossRevenue: 'revenue', cost: 'cost', orders: 'orders', roi: 'roi', cpa: 'cpa',
@@ -606,14 +623,30 @@ export const gmvMaxRepo = {
     }
     const sortExpression = sortExpressions[String(input?.sortBy || '')] || 'revenue'
     const sortDirection = input?.sortDirection === 'asc' ? 'ASC' : 'DESC'
-    const requiresEnrichment = Boolean(search)
-      || Boolean(input?.state && input.state !== 'all')
+    const requiresEnrichment = Boolean(input?.state && input.state !== 'all')
       || ['creativeName', 'intelligenceScore', 'intelligenceRoiTrend'].includes(String(input?.sortBy || ''))
 
     if (!requiresEnrichment) {
-      const aggregateSql = `
+      // Plain-language segments from the ad data itself, so they work before any product cost is entered:
+      // new = first spend ever falls in the last 7 days of the range, no_orders = spent without orders,
+      // earning = 3+ orders and ROI at least 80% of the scope's own ROI, average = everything else.
+      const newSince = shiftIsoDay(endDate, -6)
+      const segment = GMV_MAX_CREATIVE_SEGMENTS.includes(String(input?.segment) as GmvMaxCreativeSegment) ? String(input?.segment) : ''
+      const scopedFilters = [...metricFilters]
+      const scopedParameters: Array<string | number> = [...metricParameters]
+      if (search) {
+        scopedFilters.unshift(`(aggregated.creative_id LIKE ? OR aggregated.item_group_id LIKE ?
+          OR EXISTS (SELECT 1 FROM gmv_campaigns c WHERE c.id = aggregated.campaign_id
+            AND LOWER(COALESCE(json_extract(c.payload, '$.name'), '')) LIKE ?)
+          OR EXISTS (SELECT 1 FROM gmv_product_costs pc WHERE pc.store_id = aggregated.store_id AND pc.product_id = aggregated.item_group_id
+            AND LOWER(COALESCE(json_extract(pc.payload, '$.productName'), '')) LIKE ?))`)
+        scopedParameters.unshift(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`)
+      }
+      const segmentedSql = `
         WITH aggregated AS (
           SELECT cm.campaign_id, cm.creative_id, cm.item_group_id,
+            MAX(cm.store_id) AS store_id,
+            MIN(cm.stat_day) AS first_day,
             SUM(cm.cost) AS cost,
             SUM(cm.gross_revenue) AS revenue,
             SUM(cm.orders) AS orders,
@@ -626,20 +659,51 @@ export const gmvMaxRepo = {
           FROM gmv_creative_metrics cm
           WHERE ${baseConditions.join(' AND ')}
           GROUP BY cm.campaign_id, cm.creative_id, cm.item_group_id
-        ), filtered AS (
-          SELECT *,
-            CASE WHEN cost > 0 THEN revenue / cost ELSE 0 END AS roi,
-            CASE WHEN orders > 0 THEN cost / orders ELSE 0 END AS cpa
-          FROM aggregated${filters.length ? ` WHERE ${filters.join(' AND ')}` : ''}
+        ), scoped AS (
+          SELECT aggregated.*,
+            CASE WHEN aggregated.cost > 0 THEN aggregated.revenue / aggregated.cost ELSE 0 END AS roi,
+            CASE WHEN aggregated.orders > 0 THEN aggregated.cost / aggregated.orders ELSE 0 END AS cpa
+          FROM aggregated
+          ${scopedFilters.length ? `WHERE ${scopedFilters.join(' AND ')}` : ''}
+        ), totals AS (
+          SELECT CASE WHEN SUM(cost) > 0 THEN SUM(revenue) / SUM(cost) ELSE 0 END AS scope_roi FROM scoped
+        ), segmented AS (
+          SELECT scoped.*, totals.scope_roi,
+            CASE
+              WHEN scoped.first_day >= ? AND NOT EXISTS (
+                SELECT 1 FROM gmv_creative_metrics earlier
+                WHERE earlier.creative_id = scoped.creative_id AND earlier.stat_day < scoped.first_day
+                  AND earlier.campaign_id = scoped.campaign_id
+              ) THEN 'new'
+              WHEN scoped.orders = 0 AND scoped.cost > 0 THEN 'no_orders'
+              WHEN scoped.orders >= 3 AND scoped.roi >= totals.scope_roi * 0.8 THEN 'earning'
+              ELSE 'average'
+            END AS segment
+          FROM scoped, totals
         )
+      `
+      const segmentedParameters = [...baseParameters, ...scopedParameters, newSince]
+      const rows = getDatabase().prepare(`${segmentedSql}
         SELECT *, COUNT(*) OVER() AS total_count, SUM(cost) OVER() AS total_cost,
           SUM(revenue) OVER() AS total_revenue, SUM(orders) OVER() AS total_orders
-        FROM filtered
+        FROM segmented ${segment ? 'WHERE segment = ?' : ''}
         ORDER BY ${sortExpression} ${sortDirection}, creative_id ASC
         LIMIT ? OFFSET ?
-      `
-      const rows = getDatabase().prepare(aggregateSql)
-        .all(...baseParameters, ...filterParameters, pageSize, (page - 1) * pageSize) as any[]
+      `).all(...segmentedParameters, ...(segment ? [segment] : []), pageSize, (page - 1) * pageSize) as any[]
+      const segmentRows = getDatabase().prepare(`${segmentedSql}
+        SELECT segment, COUNT(*) AS total, SUM(cost) AS cost, SUM(revenue) AS revenue, SUM(orders) AS orders, MAX(scope_roi) AS scope_roi
+        FROM segmented GROUP BY segment
+      `).all(...segmentedParameters) as Array<{ segment: string; total: number; cost: number; revenue: number; orders: number; scope_roi: number }>
+      const segments = Object.fromEntries(GMV_MAX_CREATIVE_SEGMENTS.map((key) => [key, 0])) as Record<GmvMaxCreativeSegment, number>
+      const overall = { count: 0, cost: 0, revenue: 0, orders: 0, roi: 0 }
+      for (const entry of segmentRows) {
+        if (entry.segment in segments) segments[entry.segment as GmvMaxCreativeSegment] = Number(entry.total) || 0
+        overall.count += Number(entry.total) || 0
+        overall.cost += Number(entry.cost) || 0
+        overall.revenue += Number(entry.revenue) || 0
+        overall.orders += Number(entry.orders) || 0
+        overall.roi = Number(entry.scope_roi) || 0
+      }
       const sampleStatement = getDatabase().prepare(`
         SELECT payload FROM gmv_creative_metrics
         WHERE campaign_id = ? AND creative_id = ? AND item_group_id = ? AND stat_day >= ? AND stat_day <= ?
@@ -660,10 +724,13 @@ export const gmvMaxRepo = {
             playDepth: Number(row.play_depth) || 0,
             samples: Number(row.samples) || 0,
             days: Number(row.days) || 0,
+            segment: String(row.segment) as GmvMaxCreativeSegment,
           }
         }),
         total: Number(summary.total_count) || 0,
         summary: { cost: Number(summary.total_cost) || 0, revenue: Number(summary.total_revenue) || 0, orders: Number(summary.total_orders) || 0 },
+        segments,
+        overall,
         page,
         pageSize,
       }

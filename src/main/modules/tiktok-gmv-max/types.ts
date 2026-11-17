@@ -1440,3 +1440,7 @@ export type GmvMaxOptimizationRun = {
   completedAt?: number
   error?: string
 }
+
+/** Plain-language creative segments computed from ad data alone (see listCreativeMetricAggregatePage). */
+export const GMV_MAX_CREATIVE_SEGMENTS = ['earning', 'average', 'no_orders', 'new'] as const
+export type GmvMaxCreativeSegment = (typeof GMV_MAX_CREATIVE_SEGMENTS)[number]

@@ -1167,3 +1167,85 @@ html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-regenerate { justi
   html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced__split { grid-template-columns: minmax(0, 1fr); }
   html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion { flex-wrap: wrap; }
 }
+
+/* ---------- creatives page v3: top earners / wasters, segment chips, ROI pills, spend bars ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top {
+  min-width: 0;
+  padding: 12px 16px 8px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top.is-waste { border-color: color-mix(in srgb, var(--status-critical) 45%, var(--d-border)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__title { display: inline-flex; align-items: center; gap: 6px; color: var(--tone); font-size: 14px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__title .gmv-icon { width: 16px; height: 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top ol { margin: 0; padding: 0; list-style: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 0; border-top: 1px solid var(--d-line); font-size: 13px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top li:first-child { border-top: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__rank { flex: none; width: 18px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__value { flex: none; color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__value.is-waste { color: var(--status-critical) !important; background: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__empty { margin: 8px 0 6px; color: var(--text-muted); font-size: 13px; }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--d-border) !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip:hover { color: var(--text-primary) !important; border-color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip.is-active {
+  border-color: var(--text-primary) !important;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tone, var(--status-neutral)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip em { color: var(--text-muted); font-style: normal; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip.is-active em { color: var(--text-secondary); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link { display: inline-flex; align-items: center; gap: 5px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link .gmv-icon { width: 14px; height: 14px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link.is-warning { color: var(--status-warning) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-summary { margin: -2px 0 0; color: var(--text-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-table-wrap.is-loading .gmv-cx-table { opacity: .45; transition: opacity .15s; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table { min-width: 760px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__title { overflow: hidden; color: var(--text-primary); font-size: 13.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__text small { display: block !important; overflow: hidden; text-overflow: ellipsis; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table__spend { width: 22%; min-width: 150px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-spend { display: block; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bar-track { display: block; height: 4px; margin-top: 5px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bar-track i { display: block; height: 100%; border-radius: 2px; background: var(--series-1); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill {
+  display: inline-block;
+  min-width: 48px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, var(--status-neutral)) 16%, transparent) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill.gvt-good { color: var(--status-good) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill.gvt-critical { color: var(--status-critical) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill.gvt-neutral { background: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail .is-wide { grid-column: span 2; }
+@media (max-width: 1000px) {
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tops { grid-template-columns: minmax(0, 1fr); }
+}

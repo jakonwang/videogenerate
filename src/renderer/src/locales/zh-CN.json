@@ -5006,12 +5006,38 @@
       "product_card": "商品卡"
     },
     "columns": {
+      "spendShare": "花费",
       "video": "视频",
       "status": "状态",
       "suggestion": "建议"
     },
     "days": "{count} 天",
     "unknownCreator": "来源未知",
+    "tops": {
+      "earners": "最赚钱的视频",
+      "wasters": "只花钱不出单",
+      "all": "全部 ›",
+      "noEarners": "还没有赚钱的视频",
+      "noWasters": "没有只花钱不出单的视频",
+      "spentNoOrders": "花 {spend} · 0 单"
+    },
+    "segments": {
+      "all": "全部",
+      "earning": "赚钱",
+      "average": "一般",
+      "no_orders": "不出单",
+      "new": "新视频",
+      "allHint": "这段时间有花费的全部视频",
+      "earningHint": "至少 3 单，ROI 不低于全部视频平均的 80%",
+      "averageHint": "有订单，但 ROI 偏低或订单少",
+      "no_ordersHint": "花了钱，一单没出",
+      "newHint": "最近 7 天才开始花钱，还在起量"
+    },
+    "summaryLine": "共 {count} 条视频 · 花费 {spend} · 收入 {revenue} · ROI {roi} · {orders} 单",
+    "suggestionsLink": "{count} 条建议待确认",
+    "setupLink": "成本没填完",
+    "zeroOrders": "0 单",
+    "productImageHint": "没有视频封面，显示的是商品图",
     "untitled": "视频 {id}",
     "productBadge": "商品",
     "detail": {

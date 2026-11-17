@@ -1,72 +1,77 @@
 <script lang="ts">
 // Creatives page of the GMV MAX workspace. State and handlers come from TiktokGmvMaxOptimizerView via provide/inject.
-// Default view is task-first for ordinary sellers: what to do now, four numbers, a status-tabbed video list.
+// Default view answers one question at a glance: which videos make money and which only spend.
+// Segments come from the ad data itself (see listCreativeMetricAggregatePage), so they work before costs are entered.
 // Funnel, experiment pool, creator view, allow/deny lists and the full suggestion history sit under "advanced".
-import { computed, defineComponent, ref } from "vue";
+import { computed, defineComponent, onBeforeUnmount, ref, watch } from "vue";
 import {
+  AlertTriangle,
   ArrowRightLeft,
   Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Filter,
-  AlertTriangle,
-  CircleCheck,
   Film,
+  Filter,
+  Flame,
   Inbox,
   Play,
-  RefreshCw,
   RotateCcw,
   ShieldAlert,
   SlidersHorizontal,
   Trash2,
+  TrendingUp,
   X,
 } from "lucide-vue-next";
 import { useGmvWorkspace } from "./workspaceContext";
-import GmvKpiStrip, { type GmvKpi } from "../GmvKpiStrip.vue";
 
-type StatusTab = "all" | "good" | "testing" | "replace" | "waste";
-type Tone = "good" | "info" | "warning" | "critical" | "neutral";
+type Segment = "all" | "earning" | "average" | "no_orders" | "new";
+const SEGMENTS: Segment[] = ["all", "earning", "average", "no_orders", "new"];
+const SEGMENT_TONE: Record<Exclude<Segment, "all">, string> = {
+  earning: "good",
+  average: "neutral",
+  no_orders: "critical",
+  new: "info",
+};
 
-// One simple tab can cover several intelligence states; the server accepts a comma-separated list.
-const STATUS_TABS: Array<{ key: StatusTab; states: string }> = [
-  { key: "all", states: "all" },
-  { key: "good", states: "winner,stable" },
-  { key: "testing", states: "new,testing" },
-  { key: "replace", states: "fatigued" },
-  { key: "waste", states: "waste" },
-];
-
-const STATE_GROUP: Record<string, { key: string; tone: Tone }> = {
-  winner: { key: "good", tone: "good" },
-  stable: { key: "good", tone: "good" },
-  new: { key: "testing", tone: "info" },
-  testing: { key: "testing", tone: "info" },
-  fatigued: { key: "replace", tone: "warning" },
-  waste: { key: "waste", tone: "critical" },
-  blocked: { key: "needsCost", tone: "neutral" },
+type CreativeRow = {
+  campaignId: string;
+  creativeId: string;
+  itemGroupId?: string;
+  storeId: string;
+  source?: string;
+  creativeName?: string;
+  creatorName?: string;
+  productName?: string;
+  productImageUrl?: string;
+  cost: string;
+  grossRevenue: string;
+  roi: string;
+  orders: string;
+  days?: number;
+  segment?: Exclude<Segment, "all">;
+  raw?: Record<string, unknown>;
 };
 
 export default defineComponent({
   name: "GmvCreativesPage",
   components: {
+    AlertTriangle,
     ArrowRightLeft,
     Check,
     ChevronDown,
     ChevronRight,
     ChevronUp,
-    Filter,
-    GmvKpiStrip,
-    AlertTriangle,
-    CircleCheck,
     Film,
+    Filter,
+    Flame,
     Inbox,
     Play,
-    RefreshCw,
     RotateCcw,
     ShieldAlert,
     SlidersHorizontal,
     Trash2,
+    TrendingUp,
     X,
   },
   setup() {
@@ -77,14 +82,107 @@ export default defineComponent({
     const totalsStore = computed(() =>
       ws.selectedStore.value !== "all" ? ws.selectedStore.value : ws.uniqueStores.value[0]?.storeId,
     );
-    const kpis = computed<GmvKpi[]>(() => {
-      const summary = ws.creativePage.value.summary;
-      return [
-        { key: "spend", label: ws.t("gmvMaxCreativesSimple.kpi.spend"), value: ws.formatCny(summary.cost, totalsStore.value) },
-        { key: "gmv", label: ws.t("gmvMaxCreativesSimple.kpi.revenue"), value: ws.formatCny(summary.revenue, totalsStore.value) },
-        { key: "roi", label: "ROI", value: summary.cost > 0 ? ws.formatRoi(summary.roi) : "—" },
-        { key: "orders", label: ws.t("gmvMaxCreativesSimple.kpi.orders"), value: ws.formatInteger(summary.orders) },
-      ];
+
+    // Segment counts and totals for the whole scope; kept from the last answer while a new page loads.
+    const lastSegments = ref<Record<string, number> | null>(null);
+    const lastOverall = ref<{ count: number; cost: number; revenue: number; orders: number; roi: number } | null>(null);
+    watch(
+      () => ws.creativePage.value,
+      (page: { segments?: Record<string, number>; overall?: typeof lastOverall.value }) => {
+        if (page?.segments) lastSegments.value = page.segments;
+        if (page?.overall) lastOverall.value = page.overall;
+      },
+      { immediate: true },
+    );
+    function segmentCount(key: Segment) {
+      if (key === "all") return lastOverall.value?.count ?? null;
+      return lastSegments.value ? lastSegments.value[key] ?? 0 : null;
+    }
+
+    const activeSegment = computed<Segment>(() =>
+      SEGMENTS.includes(ws.creativeSegment.value) ? (ws.creativeSegment.value as Segment) : "all",
+    );
+    function selectSegment(key: Segment) {
+      ws.creativeSegment.value = key;
+      ws.creativeState.value = "all";
+      // Wasted spend reads best biggest-first; everything else by revenue.
+      ws.creativeSortBy.value = key === "no_orders" ? "cost" : "grossRevenue";
+      ws.creativeSortDirection.value = "desc";
+      expandedRow.value = "";
+      void ws.loadCreativePage(1);
+    }
+    function showSegment(key: Segment) {
+      selectSegment(key);
+      document.querySelector('[data-testid="gmv-creative-list"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    function reload() {
+      expandedRow.value = "";
+      void ws.loadCreativePage(1);
+    }
+
+    // The two at-a-glance lists: top earners by revenue and the biggest spend without orders.
+    const topEarners = ref<CreativeRow[]>([]);
+    const topWasters = ref<CreativeRow[]>([]);
+    const topsLoading = ref(false);
+    let topsRequest = 0;
+    const topsScope = computed(() =>
+      JSON.stringify({
+        startDate: ws.startDate.value,
+        endDate: ws.endDate.value,
+        storeId: ws.selectedStore.value,
+        campaignId: ws.creativeCampaign.value,
+        source: ws.creativeSource.value,
+        search: ws.searchText.value,
+        loaded: ws.creativePage.value?.startDate,
+      }),
+    );
+    async function loadTops() {
+      const request = ++topsRequest;
+      topsLoading.value = true;
+      const base = {
+        page: 1,
+        pageSize: 10,
+        startDate: ws.startDate.value,
+        endDate: ws.endDate.value,
+        storeId: ws.selectedStore.value,
+        campaignId: ws.creativeCampaign.value,
+        source: ws.creativeSource.value,
+        search: ws.searchText.value,
+        sortDirection: "desc" as const,
+      };
+      try {
+        const [earners, wasters] = await Promise.all([
+          window.api.tiktokGmvMax.getCreativePage({ ...base, segment: "earning", sortBy: "grossRevenue" }),
+          window.api.tiktokGmvMax.getCreativePage({ ...base, segment: "no_orders", sortBy: "cost" }),
+        ]);
+        if (request !== topsRequest) return;
+        topEarners.value = ((earners as { items?: CreativeRow[] })?.items || []).slice(0, 3);
+        topWasters.value = ((wasters as { items?: CreativeRow[] })?.items || []).slice(0, 3);
+      } catch {
+        if (request !== topsRequest) return;
+        topEarners.value = [];
+        topWasters.value = [];
+      } finally {
+        if (request === topsRequest) topsLoading.value = false;
+      }
+    }
+    let topsTimer: ReturnType<typeof setTimeout> | undefined;
+    watch(topsScope, () => {
+      clearTimeout(topsTimer);
+      topsTimer = setTimeout(() => void loadTops(), 250);
+    }, { immediate: true });
+    onBeforeUnmount(() => clearTimeout(topsTimer));
+
+    const summaryLine = computed(() => {
+      const overall = lastOverall.value;
+      if (!overall) return "";
+      return ws.t("gmvMaxCreativesSimple.summaryLine", {
+        count: ws.formatInteger(overall.count),
+        spend: ws.formatCny(overall.cost, totalsStore.value),
+        revenue: ws.formatCny(overall.revenue, totalsStore.value),
+        roi: overall.cost > 0 ? ws.formatRoi(overall.roi) : "—",
+        orders: ws.formatInteger(overall.orders),
+      });
     });
 
     const pendingSuggestions = computed(() =>
@@ -94,67 +192,44 @@ export default defineComponent({
       () => Number(ws.incompleteCreativeCostCount.value) > 0 || Number(ws.missingCreativeTestBudgetCount.value) > 0,
     );
 
-    const statusTab = computed<StatusTab | "">(
-      () => STATUS_TABS.find((tab) => tab.states === ws.creativeState.value)?.key ?? "",
+    // Spend bar: share of the largest spend on this page, in CNY so mixed-currency stores compare fairly.
+    const maxPageSpend = computed(() =>
+      Math.max(0, ...(ws.filteredCreatives.value as CreativeRow[]).map((item) => spendCny(item))),
     );
-    function selectTab(key: StatusTab) {
-      const tab = STATUS_TABS.find((item) => item.key === key)!;
-      ws.creativeState.value = tab.states;
-      expandedRow.value = "";
-      void ws.loadCreativePage(1);
+    function spendCny(item: CreativeRow) {
+      const converted = ws.convertToCny(item.cost, item.storeId);
+      return converted === null ? ws.metricNumber(item.cost) : converted;
     }
-    function selectSource() {
-      expandedRow.value = "";
-      void ws.loadCreativePage(1);
+    function spendShare(item: CreativeRow) {
+      return maxPageSpend.value > 0 ? Math.max(2, Math.round((spendCny(item) / maxPageSpend.value) * 100)) : 0;
     }
-    function showReplace() {
-      selectTab("replace");
-      document.querySelector('[data-testid="gmv-creative-list"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+    function segmentTone(item: CreativeRow) {
+      return item.segment ? SEGMENT_TONE[item.segment] : "neutral";
     }
 
-    function stateInfo(state: string) {
-      return STATE_GROUP[state] || { key: "testing", tone: "info" as Tone };
-    }
     function rowKey(item: { campaignId: string; creativeId: string; itemGroupId?: string }) {
       return `${item.campaignId}:${item.creativeId}:${item.itemGroupId || "unscoped"}`;
     }
     function toggleRow(key: string) {
       expandedRow.value = expandedRow.value === key ? "" : key;
     }
+
     // Synced video assets carry cover, caption and the posting account under raw; metrics alone only have the ID.
-    type RawCreative = {
-      creativeId: string;
-      creativeName?: string;
-      productName?: string;
-      productImageUrl?: string;
-      raw?: Record<string, unknown>;
-    };
     const brokenImages = ref(new Set<string>());
     const record = (value: unknown) => (value && typeof value === "object" ? (value as Record<string, unknown>) : {});
     function httpUrl(...values: unknown[]) {
       return values.map((value) => String(value || "").trim()).find((value) => /^https?:\/\//i.test(value)) || "";
     }
-    function coverUrl(item: RawCreative) {
+    function coverUrl(item: CreativeRow) {
       const raw = record(item.raw);
       const video = record(raw.video_info);
       const url = httpUrl(video.video_cover_url, raw.video_cover_url, video.poster_url, raw.poster_url, raw.cover_url);
       return url && !brokenImages.value.has(url) ? url : "";
     }
     // TikTok only returns real covers for a few videos; the product being sold is the next best picture.
-    function productImage(item: RawCreative) {
+    function productImage(item: CreativeRow) {
       const url = httpUrl(item.productImageUrl);
       return !coverUrl(item) && url && !brokenImages.value.has(url) ? url : "";
-    }
-    function hasCaption(item: RawCreative) {
-      return Boolean(String(record(item.raw).text || "").trim());
-    }
-    function productTitle(item: RawCreative) {
-      const name = String(item.productName || "").trim();
-      return name && name !== "-" && !/^\d+$/.test(name) ? name : "";
-    }
-    function avatarUrl(item: RawCreative) {
-      const url = httpUrl(record(record(item.raw).identity_info).profile_image);
-      return url && !brokenImages.value.has(url) ? url : "";
     }
     function markBroken(url: string) {
       brokenImages.value = new Set(brokenImages.value).add(url);
@@ -162,24 +237,28 @@ export default defineComponent({
     function shortId(id: string) {
       return id.length > 10 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id;
     }
-    function videoTitle(item: RawCreative) {
+    // Product-card entries carry a "product-card:<id>" creative ID; name them as product cards, not videos.
+    function idLabel(item: CreativeRow) {
+      const match = /^product-card:(.+)$/.exec(item.creativeId);
+      if (match) return `${ws.t("gmvMaxCreativesSimple.sources.product_card")} ${shortId(match[1])}`;
+      return ws.t("gmvMaxCreativesSimple.untitled", { id: shortId(item.creativeId) });
+    }
+    // Title: the caption when TikTok gave one, otherwise the short video ID (product goes on the second line).
+    function videoTitle(item: CreativeRow) {
       const caption = String(record(item.raw).text || "").replace(/\s+/g, " ").trim();
       if (caption) return caption;
       const name = String(item.creativeName || "").trim();
       if (name && name !== item.creativeId) return name;
-      return productTitle(item) || ws.t("gmvMaxCreativesSimple.untitled", { id: shortId(item.creativeId) });
+      return idLabel(item);
     }
-    // When the title is the product name, the video ID moves to the second line so rows selling the same product stay apart.
-    function titleIsProduct(item: RawCreative) {
-      const name = String(item.creativeName || "").trim();
-      return !hasCaption(item) && !(name && name !== item.creativeId) && Boolean(productTitle(item));
+    // Product names are long marketing titles; keep the part before the first separator.
+    function productShort(item: CreativeRow) {
+      const name = String(item.productName || "").trim();
+      if (!name || name === "-" || /^\d+$/.test(name)) return "";
+      const head = name.replace(/^\[[^\]]*\]\s*/, "").split(/\s[-–|]\s|,|，/)[0].trim();
+      return head.length > 28 ? `${head.slice(0, 28)}…` : head;
     }
-    function videoLabel(item: RawCreative) {
-      return ws.t("gmvMaxCreativesSimple.untitled", { id: shortId(item.creativeId) });
-    }
-
-    // Creator name when known, otherwise the source in plain words.
-    function creatorLabel(item: { creatorName?: string; source?: string; raw?: Record<string, unknown> }) {
+    function creatorLabel(item: CreativeRow) {
       const name = String(item.creatorName || "").trim();
       if (name && name !== "-") return name;
       const identity = String(record(record(item.raw).identity_info).display_name || "").trim();
@@ -188,6 +267,16 @@ export default defineComponent({
       return ["owned", "affiliate", "product_card"].includes(source)
         ? ws.t(`gmvMaxCreativesSimple.sources.${source}`)
         : ws.t("gmvMaxCreativesSimple.unknownCreator");
+    }
+    function subtitle(item: CreativeRow) {
+      return [productShort(item), creatorLabel(item), ws.t("gmvMaxCreativesSimple.days", { count: ws.formatInteger(item.days || 0) })]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    function topLabel(item: CreativeRow) {
+      const product = productShort(item);
+      const id = item.creativeId.startsWith("product-card:") ? idLabel(item) : shortId(item.creativeId);
+      return product ? `${id} · ${product}` : id;
     }
 
     // Plain-language name of a creative suggestion.
@@ -207,29 +296,32 @@ export default defineComponent({
 
     return {
       ...ws,
-      STATUS_TABS,
-      avatarUrl,
+      SEGMENTS,
+      activeSegment,
       coverUrl,
-      creatorLabel,
-      markBroken,
-      productImage,
-      titleIsProduct,
-      videoLabel,
-      videoTitle,
-      statusTab,
       expandedRow,
-      kpis,
+      markBroken,
       pendingSuggestions,
+      productImage,
+      reload,
       rowKey,
-      selectSource,
-      selectTab,
+      segmentCount,
+      segmentTone,
+      selectSegment,
       setupMissing,
-      showReplace,
+      showSegment,
       showSuggestions,
-      stateInfo,
+      spendShare,
+      subtitle,
       suggestionLabel,
       suggestionTarget,
+      summaryLine,
       toggleRow,
+      topEarners,
+      topLabel,
+      topWasters,
+      topsLoading,
+      videoTitle,
     };
   },
 });
@@ -237,122 +329,134 @@ export default defineComponent({
 
 <template>
 <section class="gmv-section gmv-dash-page gmv-am gmv-cx" data-testid="gmv-creatives-page">
-  <!-- 1. What to do now -->
-  <div class="gmv-cx-todo" data-testid="gmv-creative-todo">
-    <div class="gmv-cx-todo__item">
-      <Inbox class="gmv-cx-todo__icon" />
-      <p v-if="pendingSuggestions.length">
-        <b>{{ pendingSuggestions.length }}</b> {{ t("gmvMaxCreativesSimple.todo.pendingText") }}
+  <!-- 1. At a glance: what earns, what only spends -->
+  <div class="gmv-cx-tops" data-testid="gmv-creative-tops">
+    <section class="gmv-cx-top" data-testid="gmv-creative-top-earners">
+      <header>
+        <span class="gmv-cx-top__title gvt-good"><TrendingUp class="gmv-icon" />{{ t("gmvMaxCreativesSimple.tops.earners") }}</span>
+        <button class="gmv-cx-link" type="button" @click="showSegment('earning')">{{ t("gmvMaxCreativesSimple.tops.all") }}</button>
+      </header>
+      <ol v-if="topEarners.length">
+        <li v-for="(item, index) in topEarners" :key="rowKey(item)">
+          <span class="gmv-cx-top__rank">{{ index + 1 }}</span>
+          <span class="gmv-cx-top__name" :title="item.productName">{{ topLabel(item) }}</span>
+          <span class="gmv-cx-top__value">
+            ROI {{ formatRoi(item.roi) }} · {{ formatCny(item.grossRevenue, item.storeId) }}
+          </span>
+        </li>
+      </ol>
+      <p v-else class="gmv-cx-top__empty">
+        {{ topsLoading ? t("gmvMaxData.loadingPage") : t("gmvMaxCreativesSimple.tops.noEarners") }}
       </p>
-      <p v-else>{{ t("gmvMaxCreativesSimple.todo.noPendingText") }}</p>
+    </section>
+    <section class="gmv-cx-top is-waste" data-testid="gmv-creative-top-wasters">
+      <header>
+        <span class="gmv-cx-top__title gvt-critical"><Flame class="gmv-icon" />{{ t("gmvMaxCreativesSimple.tops.wasters") }}</span>
+        <button class="gmv-cx-link" type="button" @click="showSegment('no_orders')">{{ t("gmvMaxCreativesSimple.tops.all") }}</button>
+      </header>
+      <ol v-if="topWasters.length">
+        <li v-for="(item, index) in topWasters" :key="rowKey(item)">
+          <span class="gmv-cx-top__rank">{{ index + 1 }}</span>
+          <span class="gmv-cx-top__name" :title="item.productName">{{ topLabel(item) }}</span>
+          <span class="gmv-cx-top__value is-waste">
+            {{ t("gmvMaxCreativesSimple.tops.spentNoOrders", { spend: formatCny(item.cost, item.storeId) }) }}
+          </span>
+        </li>
+      </ol>
+      <p v-else class="gmv-cx-top__empty">
+        {{ topsLoading ? t("gmvMaxData.loadingPage") : t("gmvMaxCreativesSimple.tops.noWasters") }}
+      </p>
+    </section>
+  </div>
+
+  <!-- 2. Segment chips + one-line summary; suggestions and setup as quiet links -->
+  <div class="gmv-cx-list" data-testid="gmv-creative-list">
+    <div class="gmv-cx-bar">
+      <div class="gmv-cx-chips" role="group" :aria-label="t('gmvMaxCreativesSimple.tabs.label')" data-testid="gmv-creative-status-tabs">
+        <button
+          v-for="key in SEGMENTS"
+          :key="key"
+          type="button"
+          :class="['gmv-cx-chip', key !== 'all' ? `gvt-${key === 'earning' ? 'good' : key === 'no_orders' ? 'critical' : key === 'new' ? 'info' : 'neutral'}` : '', { 'is-active': activeSegment === key }]"
+          :data-testid="`gmv-creative-tab-${key}`"
+          :title="t(`gmvMaxCreativesSimple.segments.${key}Hint`)"
+          @click="selectSegment(key)"
+        >
+          <i v-if="key !== 'all'" class="gmv-cx-chip__dot"></i>{{ t(`gmvMaxCreativesSimple.segments.${key}`) }}
+          <em v-if="segmentCount(key) !== null">{{ formatInteger(segmentCount(key)) }}</em>
+        </button>
+      </div>
+      <div class="gmv-am__spacer"></div>
       <button
         v-if="pendingSuggestions.length"
         class="gmv-cx-link"
+        type="button"
         data-testid="gmv-creative-review-suggestions"
         @click="showSuggestions = !showSuggestions"
       >
-        {{ showSuggestions ? t("gmvMaxCreativesSimple.todo.hide") : t("gmvMaxCreativesSimple.todo.review") }}
+        <Inbox class="gmv-icon" />{{ t("gmvMaxCreativesSimple.suggestionsLink", { count: pendingSuggestions.length }) }}
       </button>
       <button
         v-else
         class="gmv-cx-link"
+        type="button"
         data-testid="gmv-optimize-creatives"
         :disabled="!connected || !!busyAction"
         @click="optimizeCreatives"
       >
-        {{ busyAction === "optimize-creatives" ? t("gmvMaxCreativesSimple.todo.generating") : t("gmvMaxCreativesSimple.todo.generate") }}
-      </button>
-    </div>
-
-    <div class="gmv-cx-todo__item">
-      <RefreshCw class="gmv-cx-todo__icon" />
-      <p>{{ t("gmvMaxCreativesSimple.todo.replaceText") }}</p>
-      <button class="gmv-cx-link" data-testid="gmv-creative-show-replace" @click="showReplace">
-        {{ t("gmvMaxCreativesSimple.todo.view") }}
-      </button>
-    </div>
-
-    <div :class="['gmv-cx-todo__item', setupMissing ? 'is-attention' : '']" data-testid="gmv-creative-setup">
-      <AlertTriangle v-if="setupMissing" class="gmv-cx-todo__icon" />
-      <CircleCheck v-else class="gmv-cx-todo__icon" />
-      <p
-        :title="
-          setupMissing
-            ? t('gmvMaxCreativesSimple.todo.setupHint', { costs: incompleteCreativeCostCount, budgets: missingCreativeTestBudgetCount })
-            : ''
-        "
-      >
-        {{
-          setupMissing
-            ? t("gmvMaxCreativesSimple.todo.setupText")
-            : connected && dashboard.campaigns.length
-              ? t("gmvMaxCreativesSimple.todo.setupDone")
-              : t("gmvMaxCreativesSimple.todo.setupUnknown")
+        <Inbox class="gmv-icon" />{{
+          busyAction === "optimize-creatives" ? t("gmvMaxCreativesSimple.todo.generating") : t("gmvMaxCreativesSimple.todo.generate")
         }}
-      </p>
-      <button class="gmv-cx-link" data-testid="gmv-creative-open-setup" @click="activeTab = 'rules'">
-        {{ setupMissing ? t("gmvMaxCreativesSimple.todo.setup") : t("gmvMaxCreativesSimple.todo.viewSetup") }}
       </button>
-    </div>
-  </div>
-
-  <!-- Pending suggestions, opened from the first card -->
-  <section v-if="showSuggestions && pendingSuggestions.length" class="gmv-dcard gmv-cx-suggestions" data-testid="gmv-creative-suggestions">
-    <header>
-      <strong>{{ t("gmvMaxCreativesSimple.suggestions.title") }}</strong>
-      <small>{{ t("gmvMaxCreativesSimple.suggestions.hint") }}</small>
-    </header>
-    <div v-for="item in pendingSuggestions" :key="item.id" class="gmv-cx-suggestion">
-      <div class="gmv-cx-suggestion__main">
-        <strong>{{ suggestionLabel(item) }}</strong>
-        <span>{{ suggestionTarget(item) }} · {{ campaignName(item.campaignId) }}</span>
-        <small v-if="item.reason">{{ item.reason }}</small>
-      </div>
-      <div class="gmv-cx-suggestion__actions">
-        <button class="gmv-button gmv-button--secondary" @click="openAction(item.id)">{{ t("gmvMaxCreativesSimple.actions.detail") }}</button>
-        <button class="gmv-button gmv-button--secondary" :disabled="!!busyAction" @click="reject(item.id)">{{ t("gmvMaxCreativesSimple.actions.ignore") }}</button>
-        <button class="gmv-button gmv-button--primary" :disabled="!!busyAction" @click="approve(item.id)">
-          <Check class="gmv-icon" />{{ t("gmvMaxCreativesSimple.actions.accept") }}
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 2. Four headline numbers -->
-  <GmvKpiStrip class="gmv-cx-kpis" :items="kpis" :compare="false" data-testid="gmv-creative-kpis" />
-
-  <!-- 3. Video list -->
-  <div class="gmv-cx-list" data-testid="gmv-creative-list">
-    <div class="gmv-am__toolbar">
-      <div class="gmv-am__seg" role="group" :aria-label="t('gmvMaxCreativesSimple.tabs.label')" data-testid="gmv-creative-status-tabs">
-        <button
-          v-for="tab in STATUS_TABS"
-          :key="tab.key"
-          type="button"
-          :class="{ 'is-active': statusTab === tab.key }"
-          :data-testid="`gmv-creative-tab-${tab.key}`"
-          @click="selectTab(tab.key)"
-        >
-          {{ t(`gmvMaxCreativesSimple.tabs.${tab.key}`) }}<em v-if="statusTab === tab.key && !creativeLoading">{{ creativePage.total }}</em>
-        </button>
-      </div>
-      <div class="gmv-am__spacer"></div>
-      <select v-model="creativeSource" class="gmv-cx-select" :aria-label="t('gmvMaxCreativesSimple.source')" @change="selectSource">
+      <button
+        v-if="setupMissing"
+        class="gmv-cx-link is-warning"
+        type="button"
+        data-testid="gmv-creative-open-setup"
+        :title="t('gmvMaxCreativesSimple.todo.setupHint', { costs: incompleteCreativeCostCount, budgets: missingCreativeTestBudgetCount })"
+        @click="activeTab = 'rules'"
+      >
+        <AlertTriangle class="gmv-icon" />{{ t("gmvMaxCreativesSimple.setupLink") }}
+      </button>
+      <select v-model="creativeSource" class="gmv-cx-select" :aria-label="t('gmvMaxCreativesSimple.source')" @change="reload">
         <option v-for="source in ['all', 'owned', 'affiliate', 'product_card']" :key="source" :value="source">
           {{ t(`gmvMaxCreativesSimple.sources.${source}`) }}
         </option>
       </select>
     </div>
+    <p v-if="summaryLine" class="gmv-cx-summary" data-testid="gmv-creative-summary">{{ summaryLine }}</p>
 
-    <div class="gmv-table-wrap">
+    <!-- Pending suggestions, opened from the link above -->
+    <section v-if="showSuggestions && pendingSuggestions.length" class="gmv-dcard gmv-cx-suggestions" data-testid="gmv-creative-suggestions">
+      <header>
+        <strong>{{ t("gmvMaxCreativesSimple.suggestions.title") }}</strong>
+        <small>{{ t("gmvMaxCreativesSimple.suggestions.hint") }}</small>
+      </header>
+      <div v-for="item in pendingSuggestions" :key="item.id" class="gmv-cx-suggestion">
+        <div class="gmv-cx-suggestion__main">
+          <strong>{{ suggestionLabel(item) }}</strong>
+          <span>{{ suggestionTarget(item) }} · {{ campaignName(item.campaignId) }}</span>
+          <small v-if="item.reason">{{ item.reason }}</small>
+        </div>
+        <div class="gmv-cx-suggestion__actions">
+          <button class="gmv-button gmv-button--secondary" @click="openAction(item.id)">{{ t("gmvMaxCreativesSimple.actions.detail") }}</button>
+          <button class="gmv-button gmv-button--secondary" :disabled="!!busyAction" @click="reject(item.id)">{{ t("gmvMaxCreativesSimple.actions.ignore") }}</button>
+          <button class="gmv-button gmv-button--primary" :disabled="!!busyAction" @click="approve(item.id)">
+            <Check class="gmv-icon" />{{ t("gmvMaxCreativesSimple.actions.accept") }}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. The list -->
+    <div :class="['gmv-table-wrap', { 'is-loading': creativeLoading }]">
       <table class="gmv-table gmv-cx-table">
         <thead>
           <tr>
             <th>{{ t("gmvMaxCreativesSimple.columns.video") }}</th>
-            <th>{{ t("gmvMaxCreativesSimple.columns.status") }}</th>
-            <th class="is-num">
+            <th class="gmv-cx-table__spend">
               <button class="gmv-sort-button" @click="toggleCreativeSort('cost')">
-                {{ t("gmvMaxCreativesSimple.kpi.spend") }}<small>{{ sortMark("cost", creativeSortBy, creativeSortDirection) }}</small>
+                {{ t("gmvMaxCreativesSimple.columns.spendShare") }}<small>{{ sortMark("cost", creativeSortBy, creativeSortDirection) }}</small>
               </button>
             </th>
             <th class="is-num">
@@ -387,43 +491,34 @@ export default defineComponent({
                     @click.stop="openCreativeVideo(item)"
                   >
                     <img v-if="coverUrl(item)" :src="coverUrl(item)" alt="" loading="lazy" referrerpolicy="no-referrer" @error="markBroken(coverUrl(item))" />
-                    <template v-else-if="productImage(item)">
-                      <img
-                        :src="productImage(item)"
-                        alt=""
-                        loading="lazy"
-                        referrerpolicy="no-referrer"
-                        class="is-product"
-                        @error="markBroken(productImage(item))"
-                      />
-                      <span class="gmv-cx-video__badge">{{ t("gmvMaxCreativesSimple.productBadge") }}</span>
-                    </template>
+                    <img
+                      v-else-if="productImage(item)"
+                      :src="productImage(item)"
+                      :alt="t('gmvMaxCreativesSimple.productBadge')"
+                      :title="t('gmvMaxCreativesSimple.productImageHint')"
+                      loading="lazy"
+                      referrerpolicy="no-referrer"
+                      class="is-product"
+                      @error="markBroken(productImage(item))"
+                    />
                     <Film v-else class="gmv-cx-video__placeholder" />
                     <Play v-if="creativeVideoAvailable(item)" class="gmv-cx-video__play" />
                   </button>
                   <div class="gmv-cx-video__text">
-                    <strong :title="videoTitle(item)">{{ videoTitle(item) }}</strong>
-                    <small>
-                      <img v-if="avatarUrl(item)" :src="avatarUrl(item)" alt="" referrerpolicy="no-referrer" @error="markBroken(avatarUrl(item))" />
-                      <template v-if="titleIsProduct(item)">{{ videoLabel(item) }} · </template>{{ creatorLabel(item) }} ·
-                      {{ t("gmvMaxCreativesSimple.days", { count: formatInteger(item.days) }) }}
-                    </small>
+                    <span class="gmv-cx-video__title" :title="videoTitle(item)">{{ videoTitle(item) }}</span>
+                    <small :title="item.productName">{{ subtitle(item) }}</small>
                   </div>
                 </div>
               </td>
-              <td>
-                <span
-                  v-if="stateInfo(item.intelligenceState).key !== 'needsCost'"
-                  :class="['gmv-cx-state', `gvt-${stateInfo(item.intelligenceState).tone}`]"
-                  :title="t(`gmvMaxIntelligence.creativeStates.${item.intelligenceState}`)"
-                >{{ t(`gmvMaxCreativesSimple.states.${stateInfo(item.intelligenceState).key}`) }}</span>
-                <span v-else class="gmv-cx-state is-muted" :title="t('gmvMaxCreativesSimple.states.needsCostHint')">{{
-                  t("gmvMaxCreativesSimple.states.needsCost")
-                }}</span>
+              <td class="gmv-cx-table__spend">
+                <span class="gmv-cx-spend">{{ formatCny(item.cost, item.storeId) }}</span>
+                <span class="gmv-cx-bar-track"><i :style="{ width: `${spendShare(item)}%` }"></i></span>
               </td>
-              <td class="is-num">{{ formatCny(item.cost, item.storeId) }}</td>
-              <td class="is-num"><strong>{{ formatCny(item.grossRevenue, item.storeId) }}</strong></td>
-              <td class="is-num"><strong>{{ formatRoi(item.roi) }}</strong></td>
+              <td class="is-num">{{ formatCny(item.grossRevenue, item.storeId) }}</td>
+              <td class="is-num">
+                <span v-if="item.segment === 'no_orders'" class="gmv-cx-pill gvt-critical">{{ t("gmvMaxCreativesSimple.zeroOrders") }}</span>
+                <span v-else :class="['gmv-cx-pill', `gvt-${segmentTone(item)}`]">{{ formatRoi(item.roi) }}</span>
+              </td>
               <td class="is-num">{{ formatInteger(item.orders) }}</td>
               <td class="gmv-cx-table__actions">
                 <button
@@ -439,21 +534,16 @@ export default defineComponent({
               </td>
             </tr>
             <tr v-if="expandedRow === rowKey(item)" class="gmv-cx-detail-row">
-              <td colspan="7">
+              <td colspan="6">
                 <dl class="gmv-cx-detail">
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.campaign") }}</dt><dd>{{ item.campaignName }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.product") }}</dt><dd>{{ item.productName || "-" }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.authorization") }}</dt><dd>{{ item.authorizationType || "-" }} {{ item.authorizationStatus }}</dd></div>
+                  <div class="is-wide"><dt>{{ t("gmvMaxCreativesSimple.detail.product") }}</dt><dd>{{ item.productName || "-" }}</dd></div>
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.cpa") }}</dt><dd>{{ formatCny(item.cpa, item.storeId) }}</dd></div>
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.ctr") }}</dt><dd>{{ formatPercent(item.ctr) }}</dd></div>
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.cvr") }}</dt><dd>{{ formatPercent(item.conversionRate) }}</dd></div>
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.play2s") }}</dt><dd>{{ formatPercent(item.play2sRate) }}</dd></div>
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.play6s") }}</dt><dd>{{ formatPercent(item.playDepth) }}</dd></div>
-                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.score") }}</dt><dd>{{ formatInteger(item.intelligenceScore) }}</dd></div>
-                  <div>
-                    <dt>{{ t("gmvMaxCreativesSimple.detail.roiTrend") }}</dt>
-                    <dd :class="metricNumber(item.intelligenceRoiTrend) >= 0 ? 'is-positive' : 'is-negative'">{{ formatPercent(item.intelligenceRoiTrend, true) }}</dd>
-                  </div>
+                  <div><dt>{{ t("gmvMaxCreativesSimple.detail.authorization") }}</dt><dd>{{ item.authorizationType || "-" }} {{ item.authorizationStatus }}</dd></div>
                   <div><dt>{{ t("gmvMaxCreativesSimple.detail.id") }}</dt><dd>{{ item.creativeId }}</dd></div>
                 </dl>
                 <div class="gmv-cx-detail__actions">
@@ -467,7 +557,7 @@ export default defineComponent({
       </table>
       <div v-if="creativeLoading && !creativePage.items.length" class="gmv-empty">{{ t("gmvMaxData.loadingPage") }}</div>
       <div v-else-if="!filteredCreatives.length" class="gmv-empty">
-        {{ statusTab && statusTab !== "all" ? t("gmvMaxCreativesSimple.emptyTab") : t("gmvMaxAdvanced.empty.creatives") }}
+        {{ activeSegment !== "all" ? t("gmvMaxCreativesSimple.emptyTab") : t("gmvMaxAdvanced.empty.creatives") }}
       </div>
       <div class="gmv-pagination">
         <span>{{

@@ -314,6 +314,8 @@ type ProductCost = CostFields & {
   gmvMaxAdsStatus?: string;
   catalogSyncedAt?: number;
 };
+/** Plain-language creative segment computed from ad data (see main listCreativeMetricAggregatePage). */
+type CreativeSegment = "earning" | "average" | "no_orders" | "new";
 type CreativeMetric = {
   id: string;
   campaignId: string;
@@ -356,6 +358,7 @@ type CreativePerformance = CreativeMetric & {
   intelligenceState: CreativeInsight["state"];
   intelligenceScore: number;
   intelligenceRoiTrend: string;
+  segment?: CreativeSegment;
 };
 type CreativePage = {
   items: CreativePerformance[];
@@ -365,6 +368,8 @@ type CreativePage = {
   startDate: string;
   endDate: string;
   summary: { cost: number; revenue: number; orders: number; roi: number };
+  segments?: Record<CreativeSegment, number>;
+  overall?: { count: number; cost: number; revenue: number; orders: number; roi: number };
 };
 type CreativeInsight = {
   id: string;
@@ -1877,6 +1882,7 @@ const creativePage = shallowRef<CreativePage>({
 const creativeLoading = ref(false);
 const creativeCampaign = ref("all");
 const creativeState = ref("all");
+const creativeSegment = ref("all");
 const creativeSortBy = ref("grossRevenue");
 const creativeSortDirection = ref<"asc" | "desc">("desc");
 const listEntryPage = shallowRef<ListEntryPage>({
@@ -4892,6 +4898,7 @@ async function loadCreativePage(page = creativePage.value.page) {
     campaignId: creativeCampaign.value,
     source: creativeSource.value,
     state: creativeState.value,
+    segment: creativeSegment.value === "all" ? undefined : creativeSegment.value,
     search: searchText.value,
     minSpend: cnyFilterToSource(minCreativeSpend.value),
     minOrders: minCreativeOrders.value,
@@ -5751,6 +5758,7 @@ function clearFilters() {
   creativeCampaign.value = "all";
   creativeSource.value = "all";
   creativeState.value = "all";
+  creativeSegment.value = "all";
   minCreativeSpend.value = undefined;
   minCreativeOrders.value = undefined;
   minCreativeRoi.value = undefined;
@@ -6581,6 +6589,7 @@ provide(GMV_WORKSPACE_KEY, {
   completeSopTask,
   connect,
   connected,
+  convertToCny,
   copySopIdentifier,
   createSopCreativeAction,
   creativeActionQueue,
@@ -6594,6 +6603,7 @@ provide(GMV_WORKSPACE_KEY, {
   creativeSortDirection,
   creativeSource,
   creativeState,
+  creativeSegment,
   creativeVideoAvailable,
   creativeView,
   creatorPerformance,

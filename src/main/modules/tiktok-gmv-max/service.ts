@@ -1376,6 +1376,7 @@ function creativePage(input?: {
   campaignId?: string
   source?: string
   state?: string
+  segment?: string
   search?: string
   minSpend?: number
   minOrders?: number
@@ -1395,6 +1396,7 @@ function creativePage(input?: {
     storeId: input?.storeId,
     source: input?.source,
     state: input?.state,
+    segment: input?.segment,
     search: input?.search,
     minSpend: input?.minSpend,
     minOrders: input?.minOrders,
@@ -1456,6 +1458,7 @@ function creativePage(input?: {
       intelligenceState: insight?.state || 'testing',
       intelligenceScore: insight?.score || 0,
       intelligenceRoiTrend: insight?.roiTrendPercent || '0',
+      segment: 'segment' in group ? group.segment : undefined,
       raw,
     }
   })
@@ -1468,6 +1471,9 @@ function creativePage(input?: {
     startDate: range.startDate,
     endDate: range.endDate,
     summary: { ...summary, roi: summary.cost > 0 ? summary.revenue / summary.cost : 0 },
+    // Only the fast aggregate query computes segments; the enriched (intelligence-state) query leaves them out.
+    segments: 'segments' in aggregatePage ? aggregatePage.segments : undefined,
+    overall: 'overall' in aggregatePage ? aggregatePage.overall : undefined,
   }
 }
 

@@ -5021,12 +5021,38 @@
       "product_card": "Product card"
     },
     "columns": {
+      "spendShare": "Spend",
       "video": "Video",
       "status": "Status",
       "suggestion": "Suggestion"
     },
     "days": "{count} days",
     "unknownCreator": "Unknown source",
+    "tops": {
+      "earners": "Top earning videos",
+      "wasters": "Spending with no orders",
+      "all": "All ›",
+      "noEarners": "No earning videos yet",
+      "noWasters": "No videos spending without orders",
+      "spentNoOrders": "Spent {spend} · 0 orders"
+    },
+    "segments": {
+      "all": "All",
+      "earning": "Earning",
+      "average": "Average",
+      "no_orders": "No orders",
+      "new": "New",
+      "allHint": "All videos with spend in this period",
+      "earningHint": "3+ orders and ROI at least 80% of the overall average",
+      "averageHint": "Has orders, but ROI is low or orders are few",
+      "no_ordersHint": "Spent money without a single order",
+      "newHint": "Started spending in the last 7 days"
+    },
+    "summaryLine": "{count} videos · spend {spend} · revenue {revenue} · ROI {roi} · {orders} orders",
+    "suggestionsLink": "{count} suggestions to review",
+    "setupLink": "Costs not finished",
+    "zeroOrders": "0 orders",
+    "productImageHint": "No video cover, showing the product image",
     "untitled": "Video {id}",
     "productBadge": "Product",
     "detail": {
