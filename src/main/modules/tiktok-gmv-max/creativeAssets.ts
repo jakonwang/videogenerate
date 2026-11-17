@@ -50,3 +50,34 @@ export function resolveGmvMaxCreativeAsset(assets: GmvMaxCreativeAsset[], metric
       && item.creativeId === metric.creativeId
       && !item.campaignId)
 }
+
+/** Video posts that campaign details already describe (custom-selected posts carry cover, caption and account). */
+export function extractGmvMaxCampaignPostVideos(campaigns: GmvMaxCampaign[], storeId: string) {
+  const rows: Array<{ campaignId: string; row: Record<string, unknown> }> = []
+  const seen = new Set<string>()
+  const visit = (campaignId: string, value: unknown, depth: number) => {
+    if (!value || typeof value !== 'object' || depth > 6) return
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(campaignId, entry, depth + 1)
+      return
+    }
+    const record = value as Record<string, unknown>
+    const itemId = String(record.item_id || '').trim()
+    const videoInfo = record.video_info
+    if (itemId && videoInfo && typeof videoInfo === 'object' && !Array.isArray(videoInfo)) {
+      const key = `${campaignId}:${itemId}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        rows.push({ campaignId, row: record })
+      }
+      return
+    }
+    for (const entry of Object.values(record)) visit(campaignId, entry, depth + 1)
+  }
+  for (const campaign of campaigns) {
+    if (campaign.storeId !== storeId) continue
+    visit(campaign.id, campaign.raw, 0)
+  }
+  return rows
+}
+

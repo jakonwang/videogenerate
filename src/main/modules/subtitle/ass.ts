@@ -143,9 +143,10 @@ function styleLineTitle(input: AssRenderOptions) {
   if (input.preset === 'yellow_box') {
     const font = input.fontName || ASS_DEFAULT_FONT_FAMILY
     const primary = '&H00000000'
-    const outline = '&H00000000'
-    const back = '&H0000D7FF'
-    return `Style: YellowCaptionTop,${font},${size},${primary},${primary},${primary},${back},0,0,0,0,100,100,0,0,3,10,2,${alignment},20,20,${marginV},1`
+    // BorderStyle=3 (opaque box): libass fills the box with OutlineColour; BackColour is the box's shadow.
+    const box = '&H0000D7FF'
+    const shadow = '&H80000000'
+    return `Style: YellowCaptionTop,${font},${size},${primary},${primary},${box},${shadow},0,0,0,0,100,100,0,0,3,10,2,${alignment},20,20,${marginV},1`
   }
   // 白字网感：MainContent，Bold=1 Italic=1，暖深灰描边 Outline=3（默认模板 Noto 族名映射为 Nunito + Bold Italic woff2）
   const font = resolveWhiteShadowDisplayFont(input.fontName || '')
@@ -168,9 +169,9 @@ function styleLineTimed(input: AssRenderOptions) {
   if (input.preset === 'yellow_box') {
     const font = input.fontName || ASS_DEFAULT_FONT_FAMILY
     const primary = '&H00000000'
-    const outline = '&H00000000'
-    const back = '&H0000D7FF'
-    return `Style: YellowCaptionBottom,${font},${size},${primary},${primary},${primary},${back},0,0,0,0,100,100,0,0,3,8,2,${alignment},20,20,${marginV},1`
+    const box = '&H0000D7FF'
+    const shadow = '&H80000000'
+    return `Style: YellowCaptionBottom,${font},${size},${primary},${primary},${box},${shadow},0,0,0,0,100,100,0,0,3,8,2,${alignment},20,20,${marginV},1`
   }
   const font = resolveWhiteShadowDisplayFont(input.fontName || '')
   const primary = '&H00FFFFFF'
@@ -178,6 +179,59 @@ function styleLineTimed(input: AssRenderOptions) {
   const outlineC = '&H00332B2A'
   const back = '&H00000000'
   return `Style: ${ASS_STYLE_MAIN_CONTENT_BOTTOM},${font},${size},${primary},${secondary},${outlineC},${back},1,1,0,0,100,100,0,0,1,3,0,${alignment},20,20,${marginV},1`
+}
+
+/** Caption width budget per on-screen chunk (CJK / Thai / full-width count double). */
+const CAPTION_CHUNK_UNITS = 24
+
+const captionCharWidth = (ch: string) => (/[\u2E80-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF\u0E00-\u0E7F]/.test(ch) ? 2 : 1)
+
+/**
+ * Splits one timed TTS part into short captions (TikTok style), at word boundaries for spaced
+ * languages and per character for CJK, giving each chunk time in proportion to its length.
+ */
+export function chunkTimedCaption(text: string, startSec: number, endSec: number): Array<{ text: string; start: number; end: number }> {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim()
+  const total = [...clean].reduce((a, c) => a + captionCharWidth(c), 0)
+  if (!clean || total <= CAPTION_CHUNK_UNITS) return clean ? [{ text: clean, start: startSec, end: endSec }] : []
+  const tokens = clean.match(/[\u2E80-\u9FFF\uFF00-\uFFEF][，。！？、,.!?]*|[^\s\u2E80-\u9FFF\uFF00-\uFFEF]+|\s/g) ?? [clean]
+  const chunks: string[] = []
+  let cur = ''
+  let w = 0
+  for (const tok of tokens) {
+    if (tok === ' ') {
+      if (cur) {
+        cur += ' '
+        w += 1
+      }
+      continue
+    }
+    const tw = [...tok].reduce((a, c) => a + captionCharWidth(c), 0)
+    if (w + tw > CAPTION_CHUNK_UNITS && cur.trim()) {
+      chunks.push(cur.trim())
+      cur = ''
+      w = 0
+    }
+    cur += tok
+    w += tw
+    // Prefer ending a caption at punctuation once it has some length, so sentences don't straddle captions.
+    if (w >= 8 && /[,.!?;:，。！？、；：]$/.test(tok)) {
+      chunks.push(cur.trim())
+      cur = ''
+      w = 0
+    }
+  }
+  if (cur.trim()) chunks.push(cur.trim())
+  const span = Math.max(0.06, endSec - startSec)
+  const weights = chunks.map((c) => Math.max(1, [...c].reduce((a, ch) => a + captionCharWidth(ch), 0)))
+  const sum = weights.reduce((a, b) => a + b, 0)
+  let t = startSec
+  return chunks.map((c, i) => {
+    const start = t
+    const end = i === chunks.length - 1 ? endSec : t + (span * weights[i]!) / sum
+    t = end
+    return { text: c, start, end }
+  })
 }
 
 /** 生成 UTF-8 ASS（无 BOM），libass/FFmpeg 按 UTF-8 解析 */
@@ -263,13 +317,19 @@ export function buildAss(opts: AssRenderOptions) {
       for (const p of parts) {
         const s = Math.max(0, p.start / 1000)
         const e = Math.max(s + 0.06, p.end / 1000)
-        events.push(
-          `Dialogue: 0,${assTime(s)},${assTime(Math.min(e, dur))},${styleName},,0,0,0,,${pop}${escAssText(p.part)}`,
-        )
+        // WrapStyle 2 never wraps: a whole TTS sentence would run off the frame, so show it as short captions.
+        for (const c of chunkTimedCaption(p.part, s, e)) {
+          events.push(
+            `Dialogue: 0,${assTime(c.start)},${assTime(Math.min(c.end, dur))},${styleName},,0,0,0,,${pop}${escAssText(c.text)}`,
+          )
+        }
       }
     } else {
+      // No usable word timing: pace short captions across the voice duration instead of one frame-wide line.
       const txt = String(ts.text ?? '')
-      events.push(`Dialogue: 0,${assTime(0)},${assTime(dur)},${styleName},,0,0,0,,${pop}${escAssText(txt)}`)
+      for (const c of chunkTimedCaption(txt, 0, dur)) {
+        events.push(`Dialogue: 0,${assTime(c.start)},${assTime(c.end)},${styleName},,0,0,0,,${pop}${escAssText(c.text)}`)
+      }
     }
   }
 

@@ -3,6 +3,7 @@ import { signEntitlementToken } from '../../../src/shared/cloud/entitlementToken
 import {
   CLOUD_FEATURES,
   CLOUD_PERMANENT_EXPIRES_AT,
+  deviceKindOf,
   type CloudAdminStats,
   type CloudAdminUserDetail,
   type CloudAdminUserPatch,
@@ -62,9 +63,9 @@ const RESERVED_CONFIG_PREFIX = 'software.'
 export type Actor = { user: UserRow; ip: string }
 
 export const DEFAULT_PLANS: CloudPlan[] = [
-  { code: 'month', name: '月度会员', description: '全部功能，1 台设备', days: 30, amountFen: 9900, maxDevices: 1, features: ['*'], active: true, sort: 10 },
-  { code: 'quarter', name: '季度会员', description: '全部功能，2 台设备', days: 90, amountFen: 26900, maxDevices: 2, features: ['*'], active: true, sort: 20 },
-  { code: 'year', name: '年度会员', description: '全部功能，3 台设备', days: 365, amountFen: 89900, maxDevices: 3, features: ['*'], active: true, sort: 30 },
+  { code: 'month', name: '月度会员', description: '全部功能，1 台电脑 + 1 部手机', days: 30, amountFen: 9900, maxDevices: 1, features: ['*'], active: true, sort: 10 },
+  { code: 'quarter', name: '季度会员', description: '全部功能，2 台电脑 + 1 部手机', days: 90, amountFen: 26900, maxDevices: 2, features: ['*'], active: true, sort: 20 },
+  { code: 'year', name: '年度会员', description: '全部功能，3 台电脑 + 1 部手机', days: 365, amountFen: 89900, maxDevices: 3, features: ['*'], active: true, sort: 30 },
 ]
 
 export const DEFAULT_CONFIG: Array<{ key: string; value: unknown; scope: 'public' | 'private'; description: string }> = [
@@ -112,7 +113,7 @@ export function createCloudService(deps: {
 
   function entitlementFor(user: UserRow): CloudEntitlement {
     if (isUnlimited(user)) {
-      return { active: user.status === 'active', unlimited: true, planCode: user.planCode, planName: '不受限', expiresAt: null, features: ['*'], maxDevices: 0 }
+      return { active: user.status === 'active', unlimited: true, planCode: user.planCode, planName: '不受限', expiresAt: null, features: ['*'], maxDevices: 0, maxMobileDevices: 0 }
     }
     const plan = user.planCode ? repo.getPlan(user.planCode) : null
     const active = user.status === 'active' && Boolean(user.planExpiresAt && user.planExpiresAt > now())
@@ -124,6 +125,7 @@ export function createCloudService(deps: {
       expiresAt: user.planExpiresAt,
       features: active ? (plan?.features ?? []) : [],
       maxDevices: plan?.maxDevices ?? 1,
+      maxMobileDevices: config.maxMobileDevices,
     }
   }
 
@@ -191,7 +193,7 @@ export function createCloudService(deps: {
   }
 
   async function login(input: CloudLoginRequest, ip: string): Promise<CloudLoginResponse> {
-    const client: CloudClientKind = input.client === 'admin' || input.client === 'desktop' ? input.client : 'web'
+    const client: CloudClientKind = input.client === 'admin' || input.client === 'desktop' || input.client === 'mobile' ? input.client : 'web'
     let account: string
     try {
       account = normalizeAccount(input.account)
@@ -211,7 +213,7 @@ export function createCloudService(deps: {
     if (user.status !== 'active') throw new CloudError('ACCOUNT_DISABLED', '账号已被停用，请联系客服', 403)
     if (client === 'admin' && user.role === 'user') throw forbidden('该账号没有后台权限')
 
-    const machineId = client === 'desktop' ? String(input.machineId || '').slice(0, 128) || null : null
+    const machineId = client === 'desktop' || client === 'mobile' ? String(input.machineId || '').slice(0, 128) || null : null
     repo.updateUser(user.id, { lastLoginAt: now() }, now())
     const sessionToken = issueSession(user, client, machineId)
     if (client === 'admin') audit({ user, ip }, 'admin.login', user.id)
@@ -270,9 +272,22 @@ export function createCloudService(deps: {
         repo.touchDevice(existing.id, info)
         return repo.getActiveDevice(user.id, existing.id)!
       }
-      const devices = repo.listActiveDevices(user.id)
-      if (entitlement.maxDevices > 0 && devices.length >= entitlement.maxDevices) {
-        throw new CloudError('DEVICE_LIMIT', `当前会员最多绑定 ${entitlement.maxDevices} 台设备，请先解绑其它设备`, 409, { devices, maxDevices: entitlement.maxDevices })
+      const kind = deviceKindOf(info.platform)
+      const sameKind = repo.listActiveDevices(user.id).filter((device) => device.kind === kind)
+      if (kind === 'mobile') {
+        // Phones have their own allowance. A new phone takes over from the least recently used one,
+        // so switching phones never needs a manual unbind.
+        const limit = entitlement.maxMobileDevices
+        if (limit > 0 && sameKind.length >= limit) {
+          const oldest = [...sameKind].sort((a, b) => a.lastSeenAt - b.lastSeenAt).slice(0, sameKind.length - limit + 1)
+          for (const device of oldest) {
+            repo.revokeDevice(device.id, 'replaced', info.now)
+            repo.revokeUserSessions(user.id, info.now, device.machineId)
+            audit({ user, ip: '' }, 'device.replace', device.id, { machineId: device.machineId, by: machineId })
+          }
+        }
+      } else if (entitlement.maxDevices > 0 && sameKind.length >= entitlement.maxDevices) {
+        throw new CloudError('DEVICE_LIMIT', `当前会员最多绑定 ${entitlement.maxDevices} 台电脑，请先解绑其它电脑`, 409, { devices: sameKind, maxDevices: entitlement.maxDevices })
       }
       const id = newId('d')
       repo.insertDevice({ id, userId: user.id, machineId, ...info })
@@ -306,7 +321,7 @@ export function createCloudService(deps: {
   }
 
   function listPlans(): CloudPlansResponse {
-    return { plans: repo.listPlans(false), channels: availableChannels() }
+    return { plans: repo.listPlans(false), channels: availableChannels(), maxMobileDevices: config.maxMobileDevices }
   }
 
   async function createOrder(user: UserRow, input: { planCode: string; channel: CloudPayChannel }): Promise<CloudOrder> {
@@ -752,6 +767,8 @@ export function createCloudService(deps: {
   }
 
   return {
+    /** 仅云端内部使用（AI 网关读取平台密钥），不对外返回 */
+    readManagedSettings: () => readManagedSettings().settings,
     ensureSeed,
     availableChannels,
     entitlementFor,

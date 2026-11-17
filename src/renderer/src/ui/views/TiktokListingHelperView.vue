@@ -597,17 +597,16 @@ onBeforeUnmount(() => {
     <section class="listing-shell">
       <div class="page-top">
         <div class="crumb-row">
-          <button class="back-link" type="button" @click="router.push('/plugins?tab=installed')">
-            <ChevronLeft class="h-4 w-4" /> {{ tr('autoUi.k_a2a2147b4eb9') }} </button>
+          <button class="back-link" type="button" @click="router.push('/plugins')">
+            <ChevronLeft class="h-4 w-4" /> {{ tr('ai.tools.back') }} </button>
           <span>/</span>
-          <strong>{{ tr('autoUi.k_add920d22933') }}</strong>
+          <strong>{{ tr('ai.tools.items.tiktok-listing-helper.name') }}</strong>
         </div>
 
         <div class="page-top__main">
           <div class="hero-copy">
             <div class="page-title-row">
               <h1>{{ activeTab === 'list' ? tr('autoUi.k_44544d214520') : tr('autoUi.k_8ded76cf707b') }}</h1>
-              <span class="official-badge">{{ tr('autoUi.k_174b4bbfebfc') }}</span>
             </div>
             <p>
               {{
@@ -2307,5 +2306,18 @@ onBeforeUnmount(() => {
   .table-footer__meta {
     flex-wrap: wrap;
   }
+}
+</style>
+
+<style>
+/* The global theme restyles every input; inputs nested in a styled shell must stay borderless. */
+html[data-app-theme] body #app .app-shell :is(.field-shell, .select-shell, .page-size) :is(input, select) {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
 }
 </style>

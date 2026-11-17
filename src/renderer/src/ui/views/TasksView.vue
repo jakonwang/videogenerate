@@ -14,6 +14,7 @@ type VideoTask = {
   status: 'queued' | 'running' | 'paused' | 'done' | 'error' | 'skipped' | 'cancelled'
   progress: number
   error?: string
+  mix?: { formulaName: string; mode: 'auto' | 'ai'; title?: string }
 }
 
 type Product = { id: string; name: string }
@@ -66,8 +67,10 @@ function resolveProductName(productId: string) {
   return productNameMap.value.get(productId) ?? productId ?? '-'
 }
 
-function resolveTemplateName(templateId: string) {
-  return templateNameMap.value.get(templateId) ?? templateId ?? '-'
+function resolveTemplateName(task: VideoTask) {
+  // Mix-studio tasks: the formula is what matters; the template (if any) only supplied finishing.
+  if (task.mix?.formulaName) return `${task.mix.mode === 'ai' ? 'AI' : 'Auto'} · ${task.mix.formulaName}`
+  return templateNameMap.value.get(task.templateId) ?? task.templateId ?? '-'
 }
 
 async function refresh() {
@@ -216,7 +219,7 @@ onUnmounted(() => {
                 <div class="tasks__path" :title="task.outPath">{{ task.outPath || t('production.tasks.noOutput') }}</div>
                 <div v-if="task.status === 'error' && task.error" class="tasks__error">{{ task.error }}</div>
               </td>
-              <td class="vg-secondary">{{ resolveTemplateName(task.templateId) }}</td>
+              <td class="vg-secondary">{{ resolveTemplateName(task) }}</td>
               <td>
                 <span class="vg-progress">
                   <span class="vg-progress__bar">

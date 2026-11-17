@@ -1,5 +1,5 @@
-export type TiktokListingCategory = 'earring' | 'ring' | 'necklace' | 'phone_case' | 'bracelet'
-export type TiktokListingLanguage = 'zh-CN' | 'en-US' | 'vi-VN'
+import type { TiktokListingCategory, TiktokListingLanguage } from '../../../shared/tiktokListingPrompts'
+export type { TiktokListingCategory, TiktokListingLanguage }
 export type TiktokListingGenerationStatus = 'idle' | 'generating' | 'done' | 'failed'
 
 export type TiktokListingExportCategoryConfig = {

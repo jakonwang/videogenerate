@@ -3,9 +3,12 @@ import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import {
   CREATOR_HUB_DEFAULT_SETTINGS,
+  type CreatorHubContact,
   type CreatorHubCreatorPerf,
   type CreatorHubCreatorProfile,
+  type CreatorHubMessageTemplate,
   type CreatorHubOrder,
+  type CreatorHubPoolCreator,
   type CreatorHubProductCost,
   type CreatorHubVideo,
   type CreatorHubSample,
@@ -30,6 +33,10 @@ CREATE TABLE IF NOT EXISTS ch_videos (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS ch_creator_perf (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, synced_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ch_orders (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, created_at INTEGER NOT NULL, synced_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ch_creator_profiles (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS ch_pool (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, last_seen_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_ch_pool_shop ON ch_pool(shop_id, last_seen_at DESC);
+CREATE TABLE IF NOT EXISTS ch_contacts (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_ch_contacts_shop ON ch_contacts(shop_id, creator_id);
 CREATE TABLE IF NOT EXISTS ch_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ch_schema_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ch_shops_shop_id ON ch_shops(shop_id) WHERE shop_id IS NOT NULL AND shop_id <> '';
@@ -107,6 +114,8 @@ export const creatorHubRepo = {
       db().prepare('DELETE FROM ch_creator_perf WHERE shop_id = ?').run(id)
       db().prepare('DELETE FROM ch_orders WHERE shop_id = ?').run(id)
       db().prepare('DELETE FROM ch_creator_profiles WHERE shop_id = ?').run(id)
+      db().prepare('DELETE FROM ch_pool WHERE shop_id = ?').run(id)
+      db().prepare('DELETE FROM ch_contacts WHERE shop_id = ?').run(id)
       db().prepare('DELETE FROM ch_shops WHERE id = ?').run(id)
     })
   },
@@ -214,6 +223,81 @@ export const creatorHubRepo = {
       ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, payload = excluded.payload`)
       .run(profile.id, profile.shopId, profile.creatorId, profile.updatedAt, JSON.stringify(profile))
     return profile
+  },
+
+  // ===== Creator pool (marketplace search results; local star / sources are kept across searches) =====
+  listPool(shopId?: string): CreatorHubPoolCreator[] {
+    const rows = shopId
+      ? db().prepare('SELECT payload FROM ch_pool WHERE shop_id = ? ORDER BY last_seen_at DESC').all(shopId)
+      : db().prepare('SELECT payload FROM ch_pool ORDER BY last_seen_at DESC').all()
+    return rows.map((row) => parse<CreatorHubPoolCreator>(row))
+  },
+  getPoolCreator(id: string): CreatorHubPoolCreator | undefined {
+    const row = db().prepare('SELECT payload FROM ch_pool WHERE id = ?').get(id)
+    return row ? parse<CreatorHubPoolCreator>(row) : undefined
+  },
+  upsertPool(rows: CreatorHubPoolCreator[], source: string) {
+    const select = db().prepare('SELECT payload FROM ch_pool WHERE id = ?')
+    const write = db().prepare(`INSERT INTO ch_pool (id, shop_id, creator_id, last_seen_at, payload) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at, payload = excluded.payload`)
+    let added = 0
+    let updated = 0
+    transaction(() => {
+      for (const row of rows) {
+        const existing = select.get(row.id)
+        const previous = existing ? parse<CreatorHubPoolCreator>(existing) : undefined
+        if (previous) updated += 1
+        else added += 1
+        const sources = [source, ...(previous?.sources || []).filter((item) => item !== source)].slice(0, 8)
+        const next: CreatorHubPoolCreator = { ...row, starred: previous?.starred || false, sources, firstSeenAt: previous?.firstSeenAt || row.firstSeenAt }
+        write.run(next.id, next.shopId, next.creatorId, next.lastSeenAt, JSON.stringify(next))
+      }
+    })
+    return { added, updated }
+  },
+  setPoolStar(ids: string[], starred: boolean) {
+    const select = db().prepare('SELECT payload FROM ch_pool WHERE id = ?')
+    const write = db().prepare('UPDATE ch_pool SET payload = ? WHERE id = ?')
+    transaction(() => {
+      for (const id of ids) {
+        const row = select.get(id)
+        if (!row) continue
+        write.run(JSON.stringify({ ...parse<CreatorHubPoolCreator>(row), starred }), id)
+      }
+    })
+  },
+  removePool(ids: string[]) {
+    const remove = db().prepare('DELETE FROM ch_pool WHERE id = ?')
+    transaction(() => { for (const id of ids) remove.run(id) })
+  },
+
+  // ===== Creator contacts (local only) =====
+  listContacts(shopId?: string): CreatorHubContact[] {
+    const rows = shopId
+      ? db().prepare('SELECT payload FROM ch_contacts WHERE shop_id = ?').all(shopId)
+      : db().prepare('SELECT payload FROM ch_contacts').all()
+    return rows.map((row) => parse<CreatorHubContact>(row))
+  },
+  getContact(id: string): CreatorHubContact | undefined {
+    const row = db().prepare('SELECT payload FROM ch_contacts WHERE id = ?').get(id)
+    return row ? parse<CreatorHubContact>(row) : undefined
+  },
+  saveContact(contact: CreatorHubContact) {
+    db().prepare(`INSERT INTO ch_contacts (id, shop_id, creator_id, updated_at, payload) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, payload = excluded.payload`)
+      .run(contact.id, contact.shopId, contact.creatorId, contact.updatedAt, JSON.stringify(contact))
+    return contact
+  },
+
+  // ===== Message templates =====
+  getTemplates(): CreatorHubMessageTemplate[] | undefined {
+    const row = db().prepare("SELECT value FROM ch_settings WHERE key = 'messageTemplates'").get() as { value: string } | undefined
+    if (!row) return undefined
+    try { return JSON.parse(row.value) } catch { return undefined }
+  },
+  saveTemplates(templates: CreatorHubMessageTemplate[]) {
+    db().prepare("INSERT INTO ch_settings (key, value) VALUES ('messageTemplates', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(templates))
+    return templates
   },
 
   // ===== Sync jobs =====

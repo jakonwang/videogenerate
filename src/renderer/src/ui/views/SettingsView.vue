@@ -23,9 +23,13 @@ import {
   RefreshCw,
   Save,
   Settings as SettingsIcon,
+  Brain,
+  AlarmClock,
 } from 'lucide-vue-next'
 import { useAppSettingsStore, type AppTheme } from '@/stores/appSettings'
 import StorageManagementPanel from '../components/StorageManagementPanel.vue'
+import BrandMemorySettings from '../components/ai/BrandMemorySettings.vue'
+import AiAutomationSettings from '../components/ai/AiAutomationSettings.vue'
 import {
   listCapabilityPlatforms,
   mapPlatformToStoredProvider,
@@ -194,6 +198,8 @@ type SettingsSection =
   | 'capabilities'
   | 'storage-management'
   | 'qiniu'
+  | 'brand'
+  | 'automation'
 
 const settingsSection = ref<SettingsSection>('appearance')
 const settingsNavPanel = ref<HTMLElement | null>(null)
@@ -203,7 +209,7 @@ const appSettings = useAppSettingsStore()
 
 watch(() => route.query.section, (value) => {
   const section = String(Array.isArray(value) ? value[0] : value || '') as SettingsSection
-  if (['appearance', 'platforms', 'capabilities', 'storage-management', 'qiniu'].includes(section)) settingsSection.value = section
+  if (['appearance', 'platforms', 'capabilities', 'storage-management', 'qiniu', 'brand', 'automation'].includes(section)) settingsSection.value = section
 }, { immediate: true })
 
 function revealActiveSettingsSection() {
@@ -251,6 +257,14 @@ const sectionGroups = [
     items: [
       { key: 'platforms', labelKey: 'settings.sections.platforms.label', descKey: 'settings.sections.platforms.desc', icon: KeyRound },
       { key: 'capabilities', labelKey: 'settings.sections.capabilities.label', descKey: 'settings.sections.capabilities.desc', icon: Server },
+    ],
+  },
+  {
+    key: 'producer',
+    labelKey: 'ai.settingsGroup',
+    items: [
+      { key: 'brand', labelKey: 'ai.brand.title', descKey: 'ai.brand.navDesc', icon: Brain },
+      { key: 'automation', labelKey: 'ai.automation.navTitle', descKey: 'ai.automation.navDesc', icon: AlarmClock },
     ],
   },
   {
@@ -826,36 +840,7 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section class="vg-card">
-            <div class="vg-card__head">
-              <span class="vg-card__title"><KeyRound :size="16" /> {{ t('settings.access.title') }} <small>{{ t('settings.access.subtitle') }}</small></span>
-              <span class="vg-pill vg-pill--accent">{{ t('settings.access.localMode') }}</span>
-            </div>
-            <div class="vg-field">
-              <label for="settings-access-key">{{ t('settings.access.keyLabel') }}</label>
-              <div class="vg-row settings__inline">
-                <input
-                  id="settings-access-key"
-                  v-model="accessKeyInput"
-                  class="vg-input"
-                  :type="accessKeyVisible ? 'text' : 'password'"
-                  autocomplete="off"
-                  :placeholder="t('settings.access.placeholder')"
-                />
-                <button type="button" class="vg-icon-btn" :aria-label="t('settings.common.show')" @click="accessKeyVisible = !accessKeyVisible">
-                  <EyeOff v-if="accessKeyVisible" :size="16" />
-                  <Eye v-else :size="16" />
-                </button>
-                <button type="button" class="vg-btn vg-btn--primary" @click="saveAccessKey">{{ t('settings.access.save') }}</button>
-              </div>
-            </div>
-            <div class="vg-card__foot">
-              <span class="vg-muted settings__hint">{{ accessKeyMessage || t('settings.access.futureHint') }}</span>
-              <span class="vg-pill vg-pill--dot" :class="appSettings.accessKey ? 'vg-pill--green' : ''">
-                {{ appSettings.accessKey ? t('settings.access.configured') : t('settings.access.notConfigured') }}
-              </span>
-            </div>
-          </section>
+          
         </template>
 
         <!-- Platforms -->
@@ -1003,6 +988,10 @@ onBeforeUnmount(() => {
 
         <!-- Storage -->
         <StorageManagementPanel v-else-if="settingsSection === 'storage-management'" />
+
+        <BrandMemorySettings v-else-if="settingsSection === 'brand'" />
+
+        <AiAutomationSettings v-else-if="settingsSection === 'automation'" />
 
         <!-- Qiniu -->
         <section v-else-if="settingsSection === 'qiniu'" class="vg-card">

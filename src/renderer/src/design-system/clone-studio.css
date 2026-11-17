@@ -14,6 +14,9 @@ html body #app .clone-page .cw-shell > .cw { display: block; width: 100%; max-wi
 .cw-sticky { position: sticky; top: 12px; align-self: start; }
 
 /* ---------- step header ---------- */
+.cw-modebar { display: flex; align-items: center; gap: 10px; min-width: 0; margin: 10px 0 14px; padding: 8px 12px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel-soft); }
+.cw-modebar__label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--theme-text); white-space: nowrap; }
+.cw-modebar__hint { flex: 1; min-width: 0; font-size: 12px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cw-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .cw-head__no { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid var(--vg-accent-line); border-radius: 12px; background: var(--vg-accent-soft); color: var(--vg-accent); font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .cw-head__text { flex: 1; min-width: 0; }

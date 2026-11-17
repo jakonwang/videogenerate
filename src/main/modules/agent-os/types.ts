@@ -47,6 +47,19 @@ export type AgentIntentType =
   | 'Intent.TemplateManage'
   | 'Intent.ArtifactInspect'
   | 'Intent.ArtifactExport'
+  | 'Intent.SystemHealthCheck'
+  | 'Intent.AssetSearch'
+  | 'Intent.AssetArchive'
+  | 'Intent.CloneShotsSend'
+  | 'Intent.CreativeFromImages'
+  | 'Intent.LivePhotoFromVideo'
+  | 'Intent.ReviewSubmit'
+  | 'Intent.ProductImportFromLink'
+  | 'Intent.ProductResearchPromote'
+  | 'Intent.PublishDraft'
+  | 'Intent.InsightsRead'
+  | 'Intent.ReferenceDiscover'
+  | 'Intent.OutputsAwait'
 
 export type AgentCapabilityId =
   | 'Product.Read'
@@ -75,6 +88,19 @@ export type AgentCapabilityId =
   | 'Template.Manage'
   | 'Artifact.Read'
   | 'Artifact.Export'
+  | 'System.HealthCheck'
+  | 'Asset.Search'
+  | 'Asset.Archive'
+  | 'Clone.SendShots'
+  | 'CreativeStudio.CreateFromImages'
+  | 'LivePhoto.FromVideo'
+  | 'Review.Submit'
+  | 'Product.ImportFromLink'
+  | 'ProductResearch.PromoteWinner'
+  | 'Publish.Draft'
+  | 'Insights.Read'
+  | 'Reference.Discover'
+  | 'Outputs.Await'
 
 export type AgentArtifactKind =
   | 'image'
@@ -158,6 +184,8 @@ export type AgentWorkflowStep = {
   employeeId: string
   status: AgentStepStatus
   repairCount: number
+  /** Set when the user explicitly confirmed a dangerous step at execution time. */
+  confirmedAt?: number
   currentAttemptId?: string
   error?: string
   startedAt?: number
@@ -309,6 +337,8 @@ export type AgentAdapterContext = {
   step: AgentWorkflowStep
   idempotencyKey: string
   dependencyArtifacts: AgentArtifact[]
+  /** Artifacts of every earlier step this step transitively depends on (includes dependencyArtifacts). */
+  upstreamArtifacts?: AgentArtifact[]
   registerArtifact: (draft: AgentArtifactDraft) => string
 }
 

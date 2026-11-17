@@ -1,9 +1,16 @@
-import type { IpcMain } from 'electron'
+import type { BrowserWindow, IpcMain } from 'electron'
 import { tiktokCreativeStudioService } from '../modules/tiktok-creative-studio/service'
 import { creatokPublisherService } from '../modules/tiktok-publisher/service'
 
-export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain) {
+export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain, getWindow: () => BrowserWindow | null = () => null) {
   ipcMain.handle('plugin:tiktokCreative:list', async () => await tiktokCreativeStudioService.list())
+  ipcMain.handle('plugin:tiktokCreative:listSummary', async (_e, payload?: { ids?: string[] }) => await tiktokCreativeStudioService.listSummary(payload))
+  ipcMain.handle('plugin:tiktokCreative:getTask', async (_e, id: string) => await tiktokCreativeStudioService.getTask(id))
+  tiktokCreativeStudioService.subscribeChanges((taskIds) => {
+    const window = getWindow()
+    if (!window || window.isDestroyed()) return
+    window.webContents.send('plugin:tiktokCreative:changed', { taskIds })
+  })
   ipcMain.handle('plugin:tiktokCreative:getSettings', async () => await tiktokCreativeStudioService.getSettings())
   ipcMain.handle('plugin:tiktokCreative:saveSettings', async (_e, payload) => await tiktokCreativeStudioService.saveSettings(payload))
   ipcMain.handle('plugin:tiktokCreative:listAccounts', async () => await tiktokCreativeStudioService.listAccounts())

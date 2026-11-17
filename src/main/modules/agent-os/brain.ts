@@ -1,5 +1,6 @@
 import { cloneRepo } from '../clone/repo'
 import { generateChatCompletion } from '../clone/unifiedChat'
+import { contentHubIntentDescriptions } from './contentHubCapabilities'
 import type {
   AgentArtifact,
   AgentAttachment,
@@ -52,7 +53,8 @@ const intentDescriptions: Record<AgentIntentType, string> = {
   'Intent.TemplateManage': 'Duplicate, delete, or edit an existing production template.',
   'Intent.ArtifactInspect': 'Read and present existing outputs without changing them.',
   'Intent.ArtifactExport': 'Export selected existing outputs to a chosen directory.',
-}
+  ...Object.fromEntries(Object.entries(contentHubIntentDescriptions).map(([key, value]) => [key, value.description])),
+} as unknown as Record<AgentIntentType, string>
 
 const intentRequirements: Record<AgentIntentType, string[]> = {
   'Intent.ProductInspect': [],
@@ -81,7 +83,8 @@ const intentRequirements: Record<AgentIntentType, string[]> = {
   'Intent.TemplateManage': ['A template action and an existing template identifier.'],
   'Intent.ArtifactInspect': [],
   'Intent.ArtifactExport': ['One or more selected existing results.', 'An output directory. File formats are preserved.'],
-}
+  ...Object.fromEntries(Object.entries(contentHubIntentDescriptions).map(([key, value]) => [key, value.requirements])),
+} as unknown as Record<AgentIntentType, string[]>
 
 export function setAgentBrainTestDependencies(input: { generateChatCompletion?: BrainCompletion }) {
   if (input.generateChatCompletion) brainDependencies.generateChatCompletion = input.generateChatCompletion
@@ -154,6 +157,10 @@ export async function decideAgentTurn(input: {
   attachments: AgentAttachment[]
   context: Record<string, unknown>
   artifacts: AgentArtifact[]
+  /** Brand and product memory rendered as plain guidance. */
+  memoryGuidance?: string
+  /** Compact read-only snapshot of products and projects. */
+  workspace?: Record<string, unknown>
 }): Promise<AgentBrainDecision | null> {
   const allowedIntents = new Set(input.employee.allowedIntents)
   const credentials = await cloneRepo.getCredentials()
@@ -179,7 +186,9 @@ export async function decideAgentTurn(input: {
       ? 'The current request contains an explicit business execution signal; choose the best action from the request and conversation.'
       : 'The current request contains no explicit business execution signal. You must not choose workflow.',
     `Follow the employee planning policy: ${input.employee.plannerPolicy}`,
-  ].join(' ')
+    'When the request names a product or project, resolve it against workspace.products / workspace.recentProjects and put its id into context.productId or context.cloneProjectId.',
+    input.memoryGuidance ? `Apply this brand memory to every plan and reply:\n${input.memoryGuidance}` : '',
+  ].filter(Boolean).join(' ')
   const prompt = JSON.stringify({
     request: input.request,
     employee: {
@@ -194,6 +203,7 @@ export async function decideAgentTurn(input: {
     })),
     currentAttachments: input.attachments.map((item) => ({ name: item.name, mediaType: item.mediaType })),
     context: cleanContext(input.context),
+    workspace: input.workspace || {},
     existingResults: input.artifacts.slice(-20).map((artifact) => ({
       id: artifact.id,
       kind: artifact.kind,

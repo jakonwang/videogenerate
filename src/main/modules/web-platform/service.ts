@@ -1370,7 +1370,7 @@ export const webPlatformService = {
     token: string,
     input: {
       cloneProjectId: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       productPoints?: string
       modelProfileOptions?: import('../../../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]

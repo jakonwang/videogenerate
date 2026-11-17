@@ -32,6 +32,11 @@ export type CreatokPublishTask = {
   state: CreatokPublishState
   precheck?: CreatokPrecheck
   error?: { kind?: string; reason?: string; message: string; requestId?: string; stage?: string; resultUnknown?: boolean }
+  /** Local product (product library) this video belongs to. */
+  localProductId?: string
+  /** Content hub reference of the source output, e.g. `clone:<id>`. */
+  sourceRef?: string
+  createdBy?: 'user' | 'ai_producer'
   createdAt: number
   updatedAt: number
 }

@@ -8,6 +8,9 @@ import type { CreatorHubCreatorPerf, CreatorHubOrder, CreatorHubProductCost, Cre
 import { analyticsWindow, creatorListBody, orderListBody, parseCreatorPage, parseOrderPage, parseVideoPage, videoListBody } from '../src/main/modules/tiktok-creator-hub/analyticsParser'
 import { buildCrm, buildOverview, creatorScore, linkVideosToSamples, orderSummary, tierOf } from '../src/shared/creatorHubAnalytics'
 import { readdir } from 'node:fs/promises'
+import { discoverBody, parseDiscoverPage, parseProfile, profileBody } from '../src/main/modules/tiktok-creator-hub/discoverParser'
+import { applyContactInput, extractContacts, mergeBioContact, normalizeVnPhone, renderTemplate, zaloLink, zaloNumber } from '../src/shared/creatorHubContacts'
+import { bucketLowerBound, buildPool, logScale, poolScore } from '../src/shared/creatorHubDiscovery'
 import { CREATOR_HUB_DEFAULT_SETTINGS } from '../src/shared/creatorHub'
 
 const DAY = 86_400_000
@@ -297,8 +300,113 @@ async function testLocales() {
   }
 }
 
+function testDiscovery() {
+  const body = discoverBody({ shopId: 's1', keyword: '  bông tai ', categoryIds: ['605248', 'x'], followersMin: 5000, gmvGroups: [4, 9, 4], unitsGroups: [4], starOnly: true }, { page: 1, searchKey: 'k', nextItemCursor: 20 })
+  assert.deepEqual(body, {
+    query: 'bông tai',
+    pagination: { size: 20, page: 1, search_key: 'k', next_item_cursor: 20 },
+    filter_params: { category_list: [{ string_list: ['605248'] }], follower_filter: { left_bound: 5000, right_bound: -1 }, gmv_group_v2: [4], units_sold_group: [4], is_rising_star: true },
+    algorithm: 1,
+  })
+  assert.deepEqual(discoverBody({ shopId: 's1' }).filter_params, {})
+
+  const wrap = (value: unknown) => ({ value, is_authorized: true, status: 0 })
+  const page = parseDiscoverPage({
+    code: 0,
+    next_pagination: { has_more: true, next_page: 1, search_key: 'abc', next_item_cursor: 20 },
+    creator_profile_list: [
+      {
+        creator_oecuid: wrap('7001'), handle: wrap('jewel.vn'), nickname: wrap('Jewel'), avatar: wrap({ thumb_url_list: ['https://x/a.webp'] }),
+        follower_cnt: wrap('12500'), creator_level: wrap(5), category: wrap([{ name: 'Fashion Accessories' }]),
+        med_gmv_revenue: wrap({ value: '11436216.18', symbol: '₫' }), med_gmv_revenue_range: wrap('1M₫+'), units_sold: wrap('412'),
+        ec_video_avg_view_cnt: wrap('5235'), ec_video_med_view_cnt: wrap('82'), video_engagement: wrap(77),
+        top_follower_gender: wrap([{ key: 'Female', value: '3359' }]), top_follower_ages: wrap(['25-34']),
+        has_invited_before_90d: wrap(true), has_collaborated: wrap(false), is_creator_blocked_by_shop: wrap(false), is_rising_star: wrap(false),
+        sample_fulfillment_rate: { is_authorized: true, status: 0 },
+        top_video_data: wrap([{ item_id: '9001', name: 'bông tai', play_cnt: 236014, like_cnt: 1008, comment_cnt: 33, release_date: '1787244677', video_products: [{ name: 'Earring' }] }]),
+      },
+      { creator_oecuid: wrap(''), handle: wrap('skip') },
+    ],
+  }, 's1', NOW)
+  assert.equal(page.rows.length, 1, 'rows without an id are skipped')
+  const [creator] = page.rows
+  assert.equal(creator.id, 's1:7001')
+  assert.equal(creator.gmv, 11436216.18)
+  assert.equal(creator.engagementRate, 0.0077, 'engagement comes in basis points of a percent')
+  assert.deepEqual(creator.topGender, { key: 'Female', share: 0.3359 })
+  assert.equal(creator.invitedIn90d, true)
+  assert.equal(creator.topVideos[0].postedAt, 1787244677000)
+  assert.deepEqual(page.cursor, { page: 1, searchKey: 'abc', nextItemCursor: 20 })
+  assert.throws(() => parseDiscoverPage({ code: 98001004, message: 'bad size' }, 's1'), /API_DISCOVER:98001004/)
+
+  assert.equal(bucketLowerBound('1M₫+'), 1e6)
+  assert.equal(bucketLowerBound('100K₫-500K₫'), 1e5)
+  assert.equal(bucketLowerBound('11,4Tr ₫'), 11.4e6)
+  assert.equal(bucketLowerBound(undefined), undefined)
+  assert.equal(logScale(10, 10, 1000), 0)
+  assert.equal(logScale(100, 10, 1000), 0.5)
+
+  const neutral = poolScore(creator, { ourFulfilled: 0, ourOverdue: 0, ourGmv: 0 })
+  assert.equal(neutral.parts.history, 13, 'no history counts as 50%')
+  const reliable = poolScore(creator, { ourFulfilled: 4, ourOverdue: 0, ourGmv: 1 })
+  const flaky = poolScore(creator, { ourFulfilled: 1, ourOverdue: 3, ourGmv: 0 })
+  assert.equal(reliable.parts.history, 25)
+  assert.ok(reliable.score > neutral.score && neutral.score > flaky.score)
+  assert.equal(neutral.score, neutral.parts.sales + neutral.parts.content + neutral.parts.account + neutral.parts.history)
+
+  const crm = buildCrm({
+    perf: [], costs: [], settings: CREATOR_HUB_DEFAULT_SETTINGS, now: NOW,
+    samples: [sample({ id: 's1:a1', shopId: 's1', creatorId: 'tt-1', creatorHandle: 'Jewel.VN', platformFulfillmentRate: 0.9 })],
+    profiles: [],
+  })
+  assert.equal(crm[0].samplesShipped, 1)
+  const pool = buildPool({ pool: [creator], crm, samples: [sample({ id: 's1:a1', shopId: 's1', creatorId: 'tt-1', creatorHandle: 'Jewel.VN', platformFulfillmentRate: 0.9 })], profiles: [{ id: 's1:7001', shopId: 's1', creatorId: '7001', tags: ['vip'], blocked: false, updatedAt: NOW }] })
+  assert.equal(pool[0].ourSamples, 1, 'pool joins CRM rows by handle when ids differ')
+  assert.equal(pool[0].platformFulfillmentRate, 0.9)
+  assert.deepEqual(pool[0].tags, ['vip'])
+}
+
+function testContacts() {
+  assert.equal(normalizeVnPhone('+84 912.345.678'), '0912345678')
+  assert.equal(normalizeVnPhone('84912345678'), '0912345678')
+  assert.equal(normalizeVnPhone('0212345678'), undefined, 'landlines / bad prefixes rejected')
+  assert.equal(normalizeVnPhone('091234567'), undefined)
+
+  assert.deepEqual(extractContacts('Trang sức xinh 💍 Zalo: 0912 345 678 | mail: Shop.Xinh@Gmail.com'), { email: 'shop.xinh@gmail.com', zalo: '0912345678' })
+  assert.deepEqual(extractContacts('Hợp tác inbox\nzl 0987.654.321\nhotline 0901234567'), { zalo: '0987654321', phone: '0901234567' })
+  assert.deepEqual(extractContacts('Liên hệ Zalo dưới bio\n+84 345 678 901'), { zalo: '0345678901' }, 'single number + zalo mention')
+  assert.deepEqual(extractContacts('call 0345678901'), { phone: '0345678901' })
+  assert.deepEqual(extractContacts('trang sức xuping, titan siêu bền không gỉ'), {})
+  assert.deepEqual(extractContacts('order 1234567890123'), {}, 'long ids are not phones')
+
+  assert.equal(zaloNumber({ phone: '0901234567' }), '0901234567', 'falls back to the phone')
+  assert.equal(zaloLink('0912345678'), 'https://zalo.me/0912345678')
+  assert.equal(renderTemplate('Chào {name} @{handle} từ {shop} {unknown}', { name: 'Lan', handle: 'lan.vn', shop: 'LUMÉE' }), 'Chào Lan @lan.vn từ LUMÉE {unknown}')
+
+  const merged = mergeBioContact({ id: 's1:1', shopId: 's1', creatorId: '1', handle: 'a', zalo: '0911111111', status: 'contacted', log: [{ at: 1, channel: 'zalo' }], updatedAt: 1 }, { shopId: 's1', creatorId: '1', handle: 'a', bio: 'zalo 0922222222 mail a@b.co', contactInfoAvailable: true, now: 5 })
+  assert.equal(merged.zalo, '0911111111', 'manual number is kept')
+  assert.equal(merged.email, 'a@b.co')
+  assert.equal(merged.status, 'contacted')
+  assert.equal(merged.contactInfoAvailable, true)
+  assert.equal(merged.bioFetchedAt, 5)
+
+  const edited = applyContactInput(merged, { shopId: 's1', creatorId: '1', handle: 'a', zalo: '', phone: '+84 933 333 333', status: 'replied' }, 9)
+  assert.equal(edited.zalo, undefined, 'empty string clears')
+  assert.equal(edited.phone, '0933333333')
+  assert.equal(edited.status, 'replied')
+  assert.equal(edited.log.length, 1)
+  assert.throws(() => applyContactInput(merged, { shopId: 's1', creatorId: '1', handle: 'a', zalo: '12345' }, 9), /PHONE_INVALID/)
+  assert.throws(() => applyContactInput(merged, { shopId: 's1', creatorId: '1', handle: 'a', email: 'nope' }, 9), /EMAIL_INVALID/)
+
+  assert.deepEqual(profileBody('7495576829382527265'), { creator_oec_id: '7495576829382527265', profile_types: [1] })
+  assert.deepEqual(parseProfile({ code: 0, creator_profile: { bio: { value: 'zalo 0912345678' }, contact_info_available: { value: true }, handle: { value: 'x' } } }), { bio: 'zalo 0912345678', contactInfoAvailable: true, handle: 'x' })
+  assert.throws(() => parseProfile({ code: 98001004 }), /API_PROFILE/)
+}
+
 async function run() {
   testCookies()
+  testDiscovery()
+  testContacts()
   testSampleParser()
   testFulfillment()
   testAnalyticsParsers()

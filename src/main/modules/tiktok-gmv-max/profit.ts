@@ -188,7 +188,7 @@ export function calculateGmvMaxCampaignProfitGuard(input: {
   const grouped = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.metrics) {
     if (!metric.itemGroupId) continue
-    grouped.set(metric.itemGroupId, [...(grouped.get(metric.itemGroupId) || []), metric])
+    { const bucket = grouped.get(metric.itemGroupId); if (bucket) bucket.push(metric); else grouped.set(metric.itemGroupId, [metric]) }
   }
   if (!grouped.size) {
     const product = input.productCosts.length === 1 ? input.productCosts[0] : undefined

@@ -20,6 +20,8 @@ export function registerAgentOsIpc(ipcMain: IpcMain, getWindow: () => BrowserWin
   ipcMain.handle('agentOs:rejectRun', async (_event, payload) => await agentOsService.rejectRun(payload))
   ipcMain.handle('agentOs:pauseRun', async (_event, runId: string) => await agentOsService.pauseRun(runId))
   ipcMain.handle('agentOs:resumeRun', async (_event, runId: string) => await agentOsService.resumeRun(runId))
+  ipcMain.handle('agentOs:confirmStep', async (_event, payload) => await agentOsService.confirmStep(payload))
+  ipcMain.handle('agentOs:estimateRun', async (_event, runId: string) => await agentOsService.estimateRun(runId))
   ipcMain.handle('agentOs:cancelRun', async (_event, runId: string) => await agentOsService.cancelRun(runId))
 
   ipcMain.handle('agentOs:listArtifacts', async (_event, payload) => await agentOsService.listArtifacts(payload))

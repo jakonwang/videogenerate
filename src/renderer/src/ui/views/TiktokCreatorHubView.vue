@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { AlertCircle, CheckCircle2, ChevronLeft, Clapperboard, Info, LayoutDashboard, Package, Percent, Receipt, RefreshCw, Store, UserCog, Users, Wallet } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, ChevronLeft, Clapperboard, Info, LayoutDashboard, Package, Percent, Receipt, RefreshCw, Store, UserCog, UserSearch, Users, Wallet } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import type {
+  CreatorHubContact,
+  CreatorHubMessageTemplate,
+  CreatorHubCreatorDetail,
   CreatorHubCrmRow,
+  CreatorHubDiscoverQuery,
+  CreatorHubPoolRow,
   CreatorHubFulfillmentReport,
   CreatorHubOrder,
   CreatorHubOverview,
@@ -19,7 +24,9 @@ import { CREATOR_HUB_DEFAULT_SETTINGS } from '@/../../shared/creatorHub'
 import ChActionDialog from './creator-hub/ChActionDialog.vue'
 import ChCookieDialog from './creator-hub/ChCookieDialog.vue'
 import ChCostsPanel from './creator-hub/ChCostsPanel.vue'
+import ChCreatorDetailDialog from './creator-hub/ChCreatorDetailDialog.vue'
 import ChCrmPanel from './creator-hub/ChCrmPanel.vue'
+import ChDiscoverPanel from './creator-hub/ChDiscoverPanel.vue'
 import ChFulfillmentPanel from './creator-hub/ChFulfillmentPanel.vue'
 import ChOrdersPanel from './creator-hub/ChOrdersPanel.vue'
 import ChOverviewPanel from './creator-hub/ChOverviewPanel.vue'
@@ -27,12 +34,13 @@ import ChProfileDialog from './creator-hub/ChProfileDialog.vue'
 import ChSamplesPanel from './creator-hub/ChSamplesPanel.vue'
 import ChShopsPanel from './creator-hub/ChShopsPanel.vue'
 import ChVideosPanel from './creator-hub/ChVideosPanel.vue'
-import { creatorHubError } from './creator-hub/creatorHubFormat'
+import ChZaloDialog from './creator-hub/ChZaloDialog.vue'
+import { creatorHubError, type CreatorDetailTarget, type DetailSavePayload } from './creator-hub/creatorHubFormat'
 import './creator-hub/creator-hub.css'
 
-type Tab = 'overview' | 'fulfillment' | 'samples' | 'videos' | 'creators' | 'orders' | 'costs' | 'shops'
+type Tab = 'overview' | 'discover' | 'fulfillment' | 'samples' | 'videos' | 'creators' | 'orders' | 'costs' | 'shops'
 type SamplePreset = { stage?: string; fulfillment?: string; token: number } | null
-const TABS: Tab[] = ['overview', 'fulfillment', 'samples', 'videos', 'creators', 'orders', 'costs', 'shops']
+const TABS: Tab[] = ['overview', 'discover', 'fulfillment', 'samples', 'videos', 'creators', 'orders', 'costs', 'shops']
 const ALL = 'all'
 const SHOP_KEY = 'creatorHub.currentShop'
 const TAB_KEY = 'creatorHub.tab'
@@ -71,12 +79,24 @@ const action = ref<{ kind: 'rename' | 'remove'; shop: CreatorHubShop } | null>(n
 const actionBusy = ref(false)
 const profileRow = ref<CreatorHubCrmRow | null>(null)
 const profileBusy = ref(false)
+const poolRows = ref<CreatorHubPoolRow[]>([])
+const searching = ref(false)
+const detailTarget = ref<CreatorDetailTarget | null>(null)
+const detail = ref<CreatorHubCreatorDetail | null>(null)
+const detailLoading = ref(false)
+const detailBusy = ref(false)
+const fetchingContacts = ref(false)
+const templates = ref<CreatorHubMessageTemplate[]>([])
+const zaloTarget = ref<(CreatorDetailTarget & { followers?: number }) | null>(null)
+const zaloContact = ref<CreatorHubContact | undefined>(undefined)
+const zaloBusy = ref(false)
 const toast = ref<{ id: number; text: string; tone: 'info' | 'success' | 'error' } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const tabs = computed(() => [
   { key: 'overview' as Tab, icon: LayoutDashboard, label: t('creatorHub.tabs.overview') },
+  { key: 'discover' as Tab, icon: UserSearch, label: t('creatorHub.tabs.discover'), count: poolRows.value.length },
   { key: 'fulfillment' as Tab, icon: Percent, label: t('creatorHub.tabs.fulfillment') },
   { key: 'samples' as Tab, icon: Package, label: t('creatorHub.tabs.samples'), count: samples.value.length },
   { key: 'videos' as Tab, icon: Clapperboard, label: t('creatorHub.tabs.videos') },
@@ -89,7 +109,7 @@ const shopFilter = computed(() => (currentShop.value === ALL ? undefined : curre
 const selectedShop = computed(() => shops.value.find((item) => item.id === currentShop.value) || null)
 const showShopColumn = computed(() => currentShop.value === ALL && shops.value.length > 1)
 const anyRunning = computed(() => Object.values(progress.value).some((item) => item?.status === 'running'))
-const knownTags = computed(() => [...new Set(crmRows.value.flatMap((row) => row.tags))].sort())
+const knownTags = computed(() => [...new Set([...crmRows.value, ...poolRows.value].flatMap((row) => row.tags))].sort())
 
 function notify(text: string, tone: 'info' | 'success' | 'error' = 'info') {
   toast.value = { id: Date.now(), text, tone }
@@ -117,6 +137,7 @@ async function loadData() {
 async function loadTab(value: Tab) {
   const shopId = shopFilter.value
   if (value === 'overview') overview.value = await api.getOverview(shopId)
+  else if (value === 'discover') poolRows.value = await api.listPool(shopId)
   else if (value === 'videos') videos.value = await api.listVideos(shopId)
   else if (value === 'creators') crmRows.value = await api.listCrm(shopId)
   else if (value === 'orders') orders.value = await api.listOrders(shopId)
@@ -244,6 +265,132 @@ async function saveProfile(payload: { tags: string[]; note: string; blocked: boo
   } catch (error) { fail(error) } finally { profileBusy.value = false }
 }
 
+async function discover(query: Omit<CreatorHubDiscoverQuery, 'shopId'>) {
+  const shop = selectedShop.value
+  if (!shop || searching.value) return
+  searching.value = true
+  try {
+    const result = await api.discoverCreators({ ...query, shopId: shop.id })
+    notify(t('creatorHub.messages.discovered', { fetched: result.fetched, added: result.added, updated: result.updated }), 'success')
+    poolRows.value = await api.listPool(shopFilter.value)
+  } catch (error) {
+    fail(error)
+    await loadShops().catch(() => undefined)
+  } finally { searching.value = false }
+}
+async function starPool(ids: string[], starred: boolean) {
+  if (!ids.length) return
+  try {
+    await api.setPoolStar({ ids, starred })
+    poolRows.value = await api.listPool(shopFilter.value)
+    if (detailTarget.value) await loadDetail()
+  } catch (error) { fail(error) }
+}
+async function removePool(ids: string[]) {
+  if (!ids.length) return
+  try {
+    const result = await api.removePool(ids)
+    notify(t('creatorHub.messages.poolRemoved', { count: result.count }), 'success')
+    poolRows.value = await api.listPool(shopFilter.value)
+  } catch (error) { fail(error) }
+}
+async function loadDetail() {
+  const target = detailTarget.value
+  if (!target) return
+  detailLoading.value = true
+  try {
+    const value = await api.getCreatorDetail({ shopId: target.shopId, creatorId: target.creatorId, handle: target.handle })
+    if (detailTarget.value === target) detail.value = value
+  } catch (error) { fail(error) } finally { detailLoading.value = false }
+}
+function openDetail(target: CreatorDetailTarget) {
+  detailTarget.value = target
+  detail.value = null
+  void loadDetail()
+}
+function closeDetail() {
+  detailTarget.value = null
+  detail.value = null
+}
+async function fetchContacts(rows: CreatorHubPoolRow[]) {
+  const byShop = new Map<string, CreatorHubPoolRow[]>()
+  for (const row of rows) byShop.set(row.shopId, [...(byShop.get(row.shopId) || []), row])
+  if (!byShop.size || fetchingContacts.value) return
+  fetchingContacts.value = true
+  try {
+    const total = { checked: 0, failed: 0, withZalo: 0, withPhone: 0, withEmail: 0, onBackend: 0 }
+    for (const [shopId, list] of byShop) {
+      const result = await api.fetchContacts({ shopId, creators: list.map((row) => ({ creatorId: row.creatorId, handle: row.handle })) })
+      for (const key of Object.keys(total) as Array<keyof typeof total>) total[key] += result[key]
+    }
+    notify(t('creatorHub.messages.contactsFetched', total), total.failed ? 'error' : 'success')
+    poolRows.value = await api.listPool(shopFilter.value)
+  } catch (error) { fail(error) } finally { fetchingContacts.value = false }
+}
+async function loadTemplates() {
+  try { templates.value = await api.listTemplates() } catch (error) { fail(error) }
+}
+function openZalo(target: CreatorDetailTarget & { followers?: number }, contact?: CreatorHubContact) {
+  zaloTarget.value = target
+  zaloContact.value = contact
+  if (!templates.value.length) void loadTemplates()
+}
+async function onZaloSent(payload: { zalo?: string }) {
+  const target = zaloTarget.value
+  if (!target) return
+  zaloBusy.value = true
+  try {
+    if (payload.zalo) await api.saveContact({ shopId: target.shopId, creatorId: target.creatorId, handle: target.handle, zalo: payload.zalo })
+    await api.logContact({ shopId: target.shopId, creatorId: target.creatorId, handle: target.handle, channel: 'zalo' })
+    notify(t('creatorHub.messages.zaloOpened'), 'success')
+    zaloTarget.value = null
+    if (tab.value === 'discover') poolRows.value = await api.listPool(shopFilter.value)
+    if (detailTarget.value) await loadDetail()
+  } catch (error) { fail(error) } finally { zaloBusy.value = false }
+}
+async function saveTemplate(payload: { id?: string; name: string; body: string }) {
+  zaloBusy.value = true
+  try {
+    templates.value = await api.saveTemplate(payload)
+    notify(t('creatorHub.messages.templateSaved'), 'success')
+  } catch (error) { fail(error) } finally { zaloBusy.value = false }
+}
+async function removeTemplate(id: string) {
+  zaloBusy.value = true
+  try { templates.value = await api.removeTemplate(id) } catch (error) { fail(error) } finally { zaloBusy.value = false }
+}
+async function openCreatorBackend() {
+  const target = detailTarget.value
+  if (!target) return
+  try {
+    const result = await api.openCreatorBackend({ shopId: target.shopId, creatorId: target.creatorId })
+    if (!result.loggedIn) notify(t('creatorHub.messages.loginExpired', { name: shops.value.find((item) => item.id === target.shopId)?.name || '' }), 'error')
+  } catch (error) { fail(error) }
+}
+function zaloFromDetail() {
+  const target = detailTarget.value
+  if (target) openZalo({ ...target, followers: detail.value?.pool?.followers }, detail.value?.contact)
+}
+function shopNameOf(shopId?: string) {
+  return shops.value.find((item) => item.id === shopId)?.name || ''
+}
+
+async function saveDetailProfile(payload: DetailSavePayload) {
+  const target = detailTarget.value
+  if (!target) return
+  detailBusy.value = true
+  try {
+    const { contact, ...profile } = payload
+    const before = detail.value?.contact
+    const changed = (contact.zalo || '') !== (before?.zalo || '') || (contact.phone || '') !== (before?.phone || '') || (contact.email || '') !== (before?.email || '') || contact.status !== (before?.status || 'none')
+    if (changed) await api.saveContact({ shopId: target.shopId, creatorId: target.creatorId || target.handle, handle: target.handle, ...contact })
+    await api.saveProfile({ shopId: target.shopId, creatorId: detail.value?.crm?.creatorId || target.creatorId || target.handle, ...profile })
+    notify(t('creatorHub.messages.profileSaved'), 'success')
+    closeDetail()
+    await loadTab(tab.value)
+  } catch (error) { fail(error) } finally { detailBusy.value = false }
+}
+
 function goFromOverview(target: 'samples-review' | 'samples-overdue' | 'costs' | 'shops' | 'fulfillment') {
   if (target === 'samples-review') { samplePreset.value = { stage: 'pending_review', fulfillment: 'all', token: Date.now() }; tab.value = 'samples' }
   else if (target === 'samples-overdue') { samplePreset.value = { stage: 'all', fulfillment: 'overdue', token: Date.now() }; tab.value = 'samples' }
@@ -264,7 +411,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="vg-scope vg-page ch-page" data-testid="creator-hub-page">
     <header class="vg-page-head">
-      <button class="vg-icon-btn" type="button" :title="t('creatorHub.actions.back')" @click="router.push('/plugins?tab=installed')"><ChevronLeft :size="18" /></button>
+      <button class="vg-icon-btn" type="button" :title="t('creatorHub.actions.back')" @click="router.push('/plugins')"><ChevronLeft :size="18" /></button>
       <span class="vg-page-head__icon"><Users :size="20" /></span>
       <div class="vg-page-head__text">
         <h1>{{ t('creatorHub.title') }}</h1>
@@ -299,10 +446,33 @@ onBeforeUnmount(() => {
     </div>
 
     <ChOverviewPanel v-if="tab === 'overview'" :overview="overview" :shops="currentShop === ALL ? shops : shops.filter((item) => item.id === currentShop)" :show-shops="showShopColumn" @go="goFromOverview" />
+    <ChDiscoverPanel
+      v-else-if="tab === 'discover'"
+      :rows="poolRows"
+      :shops="shops"
+      :show-shop="showShopColumn"
+      :selected-shop="selectedShop"
+      :searching="searching"
+      :fetching-contacts="fetchingContacts"
+      @search="discover"
+      @fetch-contacts="fetchContacts"
+      @zalo="(row) => openZalo({ shopId: row.shopId, creatorId: row.creatorId, handle: row.handle, nickname: row.nickname, avatar: row.avatar, followers: row.followers }, row.contact)"
+      @star="starPool"
+      @remove="removePool"
+      @copied="(count) => notify(t('creatorHub.messages.handlesCopied', { count }), 'success')"
+      @detail="(row) => openDetail({ shopId: row.shopId, creatorId: row.creatorId, handle: row.handle, nickname: row.nickname, avatar: row.avatar })"
+    />
     <ChFulfillmentPanel v-else-if="tab === 'fulfillment'" :report="report" :shops="shops" :show-shop="showShopColumn" :saving-settings="savingSettings" @save-settings="saveSettings" />
     <ChSamplesPanel v-else-if="tab === 'samples'" :samples="samples" :costs="costs" :settings="settings" :shops="shops" :show-shop="showShopColumn" :preset="samplePreset" @save-cost="saveSampleCost" @open="openBackend" />
     <ChVideosPanel v-else-if="tab === 'videos'" :videos="videos" :shops="shops" :show-shop="showShopColumn" />
-    <ChCrmPanel v-else-if="tab === 'creators'" :rows="crmRows" :shops="shops" :show-shop="showShopColumn" @edit="(row) => (profileRow = row)" />
+    <ChCrmPanel
+      v-else-if="tab === 'creators'"
+      :rows="crmRows"
+      :shops="shops"
+      :show-shop="showShopColumn"
+      @edit="(row) => (profileRow = row)"
+      @detail="(row) => openDetail({ shopId: row.shopId, creatorId: row.creatorId, handle: row.creatorHandle, nickname: row.creatorNickname, avatar: row.creatorAvatar })"
+    />
     <ChOrdersPanel v-else-if="tab === 'orders'" :orders="orders" :shops="shops" :show-shop="showShopColumn" :window-days="settings.orderWindowDays" />
     <template v-else-if="tab === 'costs'">
       <ChCostsPanel v-if="selectedShop" :shop-id="selectedShop.id" :samples="samples" :costs="costs" :saving="savingCost" @save="saveCost" @remove="removeCost" />
@@ -342,6 +512,31 @@ onBeforeUnmount(() => {
     />
     <ChCookieDialog :open="cookieDialog.open" :shop="cookieDialog.shop" @close="cookieDialog = { open: false, shop: null }" @imported="onImported" />
     <ChProfileDialog :row="profileRow" :busy="profileBusy" :known-tags="knownTags" @close="profileRow = null" @save="saveProfile" />
+    <ChCreatorDetailDialog
+      :target="detailTarget"
+      :detail="detail"
+      :loading="detailLoading"
+      :busy="detailBusy"
+      :known-tags="knownTags"
+      :shop-name="detailTarget && showShopColumn ? shops.find((item) => item.id === detailTarget?.shopId)?.name : undefined"
+      @close="closeDetail"
+      @save="saveDetailProfile"
+      @star="(id, starred) => starPool([id], starred)"
+      @zalo="zaloFromDetail"
+      @open-backend="openCreatorBackend"
+    />
+    <ChZaloDialog
+      :target="zaloTarget"
+      :contact="zaloContact"
+      :templates="templates"
+      :shop-name="shopNameOf(zaloTarget?.shopId)"
+      :busy="zaloBusy"
+      @close="zaloTarget = null"
+      @sent="onZaloSent"
+      @save-template="saveTemplate"
+      @remove-template="removeTemplate"
+      @copied="notify(t('creatorHub.messages.messageCopied'), 'success')"
+    />
 
     <Teleport to="body">
       <Transition name="vg-toast">

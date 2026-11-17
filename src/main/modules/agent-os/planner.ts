@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { cloneRepo } from '../clone/repo'
 import { generateChatCompletion } from '../clone/unifiedChat'
+import { contentHubIntentDescriptions } from './contentHubCapabilities'
 import type {
   AgentAttachment,
   AgentEmployeeManifest,
@@ -55,6 +56,12 @@ const intentCatalog: Array<PlannedIntent & { description: string; employeeId: st
   { intentType: 'Intent.TemplateManage', title: 'Manage production template', description: 'Duplicate, delete, or edit an existing production template.', employeeId: 'employee.package' },
   { intentType: 'Intent.ArtifactInspect', title: 'Inspect existing results', description: 'Read existing results without exporting or regenerating them.', employeeId: 'employee.package' },
   { intentType: 'Intent.ArtifactExport', title: 'Export deliverables', description: 'Export existing artifacts without regenerating them.', employeeId: 'employee.package' },
+  ...Object.entries(contentHubIntentDescriptions).map(([intentType, value]) => ({
+    intentType: intentType as AgentIntentType,
+    title: value.title,
+    description: value.description,
+    employeeId: value.employeeId,
+  })),
 ]
 
 function uniqueIntents(values: AgentIntentType[]) {

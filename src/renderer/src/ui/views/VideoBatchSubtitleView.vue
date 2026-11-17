@@ -763,7 +763,10 @@ async function ensurePluginReady() {
   pluginChecking.value = true
   pluginReady.value = false
   try {
-    const plugin = await webApiClient.getPlugin('video-batch-subtitle')
+    let plugin = await webApiClient.getPlugin('video-batch-subtitle')
+    // Built-in tool: silently activate it instead of sending the user to an install screen.
+    if (plugin.status !== 'installed') plugin = (await webApiClient.installPlugin('video-batch-subtitle')).plugin
+    if (plugin.runtimeState !== 'enabled') plugin = (await webApiClient.enablePlugin('video-batch-subtitle')).plugin
     pluginReady.value = plugin.status === 'installed' && plugin.runtimeState === 'enabled'
   } catch {
     pluginReady.value = false
@@ -1111,7 +1114,7 @@ onBeforeUnmount(() => {
       <p>{{ tr('autoUi.k_a27ab48c49f9') }}</p>
       <button class="ghost-button" type="button" @click="router.push('/plugins')">
         <ArrowLeft class="h-4 w-4" />
-        <span>{{ tr('autoUi.k_ee7023263319') }}</span>
+        <span>{{ tr('ai.tools.back') }}</span>
       </button>
     </section>
 

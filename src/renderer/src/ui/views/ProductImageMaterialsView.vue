@@ -1231,7 +1231,7 @@ onUnmounted(() => {
           <p>{{ copy.workspaceHint }}</p>
         </div>
         <div class="pm-head__actions">
-          <button class="vg-btn" data-testid="product-image-materials-back" type="button" @click="router.push('/plugins?tab=installed&plugin=product-image-materials')">
+          <button class="vg-btn" data-testid="product-image-materials-back" type="button" @click="router.push('/plugins')">
             <ChevronLeft :size="15" />{{ copy.backPlugin }}
           </button>
           <button class="vg-btn" data-testid="product-image-materials-refresh" type="button" :disabled="loading" @click="loadAll">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { ArrowDownUp, Ban, Pencil, Search, Users } from 'lucide-vue-next'
+import { ArrowDownUp, Ban, Eye, Pencil, Search, Users } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import type { CreatorHubCrmRow, CreatorHubShop, CreatorHubTier } from '@/../../shared/creatorHub'
 import ChPager from './ChPager.vue'
@@ -9,7 +9,7 @@ import { formatCount, formatMoney, formatPercent, rateTone } from './creatorHubF
 type SortKey = 'score' | 'gmv' | 'commission' | 'samplesShipped' | 'fulfillmentRate' | 'sampleRoi'
 
 const props = defineProps<{ rows: CreatorHubCrmRow[]; shops: CreatorHubShop[]; showShop: boolean }>()
-const emit = defineEmits<{ edit: [row: CreatorHubCrmRow] }>()
+const emit = defineEmits<{ edit: [row: CreatorHubCrmRow]; detail: [row: CreatorHubCrmRow] }>()
 const { t } = useI18n()
 
 const filters = reactive({ q: '', tier: 'all', tag: 'all', blocked: 'active' as 'active' | 'blocked' | 'all', withSamples: false })
@@ -127,7 +127,10 @@ defineExpose({ allTags })
                 <td class="num"><span v-if="row.fulfillmentRate != null" class="vg-pill" :class="`vg-pill--${rateTone(row.fulfillmentRate)}`">{{ formatPercent(row.fulfillmentRate) }}</span><span v-else class="vg-muted">-</span></td>
                 <td class="num">{{ row.sampleRoi != null ? `${row.sampleRoi.toFixed(1)}x` : '-' }}</td>
                 <td><span class="vg-ellipsis ch-note" :title="row.note">{{ row.note || '' }}</span></td>
-                <td><button class="vg-icon-btn" :title="t('creatorHub.crm.edit')" data-testid="creator-hub-crm-edit" @click="emit('edit', row)"><Pencil :size="14" /></button></td>
+                <td class="ch-nowrap">
+                  <button class="vg-icon-btn" :title="t('creatorHub.discover.detail')" data-testid="creator-hub-crm-detail" @click="emit('detail', row)"><Eye :size="14" /></button>
+                  <button class="vg-icon-btn" :title="t('creatorHub.crm.edit')" data-testid="creator-hub-crm-edit" @click="emit('edit', row)"><Pencil :size="14" /></button>
+                </td>
               </tr>
               <tr v-if="!paged.length"><td :colspan="showShop ? 12 : 11" class="vg-table__empty">{{ t('creatorHub.samples.noMatch') }}</td></tr>
             </tbody>

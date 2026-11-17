@@ -1,3 +1,4 @@
+import { deviceKindOf } from '../../../src/shared/cloud/types'
 import type {
   CloudAuditLog,
   CloudConfigEntry,
@@ -61,6 +62,7 @@ function mapDevice(row: Row): CloudDevice {
     appVersion: String(row.app_version ?? ''),
     createdAt: Number(row.created_at),
     lastSeenAt: Number(row.last_seen_at),
+    kind: deviceKindOf(String(row.platform ?? '')),
   }
 }
 
@@ -276,7 +278,7 @@ export function createRepo(db: CloudDb) {
         id,
       )
     },
-    revokeDevice(id: string, revokedBy: 'user' | 'admin', now: number) {
+    revokeDevice(id: string, revokedBy: 'user' | 'admin' | 'replaced', now: number) {
       db.prepare('UPDATE devices SET revoked_at = ?, revoked_by = ? WHERE id = ? AND revoked_at IS NULL').run(now, revokedBy, id)
     },
     countUserUnbindsSince(userId: string, since: number): number {

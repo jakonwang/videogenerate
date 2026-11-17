@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { BarChart3, BookOpen, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
+import { BarChart3, BookOpen, PanelLeftClose, PanelLeftOpen, Sparkles, SlidersHorizontal } from "lucide-vue-next";
 
 export type GmvMaxNavItem = {
   id: string;
@@ -8,6 +8,8 @@ export type GmvMaxNavItem = {
   icon: Component;
   tab?: string;
   count?: number;
+  /** Section heading shown above the first item of each section. */
+  section?: string;
   children?: Array<{ id: string; label: string; tab: string }>;
 };
 
@@ -20,12 +22,17 @@ const props = defineProps<{
   connectionLabel: string;
   collapseLabel: string;
   expandLabel: string;
+  /** Beginner / pro switch; omitted = no switch shown. */
+  modeLabel?: string;
+  modeHint?: string;
+  simple?: boolean;
 }>();
 
 const emit = defineEmits<{
   select: [tab: string];
   help: [];
   toggle: [];
+  mode: [];
 }>();
 
 function itemActive(item: GmvMaxNavItem) {
@@ -41,7 +48,15 @@ function itemActive(item: GmvMaxNavItem) {
     </div>
 
     <nav aria-label="GMV MAX">
-      <template v-for="item in items" :key="item.id">
+      <template v-for="(item, index) in items" :key="item.id">
+        <div
+          v-if="item.section && item.section !== items[index - 1]?.section"
+          class="gmv-v2-nav__section"
+          :class="{ 'is-first': index === 0 }"
+          role="presentation"
+        >
+          <span>{{ item.section }}</span>
+        </div>
         <button
           v-if="item.tab"
           type="button"
@@ -75,6 +90,18 @@ function itemActive(item: GmvMaxNavItem) {
     </nav>
 
     <footer>
+      <button
+        v-if="modeLabel"
+        type="button"
+        class="gmv-v2-nav__mode"
+        data-testid="gmv-mode-toggle"
+        :title="modeHint || modeLabel"
+        :aria-label="modeLabel"
+        @click="emit('mode')"
+      >
+        <component :is="simple ? SlidersHorizontal : Sparkles" />
+        <span><b>{{ modeLabel }}</b><small v-if="modeHint">{{ modeHint }}</small></span>
+      </button>
       <button
         type="button"
         :class="['gmv-v2-nav__help', { 'is-active': activeTab === 'help' }]"
@@ -163,7 +190,7 @@ function itemActive(item: GmvMaxNavItem) {
 .gmv-v2-nav__group > div,
 .gmv-v2-nav__help,
 .gmv-v2-nav__toggle {
-  min-height: 42px;
+  min-height: 38px;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   gap: 10px;
   padding: 0 10px;
@@ -186,13 +213,34 @@ function itemActive(item: GmvMaxNavItem) {
   color: var(--theme-control-selected-text);
   box-shadow: inset 3px 0 0 var(--theme-accent);
 }
+.gmv-v2-nav__section,
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__section {
+  margin: 14px 0 4px;
+  padding: 0 10px;
+  color: var(--theme-text-muted);
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.4;
+  letter-spacing: .04em;
+}
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__section.is-first { margin-top: 2px; }
+html[data-app-theme] body #app .gmv-v2-nav.is-collapsed .gmv-v2-nav__section { margin: 8px 6px 4px; padding: 0; height: 1px; background: var(--theme-divider); }
+.gmv-v2-nav.is-collapsed .gmv-v2-nav__section span { display: none; }
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__section span { font-size: 11px !important; font-weight: 600 !important; color: var(--theme-text-muted) !important; }
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__item:not(.is-active),
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__help:not(.is-active),
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__toggle { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__item:not(.is-active):hover,
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__help:not(.is-active):hover,
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__toggle:hover { background: var(--theme-control-hover) !important; }
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__item.is-active { background: color-mix(in srgb, var(--theme-accent) 12%, transparent) !important; border-color: transparent !important; box-shadow: inset 3px 0 0 var(--theme-accent) !important; }
 .gmv-v2-nav svg { width: 17px; height: 17px; color: var(--theme-text-muted); }
 .gmv-v2-nav__item.is-active > svg,
 .gmv-v2-nav__help.is-active > svg,
 .gmv-v2-nav__group.is-active > div > svg { color: var(--theme-accent); }
 .gmv-v2-nav__item > span,
 .gmv-v2-nav__help span,
-.gmv-v2-nav__toggle span { font-size: 13px; font-weight: 700; }
+.gmv-v2-nav__toggle span { font-size: 13px; font-weight: 600; }
 .gmv-v2-nav__item em {
   min-width: 22px;
   padding: 2px 5px;
@@ -243,6 +291,27 @@ function itemActive(item: GmvMaxNavItem) {
   background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
 }
 .gmv-v2-nav__group > button.is-active i { background: var(--theme-accent); }
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__mode {
+  width: 100%;
+  min-height: 46px;
+  padding: 7px 10px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px dashed var(--theme-border) !important;
+  border-radius: 8px;
+  background: transparent !important;
+  color: var(--theme-text-secondary);
+  text-align: left;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-v2-nav .gmv-v2-nav__mode:hover { border-color: var(--theme-accent) !important; color: var(--theme-text); }
+.gmv-v2-nav__mode span { display: grid; gap: 1px; min-width: 0; }
+.gmv-v2-nav__mode b { font-size: 12.5px; font-weight: 600; }
+.gmv-v2-nav__mode small { font-size: 11px; color: var(--theme-text-muted); white-space: normal; line-height: 1.35; }
+.gmv-v2-nav.is-collapsed .gmv-v2-nav__mode { grid-template-columns: 1fr; justify-items: center; padding: 8px 0; }
+.gmv-v2-nav.is-collapsed .gmv-v2-nav__mode span { display: none; }
 .gmv-v2-nav footer {
   margin-top: auto;
   padding-top: 12px;

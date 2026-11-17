@@ -27,5 +27,135 @@
   "subtitle": "Add subtitles",
   "move": "Move to group",
   "delete": "Delete",
-  "backToList": "All tasks"
+  "backToList": "All tasks",
+  "promptManager": {
+    "entry": "Prompts",
+    "title": "Clone prompt management",
+    "desc": "Manage prompt versions per pipeline step and product category. The active version is used for new generations; existing results are not changed.",
+    "kinds": {
+      "shot_video": {
+        "label": "Shot video",
+        "hint": "Sent to the video model for each shot. Placeholders are filled from the shot and the product category."
+      },
+      "storyboard_model": {
+        "label": "Storyboard · Model",
+        "hint": "Used for start/end frames of model presentation shots. Image 1 is the model and product reference, Image 2 is the scene reference."
+      },
+      "storyboard_product": {
+        "label": "Storyboard · Product",
+        "hint": "Used for start/end frames of product close-up shots. Image 1 is the product reference, Image 2 is the scene reference."
+      },
+      "script_analysis": {
+        "label": "Script analysis",
+        "hint": "Guidance for analysing the reference video. The output format and shot timeline are appended automatically."
+      }
+    },
+    "category": "Category",
+    "categoryHint": "A category uses its own active version first, then the \"All categories\" version, then the built-in default.",
+    "customized": "customized",
+    "version": "Version",
+    "versionHint": "Save your edits in place, or save them as a new version.",
+    "builtinHint": "The built-in default is read-only. Save it as a new version to change it.",
+    "builtinName": "Built-in default",
+    "active": "Active",
+    "name": "Version name",
+    "namePlaceholder": "Leave empty to name automatically",
+    "content": "Prompt content",
+    "placeholders": "Placeholders:",
+    "insertPlaceholder": "Click to append",
+    "save": "Save changes",
+    "saveAsNew": "Save as new version",
+    "activate": "Activate version",
+    "rollback": "Roll back as new version",
+    "remove": "Delete",
+    "saved": "Saved V{version}. Activate it to use it.",
+    "activated": "Activated. New generations will use this version.",
+    "restored": "Restored as V{version} and activated.",
+    "deleted": "Deleted.",
+    "discardConfirm": "Discard unsaved changes?",
+    "deleteConfirm": "Delete V{version}? This cannot be undone.",
+    "categories": {
+      "all": "All categories",
+      "earrings": "Earrings",
+      "necklace": "Necklace",
+      "ring": "Ring",
+      "bracelet": "Bracelet",
+      "phone_case": "Phone case",
+      "clothes": "Clothes",
+      "bag": "Bag",
+      "shoes": "Shoes",
+      "toy": "Toy",
+      "general": "General"
+    },
+    "titleFor": "{kind} prompts"
+  },
+  "simple": {
+    "headline": {
+      "setup": "Clone a winning video",
+      "running": "Making your video",
+      "paused": "Not finished yet",
+      "error": "Something went wrong",
+      "done": "Your video is ready"
+    },
+    "subline": {
+      "setup": "Pick the three things below and press the button. AI does the rest.",
+      "running": "You can leave this page; progress will still be here when you come back.",
+      "paused": "It stopped part-way last time. Press \"Continue\" to carry on.",
+      "error": "Check the reason, fix it, then press \"Retry\". It carries on from where it stopped.",
+      "done": "Save it and use it, or make another one."
+    },
+    "openAdvanced": "Step by step",
+    "change": "Change",
+    "video": {
+      "title": "Reference video",
+      "hint": "The winning video you want to imitate",
+      "action": "Choose video",
+      "chosen": "Selected"
+    },
+    "product": {
+      "title": "Your product",
+      "hint": "Pick the product you sell from the library",
+      "action": "Choose product"
+    },
+    "model": {
+      "title": "Model",
+      "hint": "Pick from the model library; it is remembered next time",
+      "action": "Choose model"
+    },
+    "start": "Start cloning",
+    "starting": "Starting…",
+    "startHint": "Analysis, visuals, videos and the final cut run automatically.",
+    "missing": "Still needed: {items}",
+    "startFailed": "Could not start generating",
+    "phases": {
+      "analyze": {
+        "title": "Analyse the reference",
+        "desc": "Understand the shots and rhythm"
+      },
+      "visuals": {
+        "title": "Create the visuals",
+        "desc": "Write the script and place your product and model in each shot"
+      },
+      "videos": {
+        "title": "Generate the videos",
+        "desc": "Bring each shot to life; this takes the longest"
+      },
+      "compose": {
+        "title": "Assemble the video",
+        "desc": "Join the shots into one video"
+      }
+    },
+    "runningHint": "Generating the videos usually takes from a few to fifteen minutes.",
+    "pausedHint": "Finished parts are kept.",
+    "errorHint": "If it keeps failing, open \"Step by step\" at the top right to see each step.",
+    "retry": "Retry",
+    "resume": "Continue",
+    "reveal": "Save / show in folder",
+    "open": "Open in player",
+    "newTask": "Make another",
+    "doneHint": "Want to change a shot? Open \"Step by step\" at the top right.",
+    "advancedLabel": "Step by step",
+    "advancedHint": "Review and change each step here. For everyday use, go back to simple mode.",
+    "backToSimple": "Back to simple mode"
+  }
 }

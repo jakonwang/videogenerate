@@ -391,7 +391,7 @@ export function buildGmvMaxProductDailyMetrics(input: {
   const grouped = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.metrics) {
     const statDate = metric.statDate.slice(0, 10)
-    grouped.set(statDate, [...(grouped.get(statDate) || []), metric])
+    { const bucket = grouped.get(statDate); if (bucket) bucket.push(metric); else grouped.set(statDate, [metric]) }
   }
   return [...grouped.entries()]
     .sort(([left], [right]) => left.localeCompare(right))

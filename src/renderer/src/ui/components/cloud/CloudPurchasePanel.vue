@@ -12,6 +12,7 @@ const { t } = useI18n()
 const cloudAuth = useCloudAuthStore()
 
 const plans = ref<CloudPlan[]>([])
+const mobileSlots = ref(1)
 const channels = ref<CloudPayChannel[]>([])
 const selectedChannel = ref<CloudPayChannel | ''>('')
 const loadError = ref('')
@@ -41,6 +42,7 @@ async function loadPlans() {
     return
   }
   plans.value = result.plans
+  mobileSlots.value = result.maxMobileDevices ?? 1
   channels.value = result.channels
   selectedChannel.value = payChannels.value[0] ?? (mockEnabled.value ? 'mock' : '')
 }
@@ -167,7 +169,7 @@ onBeforeUnmount(stopPolling)
             <b>{{ formatFen(plan.amountFen) }}</b>
             <span>/ {{ plan.days === 0 ? t('cloud.membership.forever') : t('cloud.membership.days', { count: plan.days }) }}</span>
           </div>
-          <span class="vg-chip">{{ plan.maxDevices === 0 ? t('cloud.membership.deviceUnlimited') : t('cloud.membership.deviceCount', { count: plan.maxDevices }) }}</span>
+          <span class="vg-chip">{{ plan.maxDevices === 0 ? t('cloud.membership.deviceUnlimited', { mobile: mobileSlots }) : t('cloud.membership.deviceCount', { count: plan.maxDevices, mobile: mobileSlots }) }}</span>
           <button class="vg-btn vg-btn--primary vg-btn--block" type="button" :disabled="!selectedChannel || busyPlan === plan.code" @click="buy(plan)">
             <LoaderCircle v-if="busyPlan === plan.code" :size="15" class="vg-spin" />
             <QrCode v-else :size="15" />

@@ -119,6 +119,44 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
       CREATE INDEX idx_audit_created ON audit_logs(created_at);
     `,
   },
+  {
+    id: 2,
+    sql: `
+      CREATE TABLE sync_records (
+        user_id TEXT NOT NULL REFERENCES users(id),
+        collection TEXT NOT NULL,
+        id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        seq INTEGER NOT NULL,
+        server_updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, collection, id)
+      );
+      CREATE INDEX idx_sync_records_seq ON sync_records(user_id, seq);
+      CREATE TABLE sync_files (
+        user_id TEXT NOT NULL REFERENCES users(id),
+        id TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, id)
+      );
+    `,
+  },
+  {
+    id: 3,
+    sql: `
+      CREATE TABLE ai_usage (
+        user_id TEXT NOT NULL REFERENCES users(id),
+        day TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        calls INTEGER NOT NULL DEFAULT 0,
+        failures INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, day, purpose)
+      );
+    `,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

@@ -18,7 +18,7 @@ import { convertGmvMaxMoneyToCny, createGmvMaxExchangeRateLoader, parseGmvMaxExc
 import { buildGmvMaxStrategyCalibrations } from './calibration'
 import { analyzeGmvMaxProductIntelligence, mergeGmvMaxProductInsights } from './productIntelligence'
 import { resolveGmvMaxProductCostScope, validateGmvMaxCostInput, validateGmvMaxOptionalCostInput, validateGmvMaxProductSellingPrice } from './costValidation'
-import { buildGmvMaxVideoIdentity, extractGmvMaxCampaignIdentityRows, mergeGmvMaxIdentityRows, resolveGmvMaxCreativeAsset } from './creativeAssets'
+import { buildGmvMaxVideoIdentity, extractGmvMaxCampaignIdentityRows, extractGmvMaxCampaignPostVideos, mergeGmvMaxIdentityRows, resolveGmvMaxCreativeAsset } from './creativeAssets'
 import { selectGmvMaxCampaignCandidate, selectGmvMaxCampaignCandidates } from './automation'
 import { evaluateGmvMaxDecision, resolveGmvMaxDecisionRules } from './decisionEngine'
 import { buildGmvMaxRoiUnlockExperiment, evaluateGmvMaxRoiUnlockExperiment } from './experimentEngine'
@@ -47,6 +47,7 @@ import {
   type GmvMaxPolicyPreset,
   type GmvMaxRecommendation,
   type GmvMaxActionType,
+  type GmvMaxRealtimeSample,
   type GmvMaxCostInput,
   type GmvMaxListEntry,
   type GmvMaxNotificationConfig,
@@ -83,7 +84,14 @@ import {
 import { buildFallbackCoachDecision, buildGmvMaxProductProfile, coachInputHash, validateCoachDecision } from './coach'
 import { buildGmvMaxCommandCenter } from './commandCenter'
 
+import { buildV2Workspace, readV2Settings, recordV2Change, saveV2Settings, undoV2Change } from './v2Workspace'
 const REPORT_METRICS = ['cost', 'gross_revenue', 'roi', 'orders']
+/** Official campaign-level fields: real spend after credits/coupons, and the target ROI in effect that day (Product only). */
+const extendedReportMetricsUnsupported = new Set<string>()
+function reportMetricsFor(campaignType: GmvMaxCampaignType, realtime: boolean) {
+  if (realtime) return REPORT_METRICS
+  return campaignType === 'PRODUCT' ? [...REPORT_METRICS, 'net_cost', 'roas_bid'] : [...REPORT_METRICS, 'net_cost']
+}
 const executingRecommendationIds = new Set<string>()
 const executingPortfolioIds = new Set<string>()
 const actionLocks = new Set<string>()
@@ -166,8 +174,8 @@ function compactExpiredRealtimeSamples(now = Date.now()) {
   return { cutoff, samplesRemoved, summariesSaved }
 }
 
-function realtimeHistoricalSummaries(campaignId: string, localDate: string) {
-  const samples = gmvMaxRepo.listRealtimeSamples(campaignId).filter((sample) => sample.localDate && sample.windowKey && sample.windowIndex !== undefined && sample.localDate !== localDate)
+function realtimeHistoricalSummaries(campaignId: string, localDate: string, preloaded?: GmvMaxRealtimeSample[]) {
+  const samples = (preloaded || gmvMaxRepo.listRealtimeSamples(campaignId)).filter((sample) => sample.localDate && sample.windowKey && sample.windowIndex !== undefined && sample.localDate !== localDate)
   const groups = new Map<string, typeof samples>()
   for (const sample of samples) {
     const key = `${sample.localDate}:${sample.windowKey}`
@@ -396,6 +404,18 @@ function connectionById(id: string) {
 
 function activeConnection() {
   return gmvMaxRepo.listConnections().find((item) => item.state === 'connected') || gmvMaxRepo.listConnections()[0] || null
+}
+
+/** TikTok rejected the stored token and it could not be refreshed: the user has to authorize again. */
+function isGmvMaxAuthExpired(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '')
+  return /authorization is required|UnauthorizedError|invalid_grant|invalid_token/i.test(message)
+}
+
+/** Records a failed TikTok call on the connection; an expired authorization moves it to the "expired" state. */
+async function recordConnectionFailure(id: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return await saveConnectionState(id, isGmvMaxAuthExpired(error) ? { state: 'expired', lastError: message } : { lastError: message })
 }
 
 async function saveConnectionState(id: string, patch: Partial<GmvMaxConnection>) {
@@ -642,12 +662,12 @@ async function syncMetricsForBinding(binding: GmvMaxAccountBinding, campaigns: G
     const pageFingerprints = new Set<string>()
     let page = 1
     while (page <= 100) {
-      const result = await gmvMaxMcpClient.call(binding.connectionId, 'gmv_max_report_get', {
+      const requestReport = (metrics: string[]) => gmvMaxMcpClient.call(binding.connectionId, 'gmv_max_report_get', {
         advertiser_id: binding.advertiserId,
         store_ids: [binding.storeId],
         start_date: range.startDate,
         end_date: range.endDate,
-        metrics: REPORT_METRICS,
+        metrics,
         dimensions: ['campaign_id', 'stat_time_day'],
         filtering: {
           campaign_ids: batch.map((campaign) => campaign.id),
@@ -656,6 +676,16 @@ async function syncMetricsForBinding(binding: GmvMaxAccountBinding, campaigns: G
         page,
         page_size: pageSize,
       })
+      const extendedMetrics = extendedReportMetricsUnsupported.has(binding.connectionId) ? REPORT_METRICS : reportMetricsFor(binding.campaignType, realtime)
+      let result: Awaited<ReturnType<typeof requestReport>>
+      try {
+        result = await requestReport(extendedMetrics)
+      } catch (error) {
+        // Older accounts / API versions may reject net_cost or roas_bid: fall back to the original fields.
+        if (extendedMetrics === REPORT_METRICS) throw error
+        extendedReportMetricsUnsupported.add(binding.connectionId)
+        result = await requestReport(REPORT_METRICS)
+      }
       const rows = findArray(result.data, ['list', 'rows', 'report_list'])
       if (repeatedPage(rows, pageFingerprints)) break
       for (const row of rows) {
@@ -879,6 +909,22 @@ async function syncCreativeAssetsForBinding(binding: GmvMaxAccountBinding) {
     await syncVideoRequest({ identity_list: identities })
   }
   await syncVideoRequest({ need_auth_code_video: true })
+  backfillCampaignPostCovers(binding, savedVideoIds)
+}
+
+// Posts picked by hand inside a campaign carry cover, caption and account in the campaign details;
+// the video list above leaves out posts GMV MAX is already running, so save these as video assets too.
+function backfillCampaignPostCovers(binding: GmvMaxAccountBinding, savedVideoIds: Set<string>) {
+  const campaigns = gmvMaxRepo.listCampaigns().filter((item) => item.storeId === binding.storeId)
+  for (const { campaignId, row } of extractGmvMaxCampaignPostVideos(campaigns, binding.storeId)) {
+    const creativeId = text(row.item_id)
+    if (!creativeId || savedVideoIds.has(creativeId)) continue
+    gmvMaxRepo.saveCreativeAsset({
+      id: hash(binding.storeId, 'video', campaignId, creativeId), campaignId, storeId: binding.storeId,
+      creativeId, kind: 'video', name: text(row.video_name || row.item_name || row.name) || undefined,
+      status: text(row.status || row.operation_status) || undefined, raw: row, syncedAt: Date.now(),
+    })
+  }
 }
 
 async function syncCreativeMetricsForBinding(binding: GmvMaxAccountBinding, campaigns: GmvMaxCampaign[]) {
@@ -1037,14 +1083,14 @@ function profitDataSnapshot(
     ? preloaded.creativeMetrics.filter((item) => (!range || (item.statDate.slice(0, 10) >= range.startDate && item.statDate.slice(0, 10) <= range.endDate)) && (!scopedCampaignIds.length || scopedCampaignIdSet.has(item.campaignId)))
     : range ? gmvMaxRepo.listCreativeMetricsRange(range.startDate, range.endDate, { campaignIds: scopedCampaignIds }) : gmvMaxRepo.listCreativeMetrics()
   for (const metric of creativeMetrics) {
-    creativeMetricsByCampaign.set(metric.campaignId, [...(creativeMetricsByCampaign.get(metric.campaignId) || []), metric])
+    { const bucket = creativeMetricsByCampaign.get(metric.campaignId); if (bucket) bucket.push(metric); else creativeMetricsByCampaign.set(metric.campaignId, [metric]) }
   }
   const dailyMetricsByCampaign = new Map<string, GmvMaxDailyMetric[]>()
   const dailyMetrics = preloaded?.dailyMetrics
     ? preloaded.dailyMetrics.filter((item) => (!range || (item.statDate.slice(0, 10) >= range.startDate && item.statDate.slice(0, 10) <= range.endDate)) && (!scopedCampaignIds.length || scopedCampaignIdSet.has(item.campaignId)))
     : range ? gmvMaxRepo.listMetricsRange(range.startDate, range.endDate, scopedCampaignIds) : gmvMaxRepo.listMetrics()
   for (const metric of dailyMetrics) {
-    dailyMetricsByCampaign.set(metric.campaignId, [...(dailyMetricsByCampaign.get(metric.campaignId) || []), metric])
+    { const bucket = dailyMetricsByCampaign.get(metric.campaignId); if (bucket) bucket.push(metric); else dailyMetricsByCampaign.set(metric.campaignId, [metric]) }
   }
   const productCosts = scopedCampaignIds.length ? gmvMaxRepo.listProductCostsForScope(scopedStoreIds, scopedCampaignIds) : gmvMaxRepo.listProductCosts()
   const storeCosts = scopedCampaignIds.length ? gmvMaxRepo.listStoreCostsByStoreIds(scopedStoreIds) : gmvMaxRepo.listStoreCosts()
@@ -1140,34 +1186,53 @@ function profitGuardForSopProduct(
   })
 }
 
+/**
+ * Pacing results per campaign, reused while that campaign's real-time samples are unchanged and within the same
+ * minute (the expected pace moves with the clock). Parsing every stored sample on each page load took seconds.
+ */
+const pacingCache = new Map<string, { key: string; value: GmvMaxPacingDiagnostic }>()
+
 function pacingDiagnostics(campaigns: GmvMaxCampaign[], now = Date.now()) {
   const bindings = new Map(gmvMaxRepo.listBindings().map((item) => [item.id, item]))
+  const versions = gmvMaxRepo.realtimeSampleVersions()
+  const minute = Math.floor(now / 60_000)
   return campaigns.map((campaign): GmvMaxPacingDiagnostic => {
-    const binding = bindings.get(campaign.bindingId)
-    const timezone = binding?.timezone || 'UTC'
-    const local = zonedDateParts(timezone, now)
-    const pacing = evaluateGmvMaxPacingDiagnostic({
-      campaign,
-      samples: gmvMaxRepo.listRealtimeSamples(campaign.id),
-      timezone,
-      localDate: local.date,
-      localHour: local.hour,
-      localMinute: local.minute,
-      now,
-    })
-    const window = getGmvMaxSixHourWindow(local.date, local.hour)
-    const signal = evaluateGmvMaxRealtimeSignal({
-      campaignId: campaign.id,
-      localDate: local.date,
-      windowKey: window.key,
-      windowIndex: window.index,
-      windowStartAt: now - (((local.hour % 6) * 60 + local.minute) * 60_000),
-      now,
-      samples: gmvMaxRepo.listRealtimeSamples(campaign.id),
-      historicalSummaries: [...gmvMaxRepo.listRealtimeWindowSummaries(campaign.id), ...realtimeHistoricalSummaries(campaign.id, local.date)],
-    })
-    return { ...pacing, realtimeSignal: signal }
+    const cacheKey = `${minute}:${versions.get(campaign.id) || 'none'}:${campaign.budget}:${campaign.operationStatus}:${campaign.bindingId}`
+    const cached = pacingCache.get(campaign.id)
+    if (cached && cached.key === cacheKey) return cached.value
+    const value = computePacingDiagnostic(campaign, bindings, now)
+    pacingCache.set(campaign.id, { key: cacheKey, value })
+    return value
   })
+}
+
+function computePacingDiagnostic(campaign: GmvMaxCampaign, bindings: Map<string, GmvMaxAccountBinding>, now: number): GmvMaxPacingDiagnostic {
+  const binding = bindings.get(campaign.bindingId)
+  const timezone = binding?.timezone || 'UTC'
+  const local = zonedDateParts(timezone, now)
+  // One read per campaign, shared by pacing, the window signal and its history (each filters what it needs).
+  const samples = gmvMaxRepo.listRealtimeSamples(campaign.id)
+  const pacing = evaluateGmvMaxPacingDiagnostic({
+    campaign,
+    samples,
+    timezone,
+    localDate: local.date,
+    localHour: local.hour,
+    localMinute: local.minute,
+    now,
+  })
+  const window = getGmvMaxSixHourWindow(local.date, local.hour)
+  const signal = evaluateGmvMaxRealtimeSignal({
+    campaignId: campaign.id,
+    localDate: local.date,
+    windowKey: window.key,
+    windowIndex: window.index,
+    windowStartAt: now - (((local.hour % 6) * 60 + local.minute) * 60_000),
+    now,
+    samples,
+    historicalSummaries: [...gmvMaxRepo.listRealtimeWindowSummaries(campaign.id), ...realtimeHistoricalSummaries(campaign.id, local.date, samples)],
+  })
+  return { ...pacing, realtimeSignal: signal }
 }
 
 function latestLearningSnapshots(campaignIds?: string[]) {
@@ -1278,6 +1343,16 @@ function dashboardDateRange(input?: { startDate?: string; endDate?: string }, fa
   return startDate <= endDate ? { startDate, endDate } : { startDate: endDate, endDate: startDate }
 }
 
+/** The period of the same length that ends the day before `range` starts. */
+export function previousDateRange(range: { startDate: string; endDate: string }) {
+  const day = 86_400_000
+  const start = Date.parse(`${range.startDate}T00:00:00.000Z`)
+  const end = Date.parse(`${range.endDate}T00:00:00.000Z`)
+  const length = Math.round((end - start) / day) + 1
+  const iso = (value: number) => new Date(value).toISOString().slice(0, 10)
+  return { startDate: iso(start - length * day), endDate: iso(start - day) }
+}
+
 function dateRangeEpoch(range: { startDate: string; endDate: string }) {
   const startAt = Date.parse(`${range.startDate}T00:00:00.000Z`)
   const endAt = Date.parse(`${range.endDate}T23:59:59.999Z`)
@@ -1338,12 +1413,18 @@ function creativePage(input?: {
   const insights = new Map(latestCreativeInsights(campaignIds).map((item) => [`${item.campaignId}:${item.creativeId}:${item.itemGroupId || 'unscoped'}`, item]))
   const learning = new Map(latestLearningSnapshots(campaignIds).map((item) => [item.campaignId, item]))
   const policies = new Map(campaignIds.map((campaignId) => [campaignId, policyFor(campaignId)]))
+  // Most delivering videos have no synced cover; the product they sell gives the row a recognizable picture and name.
+  const products = new Map(
+    gmvMaxRepo.listProductImages(storeIds, grouped.map((item) => text(item.sample.itemGroupId)))
+      .map((item) => [`${item.storeId}:${item.productId}`, item]),
+  )
 
   const rows = grouped.map((group) => {
     const asset = resolveGmvMaxCreativeAsset(assets, group.sample)
     const raw = { ...(asset?.raw || {}), ...(group.sample.raw || {}) }
     const campaign = campaigns.get(group.sample.campaignId)
     const insight = insights.get(`${group.sample.campaignId}:${group.sample.creativeId}:${group.sample.itemGroupId || 'unscoped'}`)
+    const product = products.get(`${group.sample.storeId}:${text(group.sample.itemGroupId)}`)
     const policy = policies.get(group.sample.campaignId) || defaultGmvMaxPolicy(group.sample.campaignId)
     const roi = group.cost > 0 ? group.revenue / group.cost : 0
     const cpa = group.orders > 0 ? group.cost / group.orders : 0
@@ -1366,8 +1447,9 @@ function creativePage(input?: {
       days: group.days,
       creatorName: creativeField(raw, ['creator_name', 'user_name', 'identity_name', 'display_name']),
       productName: creativeField(raw, ['product_name', 'product_title', 'item_name']) === '-'
-        ? group.sample.itemGroupId || '-'
+        ? product?.productName || group.sample.itemGroupId || '-'
         : creativeField(raw, ['product_name', 'product_title', 'item_name']),
+      productImageUrl: /^https?:\/\//i.test(product?.imageUrl || '') ? product?.imageUrl : undefined,
       authorizationType: creativeField(raw, ['authorization_type', 'identity_type', 'source']),
       authorizationStatus: creativeField(raw, ['authorization_status', 'status', 'operation_status']),
       label,
@@ -1429,6 +1511,17 @@ function campaignDataPage(input?: {
     metricsByCampaign.set(metric.campaignId, current)
   }
   for (const value of metricsByCampaign.values()) value.utilization = value.samples ? value.utilization / value.samples : 0
+  // Same-length period right before the selected range, for "vs previous period" deltas.
+  const previousRange = previousDateRange(range)
+  const previousByCampaign = new Map<string, { cost: number; revenue: number; orders: number; roi: number }>()
+  for (const metric of gmvMaxRepo.listMetricsRange(previousRange.startDate, previousRange.endDate, campaignIds)) {
+    const current = previousByCampaign.get(metric.campaignId) || { cost: 0, revenue: 0, orders: 0, roi: 0 }
+    current.cost += Number(metric.cost) || 0
+    current.revenue += Number(metric.grossRevenue) || 0
+    current.orders += Number(metric.orders) || 0
+    current.roi = current.cost > 0 ? current.revenue / current.cost : 0
+    previousByCampaign.set(metric.campaignId, current)
+  }
   const pacingByCampaign = new Map(pacingDiagnostics(campaigns).map((item) => [item.campaignId, item]))
   const learningByCampaign = new Map(latestLearningSnapshots().map((item) => [item.campaignId, item]))
   const profitData = profitDataSnapshot(range, campaignIds, {
@@ -1453,6 +1546,7 @@ function campaignDataPage(input?: {
       profitGuard,
       learning: learningByCampaign.get(campaign.id) || null,
       recommendationCount: recommendationCounts.get(campaign.id) || 0,
+      previousMetrics: previousByCampaign.get(campaign.id) || null,
     }
   }).filter((item) => {
     if (input?.storeId && input.storeId !== 'all' && item.storeId !== input.storeId) return false
@@ -1487,6 +1581,14 @@ function campaignDataPage(input?: {
       result.cost += item.metrics.cost
       result.revenue += item.metrics.revenue
       result.orders += item.metrics.orders
+      return result
+    }, { cost: 0, revenue: 0, orders: 0 }),
+    previousStartDate: previousRange.startDate,
+    previousEndDate: previousRange.endDate,
+    previousSummary: rows.reduce((result, item) => {
+      result.cost += item.previousMetrics?.cost || 0
+      result.revenue += item.previousMetrics?.revenue || 0
+      result.orders += item.previousMetrics?.orders || 0
       return result
     }, { cost: 0, revenue: 0, orders: 0 }),
   }
@@ -2479,9 +2581,9 @@ async function recalculateSopInternal(_createDrafts: boolean) {
   const creativeMetrics = gmvMaxRepo.listCreativeMetrics()
   const insights = latestCreativeInsights(instances.map((item) => item.campaignId))
   const creativeMetricsByCampaign = new Map<string, GmvMaxCreativeMetric[]>()
-  for (const metric of creativeMetrics) creativeMetricsByCampaign.set(metric.campaignId, [...(creativeMetricsByCampaign.get(metric.campaignId) || []), metric])
+  for (const metric of creativeMetrics) { const bucket = creativeMetricsByCampaign.get(metric.campaignId); if (bucket) bucket.push(metric); else creativeMetricsByCampaign.set(metric.campaignId, [metric]) }
   const insightsByCampaign = new Map<string, typeof insights>()
-  for (const insight of insights) insightsByCampaign.set(insight.campaignId, [...(insightsByCampaign.get(insight.campaignId) || []), insight])
+  for (const insight of insights) { const bucket = insightsByCampaign.get(insight.campaignId); if (bucket) bucket.push(insight); else insightsByCampaign.set(insight.campaignId, [insight]) }
   const existingTasks = new Map(gmvMaxRepo.listSopTasks().map((item) => [item.id, item]))
   const existingDna = new Map(gmvMaxRepo.listWinnerDna().map((item) => [item.id, item]))
   const activeBindings = gmvMaxRepo.listBindings().filter((item) => item.active)
@@ -2538,7 +2640,7 @@ async function recalculateSopInternal(_createDrafts: boolean) {
     }
     const creativeMetricsByCreativeId = new Map<string, GmvMaxCreativeMetric[]>()
     for (const metric of campaignCreativeMetrics) {
-      creativeMetricsByCreativeId.set(metric.creativeId, [...(creativeMetricsByCreativeId.get(metric.creativeId) || []), metric])
+      { const bucket = creativeMetricsByCreativeId.get(metric.creativeId); if (bucket) bucket.push(metric); else creativeMetricsByCreativeId.set(metric.creativeId, [metric]) }
     }
     const creativeGradeSummary = { S: 0, A: 0, B: 0, C: 0 }
     for (const insight of campaignInsights) {
@@ -2886,10 +2988,10 @@ function buildSopCreativeVideos(
   const metricsByScope = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of metrics) {
     const key = scopeKey(metric.campaignId, metric.creativeId, metric.itemGroupId)
-    metricsByScope.set(key, [...(metricsByScope.get(key) || []), metric])
+    { const bucket = metricsByScope.get(key); if (bucket) bucket.push(metric); else metricsByScope.set(key, [metric]) }
   }
   const insightsByCampaign = new Map<string, typeof insights>()
-  for (const insight of insights) insightsByCampaign.set(insight.campaignId, [...(insightsByCampaign.get(insight.campaignId) || []), insight])
+  for (const insight of insights) { const bucket = insightsByCampaign.get(insight.campaignId); if (bucket) bucket.push(insight); else insightsByCampaign.set(insight.campaignId, [insight]) }
   const campaignAssets = new Map<string, (typeof assets)[number]>()
   const storeAssets = new Map<string, (typeof assets)[number]>()
   for (const asset of assets) {
@@ -3370,7 +3472,11 @@ export const gmvMaxService = {
     if (!connection) throw new Error('GMV MAX connection does not exist.')
     await saveConnectionState(connectionId, { state: 'authorizing', lastError: undefined })
     try {
-      const runtime = await gmvMaxMcpClient.connect(connectionId, false)
+      // Try the stored token first; when TikTok no longer accepts it, open the TikTok login page to authorize again.
+      const runtime = await gmvMaxMcpClient.connect(connectionId, false).catch(async (error) => {
+        if (!isGmvMaxAuthExpired(error)) throw error
+        return await gmvMaxMcpClient.connect(connectionId, true)
+      })
       const connected = await saveConnectionState(connectionId, {
         state: 'connected',
         lastConnectedAt: Date.now(),
@@ -3383,7 +3489,7 @@ export const gmvMaxService = {
       return connected
     } catch (error) {
       await saveConnectionState(connectionId, {
-        state: 'error',
+        state: isGmvMaxAuthExpired(error) ? 'expired' : 'error',
         lastError: error instanceof Error ? error.message : String(error),
       })
       throw error
@@ -4163,6 +4269,42 @@ export const gmvMaxService = {
     return outcomePage(input)
   },
 
+  /** V2: one diagnosis per campaign, the daily checklist and the account summary. */
+  async getV2Workspace(input?: { storeId?: string }) {
+    const campaigns = gmvMaxRepo.listCampaigns().filter((campaign) => !input?.storeId || input.storeId === 'all' || campaign.storeId === input.storeId)
+    const now = Date.now()
+    const range = { startDate: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), endDate: new Date(now).toISOString().slice(0, 10) }
+    const ids = campaigns.map((campaign) => campaign.id)
+    // Pre-aggregated creative metrics, as on the campaign page: the raw 30-day rows took seconds to load.
+    const data = campaigns.length ? profitDataSnapshot(range, ids, { creativeMetrics: aggregatedCreativeMetricsForProfit(range, ids) }) : undefined
+    return buildV2Workspace({
+      storeId: input?.storeId,
+      now,
+      productMarginFor: (campaign) => {
+        if (!data) return null
+        try {
+          const guard = profitGuardFor(campaign, policyFor(campaign.id), data)
+          const margin = Number(guard.contributionMarginRate)
+          return guard.complete && Number.isFinite(margin) && margin > 0 && margin < 1 ? margin : null
+        } catch {
+          return null
+        }
+      },
+    })
+  },
+
+  async saveV2Settings(input: Parameters<typeof saveV2Settings>[0]) {
+    return saveV2Settings(input)
+  },
+
+  async recordV2Change(input: Parameters<typeof recordV2Change>[0]) {
+    return recordV2Change(input)
+  },
+
+  async undoV2Change(input: { id: string }) {
+    return undoV2Change(String(input?.id || ''))
+  },
+
   async getCommandCenter() {
     expireUnsupportedSessionRecommendations()
     const workspace = await this.getSopWorkspace()
@@ -4181,6 +4323,7 @@ export const gmvMaxService = {
 
   async syncAll(options?: { recalculateSop?: boolean; onProgress?: (completed: number, total: number) => void }) {
     const connections = gmvMaxRepo.listConnections().filter((item) => item.state === 'connected')
+    if (!connections.length && gmvMaxRepo.listConnections().some((item) => item.state === 'expired')) throw new Error('GMV_MAX_AUTH_EXPIRED')
     if (!connections.length) throw new Error('Connect TikTok for Business before syncing.')
     let successfulScopes = 0
     let successfulConnections = 0
@@ -4193,7 +4336,7 @@ export const gmvMaxService = {
         successfulConnections += 1
       } catch (error) {
         firstError ||= error
-        await saveConnectionState(connection.id, { lastError: error instanceof Error ? error.message : String(error) })
+        await recordConnectionFailure(connection.id, error)
       }
     }
     const bindings = selectUniqueGmvMaxActiveBindings(discoveredBindings, true)
@@ -4236,6 +4379,7 @@ export const gmvMaxService = {
 
   async syncAccountsAndStores() {
     const connections = gmvMaxRepo.listConnections().filter((item) => item.state === 'connected')
+    if (!connections.length && gmvMaxRepo.listConnections().some((item) => item.state === 'expired')) throw new Error('GMV_MAX_AUTH_EXPIRED')
     if (!connections.length) throw new Error('Connect TikTok for Business before syncing.')
     let successfulConnections = 0
     let firstError: unknown
@@ -4245,7 +4389,7 @@ export const gmvMaxService = {
         successfulConnections += 1
       } catch (error) {
         firstError ||= error
-        await saveConnectionState(connection.id, { lastError: error instanceof Error ? error.message : String(error) })
+        await recordConnectionFailure(connection.id, error)
       }
     }
     if (!successfulConnections && firstError) throw firstError
@@ -4873,7 +5017,7 @@ export const gmvMaxService = {
 
   async saveNotificationConfig(input: Partial<GmvMaxNotificationConfig>) {
     const current = gmvMaxRepo.listNotificationConfigs()[0]
-    return gmvMaxRepo.saveNotificationConfig({ id: current?.id || 'default', enabled: input.enabled ?? current?.enabled ?? false, platform: 'feishu', target: text(input.target ?? current?.target) || undefined, dailySummaryEnabled: input.dailySummaryEnabled ?? current?.dailySummaryEnabled ?? true, updatedAt: Date.now() })
+    return gmvMaxRepo.saveNotificationConfig({ id: current?.id || 'default', enabled: input.enabled ?? current?.enabled ?? false, platform: 'desktop', target: text(input.target ?? current?.target) || undefined, dailySummaryEnabled: input.dailySummaryEnabled ?? current?.dailySummaryEnabled ?? true, updatedAt: Date.now() })
   },
 
   async sendDailySummary(now = Date.now()) {
@@ -4928,6 +5072,156 @@ export const gmvMaxService = {
     }
     gmvMaxRepo.saveRecommendation(reverse)
     return await executeRecommendation(reverse)
+  },
+
+  /**
+   * What a media buyer should look at now, from local data: ROI under the break-even floor over the last three
+   * complete days, budget burning ahead of the day's pace, and tired creatives. Each alert has a key that is stable
+   * for one day, so it is announced once.
+   */
+  getAlerts() {
+    const campaigns = gmvMaxRepo.listCampaigns().filter((item) => text(item.operationStatus).toUpperCase() === 'ENABLE')
+    if (!campaigns.length) return []
+    const ids = campaigns.map((item) => item.id)
+    const range = completedReportRange('UTC', 3)
+    // Only the alert window and these campaigns: loading every creative metric ever stored took seconds.
+    const profitData = profitDataSnapshot(range, ids)
+    const pacing = new Map(pacingDiagnostics(campaigns).map((item) => [item.campaignId, item]))
+    const totals = new Map<string, { cost: number; revenue: number }>()
+    for (const metric of gmvMaxRepo.listMetricsRange(range.startDate, range.endDate, ids)) {
+      const current = totals.get(metric.campaignId) || { cost: 0, revenue: 0 }
+      current.cost += Number(metric.cost) || 0
+      current.revenue += Number(metric.grossRevenue) || 0
+      totals.set(metric.campaignId, current)
+    }
+    const fatigued = new Map<string, number>()
+    for (const insight of latestCreativeInsights(ids)) {
+      if (insight.state === 'fatigued') fatigued.set(insight.campaignId, (fatigued.get(insight.campaignId) || 0) + 1)
+    }
+    const storeMargins = readV2Settings().storeMargins
+    const day = new Date().toISOString().slice(0, 10)
+    const alerts: Array<{ key: string; kind: 'roi_below_floor' | 'budget_overspend' | 'creative_fatigue'; severity: 'critical' | 'warning'; campaignId: string; campaignName: string; storeId: string; value: string; threshold?: string }> = []
+    for (const campaign of campaigns) {
+      const base = { campaignId: campaign.id, campaignName: campaign.name, storeId: campaign.storeId }
+      // Break-even ROI: full product costs when complete, otherwise 1 / the store's gross margin from the quick setup.
+      const guard = profitGuardFor(campaign, policyFor(campaign.id), profitData)
+      const margin = storeMargins[campaign.storeId]
+      const floor = guard.complete ? Number(guard.effectiveRoiFloor) || 0 : margin && margin > 0 ? 1 / margin : 0
+      const total = totals.get(campaign.id)
+      if (floor > 0 && total && total.cost > 0 && total.revenue / total.cost < floor) {
+        alerts.push({ ...base, key: hash('roi_below_floor', campaign.id, day), kind: 'roi_below_floor', severity: 'critical', value: (total.revenue / total.cost).toFixed(2), threshold: floor.toFixed(2) })
+      }
+      const pace = pacing.get(campaign.id)
+      if (pace?.dataStable && pace.state === 'overspend') {
+        alerts.push({ ...base, key: hash('budget_overspend', campaign.id, day), kind: 'budget_overspend', severity: 'warning', value: pace.actualSpendRatio, threshold: pace.expectedSpendRatio })
+      }
+      const tired = fatigued.get(campaign.id) || 0
+      if (tired > 0) alerts.push({ ...base, key: hash('creative_fatigue', campaign.id, day), kind: 'creative_fatigue', severity: 'warning', value: String(tired) })
+    }
+    return alerts.sort((left, right) => (left.severity === right.severity ? 0 : left.severity === 'critical' ? -1 : 1))
+  },
+
+  /** Alerts not announced yet (desktop alerts on), recorded so each is announced once. */
+  takeNewAlerts() {
+    const config = gmvMaxRepo.listNotificationConfigs()[0]
+    if (config && !config.enabled) return []
+    const announced = new Set(gmvMaxRepo.listRecentNotifications(500).map((item) => item.eventType))
+    const fresh = this.getAlerts().filter((alert) => !announced.has(`alert:${alert.key}`))
+    for (const alert of fresh) {
+      gmvMaxRepo.saveNotification({ id: randomUUID(), eventType: `alert:${alert.key}`, status: 'succeeded', target: 'desktop', message: `${alert.kind} ${alert.campaignName}`, createdAt: Date.now() })
+    }
+    return fresh
+  },
+
+  /**
+   * A budget, target ROI or on/off change made by hand in the ads manager. It is stored as an approved action and
+   * runs through the same executor as approved suggestions: TikTok state is checked before and after the write,
+   * the change lands in the audit log, and it can be rolled back.
+   */
+  async applyManualChange(input: { campaignId: string; budget?: string | number; roasBid?: string | number; operationStatus?: string }) {
+    if (this.schedulerState.emergencyStopped) throw new Error('GMV MAX write operations are paused by the emergency stop.')
+    const campaign = gmvMaxRepo.listCampaigns().find((entry) => entry.id === text(input?.campaignId))
+    if (!campaign) throw new Error('GMV MAX campaign does not exist.')
+    const now = Date.now()
+    const status = text(input?.operationStatus).toUpperCase()
+    const currentBudget = Number(campaign.budget) || 0
+    const currentRoasBid = Number(campaign.roasBid) || 0
+    let actionType: GmvMaxActionType
+    let actionPayload: Record<string, unknown>
+    let rollbackPayload: Record<string, unknown>
+    let proposedBudget = campaign.budget
+    let proposedRoasBid = campaign.roasBid
+    let scaleUp: boolean
+    if (status) {
+      if (status !== 'ENABLE' && status !== 'DISABLE') throw new Error('GMV_MAX_MANUAL_STATUS_INVALID')
+      if (status === text(campaign.operationStatus).toUpperCase()) throw new Error('GMV_MAX_MANUAL_NO_CHANGE')
+      actionType = 'status'
+      actionPayload = { operationStatus: status, source: 'manual' }
+      rollbackPayload = { operationStatus: campaign.operationStatus }
+      scaleUp = status === 'ENABLE'
+    } else {
+      const blank = (value: unknown) => value === undefined || value === null || String(value).trim() === ''
+      const budget = blank(input?.budget) ? currentBudget : Number(input?.budget)
+      const roasBid = blank(input?.roasBid) ? currentRoasBid : Number(input?.roasBid)
+      if (!Number.isFinite(budget) || budget <= 0) throw new Error('GMV_MAX_MANUAL_BUDGET_INVALID')
+      if (!Number.isFinite(roasBid) || roasBid <= 0) throw new Error('GMV_MAX_MANUAL_ROI_INVALID')
+      const budgetChanged = Math.abs(budget - currentBudget) >= 0.005
+      const roiChanged = Math.abs(roasBid - currentRoasBid) >= 0.005
+      if (!budgetChanged && !roiChanged) throw new Error('GMV_MAX_MANUAL_NO_CHANGE')
+      proposedBudget = budget.toFixed(2)
+      proposedRoasBid = roasBid.toFixed(2)
+      actionType = budgetChanged ? 'budget' : 'roi'
+      actionPayload = { budget: proposedBudget, roasBid: proposedRoasBid, source: 'manual' }
+      rollbackPayload = { budget: campaign.budget, roasBid: campaign.roasBid }
+      scaleUp = budgetChanged ? budget > currentBudget : roasBid < currentRoasBid
+    }
+    const today = new Date(now).toISOString().slice(0, 10)
+    const key = hash(campaign.id, 'manual', actionType, proposedBudget, proposedRoasBid, status, now)
+    const recommendation: GmvMaxRecommendation = {
+      id: key,
+      campaignId: campaign.id,
+      bindingId: campaign.bindingId,
+      kind: scaleUp ? 'scale_up' : 'scale_down',
+      actionType,
+      status: 'approved',
+      risk: 'low',
+      preset: policyFor(campaign.id).preset,
+      currentBudget: campaign.budget,
+      proposedBudget,
+      currentRoasBid: campaign.roasBid,
+      proposedRoasBid,
+      reason: 'Manual change from the ads manager.',
+      evidence: {
+        startDate: today, endDate: today, metricIds: [], consecutiveDays: 0, totalOrders: '0', averageRoi: '0',
+        averageBudgetUtilization: '0', targetRoi: campaign.roasBid, dataFreshness: 'preliminary',
+      },
+      actionPayload,
+      rollbackPayload,
+      reversible: true,
+      shadow: false,
+      autoExecutable: false,
+      idempotencyKey: key,
+      createdAt: now,
+      updatedAt: now,
+    }
+    gmvMaxRepo.saveRecommendation(recommendation)
+    return await executeRecommendation(recommendation)
+  },
+
+  /** Several manual changes, one after another; each succeeds or fails on its own. */
+  async applyManualChanges(input: { changes: Array<{ campaignId: string; budget?: string | number; roasBid?: string | number; operationStatus?: string }> }) {
+    const changes = Array.isArray(input?.changes) ? input.changes : []
+    if (!changes.length || changes.length > 50) throw new Error('Select between 1 and 50 campaigns for a bulk change.')
+    const results: Array<{ campaignId: string; status: 'succeeded' | 'failed'; error?: string }> = []
+    for (const change of changes) {
+      try {
+        await this.applyManualChange(change)
+        results.push({ campaignId: text(change.campaignId), status: 'succeeded' })
+      } catch (error) {
+        results.push({ campaignId: text(change?.campaignId), status: 'failed', error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    return { total: results.length, succeeded: results.filter((item) => item.status === 'succeeded').length, failed: results.filter((item) => item.status === 'failed').length, items: results }
   },
 
   async approveRecommendation(id: string) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -13,6 +13,12 @@ import {
   Store,
   Images,
   Settings,
+  Inbox,
+  Wand2,
+  PlaySquare,
+  Scissors,
+  BarChart3,
+  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   X,
@@ -24,6 +30,10 @@ import TitleBar from "./components/TitleBar.vue";
 import UiLocaleSelect from "./components/UiLocaleSelect.vue";
 import DsMainLayout from "../design-system/layout/MainLayout.vue";
 import AssetLibraryPickerHost from "./components/AssetLibraryPickerHost.vue";
+import AiProducerPanel from "./components/ai/AiProducerPanel.vue";
+import AiCommandBar from "./components/ai/AiCommandBar.vue";
+import AiNotices from "./components/ai/AiNotices.vue";
+import { useAiProducerStore } from "@/stores/aiProducer";
 import { useCloneTopbarStore } from "@/stores/cloneTopbar";
 import { useDesignInspectorStore } from "@/stores/designInspector";
 import { useWebSessionStore } from "@/stores/webSession";
@@ -33,12 +43,11 @@ const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 const APP_SIDEBAR_STORAGE_KEY = "videogenerate:app-sidebar-collapsed:v1";
-const helpOpen = ref(false);
-const moreOpen = ref(false);
 const appSidebarCollapsed = ref(false);
 const cloneTopbar = useCloneTopbarStore();
 const designInspector = useDesignInspectorStore();
 const webSession = useWebSessionStore();
+const aiProducer = useAiProducerStore();
 const { visible: cloneTopbarVisible, items: cloneTopbarItems } =
   storeToRefs(cloneTopbar);
 const { enabled: designInspectorEnabled } = storeToRefs(designInspector);
@@ -59,117 +68,81 @@ const topUserPlan = computed(() => {
   return status.planName || t("cloud.membership.none");
 });
 
+const isToolRoute = computed(() =>
+  route.path === '/plugins' ||
+  route.path === '/live-slicer' ||
+  (route.path.startsWith('/plugins/') && !route.path.startsWith('/plugins/tiktok-creative-studio') && !route.path.startsWith('/plugins/live-photo-generator')),
+)
+
 const allNavItems = computed(() => [
   {
     to: "/home",
     icon: House,
-    label: t("nav.home"),
-    active: route.path.includes("/home"),
+    label: t("ai.nav.workbench"),
+    active: route.path.startsWith("/home"),
   },
   {
-    to: "/product-research",
-    icon: SearchCheck,
-    label: t("nav.productResearch"),
-    active: route.path.includes("/product-research"),
+    to: "/inbox",
+    icon: Inbox,
+    label: t("ai.nav.inbox"),
+    active: route.path.startsWith("/inbox"),
+    badge: aiProducer.pendingReviews,
+  },
+]);
+
+const allSections = computed(() => [
+  {
+    title: t("ai.nav.groupCreate"),
+    items: [
+      { to: "/product-research", icon: SearchCheck, label: t("nav.productResearch"), active: route.path.startsWith("/product-research") },
+      { to: "/clone", icon: CopyPlus, label: t("nav.clone"), active: route.path.startsWith("/clone") },
+      { to: "/plugins/tiktok-creative-studio", icon: Wand2, label: t("ai.nav.creativeStudio"), active: route.path.startsWith("/plugins/tiktok-creative-studio") },
+      { to: "/plugins/live-photo-generator", icon: PlaySquare, label: t("ai.nav.livePhoto"), active: route.path.startsWith("/plugins/live-photo-generator") },
+      { to: "/production", icon: Scissors, label: t("ai.nav.production"), active: route.path.startsWith("/production") },
+      { to: "/publish", icon: Send, label: t("ai.nav.publish"), active: route.path.startsWith("/publish") },
+      { to: "/insights", icon: BarChart3, label: t("ai.nav.insights"), active: route.path.startsWith("/insights") },
+    ],
   },
   {
-    to: "/models",
-    icon: Sparkles,
-    label: t("nav.models"),
-    active: route.path.includes("/models"),
+    title: t("ai.nav.groupAssets"),
+    items: [
+      { to: "/products", icon: FolderOpen, label: t("ai.nav.products"), active: route.path.startsWith("/products") },
+      { to: "/models", icon: Sparkles, label: t("ai.nav.models"), active: route.path.startsWith("/models") },
+      { to: "/asset-library", icon: Images, label: t("ai.nav.assets"), active: route.path.startsWith("/asset-library") },
+      { to: "/templates", icon: LayoutTemplate, label: t("ai.nav.templates"), active: route.path.startsWith("/templates") },
+    ],
   },
   {
-    to: "/asset-library",
-    icon: Images,
-    label: t("nav.assets"),
-    active: route.path.includes("/asset-library"),
-  },
-  {
-    to: "/products",
-    icon: FolderOpen,
-    label: t("nav.productLibrary"),
-    active: route.path.includes("/products"),
-  },
-  {
-    to: "/clone",
-    icon: CopyPlus,
-    label: t("nav.clone"),
-    active: route.path.includes("/clone"),
-  },
-  {
-    to: "/publish",
-    icon: Send,
-    label: t("nav.publish"),
-    active: route.path.includes("/publish"),
+    title: t("ai.nav.tools"),
+    items: [
+      { to: "/plugins", icon: Store, label: t("ai.tools.title"), active: isToolRoute.value },
+    ],
   },
 ]);
 
 /** 后台关闭的模块不出现在导航里 */
 const navItems = computed(() => allNavItems.value.filter((item) => cloudAuth.hasFeature(featureForPath(item.to))));
+const sidebarSections = computed(() =>
+  allSections.value
+    .map((section) => ({ ...section, items: section.items.filter((item) => cloudAuth.hasFeature(featureForPath(item.to.split("?")[0]))) }))
+    .filter((section) => section.items.length),
+);
 
-const helpItems = computed(() => [
-  { to: "/models", title: t("nav.models"), desc: t("shell.helpModels") },
-  {
-    to: "/products",
-    title: t("nav.productLibrary"),
-    desc: t("shell.helpProducts"),
-  },
-  { to: "/clone", title: t("nav.clone"), desc: t("shell.helpClone") },
-  { to: "/publish", title: t("nav.publish"), desc: t("nav.publish") },
-]);
-
-const sidebarSections = computed(() => [
-  {
-    title: t("nav.plugins"),
-    items: [
-      {
-        to: "/plugins",
-        icon: Store,
-        label: t("plugins.tabs.market"),
-        active: route.path.includes("/plugins") && !route.query.tab,
-      },
-      {
-        to: "/plugins?tab=installed",
-        icon: Puzzle,
-        label: t("plugins.tabs.installed"),
-        active:
-          route.path.includes("/plugins") && route.query.tab === "installed",
-      },
-    ],
-  },
-]);
+function onGlobalKeydown(event: KeyboardEvent) {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return
+  const key = event.key.toLowerCase()
+  if (key === "k") {
+    event.preventDefault()
+    aiProducer.commandOpen = !aiProducer.commandOpen
+  } else if (key === "j") {
+    event.preventDefault()
+    if (aiProducer.panelOpen) aiProducer.close()
+    else void aiProducer.open()
+  }
+}
 
 function go(path: string, query?: Record<string, string>) {
   void router.push({ path, query });
-}
-
-function openCloudWorkspace() {
-  go("/production");
-}
-
-function quickExport() {
-  go("/production/tasks", { ws: "media", quickStart: String(Date.now()) });
-}
-
-function openHelpModal() {
-  helpOpen.value = true;
-}
-
-function onTopMenuClick(key: string) {
-  moreOpen.value = false;
-  if (key === "project") {
-    go("/products");
-    return;
-  }
-  if (key === "edit") {
-    go("/production");
-    return;
-  }
-  if (key === "view") {
-    go("/production");
-    return;
-  }
-  if (key === "export") quickExport();
 }
 
 function requestCloneStage(key: string) {
@@ -187,6 +160,12 @@ function toggleAppSidebar() {
 onMounted(() => {
   appSidebarCollapsed.value =
     localStorage.getItem(APP_SIDEBAR_STORAGE_KEY) === "true";
+  window.addEventListener("keydown", onGlobalKeydown);
+  void aiProducer.init();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onGlobalKeydown);
 });
 </script>
 
@@ -194,6 +173,9 @@ onMounted(() => {
   <div class="ui-app app-shell" :class="{ 'is-sidebar-collapsed': appSidebarCollapsed }">
     <AssetLibraryPickerHost />
     <TitleBar />
+    <AiProducerPanel />
+    <AiCommandBar />
+    <AiNotices />
     <div class="app-shell__body">
       <DsMainLayout
         :nav-items="navItems"
@@ -289,44 +271,6 @@ onMounted(() => {
       </DsMainLayout>
     </div>
 
-    <Teleport to="body">
-      <div v-if="helpOpen" class="vg-scope vg-backdrop" @click.self="helpOpen = false">
-        <div class="vg-dialog" role="dialog" aria-modal="true">
-          <div class="vg-dialog__head">
-            <div class="vg-dialog__title">
-              <div>
-                <h2>{{ t("shell.helpTitle") }}</h2>
-                <p>{{ t("shell.helpDesc") }}</p>
-              </div>
-            </div>
-            <button class="vg-icon-btn" type="button" :aria-label="t('common.cancel')" @click="helpOpen = false">
-              <X class="shell-foot__icon" />
-            </button>
-          </div>
-          <div class="vg-dialog__body">
-            <div class="vg-list">
-              <button
-                v-for="item in helpItems"
-                :key="item.to"
-                class="vg-list__item vg-list__item--button"
-                type="button"
-                @click="helpOpen = false; go(item.to)"
-              >
-                <span class="vg-list__main">
-                  <span class="vg-list__title">{{ item.title }}</span>
-                  <span class="vg-list__sub">{{ item.desc }}</span>
-                </span>
-              </button>
-            </div>
-          </div>
-          <div class="vg-dialog__foot">
-            <div class="vg-dialog__foot-actions">
-              <button class="vg-btn" type="button" @click="helpOpen = false">{{ t("common.cancel") }}</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 

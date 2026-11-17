@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Check, LoaderCircle } from 'lucide-react'
 
-import type { CloudFeature, CloudPlan } from '@shared/cloud/types'
+import { describeDeviceAllowance, type CloudFeature, type CloudPlan } from '@shared/cloud/types'
 import { formatYuan, useCloudUser, userClient } from '@/lib/cloud-user'
 import { cn } from '@/lib/utils'
 
@@ -32,12 +32,16 @@ function perDay(plan: CloudPlan) {
 export function PlanCards({ compact = false }: { compact?: boolean }) {
   const { me } = useCloudUser()
   const [plans, setPlans] = useState<CloudPlan[] | null>(null)
+  const [mobileSlots, setMobileSlots] = useState(1)
   const [error, setError] = useState('')
 
   useEffect(() => {
     userClient
       .listPlans()
-      .then((result) => setPlans(result.plans))
+      .then((result) => {
+        setPlans(result.plans)
+        setMobileSlots(result.maxMobileDevices ?? 1)
+      })
       .catch((err) => setError((err as Error).message))
   }, [])
 
@@ -80,14 +84,14 @@ export function PlanCards({ compact = false }: { compact?: boolean }) {
             {perDay(plan) ? <span className="-mt-3 text-xs text-[var(--text-muted)]">{perDay(plan)}</span> : null}
             {!compact ? (
               <ul className="grid gap-2.5 text-sm text-[var(--text-secondary)]">
-                {[...featureList(plan.features), plan.maxDevices === 0 ? '不限设备数' : `可绑定 ${plan.maxDevices} 台电脑`].map((item) => (
+                {[...featureList(plan.features), `可登录 ${describeDeviceAllowance(plan.maxDevices, mobileSlots)}`].map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success)]" /> {item}
                   </li>
                 ))}
               </ul>
             ) : (
-              <span className="text-sm text-[var(--text-secondary)]">{plan.maxDevices === 0 ? '不限设备数' : `可绑定 ${plan.maxDevices} 台电脑`}</span>
+              <span className="text-sm text-[var(--text-secondary)]">{`可登录 ${describeDeviceAllowance(plan.maxDevices, mobileSlots)}`}</span>
             )}
             <Link
               href={href}

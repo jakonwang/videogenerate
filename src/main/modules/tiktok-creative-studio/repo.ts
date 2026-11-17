@@ -8,6 +8,21 @@ import type { TiktokCreativeShotTask, TiktokCreativeTask, TiktokCreativeTaskLog 
 const STORE_NAMESPACE = 'tiktok-creative-studio-tasks'
 let migrationPromise: Promise<{ migrated: number }> | null = null
 
+type TaskChangeListener = (taskId: string) => void
+const changeListeners = new Set<TaskChangeListener>()
+
+export function onTiktokCreativeTaskChanged(listener: TaskChangeListener) {
+  changeListeners.add(listener)
+  return () => { changeListeners.delete(listener) }
+}
+
+function emitTaskChanged(taskId: string) {
+  for (const listener of changeListeners) {
+    try { listener(taskId) } catch { // listeners must not break persistence
+    }
+  }
+}
+
 function dbPath() {
   return join(getAppPaths().dbDir, 'tiktok-creative-studio.json')
 }
@@ -161,6 +176,7 @@ export const tiktokCreativeStudioRepo = {
     await ensureMigrated()
     const normalized = normalizeTask(await materializeTaskAssets(task))
     await backgroundRecordStore.upsert(STORE_NAMESPACE, normalized as unknown as Record<string, unknown>)
+    emitTaskChanged(normalized.id)
     return normalized
   },
 
@@ -205,6 +221,8 @@ export const tiktokCreativeStudioRepo = {
 
   async remove(id: string) {
     await ensureMigrated()
-    return { ok: await backgroundRecordStore.remove(STORE_NAMESPACE, id) }
+    const ok = await backgroundRecordStore.remove(STORE_NAMESPACE, id)
+    emitTaskChanged(id)
+    return { ok }
   },
 }

@@ -1,0 +1,712 @@
+{
+  "producer": "AI 制片人",
+  "producerTagline": "说出目标，它来规划、调度、交付",
+  "history": "历史对话",
+  "newChat": "新对话",
+  "untitled": "未命名对话",
+  "noHistory": "还没有对话",
+  "tabs": {
+    "chat": "对话",
+    "recipes": "配方"
+  },
+  "welcomeTitle": "今天想做什么内容？",
+  "welcomeDesc": "告诉我目标，我会先给出计划（步骤、预计消耗、耗时），你点「执行」后才开始。可以拖入视频或图片，也可以直接写商品名。",
+  "browseRecipes": "浏览配方",
+  "suggest": {
+    "health": "帮我做一次系统体检，看看模型、账号和磁盘是否就绪",
+    "weekly": "复盘最近 7 天的内容产出和通过率，给我下周建议",
+    "failed": "最近有哪些任务失败了？告诉我原因和处理办法",
+    "publish": "把已经审核通过的视频生成发布草稿"
+  },
+  "thinking": "正在思考和规划…",
+  "composerPlaceholder": "例如：给「珍珠耳环」做 2 条复刻视频，再把分镜做成 Live Photo",
+  "composerHint": "Enter 发送 · Shift+Enter 换行 · 可拖入文件",
+  "send": "发送",
+  "attachFile": "从电脑添加文件",
+  "attachAsset": "从素材库添加",
+  "dropHere": "松开即可添加为附件",
+  "settingsGroup": "AI 制片人",
+  "nav": {
+    "workbench": "工作台",
+    "inbox": "审核收件箱",
+    "groupCreate": "创作",
+    "groupAssets": "资产",
+    "creativeStudio": "TikTok 创意工作室",
+    "livePhoto": "Live Photo",
+    "production": "批量混剪",
+    "publish": "发布中心",
+    "insights": "数据复盘",
+    "products": "商品库",
+    "models": "模特库",
+    "assets": "素材库",
+    "templates": "模板库",
+    "tools": "工具箱"
+  },
+  "line": {
+    "clone": "复刻",
+    "creative": "创意工作室",
+    "livephoto": "Live Photo",
+    "production": "批量混剪",
+    "publish": "发布"
+  },
+  "contentStatus": {
+    "running": "生成中",
+    "failed": "失败",
+    "ready": "已完成",
+    "draft": "未开始"
+  },
+  "status": {
+    "draft": "草稿",
+    "planning": "规划中",
+    "waiting_approval": "待你审批",
+    "running": "执行中",
+    "paused": "已暂停",
+    "reviewing": "检查中",
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消"
+  },
+  "intent": {
+    "ProductInspect": "查看商品资料",
+    "ProductSave": "保存商品",
+    "ProductManage": "管理商品（可能删除）",
+    "ProductAnalyze": "商品识别分析",
+    "MaterialPrepare": "准备商品素材",
+    "MaterialManage": "管理商品素材",
+    "CommerceVideoCreate": "复刻视频（参考分析→成片）",
+    "CloneProjectManage": "管理复刻项目",
+    "ModelIdentityManage": "管理模特",
+    "LivePhotoCreate": "生成 Live Photo",
+    "LivePhotoManage": "管理 Live Photo",
+    "SubtitleGenerate": "生成字幕",
+    "VideoSlice": "长视频切片",
+    "SourceVideoImport": "解析下载参考视频",
+    "SourceVideoManage": "管理来源视频",
+    "ListingGenerate": "生成上架文案",
+    "ListingExport": "导出上架表格",
+    "ListingManage": "管理上架记录",
+    "TiktokCreativeManage": "管理创意工作室任务",
+    "ProductionBatchCreate": "创建批量混剪",
+    "ProductionQueueControl": "控制混剪队列",
+    "ProductionTaskManage": "管理混剪任务",
+    "TemplateSave": "保存模板",
+    "TemplateManage": "管理模板",
+    "ArtifactInspect": "查看已有产出",
+    "ArtifactExport": "导出产出",
+    "SystemHealthCheck": "系统体检",
+    "AssetSearch": "检索素材库",
+    "AssetArchive": "归档到素材库",
+    "CloneShotsSend": "分镜送去创意工作室 / Live Photo",
+    "CreativeFromImages": "创意工作室：场景图换品出片",
+    "LivePhotoFromVideo": "视频转 Live Photo",
+    "ReviewSubmit": "送入审核收件箱",
+    "ProductImportFromLink": "贴链接建商品",
+    "ProductResearchPromote": "爆品转商品",
+    "PublishDraft": "生成发布草稿",
+    "InsightsRead": "内容复盘",
+    "ReferenceDiscover": "自动挑选参考爆款",
+    "OutputsAwait": "等待出片完成"
+  },
+  "plan": {
+    "approve": "执行",
+    "reject": "不执行",
+    "pause": "暂停",
+    "resume": "继续",
+    "cancel": "取消",
+    "goReview": "去审核产出",
+    "modelCalls": "约 {count} 次模型调用",
+    "modelCallsHint": "按配方经验值估算，实际以模型返回为准",
+    "accountCredits": "约 {count} 个 TikTok 账号额度",
+    "accountCreditsHint": "创意工作室出片消耗 TikTok 创意账号额度",
+    "minutes": "约 {count} 分钟",
+    "awaitingConfirmation": "「{title}」会修改或删除数据，需要你单独确认后才会执行。",
+    "confirmStep": "确认执行这一步",
+    "dependencyFailed": "上一步失败，已跳过",
+    "noModelCalls": "不消耗模型额度"
+  },
+  "notice": {
+    "runCompleted": "AI 制片人完成了一个计划，产出已进入审核收件箱",
+    "runFailed": "有一个计划执行失败，打开 AI 制片人查看原因",
+    "awaitingConfirmation": "AI 制片人有一个步骤等待你确认"
+  },
+  "tray": {
+    "title": "任务",
+    "desc": "AI 制片人的计划与进度，后台运行不阻塞操作",
+    "empty": "还没有计划。按 Ctrl+J 打开 AI 制片人。"
+  },
+  "command": {
+    "placeholder": "搜索商品、项目、页面，或直接告诉 AI 要做什么…",
+    "short": "搜索或下指令",
+    "ask": "交给 AI 制片人：{text}",
+    "askHint": "生成计划，审批后执行",
+    "productSpace": "商品空间",
+    "empty": "没有匹配项",
+    "navigate": "选择",
+    "open": "打开",
+    "groups": {
+      "ai": "AI 制片人",
+      "recipe": "配方",
+      "page": "页面",
+      "product": "商品",
+      "project": "项目",
+      "asset": "素材"
+    }
+  },
+  "recipes": {
+    "intro": "配方是设计好的计划模板：填几个必要信息，AI 生成完整计划，你审批后执行。",
+    "makePlan": "生成计划",
+    "approvalNote": "生成后会先展示计划卡（步骤、预计消耗、耗时），需要你点「执行」才会开始。",
+    "pack": {
+      "title": "一个商品，一套内容",
+      "desc": "选商品和参考视频，自动复刻成片，并把分镜做成 Live Photo / 创意短视频",
+      "output": "产出：N 条复刻成片 + 分镜 Live Photo",
+      "prompt": "为这个商品做一套内容：基于 {count} 条参考视频复刻成片，并复用分镜",
+      "summary": "复刻 {count} 条参考视频 → 分镜送去其他生产线 → 进入审核收件箱"
+    },
+    "scene": {
+      "title": "场景图批量出片",
+      "desc": "把好看的场景图换成你的商品，用 TikTok 创意账号或模型批量出短视频 / Live Photo",
+      "output": "产出：每张图一条短视频或 Live Photo",
+      "promptCreative": "用创意工作室把 {count} 张场景图换成这个商品并出片",
+      "promptLivePhoto": "把 {count} 张场景图换成这个商品并做成 Live Photo",
+      "summaryCreative": "{count} 张场景图 → 商品换图 → TikTok 创意账号出片 → 审核",
+      "summaryLivePhoto": "{count} 张场景图 → 商品换图 → 模型出动态 → Live Photo → 审核"
+    },
+    "viral": {
+      "title": "跟拍一条爆款",
+      "desc": "贴爆款链接，自动解析下载，为每个商品复刻一条",
+      "output": "产出：每个商品一条复刻成片",
+      "prompt": "跟拍 {links} 条爆款，为 {products} 个商品各复刻一条",
+      "summary": "解析 {links} 条爆款 → 为 {products} 个商品复刻 → 审核"
+    },
+    "winners": {
+      "title": "爆品转商品",
+      "desc": "把选品方案里测款结论为「爆品」的商品一键建入商品库",
+      "output": "产出：商品库新增爆品",
+      "prompt": "把选品方案里的爆品加入商品库",
+      "summary": "读取选品方案爆品 → 建入商品库"
+    },
+    "link": {
+      "title": "贴链接建商品",
+      "desc": "贴一个商品页链接，自动读取标题和主图创建商品",
+      "output": "产出：一个新商品",
+      "prompt": "用这个链接创建商品：{url}",
+      "summary": "读取链接 → 创建商品"
+    },
+    "publish": {
+      "title": "通过的内容排期发布",
+      "desc": "把审核通过的视频生成发布草稿，可按间隔自动排期；真正发布仍需你在发布中心确认",
+      "output": "产出：发布草稿 / 排期",
+      "prompt": "把审核通过、还没发布的视频生成发布草稿",
+      "summary": "收集已通过视频 → 生成发布草稿（发布需你确认）"
+    },
+    "autopilot": {
+      "title": "全自动打爆",
+      "desc": "从选品到发布草稿一条龙：建商品 → 找爆款参考 → 复刻成片 → 质检 → 排期 → 复盘",
+      "output": "产出：每个商品 N 条成片 + Live Photo + 发布草稿 + 复盘建议",
+      "prompt": "全自动打爆：从商品到成片、审核和发布草稿一次跑完",
+      "summary": "体检 → 准备商品 → 找参考爆款 → 复刻成片 → 等待出片 → 审核{publish} → 复盘",
+      "summaryPublish": " → 发布草稿"
+    }
+  },
+  "fields": {
+    "product": "商品",
+    "productOptional": "商品（可选，不选则包含全部商品）",
+    "products": "商品（可多选）",
+    "productsHint": "每个商品都会单独复刻一条",
+    "selectProduct": "选择商品",
+    "noProducts": "商品库是空的，先创建商品",
+    "referenceVideos": "参考视频",
+    "referenceVideosHint": "每条参考视频复刻一个项目，建议 1–3 条",
+    "variantCount": "脚本变体数",
+    "variantCountHint": "每个项目生成几版脚本供挑选",
+    "shotsToLivePhoto": "分镜同时做成 Live Photo",
+    "shotsToCreative": "分镜同时送去创意工作室出片（消耗账号额度）",
+    "sceneImages": "场景图",
+    "sceneImagesHint": "可以是别人的商品图、好看的场景图，AI 会换成你的商品",
+    "engine": "出片方式",
+    "engineCreative": "TikTok 创意工作室（消耗账号额度）",
+    "engineLivePhoto": "模型 API + Live Photo",
+    "viralLinks": "爆款链接",
+    "viralLinksHint": "每行一个 TikTok / 抖音分享链接",
+    "scheme": "选品方案",
+    "productUrl": "商品链接",
+    "productNameOptional": "商品名称（读取不到标题时使用）",
+    "startAt": "首条发布时间",
+    "startAtHint": "留空则只生成草稿不排期",
+    "intervalHours": "每条间隔（小时）",
+    "fromLibrary": "从素材库选",
+    "fromDisk": "从电脑选",
+    "selectedCount": "已选 {count} 个",
+    "required": "必填",
+    "on": "开",
+    "off": "关",
+    "autopilotSource": "商品从哪里来",
+    "sourceScheme": "选品方案里的爆品",
+    "sourceLink": "贴一个商品链接",
+    "sourceProducts": "商品库里已有的商品",
+    "referenceMode": "参考爆款视频",
+    "referenceAuto": "AI 自动挑选（已下载的爆款 / 素材库参考文件夹）",
+    "referenceLinks": "我来贴爆款链接",
+    "referenceCount": "每个商品参考几条爆款",
+    "referenceCountHint": "每条参考视频会为每个商品复刻一个项目",
+    "autoApprove": "成片自动通过审核并生成发布草稿",
+    "autoApproveHint": "只对本次流水线的产出生效；真正发布仍需你在发布中心确认"
+  },
+  "inbox": {
+    "title": "审核收件箱",
+    "desc": "AI 产出的成片、短视频和 Live Photo 都在这里。你做选择题：通过 / 重做 / 丢弃。",
+    "tabs": {
+      "pending": "待审核",
+      "approved": "已通过",
+      "redo": "要重做",
+      "discarded": "已丢弃"
+    },
+    "decided": {
+      "approved": "已通过，已存入素材库「AI 成片」",
+      "redo": "已标记重做，原因已记入品牌记忆",
+      "discarded": "已丢弃"
+    },
+    "allLines": "全部生产线",
+    "approve": "通过",
+    "redo": "重做",
+    "discard": "丢弃",
+    "switch": "切换",
+    "undo": "撤销",
+    "undone": "已撤销，回到待审核",
+    "prev": "上一条",
+    "next": "下一条",
+    "product": "商品",
+    "finishedAt": "完成时间",
+    "decision": "结论",
+    "note": "备注",
+    "redoReason": "重做原因",
+    "notePlaceholder": "补充说明（可选），会写进品牌记忆",
+    "redoHint": "原因会进入品牌记忆，AI 下次规划时会避开。打开项目即可重新生成。",
+    "confirmRedo": "确认重做",
+    "openProject": "打开项目",
+    "toLivePhoto": "转成 Live Photo",
+    "toLivePhotoPrompt": "把「{title}」转成 Live Photo",
+    "publishOne": "生成发布草稿",
+    "publishAll": "全部生成发布草稿",
+    "publishPrompt": "为 {count} 条已通过的视频生成发布草稿",
+    "emptyPending": "没有待审核的内容",
+    "empty": "这里还没有内容",
+    "emptyHint": "让 AI 制片人用配方生产一批内容，完成后会自动出现在这里。",
+    "startRecipe": "用配方做一套内容"
+  },
+  "redo": {
+    "product_mismatch": "商品不像",
+    "weird_motion": "动作别扭",
+    "blurry": "画面模糊",
+    "bad_composition": "构图不好",
+    "off_brand": "不符合品牌调性",
+    "subtitle_issue": "字幕问题",
+    "other": "其他"
+  },
+  "space": {
+    "tab": "商品空间",
+    "profileTab": "商品资料",
+    "makeShort": "AI 做一套内容",
+    "makeTitle": "为这个商品做内容",
+    "makeDesc": "选一个配方，AI 生成计划并在你审批后执行；产出会回到这里和审核收件箱。",
+    "askAi": "问 AI",
+    "askPrompt": "关于商品「{name}」，",
+    "nextSteps": "下一步建议",
+    "suggestFirst": "还没有任何内容，先做第一套内容",
+    "suggestReview": "{count} 条内容等你审核",
+    "suggestFailed": "{count} 个任务失败，交给 AI 排查",
+    "suggestPublish": "{count} 条已通过的视频可以排期发布",
+    "suggestMore": "继续加量：换一批参考视频或场景图",
+    "failedPrompt": "检查商品「{name}」最近失败的任务，说明原因并给出重试方案",
+    "statDetail": "生成中 {running} · 已通过 {approved}",
+    "content": "全部内容",
+    "clearFilter": "清除筛选",
+    "noContent": "这个商品还没有内容",
+    "memory": "商品记忆",
+    "memoryHint": "AI 规划这个商品的内容时会参考",
+    "sellingPoints": "卖点",
+    "audience": "目标人群",
+    "avoid": "需要避免",
+    "notes": "其他备注",
+    "saved": "已保存",
+    "lineage": "内容来历",
+    "noLineage": "还没有来历记录，AI 串联的内容会记录在这里",
+    "relation": {
+      "derived_from": "生成",
+      "sent_to": "送去",
+      "archived_as": "归档为",
+      "published_as": "发布为",
+      "created_by_run": "由计划创建",
+      "product_of": "产出"
+    },
+    "refKind": {
+      "clone": "复刻",
+      "creative": "创意工作室",
+      "livephoto": "Live Photo",
+      "product": "商品",
+      "asset": "素材",
+      "publish": "发布",
+      "url": "链接",
+      "research": "选品",
+      "file": "文件",
+      "production": "混剪"
+    }
+  },
+  "spine": {
+    "title": "商品链路",
+    "bind": "绑定店铺商品",
+    "editBind": "修改绑定",
+    "bound": "已绑定 {count} 个店铺商品",
+    "bindTitle": "绑定 TikTok 店铺商品",
+    "bindDesc": "选择「{name}」在店铺里对应的商品，投放和达人数据会归到这个商品下。",
+    "searchPlaceholder": "搜索商品名称或 ID",
+    "untitled": "未命名商品",
+    "noCandidates": "还没有同步到店铺商品，可以在下方手动填写商品 ID。",
+    "manualPlaceholder": "手动填写 TikTok 商品 ID",
+    "addManual": "添加",
+    "pickedCount": "已选 {count} 个",
+    "needBind": "绑定店铺商品后可见",
+    "adsEmpty": "近 14 天没有投放数据",
+    "creatorsEmpty": "还没有达人数据",
+    "contentDetail": "可用成片 · 生成中 {running}",
+    "publishDetail": "已发布视频",
+    "adsDetail": "近 {days} 天花费 {spend} · 在投素材 {creatives}",
+    "creatorsDetail": "达人视频 · 样品 {samples} · GMV {gmv}",
+    "noSignals": "投放和达人数据暂时没有需要处理的信号。",
+    "variantPrompt": "商品「{product}」的素材「{name}」出单表现最好，请参考它的结构再做一批变体。",
+    "stage": {
+      "content": "素材",
+      "publish": "发布",
+      "ads": "投放",
+      "creators": "达人"
+    },
+    "level": {
+      "warning": "需处理",
+      "success": "机会",
+      "info": "提示"
+    },
+    "source": {
+      "ads": "投放",
+      "creators": "达人",
+      "publish": "发布"
+    },
+    "action": {
+      "bind": "去绑定",
+      "make_content": "补一批素材",
+      "make_variant": "照它做变体",
+      "open_ads": "查看投放",
+      "open_creators": "查看达人"
+    },
+    "signal": {
+      "bind_channel": "还没有绑定店铺商品，投放和达人数据暂时归不到这个商品。",
+      "ads_need_creatives": "近 3 天在投素材只有 {active} 条，少于 {target} 条，素材不够轮换。",
+      "ads_winner": "素材「{name}」ROI {roi}，高于商品平均 {avgRoi}，已出 {orders} 单。",
+      "ads_fatigue": "主力素材「{name}」近 3 天 ROI 从 {previousRoi} 降到 {recentRoi}，正在衰退。",
+      "ads_concentration": "素材「{name}」占了 {share}% 的花费，过度依赖单条素材。",
+      "ads_unprofitable": "近 14 天 ROI {roi}，低于盈亏平衡 ROI {breakEvenRoi}。",
+      "creator_winner": "达人 {creator} 的视频「{name}」出了 {orders} 单，可以照它复刻。",
+      "creators_awaiting_content": "{count} 位达人已收到样品，还没有发视频。"
+    }
+  },
+  "perf": {
+    "title": "出单验证",
+    "hint": "近 {days} 天投放数据 · 商品平均 ROI {roi}",
+    "empty": "还没有成片和投放素材对上号。视频发布并开始投放后会自动匹配，也可以在下方手动关联。",
+    "unmatched": "{count} 条已发布的视频还没有匹配到投放素材。",
+    "unlinkedTitle": "未关联的投放素材",
+    "creativeStats": "花费 {spend} · ROI {roi} · {orders} 单",
+    "pickContent": "选择对应的成片",
+    "noLinkable": "没有可关联的成片",
+    "link": "关联",
+    "unlink": "取消关联",
+    "orders": "{count} 单",
+    "variantPrompt": "商品「{product}」的{line}成片「{title}」投放 ROI {roi}、出了 {orders} 单，是目前卖得最好的一条。请沿用它的结构再做一批变体。",
+    "col": {
+      "content": "成片",
+      "verdict": "判定",
+      "spend": "花费",
+      "revenue": "成交额",
+      "orders": "订单",
+      "creative": "投放素材",
+      "linkTo": "关联到成片"
+    },
+    "verdict": {
+      "winner": "出单好",
+      "average": "一般",
+      "weak": "不出单",
+      "unproven": "未投放"
+    },
+    "method": {
+      "auto": "自动匹配",
+      "manual": "手动关联"
+    },
+    "variantPlanPrompt": "成片「{title}」投放 ROI {roi}、出了 {orders} 单。用它的参考视频、同一个商品和模特，再做 {count} 条脚本角度不同的变体。",
+    "variantPlanSummary": "照「{title}」做 {count} 条变体 → 送审",
+    "noLinkableHint": "还没有已完成的成片可以关联，做好成片后再回来手动关联。",
+    "showAll": "展开全部 {count} 条",
+    "collapse": "收起"
+  },
+  "brand": {
+    "title": "品牌记忆",
+    "navDesc": "调性、禁用词与 AI 学到的偏好",
+    "subtitle": "所有 AI 规划都会带上这些要求",
+    "brandName": "品牌名",
+    "watermarkText": "水印文字",
+    "tone": "品牌调性",
+    "tonePlaceholder": "例如：高级、简洁、少用夸张词",
+    "audience": "目标人群",
+    "audiencePlaceholder": "例如：18–30 岁、喜欢日常通勤穿搭的女性",
+    "bannedWords": "禁用词",
+    "bannedWordsPlaceholder": "用逗号分隔，例如：最便宜，第一，绝对",
+    "subtitleStyle": "字幕风格",
+    "notes": "其他要求",
+    "hint": "修改后对下一次规划生效",
+    "learned": "AI 学到的偏好",
+    "learnedHint": "来自审核收件箱的通过 / 重做记录",
+    "noFeedback": "审核几条内容后，这里会出现 AI 学到的偏好",
+    "forget": "忘掉这条"
+  },
+  "automation": {
+    "navTitle": "体检与自动化",
+    "navDesc": "系统体检、每日简报、每周复盘",
+    "healthTitle": "系统体检",
+    "healthSubtitle": "模型、创意账号、发布渠道、磁盘",
+    "checkNow": "立即体检",
+    "checkedAt": "上次体检：{time}",
+    "title": "自动化",
+    "subtitle": "定时生成简报与复盘，只提醒、不自动执行写操作",
+    "daily": "每日简报",
+    "dailyDesc": "失败任务、待审核、额度与库存预警，显示在工作台",
+    "weekly": "每周复盘",
+    "weeklyDesc": "汇总产出与通过率，给出下周建议和计划草案入口",
+    "at": "每天",
+    "oclock": "点",
+    "aiSummary": "AI 总结",
+    "aiSummaryDesc": "用对话模型写一段 3 句话的总结（少量消耗）",
+    "notifications": "桌面通知",
+    "notificationsDesc": "计划完成、等待确认、新内容待审核时提醒",
+    "safetyNote": "自动化只生成简报和建议；任何会消耗额度或修改数据的计划仍需你审批。",
+    "weekday": {
+      "0": "周日",
+      "1": "周一",
+      "2": "周二",
+      "3": "周三",
+      "4": "周四",
+      "5": "周五",
+      "6": "周六"
+    }
+  },
+  "home": {
+    "kicker": "AI 带货内容团队",
+    "greeting": {
+      "night": "夜深了，",
+      "morning": "早上好，",
+      "afternoon": "下午好，",
+      "evening": "晚上好，"
+    },
+    "headline": "今天卖什么？",
+    "sub": "告诉 AI 制片人你的目标，它会规划、调度复刻 / 创意工作室 / Live Photo，并把产出交给你挑选。",
+    "goalPlaceholder": "例如：这周给新到的耳环做 6 条视频和一组 Live Photo",
+    "goalSubmit": "交给 AI",
+    "openWorkspace": "打开工作台",
+    "letAi": "让 AI 来做",
+    "lines": {
+      "clone": {
+        "title": "复刻",
+        "desc": "照着爆款视频的结构，做一条带你商品的完整成片"
+      },
+      "creative": {
+        "title": "TikTok 创意工作室",
+        "desc": "场景图换上你的商品，用 TikTok 创意账号批量出短视频"
+      },
+      "livephoto": {
+        "title": "Live Photo",
+        "desc": "场景图换上你的商品，做成可在手机上「动起来」的照片"
+      }
+    },
+    "brief": "AI 今日简报",
+    "refreshBrief": "重新生成",
+    "handToAi": "交给 AI",
+    "continue": "继续上次",
+    "noProjects": "还没有项目",
+    "noProjectsHint": "从上面三条生产线或「交给 AI」开始",
+    "toolsTitle": "工具箱",
+    "tools": {
+      "parser": "视频解析下载",
+      "subtitle": "视频批量字幕",
+      "materials": "商品图片素材",
+      "production": "批量混剪",
+      "creators": "达人管理",
+      "gmv": "GMV MAX 优化器",
+      "inventory": "店小秘库存分析",
+      "all": "全部工具"
+    },
+    "autopilot": {
+      "badge": "一个人，一条龙",
+      "title": "全自动打爆流水线",
+      "desc": "选好商品来源，其余交给 AI：它会按顺序跑完每一站，卡住时停下来告诉你原因。",
+      "cta": "启动全自动",
+      "stages": {
+        "research": {
+          "title": "选品",
+          "sub": "爆品结论"
+        },
+        "product": {
+          "title": "建商品",
+          "sub": "识别卖点"
+        },
+        "reference": {
+          "title": "找爆款",
+          "sub": "挑选参考"
+        },
+        "video": {
+          "title": "出成片",
+          "sub": "复刻 + Live Photo"
+        },
+        "review": {
+          "title": "质检",
+          "sub": "审核收件箱"
+        },
+        "publish": {
+          "title": "排期",
+          "sub": "发布草稿"
+        },
+        "insights": {
+          "title": "复盘",
+          "sub": "下一批更好"
+        }
+      }
+    }
+  },
+  "insights": {
+    "title": "数据复盘",
+    "desc": "看清每条生产线产出了多少、通过了多少、发出去多少，再决定下一步。",
+    "days": "{count} 天",
+    "generateWeekly": "生成本周复盘",
+    "produced": "产出",
+    "approved": "通过",
+    "redo": "重做",
+    "approvalRate": "通过率",
+    "published": "已发布",
+    "byLine": "按生产线",
+    "line": "生产线",
+    "dataNote": "「效果」目前以审核通过率和发布成功为准；发布渠道暂不提供播放和成交数据。",
+    "recommendations": "AI 建议",
+    "askPlan": "根据最近的复盘数据，帮我拟定下周的内容计划，优先使用通过率高的生产方式",
+    "askPlanButton": "让 AI 拟定下周计划",
+    "topProducts": "表现最好的商品",
+    "productLine": "产出 {produced} · 通过 {approved} · 发布 {published}",
+    "noData": "暂无数据",
+    "redoReasons": "常见重做原因",
+    "noRedo": "还没有重做记录",
+    "editMemory": "去完善品牌记忆",
+    "publish": "发布",
+    "publishTotal": "发布任务",
+    "publishDone": "已发布",
+    "publishDraft": "草稿待确认",
+    "publishFailed": "失败",
+    "openPublish": "打开发布中心",
+    "weeklyHistory": "历次周复盘",
+    "noWeekly": "还没有周复盘"
+  },
+  "tools": {
+    "title": "工具箱",
+    "desc": "素材获取、图片加工、视频后期和店铺运营工具，点开即用。",
+    "search": "搜索工具",
+    "recent": "最近使用",
+    "noMatch": "没有匹配的工具",
+    "back": "返回工具箱",
+    "groups": {
+      "source": "素材获取",
+      "image": "图片加工",
+      "video": "视频后期",
+      "operations": "店铺运营"
+    },
+    "items": {
+      "video-parser-download": {
+        "name": "视频解析下载",
+        "desc": "粘贴 TikTok / 抖音分享链接，解析并下载无水印视频"
+      },
+      "live-slicer": {
+        "name": "直播切片",
+        "desc": "把直播录像或长视频切成可复用的短片段"
+      },
+      "product-image-materials": {
+        "name": "商品图片素材",
+        "desc": "从视频中批量截取可复用的商品图片"
+      },
+      "product-replacement": {
+        "name": "商品替换",
+        "desc": "把场景图里的商品批量换成你的商品"
+      },
+      "product-watermark": {
+        "name": "商品品牌水印",
+        "desc": "商品图裁成正方形并加上品牌水印"
+      },
+      "video-batch-subtitle": {
+        "name": "视频批量字幕",
+        "desc": "自动识别语音，批量生成并烧录字幕"
+      },
+      "video-batch-watermark": {
+        "name": "视频批量水印",
+        "desc": "给多条视频统一加文字或图片水印"
+      },
+      "tiktok-listing-helper": {
+        "name": "TikTok 上架助手",
+        "desc": "生成商品标题、卖点和图片，导出上架表格"
+      },
+      "tiktok-creator-hub": {
+        "name": "达人管理",
+        "desc": "多店铺寄样管理与达人履约跟进"
+      },
+      "tiktok-gmv-max-optimizer": {
+        "name": "GMV MAX 优化器",
+        "desc": "分析投放数据，给出预算与 ROI 调整建议"
+      },
+      "dianxiaomi-inventory": {
+        "name": "店小秘库存分析",
+        "desc": "同步发货量，预测断货并提示补货"
+      }
+    }
+  },
+  "watermark": {
+    "videos": "选择视频",
+    "noVideos": "从素材库或电脑添加要加水印的视频",
+    "style": "水印样式",
+    "kindText": "文字水印",
+    "kindImage": "图片水印",
+    "text": "水印文字",
+    "textPlaceholder": "例如：品牌名 / 店铺名",
+    "color": "文字颜色",
+    "image": "水印图片",
+    "pickImage": "选择图片",
+    "pngHint": "建议使用透明背景的 PNG",
+    "position": "位置",
+    "positions": {
+      "top-left": "左上",
+      "top-right": "右上",
+      "center": "居中",
+      "bottom-left": "左下",
+      "bottom-right": "右下"
+    },
+    "size": "大小（占画面宽度）",
+    "opacity": "不透明度",
+    "margin": "边距",
+    "output": "输出",
+    "outputDir": "选择输出文件夹",
+    "outputDefault": "默认保存到软件数据目录",
+    "archive": "完成后存入素材库「AI 成片 / 加水印」",
+    "start": "开始处理 {count} 个视频",
+    "preview": "效果预览",
+    "previewEmpty": "填写水印文字或选择图片后显示预览",
+    "history": "处理记录",
+    "noHistory": "还没有处理记录",
+    "openDir": "打开输出文件夹",
+    "retry": "重试失败项",
+    "removeBatch": "删除记录（不删除文件）"
+  },
+  "pages": {
+    "productResearch": "选品中心"
+  }
+}

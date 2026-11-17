@@ -1,0 +1,712 @@
+{
+  "producer": "AI Producer",
+  "producerTagline": "State a goal; it plans, orchestrates and delivers",
+  "history": "History",
+  "newChat": "New conversation",
+  "untitled": "Untitled conversation",
+  "noHistory": "No conversations yet",
+  "tabs": {
+    "chat": "Chat",
+    "recipes": "Recipes"
+  },
+  "welcomeTitle": "What content shall we make today?",
+  "welcomeDesc": "Tell me the goal. I will propose a plan first (steps, estimated cost, time) and only start after you click Run. Drop in videos or images, or mention a product by name.",
+  "browseRecipes": "Browse recipes",
+  "suggest": {
+    "health": "Run a health check: are models, accounts and disk ready?",
+    "weekly": "Review the last 7 days of output and approval rate and suggest next week",
+    "failed": "Which tasks failed recently? Tell me why and how to fix them",
+    "publish": "Create publishing drafts for approved videos"
+  },
+  "thinking": "Thinking and planning…",
+  "composerPlaceholder": "e.g. Make 2 clone videos for the pearl earrings and turn the storyboard frames into Live Photos",
+  "composerHint": "Enter to send · Shift+Enter for new line · drop files",
+  "send": "Send",
+  "attachFile": "Add files from computer",
+  "attachAsset": "Add from asset library",
+  "dropHere": "Drop to attach",
+  "settingsGroup": "AI Producer",
+  "nav": {
+    "workbench": "Workbench",
+    "inbox": "Review inbox",
+    "groupCreate": "Create",
+    "groupAssets": "Assets",
+    "creativeStudio": "TikTok Creative Studio",
+    "livePhoto": "Live Photo",
+    "production": "Batch remix",
+    "publish": "Publishing",
+    "insights": "Insights",
+    "products": "Products",
+    "models": "Models",
+    "assets": "Asset library",
+    "templates": "Templates",
+    "tools": "Toolbox"
+  },
+  "line": {
+    "clone": "Clone",
+    "creative": "Creative Studio",
+    "livephoto": "Live Photo",
+    "production": "Batch remix",
+    "publish": "Publishing"
+  },
+  "contentStatus": {
+    "running": "Generating",
+    "failed": "Failed",
+    "ready": "Done",
+    "draft": "Not started"
+  },
+  "status": {
+    "draft": "Draft",
+    "planning": "Planning",
+    "waiting_approval": "Awaiting approval",
+    "running": "Running",
+    "paused": "Paused",
+    "reviewing": "Checking",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "intent": {
+    "ProductInspect": "Inspect product",
+    "ProductSave": "Save product",
+    "ProductManage": "Manage product (may delete)",
+    "ProductAnalyze": "Analyze product",
+    "MaterialPrepare": "Prepare product materials",
+    "MaterialManage": "Manage product materials",
+    "CommerceVideoCreate": "Clone video (analysis to final cut)",
+    "CloneProjectManage": "Manage clone project",
+    "ModelIdentityManage": "Manage model identity",
+    "LivePhotoCreate": "Create Live Photo",
+    "LivePhotoManage": "Manage Live Photo",
+    "SubtitleGenerate": "Generate subtitles",
+    "VideoSlice": "Slice long video",
+    "SourceVideoImport": "Import reference videos",
+    "SourceVideoManage": "Manage source videos",
+    "ListingGenerate": "Generate listing copy",
+    "ListingExport": "Export listings",
+    "ListingManage": "Manage listings",
+    "TiktokCreativeManage": "Manage creative tasks",
+    "ProductionBatchCreate": "Create batch remix",
+    "ProductionQueueControl": "Control remix queue",
+    "ProductionTaskManage": "Manage remix task",
+    "TemplateSave": "Save template",
+    "TemplateManage": "Manage template",
+    "ArtifactInspect": "Inspect outputs",
+    "ArtifactExport": "Export outputs",
+    "SystemHealthCheck": "Health check",
+    "AssetSearch": "Search asset library",
+    "AssetArchive": "Archive to asset library",
+    "CloneShotsSend": "Send frames to Creative Studio / Live Photo",
+    "CreativeFromImages": "Creative Studio: swap product into scenes",
+    "LivePhotoFromVideo": "Video to Live Photo",
+    "ReviewSubmit": "Send to review inbox",
+    "ProductImportFromLink": "Create product from link",
+    "ProductResearchPromote": "Promote winners to products",
+    "PublishDraft": "Create publishing drafts",
+    "InsightsRead": "Content insights",
+    "ReferenceDiscover": "Pick viral reference videos",
+    "OutputsAwait": "Wait for outputs to finish"
+  },
+  "plan": {
+    "approve": "Run",
+    "reject": "Don't run",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "goReview": "Review outputs",
+    "modelCalls": "~{count} model calls",
+    "modelCallsHint": "Estimated from recipe experience; actual usage may differ",
+    "accountCredits": "~{count} TikTok account credits",
+    "accountCreditsHint": "Creative Studio rendering uses TikTok creative account credits",
+    "minutes": "~{count} min",
+    "awaitingConfirmation": "\"{title}\" changes or deletes data and needs your confirmation before it runs.",
+    "confirmStep": "Confirm this step",
+    "dependencyFailed": "Skipped because the previous step failed",
+    "noModelCalls": "No model usage"
+  },
+  "notice": {
+    "runCompleted": "AI Producer finished a plan; outputs are in the review inbox",
+    "runFailed": "A plan failed. Open AI Producer to see why",
+    "awaitingConfirmation": "AI Producer is waiting for your confirmation"
+  },
+  "tray": {
+    "title": "Tasks",
+    "desc": "AI Producer plans and progress, running in the background",
+    "empty": "No plans yet. Press Ctrl+J to open AI Producer."
+  },
+  "command": {
+    "placeholder": "Search products, projects, pages, or tell AI what to do…",
+    "short": "Search or command",
+    "ask": "Ask AI Producer: {text}",
+    "askHint": "Creates a plan that runs after approval",
+    "productSpace": "Product space",
+    "empty": "No matches",
+    "navigate": "Select",
+    "open": "Open",
+    "groups": {
+      "ai": "AI Producer",
+      "recipe": "Recipes",
+      "page": "Pages",
+      "product": "Products",
+      "project": "Projects",
+      "asset": "Assets"
+    }
+  },
+  "recipes": {
+    "intro": "Recipes are ready-made plans: fill in a few inputs, AI builds the full plan, you approve and it runs.",
+    "makePlan": "Create plan",
+    "approvalNote": "You will see a plan card (steps, estimated cost, time) first; nothing starts until you click Run.",
+    "pack": {
+      "title": "One product, a full content pack",
+      "desc": "Pick a product and reference videos; AI clones final cuts and reuses frames for Live Photos / creative shorts",
+      "output": "Output: N clone videos + frame Live Photos",
+      "prompt": "Make a content pack for this product: clone {count} reference videos and reuse the storyboard frames",
+      "summary": "Clone {count} reference videos, send frames to other lines, then to the review inbox"
+    },
+    "scene": {
+      "title": "Scene images to videos",
+      "desc": "Swap your product into nice scene images and render shorts / Live Photos in bulk",
+      "output": "Output: one short or Live Photo per image",
+      "promptCreative": "Use Creative Studio to swap this product into {count} scene images and render videos",
+      "promptLivePhoto": "Swap this product into {count} scene images and make Live Photos",
+      "summaryCreative": "{count} scene images, product swap, TikTok creative accounts render, review",
+      "summaryLivePhoto": "{count} scene images, product swap, model motion, Live Photo, review"
+    },
+    "viral": {
+      "title": "Follow a viral video",
+      "desc": "Paste viral links; AI downloads them and clones one video per product",
+      "output": "Output: one clone video per product",
+      "prompt": "Follow {links} viral videos and clone one for each of {products} products",
+      "summary": "Import {links} viral videos, clone for {products} products, review"
+    },
+    "winners": {
+      "title": "Winners to products",
+      "desc": "Add products concluded as winners in product research to the product library",
+      "output": "Output: new winning products",
+      "prompt": "Add the winners from product research to the product library",
+      "summary": "Read research winners and create products"
+    },
+    "link": {
+      "title": "Product from link",
+      "desc": "Paste a product page link; title and main image are read automatically",
+      "output": "Output: one new product",
+      "prompt": "Create a product from this link: {url}",
+      "summary": "Read link and create product"
+    },
+    "publish": {
+      "title": "Schedule approved content",
+      "desc": "Create publishing drafts for approved videos with optional spacing; you still confirm publishing in Publishing",
+      "output": "Output: publishing drafts / schedule",
+      "prompt": "Create publishing drafts for approved videos that are not published yet",
+      "summary": "Collect approved videos and create drafts (you confirm publishing)"
+    },
+    "autopilot": {
+      "title": "Autopilot",
+      "desc": "From product research to publish drafts in one run: product → viral reference → clone video → QC → schedule → review",
+      "output": "Output: N videos per product + Live Photos + publish drafts + next-step insights",
+      "prompt": "Autopilot: take products all the way to finished videos, review and publish drafts",
+      "summary": "Health check → prepare products → find references → clone videos → wait for outputs → review{publish} → insights",
+      "summaryPublish": " → publish drafts"
+    }
+  },
+  "fields": {
+    "product": "Product",
+    "productOptional": "Product (optional, all products if empty)",
+    "products": "Products (multiple)",
+    "productsHint": "One clone per product",
+    "selectProduct": "Select a product",
+    "noProducts": "The product library is empty",
+    "referenceVideos": "Reference videos",
+    "referenceVideosHint": "One clone project per reference video; 1 to 3 recommended",
+    "variantCount": "Script variants",
+    "variantCountHint": "How many script versions each project generates",
+    "shotsToLivePhoto": "Also turn frames into Live Photos",
+    "shotsToCreative": "Also render frames in Creative Studio (uses account credits)",
+    "sceneImages": "Scene images",
+    "sceneImagesHint": "Competitor product shots or nice scenes; AI swaps in your product",
+    "engine": "Render with",
+    "engineCreative": "TikTok Creative Studio (account credits)",
+    "engineLivePhoto": "Model API + Live Photo",
+    "viralLinks": "Viral links",
+    "viralLinksHint": "One TikTok / Douyin share link per line",
+    "scheme": "Research scheme",
+    "productUrl": "Product link",
+    "productNameOptional": "Product name (used if the title cannot be read)",
+    "startAt": "First publish time",
+    "startAtHint": "Leave empty to create drafts only",
+    "intervalHours": "Hours between posts",
+    "fromLibrary": "From asset library",
+    "fromDisk": "From computer",
+    "selectedCount": "{count} selected",
+    "required": "Required",
+    "on": "On",
+    "off": "Off",
+    "autopilotSource": "Where products come from",
+    "sourceScheme": "Winners of a research scheme",
+    "sourceLink": "Paste a product link",
+    "sourceProducts": "Products already in the library",
+    "referenceMode": "Viral reference videos",
+    "referenceAuto": "Let AI pick (downloaded virals / reference folders)",
+    "referenceLinks": "I will paste viral links",
+    "referenceCount": "Reference videos per product",
+    "referenceCountHint": "Each reference video becomes one clone project per product",
+    "autoApprove": "Auto-approve finished videos and create publish drafts",
+    "autoApproveHint": "Only applies to outputs of this run; you still confirm publishing in the Publish Center"
+  },
+  "inbox": {
+    "title": "Review inbox",
+    "desc": "Every clone video, creative short and Live Photo AI produces lands here. You choose: approve, redo or discard.",
+    "tabs": {
+      "pending": "To review",
+      "approved": "Approved",
+      "redo": "Redo",
+      "discarded": "Discarded"
+    },
+    "decided": {
+      "approved": "Approved and saved to the \"AI 成片\" asset folder",
+      "redo": "Marked for redo; the reason was added to brand memory",
+      "discarded": "Discarded"
+    },
+    "allLines": "All lines",
+    "approve": "Approve",
+    "redo": "Redo",
+    "discard": "Discard",
+    "switch": "Switch",
+    "undo": "Undo",
+    "undone": "Undone, back to review",
+    "prev": "Previous",
+    "next": "Next",
+    "product": "Product",
+    "finishedAt": "Finished",
+    "decision": "Decision",
+    "note": "Note",
+    "redoReason": "Reason",
+    "notePlaceholder": "Optional note, saved to brand memory",
+    "redoHint": "Reasons go into brand memory so AI avoids them next time. Open the project to regenerate.",
+    "confirmRedo": "Confirm redo",
+    "openProject": "Open project",
+    "toLivePhoto": "Make Live Photo",
+    "toLivePhotoPrompt": "Turn \"{title}\" into a Live Photo",
+    "publishOne": "Create publishing draft",
+    "publishAll": "Draft all for publishing",
+    "publishPrompt": "Create publishing drafts for {count} approved videos",
+    "emptyPending": "Nothing to review",
+    "empty": "Nothing here yet",
+    "emptyHint": "Let AI Producer run a recipe; finished outputs show up here automatically.",
+    "startRecipe": "Make a content pack"
+  },
+  "redo": {
+    "product_mismatch": "Product doesn't match",
+    "weird_motion": "Awkward motion",
+    "blurry": "Blurry",
+    "bad_composition": "Poor composition",
+    "off_brand": "Off brand",
+    "subtitle_issue": "Subtitle issue",
+    "other": "Other"
+  },
+  "space": {
+    "tab": "Product space",
+    "profileTab": "Product profile",
+    "makeShort": "AI content pack",
+    "makeTitle": "Make content for this product",
+    "makeDesc": "Pick a recipe; AI drafts a plan and runs it after approval. Outputs come back here and to the review inbox.",
+    "askAi": "Ask AI",
+    "askPrompt": "About the product \"{name}\": ",
+    "nextSteps": "Next steps",
+    "suggestFirst": "No content yet: make the first content pack",
+    "suggestReview": "{count} outputs waiting for review",
+    "suggestFailed": "{count} tasks failed; let AI investigate",
+    "suggestPublish": "{count} approved videos can be scheduled",
+    "suggestMore": "Scale up with new reference videos or scene images",
+    "failedPrompt": "Check the recent failed tasks of \"{name}\", explain why and propose retries",
+    "statDetail": "{running} running · {approved} approved",
+    "content": "All content",
+    "clearFilter": "Clear filter",
+    "noContent": "No content for this product yet",
+    "memory": "Product memory",
+    "memoryHint": "AI uses this when planning content for this product",
+    "sellingPoints": "Selling points",
+    "audience": "Audience",
+    "avoid": "Avoid",
+    "notes": "Notes",
+    "saved": "Saved",
+    "lineage": "Content lineage",
+    "noLineage": "No lineage yet; content linked by AI is recorded here",
+    "relation": {
+      "derived_from": "produced",
+      "sent_to": "sent to",
+      "archived_as": "archived as",
+      "published_as": "published as",
+      "created_by_run": "created by plan",
+      "product_of": "produced"
+    },
+    "refKind": {
+      "clone": "Clone",
+      "creative": "Creative Studio",
+      "livephoto": "Live Photo",
+      "product": "Product",
+      "asset": "Asset",
+      "publish": "Publishing",
+      "url": "Link",
+      "research": "Research",
+      "file": "File",
+      "production": "Remix"
+    }
+  },
+  "spine": {
+    "title": "Product pipeline",
+    "bind": "Link shop product",
+    "editBind": "Edit link",
+    "bound": "{count} shop product(s) linked",
+    "bindTitle": "Link TikTok Shop product",
+    "bindDesc": "Pick the shop product that \"{name}\" is sold as. Ads and creator data will be grouped under this product.",
+    "searchPlaceholder": "Search by product name or ID",
+    "untitled": "Untitled product",
+    "noCandidates": "No shop products synced yet. Enter a product ID below.",
+    "manualPlaceholder": "Enter a TikTok product ID",
+    "addManual": "Add",
+    "pickedCount": "{count} selected",
+    "needBind": "Link a shop product to see this",
+    "adsEmpty": "No ad data in the last 14 days",
+    "creatorsEmpty": "No creator data yet",
+    "contentDetail": "Ready videos · {running} generating",
+    "publishDetail": "Published videos",
+    "adsDetail": "{spend} spent in {days} days · {creatives} active creatives",
+    "creatorsDetail": "Creator videos · {samples} samples · GMV {gmv}",
+    "noSignals": "Nothing in the ad or creator data needs attention right now.",
+    "variantPrompt": "For product \"{product}\", creative \"{name}\" sells best. Make a batch of variants that follow its structure.",
+    "stage": {
+      "content": "Content",
+      "publish": "Publish",
+      "ads": "Ads",
+      "creators": "Creators"
+    },
+    "level": {
+      "warning": "Action",
+      "success": "Opportunity",
+      "info": "Note"
+    },
+    "source": {
+      "ads": "Ads",
+      "creators": "Creators",
+      "publish": "Publish"
+    },
+    "action": {
+      "bind": "Link now",
+      "make_content": "Make more content",
+      "make_variant": "Make variants",
+      "open_ads": "Open ads",
+      "open_creators": "Open creators"
+    },
+    "signal": {
+      "bind_channel": "No shop product is linked, so ads and creator data cannot be grouped under this product.",
+      "ads_need_creatives": "Only {active} creative(s) spent in the last 3 days, below {target}. There is not enough to rotate.",
+      "ads_winner": "Creative \"{name}\" has ROI {roi}, above the product average of {avgRoi}, with {orders} orders.",
+      "ads_fatigue": "Top creative \"{name}\" dropped from ROI {previousRoi} to {recentRoi} in the last 3 days.",
+      "ads_concentration": "Creative \"{name}\" takes {share}% of spend. The product depends on a single creative.",
+      "ads_unprofitable": "ROI over 14 days is {roi}, below the break-even ROI of {breakEvenRoi}.",
+      "creator_winner": "The video \"{name}\" by creator {creator} drove {orders} orders. Use it as a reference.",
+      "creators_awaiting_content": "{count} creator(s) received samples and have not posted yet."
+    }
+  },
+  "perf": {
+    "title": "Sales proof",
+    "hint": "Ad data from the last {days} days · product average ROI {roi}",
+    "empty": "No video is matched to an ad creative yet. Matching happens automatically once a video is published and running; you can also link manually below.",
+    "unmatched": "{count} published video(s) are not matched to an ad creative yet.",
+    "unlinkedTitle": "Unlinked ad creatives",
+    "creativeStats": "{spend} spent · ROI {roi} · {orders} orders",
+    "pickContent": "Pick the matching video",
+    "noLinkable": "No video available to link",
+    "link": "Link",
+    "unlink": "Unlink",
+    "orders": "{count} orders",
+    "variantPrompt": "For product \"{product}\", the {line} video \"{title}\" has ROI {roi} with {orders} orders and is the best seller so far. Make a batch of variants that keep its structure.",
+    "col": {
+      "content": "Video",
+      "verdict": "Verdict",
+      "spend": "Spend",
+      "revenue": "Revenue",
+      "orders": "Orders",
+      "creative": "Ad creative",
+      "linkTo": "Link to video"
+    },
+    "verdict": {
+      "winner": "Sells well",
+      "average": "Average",
+      "weak": "Not selling",
+      "unproven": "No spend"
+    },
+    "method": {
+      "auto": "auto-matched",
+      "manual": "linked manually"
+    },
+    "variantPlanPrompt": "Video \"{title}\" has ROI {roi} with {orders} orders. Make {count} variants from its reference video with the same product and model, each with a different script angle.",
+    "variantPlanSummary": "{count} variants of \"{title}\" → review",
+    "noLinkableHint": "No finished video to link yet. Come back once a video is ready.",
+    "showAll": "Show all {count}",
+    "collapse": "Show less"
+  },
+  "brand": {
+    "title": "Brand memory",
+    "navDesc": "Tone, banned words and learned preferences",
+    "subtitle": "Every AI plan carries these requirements",
+    "brandName": "Brand name",
+    "watermarkText": "Watermark text",
+    "tone": "Brand tone",
+    "tonePlaceholder": "e.g. premium, clean, no hype words",
+    "audience": "Audience",
+    "audiencePlaceholder": "e.g. women 18 to 30 who like everyday commute outfits",
+    "bannedWords": "Banned words",
+    "bannedWordsPlaceholder": "Comma separated, e.g. cheapest, number one, guaranteed",
+    "subtitleStyle": "Subtitle style",
+    "notes": "Other requirements",
+    "hint": "Applies to the next plan",
+    "learned": "Learned preferences",
+    "learnedHint": "From approve / redo decisions in the review inbox",
+    "noFeedback": "Review a few outputs and learned preferences will appear here",
+    "forget": "Forget this"
+  },
+  "automation": {
+    "navTitle": "Health & automation",
+    "navDesc": "Health check, daily brief, weekly review",
+    "healthTitle": "Health check",
+    "healthSubtitle": "Models, creative accounts, publishing, disk",
+    "checkNow": "Check now",
+    "checkedAt": "Last checked: {time}",
+    "title": "Automation",
+    "subtitle": "Scheduled briefs and reviews; reminders only, never automatic write actions",
+    "daily": "Daily brief",
+    "dailyDesc": "Failures, pending reviews, credit and stock alerts on the workbench",
+    "weekly": "Weekly review",
+    "weeklyDesc": "Output and approval summary with next-week suggestions",
+    "at": "Daily at",
+    "oclock": ":00",
+    "aiSummary": "AI summary",
+    "aiSummaryDesc": "Uses the chat model to write a 3-sentence summary (small cost)",
+    "notifications": "Desktop notifications",
+    "notificationsDesc": "When plans finish, need confirmation or new outputs await review",
+    "safetyNote": "Automation only creates briefs and suggestions; any plan that spends credits or changes data still needs your approval.",
+    "weekday": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    }
+  },
+  "home": {
+    "kicker": "Your AI commerce content team",
+    "greeting": {
+      "night": "Working late? ",
+      "morning": "Good morning. ",
+      "afternoon": "Good afternoon. ",
+      "evening": "Good evening. "
+    },
+    "headline": "What are we selling today?",
+    "sub": "Tell AI Producer your goal. It plans and runs Clone / Creative Studio / Live Photo and hands you the outputs to pick from.",
+    "goalPlaceholder": "e.g. This week make 6 videos and a set of Live Photos for the new earrings",
+    "goalSubmit": "Hand to AI",
+    "openWorkspace": "Open workspace",
+    "letAi": "Let AI do it",
+    "lines": {
+      "clone": {
+        "title": "Clone",
+        "desc": "Follow a viral video's structure to make a full cut with your product"
+      },
+      "creative": {
+        "title": "TikTok Creative Studio",
+        "desc": "Swap your product into scene images and render shorts with TikTok creative accounts"
+      },
+      "livephoto": {
+        "title": "Live Photo",
+        "desc": "Swap your product into scene images and make photos that move on phones"
+      }
+    },
+    "brief": "AI daily brief",
+    "refreshBrief": "Regenerate",
+    "handToAi": "Hand to AI",
+    "continue": "Continue",
+    "noProjects": "No projects yet",
+    "noProjectsHint": "Start from one of the lines above or hand a goal to AI",
+    "toolsTitle": "Toolbox",
+    "tools": {
+      "parser": "Video download",
+      "subtitle": "Batch subtitles",
+      "materials": "Video to images",
+      "production": "Batch remix",
+      "creators": "Creators",
+      "gmv": "GMV MAX",
+      "inventory": "Inventory",
+      "all": "All tools"
+    },
+    "autopilot": {
+      "badge": "One person, end to end",
+      "title": "Autopilot pipeline",
+      "desc": "Choose where products come from and let AI run every station in order. It stops and tells you why when something blocks it.",
+      "cta": "Start autopilot",
+      "stages": {
+        "research": {
+          "title": "Research",
+          "sub": "Winning products"
+        },
+        "product": {
+          "title": "Product",
+          "sub": "Selling points"
+        },
+        "reference": {
+          "title": "Virals",
+          "sub": "Pick references"
+        },
+        "video": {
+          "title": "Videos",
+          "sub": "Clone + Live Photo"
+        },
+        "review": {
+          "title": "QC",
+          "sub": "Review inbox"
+        },
+        "publish": {
+          "title": "Schedule",
+          "sub": "Publish drafts"
+        },
+        "insights": {
+          "title": "Insights",
+          "sub": "Better next batch"
+        }
+      }
+    }
+  },
+  "insights": {
+    "title": "Insights",
+    "desc": "See what each line produced, how much was approved and published, then decide what's next.",
+    "days": "{count} days",
+    "generateWeekly": "Generate weekly review",
+    "produced": "Produced",
+    "approved": "Approved",
+    "redo": "Redo",
+    "approvalRate": "Approval",
+    "published": "Published",
+    "byLine": "By production line",
+    "line": "Line",
+    "dataNote": "Performance currently means approval rate and publishing success; the publishing channel does not expose views or sales yet.",
+    "recommendations": "AI suggestions",
+    "askPlan": "Based on the recent review data, draft next week's content plan, favouring the lines with the best approval rate",
+    "askPlanButton": "Let AI draft next week",
+    "topProducts": "Top products",
+    "productLine": "{produced} produced · {approved} approved · {published} published",
+    "noData": "No data yet",
+    "redoReasons": "Top redo reasons",
+    "noRedo": "No redo records yet",
+    "editMemory": "Improve brand memory",
+    "publish": "Publishing",
+    "publishTotal": "Publishing tasks",
+    "publishDone": "Published",
+    "publishDraft": "Drafts to confirm",
+    "publishFailed": "Failed",
+    "openPublish": "Open Publishing",
+    "weeklyHistory": "Weekly reviews",
+    "noWeekly": "No weekly reviews yet"
+  },
+  "tools": {
+    "title": "Toolbox",
+    "desc": "Tools for sourcing, image editing, video post-production and shop operations.",
+    "search": "Search tools",
+    "recent": "Recently used",
+    "noMatch": "No matching tools",
+    "back": "Back to toolbox",
+    "groups": {
+      "source": "Sourcing",
+      "image": "Image editing",
+      "video": "Video post",
+      "operations": "Shop operations"
+    },
+    "items": {
+      "video-parser-download": {
+        "name": "Video download",
+        "desc": "Paste TikTok / Douyin share links to download videos without watermark"
+      },
+      "live-slicer": {
+        "name": "Live slicer",
+        "desc": "Cut live recordings or long videos into reusable clips"
+      },
+      "product-image-materials": {
+        "name": "Product image materials",
+        "desc": "Extract reusable product images from videos in bulk"
+      },
+      "product-replacement": {
+        "name": "Product replacement",
+        "desc": "Swap the product in scene images with yours in bulk"
+      },
+      "product-watermark": {
+        "name": "Product brand watermark",
+        "desc": "Crop product images to squares and add your brand watermark"
+      },
+      "video-batch-subtitle": {
+        "name": "Batch subtitles",
+        "desc": "Transcribe speech and burn subtitles in bulk"
+      },
+      "video-batch-watermark": {
+        "name": "Batch video watermark",
+        "desc": "Add a text or image watermark to many videos at once"
+      },
+      "tiktok-listing-helper": {
+        "name": "TikTok listing helper",
+        "desc": "Generate titles, selling points and images, then export listing sheets"
+      },
+      "tiktok-creator-hub": {
+        "name": "Creators",
+        "desc": "Multi-shop sample management and creator follow-up"
+      },
+      "tiktok-gmv-max-optimizer": {
+        "name": "GMV MAX optimizer",
+        "desc": "Analyse ad data and suggest budget and ROI changes"
+      },
+      "dianxiaomi-inventory": {
+        "name": "Dianxiaomi inventory",
+        "desc": "Sync shipments, forecast stockouts and flag reorders"
+      }
+    }
+  },
+  "watermark": {
+    "videos": "Videos",
+    "noVideos": "Add videos from the asset library or your computer",
+    "style": "Watermark",
+    "kindText": "Text",
+    "kindImage": "Image",
+    "text": "Watermark text",
+    "textPlaceholder": "e.g. brand or shop name",
+    "color": "Text color",
+    "image": "Watermark image",
+    "pickImage": "Choose image",
+    "pngHint": "A transparent PNG works best",
+    "position": "Position",
+    "positions": {
+      "top-left": "Top left",
+      "top-right": "Top right",
+      "center": "Center",
+      "bottom-left": "Bottom left",
+      "bottom-right": "Bottom right"
+    },
+    "size": "Size (of frame width)",
+    "opacity": "Opacity",
+    "margin": "Margin",
+    "output": "Output",
+    "outputDir": "Choose output folder",
+    "outputDefault": "Saved to the app data folder by default",
+    "archive": "Save results to the asset library",
+    "start": "Process {count} videos",
+    "preview": "Preview",
+    "previewEmpty": "Enter text or choose an image to preview",
+    "history": "History",
+    "noHistory": "No batches yet",
+    "openDir": "Open output folder",
+    "retry": "Retry failed",
+    "removeBatch": "Remove record (files are kept)"
+  },
+  "pages": {
+    "productResearch": "Product research"
+  }
+}

@@ -1,6 +1,12 @@
-import type { CreatorHubSampleFulfillment, CreatorHubSampleStage } from '@/../../shared/creatorHub'
+import type { CreatorHubContactStatus, CreatorHubSampleFulfillment, CreatorHubSampleStage } from '@/../../shared/creatorHub'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
+
+/** Which creator the detail dialog shows (header data is available before the detail loads). */
+export type CreatorDetailTarget = { shopId: string; creatorId: string; handle: string; nickname: string; avatar?: string }
+
+/** What the detail dialog saves: the local profile plus the contact fields. */
+export type DetailSavePayload = { tags: string[]; note: string; blocked: boolean; contact: { zalo: string; phone: string; email: string; status: CreatorHubContactStatus } }
 
 export const SAMPLE_STAGES: CreatorHubSampleStage[] = ['pending_review', 'ready_to_ship', 'shipped', 'awaiting_content', 'completed', 'cancelled']
 
@@ -55,7 +61,7 @@ export function formatDateTime(ts?: number) {
 
 const KNOWN_ERRORS = [
   'COOKIE_JSON_INVALID', 'COOKIE_EMPTY', 'COOKIE_NO_SESSION', 'COOKIE_SET_FAILED', 'COOKIE_SHOP_MISMATCH', 'LOGIN_EXPIRED',
-  'SECURE_STORAGE_UNAVAILABLE', 'SHOP_NOT_FOUND', 'SYNC_RUNNING', 'SYNC_INTERRUPTED', 'SYNC_FAILED', 'COST_INVALID', 'PRODUCT_REQUIRED', 'SHOP_NAME_REQUIRED', 'CREATOR_REQUIRED',
+  'SECURE_STORAGE_UNAVAILABLE', 'SHOP_NOT_FOUND', 'SYNC_RUNNING', 'SYNC_INTERRUPTED', 'SYNC_FAILED', 'COST_INVALID', 'PRODUCT_REQUIRED', 'SHOP_NAME_REQUIRED', 'CREATOR_REQUIRED', 'DISCOVER_RUNNING', 'PHONE_INVALID', 'EMAIL_INVALID', 'TEMPLATE_REQUIRED',
 ]
 
 /** Maps `CREATOR_HUB_*` error codes from the main process to localised text. */

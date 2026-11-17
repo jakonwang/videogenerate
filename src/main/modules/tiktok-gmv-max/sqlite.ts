@@ -371,6 +371,18 @@ export const gmvMaxRepo = {
   },
   saveStoreCost(item: GmvMaxStoreCost) { upsert('gmv_store_costs', ['id', 'store_id', 'updated_at'], [item.id, item.storeId, item.updatedAt], item); return item },
   listProductCosts: () => list<GmvMaxProductCost>('gmv_product_costs'),
+  /** Name and image of catalog products, for showing a product picture next to the videos that sell it. */
+  listProductImages(storeIds: string[], productIds: string[]) {
+    const uniqueStoreIds = [...new Set(storeIds.filter(Boolean))]
+    const uniqueProductIds = [...new Set(productIds.filter(Boolean))]
+    if (!uniqueStoreIds.length || !uniqueProductIds.length) return [] as Array<{ storeId: string; productId: string; productName: string; imageUrl: string }>
+    return (getDatabase().prepare(`
+      SELECT store_id, product_id, json_extract(payload, '$.productName') AS product_name, json_extract(payload, '$.imageUrl') AS image_url
+      FROM gmv_product_costs
+      WHERE store_id IN (${uniqueStoreIds.map(() => '?').join(', ')}) AND product_id IN (${uniqueProductIds.map(() => '?').join(', ')})
+    `).all(...uniqueStoreIds, ...uniqueProductIds) as Array<{ store_id: string; product_id: string; product_name: string | null; image_url: string | null }>)
+      .map((row) => ({ storeId: String(row.store_id), productId: String(row.product_id), productName: String(row.product_name || ''), imageUrl: String(row.image_url || '') }))
+  },
   listProductCostsForScope(storeIds: string[], campaignIds: string[]) {
     const uniqueStoreIds = [...new Set(storeIds.filter(Boolean))]
     const uniqueCampaignIds = [...new Set(campaignIds.filter(Boolean))]
@@ -473,6 +485,25 @@ export const gmvMaxRepo = {
       .all(...parameters)
       .map((row: any) => JSON.parse(String(row.payload)) as GmvMaxCreativeMetric)
   },
+  /** Daily creative rows for a set of TikTok Shop product ids (item_group_id), across every campaign. */
+  listCreativeDailyForProducts(productIds: string[], startDate: string, endDate: string) {
+    const ids = [...new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean))]
+    if (!ids.length) return []
+    return getDatabase().prepare(`SELECT campaign_id AS campaignId, creative_id AS creativeId, item_group_id AS productId, stat_day AS statDay,
+        MAX(cost) AS cost, MAX(gross_revenue) AS grossRevenue, MAX(orders) AS orders,
+        MAX(COALESCE(json_extract(payload, '$.creativeName'), '')) AS creativeName
+      FROM gmv_creative_metrics
+      WHERE stat_day >= ? AND stat_day <= ? AND item_group_id IN (${ids.map(() => '?').join(', ')})
+      GROUP BY campaign_id, creative_id, item_group_id, stat_day`)
+      .all(startDate, endDate, ...ids) as Array<{ campaignId: string; creativeId: string; productId: string; statDay: string; cost: number; grossRevenue: number; orders: number; creativeName: string }>
+  },
+  /** Only the fields needed for "latest status per creative", without parsing whole metric payloads. */
+  listCreativeStatusesRange(startDate: string, endDate: string, campaignIds: string[]) {
+    const ids = [...new Set(campaignIds.filter(Boolean))]
+    if (!ids.length) return []
+    return getDatabase().prepare(`SELECT campaign_id AS campaignId, COALESCE(json_extract(payload, '$.itemId'), creative_id) AS itemKey, stat_date AS statDate, json_extract(payload, '$.status') AS status FROM gmv_creative_metrics WHERE stat_day >= ? AND stat_day <= ? AND campaign_id IN (${ids.map(() => '?').join(', ')})`)
+      .all(startDate, endDate, ...ids) as Array<{ campaignId: string; itemKey: string; statDate: string; status: string | null }>
+  },
   listCreativeMetricAggregatesRange(startDate: string, endDate: string, input?: { campaignIds?: string[]; storeId?: string; source?: string }) {
     const conditions = ['stat_day >= ?', 'stat_day <= ?']
     const parameters: string[] = [startDate, endDate]
@@ -556,9 +587,12 @@ export const gmvMaxRepo = {
       filters.push(`(LOWER(sample_payload) LIKE ? OR LOWER(campaign_name) LIKE ? OR LOWER(asset_name) LIKE ?)`)
       filterParameters.push(`%${search}%`, `%${search}%`, `%${search}%`)
     }
-    if (input?.state && input.state !== 'all') {
-      filters.push('(intelligence_state = ? OR derived_label = ?)')
-      filterParameters.push(input.state, input.state)
+    // A comma-separated list lets one simple status tab cover several intelligence states (e.g. "winner,stable").
+    const states = [...new Set(String(input?.state || '').split(',').map((item) => item.trim()).filter((item) => item && item !== 'all'))]
+    if (states.length) {
+      const placeholders = states.map(() => '?').join(', ')
+      filters.push(`(intelligence_state IN (${placeholders}) OR derived_label IN (${placeholders}))`)
+      filterParameters.push(...states, ...states)
     }
     if (Number(input?.minSpend) > 0) { filters.push('cost >= ?'); filterParameters.push(Number(input?.minSpend)) }
     if (Number(input?.minOrders) > 0) { filters.push('orders >= ?'); filterParameters.push(Number(input?.minOrders)) }
@@ -770,6 +804,11 @@ export const gmvMaxRepo = {
       .map((row: any) => JSON.parse(String(row.payload)) as GmvMaxCreativeAsset)
   },
   saveCreativeAsset(item: GmvMaxCreativeAsset) { upsert('gmv_creative_assets', ['id', 'store_id', 'synced_at'], [item.id, item.storeId, item.syncedAt], item); return item },
+  /** Cheap change marker per campaign (sample count and newest sync time), used to cache pacing results. */
+  realtimeSampleVersions() {
+    const rows = getDatabase().prepare('SELECT campaign_id, COUNT(*) AS total, MAX(synced_at) AS latest FROM gmv_realtime_samples GROUP BY campaign_id').all() as Array<{ campaign_id: string; total: number; latest: number }>
+    return new Map(rows.map((row) => [String(row.campaign_id), `${row.total}:${row.latest}`]))
+  },
   listRealtimeSamples(campaignId?: string) {
     if (!campaignId) return list<GmvMaxRealtimeSample>('gmv_realtime_samples', 'synced_at DESC')
     return getDatabase().prepare('SELECT payload FROM gmv_realtime_samples WHERE campaign_id = ? ORDER BY synced_at ASC').all(campaignId).map((row: any) => JSON.parse(String(row.payload)) as GmvMaxRealtimeSample)
@@ -903,6 +942,15 @@ export const gmvMaxRepo = {
   saveRuntimeState(item: GmvMaxSchedulerState) {
     upsert('gmv_runtime_state', ['id', 'updated_at'], ['default', item.updatedAt], item)
     return item
+  },
+  /** Small keyed JSON records (V2 settings, manual change log) stored next to the scheduler state. */
+  getRuntimeRecord<T>(id: string): T | null {
+    const row = getDatabase().prepare('SELECT payload FROM gmv_runtime_state WHERE id = ?').get(id) as any
+    return row ? JSON.parse(String(row.payload)) as T : null
+  },
+  saveRuntimeRecord<T>(id: string, payload: T) {
+    upsert('gmv_runtime_state', ['id', 'updated_at'], [id, Date.now()], payload)
+    return payload
   },
   listLearningSnapshots(campaignId?: string) {
     if (!campaignId) return list<GmvMaxLearningSnapshot>('gmv_learning_snapshots', 'analyzed_at DESC')

@@ -15,6 +15,7 @@ import type {
   ProductResearchScheme,
   ProductResearchSchemeState,
   ProductResearchSchemeStatus,
+  ProductResearchTaskStatus,
 } from '../../../shared/productResearch'
 
 type PersistedState = {
@@ -42,6 +43,8 @@ type SocketMessage = {
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const PAIRING_TTL_MS = 5 * 60 * 1000
 const PRODUCT_RESEARCH_PORT = 41688
+/** 手机 App 采集结果统一归入的方案 */
+const MOBILE_SCHEME_ID = 'mobile-collect'
 
 function localIpv4Address() {
   const interfaces = Object.entries(networkInterfaces())
@@ -468,6 +471,62 @@ class ProductResearchService {
     }
     await this.persist()
     return scheme
+  }
+
+  /**
+   * 导入手机 App 上直接采集的结果（经云端同步而来），统一放进「手机采集」方案，
+   * 之后可以和电脑下发的采集一样走分析、确定商品的流程。重复导入同一条会跳过。
+   */
+  async importMobileCollection(input: {
+    tasks: Array<{ id: string; keyword: string; targetCount: number; collected: number; status: string; error?: string; startedAt: number; finishedAt?: number }>
+    results: Array<Omit<ProductResearchResult, 'schemeId' | 'shopName' | 'confidence' | 'imageDataUrl'> & { imagePath?: string }>
+  }): Promise<{ tasks: number; results: number }> {
+    await this.ensureLoaded()
+    if (!input.tasks.length && !input.results.length) return { tasks: 0, results: 0 }
+    let scheme = this.state.schemes.find((item) => item.id === MOBILE_SCHEME_ID)
+    if (!scheme) {
+      const ts = Date.now()
+      scheme = { id: MOBILE_SCHEME_ID, name: '手机采集', need: '在 TiktokCut 手机 App 上直接采集的抖音商品', market: '抖音', status: 'active', sopStage: 2, keywordCount: 0, resultCount: 0, candidateCount: 0, createdAt: ts, updatedAt: ts }
+      this.state.schemes.push(scheme)
+    }
+    const schemeState = (this.state.schemeStates[MOBILE_SCHEME_ID] ??= { keywords: [], candidateIds: [], productEdits: [], liveTestRecords: [] })
+    const statusOf = (value: string): ProductResearchTaskStatus =>
+      value === 'completed' || value === 'failed' || value === 'cancelled' || value === 'running' ? value : 'completed'
+
+    let tasks = 0
+    for (const item of input.tasks) {
+      const existing = this.state.tasks.find((task) => task.id === item.id)
+      const next: ProductResearchTask = {
+        id: item.id,
+        schemeId: MOBILE_SCHEME_ID,
+        keyword: item.keyword,
+        sort: 'sales',
+        targetCount: item.targetCount,
+        status: statusOf(item.status),
+        collectedCount: item.collected,
+        createdAt: item.startedAt,
+        startedAt: item.startedAt,
+        completedAt: item.finishedAt,
+        error: item.error,
+      }
+      if (existing) Object.assign(existing, next)
+      else this.state.tasks.push(next)
+      tasks += 1
+      if (item.keyword && !schemeState.keywords.some((keyword) => keyword.value === item.keyword)) {
+        schemeState.keywords.push({ id: `${MOBILE_SCHEME_ID}-kw-${randomUUID()}`, value: item.keyword, status: 'collected' })
+      }
+    }
+
+    let results = 0
+    for (const item of input.results) {
+      if (this.state.results.some((result) => result.id === item.id)) continue
+      this.state.results.push({ ...item, schemeId: MOBILE_SCHEME_ID, shopName: '', confidence: 0.88 })
+      results += 1
+    }
+    scheme.keywordCount = schemeState.keywords.length
+    scheme.updatedAt = Date.now()
+    await this.persist()
+    return { tasks, results }
   }
 
   async listSchemes(): Promise<ProductResearchScheme[]> {

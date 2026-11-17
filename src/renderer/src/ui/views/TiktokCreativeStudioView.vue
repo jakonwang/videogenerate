@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { openAssetLibraryPicker } from "@/lib/assetLibraryPicker";
@@ -150,6 +150,7 @@ type Shot = {
     imagePromptPreview?: unknown;
     replacementRegion?: ReplacementRegion;
     generationAttempts?: Array<{ outputPath?: string }>;
+    generationAttemptCount?: number;
     qualityReport?: QualityReport;
     generatedStillPath?: string;
   };
@@ -198,10 +199,21 @@ const activeTab = ref<"reference" | "library" | "publish">(
 const loading = ref(false);
 const creating = ref(false);
 const notice = ref("");
+// Success toasts close themselves; errors stay until dismissed.
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+watch(notice, (value) => {
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = value ? setTimeout(() => (notice.value = ""), 4000) : undefined;
+});
+onBeforeUnmount(() => {
+  if (noticeTimer) clearTimeout(noticeTimer);
+});
 const errorText = ref("");
 const products = ref<Product[]>([]);
 const materials = ref<Material[]>([]);
-const tasks = ref<Task[]>([]);
+// Library rows are replaced wholesale (never mutated in place), so a shallow
+// ref avoids deep-proxying hundreds of shot objects on every refresh.
+const tasks = shallowRef<Task[]>([]);
 const accounts = ref<Account[]>([]);
 const promptVersions = ref<PromptVersion[]>([]);
 const promptKind = ref<"image" | "video">("video");
@@ -409,6 +421,93 @@ const runtimeDialogOpen = computed({
 });
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let taskRefreshBusy = false;
+let stopCreativeChanges: (() => void) | undefined;
+let creativeFallbackTicks = 0;
+let creativeChangeTimer: ReturnType<typeof setTimeout> | undefined;
+const pendingChangedTaskIds = new Set<string>();
+// Full task records (logs, request traces) are only loaded for the task shown
+// in the runtime panel or the detail dialog; the library uses summary rows.
+const fullTasks = shallowRef<Record<string, Task>>({});
+function fullTaskOf(task?: Task | null) {
+  if (!task) return null;
+  return fullTasks.value[task.id] || task;
+}
+function fullShotOf(task?: Task | null, shot?: Shot | null) {
+  if (!task || !shot) return shot || null;
+  return (
+    fullTasks.value[task.id]?.shots.find((item) => item.shotId === shot.shotId) ||
+    shot
+  );
+}
+function openFullTaskIds() {
+  return Array.from(
+    new Set([detailTask.value?.id, runtimeTask.value?.id].filter(Boolean) as string[]),
+  );
+}
+async function loadFullTask(id: string) {
+  try {
+    const full = await window.api.tiktokCreative.getTask(id);
+    if (!openFullTaskIds().includes(id)) return;
+    const next = { ...fullTasks.value };
+    if (full) next[id] = full;
+    else delete next[id];
+    fullTasks.value = next;
+  } catch {
+    // Detail falls back to the summary row.
+  }
+}
+watch(
+  () => openFullTaskIds().join("|"),
+  () => {
+    const ids = openFullTaskIds();
+    const kept: Record<string, Task> = {};
+    for (const id of ids) if (fullTasks.value[id]) kept[id] = fullTasks.value[id];
+    fullTasks.value = kept;
+    for (const id of ids) void loadFullTask(id);
+  },
+);
+function scheduleCreativeChangeFlush() {
+  if (creativeChangeTimer) return;
+  creativeChangeTimer = setTimeout(() => {
+    creativeChangeTimer = undefined;
+    void flushCreativeChanges();
+  }, 300);
+}
+async function flushCreativeChanges() {
+  if (!pendingChangedTaskIds.size) return;
+  // While hidden, keep collecting ids and apply them once visible again.
+  if (document.hidden || taskRefreshBusy) return;
+  const ids = Array.from(pendingChangedTaskIds);
+  pendingChangedTaskIds.clear();
+  taskRefreshBusy = true;
+  try {
+    const rows = (await window.api.tiktokCreative.listSummary({ ids })) as Task[];
+    const byId = new Map((Array.isArray(rows) ? rows : []).map((row) => [row.id, row]));
+    const changed = new Set(ids);
+    const next = tasks.value
+      .filter((task) => !changed.has(task.id) || byId.has(task.id))
+      .map((task) => byId.get(task.id) || task);
+    const known = new Set(next.map((task) => task.id));
+    for (const row of byId.values()) if (!known.has(row.id)) next.push(row);
+    next.sort(
+      (left, right) =>
+        Number(right.createdAt || 0) - Number(left.createdAt || 0) ||
+        String(right.id).localeCompare(String(left.id)),
+    );
+    tasks.value = next;
+    syncRuntimeSelection();
+    if (libraryPage.value > totalPages.value) libraryPage.value = totalPages.value;
+    for (const id of openFullTaskIds()) if (changed.has(id)) void loadFullTask(id);
+  } catch {
+    for (const id of ids) pendingChangedTaskIds.add(id);
+  } finally {
+    taskRefreshBusy = false;
+  }
+  if (pendingChangedTaskIds.size) scheduleCreativeChangeFlush();
+}
+function handleCreativeVisibilityChange() {
+  if (!document.hidden && pendingChangedTaskIds.size) scheduleCreativeChangeFlush();
+}
 let publisherTaskRefreshBusy = false;
 
 const selectedProduct = computed(() =>
@@ -742,9 +841,34 @@ const pagedPublisherTasks = computed(() =>
     publisherPage.value * publisherPageSize.value,
   ),
 );
+const publisherOverviewTabs = computed(() => [
+  { key: "all" as const, label: "全部", count: publisherTasks.value.length },
+  { key: "pending" as const, label: "待发布", count: publisherPendingTasks.value.length },
+  { key: "draft" as const, label: "草稿", count: publisherTasks.value.filter((item) => item.state === "draft").length },
+  { key: "published" as const, label: "已发布", count: publisherTasks.value.filter((item) => item.state === "published").length },
+]);
+const publisherFiltersActive = computed(() =>
+  Boolean(
+    publisherSearch.value.trim() ||
+      publisherAppliedFilters.status !== "all" ||
+      publisherAppliedFilters.account !== "all" ||
+      publisherAppliedFilters.product !== "all" ||
+      publisherAppliedFilters.date,
+  ),
+);
+const publisherSelectableIds = computed(() =>
+  filteredPublisherTasks.value
+    .filter((item) => item.state !== "published")
+    .map((item) => String(item.id)),
+);
+const publisherAllVisibleSelected = computed(
+  () =>
+    publisherSelectableIds.value.length > 0 &&
+    publisherSelectableIds.value.every((id) => publisherRowSelection.value.includes(id)),
+);
 const runtimeLogs = computed<LogItem[]>(() => {
-  const task = runtimeTask.value;
-  const shot = runtimeShot.value;
+  const task = fullTaskOf(runtimeTask.value);
+  const shot = fullShotOf(runtimeTask.value, runtimeShot.value);
   if (!task) return [];
   const requestLogs: LogItem[] = (shot?.requestTrace || []).map(
     (trace, index) => ({
@@ -849,11 +973,13 @@ const subtitlePresets = computed<
   },
 ]);
 
-function previewSrc(path?: string) {
+function previewSrc(path?: string, thumbWidth?: number) {
   const value = String(path || "").trim();
   if (!value) return "";
   if (/^(https?:|data:|blob:|vg:)/i.test(value)) return value;
-  return `vg://file?path=${encodeURIComponent(value)}`;
+  // `&w=` asks the vg:// protocol for a cached, downscaled thumbnail.
+  const thumb = thumbWidth ? `&w=${thumbWidth}` : "";
+  return `vg://file?path=${encodeURIComponent(value)}${thumb}`;
 }
 function generatedImagePath(shot?: Shot) {
   if (!shot) return "";
@@ -919,8 +1045,24 @@ function formatPublisherSchedule(value?: string | number) {
 function publisherStateLabel(state?: string) {
   if (state === "published") return "已发布";
   if (state === "draft") return "草稿";
-  if (state === "failed" || state === "result_unknown") return "发布失败";
+  if (state === "failed") return "发布失败";
+  if (state === "result_unknown") return "结果未知";
+  if (state === "scheduled") return "已排期";
+  if (state === "prechecking" || state === "uploading" || state === "queued" || state === "publishing") return "发布中";
   return "待发布";
+}
+function publisherStateTone(state?: string) {
+  if (state === "published") return "green";
+  if (state === "failed" || state === "result_unknown") return "red";
+  if (state === "scheduled" || state === "prechecking" || state === "uploading" || state === "queued" || state === "publishing") return "blue";
+  if (state === "draft") return "gray";
+  return "amber";
+}
+function publisherAccountName(item: any) {
+  if (item?.connectionName) return item.connectionName;
+  const uid = item?.connectionUid;
+  if (!uid) return "未选择账号";
+  return publisherConnections.value.find((account: any) => account.uid === uid)?.name || uid;
 }
 function publisherErrorText(item: any) {
   const error = item?.error;
@@ -1083,7 +1225,7 @@ async function refresh(silent = false) {
   try {
     const requestedPromptKind = promptKind.value;
     const [taskRows, productRows, accountResult, settings] = await Promise.all([
-      window.api.tiktokCreative.list(),
+      window.api.tiktokCreative.listSummary(),
       window.api.products.list(),
       window.api.tiktokCreative.listAccounts(),
       window.api.tiktokCreative.getSettings(),
@@ -1114,7 +1256,7 @@ async function refreshTaskRows() {
   if (taskRefreshBusy || document.hidden) return;
   taskRefreshBusy = true;
   try {
-    const taskRows = await window.api.tiktokCreative.list();
+    const taskRows = await window.api.tiktokCreative.listSummary();
     tasks.value = Array.isArray(taskRows) ? taskRows : [];
     syncRuntimeSelection();
     if (libraryPage.value > totalPages.value)
@@ -1419,7 +1561,11 @@ function canCorrectRegion(shot: Shot) {
   );
 }
 function imageAttemptCount(shot: Shot) {
-  return shot.imagePreparation?.generationAttempts?.length || 0;
+  return (
+    shot.imagePreparation?.generationAttempts?.length ??
+    shot.imagePreparation?.generationAttemptCount ??
+    0
+  );
 }
 function qualityScore(shot: Shot) {
   const score = Number(shot.imagePreparation?.qualityReport?.score);
@@ -1968,13 +2114,18 @@ function togglePublisherRow(id: string) {
 }
 function toggleAllPublisherRows() {
   publisherEditId.value = "";
-  const visibleIds = filteredPublisherTasks.value.map((item) => String(item.id));
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) =>
-    publisherRowSelection.value.includes(id),
-  );
+  const visibleIds = publisherSelectableIds.value;
+  const allVisibleSelected = publisherAllVisibleSelected.value;
   publisherRowSelection.value = allVisibleSelected
     ? publisherRowSelection.value.filter((id) => !visibleIds.includes(id))
     : Array.from(new Set([...publisherRowSelection.value, ...visibleIds]));
+}
+async function focusPublisherRow(item: any) {
+  if (item?.state === "published") return;
+  publisherRowSelection.value = [item.id];
+  publisherEditorFields.title = true;
+  publisherEditorFields.description = Boolean(item.description);
+  await editPublisherTask(item);
 }
 function setPublisherRowSchedule(item: any) {
   if (!item.scheduleAt)
@@ -2983,6 +3134,11 @@ onMounted(async () => {
   restorePublisherFavoriteMusic();
   await refresh();
   if (props.publisherOnly) await refreshPublisher();
+  stopCreativeChanges = window.api.tiktokCreative.onChanged(({ taskIds }) => {
+    for (const id of taskIds || []) pendingChangedTaskIds.add(id);
+    scheduleCreativeChangeFlush();
+  });
+  document.addEventListener("visibilitychange", handleCreativeVisibilityChange);
   refreshTimer = setInterval(() => {
     if (document.hidden) return;
     if (props.publisherOnly || activeTab.value === "publish") {
@@ -2997,6 +3153,9 @@ onMounted(async () => {
       ["queued", "processing", "running", "pending"].includes(String(item.status || "")),
     );
     if (!hasActiveCreativeTask) return;
+    // Safety net every ~60s; normal updates arrive via onChanged.
+    creativeFallbackTicks += 1;
+    if (creativeFallbackTicks % 6 !== 0) return;
     void refreshTaskRows();
   }, 10000);
 });
@@ -3004,6 +3163,9 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", handlePublishUiClick);
   document.removeEventListener("input", handlePublishUiInput);
   if (refreshTimer) clearInterval(refreshTimer);
+  stopCreativeChanges?.();
+  if (creativeChangeTimer) clearTimeout(creativeChangeTimer);
+  document.removeEventListener("visibilitychange", handleCreativeVisibilityChange);
   publisherMusicAudio?.pause();
   publisherMusicAudio = null;
 });
@@ -3018,13 +3180,10 @@ onBeforeUnmount(() => {
       <header class="ts-head">
         <div class="ts-head__icon"><Sparkles :size="22" /></div>
         <div class="ts-head__text">
-          <h1>TikTok Creative Studio</h1>
+          <h1>{{ tr('ai.nav.creativeStudio') }}</h1>
           <p>{{ tr("autoUi.k_c5d1c075a08a") }}</p>
         </div>
         <div class="ts-head__actions">
-          <button class="vg-btn" type="button" @click="router.push('/plugins')">
-            <ChevronLeft :size="15" />{{ tr("autoUi.k_3966f952c1c0") }}
-          </button>
           <button class="vg-btn" type="button" :disabled="loading" @click="refresh()">
             <RefreshCcw :size="15" :class="{ 'vg-spin': loading }" />{{ tr("autoUi.k_38108eaa1d32") }}
           </button>
@@ -3046,14 +3205,23 @@ onBeforeUnmount(() => {
         </button>
       </nav>
     </section>
-    <div v-if="notice" class="publisher-toast publisher-toast-success" role="status">
-      <CheckCircle2 class="h-4 w-4" /><span>{{ notice }}</span>
-      <button type="button" aria-label="关闭提示" @click="notice = ''">
-        <X class="h-4 w-4" />
-      </button>
-    </div>
-    <div v-if="errorText" class="publisher-toast publisher-toast-error">
-      <AlertTriangle class="h-4 w-4" />{{ errorText }}
+    <div class="vg-scope ts-toasts" aria-live="polite">
+      <Transition name="ts-toast">
+        <div v-if="errorText" class="vg-toast vg-toast--error ts-toast" role="alert">
+          <AlertTriangle :size="16" /><span class="ts-toast__text">{{ errorText }}</span>
+          <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭提示" @click="errorText = ''">
+            <X :size="14" />
+          </button>
+        </div>
+      </Transition>
+      <Transition name="ts-toast">
+        <div v-if="notice" class="vg-toast vg-toast--success ts-toast" role="status">
+          <CheckCircle2 :size="16" /><span class="ts-toast__text">{{ notice }}</span>
+          <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭提示" @click="notice = ''">
+            <X :size="14" />
+          </button>
+        </div>
+      </Transition>
     </div>
     <div
       v-if="publisherCredentialOpen"
@@ -3104,646 +3272,325 @@ onBeforeUnmount(() => {
         </footer>
       </section>
     </div>
-    <section v-if="activeTab === 'publish'" class="publisher-design-page">
-      <header class="publisher-design-head">
-        <div class="publisher-design-title">
-          <div class="publisher-design-logo"><Send class="h-5 w-5" /></div>
-          <div>
-            <h1>批量发布</h1>
-            <p>批量管理与发布 TikTok 视频</p>
-          </div>
+    <section v-if="activeTab === 'publish'" class="vg-scope pub">
+      <header class="pub-head">
+        <div class="pub-head__icon"><Send :size="20" /></div>
+        <div class="pub-head__text">
+          <h1>{{ tr('ai.nav.publish') }}</h1>
+          <p>批量编辑并发布 TikTok Shop 带货视频</p>
         </div>
-        <div class="publisher-design-actions">
-          <div class="publisher-api-chip publisher-design-api-chip">
-            <KeyRound class="h-4 w-4" /><span>Creatok API</span>
-            <i :class="{ ready: publisherConfigured }"></i>
-            <em>{{ publisherConfigured ? "已连接" : "未连接" }}</em>
-            <button
-              type="button"
-              @click="publisherCredentialOpen = !publisherCredentialOpen"
-            >{{ publisherConfigured ? "管理" : "连接" }}</button>
+        <div class="pub-head__actions">
+          <div class="pub-conn" :class="{ 'is-ready': publisherConfigured }">
+            <KeyRound :size="14" />
+            <span class="pub-conn__name">CreatOK API</span>
+            <span class="pub-conn__state"><i />{{ publisherConfigured ? "已连接" : "未连接" }}</span>
+            <button type="button" class="vg-link" @click="publisherCredentialOpen = !publisherCredentialOpen">
+              {{ publisherConfigured ? "管理" : "去连接" }}
+            </button>
           </div>
-          <button
-            class="publisher-music-library-button"
-            type="button"
-            @click="openPublisherMusicLibrary"
-          >
-            <Headphones class="h-4 w-4" />音乐库
-            <span v-if="publisherFavoriteMusic.length">{{
-              publisherFavoriteMusic.length
-            }}</span>
+          <span class="pub-head__sep" />
+          <button class="vg-btn" type="button" @click="openPublisherMusicLibrary">
+            <Headphones :size="15" />音乐库<span v-if="publisherFavoriteMusic.length" class="vg-count">{{ publisherFavoriteMusic.length }}</span>
           </button>
-          <button
-            class="publisher-design-secondary"
-            type="button"
-            @click="uploadPublisherVideos"
-          >
-            <FolderOpen class="h-4 w-4" />导入视频</button
-          ><button
-            class="publisher-design-secondary"
-            type="button"
-            @click="pickPublisherVideos"
-          >
-            <FolderOpen class="h-4 w-4" />从素材库选择</button
-          ><button
-            class="publisher-design-primary"
-            type="button"
-            @click="uploadPublisherVideos"
-          >
-            <ImagePlus class="h-4 w-4" />上传视频 <b>+</b>
+          <button class="vg-btn" type="button" @click="pickPublisherVideos">
+            <FolderOpen :size="15" />从素材库选择
+          </button>
+          <button class="vg-btn vg-btn--primary" type="button" @click="uploadPublisherVideos">
+            <FileUp :size="15" />导入本地视频
           </button>
         </div>
       </header>
-      <div v-if="publisherSyncError" class="publisher-design-error">
-        <AlertTriangle class="h-4 w-4" />{{ publisherSyncError }}
+
+      <div v-if="publisherSyncError" class="vg-notice vg-notice--danger pub-alert">
+        <AlertTriangle :size="15" /><span>{{ publisherSyncError }}</span>
+        <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭" @click="publisherSyncError = ''"><X :size="14" /></button>
       </div>
-      <div class="publisher-design-body">
-        <div class="publisher-design-left">
-          <div class="publisher-design-stats">
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'all' }"
-              @click="setPublisherOverviewFilter('all')"
-            >
-              <span
-                >全部视频 <strong>{{ publisherTasks.length }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'video' }"
-              @click="setPublisherOverviewFilter('video')"
-            >
-              <span
-                >视频 <strong>{{ publisherTasks.length }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'pending' }"
-              @click="setPublisherOverviewFilter('pending')"
-            >
-              <span
-                >待发布
-                <strong>{{
-                  publisherPendingTasks.length
-                }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'draft' }"
-              @click="setPublisherOverviewFilter('draft')"
-            >
-              <span
-                >草稿
-                <strong>{{
-                  publisherTasks.filter((item) => item.state === "draft").length
-                }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'published' }"
-              @click="setPublisherOverviewFilter('published')"
-            >
-              <span
-                >已发布
-                <strong>{{
-                  publisherTasks.filter((item) => item.state === "published")
-                    .length
-                }}</strong></span
-              >
-            </button>
+
+      <div class="pub-body">
+        <section class="pub-main">
+          <div class="pub-bar">
+            <nav class="pub-tabs" aria-label="发布状态">
+              <button
+                v-for="tab in publisherOverviewTabs"
+                :key="tab.key"
+                type="button"
+                class="pub-tab"
+                :class="{ 'is-active': publisherOverviewFilter === tab.key }"
+                @click="setPublisherOverviewFilter(tab.key)"
+              >{{ tab.label }}<em>{{ tab.count }}</em></button>
+            </nav>
+            <label class="vg-search pub-search">
+              <Search :size="15" />
+              <input v-model="publisherSearch" class="vg-input" placeholder="搜索文件名、标题、商品" @input="publisherPage = 1" />
+            </label>
           </div>
-          <div class="publisher-design-filters">
-            <div class="publisher-design-search">
-              <Search class="h-4 w-4" /><input
-                v-model="publisherSearch"
-                placeholder="搜索视频、标题、标签..."
-                @input="publisherPage = 1"
-              />
-            </div>
-            <select
-              v-model="publisherFilterAccount"
-            >
+
+          <div class="pub-filters">
+            <Filter :size="14" class="pub-filters__icon" />
+            <select v-model="publisherFilterAccount" class="vg-select vg-select--sm" @change="applyPublisherFilters">
               <option value="all">全部账号</option>
-              <option
-                v-for="account in publisherConnections"
-                :key="account.uid"
-                :value="account.uid"
-              >
-                {{ account.name || account.uid }}
-              </option></select
-            ><select
-              v-model="publisherFilterProduct"
-            >
+              <option v-for="account in publisherConnections" :key="account.uid" :value="account.uid">{{ account.name || account.uid }}</option>
+            </select>
+            <select v-model="publisherFilterProduct" class="vg-select vg-select--sm" @change="applyPublisherFilters">
               <option value="all">全部商品</option>
-              <option
-                v-for="product in publisherProducts"
-                :key="product.id"
-                :value="product.id"
-              >
-                {{ product.title || product.name }}
-              </option></select
-            ><select
-              v-model="publisherFilterStatus"
-            >
+              <option v-for="product in publisherProducts" :key="product.id" :value="product.id">{{ product.title || product.name }}</option>
+            </select>
+            <select v-model="publisherFilterStatus" class="vg-select vg-select--sm" @change="applyPublisherFilters">
               <option value="all">全部状态</option>
               <option value="pending">待发布</option>
               <option value="draft">草稿</option>
-              <option value="published">已发布</option></select
-            >
-            <div class="publisher-filter-actions">
-              <button
-                class="publisher-date-button"
-                :class="{ active: publisherFilterDate }"
-                type="button"
-                @click="openPublisherDatePicker"
-              >
-                <Clock3 class="h-4 w-4" />{{
-                  publisherFilterDate || "选择日期"
-                }}
-              </button>
-              <input
-                ref="publisherDateInput"
-                v-model="publisherFilterDate"
-                class="publisher-date-input"
-                type="date"
-              />
-              <button
-                class="publisher-filter-apply"
-                type="button"
-                @click="applyPublisherFilters"
-              >
-                <Filter class="h-4 w-4" />筛选
-              </button>
-              <button type="button" @click="resetPublisherFilters">
-                <RefreshCcw class="h-4 w-4" />重置
-              </button>
-            </div>
-          </div>
-          <div
-            v-if="publisherRowSelection.length"
-            class="publisher-design-selection"
-          >
-            <button
-              class="publisher-selection-toggle"
-              type="button"
-              @click="toggleAllPublisherRows"
-            >
-              <CheckCircle2 class="h-4 w-4" />
-              {{
-                publisherRowSelection.length === filteredPublisherTasks.length
-                  ? "取消全选"
-                  : "全选"
-              }}
+              <option value="published">已发布</option>
+              <option value="failed">发布失败</option>
+            </select>
+            <input v-model="publisherFilterDate" class="vg-input vg-input--sm pub-date" type="date" title="按日期筛选" @change="applyPublisherFilters" />
+            <button v-if="publisherFiltersActive" type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="resetPublisherFilters">
+              <RefreshCcw :size="13" />清除筛选
             </button>
-            <span
-              >已选择
-              {{ publisherRowSelection.length }} 个视频</span
-            >
-            <span
-              v-if="publisherPrecheckState !== 'idle'"
-              class="publisher-precheck-status"
-              :class="`is-${publisherPrecheckState}`"
-            >{{ publisherPrecheckMessage }}</span>
-            <div>
-              <button type="button" @click="openPublisherDrawer">
-                批量编辑</button
-              ><button
-                type="button"
-                :disabled="publisherMusicRandomizing"
-                @click="applyRandomFavoriteMusic()"
-              >
-                <LoaderCircle
-                  v-if="publisherMusicRandomizing"
-                  class="h-3 w-3 animate-spin"
-                /><Shuffle v-else class="h-3 w-3" />随机收藏音乐
-                <small v-if="publisherFavoriteMusic.length"
-                  >({{ publisherFavoriteMusic.length }})</small
-                ></button
-              ><button
-                type="button"
-                @click="openPublisherBatchSelector('product')"
-              >
-                设置商品</button
-              ><button type="button" @click="preparePublisherScheduleSelection">
-                设置发布时间</button>
-              <label class="publisher-precheck-toggle">
-                <input v-model="publisherPrecheckEnabled" type="checkbox" />
-                发布前本地检查
-              </label>
-              <button
-                v-if="publisherPrecheckEnabled"
-                type="button"
-                @click="precheckPublisher"
-              >本地检查</button>
-            </div>
-            <button
-              class="publisher-design-primary publisher-submit-button"
-              type="button"
-              :disabled="publisherBusy"
-              @click="publishSelectedRows"
-            >
-              <Send class="h-4 w-4" />提交发布
-              ({{ publisherRowSelection.length }})
+            <span class="vg-toolbar__spacer" />
+            <span class="pub-filters__meta">共 <b>{{ filteredPublisherTasks.length }}</b> 个视频</span>
+          </div>
+
+          <div v-if="publisherRowSelection.length" class="pub-selbar">
+            <span class="pub-selbar__count">已选 <b>{{ publisherRowSelection.length }}</b> 个</span>
+            <button type="button" class="vg-link vg-link--muted" @click="publisherRowSelection = []">清空</button>
+            <span class="pub-selbar__sep" />
+            <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="openPublisherBatchSelector('product')"><Package :size="14" />设置商品</button>
+            <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="preparePublisherScheduleSelection"><Clock3 :size="14" />设置时间</button>
+            <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" :disabled="publisherMusicRandomizing" @click="applyRandomFavoriteMusic()">
+              <LoaderCircle v-if="publisherMusicRandomizing" :size="14" class="vg-spin" /><Shuffle v-else :size="14" />随机收藏音乐
+            </button>
+            <span class="vg-toolbar__spacer" />
+            <span v-if="publisherPrecheckState !== 'idle'" class="pub-precheck" :class="`is-${publisherPrecheckState}`">{{ publisherPrecheckMessage }}</span>
+            <label class="pub-precheck-toggle">
+              <input v-model="publisherPrecheckEnabled" type="checkbox" />发布前检查
+            </label>
+            <button v-if="publisherPrecheckEnabled" type="button" class="vg-btn vg-btn--sm" @click="precheckPublisher"><ShieldCheck :size="14" />检查</button>
+            <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :disabled="publisherBusy" @click="publishSelectedRows">
+              <LoaderCircle v-if="publisherBusy" :size="14" class="vg-spin" /><Send v-else :size="14" />提交发布
             </button>
           </div>
-          <main class="publisher-design-list">
-            <div class="publisher-design-list-head">
-              <span>选择</span><span>视频</span><span>标题</span
-              ><span>关联商品</span><span>发布时间</span><span>状态</span
-              ><span>操作</span>
+
+          <div class="pub-table" role="table">
+            <div class="pub-row pub-row--head" role="row">
+              <span class="pub-cell--chk">
+                <input
+                  type="checkbox"
+                  :checked="publisherAllVisibleSelected"
+                  :indeterminate.prop="publisherRowSelection.length > 0 && !publisherAllVisibleSelected"
+                  :disabled="!publisherSelectableIds.length"
+                  aria-label="全选"
+                  @change="toggleAllPublisherRows"
+                />
+              </span>
+              <span>视频</span><span>标题 / 描述</span><span>商品 / 音乐</span><span>发布时间</span><span>状态</span><span class="pub-cell--ops">操作</span>
             </div>
-            <div class="publisher-design-rows">
+            <div class="pub-table__body">
               <div
-                v-for="(item, index) in pagedPublisherTasks"
+                v-for="item in pagedPublisherTasks"
                 :key="item.id"
-                class="publisher-design-row"
-                :class="{ 'is-published': item.state === 'published' }"
+                class="pub-row"
+                role="row"
+                :class="{ 'is-selected': publisherRowSelection.includes(item.id), 'is-locked': item.state === 'published' }"
               >
-                <label
-                  ><input
+                <span class="pub-cell--chk">
+                  <input
                     type="checkbox"
                     :disabled="item.state === 'published'"
                     :checked="publisherRowSelection.includes(item.id)"
+                    :aria-label="`选择 ${fileName(item.sourceVideoPath)}`"
                     @change="togglePublisherRow(item.id)"
-                  /><b>{{ index + 1 }}</b></label
-                >
-                <div class="publisher-design-video">
-                  <span class="publisher-design-thumb"
-                  ><img
-                    v-if="publisherPosterSrc(item)"
-                    :src="publisherPosterSrc(item)"
-                    alt="video poster"
-                    loading="lazy"
-                  /><span v-else class="publisher-poster-placeholder"><Play class="h-4 w-4" /></span
-                    ><small>00:18</small></span
-                  ><span
-                    ><strong>{{ fileName(item.sourceVideoPath) }}</strong
-                    ><small>1080 x 1920 · 24.5MB</small></span
-                  >
+                  />
+                </span>
+                <div class="pub-video">
+                  <span class="pub-video__poster">
+                    <img v-if="publisherPosterSrc(item)" :src="publisherPosterSrc(item)" alt="" loading="lazy" />
+                    <Play v-else :size="14" />
+                  </span>
+                  <span class="pub-video__meta">
+                    <strong :title="item.sourceVideoPath">{{ fileName(item.sourceVideoPath) }}</strong>
+                    <small><UserRound :size="11" />{{ publisherAccountName(item) }}</small>
+                  </span>
                 </div>
-                <div class="publisher-design-title-cell">
-                  <span>{{ item.videoTitle || "未设置标题" }}</span
-                  ><button
-                    type="button"
-                    title="编辑"
-                    :disabled="item.state === 'published'"
-                    @click="
-                      editPublisherTask(item);
-                      openPublisherDrawer();
-                    "
-                  >
-                    <Pencil class="h-3 w-3" />
-                  </button>
+                <div class="pub-text">
+                  <span :class="{ 'is-empty': !item.videoTitle }">{{ item.videoTitle || "未设置标题" }}</span>
+                  <small v-if="item.description">{{ item.description }}</small>
                 </div>
-                <button
-                  class="publisher-design-product"
-                  type="button"
-                  :disabled="item.state === 'published'"
-                  @click="
-                    publisherEditId = item.id;
-                    openPublisherSelector('product');
-                  "
-                >
-                  <span class="publisher-design-product-thumb"
-                    ><Package class="h-3 w-3" /></span
-                  ><span>{{ item.productTitle || "选择商品" }}</span>
-                </button>
-                <span class="publisher-design-time">{{
-                  formatPublisherSchedule(item.scheduleAt)
-                }}</span
-                ><button
-                  type="button"
-                  class="publisher-design-state"
-                  :class="`state-${item.state}`"
-                  :title="publisherStateLabel(item.state)"
-                  @click="openPublisherStatusDetail(item)"
-                  ><i></i>{{ publisherStateLabel(item.state) }}</button
-                >
-                <div class="publisher-design-row-actions">
-                  <button
-                    type="button"
-                    title="编辑"
-                    :disabled="item.state === 'published'"
-                    @click="
-                      editPublisherTask(item);
-                      openPublisherDrawer();
-                    "
-                  >
-                    <Pencil class="h-4 w-4" /></button
-                  ><button
-                    type="button"
-                    title="删除发布任务"
-                    aria-label="删除发布任务"
-                    @click="removePublisherRow(item.id)"
-                  >
-                    <Trash2 class="h-4 w-4" />
+                <div class="pub-links">
+                  <button type="button" class="pub-link" :class="{ 'is-empty': !item.productTitle }" :disabled="item.state === 'published'" @click="publisherEditId = item.id; openPublisherSelector('product')">
+                    <Package :size="13" /><span>{{ item.productTitle || "选择商品" }}</span>
                   </button>
+                  <small v-if="item.music?.title" class="pub-links__music"><Music2 :size="11" />{{ item.music.title }}</small>
+                </div>
+                <span class="pub-time" :class="{ 'is-now': !item.scheduleAt }">{{ formatPublisherSchedule(item.scheduleAt) }}</span>
+                <span>
+                  <button type="button" class="vg-pill vg-pill--dot pub-state" :class="`vg-pill--${publisherStateTone(item.state)}`" :title="publisherErrorText(item) || publisherStateLabel(item.state)" @click="openPublisherStatusDetail(item)">
+                    {{ publisherStateLabel(item.state) }}
+                  </button>
+                </span>
+                <span class="pub-cell--ops">
+                  <button type="button" class="vg-icon-btn vg-icon-btn--sm" title="编辑" :disabled="item.state === 'published'" @click="focusPublisherRow(item)"><Pencil :size="14" /></button>
+                  <button type="button" class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" title="删除发布任务" aria-label="删除发布任务" @click="removePublisherRow(item.id)"><Trash2 :size="14" /></button>
+                </span>
+              </div>
+              <div v-if="!pagedPublisherTasks.length" class="vg-empty pub-empty">
+                <span class="vg-empty__icon"><Send :size="24" /></span>
+                <h3>{{ publisherTasks.length ? "没有符合条件的视频" : "还没有发布任务" }}</h3>
+                <p>{{ publisherTasks.length ? "调整状态或筛选条件后再试" : "导入本地视频或从素材库选择，开始批量发布" }}</p>
+                <div v-if="publisherTasks.length" class="vg-row">
+                  <button type="button" class="vg-btn vg-btn--sm" @click="resetPublisherFilters(); setPublisherOverviewFilter('all')"><RefreshCcw :size="13" />查看全部</button>
+                </div>
+                <div v-else class="vg-row">
+                  <button type="button" class="vg-btn vg-btn--sm" @click="pickPublisherVideos"><FolderOpen :size="14" />从素材库选择</button>
+                  <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" @click="uploadPublisherVideos"><FileUp :size="14" />导入本地视频</button>
                 </div>
               </div>
-              <div
-                v-if="!pagedPublisherTasks.length"
-                class="publisher-design-empty"
-              >
-                <Package class="h-6 w-6" /><strong>还没有发布任务</strong
-                ><span>点击顶部按钮导入或选择视频</span>
-              </div>
             </div>
-            <div class="publisher-design-pager">
-              <button
-                type="button"
-                :disabled="publisherPage <= 1"
-                @click="setPublisherPage(publisherPage - 1)"
-              >
-              <ChevronLeft class="h-4 w-4" /></button
-              ><template v-for="page in publisherPaginationItems" :key="page">
-                <button
-                  v-if="typeof page === 'number'"
-                  :class="{ active: publisherPage === page }"
-                  type="button"
-                  @click="setPublisherPage(page)"
-                >
-                  {{ page }}
-                </button>
-                <span v-else class="publisher-design-pager__ellipsis" aria-hidden="true">...</span>
-              </template><button
-                type="button"
-                :disabled="publisherPage >= publisherPageCount"
-                @click="setPublisherPage(publisherPage + 1)"
-              >
-                <ChevronRight class="h-4 w-4" /></button
-              ><select
-                v-model.number="publisherPageSize"
-                @change="publisherPage = 1"
-              >
-                <option :value="20">每页 20 条</option>
-                <option :value="50">每页 50 条</option></select
-              ><span
-                >共 {{ filteredPublisherTasks.length }} 个视频，已选择
-                {{ publisherRowSelection.length }} 个</span
-              >
-            </div>
-          </main>
-        </div>
-        <aside class="publisher-design-editor">
-          <div class="publisher-design-editor-head">
+          </div>
+
+          <footer class="vg-pager pub-pager">
+            <span class="vg-pager__group">
+              每页
+              <select v-model.number="publisherPageSize" class="vg-select vg-select--sm" @change="publisherPage = 1">
+                <option :value="20">20</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+              </select>
+              条
+            </span>
+            <span class="vg-pager__group">
+              <button type="button" class="vg-pg" :disabled="publisherPage <= 1" aria-label="上一页" @click="setPublisherPage(publisherPage - 1)"><ChevronLeft :size="14" /></button>
+              <template v-for="page in publisherPaginationItems" :key="page">
+                <button v-if="typeof page === 'number'" type="button" class="vg-pg" :class="{ 'is-active': publisherPage === page }" @click="setPublisherPage(page)">{{ page }}</button>
+                <span v-else class="vg-pg is-gap" aria-hidden="true">…</span>
+              </template>
+              <button type="button" class="vg-pg" :disabled="publisherPage >= publisherPageCount" aria-label="下一页" @click="setPublisherPage(publisherPage + 1)"><ChevronRight :size="14" /></button>
+            </span>
+          </footer>
+        </section>
+
+        <aside class="pub-editor">
+          <header class="pub-editor__head">
             <div>
-              <Sparkles class="h-5 w-5" />
-              <div>
-                <h2>批量编辑</h2>
-                <p>已选择 {{ publisherRowSelection.length }} 个视频</p>
+              <h2><Sparkles :size="16" />批量编辑</h2>
+              <p v-if="publisherRowSelection.length">将应用到已选的 <b>{{ publisherRowSelection.length }}</b> 个视频</p>
+              <p v-else>未选择视频，将应用到全部 <b>{{ publisherPendingTasks.length }}</b> 个待发布视频</p>
+            </div>
+            <div v-if="publisherRowSelection.length" class="pub-stack">
+              <span v-for="item in publisherSelectedTasks.slice(0, 3)" :key="item.id" class="pub-stack__item">
+                <img v-if="publisherPosterSrc(item)" :src="publisherPosterSrc(item)" alt="" />
+                <Play v-else :size="11" />
+              </span>
+              <span v-if="publisherSelectedTasks.length > 3" class="pub-stack__item pub-stack__more">+{{ publisherSelectedTasks.length - 3 }}</span>
+            </div>
+          </header>
+
+          <div class="pub-editor__body">
+            <p class="pub-editor__hint">打开开关的字段才会被修改</p>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.title }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.title }">
+                <input v-model="publisherEditorFields.title" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">标题</span>
+              </label>
+              <div v-if="publisherEditorFields.title" class="pub-field__body">
+                <input v-model="publisherTitle" class="vg-input" maxlength="150" placeholder="输入视频标题" />
+                <small class="pub-field__count">{{ publisherTitle.length }}/150</small>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.description }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.description }">
+                <input v-model="publisherEditorFields.description" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">描述与话题</span>
+              </label>
+              <div v-if="publisherEditorFields.description" class="pub-field__body">
+                <textarea v-model="publisherDescription" class="vg-textarea" rows="4" maxlength="500" placeholder="输入视频描述，可插入话题标签" />
+                <small class="pub-field__count">{{ publisherDescription.length }}/500</small>
+                <div class="pub-topics">
+                  <button v-for="tag in publisherTags" :key="tag" type="button" class="vg-chip pub-topic" @click="insertPublisherTag(tag)">{{ tag }}</button>
+                  <button v-if="!publisherTagInputOpen" type="button" class="vg-chip pub-topic pub-topic--add" @click="addPublisherTag"><Plus :size="11" />话题</button>
+                </div>
+                <div v-if="publisherTagInputOpen" class="pub-inline">
+                  <input v-model="publisherTagDraft" class="vg-input vg-input--sm" placeholder="例如 jewelry" @keyup.enter="confirmPublisherTag" @keyup.esc="cancelPublisherTag" />
+                  <button type="button" class="vg-btn vg-btn--sm" @click="confirmPublisherTag">添加</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.product }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.product }">
+                <input v-model="publisherEditorFields.product" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">关联商品</span>
+              </label>
+              <div v-if="publisherEditorFields.product" class="pub-field__body">
+                <button class="pub-picker" type="button" @click="openPublisherBatchSelector('account')">
+                  <UserRound :size="15" /><span :class="{ 'is-empty': !publisherConnectionItem }">{{ publisherConnectionItem?.name || "选择发布账号" }}</span><ChevronRight :size="14" />
+                </button>
+                <button class="pub-picker" type="button" @click="openPublisherBatchSelector('product')">
+                  <Package :size="15" /><span :class="{ 'is-empty': !publisherProductItem }">{{ publisherProductItem?.title || "选择商品" }}</span><ChevronRight :size="14" />
+                </button>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.schedule }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.schedule }">
+                <input v-model="publisherEditorFields.schedule" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">发布时间</span>
+              </label>
+              <div v-if="publisherEditorFields.schedule" class="pub-field__body">
+                <div class="pub-seg" role="radiogroup">
+                  <button type="button" :class="{ 'is-on': publisherScheduleMode === 'keep' }" @click="publisherScheduleMode = 'keep'">保持原时间</button>
+                  <button type="button" :class="{ 'is-on': publisherScheduleMode === 'unified' }" @click="publisherScheduleMode = 'unified'">统一时间</button>
+                  <button type="button" :class="{ 'is-on': publisherScheduleMode === 'sequence' }" @click="publisherScheduleMode = 'sequence'">按顺序间隔</button>
+                </div>
+                <input
+                  v-if="publisherScheduleMode !== 'keep'"
+                  v-model="publisherUnifiedSchedule"
+                  class="vg-input"
+                  type="datetime-local"
+                  @input="publisherSyncError = ''"
+                />
+                <label v-if="publisherScheduleMode === 'sequence'" class="pub-inline">
+                  <span class="pub-inline__label">每条间隔</span>
+                  <input v-model.number="publisherSequenceInterval" class="vg-input vg-input--sm" type="number" min="1" max="1440" />
+                  <span class="pub-inline__label">分钟</span>
+                </label>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.music }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.music }">
+                <input v-model="publisherEditorFields.music" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">背景音乐</span>
+              </label>
+              <div v-if="publisherEditorFields.music" class="pub-field__body">
+                <button v-if="!publisherEditorFields.product" class="pub-picker" type="button" @click="openPublisherBatchSelector('account')">
+                  <UserRound :size="15" /><span :class="{ 'is-empty': !publisherConnectionItem }">{{ publisherConnectionItem?.name || "选择发布账号" }}</span><ChevronRight :size="14" />
+                </button>
+                <button class="pub-picker" type="button" @click="openPublisherBatchSelector('music')">
+                  <Music2 :size="15" /><span :class="{ 'is-empty': !publisherSelectedMusic }">{{ publisherSelectedMusic?.title || "选择音乐" }}</span><ChevronRight :size="14" />
+                </button>
+                <button class="vg-btn vg-btn--soft vg-btn--sm vg-btn--block" type="button" :disabled="publisherMusicRandomizing" @click="applyRandomFavoriteMusic()">
+                  <LoaderCircle v-if="publisherMusicRandomizing" :size="14" class="vg-spin" /><Shuffle v-else :size="14" />随机分配收藏音乐
+                  <span v-if="publisherFavoriteMusic.length" class="pub-muted">· {{ publisherFavoriteMusic.length }} 首</span>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <footer class="pub-editor__foot">
+            <div class="pub-apply">
+              <span class="pub-apply__label">应用方式</span>
+              <div class="pub-seg pub-seg--full" role="radiogroup">
+                <button type="button" :class="{ 'is-on': publisherApplyMode === 'empty' }" @click="publisherApplyMode = 'empty'">仅填充空白</button>
+                <button type="button" :class="{ 'is-on': publisherApplyMode === 'all' }" @click="publisherApplyMode = 'all'">覆盖已有内容</button>
               </div>
             </div>
-            <button class="publisher-editor-preview-button" type="button">
-              <Play class="h-4 w-4" />预览选中
-            </button>
-          </div>
-          <div class="publisher-design-preview">
-            <div
-              v-for="item in publisherSelectedTasks.slice(0, 3)"
-              :key="item.id"
-              class="publisher-design-preview-thumb"
-            >
-              <video
-                :src="previewSrc(item.sourceVideoPath)"
-                muted
-                preload="metadata"
-              ></video>
+            <div class="pub-editor__actions">
+              <button type="button" class="vg-btn" :disabled="!publisherRowSelection.length" @click="publisherRowSelection = []; publisherEditId = ''">取消选择</button>
+              <button type="button" class="vg-btn vg-btn--primary" :disabled="!publisherPendingTasks.length" @click="applyPublisherDefaults()"><Check :size="15" />应用修改</button>
             </div>
-            <span v-if="publisherSelectedTasks.length > 3"
-              >+{{ publisherSelectedTasks.length - 3 }}</span
-            >
-          </div>
-          <div class="publisher-editor-tabs publisher-editor-tabs-single">
-            <span class="active">批量设置</span>
-          </div>
-          <p class="publisher-design-hint">
-            选择要修改的内容 <small>未选择的字段不会被修改</small>
-          </p>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.title"
-              type="checkbox"
-            />标题</label
-          >
-          <div
-            v-if="publisherEditorFields.title"
-            class="publisher-design-field"
-          >
-            <input
-              v-model="publisherTitle"
-              maxlength="150"
-              placeholder="输入新的标题"
-            /><small>将应用到 {{ publisherRowSelection.length }} 个视频</small>
-            <div class="publisher-design-radio">
-              <label
-                ><input
-                  v-model="publisherOverwriteTitle"
-                  type="radio"
-                  :value="false"
-                />仅修改空白标题</label
-              ><label
-                ><input
-                  v-model="publisherOverwriteTitle"
-                  type="radio"
-                  :value="true"
-                />覆盖所有选中视频</label
-              >
-            </div>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.description"
-              type="checkbox"
-            />描述</label
-          >
-          <div
-            v-if="publisherEditorFields.description"
-            class="publisher-design-field"
-          >
-            <textarea
-              v-model="publisherDescription"
-              rows="3"
-              maxlength="500"
-              placeholder="输入视频描述..."
-            ></textarea
-            ><small>{{ publisherDescription.length }}/500</small>
-            <div class="publisher-description-tags">
-              <button
-                v-for="tag in publisherTags"
-                :key="tag"
-                type="button"
-                @click="insertPublisherTag(tag)"
-              >{{ tag }}</button>
-              <button type="button" @click="addPublisherTag">+ 添加标签</button>
-            </div>
-            <div v-if="publisherTagInputOpen" class="publisher-description-tag-input">
-              <input
-                v-model="publisherTagDraft"
-                placeholder="输入标签，例如 jewelry"
-                @keyup.enter="confirmPublisherTag"
-                @keyup.esc="cancelPublisherTag"
-              />
-              <button type="button" @click="confirmPublisherTag">添加</button>
-            </div>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.product"
-              type="checkbox"
-            />商品</label
-          >
-          <div
-            v-if="publisherEditorFields.product || publisherEditorFields.music"
-            class="publisher-design-field"
-          >
-            <span>发布账号</span>
-            <button
-              class="publisher-design-select"
-              type="button"
-              @click="openPublisherBatchSelector('account')"
-            >
-              <UserRound class="h-4 w-4" />{{
-                publisherConnectionItem?.name || "选择发布账号"
-              }}
-            </button>
-            <small>商品和音乐将使用此账号的数据</small>
-          </div>
-          <div
-            v-if="publisherEditorFields.product"
-            class="publisher-design-field"
-          >
-            <button
-              class="publisher-design-select"
-              type="button"
-              @click="openPublisherBatchSelector('product')"
-            >
-              <Package class="h-4 w-4" />{{
-                publisherProductItem?.title || "选择商品"
-              }}
-            </button>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.schedule"
-              type="checkbox"
-            />发布时间</label
-          >
-          <div
-            v-if="publisherEditorFields.schedule"
-            class="publisher-design-field"
-          >
-            <div class="publisher-design-radio">
-              <label
-                ><input
-                  type="radio"
-                  value="keep"
-                  v-model="publisherScheduleMode"
-                />保持原时间</label
-              ><label
-                ><input
-                  type="radio"
-                  value="unified"
-                  v-model="publisherScheduleMode"
-                />统一发布时间</label
-              ><label
-                ><input
-                  type="radio"
-                  value="sequence"
-                  v-model="publisherScheduleMode"
-                />按顺序发布</label
-              >
-            </div>
-            <div
-              v-if="publisherScheduleMode !== 'keep'"
-              class="publisher-schedule-input"
-            >
-              <Clock3 class="h-4 w-4" />
-              <input
-                v-model="publisherUnifiedSchedule"
-                type="datetime-local"
-                @input="publisherSyncError = ''"
-              />
-            </div>
-            <label
-              v-if="publisherScheduleMode === 'sequence'"
-              class="publisher-sequence-interval"
-            >
-              <span>发布间隔</span>
-              <input
-                v-model.number="publisherSequenceInterval"
-                type="number"
-                min="1"
-                max="1440"
-              />
-              <small>分钟</small>
-            </label>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.music"
-              type="checkbox"
-            />音乐</label
-          >
-          <div
-            v-if="publisherEditorFields.music"
-            class="publisher-design-field"
-          >
-            <button
-              class="publisher-design-select"
-              type="button"
-              @click="openPublisherBatchSelector('music')"
-            >
-              <Music2 class="h-4 w-4" />{{
-                publisherSelectedMusic?.title || "选择音乐"
-              }}
-            </button>
-            <button
-              class="publisher-design-select publisher-random-music-button"
-              type="button"
-              :disabled="publisherMusicRandomizing"
-              @click="applyRandomFavoriteMusic()"
-            >
-              <LoaderCircle
-                v-if="publisherMusicRandomizing"
-                class="h-4 w-4 animate-spin"
-              /><Shuffle v-else class="h-4 w-4" />
-              随机分配收藏音乐
-              <small v-if="publisherFavoriteMusic.length"
-                >{{ publisherFavoriteMusic.length }} 首可用</small
-              >
-            </button>
-          </div>
-          <div class="publisher-editor-apply-mode">
-            <strong>应用方式</strong>
-            <div class="publisher-design-radio">
-              <label
-                ><input
-                  v-model="publisherApplyMode"
-                  type="radio"
-                  value="empty"
-                />仅填充空白字段</label
-              >
-              <label
-                ><input
-                  v-model="publisherApplyMode"
-                  type="radio"
-                  value="all"
-                />覆盖全部选中视频</label
-              >
-            </div>
-          </div>
-          <div class="publisher-design-apply">
-            <button type="button" @click="publisherRowSelection = []">
-              取消
-            </button>
-            <button type="button" @click="applyPublisherDefaults()">
-              应用修改
-            </button>
-          </div>
+          </footer>
         </aside>
       </div>
     </section>
@@ -3752,7 +3599,7 @@ onBeforeUnmount(() => {
         <div class="publisher-single-brand">
           <div class="publisher-single-icon"><Send class="h-5 w-5" /></div>
           <div>
-            <h1>批量发布</h1>
+            <h1>{{ tr('ai.nav.publish') }}</h1>
             <p>批量管理与发布 TikTok 视频</p>
           </div>
         </div>
@@ -5508,7 +5355,7 @@ onBeforeUnmount(() => {
           <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="ts-item" :class="{ 'is-selected': selectedShotIds.includes(shot.shotId) }">
             <div class="ts-item__media">
               <button class="ts-item__preview" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)">
-                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot))" alt="poster" />
+                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot), 480)" alt="poster" loading="lazy" decoding="async" />
                 <FileImage v-else :size="22" />
                 <span v-if="shot.status === 'completed'" class="ts-item__play"><Play :size="16" /></span>
               </button>
@@ -5562,7 +5409,7 @@ onBeforeUnmount(() => {
             <label class="ts-check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /></label>
             <div class="ts-row__main">
               <button class="ts-row__thumb" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)">
-                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot))" alt="poster" /><FileImage v-else :size="16" />
+                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot), 160)" alt="poster" loading="lazy" decoding="async" /><FileImage v-else :size="16" />
               </button>
               <div class="ts-row__copy">
                 <div class="ts-row__title">
@@ -5977,11 +5824,11 @@ onBeforeUnmount(() => {
               <p>{{ tr("autoUi.k_d3d17e466cec") }}</p>
             </div>
             <span
-              >{{ detailShot.requestTrace?.length || 0 }}
+              >{{ fullShotOf(detailTask, detailShot)?.requestTrace?.length || 0 }}
               {{ tr("autoUi.k_9788a29c8270") }}</span
             >
           </div>
-          <pre>{{ requestTraceJson(detailShot) }}</pre>
+          <pre>{{ requestTraceJson(fullShotOf(detailTask, detailShot)) }}</pre>
         </div>
       </div>
     </div>
@@ -6768,21 +6615,6 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: var(--theme-panel-soft);
 }
-.publish-mode .publisher-stepper {
-  opacity: 0.78;
-}
-.publisher-step {
-  color: var(--theme-text-secondary) !important;
-}
-.publisher-step.active {
-  color: var(--theme-accent) !important;
-}
-.publisher-step.active b {
-  background: var(--theme-accent) !important;
-}
-.publisher-stepper > i {
-  background: linear-gradient(90deg, var(--theme-tone-blue), var(--theme-tone-blue)) !important;
-}
 .tiktok-page {
   display: grid;
   gap: 10px;
@@ -6959,60 +6791,45 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
   color: var(--theme-tone-red);
 }
-.publisher-toast {
+/* Toasts: built on the kit's .vg-toast, stacked bottom-center. */
+.ts-toasts {
   position: fixed;
-  top: 50%;
   left: 50%;
-  z-index: 150;
-  display: inline-flex;
+  bottom: 28px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
-  max-width: min(360px, calc(100vw - 44px));
-  padding: 10px 14px;
-  border-radius: 10px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.4;
-  transform: translate(-50%, -50%);
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.ts-toasts .ts-toast {
+  position: static;
+  transform: none;
+  max-width: 100%;
+  padding: 8px 8px 8px 14px;
+  line-height: 1.45;
   pointer-events: auto;
 }
-.publisher-toast-success {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 48%, transparent);
-  background: var(--theme-accent);
-  color: var(--theme-accent);
+.ts-toast > svg:first-child {
+  flex: none;
 }
-.publisher-toast-error {
-  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 50%, transparent);
-  background: var(--theme-panel-soft);
-  color: var(--theme-tone-red);
-}
-.publisher-toast > span {
+.ts-toast__text {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.publisher-toast > button {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: currentColor;
-  opacity: 0.78;
+.ts-toast-enter-active,
+.ts-toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.publisher-toast > button:hover {
-  background: color-mix(in srgb, var(--theme-text) 12%, transparent);
-  opacity: 1;
-}
-.publish-mode .publisher-toast {
-  top: 76px;
-  transform: translateX(-50%);
-}
-.publish-mode .publisher-design-error {
-  top: 76px;
-  z-index: 160;
+.ts-toast-enter-from,
+.ts-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 .workspace-grid {
   display: grid;
@@ -8530,39 +8347,6 @@ onBeforeUnmount(() => {
 .publish-mode .single-actions button {
   white-space: nowrap;
 }
-.publisher-credential-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
-  border-radius: 9px;
-  background: var(--theme-panel-soft);
-}
-.publisher-credential-bar > input {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 7px;
-  background: var(--theme-panel);
-  color: var(--theme-text);
-  font-size: 11px;
-}
-.publisher-credential-bar .toolbar-button {
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 10px;
-}
-.publisher-credential-ok {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--theme-accent);
-  font-size: 10px;
-  white-space: nowrap;
-}
 .single-product-button {
   display: block;
   width: 100%;
@@ -8628,10 +8412,6 @@ onBeforeUnmount(() => {
 }
 .publish-mode .publisher-single-page {
   overflow: hidden;
-}
-.publish-mode .publisher-credential-bar {
-  min-height: 34px;
-  padding: 4px 8px;
 }
 .publish-mode .publisher-single-head {
   padding: 2px 6px;
@@ -10631,11 +10411,6 @@ onBeforeUnmount(() => {
   color: var(--theme-tone-blue);
   font-size: 11px;
 }
-.publisher-panel {
-  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
-  gap: 14px;
-  align-items: stretch;
-}
 .publish-mode .publish-layout {
   display: none;
 }
@@ -11404,59 +11179,6 @@ onBeforeUnmount(() => {
     height: 220px;
   }
 }
-.publisher-stepper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin: 2px 0 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-panel) 74%, transparent);
-}
-.publisher-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-}
-.publisher-step b {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-}
-.publisher-step.active {
-  color: var(--theme-accent);
-}
-.publisher-step.active b {
-  background: var(--theme-accent);
-  color: var(--theme-text);
-  box-shadow: 0 0 0 4px rgba(50, 200, 177, 0.12);
-}
-.publisher-stepper > i {
-  height: 1px;
-  flex: 1;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--theme-accent) 35%, transparent),
-    color-mix(in srgb, var(--theme-control-hover) 12%, transparent)
-  );
-}
-.publisher-step {
-  border: 0;
-  cursor: pointer;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-}
 .publish-pick {
   display: inline-flex;
   align-items: center;
@@ -11472,147 +11194,6 @@ onBeforeUnmount(() => {
 .publish-pick:hover {
   border-color: var(--theme-accent);
   color: var(--theme-accent);
-}
-.publisher-preview-strip {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 16px;
-  align-items: center;
-  padding: 14px;
-  margin-bottom: 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--theme-tone-blue) 90%, transparent),
-    color-mix(in srgb, var(--theme-panel) 90%, transparent)
-  );
-}
-.publisher-preview-strip__phone {
-  width: 150px;
-  height: 180px;
-  overflow: hidden;
-  border-radius: 10px;
-  background: var(--theme-panel);
-  display: grid;
-  place-items: center;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  text-align: center;
-}
-.publisher-preview-strip__phone video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.publisher-preview-strip__phone > div {
-  display: grid;
-  gap: 7px;
-  place-items: center;
-}
-.publisher-preview-strip__info {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-.publisher-preview-strip__info h2 {
-  margin: 0;
-  font-size: 20px;
-}
-.publisher-preview-strip__info p {
-  margin: 0;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.publisher-preview-strip__info > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publisher-preview-strip__info strong {
-  color: var(--theme-text);
-  font-size: 11px;
-  margin-right: 12px;
-}
-.publisher-overview {
-  display: grid;
-  gap: 18px;
-  margin: 4px 0 16px;
-}
-.publisher-overview-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 20px;
-}
-.publisher-overview-title h1 {
-  margin: 5px 0 0;
-  font-size: 30px;
-  line-height: 1.15;
-}
-.publisher-overview-title p {
-  margin: 8px 0 0;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-}
-.publisher-overview-actions {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-}
-.publisher-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-.publisher-stat {
-  display: grid;
-  gap: 5px;
-  min-height: 82px;
-  padding: 15px 16px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: linear-gradient(
-    140deg,
-    color-mix(in srgb, var(--theme-tone-blue) 88%, transparent),
-    color-mix(in srgb, var(--theme-panel) 90%, transparent)
-  );
-}
-.publisher-stat span {
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-}
-.publisher-stat strong {
-  font-size: 24px;
-  line-height: 1;
-  color: var(--theme-text);
-}
-.publisher-stat small {
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publisher-stat--status strong {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 16px;
-}
-.publisher-stat--status i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--theme-control-hover);
-}
-.publisher-stat--status i.ready {
-  background: var(--theme-accent);
-  box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.13);
 }
 .publisher-select-button {
   display: flex;
@@ -11672,24 +11253,6 @@ onBeforeUnmount(() => {
   color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
-}
-.publisher-design-error {
-  position: fixed;
-  top: 88px;
-  left: 50%;
-  z-index: 120;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: min(520px, calc(100vw - 32px));
-  padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 48%, transparent);
-  border-radius: 7px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text);
-  font-size: 12px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
-  transform: translateX(-50%);
 }
 .publisher-option-grid {
   display: grid;
@@ -11783,19 +11346,6 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--theme-accent) 34%, transparent);
   color: var(--theme-text);
 }
-.publisher-published-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  color: var(--theme-tone-green);
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-}
 .publisher-picker-dialog {
   width: min(720px, 100%);
 }
@@ -11873,8 +11423,7 @@ onBeforeUnmount(() => {
   color: var(--theme-tone-blue);
   font-size: 12px;
 }
-.publisher-config-card,
-.publisher-queue-card {
+.publisher-config-card {
   min-height: 540px;
   gap: 0;
   padding: 0;
@@ -11888,227 +11437,6 @@ onBeforeUnmount(() => {
   box-shadow:
     0 16px 34px rgba(5, 9, 18, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-.publisher-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 22px 22px 18px;
-  border-bottom: 1px solid var(--theme-border);
-}
-.publisher-card-head h2 {
-  margin: 5px 0 0;
-  font-size: 22px;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-.publisher-card-head p {
-  margin: 7px 0 0;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.publisher-eyebrow {
-  color: var(--theme-accent);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
-}
-.publisher-connection-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-panel) 55%, transparent);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.publisher-connection-state.ready {
-  border-color: color-mix(in srgb, var(--theme-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  color: var(--theme-tone-green);
-}
-.publisher-state-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--theme-control-hover);
-  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12);
-}
-.publisher-connection-state.ready .publisher-state-dot {
-  background: var(--theme-accent);
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.14);
-}
-.publisher-section {
-  display: grid;
-  gap: 13px;
-  padding: 19px 22px;
-  border-bottom: 1px solid var(--theme-border);
-}
-.publisher-section-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-.publisher-section-title strong {
-  font-size: 13px;
-  color: var(--theme-text);
-}
-.publisher-section-title small {
-  margin-left: auto;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  font-weight: 500;
-}
-.publisher-section-index {
-  display: grid;
-  place-items: center;
-  width: 23px;
-  height: 23px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 35%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  color: var(--theme-accent);
-  font:
-    700 10px ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
-.publisher-key-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 8px;
-}
-.publisher-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px;
-}
-.publisher-form-grid label {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-.publisher-form-grid label > span {
-  color: var(--theme-tone-blue);
-  font-size: 11px;
-  font-weight: 700;
-}
-.publisher-form-grid input,
-.publisher-form-grid select,
-.publisher-key-row input {
-  width: 100%;
-  min-width: 0;
-  height: 40px;
-  box-sizing: border-box;
-  padding: 0 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
-  color: var(--theme-text);
-  font-size: 12px;
-  outline: none;
-  transition:
-    border-color 0.18s,
-    box-shadow 0.18s,
-    background 0.18s;
-}
-.publisher-form-grid input:focus,
-.publisher-form-grid select:focus,
-.publisher-key-row input:focus {
-  border-color: color-mix(in srgb, var(--theme-accent) 68%, transparent);
-  background: color-mix(in srgb, var(--theme-panel) 86%, transparent);
-  box-shadow: 0 0 0 3px rgba(85, 223, 202, 0.1);
-}
-.publisher-form-grid select {
-  appearance: auto;
-}
-.publisher-field-wide {
-  grid-column: 1/-1;
-}
-.publisher-time-hint {
-  align-self: end;
-  padding: 0 2px 3px;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  line-height: 1.45;
-}
-.publisher-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding: 18px 22px;
-  background: color-mix(in srgb, var(--theme-panel) 34%, transparent);
-}
-.publisher-action-primary {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-.publisher-action-primary button,
-.publisher-action-bar > button {
-  min-height: 38px;
-}
-.publisher-queue-head {
-  align-items: center;
-}
-.publisher-queue-count {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  color: var(--theme-text);
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1;
-}
-.publisher-queue-count small {
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-}
-.publisher-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 330px;
-  padding: 28px;
-  text-align: center;
-  flex-direction: column;
-  color: var(--theme-text);
-}
-.publisher-empty strong {
-  font-size: 15px;
-}
-.publisher-empty > span {
-  max-width: 230px;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
-}
-.publisher-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  margin-bottom: 3px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
-  border-radius: 17px;
-  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
-  color: var(--theme-accent);
-}
-.publisher-empty .ghost-button {
-  margin-top: 4px;
 }
 .publisher-queue-list {
   display: grid;
@@ -12178,139 +11506,12 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
   color: var(--theme-tone-red);
 }
-.publisher-row-error {
-  grid-column: 2/-1;
-  color: var(--theme-tone-red);
-  font-size: 10px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-.publisher-design-row-error {
-  display: block;
-  grid-column: 6/8;
-  margin-top: 4px;
-  color: var(--theme-tone-red);
-  font-size: 10px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.publisher-credential-strip {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 42px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 22%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
-  color: var(--theme-accent);
-  font-size: 11px;
-}
-.publisher-credential-strip code {
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--theme-panel) 45%, transparent);
-  color: var(--theme-tone-green);
-  font:
-    11px ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
-.publisher-credential-strip .ghost-button {
-  min-height: 30px;
-  padding: 0 10px;
-  margin-left: auto;
-}
-.publisher-credential-strip .ghost-button + .ghost-button {
-  margin-left: 0;
-}
-.publisher-sync-error {
-  color: var(--theme-tone-red);
-  font-size: 10px;
-  line-height: 1.4;
-}
-.publisher-key-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  grid-column: 1/-1;
-  min-height: 38px;
-  color: var(--theme-accent);
-  font-size: 11px;
-}
-.publisher-key-status code {
-  color: var(--theme-tone-green);
-  font:
-    11px ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
 @media (max-width: 1080px) {
-  .publisher-panel {
-    grid-template-columns: 1fr;
-  }
-  .publisher-config-card,
-  .publisher-queue-card {
+  .publisher-config-card {
     min-height: 0;
   }
-  .publisher-stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 @media (max-width: 700px) {
-  .publisher-stepper {
-    gap: 5px;
-    padding: 8px;
-  }
-  .publisher-step span {
-    display: none;
-  }
-  .publisher-stepper > i {
-    min-width: 8px;
-  }
-}
-@media (max-width: 700px) {
-  .publisher-card-head {
-    padding: 18px 16px 15px;
-    flex-direction: column;
-  }
-  .publisher-section {
-    padding: 16px;
-  }
-  .publisher-section-title {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .publisher-section-title small {
-    width: 100%;
-    margin: 0 0 0 32px;
-  }
-  .publisher-key-row {
-    grid-template-columns: 1fr 1fr;
-  }
-  .publisher-key-row input {
-    grid-column: 1/-1;
-  }
-  .publisher-form-grid {
-    grid-template-columns: 1fr;
-  }
-  .publisher-field-wide {
-    grid-column: auto;
-  }
-  .publisher-action-bar {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 16px;
-  }
-  .publisher-action-primary {
-    margin-left: 0;
-  }
-  .publisher-action-primary button,
-  .publisher-action-bar > button {
-    flex: 1;
-  }
   .publisher-queue-list {
     padding: 12px;
   }
@@ -12324,9 +11525,6 @@ onBeforeUnmount(() => {
   .publisher-row-state {
     grid-column: 2;
     justify-self: start;
-  }
-  .publisher-row-error {
-    grid-column: 1/-1;
   }
 }
 @media (max-width: 700px) {
@@ -12346,62 +11544,6 @@ onBeforeUnmount(() => {
   }
   .detail-grid .detail-wide {
     grid-column: auto;
-  }
-}
-.publisher-quick-tools {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
-}
-.publisher-music-search {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
-  gap: 8px;
-  flex: 1;
-}
-.publisher-music-search input,
-.publisher-music-search select {
-  height: 36px;
-  box-sizing: border-box;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
-  color: var(--theme-text);
-  font-size: 11px;
-}
-.publisher-music-search select {
-  min-width: 0;
-}
-@media (max-width: 700px) {
-  .publisher-quick-tools {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .publisher-music-search {
-    grid-template-columns: 1fr;
-  }
-  .publisher-music-search button {
-    width: 100%;
-  }
-}
-@media (max-width: 700px) {
-  .publisher-overview-title {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .publisher-overview-title h1 {
-    font-size: 25px;
-  }
-  .publisher-overview-actions button {
-    flex: 1;
-  }
-  .publisher-stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 .publisher-edit-dock {
@@ -12465,31 +11607,6 @@ onBeforeUnmount(() => {
   border: 0;
   background: transparent;
   color: var(--theme-accent);
-  font-size: 10px;
-}
-.publisher-credential-popover {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  align-self: end;
-  margin: -4px 8px 0 auto;
-  padding: 8px 10px;
-  width: min(520px, 100%);
-  box-sizing: border-box;
-  border: 1px solid var(--theme-border);
-  border-radius: 9px;
-  background: var(--theme-panel-soft);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
-}
-.publisher-credential-popover input {
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-  padding: 0 9px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 7px;
-  background: var(--theme-panel);
-  color: var(--theme-text);
   font-size: 10px;
 }
 .publisher-credential-modal {
@@ -12713,47 +11830,6 @@ onBeforeUnmount(() => {
 .publisher-selector-overlay {
   z-index: 180 !important;
 }
-.publisher-precheck-status {
-  color: var(--theme-text-muted, var(--theme-text-secondary));
-  font-size: 11px;
-  white-space: nowrap;
-}
-.publisher-precheck-status.is-passed { color: var(--theme-accent); }
-.publisher-precheck-status.is-failed { color: var(--theme-tone-red); }
-.publisher-precheck-status.is-running { color: var(--theme-tone-amber); }
-.publisher-precheck-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--theme-text-muted, var(--theme-text-secondary));
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.publisher-precheck-toggle input {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--theme-accent, var(--theme-accent));
-}
-.publisher-design-api-chip {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 8px 0 10px;
-}
-.publisher-design-api-chip button {
-  min-width: 38px;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-border);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--theme-panel-soft) 90%, transparent);
-  color: var(--theme-text);
-  font-size: 10px;
-}
-.publisher-design-api-chip button:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 56%, transparent);
-  color: var(--theme-accent);
-}
 .publisher-selector-overlay .live-subtitle-dialog__panel {
   position: relative;
   z-index: 181;
@@ -12852,464 +11928,6 @@ onBeforeUnmount(() => {
 .publish-mode .publisher-batch-workspace {
   display: none !important;
 }
-.publisher-design-page {
-  height: calc(100vh - 24px);
-  display: grid;
-  grid-template-rows: 64px 48px 42px 48px minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 12px;
-  background: var(--theme-panel);
-  color: var(--theme-text);
-  overflow: hidden;
-}
-.publisher-design-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 8px;
-}
-.publisher-design-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.publisher-design-logo {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: linear-gradient(145deg, var(--theme-accent), var(--theme-accent));
-  color: var(--theme-text);
-}
-.publisher-design-title h1 {
-  margin: 0;
-  font-size: 22px;
-}
-.publisher-design-title p {
-  margin: 4px 0 0;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-}
-.publisher-design-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.publisher-design-api {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 8px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-tone-blue);
-  font-size: 11px;
-}
-.publisher-design-api i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--theme-control-hover);
-}
-.publisher-design-api i.ready {
-  background: var(--theme-accent);
-}
-.publisher-design-api small {
-  color: var(--theme-text-secondary);
-}
-.publisher-design-api button {
-  border: 0;
-  background: transparent;
-  color: var(--theme-accent);
-  font-size: 11px;
-}
-.publisher-design-secondary,
-.publisher-design-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 14px;
-  border-radius: 8px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.publisher-design-secondary {
-  border: 1px solid var(--theme-tone-blue);
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-}
-.publisher-design-primary {
-  border: 1px solid var(--theme-accent);
-  background: var(--theme-accent);
-  color: var(--theme-text);
-  font-weight: 700;
-  box-shadow: 0 6px 18px rgba(31, 212, 192, 0.18);
-}
-.publisher-design-primary:disabled {
-  opacity: 0.5;
-}
-.publisher-design-stats {
-  display: flex;
-  border-top: 1px solid var(--theme-border-control);
-  border-bottom: 1px solid var(--theme-border-control);
-}
-.publisher-design-stats > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  padding: 0 14px;
-  border-right: 1px solid var(--theme-border-control);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-}
-.publisher-design-stats > div:last-child {
-  border-right: 0;
-}
-.publisher-design-stats strong {
-  margin-left: 4px;
-  color: var(--theme-text);
-  font-size: 16px;
-}
-.publisher-design-stats .active,
-.publisher-design-stats .active strong {
-  color: var(--theme-accent);
-}
-.publisher-design-filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 130px 130px 120px auto auto;
-  gap: 8px;
-}
-.publisher-design-filters select,
-.publisher-design-filters button,
-.publisher-design-search {
-  height: 36px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 7px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text);
-  font-size: 11px;
-}
-.publisher-design-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-}
-.publisher-design-search input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--theme-text);
-}
-.publisher-design-filters button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
-}
-.publisher-design-selection {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 35%, transparent);
-  border-radius: 8px;
-  background: var(--theme-tone-blue);
-}
-.publisher-design-selection > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-  color: var(--theme-tone-blue);
-  font-size: 11px;
-}
-.publisher-design-selection > div {
-  display: flex;
-  gap: 6px;
-  flex: 1;
-}
-.publisher-design-selection button:not(.publisher-design-primary) {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-  font-size: 10px;
-}
-.publisher-design-selection button:not(.publisher-design-primary) small {
-  color: var(--theme-accent);
-  font-size: 9px;
-}
-.publisher-design-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) 360px;
-  gap: 8px;
-  min-height: 0;
-}
-.publisher-design-list {
-  display: grid;
-  grid-template-rows: 40px minmax(0, 1fr) 38px;
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 9px;
-  overflow: hidden;
-  background: var(--theme-panel);
-}
-.publisher-design-list-head,
-.publisher-design-row {
-  display: grid;
-  grid-template-columns:
-    42px minmax(150px, 1.25fr) minmax(120px, 1fr) minmax(120px, 1fr)
-    108px 112px 88px;
-  gap: 8px;
-  align-items: center;
-}
-.publisher-design-list-head {
-  padding: 0 10px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publisher-design-rows {
-  min-height: 0;
-  overflow: auto;
-  padding: 4px;
-}
-.publisher-design-row {
-  min-height: 72px;
-  margin-bottom: 4px;
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 42%, transparent);
-  border-radius: 8px;
-  background: var(--theme-panel-soft);
-  font-size: 10px;
-}
-.publisher-design-row > label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.publisher-design-row input[type="checkbox"] {
-  accent-color: var(--theme-accent);
-}
-.publisher-design-video {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.publisher-design-thumb {
-  position: relative;
-  width: 40px;
-  height: 54px;
-  flex: none;
-  overflow: hidden;
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-}
-.publisher-design-thumb video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.publisher-design-thumb small {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  padding: 1px 3px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--theme-input) 70%, transparent);
-  color: var(--theme-text);
-  font-size: 8px;
-}
-.publisher-design-video strong,
-.publisher-design-video span > small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.publisher-design-video strong {
-  color: var(--theme-text);
-  font-size: 11px;
-}
-.publisher-design-video span > small {
-  margin-top: 4px;
-  color: var(--theme-text-secondary);
-  font-size: 9px;
-}
-.publisher-design-title-cell {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-}
-.publisher-design-title-cell span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--theme-text);
-}
-.publisher-design-title-cell button,
-.publisher-design-row-actions button {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text-secondary);
-}
-.publisher-design-product {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--theme-text);
-  text-align: left;
-  font-size: 10px;
-}
-.publisher-design-product span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.publisher-design-product-thumb {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 38px;
-  flex: none;
-  border-radius: 5px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text-secondary);
-}
-.publisher-design-tags {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-.publisher-design-tags span,
-.publisher-design-tags b {
-  padding: 4px 6px;
-  border-radius: 10px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-  font-size: 9px;
-  white-space: nowrap;
-}
-.publisher-design-tags b {
-  background: var(--theme-tone-blue);
-}
-.publisher-design-tags .publisher-design-tags-empty {
-  background: transparent;
-  color: var(--theme-text-secondary);
-}
-.publisher-design-time {
-  color: var(--theme-text-secondary);
-  line-height: 1.35;
-}
-.publisher-design-state {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--theme-text);
-}
-.publisher-design-state:hover {
-  color: var(--theme-text);
-}
-.publisher-design-state i {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--theme-tone-amber);
-}
-.publisher-design-state.state-published {
-  color: var(--theme-accent);
-}
-.publisher-design-state.state-published i {
-  background: var(--theme-accent);
-}
-.publisher-design-state.state-failed,
-.publisher-design-state.state-result_unknown {
-  color: var(--theme-tone-red);
-}
-.publisher-design-state.state-failed i,
-.publisher-design-state.state-result_unknown i {
-  background: var(--theme-tone-red);
-}
-.publisher-design-state.state-draft {
-  color: var(--theme-text-secondary);
-}
-.publisher-design-row-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
-  gap: 5px;
-}
-.publisher-design-row-actions button {
-  border: 0;
-  background: transparent;
-}
-.publisher-design-pager {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publisher-design-pager button,
-.publisher-design-pager select {
-  height: 30px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-}
-.publisher-design-pager button {
-  width: 30px;
-  display: grid;
-  place-items: center;
-}
-.publisher-design-pager button.active {
-  border-color: var(--theme-accent);
-  background: var(--theme-accent);
-  color: var(--theme-accent);
-}
-.publisher-design-pager__ellipsis,
 .publisher-single-pager__ellipsis {
   display: inline-grid;
   width: 20px;
@@ -13317,188 +11935,6 @@ onBeforeUnmount(() => {
   place-items: center;
   color: var(--theme-text-secondary);
   letter-spacing: 0;
-}
-.publisher-design-pager select {
-  margin-left: 8px;
-  padding: 0 8px;
-}
-.publisher-design-pager span {
-  margin-left: auto;
-}
-.publisher-design-editor {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 14px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 9px;
-  background: var(--theme-panel-soft);
-  overflow: auto;
-}
-.publisher-design-editor-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--theme-border);
-}
-.publisher-design-editor-head > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.publisher-design-editor-head h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.publisher-design-editor-head p {
-  margin: 4px 0 0;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publisher-design-preview {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 12px 0;
-}
-.publisher-design-preview-thumb {
-  width: 42px;
-  height: 52px;
-  overflow: hidden;
-  border-radius: 5px;
-  background: var(--theme-tone-blue);
-}
-.publisher-design-preview-thumb video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.publisher-design-preview > span {
-  padding: 12px 8px;
-  border-radius: 5px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-  font-size: 11px;
-}
-.publisher-design-preview button {
-  margin-left: auto;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-  font-size: 10px;
-}
-.publisher-design-hint {
-  margin: 2px 0 10px;
-  color: var(--theme-tone-blue);
-  font-size: 11px;
-}
-.publisher-design-hint small {
-  margin-left: 5px;
-  color: var(--theme-text-secondary);
-  font-size: 9px;
-}
-.publisher-design-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  color: var(--theme-tone-blue);
-  font-size: 11px;
-  border-top: 1px solid var(--theme-border);
-}
-.publisher-design-check input {
-  accent-color: var(--theme-accent);
-}
-.publisher-design-field {
-  display: grid;
-  gap: 6px;
-  padding: 4px 0 8px;
-}
-.publisher-design-field input,
-.publisher-design-field textarea,
-.publisher-design-select {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 34px;
-  padding: 0 9px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text);
-  font-size: 10px;
-}
-.publisher-design-field textarea {
-  padding-top: 8px;
-  resize: vertical;
-}
-.publisher-design-field small {
-  color: var(--theme-text-secondary);
-  font-size: 9px;
-}
-.publisher-sequence-interval {
-  display: grid;
-  grid-template-columns: auto 72px auto;
-  align-items: center;
-  justify-content: start;
-  gap: 8px;
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publisher-sequence-interval input {
-  min-height: 30px;
-}
-.publisher-design-radio {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--theme-text-secondary);
-  font-size: 9px;
-}
-.publisher-design-radio label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.publisher-design-tags.editor {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.publisher-design-tags.editor button {
-  padding: 5px 7px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-  font-size: 9px;
-}
-.publisher-design-select {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  justify-content: flex-start;
-}
-.publisher-design-apply {
-  display: flex;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--theme-border);
-}
-.publisher-design-apply button:first-child {
-  width: 88px;
-  height: 40px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 7px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-}
-.publisher-design-apply .publisher-design-primary {
-  flex: 1;
 }
 .publish-mode .publisher-single-main {
   grid-template-columns: minmax(0, 3fr) minmax(320px, 1fr) !important;
@@ -13697,7 +12133,6 @@ onBeforeUnmount(() => {
   background: var(--theme-tone-blue) !important;
   border-color: color-mix(in srgb, var(--theme-accent) 34%, transparent) !important;
 }
-.publisher-design-radio label,
 .publisher-drawer-radios label {
   position: relative;
   display: inline-flex;
@@ -13706,7 +12141,6 @@ onBeforeUnmount(() => {
   cursor: pointer;
   user-select: none;
 }
-.publisher-design-radio input[type="radio"],
 .publisher-drawer-radios input[type="radio"] {
   position: absolute !important;
   width: 1px !important;
@@ -13717,7 +12151,6 @@ onBeforeUnmount(() => {
   opacity: 0 !important;
   pointer-events: none !important;
 }
-.publisher-design-radio label::before,
 .publisher-drawer-radios label::before {
   content: "";
   flex: 0 0 14px;
@@ -13729,25 +12162,20 @@ onBeforeUnmount(() => {
   background: var(--theme-panel-soft);
   box-shadow: none;
 }
-.publisher-design-radio label:has(input[type="radio"]:checked)::before,
 .publisher-drawer-radios label:has(input[type="radio"]:checked)::before {
   border-color: var(--theme-accent) !important;
   background: radial-gradient(circle, var(--theme-accent) 0 3px, var(--theme-panel-soft) 4px) !important;
 }
-.publisher-design-radio label:has(input[type="radio"]:checked),
 .publisher-drawer-radios label:has(input[type="radio"]:checked) {
   color: var(--theme-text);
 }
-.publisher-design-radio input[type="radio"]:focus-visible,
 .publisher-drawer-radios input[type="radio"]:focus-visible {
   outline: 0;
 }
-.publisher-design-radio label:has(input[type="radio"]:focus-visible)::before,
 .publisher-drawer-radios label:has(input[type="radio"]:focus-visible)::before {
   outline: 2px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
   outline-offset: 2px;
 }
-.publisher-design-check input[type="checkbox"],
 .publisher-drawer-check input[type="checkbox"] {
   width: 14px !important;
   height: 14px !important;
@@ -13755,98 +12183,8 @@ onBeforeUnmount(() => {
   min-height: 14px !important;
   margin: 0;
 }
-.publisher-design-page ~ .publisher-drawer-backdrop {
-  display: none !important;
-}
 .publish-mode {
   overflow: hidden !important;
-}
-.publish-mode .publisher-design-page {
-  height: calc(100vh - 104px) !important;
-  max-height: calc(100vh - 104px) !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-page {
-  display: flex !important;
-  flex-direction: column !important;
-}
-.publish-mode .publisher-design-head,
-.publish-mode .publisher-design-stats,
-.publish-mode .publisher-design-filters,
-.publish-mode .publisher-design-selection {
-  flex: none !important;
-}
-.publish-mode .publisher-design-workspace {
-  display: grid !important;
-  flex: 1 1 auto !important;
-  height: auto !important;
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-list {
-  display: grid !important;
-  height: 100% !important;
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-editor {
-  display: flex !important;
-  height: 100% !important;
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-editor {
-  position: relative !important;
-  padding-bottom: 72px !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-.publish-mode .publisher-design-apply {
-  position: absolute !important;
-  left: 14px !important;
-  right: 14px !important;
-  bottom: 0 !important;
-  margin: 0 !important;
-  padding: 12px 0 !important;
-  background: var(--theme-panel-soft) !important;
-  z-index: 5 !important;
-}
-.publish-mode .publisher-design-editor-head,
-.publish-mode .publisher-design-preview,
-.publish-mode .publisher-design-hint,
-.publish-mode .publisher-design-check,
-.publish-mode .publisher-design-field {
-  flex: none !important;
-}
-.publish-mode .publisher-design-editor .publisher-design-apply {
-  flex: none !important;
-  position: sticky !important;
-  bottom: 0 !important;
-}
-.publish-mode .publisher-design-workspace {
-  min-height: 0 !important;
-  height: auto !important;
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-list,
-.publish-mode .publisher-design-editor {
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-.publish-mode .publisher-design-editor {
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-editor > *:not(.publisher-design-apply) {
-  flex-shrink: 0;
-}
-.publish-mode .publisher-design-apply {
-  position: sticky;
-  bottom: 0;
-  background: var(--theme-panel-soft);
-  z-index: 3;
-}
-.publish-mode .publisher-design-rows {
-  min-height: 0 !important;
-  overflow-y: auto !important;
 }
 .tiktok-page.publish-mode {
   height: calc(100vh - 76px) !important;
@@ -13854,189 +12192,6 @@ onBeforeUnmount(() => {
   padding: 8px 10px !important;
   overflow: hidden !important;
   box-sizing: border-box !important;
-}
-.publish-mode .publisher-design-page {
-  height: 100% !important;
-  max-height: none !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-}
-.publish-mode .publisher-design-workspace {
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-list {
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-editor {
-  min-height: 0 !important;
-}
-.publisher-design-page {
-  position: relative;
-  z-index: 2;
-}
-.publisher-design-workspace {
-  min-height: 420px !important;
-  height: auto !important;
-}
-.publisher-design-list,
-.publisher-design-editor {
-  min-height: 420px !important;
-}
-.publisher-design-rows {
-  min-height: 320px !important;
-}
-.publisher-editor-preview-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 7px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-  font-size: 10px;
-}
-.publisher-editor-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin: 0 -6px 8px;
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-}
-.publisher-editor-tabs button {
-  height: 34px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-}
-.publisher-editor-tabs button.active {
-  border-bottom-color: var(--theme-accent);
-  color: var(--theme-accent);
-}
-.publisher-editor-apply-mode {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 12px 0 8px;
-  border-top: 1px solid var(--theme-border);
-}
-.publisher-editor-apply-mode > strong {
-  font-size: 11px;
-  color: var(--theme-tone-blue);
-}
-.publish-mode .publisher-design-editor {
-  padding-bottom: 76px !important;
-}
-.publish-mode .publisher-design-editor {
-  padding-bottom: 14px !important;
-  overflow-y: auto !important;
-}
-.publish-mode .publisher-design-apply {
-  position: static !important;
-  left: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  margin-top: 12px !important;
-  flex-shrink: 0 !important;
-}
-.publish-mode .publisher-design-apply {
-  display: grid !important;
-  grid-template-columns: 80px 96px minmax(0, 1fr) !important;
-  gap: 8px !important;
-  left: 8px !important;
-  right: 8px !important;
-  padding: 10px 0 !important;
-}
-.publish-mode .publisher-design-apply > button {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 6px !important;
-  box-sizing: border-box !important;
-  width: auto !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  min-width: 0 !important;
-  padding: 0 8px !important;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 7px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  line-height: 1 !important;
-  box-shadow: none !important;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-apply > button:hover {
-  border-color: var(--theme-border-control);
-  background: var(--theme-tone-blue);
-}
-.publish-mode .publisher-design-apply .publisher-submit-button {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-text) !important;
-  font-weight: 700 !important;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button:hover {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button:disabled {
-  opacity: 0.45;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button {
-  min-width: 150px !important;
-  width: auto !important;
-  height: 36px !important;
-  min-height: 36px !important;
-  padding: 0 14px !important;
-  border-radius: 8px !important;
-  font-size: 12px !important;
-  gap: 6px !important;
-  box-shadow: none !important;
-}
-.publish-mode .publisher-editor-tabs-single {
-  min-height: 34px !important;
-  border-bottom: 1px solid var(--theme-border) !important;
-}
-.publish-mode .publisher-editor-tabs-single span {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  padding: 0 4px;
-  color: var(--theme-accent);
-  font-size: 12px;
-  font-weight: 700;
-}
-.publish-mode .publisher-schedule-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin-top: 8px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 7px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-accent);
-}
-.publish-mode .publisher-schedule-input input[type="datetime-local"] {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--theme-text);
-  color-scheme: dark;
-  font-size: 12px;
-}
-.publish-mode .publisher-schedule-input input[type="datetime-local"]:focus {
-  outline: none;
 }
 .publisher-delete-modal {
   position: fixed;
@@ -14397,273 +12552,6 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, var(--theme-accent) 66%, transparent);
   background: var(--theme-accent);
 }
-.publish-mode .publisher-design-apply {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-}
-.publish-mode .publisher-design-apply > button {
-  width: 100% !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-button.publisher-submit-button {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-text) !important;
-  box-shadow: 0 6px 16px rgba(31, 212, 192, 0.16) !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-button.publisher-submit-button:hover:not(:disabled) {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-button.publisher-submit-button:disabled {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-text-secondary) !important;
-  box-shadow: none !important;
-  opacity: 1 !important;
-}
-.publish-mode .publisher-design-preview {
-  margin: 10px 0 !important;
-  padding: 0 !important;
-}
-.publish-mode .publisher-design-check {
-  min-height: 28px !important;
-}
-.publish-mode .publisher-design-field {
-  padding-bottom: 7px !important;
-}
-.publish-mode .publisher-design-page {
-  gap: 6px !important;
-  padding: 6px !important;
-  border-radius: 10px !important;
-}
-.publish-mode .publisher-design-head {
-  height: 60px !important;
-  min-height: 60px !important;
-  padding: 0 8px !important;
-  border-bottom: 1px solid var(--theme-border-control);
-}
-.publisher-design-body {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
-  gap: 8px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-.publisher-design-left {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-.publish-mode .publisher-design-stats {
-  flex: none !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  border: 0 !important;
-}
-.publish-mode .publisher-design-stats > div {
-  height: 40px !important;
-  min-height: 40px !important;
-  padding: 0 10px !important;
-  border-right: 1px solid var(--theme-border) !important;
-}
-.publish-mode .publisher-design-stats > div:first-child {
-  border-bottom: 2px solid var(--theme-accent) !important;
-}
-.publish-mode .publisher-design-stats strong {
-  padding: 2px 7px;
-  border-radius: 10px;
-  background: var(--theme-tone-blue);
-  font-size: 11px !important;
-}
-.publish-mode .publisher-design-filters {
-  grid-template-columns:
-    minmax(190px, 1fr)
-    104px 104px 104px 108px 74px 74px !important;
-  flex: none !important;
-  height: 38px !important;
-}
-.publish-mode .publisher-design-selection {
-  flex: none !important;
-  min-height: 44px !important;
-  gap: 10px !important;
-  padding: 5px 10px !important;
-}
-.publish-mode .publisher-design-selection > span {
-  flex: 0 0 auto;
-  margin-right: 2px;
-}
-.publish-mode .publisher-design-selection > div {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.publish-mode .publisher-design-selection > div button {
-  flex: 0 0 auto;
-  min-width: 76px;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-selection .publisher-selection-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px;
-  min-width: 58px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-tone-blue);
-  border-radius: 6px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-tone-blue);
-  font-size: 10px;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-selection .publisher-selection-toggle:hover {
-  border-color: var(--theme-accent);
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-}
-.publish-mode .publisher-design-selection > .publisher-submit-button {
-  flex: 0 0 auto;
-  min-width: 124px;
-  height: 32px;
-  margin-left: auto;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 11px !important;
-  box-shadow: none !important;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-list {
-  flex: 1 1 auto !important;
-  height: auto !important;
-  min-height: 0 !important;
-  border-radius: 7px !important;
-}
-.publish-mode .publisher-design-editor {
-  width: auto !important;
-  max-width: none !important;
-  min-width: 0 !important;
-  height: 100% !important;
-  padding: 10px !important;
-  border-radius: 7px !important;
-  overflow-y: auto !important;
-}
-.publish-mode .publisher-design-row {
-  min-height: 64px !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-bottom: 1px solid var(--theme-border) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-}
-.publish-mode .publisher-design-row:hover {
-  background: color-mix(in srgb, var(--theme-tone-blue) 62%, transparent) !important;
-}
-@media (max-width: 1180px) {
-  .publisher-design-body {
-    grid-template-columns: minmax(0, 1fr) 300px;
-  }
-  .publish-mode .publisher-design-filters {
-    grid-template-columns:
-      minmax(140px, 1fr)
-      78px 78px 78px 82px 54px 54px !important;
-    gap: 6px !important;
-  }
-  .publish-mode .publisher-design-list-head,
-  .publish-mode .publisher-design-row {
-    grid-template-columns:
-      32px minmax(120px, 1.2fr) minmax(85px, 0.8fr) minmax(90px, 0.9fr)
-      70px 92px 70px !important;
-    gap: 6px !important;
-  }
-  .publish-mode .publisher-design-row {
-    padding-right: 6px !important;
-    padding-left: 6px !important;
-  }
-  .publish-mode .publisher-design-tags {
-    gap: 2px;
-  }
-  .publish-mode .publisher-design-tags span:nth-child(n + 2) {
-    display: none;
-  }
-}
-.publish-mode .publisher-design-page {
-  background: var(--theme-panel) !important;
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 58%, transparent) !important;
-}
-.publish-mode .publisher-design-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 0;
-  background: color-mix(in srgb, var(--theme-accent) 11%, transparent);
-  color: var(--theme-accent);
-  box-shadow: none;
-}
-.publish-mode .publisher-design-title {
-  gap: 14px;
-}
-.publish-mode .publisher-design-title h1 {
-  color: var(--theme-text);
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-.publish-mode .publisher-design-title p {
-  margin-top: 5px;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  line-height: 1.2;
-}
-.publish-mode .publisher-design-actions {
-  gap: 10px;
-}
-.publish-mode .publisher-design-actions button {
-  height: 38px;
-  min-width: 108px;
-  padding: 0 14px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.publish-mode .publisher-design-actions .publisher-design-secondary {
-  border-color: var(--theme-tone-blue) !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-tone-blue) !important;
-  font-weight: 600 !important;
-}
-.publish-mode .publisher-design-actions .publisher-design-primary {
-  min-width: 142px;
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-text) !important;
-  box-shadow: none !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-actions .publisher-design-primary {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, var(--theme-on-accent)) !important;
-  box-shadow: none !important;
-}
 .publisher-source-tabs {
   display: flex;
   gap: 4px;
@@ -14713,58 +12601,6 @@ html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-d
 }
 .publisher-picker-pagination button:disabled {
   opacity: 0.35;
-}
-.publish-mode .publisher-design-actions .publisher-music-library-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 112px;
-  border: 1px solid var(--theme-tone-blue);
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-  font-weight: 700;
-  line-height: 1;
-}
-.publish-mode .publisher-design-actions .publisher-music-library-button:hover {
-  border-color: var(--theme-tone-blue);
-  background: var(--theme-tone-blue);
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-  .publisher-design-actions
-  button.publisher-music-library-button {
-  border-color: var(--theme-tone-blue) !important;
-  background: var(--theme-tone-blue) !important;
-  color: var(--theme-text) !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-  .publisher-design-actions
-  button.publisher-music-library-button:hover {
-  border-color: var(--theme-tone-blue) !important;
-  background: var(--theme-tone-blue) !important;
-}
-.publisher-music-library-button > svg {
-  flex: 0 0 auto;
-  display: block;
-}
-.publisher-music-library-button span {
-  display: grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--theme-text) 20%, transparent);
-  color: var(--theme-text);
-  font-size: 9px;
 }
 .publisher-music-library-dialog {
   display: flex;
@@ -14932,241 +12768,7 @@ html[data-app-theme]
     grid-template-columns: 1fr;
   }
 }
-.publish-mode .publisher-design-stats {
-  display: flex !important;
-  align-items: center;
-  gap: 6px;
-  height: 42px !important;
-  min-height: 42px !important;
-  padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 58%, transparent) !important;
-  border-radius: 7px;
-  background: var(--theme-panel);
-}
-.publish-mode .publisher-design-stats > button {
-  display: flex;
-  flex: 1 1 0;
-  align-items: center;
-  justify-content: center;
-  height: 32px !important;
-  min-height: 32px !important;
-  min-width: 0;
-  padding: 0 10px !important;
-  border: 0 !important;
-  border-radius: 5px;
-  background: transparent !important;
-  color: var(--theme-text-secondary) !important;
-  font-size: 11px;
-  cursor: pointer;
-}
-.publish-mode .publisher-design-stats > button:hover {
-  background: var(--theme-tone-blue) !important;
-  color: var(--theme-text) !important;
-}
-.publish-mode .publisher-design-stats > button.active {
-  background: var(--theme-accent) !important;
-  color: var(--theme-accent) !important;
-  box-shadow: inset 0 0 0 1px rgba(50, 219, 195, 0.28);
-}
-.publish-mode .publisher-design-stats > button span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-stats > button strong {
-  display: grid;
-  place-items: center;
-  min-width: 21px;
-  height: 20px;
-  margin: 0;
-  padding: 0 6px;
-  border-radius: 10px;
-  background: var(--theme-tone-blue);
-  color: var(--theme-text);
-  font-size: 10px !important;
-}
-.publish-mode .publisher-design-stats > button.active strong {
-  background: var(--theme-accent);
-  color: var(--theme-accent);
-}
-.publish-mode .publisher-design-filters {
-  display: grid !important;
-  grid-template-columns: minmax(180px, 1fr) 102px 102px 96px auto !important;
-  align-items: center;
-  gap: 7px !important;
-  height: 38px !important;
-}
-.publisher-filter-actions {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.publish-mode .publisher-design-filters .publisher-filter-actions > button {
-  height: 36px;
-  min-width: 68px;
-  padding: 0 10px;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-filters .publisher-date-button {
-  min-width: 104px;
-}
-.publish-mode .publisher-design-filters .publisher-date-button.active {
-  border-color: var(--theme-accent);
-  color: var(--theme-accent);
-}
-.publish-mode .publisher-design-filters .publisher-filter-apply {
-  border-color: var(--theme-accent);
-  background: var(--theme-accent);
-  color: var(--theme-accent);
-}
-.publisher-date-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
 /* Keep the publisher surface aligned with the active application theme. */
-.publish-mode .publisher-design-page,
-.publish-mode .publisher-design-list,
-.publish-mode .publisher-design-editor {
-  border-color: var(--theme-border) !important;
-  background: var(--theme-panel) !important;
-  color: var(--theme-text) !important;
-}
-.publish-mode .publisher-design-list-head {
-  border-bottom: 1px solid var(--theme-divider) !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-text-muted) !important;
-}
-.publish-mode .publisher-design-row {
-  border-bottom-color: var(--theme-divider) !important;
-  background: var(--theme-panel) !important;
-  color: var(--theme-text-secondary) !important;
-}
-.publish-mode .publisher-design-row:hover {
-  background: var(--theme-panel-soft) !important;
-}
-.publish-mode .publisher-design-row.is-published {
-  border-left: 3px solid var(--theme-accent) !important;
-  background: color-mix(in srgb, var(--theme-accent-soft) 42%, var(--theme-panel)) !important;
-}
-.publish-mode .publisher-design-row.is-published .publisher-design-state {
-  font-weight: 700;
-}
-.publish-mode .publisher-design-row.is-published input[type="checkbox"],
-.publish-mode .publisher-design-row.is-published button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.publish-mode .publisher-design-title,
-.publish-mode .publisher-design-title h1,
-.publish-mode .publisher-design-editor-head h2,
-.publish-mode .publisher-design-check,
-.publish-mode .publisher-design-time,
-.publish-mode .publisher-design-state {
-  color: var(--theme-text) !important;
-}
-.publish-mode .publisher-design-title p,
-.publish-mode .publisher-design-editor-head p,
-.publish-mode .publisher-design-hint,
-.publish-mode .publisher-design-hint small,
-.publish-mode .publisher-design-pager {
-  color: var(--theme-text-muted) !important;
-}
-.publish-mode .publisher-design-filters select,
-.publish-mode .publisher-design-filters button,
-.publish-mode .publisher-design-search,
-.publish-mode .publisher-design-selection,
-.publish-mode .publisher-design-selection button:not(.publisher-design-primary),
-.publish-mode .publisher-design-pager button,
-.publish-mode .publisher-design-pager select {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
-.publish-mode .publisher-design-selection {
-  border-color: color-mix(in srgb, var(--theme-accent) 36%, var(--theme-border)) !important;
-  background: var(--theme-accent-soft) !important;
-}
-.publish-mode .publisher-design-selection .publisher-submit-button,
-.publish-mode .publisher-design-primary {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, var(--theme-on-accent)) !important;
-  box-shadow: none !important;
-}
-.publish-mode .publisher-design-actions .publisher-design-primary {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, var(--theme-on-accent)) !important;
-  box-shadow: none !important;
-}
-.publish-mode .publisher-design-selection .publisher-submit-button:hover,
-.publish-mode .publisher-design-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-accent) 86%, var(--theme-input)) !important;
-}
-.publish-mode .publisher-design-product,
-.publish-mode .publisher-design-row-actions button,
-.publish-mode .publisher-design-title-cell button {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
-.publish-mode .publisher-design-tags span,
-.publish-mode .publisher-design-tags b {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 22%, var(--theme-border)) !important;
-  background: var(--theme-accent-soft) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-.publish-mode .publisher-design-tags .publisher-design-tags-empty {
-  border-color: transparent !important;
-  background: transparent !important;
-  color: var(--theme-text-muted) !important;
-}
-.publish-mode .publisher-design-empty {
-  display: grid;
-  min-height: 280px;
-  place-content: center;
-  justify-items: center;
-  gap: 8px;
-  margin: 16px;
-  padding: 34px 24px;
-  border: 1px dashed var(--theme-border-control);
-  border-radius: 12px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text-muted);
-  text-align: center;
-}
-.publish-mode .publisher-design-empty svg {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 2px;
-  color: var(--theme-control-selected-text);
-}
-.publish-mode .publisher-design-empty strong {
-  color: var(--theme-text);
-  font-size: 14px;
-}
-.publish-mode .publisher-design-empty span {
-  color: var(--theme-text-muted);
-  font-size: 11px;
-}
-.publish-mode .publisher-design-editor {
-  background: var(--theme-panel-soft) !important;
-}
-.publish-mode .publisher-design-apply {
-  border-top: 1px solid var(--theme-divider) !important;
-  background: var(--theme-panel-soft) !important;
-}
-.publish-mode .publisher-design-apply > button:not(.publisher-design-primary) {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
 .publisher-picker-dialog {
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   height: min(820px, calc(100vh - 32px));
@@ -15199,234 +12801,11 @@ html[data-app-theme]
   background: var(--theme-accent) !important;
   color: var(--theme-on-accent, var(--theme-on-accent)) !important;
 }
-.publish-mode .publisher-description-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-.publish-mode .publisher-description-tags span,
-.publish-mode .publisher-description-tags button {
-  min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 999px;
-  background: var(--theme-control);
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publish-mode .publisher-description-tags span {
-  border-color: color-mix(in srgb, var(--theme-accent) 26%, var(--theme-border));
-  background: var(--theme-accent-soft);
-  color: var(--theme-control-selected-text);
-}
-.publish-mode .publisher-description-tags button:hover {
-  border-color: var(--theme-accent);
-  color: var(--theme-text);
-}
-.publish-mode .publisher-description-tag-input {
-  display: flex;
-  gap: 6px;
-  margin-top: 7px;
-}
-.publish-mode .publisher-description-tag-input input {
-  min-width: 0;
-  flex: 1;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 6px;
-  background: var(--theme-input);
-  color: var(--theme-text);
-}
-.publish-mode .publisher-description-tag-input button {
-  padding: 0 10px;
-  border: 1px solid var(--theme-accent);
-  border-radius: 6px;
-  background: var(--theme-accent);
-  color: var(--theme-on-accent, var(--theme-on-accent));
-}
 /* Final theme pass for editor text and controls. */
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-video strong,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-title-cell span,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-product,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-row > label {
-  color: var(--theme-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-video span > small,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-pager,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field small {
-  color: var(--theme-text-muted) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-editor-head,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-tabs-single,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-apply-mode {
-  border-color: var(--theme-divider) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-tabs-single {
-  background: var(--theme-panel-soft) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-tabs-single span {
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-hint,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-check,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-apply-mode > strong,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-radio {
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-hint small {
-  color: var(--theme-text-muted) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field input,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field textarea,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-select {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-input) !important;
-  color: var(--theme-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field input::placeholder,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field textarea::placeholder {
-  color: var(--theme-text-muted) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-radio label::before {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-radio label:has(input[type="radio"]:checked)::before {
-  border-color: var(--theme-accent) !important;
-  background: radial-gradient(circle, var(--theme-accent) 0 3px, var(--theme-control) 4px) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-row-actions button,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-title-cell button {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats strong {
-  background: var(--theme-control-selected) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-head {
-  border-bottom-color: var(--theme-divider) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats {
-  border: 1px solid var(--theme-border) !important;
-  border-radius: 9px !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > div {
-  border-right-color: var(--theme-divider) !important;
-  background: transparent !important;
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > div:first-child {
-  border-bottom-color: var(--theme-accent) !important;
-  background: var(--theme-accent-soft) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats strong {
-  color: inherit !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-logo {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 28%, var(--theme-border)) !important;
-  background: var(--theme-accent-soft) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-page ~ .publisher-drawer-backdrop {
-  display: grid !important;
-}
-@media (max-width: 1180px) {
-  .publish-mode .publisher-design-filters {
-    grid-template-columns: minmax(130px, 1fr) 78px 78px 78px auto !important;
-  }
-  .publish-mode .publisher-design-filters .publisher-filter-actions > button {
-    min-width: 46px;
-    padding: 0 7px;
-    font-size: 10px;
-  }
-  .publish-mode .publisher-design-filters .publisher-date-button {
-    min-width: 82px;
-  }
-}
 /* Compact publishing header: keep the API status control from stretching the toolbar. */
-.publish-mode .publisher-design-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 0;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip {
-  flex: 0 1 238px;
-  width: 238px;
-  min-width: 0 !important;
-  height: 38px !important;
-  box-sizing: border-box;
-  padding: 0 6px 0 12px !important;
-  gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--theme-border-control) 78%, transparent) !important;
-  border-radius: 11px !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-text-secondary) !important;
-  box-shadow: 0 4px 14px rgba(20, 35, 55, 0.08);
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > span {
-  overflow: hidden;
-  flex: 1 1 auto;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 650;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > em {
-  flex: 0 0 auto;
-  color: var(--theme-text-muted) !important;
-  font-size: 10px;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > button {
-  flex: 0 0 auto;
-  width: 66px !important;
-  min-width: 66px !important;
-  height: 30px !important;
-  min-height: 30px !important;
-  padding: 0 10px !important;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 18%, var(--theme-border-control)) !important;
-  border-radius: 8px !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-control-selected-text) !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > button:hover {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent-soft) !important;
-}
-@media (max-width: 980px) {
-  .publish-mode .publisher-design-head {
-    height: auto !important;
-    min-height: 60px !important;
-    padding: 10px 8px !important;
-    align-items: flex-start;
-  }
-  .publish-mode .publisher-design-actions {
-    max-width: 62%;
-    row-gap: 6px;
-  }
-  .publish-mode .publisher-design-actions > .publisher-design-api-chip {
-    flex-basis: 210px;
-    width: 210px;
-  }
-}
 .publisher-poster-placeholder { display: grid; width: 100%; height: 100%; place-items: center; color: var(--theme-text-muted); background: var(--theme-panel-soft); }
 
 /* Keep the light theme from inheriting the legacy purple music action. */
-:global(html[data-app-theme='light-teal']) .tiktok-page.publish-mode .publisher-design-actions button.publisher-music-library-button {
-  background: var(--theme-panel) !important;
-  border-color: var(--theme-border-control) !important;
-  color: var(--theme-text) !important;
-  box-shadow: none !important;
-}
 
 :global(html[data-app-theme='light-teal']) .tiktok-page .generation-mode-control__options {
   background: var(--theme-panel-soft) !important;

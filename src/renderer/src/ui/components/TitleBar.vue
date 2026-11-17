@@ -1,46 +1,23 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Copy, FolderOpen, ListChecks, Minus, RefreshCcw, Square, X } from 'lucide-vue-next'
+import { Copy, FolderOpen, Minus, Square, X } from 'lucide-vue-next'
+import AiTitlebarActions from './ai/AiTitlebarActions.vue'
 import brandIconAsset from '../../../../../resources/icon-brand-green.png'
 
-const { t, locale: i18nLocale } = useI18n()
-const router = useRouter()
+const { t } = useI18n()
+const route = useRoute()
 const maximized = ref(false)
-const refreshing = ref(false)
-const refreshedAt = ref('')
 
 async function sync() {
   const res = await window.api.window.isMaximized()
   maximized.value = Boolean(res?.maximized)
 }
 
-function updateRefreshTime() {
-  refreshedAt.value = new Intl.DateTimeFormat(String(i18nLocale.value), {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date())
-}
-
 onMounted(() => {
   void sync()
-  updateRefreshTime()
 })
-
-async function refreshStatus() {
-  if (refreshing.value) return
-  refreshing.value = true
-  await new Promise((resolve) => window.setTimeout(resolve, 320))
-  updateRefreshTime()
-  refreshing.value = false
-}
-
-function openTasks() {
-  void router.push('/production/tasks')
-}
 
 async function openDataDirectory() {
   const paths = (await window.api.getPaths()) as { dataDir?: string }
@@ -74,24 +51,9 @@ async function close() {
     <div class="vg-titlebar__drag" @dblclick="toggleMax"></div>
 
     <div class="vg-titlebar__actions">
-      <span class="vg-pill vg-pill--green vg-pill--dot vg-titlebar__status">{{ t('titleBar.localWorkspace') }} · {{ t('titleBar.ready') }}</span>
-      <button
-        class="vg-btn vg-btn--ghost vg-btn--sm"
-        type="button"
-        :disabled="refreshing"
-        :title="`${t('titleBar.lastRefresh')}: ${refreshedAt}`"
-        @click="refreshStatus"
-      >
-        <RefreshCcw :class="['vg-titlebar__icon', { 'vg-spin': refreshing }]" />
-        <span>{{ t('titleBar.refreshStatus') }}</span>
-      </button>
-      <button class="vg-btn vg-btn--ghost vg-btn--sm" type="button" @click="openTasks">
-        <ListChecks class="vg-titlebar__icon" />
-        <span>{{ t('titleBar.taskCenter') }}</span>
-      </button>
-      <button class="vg-btn vg-btn--ghost vg-btn--sm" type="button" @click="openDataDirectory">
+      <AiTitlebarActions v-if="!route.meta.public" />
+      <button class="vg-btn vg-btn--ghost vg-btn--sm" type="button" :title="t('titleBar.openDataDirectory')" @click="openDataDirectory">
         <FolderOpen class="vg-titlebar__icon" />
-        <span>{{ t('titleBar.openDataDirectory') }}</span>
       </button>
     </div>
 

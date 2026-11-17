@@ -28,7 +28,7 @@ export type CloneModelIdentitySummary = {
   id: string
   name: string
   status: 'idle' | 'generating' | 'done' | 'failed'
-  productType: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+  productType: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
   coverImagePath?: string
   imagePaths: string[]
   description: string

@@ -1075,7 +1075,7 @@ watch(
     <header class="vg-page-head">
       <span class="vg-page-head__icon"><LayoutTemplate :size="20" /></span>
       <div class="vg-page-head__text">
-        <h1>{{ tr('autoUi.k_508b6f10d1f6') }}</h1>
+        <h1>{{ tr('ai.nav.templates') }}</h1>
         <p>{{ tr('autoUi.k_c5d58c4a6e65') }}</p>
       </div>
       <div class="vg-page-head__actions">

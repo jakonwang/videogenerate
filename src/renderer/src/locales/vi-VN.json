@@ -948,8 +948,8 @@
   "settings": {
     "hero": {
       "kicker": "Cai dat / Trung tam dieu khien",
-      "title": "Cai Dat Nen Tang Va Nang Luc",
-      "subtitle": "Cau hinh API key va base URL truoc, sau do chon nen tang va mo hinh cho tinh nang video, hinh anh va hoi thoai."
+      "title": "Cai dat",
+      "subtitle": "Giao dien, mo hinh AI, AI Nha san xuat va luu tru."
     },
     "appearance": {
       "title": "Giao dien",
@@ -1077,15 +1077,15 @@
     "navigation": {
       "groups": {
         "general": "Chung",
-        "ai": "Tri tue nhan tao",
+        "ai": "Mo hinh AI",
         "hermes": "Hermes",
         "storage": "Luu tru va phan phoi"
       }
     },
     "sections": {
       "appearance": {
-        "label": "Giao dien va key cuc bo",
-        "desc": "Giao dien, chu de va key truy cap cuc bo"
+        "label": "Giao dien",
+        "desc": "Chu de va giao dien"
       },
       "platforms": {
         "label": "Key nen tang",
@@ -1500,7 +1500,7 @@
         "description": "Cat video thanh tai nguyen anh co the tai su dung, ho tro tai len Qiniu va theo doi trang thai."
       },
       "live-photo-generator": {
-        "name": "Trinh tao Live Photo",
+        "name": "Live Photo",
         "description": "Tao Live Photo tu anh tham chieu san pham, kem xem truoc va xuat."
       },
       "tiktok-creative-studio": {
@@ -1524,7 +1524,7 @@
         "description": "Xem xet va thuc thi cac de xuat ngan sach va ROI muc tieu GMV MAX co bao ve thong qua TikTok for Business MCP."
       },
       "tiktok-creator-hub": {
-        "name": "Trung tam nha sang tao TikTok",
+        "name": "Quan ly nha sang tao",
         "description": "Quan ly nha sang tao nhieu cua hang: yeu cau mau, ty le hoan thanh va chi phi mau theo tung nha sang tao, dong bo chi doc tu TikTok Shop Affiliate."
       },
       "tiktok-listing-helper": {
@@ -2232,6 +2232,244 @@
     "notesFallback": "Hien chi co loi vao khong gian lam viec."
   },
   "production": {
+    "mixInsights": {
+      "title": "Hiệu quả video ghép",
+      "desc": "Liên kết từng video ghép với creative GMV Max, chấm điểm công thức, kiểu hook và cảnh mở đầu theo chuyển đổi thật để lô sau dùng nhiều phương án thắng hơn.",
+      "back": "Quay lại xưởng ghép",
+      "allProducts": "Tất cả sản phẩm",
+      "refresh": "Đồng bộ dữ liệu GMV Max",
+      "how": "Quy trình: xuất video → gửi sang trung tâm đăng (kèm mã liên kết) → chạy quảng cáo TikTok → quay lại đây đồng bộ. Hệ thống tự liên kết theo tiêu đề bài đăng và thời lượng, hoặc liên kết thủ công. Mỗi kết quả mới chỉ thay đổi điểm một chút để tránh lệch vì may mắn.",
+      "totals": {
+        "rendered": "Đã xuất",
+        "published": "Đã gửi đăng",
+        "linked": "Đã liên kết",
+        "measured": "Có dữ liệu QC",
+        "winners": "Thắng S/A"
+      },
+      "board": {
+        "formulas": "Xếp hạng công thức",
+        "hookStyles": "Xếp hạng kiểu hook",
+        "hookClips": "Cảnh mở đầu (sản phẩm này)"
+      },
+      "col": {
+        "name": "Tên",
+        "measured": "Có dữ liệu/tổng",
+        "score": "Điểm",
+        "share": "Tỷ trọng lần sau",
+        "video": "Video",
+        "status": "Trạng thái",
+        "grade": "Hạng"
+      },
+      "noData": "Chưa có",
+      "emptyBoard": "Chưa có dữ liệu quảng cáo. Đăng, chạy QC rồi bấm \"Đồng bộ dữ liệu GMV Max\".",
+      "videos": "Video ghép ({count})",
+      "publishAll": "Gửi tất cả video chưa đăng ({count})",
+      "status": {
+        "rendered": "Chưa đăng",
+        "published": "Đã gửi đăng",
+        "linkedAuto": "Tự liên kết",
+        "linkedManual": "Liên kết tay"
+      },
+      "remake": "Làm lại video thắng",
+      "publish": "Gửi sang trung tâm đăng",
+      "link": "Liên kết creative",
+      "unlink": "Bỏ liên kết (không tự liên kết nữa)",
+      "remove": "Xóa bản ghi",
+      "removeConfirm": "Xóa bản ghi này? Tệp video vẫn được giữ.",
+      "linkTitle": "Liên kết creative GMV Max",
+      "searchCreative": "Tìm theo tên hoặc ID creative",
+      "alreadyLinked": "đang liên kết video khác; chọn sẽ chuyển sang video này",
+      "noCreatives": "Không có creative để liên kết. Hãy đồng bộ trong plugin GMV Max trước.",
+      "noGmvMax": "GMV Max chưa có dữ liệu creative (cần ủy quyền cửa hàng và tạo chiến dịch trong plugin GMV Max)",
+      "refreshed": "Đọc {creatives} creative, liên kết mới {linked}, cập nhật {updated}",
+      "published": "Đã tạo {count} bản nháp đăng; chọn tài khoản và sản phẩm ở trung tâm đăng",
+      "empty": "Chưa có video ghép. Video xuất từ xưởng ghép sẽ hiện ở đây."
+    },
+    "mix": {
+      "useInsights": "Học từ dữ liệu quảng cáo (ưu tiên công thức và mở đầu hiệu quả)",
+      "learned": "Đã tham khảo {measured} video có dữ liệu và {winners} kịch bản thắng. Phân bổ lô này:",
+      "winner": {
+        "title": "Làm lại video thắng:",
+        "desc": "giữ công thức, cảnh mở đầu và ý hook; đổi cảnh giữa và lời thoại.",
+        "cancel": "Hủy làm lại"
+      },
+      "title": "Xưởng ghép AI",
+      "desc": "Ghép video bán hàng từ cảnh quay thật trong kho theo công thức viral, kèm tiêu đề hook và phụ đề lời thoại. Mỗi video có mở đầu, cảnh và lời thoại khác nhau.",
+      "back": "Quay lại cắt ghép hàng loạt",
+      "legacy": "Ghép ngẫu nhiên theo mẫu (cũ)",
+      "step1": "1. Chế độ & sản phẩm",
+      "step2": "2. Công thức",
+      "step3": "3. Lời thoại & xuất",
+      "mode": {
+        "ai": "Ghép AI",
+        "aiDesc": "AI viết hook và lời thoại khác nhau cho từng video theo nội dung cảnh",
+        "auto": "Ghép tự động",
+        "autoDesc": "Không gọi mô hình, xoay vòng câu của bạn, không tốn phí"
+      },
+      "poolLine": "Kho cảnh: {clips} cảnh, đã gắn nhãn {tagged}, thật {real} / AI {ai}",
+      "poolEmpty": "Kho cảnh của sản phẩm này có ít hơn 3 cảnh đã gắn nhãn.",
+      "goPool": "Mở kho cảnh",
+      "language": "Ngôn ngữ lời thoại",
+      "voice": "Giọng đọc",
+      "languages": {
+        "vi-VN": "Tiếng Việt",
+        "zh-CN": "Tiếng Trung",
+        "en-US": "Tiếng Anh",
+        "th-TH": "Tiếng Thái",
+        "id-ID": "Tiếng Indonesia"
+      },
+      "formula": {
+        "hint": "Chọn nhiều công thức sẽ dùng luân phiên",
+        "fromReference": "Trích từ video mẫu",
+        "extracting": "AI đang phân tích…",
+        "namePlaceholder": "Tên công thức (tuỳ chọn)",
+        "extracted": "Đã trích công thức \"{name}\" gồm {count} đoạn",
+        "remove": "Xóa công thức",
+        "removeConfirm": "Xóa công thức \"{name}\"?",
+        "source": {
+          "builtin": "Có sẵn",
+          "reference": "Video mẫu",
+          "custom": "Tự tạo"
+        }
+      },
+      "sellingPoints": "Điểm bán / giá / ưu đãi / khách hàng",
+      "sellingPointsPlaceholder": "VD: bạc 925 không dị ứng; giá gốc 199k nay 99k; mua 2 tặng 1; quà cho bạn gái",
+      "sellingPointsHint": "AI chỉ dùng giá và ưu đãi ghi ở đây, không tự bịa.",
+      "lines": {
+        "hook": "Câu hook (mỗi dòng một câu)",
+        "body": "Câu điểm bán (mỗi dòng một câu)",
+        "cta": "Câu chốt đơn (mỗi dòng một câu)",
+        "hint": "Mỗi video ghép 1 hook + 1-2 câu điểm bán + 1 câu chốt. {'{product}'} sẽ thay bằng tên sản phẩm."
+      },
+      "template": "Mẫu hoàn thiện (tuỳ chọn)",
+      "templateNone": "Không dùng (cắt thẳng + phụ đề nền vàng)",
+      "keepOriginalAudio": "Giữ âm thanh gốc dưới lời thoại",
+      "allowAiClips": "Dùng cảnh AI khi thiếu cảnh thật",
+      "summary": "Tạo {count} video, luân phiên {formulas} công thức",
+      "generate": "Tạo phương án",
+      "generating": "Đang chọn cảnh và viết lời…",
+      "draftsTitle": "Phương án ({count})",
+      "draftsDesc": "Tổng {shots} cảnh, có thể sửa tiêu đề và lời thoại trước khi xuất",
+      "renderAll": "Xuất tất cả ({count})",
+      "removeDraft": "Xóa phương án này",
+      "draftTitle": "Tiêu đề hook trên màn hình",
+      "voiceover": "Lời thoại (tự tạo giọng đọc và phụ đề)",
+      "enqueueNone": "Không có tác vụ nào ({skipped} trùng video cũ hoặc thiếu cảnh)",
+      "validation": {
+        "product": "Hãy chọn sản phẩm",
+        "formula": "Chọn ít nhất một công thức",
+        "outDir": "Hãy chọn thư mục xuất"
+      }
+    },
+    "pool": {
+      "mismatch": {
+        "badge": "Sai sản phẩm",
+        "hint": "AI thấy đây là sản phẩm khác; cảnh này không được dùng trừ khi bạn tự gán vai trò.",
+        "notice": "{count} cảnh bị AI đánh giá là sản phẩm khác và đã bị loại khỏi video ghép. Hãy kiểm tra xem tư liệu có bị gán nhầm sản phẩm không, hoặc cập nhật mô tả sản phẩm."
+      },
+      "title": "Kho cảnh quay",
+      "desc": "Cắt video quay thật và video AI của sản phẩm thành từng cảnh. AI gắn nhãn vai trò, điểm hook và chất lượng để ghép video theo kịch bản.",
+      "back": "Quay lại cắt ghép hàng loạt",
+      "product": "Sản phẩm",
+      "noProducts": "Chưa có sản phẩm",
+      "sync": "Đồng bộ tư liệu sản phẩm",
+      "importReal": "Nhập video quay thật",
+      "importAi": "Nhập video AI",
+      "retagAll": "Gắn nhãn lại tất cả",
+      "process": "Cắt cảnh & gắn nhãn ({count})",
+      "processing": "Đang xử lý…",
+      "hint": "\"Đồng bộ tư liệu sản phẩm\" lấy video trong kho sản phẩm và video nhân bản AI đã hoàn thành của sản phẩm này. Cảnh quay thật được ưu tiên khi ghép và thường chuyển đổi tốt hơn video thuần AI.",
+      "progress": {
+        "split": "Đang cắt cảnh {done}/{total}",
+        "tag": "AI đang gắn nhãn {done}/{total}"
+      },
+      "stats": {
+        "clips": "Cảnh dùng được",
+        "tagged": "Đã gắn nhãn",
+        "realVsAi": "Thật / AI",
+        "sources": "Video nguồn"
+      },
+      "missing": {
+        "title": "Thiếu cảnh:",
+        "desc": "video bán hàng hoàn chỉnh cần các cảnh này, hãy quay thêm hoặc nhập."
+      },
+      "clipsTitle": "Cảnh quay",
+      "filters": {
+        "all": "Tất cả"
+      },
+      "sort": {
+        "label": "Sắp xếp",
+        "hook": "Điểm hook",
+        "quality": "Chất lượng",
+        "time": "Thời gian"
+      },
+      "showDisabled": "Hiện cảnh đã tắt",
+      "preview": "Xem cảnh",
+      "close": "Đóng",
+      "roles": {
+        "hook": "Hook mở đầu",
+        "pain_point": "Nỗi đau",
+        "unboxing": "Mở hộp",
+        "demo": "Demo sử dụng",
+        "wear": "Đeo / dùng thực tế",
+        "detail": "Cận chi tiết",
+        "comparison": "So sánh",
+        "proof": "Bằng chứng",
+        "cta": "Kêu gọi (CTA)",
+        "broll": "Cảnh phụ"
+      },
+      "origin": {
+        "real": "Thật",
+        "ai": "AI",
+        "unknown": "Chưa rõ"
+      },
+      "clip": {
+        "untagged": "Chưa gắn nhãn",
+        "manual": "Thủ công",
+        "heuristic": "Suy luận",
+        "hook": "Hook",
+        "quality": "Chất lượng",
+        "failed": "AI gắn nhãn thất bại, dùng suy luận",
+        "auto": "Tự động",
+        "override": "Đổi vai trò cảnh",
+        "retag": "Gắn nhãn lại",
+        "disable": "Tắt cảnh",
+        "enable": "Bật lại cảnh"
+      },
+      "empty": "Kho trống. Hãy đồng bộ tư liệu sản phẩm hoặc nhập video.",
+      "emptyFiltered": "Không có cảnh phù hợp bộ lọc.",
+      "sources": {
+        "title": "Video nguồn",
+        "empty": "Chưa có video nguồn.",
+        "file": "Tệp",
+        "kind": "Nguồn",
+        "origin": "Loại",
+        "status": "Trạng thái",
+        "clips": "Số cảnh",
+        "resplit": "Cắt lại",
+        "remove": "Xóa khỏi kho",
+        "removeConfirm": "Xóa \"{name}\" và các cảnh khỏi kho? Tệp video gốc không bị xóa."
+      },
+      "sourceKind": {
+        "creative_studio": "TikTok Creative Studio",
+        "live_photo": "Live Photo",
+        "product_asset": "Tư liệu sản phẩm",
+        "clone_output": "Video nhân bản AI",
+        "import": "Đã nhập"
+      },
+      "sourceStatus": {
+        "pending": "Chờ xử lý",
+        "splitting": "Đang cắt",
+        "ready": "Sẵn sàng",
+        "failed": "Thất bại"
+      },
+      "toast": {
+        "noneLinked": "Sản phẩm này chưa có video nào trong kho sản phẩm, TikTok Creative Studio, Live Photo hay nhân bản AI. Hãy nhập video quay thật, hoặc tạo video ở các mô-đun đó rồi đồng bộ lại.",
+        "synced": "Đã thêm {count} video nguồn, đang cắt cảnh và gắn nhãn.",
+        "nothingNew": "Không có tư liệu mới.",
+        "imported": "Đã nhập {count} video, đang cắt cảnh và gắn nhãn."
+      }
+    },
     "tabs": {
       "ariaLabel": "Dieu huong san xuat",
       "products": {
@@ -2249,8 +2487,8 @@
     },
     "home": {
       "kicker": "San xuat",
-      "title": "Trung tam thuc thi tac vu",
-      "desc": "Quan ly tao tac vu, danh sach, chi tiet va mau tai mot noi.",
+      "title": "Tron hang loat",
+      "desc": "Cat video hang loat tu tu lieu san pham va mau, quan ly tac vu va mau tai mot noi.",
       "taskCount": "{count} tac vu",
       "templateCount": "{count} mau",
       "stats": {
@@ -2260,6 +2498,16 @@
         "templates": "Tong mau"
       },
       "entries": {
+        "mix": {
+          "title": "Xưởng ghép AI",
+          "desc": "Chọn cảnh từ kho theo công thức viral, AI viết lời thoại, tạo hàng loạt video bán hàng.",
+          "metric": "Bắt đầu ghép"
+        },
+        "pool": {
+          "title": "Kho cảnh quay",
+          "desc": "Cắt video quay thật và video AI thành từng cảnh, AI gắn nhãn công dụng từng cảnh.",
+          "metric": "Quản lý cảnh"
+        },
         "create": {
           "title": "Tao tac vu",
           "desc": "Tao tac vu san xuat tu san pham va mau.",
@@ -2291,7 +2539,7 @@
     },
     "create": {
       "kicker": "San xuat / Tao tac vu",
-      "title": "Tao tac vu tu san pham va mau",
+      "title": "Tao tac vu tron",
       "desc": "Tao tac vu tai day, sau do xem nhat ky va loi trong chi tiet.",
       "noProduct": "Chua chon san pham",
       "product": "San pham",
@@ -2311,7 +2559,7 @@
     },
     "tasks": {
       "kicker": "San xuat / Danh sach tac vu",
-      "title": "Danh sach va bo loc loi",
+      "title": "Tac vu tron",
       "desc": "Xem thong tin, loc trang thai va mo chi tiet tac vu.",
       "create": "Tao tac vu",
       "pause": "Tam dung",
@@ -2360,62 +2608,179 @@
     }
   },
   "slicer": {
-    "title": "Cat video truc tiep",
-    "desc": "Nhap ban ghi truc tiep hoac video dai, nhan dien doan va cat nhanh.",
-    "noVideo": "Chua chon video",
-    "outputAfterSplit": "Thu muc xuat se hien sau khi cat",
-    "phase": {
-      "ffmpeg": "Dang cat bang FFmpeg",
-      "collect": "Dang sap xep cac doan dau ra",
-      "done": "Da tao {count} doan",
-      "failed": "Cat video that bai",
-      "ready": "Da nhap video, dang cho phan tich",
-      "idle": "Dang cho nhap"
+    "title": "Cắt livestream",
+    "desc": "Nhập bản ghi livestream hoặc video dài, tự tìm đoạn nổi bật, tinh chỉnh rồi xuất hàng loạt clip dọc.",
+    "clipPrefix": "Đoạn",
+    "status": {
+      "idle": "Chờ nhập video",
+      "ready": "Sẵn sàng phân tích",
+      "analyzed": "Đã phân tích",
+      "clips": "{n} đoạn",
+      "analyzing": "Đang phân tích {pct}%",
+      "exporting": "Đang xuất {n}/{total}"
+    },
+    "actions": {
+      "changeVideo": "Đổi video",
+      "cancel": "Hủy"
     },
     "pickers": {
-      "video": "Chon ban ghi truc tiep hoac video dai",
-      "outputDir": "Chon thu muc xuat"
+      "video": "Chọn bản ghi livestream hoặc video dài",
+      "outputDir": "Chọn thư mục xuất"
     },
     "upload": {
-      "title": "Nhap ban ghi truc tiep hoac video dai",
-      "formats": "Ho tro MP4 / MOV / MKV / WEBM",
-      "sizeHint": "Nen dung tep nho hon 10GB",
-      "choose": "Chon tep video",
-      "reselect": "Chon lai video",
-      "openOriginal": "Mo video goc"
+      "title": "Nhập bản ghi livestream hoặc video dài",
+      "formats": "Kéo thả tệp vào đây hoặc bấm để chọn · MP4 / MOV / MKV / WEBM / FLV / TS",
+      "choose": "Chọn tệp video"
     },
-    "results": {
-      "title": "Ket qua cat",
-      "count": "{count} doan",
-      "openDir": "Mo thu muc",
-      "empty": "Nhap video va bat dau phan tich. Ket qua se hien tai day."
+    "steps": {
+      "analyzeTitle": "Phân tích thông minh",
+      "analyzeDesc": "Tìm khoảnh khắc nổi bật dựa trên âm lượng, cảm xúc và chuyển cảnh",
+      "editTitle": "Chỉnh trên timeline",
+      "editDesc": "Kéo mép đoạn để cắt, đánh dấu bằng I / O, tách bằng S",
+      "exportTitle": "Xuất hàng loạt",
+      "exportDesc": "Một lần bấm ra clip dọc 9:16, có fade và chuẩn hóa âm lượng"
+    },
+    "player": {
+      "back5": "Lùi 5 giây",
+      "fwd5": "Tiến 5 giây",
+      "playPause": "Phát / tạm dừng (Space)",
+      "markIn": "Điểm vào",
+      "markOut": "Điểm ra",
+      "markInKey": "Đặt điểm vào tại đầu phát (I)",
+      "markOutKey": "Đặt điểm ra tại đầu phát (O)",
+      "addClip": "Thêm đoạn",
+      "addAtPlayhead": "Thêm tại đây",
+      "addAtPlayheadHint": "Thêm một đoạn độ dài tối thiểu bắt đầu từ đầu phát",
+      "loop": "Lặp khi xem trước đoạn",
+      "speed": "Tốc độ phát"
+    },
+    "timeline": {
+      "title": "Timeline",
+      "energy": "Âm lượng",
+      "scene": "Chuyển cảnh",
+      "clip": "Đoạn",
+      "zoomIn": "Phóng to",
+      "zoomOut": "Thu nhỏ",
+      "noAnalysis": "Chạy phân tích để xem dạng sóng âm lượng và điểm chuyển cảnh"
+    },
+    "keys": {
+      "play": "Phát",
+      "seek": "±1s (Shift ±5s)",
+      "mark": "Vào / ra",
+      "add": "Thêm đoạn",
+      "split": "Tách tại đầu phát",
+      "delete": "Xóa đoạn",
+      "zoom": "Thu phóng"
+    },
+    "editor": {
+      "titlePlaceholder": "Tiêu đề đoạn (dùng làm tên tệp)",
+      "start": "Vào",
+      "end": "Ra",
+      "playhead": "Đầu phát",
+      "fromPlayhead": "Đặt theo vị trí đầu phát",
+      "preview": "Xem trước",
+      "split": "Tách",
+      "delete": "Xóa đoạn"
+    },
+    "clips": {
+      "title": "Danh sách đoạn",
+      "selectedMeta": "Đã chọn {n} · tổng {dur}",
+      "sortTime": "Theo thời gian",
+      "sortScore": "Theo điểm",
+      "selectAll": "Chọn tất cả",
+      "merge": "Gộp đã chọn",
+      "copyTimecodes": "Sao chép timecode",
+      "removeSelected": "Xóa đã chọn",
+      "clear": "Xóa hết",
+      "emptyTitle": "Chưa có đoạn nào",
+      "emptyDesc": "Chọn chế độ nhận diện ở bên phải để phân tích, hoặc tự đánh dấu bằng điểm vào / ra.",
+      "manual": "Thủ công",
+      "exported": "Đã xuất",
+      "failed": "Lỗi",
+      "scoreHint": "Điểm: mức độ hấp dẫn so với phần còn lại của buổi live",
+      "openFile": "Mở tệp"
+    },
+    "source": {
+      "title": "Video nguồn",
+      "open": "Mở bản gốc",
+      "duration": "Thời lượng",
+      "resolution": "Độ phân giải",
+      "fps": "Tốc độ khung hình",
+      "size": "Dung lượng",
+      "codec": "Codec",
+      "noAudio": "không có âm thanh",
+      "noAudioHint": "Video không có âm thanh dùng được nên chỉ nhận diện theo chuyển cảnh. Nên dùng độ dài cố định hoặc đánh dấu thủ công."
+    },
+    "mode": {
+      "highlight": "Nổi bật",
+      "highlightDesc": "Tìm khoảnh khắc hay nhất",
+      "pause": "Theo khoảng lặng",
+      "pauseDesc": "Cắt toàn bộ theo chỗ ngắt lời",
+      "interval": "Độ dài cố định",
+      "intervalDesc": "Chia đều theo số giây",
+      "manual": "Thủ công",
+      "manualDesc": "Tự đánh dấu vào / ra"
     },
     "analysis": {
-      "title": "Cai dat phan tich",
-      "recommended": "De xuat",
-      "mode": "Che do nhan dien",
-      "smart": "Nhan dien thong minh",
-      "smartDesc": "Tu dong tim doan noi bat",
-      "manual": "Danh dau thu cong",
-      "manualDesc": "Danh dau doan bang tay",
-      "custom": "Tuy chinh",
-      "customDesc": "Cau hinh quy tac nhan dien",
-      "minDuration": "Thoi luong toi thieu (giay)",
-      "maxDuration": "Thoi luong toi da (giay)",
-      "durationHint": "De xuat 15-60 giay",
-      "fixedDuration": "FFmpeg hien cat theo thoi luong co dinh",
-      "working": "Dang phan tich...",
-      "start": "Bat dau phan tich"
+      "title": "Nhận diện",
+      "reset": "Mặc định",
+      "minDuration": "Tối thiểu (giây)",
+      "maxDuration": "Tối đa (giây)",
+      "maxClips": "Số đoạn tối đa",
+      "sensitivity": "Độ nhạy",
+      "low": "Thấp",
+      "medium": "Vừa",
+      "high": "Cao",
+      "sensitivityHint": "Độ nhạy càng cao càng nhiều ứng viên; tăng lên nếu có quá ít đoạn.",
+      "interval": "Độ dài mỗi đoạn (giây)",
+      "skipSilence": "Bỏ qua đoạn im lặng",
+      "manualTip": "Khi phát, nhấn I để đặt điểm vào, O để đặt điểm ra và Enter để thêm đoạn; hoặc bấm \"Thêm tại đây\" rồi kéo trên timeline.",
+      "analyzingHint": "Đang trích xuất âm lượng và điểm chuyển cảnh. Video dài mất vài phút, có thể hủy bất cứ lúc nào.",
+      "start": "Bắt đầu phân tích",
+      "generate": "Tạo đoạn",
+      "reanalyze": "Phân tích lại video",
+      "keepManual": "Tạo lại chỉ thay các đoạn tự động; đoạn thủ công được giữ lại."
     },
     "export": {
-      "title": "Cai dat xuat",
-      "format": "Dinh dang",
-      "sourceFormat": "Dinh dang goc",
-      "quality": "Chat luong",
-      "sourceQuality": "Giu chat luong goc",
-      "outputDir": "Thu muc xuat",
-      "all": "Xuat tat ca doan",
-      "currentDir": "Thu muc xuat hien tai"
+      "title": "Xuất",
+      "cutMode": "Cách cắt",
+      "precise": "Chính xác",
+      "fast": "Nhanh không mất dữ liệu",
+      "preciseHint": "Chính xác từng khung hình, hỗ trợ đổi khung và hiệu ứng; cần mã hóa lại.",
+      "fastHint": "Sao chép luồng, xong trong vài giây. Điểm cắt theo keyframe (lệch 1-3 giây); không xử lý hình ảnh và âm thanh.",
+      "aspect": "Tỷ lệ khung hình",
+      "aspectOriginal": "Gốc",
+      "aspectCrop916": "9:16 cắt",
+      "aspectBlur916": "9:16 nền mờ",
+      "resolution": "Độ phân giải",
+      "sourceQuality": "Giữ nguyên",
+      "padding": "Đệm hai đầu",
+      "noPadding": "Không",
+      "fade": "Fade vào / ra (0,35 giây)",
+      "loudnorm": "Chuẩn hóa âm lượng (-14 LUFS)",
+      "namePrefix": "Tiền tố tên tệp",
+      "outputDir": "Thư mục xuất",
+      "subFolder": "Tạo thư mục con mới cho mỗi lần xuất",
+      "start": "Xuất {n} đoạn",
+      "progress": "Đang xuất {n} / {total}",
+      "resultLine": "Hoàn tất: {ok} thành công, {failed} lỗi",
+      "openDir": "Mở thư mục xuất"
+    },
+    "toast": {
+      "restored": "Đã khôi phục phiên cắt trước",
+      "unsupported": "Định dạng tệp không được hỗ trợ",
+      "manualHint": "Dùng điểm vào / ra hoặc \"Thêm tại đây\" để đánh dấu đoạn",
+      "noneFound": "Không có đoạn phù hợp. Hãy tăng độ nhạy hoặc giảm độ dài tối thiểu.",
+      "generated": "Đã tạo {n} đoạn",
+      "analyzeFailed": "Phân tích thất bại: {error}",
+      "removed": "Đã xóa {n} đoạn",
+      "splitHint": "Hãy chọn một đoạn và đưa đầu phát vào trong đoạn đó",
+      "copied": "Đã sao chép {n} timecode",
+      "copyFailed": "Sao chép thất bại",
+      "noOutputDir": "Hãy chọn thư mục xuất trước",
+      "exportCancelled": "Đã hủy xuất",
+      "exportPartial": "Hoàn tất: {ok} thành công, {failed} lỗi",
+      "exported": "Đã xuất {n} đoạn"
     }
   },
   "agentOs": {

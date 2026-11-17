@@ -27,5 +27,135 @@
   "subtitle": "Thêm phụ đề",
   "move": "Chuyển nhóm",
   "delete": "Xóa",
-  "backToList": "Danh sách tác vụ"
+  "backToList": "Danh sách tác vụ",
+  "promptManager": {
+    "entry": "Quản lý prompt",
+    "title": "Quản lý prompt sao chép video",
+    "desc": "Quản lý phiên bản prompt theo từng bước và ngành hàng. Phiên bản đang bật được dùng cho lần tạo sau; kết quả đã tạo không thay đổi.",
+    "kinds": {
+      "shot_video": {
+        "label": "Video phân cảnh",
+        "hint": "Gửi cho mô hình video ở mỗi phân cảnh. Các biến được điền theo phân cảnh và ngành hàng."
+      },
+      "storyboard_model": {
+        "label": "Ảnh phân cảnh · Người mẫu",
+        "hint": "Dùng cho khung đầu/cuối của cảnh người mẫu. Ảnh 1 là người mẫu và sản phẩm, Ảnh 2 là bối cảnh."
+      },
+      "storyboard_product": {
+        "label": "Ảnh phân cảnh · Sản phẩm",
+        "hint": "Dùng cho khung đầu/cuối của cảnh cận sản phẩm. Ảnh 1 là sản phẩm, Ảnh 2 là bối cảnh."
+      },
+      "script_analysis": {
+        "label": "Phân tích kịch bản",
+        "hint": "Hướng dẫn phân tích video tham chiếu. Định dạng đầu ra và dòng thời gian được tự động thêm vào."
+      }
+    },
+    "category": "Ngành hàng",
+    "categoryHint": "Ngành hàng dùng phiên bản riêng đang bật trước, sau đó là \"Tất cả ngành hàng\", cuối cùng là mặc định.",
+    "customized": "đã tùy chỉnh",
+    "version": "Phiên bản",
+    "versionHint": "Lưu thay đổi hoặc lưu thành phiên bản mới.",
+    "builtinHint": "Mặc định không thể sửa. Hãy lưu thành phiên bản mới để thay đổi.",
+    "builtinName": "Mặc định",
+    "active": "Đang dùng",
+    "name": "Tên phiên bản",
+    "namePlaceholder": "Để trống để đặt tên tự động",
+    "content": "Nội dung prompt",
+    "placeholders": "Biến có thể dùng:",
+    "insertPlaceholder": "Nhấp để chèn vào cuối",
+    "save": "Lưu thay đổi",
+    "saveAsNew": "Lưu thành phiên bản mới",
+    "activate": "Bật phiên bản này",
+    "rollback": "Khôi phục thành phiên bản mới",
+    "remove": "Xóa",
+    "saved": "Đã lưu V{version}. Hãy bật để sử dụng.",
+    "activated": "Đã bật. Lần tạo sau sẽ dùng phiên bản này.",
+    "restored": "Đã khôi phục thành V{version} và bật.",
+    "deleted": "Đã xóa.",
+    "discardConfirm": "Bỏ các thay đổi chưa lưu?",
+    "deleteConfirm": "Xóa V{version}? Không thể hoàn tác.",
+    "categories": {
+      "all": "Tất cả ngành hàng",
+      "earrings": "Bông tai",
+      "necklace": "Dây chuyền",
+      "ring": "Nhẫn",
+      "bracelet": "Vòng tay",
+      "phone_case": "Ốp điện thoại",
+      "clothes": "Quần áo",
+      "bag": "Túi",
+      "shoes": "Giày",
+      "toy": "Đồ chơi",
+      "general": "Chung"
+    },
+    "titleFor": "Prompt: {kind}"
+  },
+  "simple": {
+    "headline": {
+      "setup": "Sao chép một video thắng lớn",
+      "running": "Đang tạo video cho bạn",
+      "paused": "Chưa tạo xong",
+      "error": "Đã xảy ra sự cố",
+      "done": "Video đã xong"
+    },
+    "subline": {
+      "setup": "Chọn ba mục bên dưới rồi bấm nút, phần còn lại để AI làm.",
+      "running": "Bạn có thể rời trang này; tiến độ vẫn còn khi quay lại.",
+      "paused": "Lần trước dừng giữa chừng. Bấm \"Tiếp tục\" để làm tiếp.",
+      "error": "Xem nguyên nhân, xử lý rồi bấm \"Thử lại\". Hệ thống sẽ làm tiếp từ chỗ dừng.",
+      "done": "Có thể lưu và dùng ngay, hoặc tạo thêm video khác."
+    },
+    "openAdvanced": "Chỉnh từng bước",
+    "change": "Đổi",
+    "video": {
+      "title": "Video tham chiếu",
+      "hint": "Video thắng lớn bạn muốn bắt chước",
+      "action": "Chọn video",
+      "chosen": "Đã chọn"
+    },
+    "product": {
+      "title": "Sản phẩm của bạn",
+      "hint": "Chọn sản phẩm cần bán trong thư viện",
+      "action": "Chọn sản phẩm"
+    },
+    "model": {
+      "title": "Người mẫu",
+      "hint": "Chọn trong thư viện; lần sau sẽ dùng lại",
+      "action": "Chọn người mẫu"
+    },
+    "start": "Bắt đầu sao chép",
+    "starting": "Đang bắt đầu…",
+    "startHint": "Phân tích, hình ảnh, video và ghép thành phẩm sẽ tự động chạy.",
+    "missing": "Còn thiếu: {items}",
+    "startFailed": "Không thể bắt đầu tạo",
+    "phases": {
+      "analyze": {
+        "title": "Phân tích video tham chiếu",
+        "desc": "Hiểu các cảnh quay và nhịp điệu"
+      },
+      "visuals": {
+        "title": "Tạo hình ảnh",
+        "desc": "Viết kịch bản, đặt sản phẩm và người mẫu vào từng cảnh"
+      },
+      "videos": {
+        "title": "Tạo video",
+        "desc": "Làm cho từng cảnh chuyển động; bước này lâu nhất"
+      },
+      "compose": {
+        "title": "Ghép thành phẩm",
+        "desc": "Nối các cảnh thành một video"
+      }
+    },
+    "runningHint": "Bước tạo video thường mất từ vài phút đến mười lăm phút.",
+    "pausedHint": "Phần đã xong được giữ lại.",
+    "errorHint": "Nếu vẫn lỗi, mở \"Chỉnh từng bước\" ở góc trên bên phải để xem chi tiết.",
+    "retry": "Thử lại",
+    "resume": "Tiếp tục",
+    "reveal": "Lưu / mở thư mục",
+    "open": "Mở bằng trình phát",
+    "newTask": "Tạo video khác",
+    "doneHint": "Muốn sửa một cảnh? Mở \"Chỉnh từng bước\" ở góc trên bên phải.",
+    "advancedLabel": "Chỉnh từng bước",
+    "advancedHint": "Xem và sửa từng bước tại đây. Dùng hằng ngày thì quay lại chế độ đơn giản.",
+    "backToSimple": "Về chế độ đơn giản"
+  }
 }

@@ -5,7 +5,7 @@
 
 export type CloudUserRole = 'user' | 'admin' | 'super_admin'
 export type CloudUserStatus = 'active' | 'disabled'
-export type CloudClientKind = 'desktop' | 'web' | 'admin'
+export type CloudClientKind = 'desktop' | 'mobile' | 'web' | 'admin'
 export type CloudPayChannel = 'wechat' | 'alipay' | 'mock'
 export type CloudOrderStatus = 'pending' | 'paid' | 'closed' | 'refunded'
 export type CloudRedeemStatus = 'unused' | 'used' | 'disabled'
@@ -39,6 +39,7 @@ export type CloudErrorCode =
   | 'NO_ENTITLEMENT'
   | 'ACCOUNT_DISABLED'
   | 'CONFLICT'
+  | 'QUOTA_EXCEEDED'
   | 'INTERNAL'
 
 export type CloudUser = {
@@ -62,8 +63,24 @@ export type CloudEntitlement = {
   planName: string | null
   expiresAt: number | null
   features: CloudFeature[]
-  /** 0 表示不限设备数 */
+  /** 可绑定的电脑数，0 表示不限 */
   maxDevices: number
+  /** 可同时登录的手机数（与电脑名额分开），0 表示不限；新手机登录会顶掉最久未用的旧手机 */
+  maxMobileDevices: number
+}
+
+/** 电脑和手机各自占用独立的设备名额 */
+export type CloudDeviceKind = 'computer' | 'mobile'
+
+export function deviceKindOf(platform: string | null | undefined): CloudDeviceKind {
+  return /^(android|ios)$/i.test(String(platform || '').trim()) ? 'mobile' : 'computer'
+}
+
+/** 套餐设备名额的中文描述，如「2 台电脑 + 1 部手机」 */
+export function describeDeviceAllowance(maxDevices: number, maxMobileDevices: number): string {
+  const computers = maxDevices === 0 ? '不限电脑' : `${maxDevices} 台电脑`
+  const phones = maxMobileDevices === 0 ? '不限手机' : `${maxMobileDevices} 部手机`
+  return `${computers} + ${phones}`
 }
 
 export type CloudDevice = {
@@ -74,6 +91,7 @@ export type CloudDevice = {
   appVersion: string
   createdAt: number
   lastSeenAt: number
+  kind: CloudDeviceKind
 }
 
 export type CloudPlan = {
@@ -201,7 +219,7 @@ export type CloudDeviceActivateResponse = {
 
 export type CloudCreateOrderRequest = { planCode: string; channel: CloudPayChannel }
 
-export type CloudPlansResponse = { plans: CloudPlan[]; channels: CloudPayChannel[] }
+export type CloudPlansResponse = { plans: CloudPlan[]; channels: CloudPayChannel[]; /** 每个会员另含的手机名额 */ maxMobileDevices: number }
 
 export type CloudAdminStats = {
   users: number

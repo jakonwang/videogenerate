@@ -1219,10 +1219,12 @@ onBeforeUnmount(() => {
       </div>
       <div class="ctl-head__actions">
         <div class="ctl-create">
-          <button type="button" class="vg-btn vg-btn--primary ctl-create-btn" :disabled="creating" @click="createMenuOpen = !createMenuOpen">
+          <button type="button" class="vg-btn vg-btn--primary ctl-create-btn" data-testid="clone-create-task" :disabled="creating" @click="startTask('auto')">
             <LoaderCircle v-if="creating" :size="16" class="vg-spin" /><Plus v-else :size="16" />
             {{ creating ? t('cloneTasks.actions.creating') : t('cloneTasks.actions.create') }}
-            <ChevronDown :size="14" class="ctl-create-btn__caret" />
+            <span class="ctl-create-btn__more" role="button" tabindex="0" data-testid="clone-create-task-more" :title="t('cloneUi.createTitle')" :aria-label="t('cloneUi.createTitle')" @click.stop="createMenuOpen = !createMenuOpen" @keydown.enter.stop.prevent="createMenuOpen = !createMenuOpen">
+              <ChevronDown :size="14" class="ctl-create-btn__caret" />
+            </span>
           </button>
           <div v-if="createMenuOpen" class="ctl-create__menu" role="menu">
             <div class="ctl-create__title">{{ t('cloneUi.createTitle') }}</div>
@@ -1725,6 +1727,7 @@ onBeforeUnmount(() => {
 .ctl-head__actions { display: flex; align-items: center; gap: 8px; }
 .ctl-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--vg-accent-soft); color: var(--vg-accent); font-size: 11px; font-weight: 700; }
 .ctl-create { position: relative; }
+.ctl-create-btn__more { display: inline-flex; align-items: center; align-self: stretch; margin: 0 -6px 0 0; padding: 0 2px; cursor: pointer; }
 .ctl-create-btn__caret { margin-left: 2px; padding-left: 6px; border-left: 1px solid color-mix(in srgb, var(--theme-on-accent) 35%, transparent); box-sizing: content-box; }
 .ctl-create__menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 320px; padding: 6px; border: 1px solid var(--theme-border-control); border-radius: 12px; background: var(--theme-panel); box-shadow: var(--theme-shadow-dialog); }
 .ctl-create__title { padding: 6px 10px 6px; font-size: 11px; font-weight: 600; color: var(--theme-text-muted); }

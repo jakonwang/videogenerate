@@ -23,6 +23,16 @@ const router = createRouter({
         { path: "", redirect: { name: "home" } },
         { path: "home", name: "home", component: HomeView },
         {
+          path: "inbox",
+          name: "inbox",
+          component: () => import("@/ui/views/ReviewInboxView.vue"),
+        },
+        {
+          path: "insights",
+          name: "insights",
+          component: () => import("@/ui/views/InsightsView.vue"),
+        },
+        {
           path: "product-research",
           name: "product-research",
           component: () => import("@/ui/views/ProductResearchView.vue"),
@@ -41,6 +51,21 @@ const router = createRouter({
           path: "production/create",
           name: "production-create",
           component: () => import("@/ui/views/ProductionCreateTaskView.vue"),
+        },
+        {
+          path: "production/mix/insights",
+          name: "production-mix-insights",
+          component: () => import("@/ui/views/ProductionMixInsightsView.vue"),
+        },
+        {
+          path: "production/mix",
+          name: "production-mix",
+          component: () => import("@/ui/views/ProductionMixStudioView.vue"),
+        },
+        {
+          path: "production/pool",
+          name: "production-pool",
+          component: () => import("@/ui/views/ProductionClipPoolView.vue"),
         },
         {
           path: "production/tasks",
@@ -140,8 +165,7 @@ const router = createRouter({
         {
           path: "plugins/video-batch-watermark",
           name: "plugin-video-batch-watermark",
-          component: () =>
-            import("@/ui/views/PluginWorkspacePlaceholderView.vue"),
+          component: () => import("@/ui/views/VideoBatchWatermarkView.vue"),
         },
         {
           path: "plugins/video-batch-subtitle",

@@ -79,7 +79,7 @@ onBeforeUnmount(stopWatch)
             <span class="prd-dialog__title-icon"><Smartphone :size="20" /></span>
             <div>
               <h2>连接采集手机</h2>
-              <p>手机与电脑连接同一 WiFi，打开「选品采集」App 扫描下方二维码完成配对。</p>
+              <p>手机与电脑连接同一 WiFi，打开 TiktokCut 手机 App，进入「选品 → 连接电脑」扫描下方二维码。</p>
             </div>
           </div>
           <button class="prd-icon-btn" aria-label="关闭" @click="emit('close')"><X :size="16" /></button>
@@ -110,8 +110,8 @@ onBeforeUnmount(stopWatch)
               <span :class="expired ? 'prd-num-red' : 'prd-num-green'">{{ pairing ? (expired ? '已过期' : remainingText) : '-' }}</span>
             </div>
             <ol class="pair-steps">
-              <li>手机安装并打开「选品采集」App，开启无障碍服务。</li>
-              <li>点击「扫码配对」，扫描左侧二维码；无法扫码时手动输入服务地址和配对码。</li>
+              <li>手机打开 TiktokCut App，进入「选品 → 连接电脑」，按提示开启无障碍服务。</li>
+              <li>点击「扫描电脑二维码」扫描左侧二维码；无法扫码时点「手动输入配对码」填写服务地址和配对码。</li>
               <li>配对成功后此窗口会自动关闭，设备出现在「手机连接状态」列表中。</li>
             </ol>
             <div v-if="!pairedName && pairing && !expired" class="pair-waiting"><Loader2 :size="13" class="prd-spin" />等待手机扫码…</div>

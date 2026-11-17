@@ -420,6 +420,12 @@ export function isLocalApiAllowed(): boolean {
   return getCloudLicenseStatus().licensed
 }
 
+/** 多端同步使用的云端会话：已登录才返回（离线令牌期间也返回，请求失败由调用方处理） */
+export function getCloudSyncSession(): { client: typeof client; userId: string; canWrite: boolean } | null {
+  if (!state?.sessionToken || !state.user) return null
+  return { client, userId: state.user.id, canWrite: Boolean(state.entitlement?.active) }
+}
+
 export async function initCloudLicense() {
   await loadState()
   if (refreshTimer) clearInterval(refreshTimer)

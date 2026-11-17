@@ -17,6 +17,7 @@ const cloudAuth = useCloudAuthStore()
 const loading = ref(false)
 const devices = ref<CloudDevice[]>([])
 const maxDevices = ref(0)
+const maxMobileDevices = ref(1)
 const orders = ref<CloudOrder[]>([])
 const supportContact = ref('')
 const message = ref<{ tone: 'accent' | 'danger'; text: string } | null>(null)
@@ -55,6 +56,7 @@ async function load() {
     if (me.ok) {
       devices.value = me.devices
       maxDevices.value = me.entitlement.maxDevices
+      maxMobileDevices.value = me.entitlement.maxMobileDevices ?? 1
     }
     if (orderList.ok) orders.value = orderList.items
     if (config.ok) supportContact.value = String(config.values['support.contact'] ?? '')
@@ -167,7 +169,7 @@ onMounted(() => void load())
           <div class="vg-card__head">
             <span class="vg-card__title">
               <LaptopMinimal :size="16" /> {{ t('cloud.membership.devices') }}
-              <small>{{ maxDevices === 0 ? t('cloud.membership.devicesUnlimited') : t('cloud.membership.devicesDesc', { max: maxDevices }) }}</small>
+              <small>{{ maxDevices === 0 ? t('cloud.membership.devicesUnlimited') : t('cloud.membership.devicesDesc', { max: maxDevices, mobile: maxMobileDevices }) }}</small>
             </span>
           </div>
           <div class="vg-list">

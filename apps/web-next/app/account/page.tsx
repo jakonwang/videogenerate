@@ -48,7 +48,7 @@ export default function AccountOverviewPage() {
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <MonitorSmartphone className="h-4 w-4" />
-                已绑定 {devices.length} / {entitlement.maxDevices === 0 ? '不限' : entitlement.maxDevices} 台
+                电脑 {devices.filter((d) => d.kind !== 'mobile').length} / {entitlement.maxDevices === 0 ? '不限' : entitlement.maxDevices} 台 · 手机 {devices.filter((d) => d.kind === 'mobile').length} / {entitlement.maxMobileDevices === 0 ? '不限' : (entitlement.maxMobileDevices ?? 1)} 部
               </span>
             </div>
             {expiringSoon ? <p className="text-sm text-[var(--warning)]">会员即将到期，续费后时长自动叠加。</p> : null}

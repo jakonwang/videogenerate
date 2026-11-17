@@ -35,7 +35,9 @@ import { templatesRepo } from './modules/templates/repo'
 import { webPlatformRepo } from './modules/web-platform/repo'
 import { configureWindowsStorageRoot, cleanupLegacyWindowsStorage, migrateLegacyWindowsUserData } from './lib/windowsStorage'
 import { registerAppShellMediaIpc } from './ipc/registerAppShellMediaIpc'
+import { registerLiveSlicerIpc } from './ipc/registerLiveSlicerIpc'
 import { registerProductsIpc } from './ipc/registerProductsIpc'
+import { registerClonePromptTemplatesIpc } from './ipc/registerClonePromptTemplatesIpc'
 import { registerLivePhotoIpc } from './ipc/registerLivePhotoIpc'
 import { registerProductImageMaterialsIpc } from './ipc/registerProductImageMaterialsIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
@@ -43,6 +45,8 @@ import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 import { registerVideoParserDownloadIpc } from './ipc/registerVideoParserDownloadIpc'
 import { registerAgentOsIpc } from './ipc/registerAgentOsIpc'
+import { registerContentHubIpc } from './ipc/registerContentHubIpc'
+import { registerVideoWatermarkIpc } from './ipc/registerVideoWatermarkIpc'
 import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
 import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
 import { registerDianxiaomiInventoryIpc } from './ipc/registerDianxiaomiInventoryIpc'
@@ -50,8 +54,11 @@ import { registerTiktokCreatorHubIpc } from './ipc/registerTiktokCreatorHubIpc'
 import { closeCreatorHubDb } from './modules/tiktok-creator-hub/repo'
 import { registerProductWatermarkIpc } from './ipc/registerProductWatermarkIpc'
 import { registerAssetLibraryIpc } from './ipc/registerAssetLibraryIpc'
+import { registerMixPoolIpc, registerMixStudioIpc } from './ipc/registerMixPoolIpc'
 import { registerProductReplacementIpc } from './ipc/registerProductReplacementIpc'
 import { registerProductResearchIpc } from './ipc/registerProductResearchIpc'
+import { registerCloudSyncIpc } from './ipc/registerCloudSyncIpc'
+import { startCloudSync, stopCloudSync } from './modules/cloud-sync/service'
 import { productReplacementService } from './modules/product-replacement/service'
 import { agentOsService } from './modules/agent-os/service'
 import { productImageMaterialsService } from './modules/product-image-materials/service'
@@ -792,7 +799,7 @@ function wireIpc() {
       _e,
       payload: {
         cloneProjectId: string
-        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
         productPoints?: string
         productReferenceImagePaths?: string[]
         generateModelPack?: boolean
@@ -1148,7 +1155,7 @@ function wireIpc() {
       _e,
       payload: {
         cloneProjectId: string
-        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
         productPoints?: string
         productReferenceImagePaths?: string[]
         generateModelPack?: boolean
@@ -1208,7 +1215,7 @@ function wireIpc() {
         title?: string
         description?: string
         sourceProjectId?: string
-        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       },
     ) => {
       return await cloneService.createModelTask(payload)
@@ -1275,7 +1282,7 @@ function wireIpc() {
           negativePrompt?: string
           locked?: boolean
           qualityMode?: 'fast' | 'standard' | 'high'
-          productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+          productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
           cloneEligible?: boolean
           filterReason?: string
           cloneClass?: 'real_product' | 'model_demo' | 'screen_recording' | 'tutorial_talking' | 'ui_demo' | 'result_showcase'
@@ -1419,7 +1426,7 @@ function wireIpc() {
       payload: {
         cloneProjectId?: string
         modelTaskId?: string
-        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
         productPoints?: string
         modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
         productReferenceImagePaths?: string[]
@@ -1441,7 +1448,7 @@ function wireIpc() {
       payload: {
         cloneProjectId?: string
         modelTaskId?: string
-        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
         productPoints?: string
         modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
         productReferenceImagePaths?: string[]
@@ -1454,7 +1461,7 @@ function wireIpc() {
       _e,
       payload: {
         cloneProjectId: string
-        productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+        productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
         productPoints?: string
         modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
         productReferenceImagePaths?: string[]
@@ -1744,14 +1751,20 @@ function wireIpc() {
   })
 
   registerAppShellMediaIpc(ipcMain, () => mainWindow, () => mainUiLocale)
+  registerLiveSlicerIpc(ipcMain)
   registerProductsIpc(ipcMain)
+  registerClonePromptTemplatesIpc(ipcMain)
   registerLivePhotoIpc(ipcMain)
   registerProductImageMaterialsIpc(ipcMain)
-  registerTiktokCreativeStudioIpc(ipcMain)
+  registerTiktokCreativeStudioIpc(ipcMain, () => mainWindow)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
+  registerMixPoolIpc(ipcMain, () => mainWindow)
+  registerMixStudioIpc(ipcMain)
   registerVideoParserDownloadIpc(ipcMain)
   registerAgentOsIpc(ipcMain, () => mainWindow)
+  registerContentHubIpc(ipcMain, () => mainWindow)
+  registerVideoWatermarkIpc(ipcMain, () => mainWindow)
   registerStorageManagementIpc(ipcMain)
   registerTiktokGmvMaxIpc(ipcMain)
   registerDianxiaomiInventoryIpc(ipcMain, () => mainWindow)
@@ -1760,6 +1773,7 @@ function wireIpc() {
   registerAssetLibraryIpc(ipcMain)
   registerProductReplacementIpc(ipcMain)
   registerProductResearchIpc(ipcMain)
+  registerCloudSyncIpc(ipcMain)
   void productReplacementService.recoverOnStartup()
 }
 
@@ -1782,6 +1796,8 @@ app.whenReady().then(async () => {
   void productResearchService.ensureServer().catch((error) => {
     console.error('[product-research] startup failed', error)
   })
+  // 商品库、模特库与手机 App 经云端同步（未登录时自动跳过）
+  startCloudSync()
   await wireMediaProtocol()
   createWindow()
   markStartupStage('window-created')
@@ -1874,6 +1890,7 @@ app.on('before-quit', () => {
   void stopPreviewHttpServer()
   void stopWebApiServer()
   void productResearchService.stop()
+  stopCloudSync()
   gmvMaxScheduler.stop()
   void backgroundRecordStore.close()
   void gmvMaxWorkerClient.close()

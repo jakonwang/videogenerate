@@ -4,9 +4,11 @@ import { openCloudDb } from './db'
 import { createCloudHttpHandler } from './http'
 import { createRepo } from './repo'
 import { createCloudService } from './service'
+import { createSyncService } from './sync'
+import { createAiService } from './ai'
 
 /** 组装云端服务（供 server.ts 与测试复用） */
-export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number } = {}) {
+export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch } = {}) {
   const config = { ...loadCloudConfig(), ...overrides }
   if (config.isProduction && config.mockPay) {
     throw new Error('生产环境禁止开启 CLOUD_PAY_MOCK')
@@ -19,7 +21,17 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
   const repo = createRepo(db)
   const service = createCloudService({ config, db, repo, entitlementPrivateKey: privateKey, now: options.now })
   service.ensureSeed()
-  const handler = createCloudHttpHandler(config, service)
+  const sync = createSyncService({ db, dataDir: config.dataDir, quotaBytes: config.syncQuotaBytes, now: options.now ?? Date.now })
+  const ai = createAiService({
+    db,
+    now: options.now ?? Date.now,
+    readManagedSettings: service.readManagedSettings,
+    readFile: (userId, fileId) => sync.readFile(userId, fileId),
+    perMinute: config.aiPerMinute,
+    perDay: config.aiPerDay,
+    fetchImpl: options.fetchImpl,
+  })
+  const handler = createCloudHttpHandler(config, service, sync, ai)
   const server = http.createServer((req, res) => void handler(req, res))
 
   return {

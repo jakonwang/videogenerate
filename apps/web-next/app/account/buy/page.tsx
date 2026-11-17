@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import QRCode from 'qrcode'
 import { Check, CheckCircle2, LoaderCircle, X } from 'lucide-react'
 
-import type { CloudOrder, CloudPayChannel, CloudPlan } from '@shared/cloud/types'
+import { describeDeviceAllowance, type CloudOrder, type CloudPayChannel, type CloudPlan } from '@shared/cloud/types'
 import { AccountPageTitle, Notice } from '@/components/account-center/account-shell'
 import { formatDate, formatYuan, useCloudUser, userClient } from '@/lib/cloud-user'
 import { cn } from '@/lib/utils'
@@ -17,6 +17,7 @@ function BuyContent() {
   const router = useRouter()
   const { me, load } = useCloudUser()
   const [plans, setPlans] = useState<CloudPlan[]>([])
+  const [mobileSlots, setMobileSlots] = useState(1)
   const [channels, setChannels] = useState<CloudPayChannel[]>([])
   const [selected, setSelected] = useState('')
   const [channel, setChannel] = useState<CloudPayChannel | ''>('')
@@ -31,6 +32,7 @@ function BuyContent() {
       .listPlans()
       .then((result) => {
         setPlans(result.plans)
+        setMobileSlots(result.maxMobileDevices ?? 1)
         setChannels(result.channels)
         const wanted = params.get('plan')
         setSelected(result.plans.find((p) => p.code === wanted)?.code ?? result.plans[1]?.code ?? result.plans[0]?.code ?? '')
@@ -125,7 +127,7 @@ function BuyContent() {
               <span className="grid flex-1 gap-0.5">
                 <span className="font-semibold">{p.name}</span>
                 <span className="text-sm text-[var(--text-muted)]">
-                  {p.days === 0 ? '永久' : `${p.days} 天`} · {p.maxDevices === 0 ? '不限设备' : `${p.maxDevices} 台电脑`}
+                  {p.days === 0 ? '永久' : `${p.days} 天`} · {describeDeviceAllowance(p.maxDevices, mobileSlots)}
                 </span>
               </span>
               <span className="text-xl font-semibold tabular-nums">{formatYuan(p.amountFen)}</span>

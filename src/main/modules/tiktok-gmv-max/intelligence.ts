@@ -60,7 +60,7 @@ export function analyzeGmvMaxCreativeIntelligence(input: {
   const grouped = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.metrics) {
     const key = `${metric.creativeId}:${metric.itemGroupId || 'unscoped'}`
-    grouped.set(key, [...(grouped.get(key) || []), metric])
+    { const bucket = grouped.get(key); if (bucket) bucket.push(metric); else grouped.set(key, [metric]) }
   }
   const floor = gmvMaxDecimal.parse(input.profitGuard.effectiveRoiFloor)
   const testBudget = gmvMaxDecimal.parse(input.policy.creativeTestBudget)

@@ -8,6 +8,8 @@ import CloneMediaCard from '../components/clone/CloneMediaCard.vue'
 import CloneStageHeader from '../components/clone/CloneStageHeader.vue'
 import CloneStateCard from '../components/clone/CloneStateCard.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import ClonePromptManager from '../components/clone/ClonePromptManager.vue'
+import CloneSimplePanel, { type CloneSimplePhase, type CloneSimpleState } from '../components/clone/CloneSimplePanel.vue'
 import { useCloneProjectWorkspace } from '@/composables/useCloneProjectWorkspace'
 import { useCloneRouteProject } from '@/composables/useCloneRouteProject'
 import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
@@ -458,6 +460,34 @@ const framePreviewPath = ref('')
 const framePreviewTitle = ref('')
 const shotPromptPreviewOpen = ref(false)
 const shotVideoPromptPreviewOpen = ref(false)
+const promptManagerOpen = ref(false)
+type PromptManagerKind = 'script_analysis' | 'storyboard_model' | 'storyboard_product' | 'shot_video'
+const PROMPT_KINDS_BY_STEP: Record<'all' | 'analyze' | 'grid' | 'video', PromptManagerKind[]> = {
+  all: ['script_analysis', 'storyboard_model', 'storyboard_product', 'shot_video'],
+  analyze: ['script_analysis'],
+  grid: ['storyboard_model', 'storyboard_product'],
+  video: ['shot_video'],
+}
+const promptManagerKinds = ref<PromptManagerKind[]>(PROMPT_KINDS_BY_STEP.video)
+const promptManagerKind = ref<PromptManagerKind>('shot_video')
+const promptManagerProductType = ref('all')
+/** Category of the bound product, so the dialog opens on the templates this project actually uses. */
+function projectPromptProductType() {
+  const project = current.value as any
+  const candidates = [project?.boundProductSnapshot?.type, project?.blueprint?.productCategory, project?.baseBlueprint?.productCategory]
+  for (const candidate of candidates) {
+    const normalized = candidate ? normalizeCloneProductType(candidate) : 'general'
+    if (normalized !== 'general') return normalized
+  }
+  return 'all'
+}
+function openPromptManager(step: 'all' | 'analyze' | 'grid' | 'video', options?: { kind?: PromptManagerKind; productType?: unknown }) {
+  promptManagerKinds.value = PROMPT_KINDS_BY_STEP[step]
+  promptManagerKind.value = options?.kind && PROMPT_KINDS_BY_STEP[step].includes(options.kind) ? options.kind : PROMPT_KINDS_BY_STEP[step][0]
+  const explicit = options?.productType ? normalizeCloneProductType(options.productType) : 'general'
+  promptManagerProductType.value = explicit !== 'general' ? explicit : projectPromptProductType()
+  promptManagerOpen.value = true
+}
 const identityGridPromptPreviewOpen = ref(false)
 const composeOutputDir = ref('')
 const composeLocalError = ref('')
@@ -1881,11 +1911,23 @@ function safeText(value: unknown, fallback: string) {
 
 function normalizeCloneProductType(value: unknown) {
   const text = String(value || '').trim().toLowerCase()
-  if (text === 'earrings' || text === 'phone_case' || text === 'clothes' || text === 'toy') return text
-  if (/earrings?|earring|ear jewelry|jewelry|jewellery|ear\\s|hoop|dangle|drop earring|stud|zircon|silver|gold/.test(text)) return 'earrings'
-  if (/phone\\s*case|case for phone|mobile case|iphone case/.test(text)) return 'phone_case'
-  if (/clothes|dress|shirt|hoodie|jacket|pants|skirt|garment|fashion/.test(text)) return 'clothes'
-  if (/toy|figure|doll|plush|lego|collectible/.test(text)) return 'toy'
+  // Keep in sync with src/main/modules/clone/productCategory.ts.
+  // Whole-word matching only: colour words ("gold", "silver") or fragments
+  // ("stud" in "studio") must never turn a product into earrings.
+  if (text === 'earring') return 'earrings'
+  if (
+    text === 'earrings' || text === 'necklace' || text === 'ring' || text === 'bracelet' || text === 'phone_case' ||
+    text === 'clothes' || text === 'bag' || text === 'shoes' || text === 'toy'
+  ) return text
+  if (/\b(?:earrings?|ear[\s-]?(?:studs?|cuffs?|jewelry|jewellery))\b/.test(text)) return 'earrings'
+  if (/\b(?:necklaces?|pendants?|chokers?)\b/.test(text)) return 'necklace'
+  if (/\b(?:bracelets?|bangles?)\b/.test(text)) return 'bracelet'
+  if (/\brings?\b(?!\s+lights?)/.test(text)) return 'ring'
+  if (/\b(?:phone\s*cases?|mobile cases?|iphone cases?)\b/.test(text)) return 'phone_case'
+  if (/\b(?:dress(?:es)?|shirts?|t-shirts?|hoodies?|jackets?|pants|skirts?|garments?|clothes|clothing)\b/.test(text)) return 'clothes'
+  if (/\b(?:handbags?|tote bags?|backpacks?|bags?)\b/.test(text)) return 'bag'
+  if (/\b(?:shoes?|sneakers?|boots?|sandals?|heels)\b/.test(text)) return 'shoes'
+  if (/\b(?:toys?|figurines?|dolls?|plush(?:ies)?)\b/.test(text)) return 'toy'
   return 'general'
 }
 
@@ -3119,6 +3161,7 @@ function selectProduct(item: ProductLibraryItem) {
   const nextId = String(item?.id || '').trim()
   if (!nextId) return
   selectedProductId.value = nextId
+  simpleProductPicked.value = true
   productQuery.value = ''
   productModalOpen.value = false
 }
@@ -3525,8 +3568,132 @@ function buildAutoStoryboardRecoverySignature(projectId: string, kind: 'query' |
   ].join(':')
 }
 
+
+// ---------------------------------------------------------------------------
+// Simple view: the default face of a task for everyday users.
+// Three inputs, one button, four plain-language phases, then the video.
+// All pipeline logic stays in the functions above; this only maps state.
+// ---------------------------------------------------------------------------
+const LAST_MODEL_STORAGE_KEY = 'clone.simple.lastModelId'
+const viewModeOverride = ref<'simple' | 'advanced' | ''>('')
+const viewMode = computed<'simple' | 'advanced'>(() => {
+  if (viewModeOverride.value) return viewModeOverride.value
+  // Tasks created as "manual" were opened by someone who wants the step-by-step workspace.
+  return current.value?.runMode === 'manual' ? 'advanced' : 'simple'
+})
+const showSimpleView = computed(() => Boolean(current.value?.id) && viewMode.value === 'simple')
+const simpleStarting = ref(false)
+// The view mode and the "user picked a product" flag belong to one task, not to the page.
+watch(
+  () => String(current.value?.id || ''),
+  () => {
+    viewModeOverride.value = ''
+    simpleProductPicked.value = false
+  },
+)
+const simpleBusy = computed(() => loading.value || autoFlowRunning.value || simpleStarting.value)
+const simpleState = computed<CloneSimpleState>(() => {
+  if (finalOutputPath.value) return 'done'
+  const started = Boolean(current.value?.blueprint?.shots?.length) || simpleStarting.value
+  if (!started) return 'setup'
+  if (simpleBusy.value) return 'running'
+  if (generationFailureText.value) return 'error'
+  return 'paused'
+})
+const simplePhases = computed<CloneSimplePhase[]>(() => {
+  const stage = workflowStageKey.value
+  const activeIndex = finalOutputPath.value ? 4 : stage === 'analyze' ? 0 : stage === 'video' ? 2 : stage === 'compose' ? 3 : 1
+  return ['analyze', 'visuals', 'videos', 'compose'].map((key, index) => ({
+    key,
+    state: index < activeIndex ? 'done' : index === activeIndex ? 'active' : 'pending',
+  }))
+})
+// A draft can carry a placeholder name before any video is chosen, so only the path counts as "chosen".
+const simpleReferenceName = computed(() =>
+  referenceSourcePath.value ? safeText(current.value?.referenceVideoName, '') || shortPath(referenceSourcePath.value) : '',
+)
+// The workspace preselects the first library product. With several products that is a guess,
+// so the simple page only shows a product the user picked, one already bound, or the only one there is.
+const simpleProductPicked = ref(false)
+const simpleProductChosen = computed(
+  () => Boolean(selectedProductId.value) && (simpleProductPicked.value || Boolean(current.value?.productId) || products.value.length === 1),
+)
+const simpleReferenceUrl = computed(() => (referenceSourcePath.value ? mediaUrl(referenceSourcePath.value) : ''))
+const simpleFinalVideoUrl = computed(() => (finalOutputPath.value ? mediaUrl(finalOutputPath.value, finalComposeUpdatedAt.value || undefined) : ''))
+
+async function startSimpleClone() {
+  if (simpleBusy.value) return
+  if (!referenceSourcePath.value || !simpleProductChosen.value || !hasBoundModel.value) return
+  simpleStarting.value = true
+  errorText.value = ''
+  try {
+    const productId = String(selectedProductId.value || '').trim()
+    if (productId && productId !== String(current.value?.productId || '').trim()) {
+      await bindLibraryProduct(productId)
+    }
+    // One button means the whole pipeline, whatever run mode the task was created with.
+    autoRunIntentArmed.value = true
+    await createBlueprint()
+  } catch (error: any) {
+    markError(error?.message ?? error, tr('cloneUi.simple.startFailed'))
+  } finally {
+    simpleStarting.value = false
+  }
+}
+
+async function resumeSimpleClone() {
+  if (simpleBusy.value) return
+  if (!current.value?.blueprint?.shots?.length) {
+    await startSimpleClone()
+    return
+  }
+  errorText.value = ''
+  try {
+    autoRunIntentArmed.value = true
+    if (workflowStageKey.value === 'compose') await composeFinalVideo()
+    else if (workflowStageKey.value === 'video') await generateShotVideos()
+    else await autoRunToStoryboardVideos()
+  } catch (error: any) {
+    markError(error?.message ?? error, tr('cloneUi.simple.startFailed'))
+  }
+}
+
+// Remember the model, and offer it again on the next task so step 3 is usually already done.
+watch(
+  () => String(current.value?.selectedModelIdentitySnapshot?.id || selectedModelId.value || '').trim(),
+  (modelId) => {
+    if (!modelId) return
+    try {
+      window.localStorage.setItem(LAST_MODEL_STORAGE_KEY, modelId)
+    } catch {
+      // Storage can be unavailable; remembering the model is only a convenience.
+    }
+  },
+)
+let simpleModelPrefillProjectId = ''
+watch(
+  () => [String(current.value?.id || ''), models.value.length, simpleState.value, hasBoundModel.value] as const,
+  async ([projectId, modelCount, state, bound]) => {
+    if (!projectId || !modelCount || state !== 'setup' || bound) return
+    if (simpleModelPrefillProjectId === projectId) return
+    simpleModelPrefillProjectId = projectId
+    let lastModelId = ''
+    try {
+      lastModelId = String(window.localStorage.getItem(LAST_MODEL_STORAGE_KEY) || '').trim()
+    } catch {
+      lastModelId = ''
+    }
+    if (!lastModelId || !models.value.some((item) => item.id === lastModelId)) return
+    try {
+      await bindModelIdentity(lastModelId)
+    } catch {
+      // The user can still pick a model by hand.
+    }
+  },
+)
+
 onMounted(async () => {
-  cloneTopbar.show(stageItems.value.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
+  cloneTopbar.show(showSimpleView.value ? [] : stageItems.value.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
   pushRuntimeLog(stageLog.value)
   offRuntimeLog = window.api.clone.onRuntimeLog?.((payload) => {
     const text = safeText(payload?.message, '')
@@ -3826,10 +3993,10 @@ watch(
 )
 
 watch(
-  stageItems,
-  (items) => {
+  [stageItems, showSimpleView] as const,
+  ([items, simple]) => {
     if (!route.path.includes('/clone/')) return
-    cloneTopbar.show(items.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
+    cloneTopbar.show(simple ? [] : items.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
   },
   { immediate: true, deep: true },
 )
@@ -3878,7 +4045,39 @@ onUnmounted(() => {
 <template>
   <div class="clone-page">
     <section class="workspace-grid cw-shell">
-      <div class="main-column vg-scope cw">
+      <CloneSimplePanel
+        v-if="showSimpleView"
+        :state="simpleState"
+        :busy="simpleBusy"
+        :reference-video-name="simpleReferenceName"
+        :reference-video-url="simpleReferenceUrl"
+        :product-name="simpleProductChosen ? selectedProductLibraryItem?.name || '' : ''"
+        :product-image-url="simpleProductChosen ? selectedProductPreview : ''"
+        :model-name="modelSnapshot?.name || ''"
+        :model-image-url="modelPreview(modelSnapshot)"
+        :phases="simplePhases"
+        :status-text="simpleState === 'running' ? stageLog : ''"
+        :error-text="simpleState === 'setup' ? errorText : generationFailureText"
+        :final-video-url="simpleFinalVideoUrl"
+        :final-poster-url="composePreviewPosterUrl"
+        @pick-video="pickReferenceVideo"
+        @pick-product="productModalOpen = true"
+        @pick-model="modelModalOpen = true"
+        @start="startSimpleClone"
+        @resume="resumeSimpleClone"
+        @open-advanced="viewModeOverride = 'advanced'"
+        @reveal-output="revealFinalOutput"
+        @open-output="openFinalOutput"
+        @new-task="router.push('/clone')"
+        @back="router.push('/clone')"
+      />
+      <div v-else class="main-column vg-scope cw">
+        <div v-if="current?.id" class="cw-modebar" data-testid="clone-advanced-bar">
+          <span class="cw-modebar__label"><SlidersHorizontal :size="14" />{{ tr('cloneUi.simple.advancedLabel') }}</span>
+          <span class="cw-modebar__hint">{{ tr('cloneUi.simple.advancedHint') }}</span>
+          <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" data-testid="clone-advanced-prompts" @click="openPromptManager('all')">{{ tr('cloneUi.promptManager.entry') }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" data-testid="clone-back-to-simple" @click="viewModeOverride = 'simple'">{{ tr('cloneUi.simple.backToSimple') }}</button>
+        </div>
         <!-- ================= 01 参考分析 ================= -->
         <article v-if="visibleStageKey === 'analyze'" class="cw-step-view">
           <header class="cw-head">
@@ -4781,6 +4980,7 @@ onUnmounted(() => {
             <h2>{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_9fec4d6ec5ef') }}</h2>
           </div>
           <div class="panel-actions">
+            <button class="ghost-button small" type="button" data-testid="clone-shot-image-open-prompt-manager" @click="openPromptManager('grid', { kind: shotImageReferenceMode === 'product_closeup' ? 'storyboard_product' : 'storyboard_model', productType: shotImagePromptPreview?.productType })">{{ tr('cloneUi.promptManager.entry') }}</button>
             <button class="ghost-button small" type="button" :disabled="!shotImagePromptPreview" @click="copyAllShotPrompts">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             <button class="ghost-button small" type="button" @click="shotPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
@@ -4849,6 +5049,7 @@ onUnmounted(() => {
             <h2>{{ selectedShotOutput ? tr('autoUi.k_24f7d6982256', { p0: String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0') }) : tr('autoUi.k_589157bc90cb') }}</h2>
           </div>
           <div class="panel-actions">
+            <button class="ghost-button small" type="button" data-testid="clone-shot-video-open-prompt-manager" @click="openPromptManager('video', { productType: shotVideoPromptPreview?.productType })">{{ tr('cloneUi.promptManager.entry') }}</button>
             <button class="ghost-button small" type="button" :disabled="!shotVideoPromptPreview" @click="copyAllShotVideoPrompts">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             <button class="ghost-button small" type="button" @click="shotVideoPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
@@ -4972,6 +5173,14 @@ onUnmounted(() => {
         <div v-else class="prompt-preview-empty"> {{ tr('autoUi.k_4638e45ae2ad') }} </div>
       </div>
     </div>
+
+    <ClonePromptManager
+      :open="promptManagerOpen"
+      :kinds="promptManagerKinds"
+      :initial-kind="promptManagerKind"
+      :initial-product-type="promptManagerProductType"
+      @close="promptManagerOpen = false"
+    />
   </div>
 </template>
 

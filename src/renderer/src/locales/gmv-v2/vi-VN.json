@@ -1,0 +1,675 @@
+{
+  "nav": {
+    "today": "Hôm nay",
+    "diagnosis": "Khám chiến dịch",
+    "academy": "Học viện",
+    "groups": {
+      "daily": "Hằng ngày",
+      "data": "Hiệu quả",
+      "ai": "Quyết định AI",
+      "more": "Thêm"
+    },
+    "campaigns": "Chiến dịch",
+    "products": "Sản phẩm",
+    "creatives": "Nội dung",
+    "profit": "Lợi nhuận & chi phí",
+    "pending": "Chờ duyệt",
+    "strategies": "Tự động hóa",
+    "growth": "Kế hoạch tăng trưởng",
+    "overview": "Tổng quan tài khoản",
+    "audit": "Nhật ký thay đổi",
+    "settings": "Cài đặt",
+    "modules": {
+      "home": "Tổng quan",
+      "delivery": "Quản lý quảng cáo",
+      "creatives": "Nội dung",
+      "profit": "Lợi nhuận",
+      "automation": "Tự động hóa",
+      "tools": "Công cụ"
+    }
+  },
+  "pages": {
+    "today": "Nhìn là biết vấn đề ở đâu và hôm nay cần làm gì. Mọi gợi ý theo quy tắc chính thức của TikTok.",
+    "diagnosis": "Mỗi chiến dịch một kết luận, một hành động. Mở dòng để xem ba đường ROI và 14 ngày gần nhất.",
+    "academy": "10 bài học 1 phút, cùng cài đặt biên lợi nhuận và ngưỡng quy tắc.",
+    "campaigns": "Chi tiêu, ROI, nhịp ngân sách và đề xuất chính thức của mọi chiến dịch trong một bảng.",
+    "growth": "Chi tiêu, doanh số và giai đoạn thử theo sản phẩm, để biết nên đẩy hay dừng.",
+    "creatives": "Doanh số, độ mệt và thiếu hụt nội dung. Bổ sung trước, tối ưu sau.",
+    "profit": "Nhập giá vốn sản phẩm để mọi thao tác đều được kiểm tra lợi nhuận.",
+    "actions": "Đề xuất thay đổi từ AI. Xem căn cứ rồi mới duyệt.",
+    "rules": "Thiết lập tự động hóa và giới hạn an toàn cho từng chiến dịch.",
+    "sop": "Kế hoạch theo ngày cho sản phẩm mới và livestream.",
+    "overview": "Kết quả, rủi ro và nhịp chi tiêu trên các cửa hàng.",
+    "audit": "Mọi thay đổi gửi tới TikTok, kết quả và lý do lỗi.",
+    "settings": "Quyền tài khoản, liên kết cửa hàng, chi phí và thông báo."
+  },
+  "codes": {
+    "blocked": {
+      "title": "Đang bị chặn",
+      "short": "Bị chặn"
+    },
+    "losing": {
+      "title": "Đang lỗ",
+      "short": "Lỗ"
+    },
+    "underspend": {
+      "title": "Không tiêu hết ngân sách",
+      "short": "Tiêu chậm"
+    },
+    "scale": {
+      "title": "Có thể tăng quy mô",
+      "short": "Tăng quy mô"
+    },
+    "creatives": {
+      "title": "Thiếu tư liệu",
+      "short": "Thiếu tư liệu"
+    },
+    "learning": {
+      "title": "Đang học, đừng chỉnh",
+      "short": "Đang học"
+    },
+    "healthy": {
+      "title": "Ổn định, giữ nguyên",
+      "short": "Ổn định"
+    },
+    "collecting": {
+      "title": "Đang thu thập dữ liệu",
+      "short": "Thu thập"
+    }
+  },
+  "reasons": {
+    "paused": "Chiến dịch hiện không phân phối.",
+    "no_spend": "Đã {days} ngày gần như không tiêu tiền, hệ thống không chạy chiến dịch này.",
+    "collecting": "Mới bắt đầu, chưa đủ dữ liệu, hãy để chạy vài ngày.",
+    "no_creatives": "Không có tư liệu nào phân phối được (bị từ chối, không khả dụng hoặc cần ủy quyền).",
+    "learning_after_change": "Vừa đổi ROI hoặc ngân sách. TikTok cần ít nhất 3 ngày để học lại; chỉnh lúc này chỉ gây nhiễu.",
+    "learning_new": "Chiến dịch mới đang trong giai đoạn học, dao động 3 ngày đầu là bình thường.",
+    "losing_protected": "ROI 7 ngày {roi} thấp hơn hòa vốn {breakEven}. Nhưng hôm nay đã hơn 20 đơn và ROI dưới 90% mục tiêu nên được bảo vệ ROI, TikTok sẽ hoàn phần chênh lệch bằng tín dụng quảng cáo.",
+    "losing_max_delivery": "Chiến dịch dùng Max delivery (không đặt ROI). ROI 7 ngày {roi} thấp hơn hòa vốn {breakEven}, tiêu thêm là lỗ thêm.",
+    "losing_target_low": "ROI 7 ngày {roi} thấp hơn hòa vốn {breakEven}: bán càng nhiều càng lỗ. Nguyên nhân là ROI mục tiêu {target} thấp hơn hòa vốn.",
+    "losing_target_ok": "ROI mục tiêu {target} đã cao hơn hòa vốn nhưng ROI thực tế 7 ngày chỉ {roi}: chuyển đổi hoặc biên lợi nhuận của sản phẩm không đủ.",
+    "underspend": "7 ngày chỉ dùng {utilization}% ngân sách trong khi ROI {roi} đã đạt mục tiêu {target}. Không tiêu hết thường do ROI mục tiêu quá cao.",
+    "underspend_at_floor": "Chỉ dùng {utilization}% ngân sách nhưng ROI mục tiêu đã sát hòa vốn, không giảm thêm được. Cần tư liệu tốt hơn hoặc ưu đãi hấp dẫn hơn.",
+    "scale": "7 ngày dùng {utilization}% ngân sách và ROI {roi} đạt mục tiêu {target}. Ngân sách đang là trần; tăng ngân sách để bán nhiều hơn.",
+    "scale_max_delivery": "Max delivery gần tiêu hết ngân sách và ROI {roi} cao hơn hòa vốn, tăng ngân sách từng bước nhỏ.",
+    "creatives_blocked": "{blocked} tư liệu bị chặn (cần ủy quyền, bị từ chối hoặc không khả dụng) nên không phân phối được.",
+    "creatives_few": "Chỉ {delivering} tư liệu đang phân phối; nên có ít nhất {need} để hệ thống tìm được tư liệu thắng.",
+    "healthy": "ROI trên mục tiêu, ngân sách dùng bình thường, lợi nhuận khoảng {profitPerDay} mỗi ngày.",
+    "healthy_low_volume": "Chưa thấy vấn đề nhưng đơn còn ít, tiếp tục theo dõi."
+  },
+  "actions": {
+    "raiseRoi": "Tăng ROI mục tiêu từ {from} lên {to}",
+    "raiseRoiMaxDelivery": "Chuyển lại sang ROI mục tiêu, đặt {to}",
+    "lowerRoi": "Giảm ROI mục tiêu từ {from} xuống {to}",
+    "raiseBudget": "Tăng ngân sách ngày từ {from} lên {to}",
+    "fixBlocker": {
+      "paused": "Kiểm tra có cần bật lại không; bỏ qua nếu cố ý tạm dừng",
+      "no_spend": "Kiểm tra lần lượt: số dư tài khoản, sản phẩm đang bán và còn hàng, tư liệu đã ủy quyền, ROI mục tiêu có quá cao",
+      "no_creatives": "Ủy quyền hoặc thay tư liệu bị chặn để có tư liệu phân phối"
+    },
+    "fixCreatives": "Xử lý {blocked} tư liệu bị chặn trước, rồi bổ sung video mới",
+    "reviewOffer": "Xem lại giá, ưu đãi và biên lợi nhuận; loại sản phẩm lỗ kéo dài khỏi chiến dịch",
+    "waitProtection": "Hôm nay đừng chỉnh, chờ khoản bảo vệ ROI; sáng mai hãy tăng ROI",
+    "waitLearning": "Đừng chỉnh, {days} ngày nữa xem lại",
+    "keep": "Giữ nguyên"
+  },
+  "timing": {
+    "morning": "Việc đầu tiên sáng mai",
+    "onceToday": "Hôm nay chỉ chỉnh một lần",
+    "oncePerDay": "Mỗi ngày tối đa một lần"
+  },
+  "protection": {
+    "protected_today_wait": "Hôm nay đủ điều kiện bảo vệ ROI; tăng ROI lúc này sẽ mất khoản hoàn của hôm nay.",
+    "raise_voids_today": "Tăng ROI làm mất bảo vệ ROI của ngày đó, nên làm việc này đầu tiên vào buổi sáng."
+  },
+  "lines": {
+    "aria": "ROI hòa vốn {breakEven}, ROI mục tiêu {target}, ROI thực tế {actual}",
+    "breakEven": "Hòa vốn",
+    "target": "Mục tiêu",
+    "actual": "Thực tế (7 ngày)",
+    "unknown": "chưa đặt biên lợi nhuận",
+    "maxDelivery": "Max delivery"
+  },
+  "lesson": {
+    "why": "Vì sao",
+    "how": "Làm thế nào",
+    "gotIt": "Đã hiểu",
+    "source": {
+      "official": "Quy tắc chính thức của TikTok",
+      "experience": "Kinh nghiệm ngành, có thể chỉnh"
+    }
+  },
+  "lessons": {
+    "daily_rhythm": {
+      "title": "Mỗi ngày chỉ xem ba lần",
+      "oneLine": "Sáng định hướng, ban ngày xem nhịp, tối bổ sung tư liệu.",
+      "why": "GMV Max hoàn toàn tự động; chỉnh liên tục làm gián đoạn quá trình học. Gom hành động vào giờ cố định giúp không bỏ sót vấn đề mà không chỉnh bừa.",
+      "how": [
+        "9 giờ sáng: xem dữ liệu đủ ngày hôm qua và làm việc cần làm (chỉ tăng ROI vào lúc này)",
+        "Ban ngày: chỉ xử lý tiêu quá nhanh hoặc quá chậm; tăng ngân sách hoặc giảm ROI, không tăng ROI",
+        "8 giờ tối: xử lý tư liệu bị chặn, thêm video mới"
+      ],
+      "sourceType": "experience",
+      "sourceName": "TikTok: Max delivery best practices",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-max-delivery-optimization"
+    },
+    "break_even": {
+      "title": "ROI hòa vốn quyết định tất cả",
+      "oneLine": "ROI hòa vốn = 1 / biên lợi nhuận. Thấp hơn là lỗ.",
+      "why": "ROI của GMV Max = doanh thu / chi phí quảng cáo. Nếu biên lợi nhuận sau giá vốn, vận chuyển và hoa hồng là 40%, mỗi 100 doanh thu chỉ được chi tối đa 40, tức ROI 2,5. Dưới 2,5 bán càng nhiều càng lỗ.",
+      "how": [
+        "Nhập biên lợi nhuận cửa hàng (trước quảng cáo) trong cài đặt",
+        "Đặt ROI mục tiêu khoảng hòa vốn x 1,15 để có 15% an toàn",
+        "Không bao giờ đặt ROI mục tiêu dưới hòa vốn"
+      ],
+      "sourceType": "experience",
+      "sourceName": "Bên thứ ba: GMV Max best practices",
+      "url": "https://bemomentiq.com/blog/gmv-max-best-practices-5-rules-every-tiktok-shop-account"
+    },
+    "learning_period": {
+      "title": "Chỉnh xong chờ 3 ngày",
+      "oneLine": "Sau mỗi lần đổi ROI hoặc ngân sách, chờ ít nhất 3 ngày trọn.",
+      "why": "Mỗi lần thay đổi hệ thống phải khám phá lại lưu lượng; dao động ban đầu là bình thường. Đổi lại vì dao động khiến hệ thống không bao giờ học xong.",
+      "how": [
+        "Bấm \"Tôi đã chỉnh\" để bắt đầu đếm ngược 3 ngày",
+        "Chiến dịch màu xanh \"Đang học\" thì đừng động vào",
+        "Sau 3 ngày đánh giá bằng dữ liệu 7 ngày"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Best practices for LIVE GMV Max",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-live-gmv-max"
+    },
+    "underspend_roi": {
+      "title": "Không tiêu hết = ROI quá cao",
+      "oneLine": "Ngân sách thừa trong khi ROI đạt mục tiêu thường do mục tiêu quá chặt.",
+      "why": "Ở chế độ ROI mục tiêu, ngân sách chỉ là trần; ROI mục tiêu là bộ lọc lưu lượng. Lọc quá chặt thì không còn lưu lượng phù hợp. TikTok khuyên giảm nhẹ ROI mục tiêu khi tiêu chậm.",
+      "how": [
+        "Mỗi lần giảm khoảng 10%",
+        "Mỗi ngày tối đa một lần (giảm hai lần sẽ mất bảo vệ ROI ngày đó)",
+        "Không thấp hơn hòa vốn x 1,05",
+        "Đã ở mức sàn mà vẫn không tiêu được thì vấn đề là tư liệu hoặc ưu đãi"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Best practices for LIVE GMV Max",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-live-gmv-max"
+    },
+    "scale_budget": {
+      "title": "Tăng quy mô tối đa 30% mỗi ngày",
+      "oneLine": "Dùng trên 80–90% ngân sách và ROI đạt mục tiêu thì tăng ngân sách.",
+      "why": "Tỷ lệ dùng cao nghĩa là ngân sách đang chặn lưu lượng có lãi. TikTok khuyên tăng dần tối đa 30% mỗi ngày; ROI giảm nhẹ ngắn hạn sau đó là bình thường.",
+      "how": [
+        "Mỗi lần tăng 30%, không nhân đôi",
+        "Chờ 3 ngày và kiểm tra ROI vẫn trên mục tiêu",
+        "Ngừng tăng khi ROI xuống dưới mục tiêu"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Max delivery best practices",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-max-delivery-optimization"
+    },
+    "roi_protection": {
+      "title": "Bảo vệ ROI: đừng làm mất khoản hoàn",
+      "oneLine": "ROI trong ngày dưới 90% mục tiêu và hơn 20 đơn thì TikTok hoàn phần chênh lệch.",
+      "why": "Khoản hoàn = chi phí ngày trừ doanh thu ngày / (ROI mục tiêu x 0,9). Mất quyền lợi trong ngày nếu tự tăng mục tiêu, giảm hơn một lần, tạm dừng hoặc xóa chiến dịch, sửa sản phẩm. Chi phí Max delivery và Creative Boost không được bảo vệ.",
+      "how": [
+        "Tăng ROI vào đầu buổi sáng và chấp nhận mất bảo vệ ngày đó",
+        "Nếu hôm nay đã đủ điều kiện thì đừng chỉnh",
+        "Trong TikTok, rê chuột vào nhãn \"ROI protected\" và chọn View history (lưu 60 ngày)"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: About ROI protection",
+      "url": "https://ads.tiktok.com/help/article/about-roi-protection-for-gmv-max-campaigns?lang=en"
+    },
+    "creative_supply": {
+      "title": "Nhiều tư liệu hơn, dễ tìm tư liệu thắng",
+      "oneLine": "Giữ đủ video phân phối được và bổ sung đều đặn.",
+      "why": "GMV Max thử mọi tư liệu hợp lệ rồi dồn ngân sách vào tư liệu tốt nhất. Càng nhiều tư liệu càng dễ tìm tư liệu thắng. TikTok Shop University gợi ý ít nhất 40 video đang phân phối cho Product GMV Max; LIVE cần 50–70 video mỗi phiên hoặc 5–10 video mới mỗi ngày.",
+      "how": [
+        "Xử lý tư liệu bị chặn trước",
+        "Bổ sung video mới hằng tuần: đổi mở đầu, nhà sáng tạo, cách trình bày",
+        "Gửi tư liệu tốt nhất cho AI Nhà sản xuất làm biến thể",
+        "Dùng Accelerate testing hoặc Creative Boost khi cần"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Improve creative exploration in Product GMV Max",
+      "url": "https://ads.tiktok.com/resources/help/article/how-to-improve-creative-exploration-in-product-gmv-max"
+    },
+    "blockers": {
+      "title": "Loại trừ nguyên nhân bị chặn trước",
+      "oneLine": "Không tiêu tiền? Kiểm tra số dư, sản phẩm, ủy quyền trước khi xem ROI.",
+      "why": "Tăng ngân sách không sửa được sản phẩm hết hàng hay video chưa ủy quyền. TikTok có 9 trạng thái tư liệu; cần ủy quyền, bị từ chối, không khả dụng, đã loại trừ thì không phân phối, video bị từ chối thậm chí vẫn có thể tiêu tiền.",
+      "how": [
+        "Kiểm tra số dư tài khoản quảng cáo",
+        "Đảm bảo sản phẩm đang bán và còn hàng",
+        "Ủy quyền video cần ủy quyền (khoảng 20 phút có hiệu lực)",
+        "Thay hoặc khiếu nại video bị từ chối; khôi phục video bị loại nhầm"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Metrics in GMV Max reports",
+      "url": "https://business-api.tiktok.com/portal/docs/metrics-in-gmv-max-campaign-reports/v1.3"
+    },
+    "max_delivery": {
+      "title": "Max delivery chỉ để bứt tốc",
+      "oneLine": "ROI mục tiêu là mặc định; Max delivery cho ra mắt, xả hàng và đại tiệc.",
+      "why": "Max delivery tiêu hết ngân sách mà không đảm bảo ROI. TikTok gợi ý 3–5 ngày Max delivery cho cửa hàng hoặc sản phẩm mới với ngân sách ngày ít nhất 10 lần giá trị đơn trung bình, và 1–5 lần chi tiêu bình thường khi đại tiệc; trên 5 lần ROI có thể giảm mạnh. Chi phí Max delivery không được bảo vệ ROI.",
+      "how": [
+        "Sản phẩm mới: Max delivery 3–5 ngày rồi chuyển về ROI mục tiêu",
+        "Đại tiệc: tối đa 5 lần chi tiêu bình thường",
+        "ROI dưới hòa vốn: chuyển về ROI mục tiêu"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: About Max delivery",
+      "url": "https://ads.tiktok.com/help/article/about-max-delivery-optimization-for-gmv-max?lang=en"
+    },
+    "seven_day_rolling": {
+      "title": "Xem 7 ngày, không xem hôm qua",
+      "oneLine": "Mọi kết luận dùng dữ liệu cuộn 7 ngày để tránh nhiễu một ngày.",
+      "why": "ROI dao động hằng ngày. Đánh giá xu hướng 7 ngày cộng với giai đoạn học cho quyết định ổn định. Chi phí cấp sản phẩm và tư liệu có thể trễ tới 11 giờ và đơn hàng gồm cả tự nhiên, nên kết luận chỉ dùng dữ liệu cấp chiến dịch.",
+      "how": [
+        "Dùng ROI \"Thực tế (7 ngày)\" thay vì hôm qua",
+        "Bất thường một lần thì theo dõi trước",
+        "Dữ liệu sản phẩm và tư liệu dùng để tìm vấn đề tư liệu, không để đánh giá lãi lỗ"
+      ],
+      "sourceType": "experience",
+      "sourceName": "TikTok: Metrics in GMV Max reports (độ trễ)",
+      "url": "https://business-api.tiktok.com/portal/docs/metrics-in-gmv-max-campaign-reports/v1.3"
+    }
+  },
+  "setup": {
+    "title": "Bước 1: nhập một biên lợi nhuận (30 giây)",
+    "desc": "Biên lợi nhuận = phần còn lại của giá sau giá vốn, vận chuyển, hoa hồng sàn và nhà sáng tạo (trước quảng cáo). Có nó hệ thống mới biết mỗi chiến dịch lãi hay lỗ. Nhập gần đúng cũng được, sửa lúc nào cũng được.",
+    "placeholder": "VD 40",
+    "invalid": "Nhập biên lợi nhuận từ 1 đến 99",
+    "breakEvenPreview": "ROI hòa vốn khoảng {roi}",
+    "how": "Tính biên lợi nhuận thế nào?"
+  },
+  "today": {
+    "connectTitle": "Hãy kết nối tài khoản quảng cáo TikTok trước",
+    "connectDesc": "Bấm Kết nối ở góc trên phải, ủy quyền và đồng bộ để xem chẩn đoán.",
+    "profit7d": "Lợi nhuận 7 ngày (ước tính)",
+    "needMargin": "Nhập biên lợi nhuận để xem",
+    "spend7d": "Chi tiêu 7 ngày",
+    "gmv7d": "Doanh thu 7 ngày",
+    "roi7d": "ROI 7 ngày",
+    "credit": "Ước tính hoàn bảo vệ ROI (hôm qua)",
+    "creditHint": "Ước tính theo công thức TikTok; số liệu TikTok là chuẩn",
+    "mustDo": "Việc cần làm hôm nay",
+    "mustDoHint": "Xếp theo mức ảnh hưởng, tối đa 5",
+    "impact": "khoảng {value}/ngày",
+    "why": "Vì sao",
+    "aiCreatives": "Nhờ AI làm tư liệu",
+    "aiCreativePrompt": "Chiến dịch GMV MAX \"{name}\" thiếu tư liệu (nên có ít nhất {need} video phân phối). Hãy làm một loạt video mới cho các sản phẩm tốt nhất.",
+    "openTikTok": "Mở TikTok",
+    "done": "Tôi đã chỉnh",
+    "recorded": "Đã ghi nhận thay đổi của \"{name}\", bắt đầu theo dõi 3 ngày.",
+    "allGood": "Hôm nay không có việc cần làm",
+    "allGoodHint": "Mọi chiến dịch đang học hoặc ổn định. Không động vào là tốt nhất.",
+    "observing": "Đang theo dõi",
+    "observingLine": "{kind}, còn {days} ngày",
+    "daysLeft": "Còn {days} ngày",
+    "noObserving": "Không có thay đổi nào đang theo dõi.",
+    "recentChanges": "Thay đổi đã ghi gần đây",
+    "undo": "Hủy ghi nhận",
+    "lessonOfDay": "Bài học hôm nay",
+    "learnMore": "Học",
+    "noDataTitle": "Chưa có dữ liệu phân phối",
+    "noDataDesc": "Đồng bộ một lần để xem chẩn đoán từng chiến dịch.",
+    "syncNow": "Đồng bộ ngay"
+  },
+  "changeKinds": {
+    "roi": "Đổi ROI",
+    "budget": "Đổi ngân sách",
+    "products": "Đổi sản phẩm",
+    "status": "Đổi trạng thái",
+    "other": "Thay đổi khác"
+  },
+  "campaigns": {
+    "all": "Tất cả",
+    "search": "Tìm chiến dịch",
+    "cols": {
+      "campaign": "Chiến dịch",
+      "diagnosis": "Chẩn đoán",
+      "lines": "Hòa vốn / mục tiêu / thực tế",
+      "utilization": "Ngân sách đã dùng",
+      "spend": "Chi 7 ngày",
+      "profit": "Lãi 7 ngày"
+    },
+    "live": "LIVE",
+    "product": "Sản phẩm",
+    "target": "ROI mục tiêu {value}",
+    "marginMissing": "Chưa nhập biên lợi nhuận nên chưa đánh giá lãi lỗ. Nhập trong Học viện.",
+    "marginStore": "Ước tính theo biên lợi nhuận mặc định của cửa hàng.",
+    "kv": {
+      "gmv": "Doanh thu 7 ngày",
+      "orders": "Đơn 7 ngày",
+      "aov": "Giá trị đơn TB",
+      "netCost": "Chi phí thực (trừ tín dụng)",
+      "creatives": "Tư liệu"
+    },
+    "creativeLine": "{delivering} đang phân phối, {learning} đang thử, {blocked} bị chặn",
+    "chartAria": "Chi tiêu và ROI theo ngày trong 14 ngày",
+    "chartLegend": "Cột: chi tiêu ngày. Xanh: ROI ngày. Xám đứt: mục tiêu. Đỏ đứt: hòa vốn.",
+    "loading": "Đang tải…",
+    "empty": "Không có chiến dịch phù hợp"
+  },
+  "academy": {
+    "lessonsTitle": "10 bài học 1 phút",
+    "lessonsHint": "Mỗi phần \"Vì sao\" đều dẫn tới đây",
+    "settingsTitle": "Cài đặt của tôi",
+    "settingsHint": "Biên lợi nhuận quyết định đường hòa vốn; ngưỡng quyết định khi nào nhắc bạn",
+    "margins": "Biên lợi nhuận cửa hàng (trước quảng cáo)",
+    "noStores": "Cửa hàng sẽ hiện sau khi kết nối và đồng bộ.",
+    "rules": "Ngưỡng quy tắc",
+    "thresholds": {
+      "safetyMargin": "Biên an toàn (%)",
+      "learningDays": "Giai đoạn học (ngày)",
+      "underspendUtilization": "Tiêu chậm: dùng ngân sách dưới (%)",
+      "scaleUtilization": "Tăng quy mô: dùng ngân sách trên (%)",
+      "roiStep": "Mỗi lần giảm ROI (%)",
+      "budgetStep": "Mỗi lần tăng ngân sách (%)",
+      "minDeliveringCreatives": "Tư liệu đang phân phối tối thiểu",
+      "minOrdersForVerdict": "Số đơn tối thiểu để kết luận lỗ"
+    },
+    "thresholdHints": {
+      "safetyMargin": "Mục tiêu gợi ý = hòa vốn x (1 + giá trị này)",
+      "learningDays": "TikTok khuyên ít nhất 3",
+      "underspendUtilization": "Mặc định 50%",
+      "scaleUtilization": "TikTok khuyên trên 80–90%",
+      "roiStep": "Mặc định 10%, giảm từ từ",
+      "budgetStep": "TikTok khuyên tối đa 30% mỗi ngày",
+      "minDeliveringCreatives": "Shop University gợi ý từ 40",
+      "minOrdersForVerdict": "Không kết luận khi mẫu quá nhỏ"
+    },
+    "saved": "Đã lưu"
+  },
+  "dash": {
+    "kpiAria": "Chỉ số chính của tài khoản, 7 ngày qua",
+    "tiles": {
+      "profit": "Lợi nhuận (7 ngày)",
+      "gmv": "Doanh thu",
+      "spend": "Chi tiêu",
+      "roi": "ROI",
+      "credit": "Bồi hoàn bảo vệ ROI dự kiến (hôm qua)"
+    },
+    "estimated": "Ước tính theo biên lợi nhuận",
+    "breakEvenNote": "Hòa vốn {value}",
+    "creditNote": "Ước tính theo quy tắc chính thức; số liệu TikTok là chuẩn",
+    "vsPrev": "so với 7 ngày trước",
+    "sparkAria": "{name}, xu hướng 14 ngày",
+    "cols": {
+      "status": "Trạng thái",
+      "campaign": "Chiến dịch",
+      "action": "Việc cần làm",
+      "impact": "Ảnh hưởng / ngày",
+      "roi": "ROI (7 ngày)",
+      "trend": "ROI 14 ngày"
+    },
+    "perDay": "~{value}",
+    "details": "Xem chi tiết",
+    "statusTitle": "Trạng thái chiến dịch",
+    "statusHint": "{count} chiến dịch. Bấm một dòng để xem.",
+    "viewAll": "Xem tất cả chiến dịch",
+    "trendTitle": "Doanh thu và chi tiêu (14 ngày)",
+    "trendHint": "Hai đường càng cách xa, bạn càng lời nhiều",
+    "trendAria": "Doanh thu và chi tiêu mỗi ngày, 14 ngày qua",
+    "roiTitle": "Xu hướng ROI (14 ngày)",
+    "roiHint": "Dưới đường đứt nét màu đỏ là đang lỗ",
+    "roiAria": "ROI mỗi ngày trong 14 ngày so với mục tiêu và hòa vốn",
+    "roiVs": "Mục tiêu {target} · hòa vốn {breakEven}",
+    "total": "Tổng ({count})",
+    "floor": "Sàn"
+  },
+  "errors": {
+    "restart": "Phần lõi chưa nạp tính năng mới. Hãy thoát hẳn ứng dụng rồi mở lại (khi phát triển, khởi động lại npm run dev).",
+    "unknown": "Tải thất bại, vui lòng thử lại."
+  },
+  "rules": {
+    "groups": "Nhóm quy tắc",
+    "groupsHint": "Mẫu chiến lược dùng lại được",
+    "auto": "Tự động",
+    "autoHint": "Tự điều chỉnh khi đủ điều kiện",
+    "shadowHint": "Chỉ mô phỏng, không đổi TikTok",
+    "manualHint": "Chỉ đề xuất, bạn tự thao tác",
+    "unbound": "Chưa có quy tắc",
+    "unboundHint": "Chiến dịch chưa có chiến lược",
+    "guards": "Quy tắc an toàn mọi chiến lược đều tuân theo",
+    "groupsTitle": "Nhóm quy tắc",
+    "groupsSubtitle": "Đặt ROI tối thiểu, CPA mục tiêu và ngân sách thử nội dung, rồi gán cho chiến dịch.",
+    "ruleCol": "Quy tắc",
+    "scopeCol": "Cửa hàng",
+    "modeCol": "Chế độ",
+    "assignHint": "Chọn quy tắc và thao tác được phép cho từng chiến dịch",
+    "allowed": "được phép",
+    "notAllowed": "không được phép",
+    "noGroups": "Chưa có nhóm quy tắc. Tạo một nhóm rồi gán cho chiến dịch.",
+    "delete": "Xóa",
+    "boundCol": "Chiến dịch"
+  },
+  "simple": {
+    "nav": {
+      "today": "Hôm nay làm gì",
+      "diagnosis": "Khám chiến dịch",
+      "academy": "Học viện",
+      "settings": "Kết nối và cài đặt"
+    },
+    "mode": {
+      "toPro": "Mở chế độ chuyên nghiệp",
+      "toProHint": "Hiện mọi công cụ và dữ liệu chi tiết",
+      "toSimple": "Về chế độ người mới",
+      "toSimpleHint": "Chỉ xem việc cần làm hôm nay",
+      "simple": "Người mới",
+      "pro": "Chuyên nghiệp"
+    },
+    "start": {
+      "title": "Bắt đầu với 3 bước",
+      "desc": "Xong 3 bước này, mỗi ngày ứng dụng sẽ chỉ bạn cần sửa gì. Khoảng 3 phút.",
+      "progress": "Đã xong {done}/3",
+      "connect": "Kết nối tài khoản quảng cáo TikTok",
+      "connectDesc": "Cần để ứng dụng đọc dữ liệu chiến dịch. Ứng dụng không tự sửa quảng cáo của bạn.",
+      "connectDone": "Đã kết nối",
+      "connectBtn": "Kết nối",
+      "sync": "Đồng bộ dữ liệu chiến dịch",
+      "syncDesc": "Lấy chi tiêu và doanh số 14 ngày gần nhất. Thường mất 1 đến 3 phút.",
+      "syncDone": "Đã đồng bộ",
+      "margin": "Nhập biên lợi nhuận gộp",
+      "marginDesc": "Biên lợi nhuận = (giá bán − giá vốn − phí vận chuyển...) ÷ giá bán. Chưa chắc thì nhập 30, sau này sửa được. Ứng dụng dùng nó để biết bạn lời hay lỗ.",
+      "marginPreview": "Mỗi 1 đồng quảng cáo phải mang về ít nhất {roi} đồng mới hòa vốn",
+      "marginExample": "Ví dụ: giá 100, giá vốn cộng vận chuyển 60, nhập 40"
+    },
+    "kpi": {
+      "profit": "Lời bao nhiêu trong 7 ngày",
+      "profitHint": "Ước tính theo biên lợi nhuận, đã trừ quảng cáo",
+      "profitMissing": "Nhập biên lợi nhuận để xem",
+      "spend": "Chi quảng cáo trong 7 ngày",
+      "spendHint": "Mang về doanh số {gmv}",
+      "roi": "Mỗi 1 đồng chi, bán về bao nhiêu",
+      "roiHint": "Dưới {value} là đang lỗ",
+      "roiNoMargin": "Nhập biên lợi nhuận để biết lời hay lỗ",
+      "vsLastWeek": "{value} so với tuần trước"
+    },
+    "tasks": {
+      "title": "Hôm nay có {count} việc",
+      "hint": "Làm từ việc số 1. Mỗi việc đều ghi rõ bấm gì trong TikTok Ads Manager. Làm xong quay lại bấm \"Tôi đã sửa xong\".",
+      "impact": "Khoảng {value}/ngày",
+      "whyLabel": "Lý do: ",
+      "doLabel": "Cần làm: ",
+      "done": "Tôi đã sửa xong",
+      "learn": "Vì sao làm vậy?"
+    },
+    "moreData": "Xem biểu đồ xu hướng",
+    "lessData": "Ẩn biểu đồ xu hướng",
+    "campaigns": {
+      "verdict": "Kết luận",
+      "next": "Bước tiếp theo",
+      "roi": "Bán về mỗi 1 đồng",
+      "roiHelp": "ROI: doanh số mang về từ mỗi 1 đồng quảng cáo",
+      "roiVs": "Dưới {breakEven} là lỗ",
+      "nothing": "Không cần thay đổi"
+    },
+    "steps": {
+      "raise_roi": [
+        "Bấm \"Mở TikTok\" bên dưới",
+        "Vào GMV Max, tìm chiến dịch \"{name}\"",
+        "Bấm Chỉnh sửa, đổi mục tiêu ROI từ {from} thành {to}",
+        "Lưu, rồi quay lại bấm \"Tôi đã sửa xong\"",
+        "Để yên 3 ngày cho hệ thống học lại"
+      ],
+      "lower_roi": [
+        "Bấm \"Mở TikTok\" bên dưới",
+        "Vào GMV Max, tìm chiến dịch \"{name}\"",
+        "Bấm Chỉnh sửa, đổi mục tiêu ROI từ {from} thành {to}",
+        "Lưu, rồi quay lại bấm \"Tôi đã sửa xong\"",
+        "Mỗi ngày chỉ chỉnh một lần, rồi chờ 3 ngày"
+      ],
+      "raise_budget": [
+        "Bấm \"Mở TikTok\" bên dưới",
+        "Vào GMV Max, tìm chiến dịch \"{name}\"",
+        "Bấm Chỉnh sửa, đổi ngân sách ngày từ {from} thành {to}",
+        "Lưu, rồi quay lại bấm \"Tôi đã sửa xong\"",
+        "Mỗi ngày tăng ngân sách tối đa một lần"
+      ],
+      "fix_creatives": [
+        "Mở TikTok Ads Manager, vào chiến dịch \"{name}\"",
+        "Mở danh sách nội dung, tìm video cần ủy quyền, bị từ chối hoặc không khả dụng",
+        "Ủy quyền video cần ủy quyền; thay video bị từ chối bằng video mới",
+        "Thiếu video thì bấm \"Nhờ AI làm tư liệu\"",
+        "Xong thì quay lại bấm \"Tôi đã sửa xong\""
+      ],
+      "fix_blocker": [
+        "Mở TikTok Ads Manager, vào chiến dịch \"{name}\"",
+        "Xử lý theo dòng \"Cần làm\", ví dụ số dư tài khoản, trạng thái sản phẩm hoặc lỗi duyệt",
+        "Xong thì quay lại bấm \"Tôi đã sửa xong\""
+      ],
+      "review_offer": [
+        "Kiểm tra sản phẩm của \"{name}\": giá, tồn kho, ưu đãi có cạnh tranh không",
+        "So sánh sản phẩm tương tự bán giá bao nhiêu, tặng gì",
+        "Điều chỉnh xong bấm \"Tôi đã sửa xong\", 3 ngày sau xem lại"
+      ],
+      "none": []
+    }
+  },
+  "table": {
+    "moreCampaigns": "Thêm {count} chiến dịch"
+  },
+  "range": {
+    "label": "Khoảng ngày",
+    "yesterday": "Hôm qua",
+    "lastDays": "{days} ngày qua",
+    "custom": "Tùy chỉnh",
+    "start": "Ngày bắt đầu",
+    "end": "Ngày kết thúc",
+    "compare": "So sánh kỳ trước"
+  },
+  "compare": {
+    "spend": "Chi tiêu",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "orders": "Đơn hàng",
+    "vsPrevious": "so với kỳ trước",
+    "noPrevious": "Không có dữ liệu kỳ trước",
+    "search": "Tìm tên hoặc ID chiến dịch",
+    "allPacing": "Tất cả",
+    "suggestions": "{count} đề xuất",
+    "evaluateHint": "Đánh giá lại mọi chiến dịch bằng dữ liệu mới nhất"
+  },
+  "edit": {
+    "selected": "Đã chọn {count} chiến dịch",
+    "selectAll": "Chọn cả trang",
+    "enable": "Bật",
+    "pause": "Tạm dừng",
+    "clear": "Bỏ chọn",
+    "adjustBudget": "Điều chỉnh ngân sách",
+    "adjustRoi": "Điều chỉnh ROI mục tiêu",
+    "preview": "Xem trước",
+    "modes": {
+      "up": "Tăng %",
+      "down": "Giảm %",
+      "setBudget": "Đặt số tiền",
+      "setRoi": "Đặt thành"
+    },
+    "editBudget": "Sửa ngân sách ngày",
+    "editRoi": "Sửa ROI mục tiêu",
+    "enterHint": "Enter để xác nhận, Esc để hủy",
+    "fields": {
+      "budget": "Ngân sách ngày",
+      "roi": "ROI mục tiêu",
+      "status": "Trạng thái"
+    },
+    "confirmTitle": "Xác nhận {count} thay đổi",
+    "confirmHint": "Thay đổi được ghi vào TikTok, kiểm tra trước và sau khi ghi, lưu nhật ký và có thể hoàn tác.",
+    "confirm": "Áp dụng ({count})",
+    "cancel": "Hủy",
+    "close": "Xong",
+    "undo": "Hoàn tác",
+    "undone": "Đã hoàn tác",
+    "doneTitle": "Kết quả",
+    "doneSummary": "{ok} thành công, {failed} thất bại",
+    "warningCount": "{count} lưu ý rủi ro, hãy xem trước khi áp dụng",
+    "safety": "Kiểm tra trước và sau khi ghi, có thể hoàn tác",
+    "warn": {
+      "budgetJump": "Tăng ngân sách hơn 50% một lần có thể làm hệ thống học lại; nên tăng từng bước",
+      "budgetCut": "Giảm ngân sách hơn 50% sẽ làm phân phối chậm rõ rệt",
+      "belowFloor": "ROI mục tiêu thấp hơn ROI hòa vốn {floor}; bán càng nhiều càng lỗ",
+      "roiJump": "ROI mục tiêu thay đổi hơn 30%; chi tiêu và phân phối có thể thay đổi nhiều",
+      "pause": "Quảng cáo dừng ngay; bật lại sẽ phải khởi động lại"
+    },
+    "errors": {
+      "noChange": "Không có thay đổi",
+      "budgetInvalid": "Ngân sách phải lớn hơn 0",
+      "roiInvalid": "ROI mục tiêu phải lớn hơn 0",
+      "stopped": "Dừng khẩn cấp đang bật nên mọi thao tác ghi bị tạm dừng.",
+      "pending": "Thay đổi trước của chiến dịch này đang được kiểm tra; thử lại sau vài phút",
+      "changedRemotely": "Giá trị đã bị đổi trên TikTok; hãy đồng bộ dữ liệu trước",
+      "notConnected": "Không có quyền TikTok khả dụng; hãy kết nối lại tài khoản trong cài đặt"
+    }
+  },
+  "views": {
+    "title": "Chế độ xem",
+    "empty": "Chưa có chế độ xem nào. Đặt bộ lọc, sắp xếp và cột rồi lưu tại đây.",
+    "namePlaceholder": "Tên, ví dụ: Chiến dịch lỗ",
+    "save": "Lưu chế độ xem",
+    "remove": "Xóa"
+  },
+  "columns": {
+    "title": "Cột",
+    "status": "Trạng thái",
+    "budget": "Ngân sách ngày",
+    "spend": "Chi tiêu",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "orders": "Đơn hàng",
+    "cpa": "Chi phí mỗi đơn",
+    "aov": "Giá trị đơn TB",
+    "protection": "Bảo vệ lợi nhuận",
+    "reset": "Đặt lại cột"
+  },
+  "alerts": {
+    "title": "Cảnh báo",
+    "empty": "Hiện không có cảnh báo",
+    "desktop": "Thông báo máy tính",
+    "desktopHint": "Hiện thông báo hệ thống khi có cảnh báo mới (kiểm tra mỗi 15 phút sau khi mở GMV MAX)",
+    "settingsTitle": "Thông báo cảnh báo",
+    "roi_below_floor": {
+      "title": "ROI dưới mức hòa vốn",
+      "detail": "ROI 3 ngày {roi}, cần {floor} để hòa vốn"
+    },
+    "budget_overspend": {
+      "title": "Ngân sách có thể hết sớm",
+      "detail": "Đã chi {spent}, theo giờ nên là {expected}"
+    },
+    "creative_fatigue": {
+      "title": "Nội dung đang giảm hiệu quả",
+      "detail": "{count} nội dung giảm hiệu quả; nên bổ sung mới"
+    }
+  },
+  "auth": {
+    "expired": "Ủy quyền TikTok đã hết hạn nên không thể đồng bộ. Hãy ủy quyền lại để tiếp tục.",
+    "expiredError": "Ủy quyền TikTok đã hết hạn. Bấm Ủy quyền lại, xác nhận trên trang TikTok rồi đồng bộ.",
+    "reauthorize": "Ủy quyền lại",
+    "done": "Đã ủy quyền lại TikTok; có thể đồng bộ ngay.",
+    "status": "Ủy quyền hết hạn"
+  },
+  "filters": {
+    "type": "Loại chiến dịch",
+    "clear": "Xóa bộ lọc"
+  }
+}

@@ -24,8 +24,11 @@ import {
   Trash2,
   Upload,
   Workflow,
+  Wand2,
 } from 'lucide-vue-next'
 import { thumbnailUrl } from '@/lib/localMedia'
+import ProductSpacePanel from '../components/ai/ProductSpacePanel.vue'
+import { useAiProducerStore } from '@/stores/aiProducer'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
 type ProductType =
@@ -107,6 +110,13 @@ type FeedbackTone = 'info' | 'success' | 'error'
 const route = useRoute()
 const router = useRouter()
 const { t: tr } = useI18n()
+const aiProducer = useAiProducerStore()
+const spaceTab = ref<'space' | 'profile'>('space')
+
+function openAiPack() {
+  if (!selected.value) return
+  void aiProducer.open({ recipeId: 'product-content-pack', context: { recipePreset: { productId: selected.value.id } } })
+}
 const list = ref<Product[]>([])
 const previewOpen = ref(false)
 const previewSrc = ref<string | null>(null)
@@ -682,6 +692,9 @@ watch(productId, () => {
           <p>{{ pageSubtitle }}</p>
         </div>
         <div class="vg-page-head__actions">
+          <button class="vg-btn vg-btn--primary" data-testid="product-ai-make-button" type="button" @click="openAiPack">
+            <Wand2 :size="15" /> {{ tr('ai.space.makeShort') }}
+          </button>
           <button class="vg-btn" :disabled="uploading" data-testid="product-upload-button" type="button" @click="uploadImages">
             <Upload :size="15" /> {{ uploading ? tr('autoUi.k_ba72be007133') : tr('autoUi.k_45bba1a10c73') }}
           </button>
@@ -694,6 +707,14 @@ watch(productId, () => {
         </div>
       </header>
 
+      <div class="vg-tabs pd-space-tabs">
+        <button type="button" class="vg-tabs__btn" :class="{ 'is-active': spaceTab === 'space' }" data-testid="product-tab-space" @click="spaceTab = 'space'">{{ tr('ai.space.tab') }}</button>
+        <button type="button" class="vg-tabs__btn" :class="{ 'is-active': spaceTab === 'profile' }" data-testid="product-tab-profile" @click="spaceTab = 'profile'">{{ tr('ai.space.profileTab') }}</button>
+      </div>
+
+      <ProductSpacePanel v-if="spaceTab === 'space'" :product-id="selected.id" :product-name="selected.name" />
+
+      <div v-show="spaceTab === 'profile'" class="pd-profile">
       <!-- Summary -->
       <section class="vg-card pd-summary">
         <div class="pd-summary__item">
@@ -939,6 +960,7 @@ watch(productId, () => {
           </article>
         </div>
       </div>
+      </div>
     </template>
 
     <section v-else class="vg-card">
@@ -954,6 +976,9 @@ watch(productId, () => {
 </template>
 
 <style scoped>
+.pd-profile { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pd-space-tabs { margin-top: -2px; overflow: visible; }
+
 .pd { width: min(1408px, 100%); margin: 0 auto; }
 .pd-title h1 { display: inline-flex; align-items: center; gap: 6px; }
 .pd-title__edit { flex-wrap: nowrap; }

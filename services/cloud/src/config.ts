@@ -35,9 +35,16 @@ export function loadCloudConfig() {
     corsOrigins: env('CLOUD_CORS_ORIGINS', 'http://127.0.0.1:18280,http://localhost:18280')
       .split(',')
       .map((item) => item.trim())
-      .filter(Boolean),
+      .filter(Boolean)
+      // 手机端（Capacitor WebView）的固定来源
+      .concat(['https://localhost', 'capacitor://localhost']),
     /** 反向代理后取真实 IP */
     trustProxy: env('CLOUD_TRUST_PROXY') === '1',
+    /** 云端 AI 网关：每个账号每分钟 / 每天最多调用次数 */
+    aiPerMinute: envInt('CLOUD_AI_PER_MINUTE', 20),
+    aiPerDay: envInt('CLOUD_AI_PER_DAY', 500),
+    /** 每个账号的多端同步文件空间（图片、视频） */
+    syncQuotaBytes: envInt('CLOUD_SYNC_QUOTA_MB', 2048) * 1024 * 1024,
     allowRegistration: env('CLOUD_ALLOW_REGISTRATION', '1') === '1',
 
     entitlementPrivateKeyPath: env('CLOUD_ENTITLEMENT_PRIVATE_KEY', join(keysDir, 'entitlement-private.pem')),
@@ -52,6 +59,8 @@ export function loadCloudConfig() {
     loginMaxFailures: 5,
     loginLockMs: 15 * 60 * 1000,
     /** 用户自助解绑设备：30 天内最多次数 */
+    /** 每个会员另含的手机名额（不占电脑名额），0 表示不限 */
+    maxMobileDevices: envInt('CLOUD_MAX_MOBILE_DEVICES', 1),
     deviceUnbindPer30d: envInt('CLOUD_DEVICE_UNBIND_PER_30D', 3),
 
     orderExpireMs: 30 * 60 * 1000,

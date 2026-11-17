@@ -72,6 +72,30 @@ function seed(dbFile) {
   for (const row of [order('O1', 'C1', 'alice', 'P1', 200000), order('O2', 'C1', 'alice', 'P1', 100000, { refundQuantity: 1 }), order('O3', 'C2', 'bob', 'P2', 50000, { settledAt: now - DAY, actualCommission: 5000 })]) {
     db.prepare('INSERT INTO ch_orders (id, shop_id, creator_id, created_at, synced_at, payload) VALUES (?, ?, ?, ?, ?, ?)').run(row.id, SHOP, row.creatorId, row.createdAt, now, JSON.stringify(row))
   }
+
+  // Creator pool (as a marketplace search would leave it). Alice matches the CRM by id.
+  db.exec('CREATE TABLE IF NOT EXISTS ch_pool (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, last_seen_at INTEGER NOT NULL, payload TEXT NOT NULL);')
+  const poolCreator = (creatorId, handle, nickname, extra = {}) => ({
+    id: `${SHOP}:${creatorId}`, shopId: SHOP, creatorId, handle, nickname, region: 'VN', followers: 25000, level: 5, categories: ['Fashion Accessories'],
+    gmv: 12000000, gmvRange: '1M₫+', unitsSold: 900, avgViews: 8000, medianViews: 900, engagementRate: 0.012, liveAvgViewers: 0,
+    topGender: { key: 'Female', share: 0.41 }, topAges: ['25-34'], risingStar: false, invitedIn90d: false, collaborated: false, blockedByShop: false,
+    topVideos: [{ itemId: '7600000000000000001', title: 'Hoa tai bac', plays: 120000, likes: 3000, comments: 40, products: ['Earring'] }],
+    starred: false, sources: ['"hoa tai" · Fashion Accessories'], firstSeenAt: now, lastSeenAt: now, ...extra,
+  })
+  for (const row of [
+    poolCreator('C1', 'alice', 'Alice'),
+    poolCreator('M1', 'newstar', 'New Star', { followers: 3000, gmv: undefined, unitsSold: 40, avgViews: 600, level: 2 }),
+    poolCreator('M2', 'invited.one', 'Invited One', { invitedIn90d: true }),
+  ]) {
+    db.prepare('INSERT INTO ch_pool (id, shop_id, creator_id, last_seen_at, payload) VALUES (?, ?, ?, ?, ?)').run(row.id, SHOP, row.creatorId, now, JSON.stringify(row))
+  }
+  db.exec('CREATE TABLE IF NOT EXISTS ch_contacts (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, creator_id TEXT NOT NULL, updated_at INTEGER NOT NULL, payload TEXT NOT NULL);')
+  for (const contact of [
+    { id: `${SHOP}:C1`, shopId: SHOP, creatorId: 'C1', handle: 'alice', zalo: '0912345678', bio: 'Zalo 0912 345 678', contactInfoAvailable: false, bioFetchedAt: now, status: 'none', log: [], updatedAt: now },
+    { id: `${SHOP}:M1`, shopId: SHOP, creatorId: 'M1', handle: 'newstar', bio: 'review đồ xinh', contactInfoAvailable: true, bioFetchedAt: now, status: 'none', log: [], updatedAt: now },
+  ]) {
+    db.prepare('INSERT INTO ch_contacts (id, shop_id, creator_id, updated_at, payload) VALUES (?, ?, ?, ?, ?)').run(contact.id, SHOP, contact.creatorId, now, JSON.stringify(contact))
+  }
   db.close()
 }
 
@@ -132,6 +156,59 @@ async function main() {
     await profile.waitFor({ state: 'detached' })
     await page.waitForFunction(() => document.querySelector('[data-testid="creator-hub-crm"]')?.textContent?.includes('Prefers Zalo'))
     await page.screenshot({ path: path.join(artifacts, 'creators-dark-teal.png') })
+
+    // Discover: pool hides creators invited in 90 days by default; Alice carries our sample history.
+    await page.locator('[data-testid="creator-hub-tab-discover"]').click()
+    const discover = page.locator('[data-testid="creator-hub-discover"]')
+    await discover.waitFor({ state: 'visible' })
+    assert.equal(await discover.locator('tbody tr').count(), 2, 'invited creator hidden by default')
+    assert.equal(await discover.locator('[data-testid="creator-hub-discover-search"]').isDisabled(), true, 'search needs a single shop')
+    await discover.locator('label.vg-switch', { hasText: /90/ }).click()
+    assert.equal(await discover.locator('tbody tr').count(), 3)
+    assert.match(await discover.locator('tbody tr').first().innerText(), /Alice/, 'highest score first')
+    assert.match(await discover.locator('tbody tr', { hasText: 'Alice' }).innerText(), /3/, 'our sample count shown')
+    await page.screenshot({ path: path.join(artifacts, 'discover-dark-teal.png') })
+
+    await discover.locator('tbody tr', { hasText: 'Alice' }).locator('[data-testid="creator-hub-discover-detail"]').click()
+    const detail = page.locator('[data-testid="creator-hub-detail-dialog"]')
+    await detail.waitFor({ state: 'visible' })
+    await page.waitForFunction(() => document.querySelector('[data-testid="creator-hub-detail-dialog"]')?.textContent?.includes('Star zircon earrings'))
+    assert.match(await detail.innerText(), /Hoa tai bac/, 'top video listed')
+    await page.screenshot({ path: path.join(artifacts, 'discover-detail-dark-teal.png') })
+    await detail.locator('textarea').fill('Found via search')
+    await detail.locator('[data-testid="creator-hub-detail-save"]').click()
+    await detail.waitFor({ state: 'detached' })
+    await discover.locator('tbody tr', { hasText: 'New Star' }).locator('button[title]').first().click()
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="creator-hub-discover"] tbody tr')].some((tr) => tr.textContent.includes('New Star') && tr.querySelector('.ch-star')))
+
+    // Contacts: Alice has a Zalo number from her bio, New Star only shared contact info on the backend.
+    assert.match(await discover.locator('tbody tr', { hasText: 'New Star' }).innerText(), /后台有联系方式|Contact on backend|quan tri/)
+    await discover.locator('[data-testid="creator-hub-contact-filter"]').selectOption('zalo')
+    assert.equal(await discover.locator('tbody tr').count(), 1)
+    await electronApp.evaluate(({ shell }) => { global.__openedUrls = []; shell.openExternal = async (url) => { global.__openedUrls.push(url) } })
+    await discover.locator('tbody tr', { hasText: 'Alice' }).locator('[data-testid="creator-hub-zalo"]').click()
+    const zalo = page.locator('[data-testid="creator-hub-zalo-dialog"]')
+    await zalo.waitFor({ state: 'visible' })
+    assert.match(await zalo.locator('[data-testid="creator-hub-zalo-message"]').inputValue(), /Alice[\s\S]*E2E Jewelry VN/, 'template filled with creator and shop')
+    assert.equal(await zalo.locator('#ch-zalo-number').inputValue(), '0912345678')
+    await page.screenshot({ path: path.join(artifacts, 'zalo-dialog-dark-teal.png') })
+    await zalo.locator('[data-testid="creator-hub-zalo-send"]').click()
+    await zalo.waitFor({ state: 'detached' })
+    assert.deepEqual(await electronApp.evaluate(() => global.__openedUrls), ['https://zalo.me/0912345678'])
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="creator-hub-discover"] tbody tr')].some((tr) => tr.textContent.includes('Alice') && /已联系|Contacted|Da lien he/.test(tr.textContent)))
+
+    // Detail: contact section; fill New Star's number by hand and mark replied.
+    await discover.locator('[data-testid="creator-hub-contact-filter"]').selectOption('all')
+    await discover.locator('tbody tr', { hasText: 'New Star' }).locator('[data-testid="creator-hub-discover-detail"]').click()
+    await detail.waitFor({ state: 'visible' })
+    const contactSection = detail.locator('[data-testid="creator-hub-detail-contact"]')
+    await contactSection.waitFor({ state: 'visible' })
+    await contactSection.locator('#ch-contact-zalo').fill('+84 987 654 321')
+    await contactSection.locator('#ch-contact-status').selectOption('replied')
+    await page.screenshot({ path: path.join(artifacts, 'detail-contact-dark-teal.png') })
+    await detail.locator('[data-testid="creator-hub-detail-save"]').click()
+    await detail.waitFor({ state: 'detached' })
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="creator-hub-discover"] tbody tr')].some((tr) => tr.textContent.includes('New Star') && tr.querySelector('[data-testid="creator-hub-zalo"]') && /已回复|Replied|Da tra loi/.test(tr.textContent)))
 
     // Orders: 3 orders, by-creator view groups alice.
     await page.locator('[data-testid="creator-hub-tab-orders"]').click()

@@ -91,8 +91,15 @@
       "growthStages": "View growth stages",
       "growthStagesHint": "Review the distribution from cold start through blocked",
       "productFilters": "Filter products",
-      "productFiltersHint": "Filter by campaign, product state, allocation, and metrics"
-      ,"actionFilters":"Filter approval actions","actionFiltersHint":"Filter by campaign, action type, risk, and sorting","backtest":"View historical backtests","backtestHint":"{count} runs for strategy validation","auditFilters":"Filter activity log","auditFiltersHint":"Filter by campaign, execution status, and action","capabilities":"View platform permissions","capabilitiesHint":"{enabled} / {total} capabilities available"
+      "productFiltersHint": "Filter by campaign, product state, allocation, and metrics",
+      "actionFilters": "Filter approval actions",
+      "actionFiltersHint": "Filter by campaign, action type, risk, and sorting",
+      "backtest": "View historical backtests",
+      "backtestHint": "{count} runs for strategy validation",
+      "auditFilters": "Filter activity log",
+      "auditFiltersHint": "Filter by campaign, execution status, and action",
+      "capabilities": "View platform permissions",
+      "capabilitiesHint": "{enabled} / {total} capabilities available"
     }
   },
   "gmvMaxSimpleNav": {
@@ -801,7 +808,10 @@
     "managed": "managed campaigns",
     "autoStarted": "auto-started",
     "waitingData": "waiting for sales data",
-    "sources": { "manual": "Manual setup", "automatic": "Automatic onboarding" }
+    "sources": {
+      "manual": "Manual setup",
+      "automatic": "Automatic onboarding"
+    }
   },
   "gmvMaxMatureLabels": {
     "lastReport": "Last report date",
@@ -938,7 +948,9 @@
       "metricsImported": "Imported {count} supplemental metric rows.",
       "draftCreated": "The Winner DNA draft was created."
     },
-    "errors": { "campaignRequired": "Select a synchronized campaign first." },
+    "errors": {
+      "campaignRequired": "Select a synchronized campaign first."
+    },
     "metrics": {
       "spend": "Spend",
       "gmv": "GMV",
@@ -1090,7 +1102,9 @@
       "refresh": "Refresh workspace"
     }
   },
-  "gmvMaxRecovery": { "acknowledge": "Acknowledge and unblock" },
+  "gmvMaxRecovery": {
+    "acknowledge": "Acknowledge and unblock"
+  },
   "gmvMaxCampaignRecommendations": {
     "open": "View pending recommendations for this campaign",
     "title": "Pending Recommendations",
@@ -1101,7 +1115,9 @@
     "period": "Complete data for the selected date range",
     "realtime": "Today live"
   },
-  "gmvMaxCoverage": { "exchange": "Valid Exchange-rate Coverage" },
+  "gmvMaxCoverage": {
+    "exchange": "Valid Exchange-rate Coverage"
+  },
   "gmvMaxOperations": {
     "netProfit": "Estimated Net Profit",
     "estimatedSource": "Estimated from the configured cost model",
@@ -1484,7 +1500,9 @@
     "cancelled": "Cancelled",
     "ended": "Ended"
   },
-  "gmvMaxProfitCoverage": { "label": "Profit Coverage" },
+  "gmvMaxProfitCoverage": {
+    "label": "Profit Coverage"
+  },
   "gmvMaxProfit": {
     "coverage": "Profit Coverage",
     "netProfit": "Estimated Net Profit",
@@ -1617,7 +1635,10 @@
     "creativeState": "Learning State",
     "score": "Quality Score",
     "roiTrend": "ROI Trend",
-    "status": { "proposed": "Ready for Review", "blocked": "Protected" },
+    "status": {
+      "proposed": "Ready for Review",
+      "blocked": "Protected"
+    },
     "creativeStates": {
       "new": "New",
       "testing": "Testing",
@@ -1884,7 +1905,11 @@
       "executed": "Executed",
       "failed": "Failed"
     },
-    "flow": { "fast": "Fast", "stable": "Stable", "slow": "Slow" },
+    "flow": {
+      "fast": "Fast",
+      "stable": "Stable",
+      "slow": "Slow"
+    },
     "performanceLabel": {
       "winner": "Top Performer",
       "testing": "Testing",
@@ -1978,8 +2003,14 @@
       "balanced_growth": "Balanced Growth",
       "gmv_growth": "GMV Growth"
     },
-    "types": { "product": "Product", "live": "LIVE" },
-    "kinds": { "scale_up": "Scale Up", "scale_down": "Scale Down" },
+    "types": {
+      "product": "Product",
+      "live": "LIVE"
+    },
+    "kinds": {
+      "scale_up": "Scale Up",
+      "scale_down": "Scale Down"
+    },
     "status": {
       "connected": "Connected",
       "disconnected": "Disconnected",
@@ -2055,7 +2086,10 @@
       "marketDesc": "Discover tools that extend clone, production, export, and publishing workflows.",
       "installedDesc": "Manage installed tools and jump into their workspaces."
     },
-    "tabs": { "market": "Plugin Market", "installed": "Installed" },
+    "tabs": {
+      "market": "Plugin Market",
+      "installed": "Installed"
+    },
     "searchPlaceholder": "Search plugins...",
     "status": {
       "notInstalled": "Not Installed",
@@ -2124,7 +2158,7 @@
         "description": "Track SKU baselines, sync shipped quantities, and forecast reorder risk."
       },
       "live-photo-generator": {
-        "name": "Live Photo Generator",
+        "name": "Live Photo",
         "description": "Create Apple-compatible Live Photos from product reference images with preview and export tools."
       },
       "tiktok-creative-studio": {
@@ -2144,7 +2178,7 @@
         "description": "Recognize, style, burn in, and export video subtitles."
       },
       "tiktok-creator-hub": {
-        "name": "TikTok Creator Hub",
+        "name": "Creators",
         "description": "Multi-shop creator management: sample requests, per-creator fulfillment rate and sample costs, synced read-only from TikTok Shop Affiliate."
       },
       "tiktok-listing-helper": {
@@ -2152,7 +2186,12 @@
         "description": "Generate TikTok listing images, titles and descriptions from product photos, and export Excel templates in batches."
       }
     },
-    "detail": { "eyebrow": "Plugin Detail", "status": "Status", "category": "Category", "path": "Path" }
+    "detail": {
+      "eyebrow": "Plugin Detail",
+      "status": "Status",
+      "category": "Category",
+      "path": "Path"
+    }
   },
   "productReplacement": {
     "backToPlugins": "Back to plugins",
@@ -2232,8 +2271,14 @@
     }
   },
   "productWatermark": {
-    "hero": { "description": "Batch-crop product images and apply reusable transparent brand watermarks." },
-    "sections": { "template": "Watermark template", "images": "Product images", "export": "Process and export" },
+    "hero": {
+      "description": "Batch-crop product images and apply reusable transparent brand watermarks."
+    },
+    "sections": {
+      "template": "Watermark template",
+      "images": "Product images",
+      "export": "Process and export"
+    },
     "labels": {
       "savedTemplates": "{count} saved",
       "chooseSaved": "Select a saved template",
@@ -2257,7 +2302,11 @@
       "succeeded": "Succeeded {count}",
       "failed": "Failed {count}"
     },
-    "placeholders": { "template": "Choose a template", "templateName": "Template name", "outputFolder": "No folder selected" },
+    "placeholders": {
+      "template": "Choose a template",
+      "templateName": "Template name",
+      "outputFolder": "No folder selected"
+    },
     "actions": {
       "back": "Back to plugins",
       "rename": "Rename",
@@ -2275,9 +2324,18 @@
       "processing": "Processing...",
       "retryFailed": "Retry failed images"
     },
-    "empty": { "images": "No product images added" },
-    "pickers": { "template": "Choose transparent watermark template", "images": "Choose product images", "output": "Choose export folder" },
-    "prompts": { "rename": "Template name", "delete": "Delete this template?" },
+    "empty": {
+      "images": "No product images added"
+    },
+    "pickers": {
+      "template": "Choose transparent watermark template",
+      "images": "Choose product images",
+      "output": "Choose export folder"
+    },
+    "prompts": {
+      "rename": "Template name",
+      "delete": "Delete this template?"
+    },
     "errors": {
       "templateFormat": "Template must be PNG or WebP.",
       "templateNameAndFile": "Choose a template image and enter a name.",
@@ -2286,7 +2344,10 @@
       "selectImages": "Add product images first.",
       "selectOutput": "Choose an export folder first."
     },
-    "messages": { "templateSaved": "Template saved.", "processed": "Complete: {success} succeeded, {failed} failed." }
+    "messages": {
+      "templateSaved": "Template saved.",
+      "processed": "Complete: {success} succeeded, {failed} failed."
+    }
   },
   "livePhoto": {
     "hero": {
@@ -2458,7 +2519,7 @@
     "generationMode": {
       "label": "Generation mode",
       "referenceToVideo": "Reference to video",
-      "imageToVideo": "Image to video",
+      "imageToVideo": "First frame to video",
       "imageToVideoHint": "Uses First and last frame: the first frame is the generated image and the last frame is a centered {p0}% zoom-in.",
       "zoomPercentLabel": "Last-frame zoom"
     },
@@ -2629,8 +2690,8 @@
   "settings": {
     "hero": {
       "kicker": "Settings / Control Center",
-      "title": "Platform And Capability Settings",
-      "subtitle": "Configure API keys and base URLs first, then choose the platform and model for video, image, and chat features."
+      "title": "Settings",
+      "subtitle": "Appearance, AI model access, AI Producer and storage."
     },
     "appearance": {
       "title": "Appearance",
@@ -2760,15 +2821,15 @@
     "navigation": {
       "groups": {
         "general": "General",
-        "ai": "Artificial Intelligence",
+        "ai": "AI models",
         "hermes": "Hermes",
         "storage": "Storage And Delivery"
       }
     },
     "sections": {
       "appearance": {
-        "label": "Appearance And Local Key",
-        "desc": "Theme, skin and local access key"
+        "label": "Appearance",
+        "desc": "Skin and theme"
       },
       "platforms": {
         "label": "Platform Keys",
@@ -2907,16 +2968,24 @@
         "apiToken": "API Token"
       },
       "cards": {
-        "kling": { "desc": "Used for AtlasCloud and Kling credentials." },
+        "kling": {
+          "desc": "Used for AtlasCloud and Kling credentials."
+        },
         "grsai": {
           "desc": "Used for GRS.AI video, image, and chat credentials."
         },
-        "ai666": { "desc": "Used for AI666 platform credentials." },
+        "ai666": {
+          "desc": "Used for AI666 platform credentials."
+        },
         "vectorengine": {
           "desc": "Used for VectorEngine platform credentials."
         },
-        "xibapi": { "desc": "Used for XIBAPI platform credentials." },
-        "replicate": { "desc": "Used for local clone image workflows." }
+        "xibapi": {
+          "desc": "Used for XIBAPI platform credentials."
+        },
+        "replicate": {
+          "desc": "Used for local clone image workflows."
+        }
       }
     },
     "capabilities": {
@@ -3008,9 +3077,15 @@
         "chat": "Chat"
       },
       "cards": {
-        "video": { "title": "Video" },
-        "image": { "title": "Image" },
-        "chat": { "title": "Chat" },
+        "video": {
+          "title": "Video"
+        },
+        "image": {
+          "title": "Image"
+        },
+        "chat": {
+          "title": "Chat"
+        },
         "status": {
           "title": "Status",
           "waiting": "Waiting to save",
@@ -3187,7 +3262,10 @@
       "running": "Running",
       "review": "Needs Review"
     },
-    "runMode": { "auto": "Automatic", "manual": "Manual" },
+    "runMode": {
+      "auto": "Automatic",
+      "manual": "Manual"
+    },
     "actions": {
       "exporting": "Exporting...",
       "batchExport": "Batch Export",
@@ -3207,7 +3285,10 @@
       "exportable": "Exportable finals",
       "subtitleReady": "Subtitle ready"
     },
-    "sort": { "newest": "Newest", "oldest": "Oldest" },
+    "sort": {
+      "newest": "Newest",
+      "oldest": "Oldest"
+    },
     "columns": {
       "preview": "Preview",
       "task": "Task",
@@ -3223,10 +3304,32 @@
       "wait": "Please wait...",
       "desc": "Select Create Task in the upper-right to create the first clone project."
     },
-    "pagination": { "summary": "{count} total, showing {start}-{end}" }
+    "pagination": {
+      "summary": "{count} total, showing {start}-{end}"
+    }
   },
   "modelLibrary": {
-    "spec": { "total": "Total models", "ready": "Ready", "generating": "Generating", "failed": "Failed", "profile": "Profile", "gender": "Gender", "age": "Age range", "market": "Market", "skin": "Skin tone", "hair": "Hair", "outfit": "Outfit", "mood": "Mood", "scene": "Scene", "gallery": "Multi-angle assets", "images": "{count} images", "copyId": "Copy ID", "meta": "Record", "selectHint": "Select a model to view details", "updated": "Updated {time}" },
+    "spec": {
+      "total": "Total models",
+      "ready": "Ready",
+      "generating": "Generating",
+      "failed": "Failed",
+      "profile": "Profile",
+      "gender": "Gender",
+      "age": "Age range",
+      "market": "Market",
+      "skin": "Skin tone",
+      "hair": "Hair",
+      "outfit": "Outfit",
+      "mood": "Mood",
+      "scene": "Scene",
+      "gallery": "Multi-angle assets",
+      "images": "{count} images",
+      "copyId": "Copy ID",
+      "meta": "Record",
+      "selectHint": "Select a model to view details",
+      "updated": "Updated {time}"
+    },
     "title": "Model Library",
     "desc": "Manage AI models, filter appearances and scenes, and bind them to clone projects.",
     "import": "Import Model",
@@ -3249,7 +3352,10 @@
     "modelProvider": "Generation Model",
     "defaultName": "AI Model {index}",
     "defaultDescription": "No description has been added for this model.",
-    "tabs": { "all": "All Models", "ready": "Ready" },
+    "tabs": {
+      "all": "All Models",
+      "ready": "Ready"
+    },
     "filters": {
       "allStatuses": "All Statuses",
       "allAges": "All Ages",
@@ -3423,7 +3529,10 @@
       "done": "Completed",
       "failed": "Issue"
     },
-    "dna": { "done": "DNA Ready", "pending": "DNA Pending" },
+    "dna": {
+      "done": "DNA Ready",
+      "pending": "DNA Pending"
+    },
     "stats": {
       "total": "Total Products",
       "allProducts": "All Products",
@@ -3465,6 +3574,244 @@
     "notesFallback": "Only the workspace entry is available."
   },
   "production": {
+    "mixInsights": {
+      "title": "Mix performance",
+      "desc": "Links every mixcut video to its GMV Max creative and scores formulas, hook styles and opening shots by real conversions, so the next batch uses the winners more.",
+      "back": "Back to mix studio",
+      "allProducts": "All products",
+      "refresh": "Sync GMV Max data",
+      "how": "Flow: render → send to the publish center (link tag added) → run ads on TikTok → sync here. Videos link automatically by post title and duration, or link them by hand. One new result only moves a score a little, so a lucky hit cannot take over.",
+      "totals": {
+        "rendered": "Rendered",
+        "published": "Sent to publish",
+        "linked": "Linked creatives",
+        "measured": "With ad data",
+        "winners": "S/A winners"
+      },
+      "board": {
+        "formulas": "Formulas",
+        "hookStyles": "Hook styles",
+        "hookClips": "Opening shots (this product)"
+      },
+      "col": {
+        "name": "Name",
+        "measured": "Measured/total",
+        "score": "Score",
+        "share": "Next share",
+        "video": "Video",
+        "status": "Status",
+        "grade": "Grade"
+      },
+      "noData": "No data",
+      "emptyBoard": "No ad data yet. Publish, run ads, then press \"Sync GMV Max data\".",
+      "videos": "Mix videos ({count})",
+      "publishAll": "Send all unpublished to publish center ({count})",
+      "status": {
+        "rendered": "Not published",
+        "published": "Sent to publish",
+        "linkedAuto": "Auto-linked",
+        "linkedManual": "Linked by hand"
+      },
+      "remake": "Remake winner",
+      "publish": "Send to publish center",
+      "link": "Link creative",
+      "unlink": "Unlink (stop auto-linking)",
+      "remove": "Delete record",
+      "removeConfirm": "Delete this record? The video file is kept.",
+      "linkTitle": "Link GMV Max creative",
+      "searchCreative": "Search by creative name or ID",
+      "alreadyLinked": "linked to another video; picking it moves the link here",
+      "noCreatives": "No creatives to link. Sync data in the GMV Max plugin first.",
+      "noGmvMax": "GMV Max has no creative data yet (authorise a store and set up a campaign in the GMV Max plugin first)",
+      "refreshed": "Read {creatives} creatives, linked {linked} new, updated {updated}",
+      "published": "Created {count} publish drafts; pick account and product in the publish center",
+      "empty": "No mix videos yet. Videos rendered from the mix studio show up here."
+    },
+    "mix": {
+      "useInsights": "Learn from ad results (more share for winning formulas and openers)",
+      "learned": "Learned from {measured} measured videos and {winners} winning scripts. This batch:",
+      "winner": {
+        "title": "Remaking winner:",
+        "desc": "keeps its formula, opening shot and hook idea; varies the middle shots and script.",
+        "cancel": "Cancel remake"
+      },
+      "title": "AI mix studio",
+      "desc": "Build selling videos from real shots in the clip pool using proven formulas, with a hook title and voiceover subtitles. Every video gets a different opener, shots and script.",
+      "back": "Back to batch mixcut",
+      "legacy": "Legacy template mixcut",
+      "step1": "1. Mode & product",
+      "step2": "2. Formulas",
+      "step3": "3. Script & output",
+      "mode": {
+        "ai": "AI mixcut",
+        "aiDesc": "AI writes a different hook and voiceover for every video based on its shots",
+        "auto": "Auto mixcut",
+        "autoDesc": "No LLM calls: rotates your own line pools, zero cost"
+      },
+      "poolLine": "Clip pool: {clips} shots, {tagged} labelled, real {real} / AI {ai}",
+      "poolEmpty": "This product has fewer than 3 labelled shots in its clip pool.",
+      "goPool": "Open clip pool",
+      "language": "Voiceover language",
+      "voice": "Voice",
+      "languages": {
+        "vi-VN": "Vietnamese",
+        "zh-CN": "Chinese",
+        "en-US": "English",
+        "th-TH": "Thai",
+        "id-ID": "Indonesian"
+      },
+      "formula": {
+        "hint": "Several formulas rotate so one batch covers several angles",
+        "fromReference": "Extract from reference video",
+        "extracting": "AI analysing…",
+        "namePlaceholder": "Formula name (optional)",
+        "extracted": "Extracted formula \"{name}\" with {count} beats",
+        "remove": "Delete formula",
+        "removeConfirm": "Delete formula \"{name}\"?",
+        "source": {
+          "builtin": "Built-in",
+          "reference": "Reference",
+          "custom": "Custom"
+        }
+      },
+      "sellingPoints": "Selling points / price / offer / audience",
+      "sellingPointsPlaceholder": "e.g. 925 silver, hypoallergenic; was $19 now $9.9; buy 2 get 1; gift for girlfriend",
+      "sellingPointsHint": "AI only uses prices and offers written here and never invents them.",
+      "lines": {
+        "hook": "Hooks (one per line)",
+        "body": "Selling lines (one per line)",
+        "cta": "Closing CTAs (one per line)",
+        "hint": "Each video rotates 1 hook + 1-2 selling lines + 1 CTA. {'{product}'} becomes the product name."
+      },
+      "template": "Finishing template (optional)",
+      "templateNone": "None (hard cuts + yellow captions, selling default)",
+      "keepOriginalAudio": "Keep shot audio under the voiceover",
+      "allowAiClips": "Use AI shots when real ones run out",
+      "summary": "{count} videos, rotating {formulas} formulas",
+      "generate": "Generate drafts",
+      "generating": "Picking shots and writing scripts…",
+      "draftsTitle": "Drafts ({count})",
+      "draftsDesc": "{shots} shots in total; edit titles and voiceovers before rendering",
+      "renderAll": "Render all ({count})",
+      "removeDraft": "Remove this draft",
+      "draftTitle": "On-screen hook title",
+      "voiceover": "Voiceover (TTS + subtitles generated)",
+      "enqueueNone": "Nothing queued ({skipped} duplicated earlier renders or had too few shots)",
+      "validation": {
+        "product": "Choose a product",
+        "formula": "Choose at least one formula",
+        "outDir": "Choose an output folder"
+      }
+    },
+    "pool": {
+      "mismatch": {
+        "badge": "Wrong product",
+        "hint": "AI sees a different product here; it is left out of this product's edits unless you assign a role by hand.",
+        "notice": "{count} shots look like a different product and are excluded from edits. Check whether they were filed under the wrong product, or update the product description."
+      },
+      "title": "Clip pool",
+      "desc": "Split a product's real footage and AI-generated videos into single shots. AI labels each shot's role, hook score and quality so mixcuts can pick shots by script.",
+      "back": "Back to batch mixcut",
+      "product": "Product",
+      "noProducts": "No products yet",
+      "sync": "Sync product footage",
+      "importReal": "Import real footage",
+      "importAi": "Import AI videos",
+      "retagAll": "Re-label all",
+      "process": "Split & label ({count})",
+      "processing": "Processing…",
+      "hint": "\"Sync product footage\" pulls videos from the product library and finished clone videos for this product. Real shots are preferred in mixcuts and usually convert better than pure AI footage.",
+      "progress": {
+        "split": "Splitting shots {done}/{total}",
+        "tag": "AI labelling shots {done}/{total}"
+      },
+      "stats": {
+        "clips": "Usable shots",
+        "tagged": "Labelled",
+        "realVsAi": "Real / AI",
+        "sources": "Source videos"
+      },
+      "missing": {
+        "title": "Missing shots:",
+        "desc": "a complete selling video needs these; shoot or import more."
+      },
+      "clipsTitle": "Shots",
+      "filters": {
+        "all": "All"
+      },
+      "sort": {
+        "label": "Sort",
+        "hook": "Hook score",
+        "quality": "Quality",
+        "time": "Timeline"
+      },
+      "showDisabled": "Show disabled",
+      "preview": "Preview shot",
+      "close": "Close",
+      "roles": {
+        "hook": "Hook",
+        "pain_point": "Pain point",
+        "unboxing": "Unboxing",
+        "demo": "Demo",
+        "wear": "Wear / in use",
+        "detail": "Detail",
+        "comparison": "Comparison",
+        "proof": "Proof",
+        "cta": "CTA close",
+        "broll": "B-roll"
+      },
+      "origin": {
+        "real": "Real",
+        "ai": "AI",
+        "unknown": "Unset"
+      },
+      "clip": {
+        "untagged": "Unlabelled",
+        "manual": "Manual",
+        "heuristic": "Rule guess",
+        "hook": "Hook",
+        "quality": "Quality",
+        "failed": "AI labelling failed; using rule guess",
+        "auto": "Auto",
+        "override": "Change shot role",
+        "retag": "Re-label",
+        "disable": "Disable shot",
+        "enable": "Restore shot"
+      },
+      "empty": "The pool is empty. Sync product footage or import videos first.",
+      "emptyFiltered": "No shots match this filter.",
+      "sources": {
+        "title": "Source videos",
+        "empty": "No source videos yet.",
+        "file": "File",
+        "kind": "From",
+        "origin": "Type",
+        "status": "Status",
+        "clips": "Shots",
+        "resplit": "Split again",
+        "remove": "Remove from pool",
+        "removeConfirm": "Remove \"{name}\" and its shots from the pool? The video file is not deleted."
+      },
+      "sourceKind": {
+        "creative_studio": "TikTok Creative Studio",
+        "live_photo": "Live Photo",
+        "product_asset": "Product footage",
+        "clone_output": "AI clone video",
+        "import": "Imported"
+      },
+      "sourceStatus": {
+        "pending": "Pending",
+        "splitting": "Splitting",
+        "ready": "Ready",
+        "failed": "Failed"
+      },
+      "toast": {
+        "noneLinked": "This product has no videos yet in the product library, TikTok Creative Studio, Live Photo or AI clone. Import real footage, or generate videos for it in those modules first and sync again.",
+        "synced": "Added {count} source videos; splitting and labelling.",
+        "nothingNew": "No new product footage.",
+        "imported": "Imported {count} videos; splitting and labelling."
+      }
+    },
     "tabs": {
       "ariaLabel": "Production navigation",
       "products": {
@@ -3482,8 +3829,8 @@
     },
     "home": {
       "kicker": "Production",
-      "title": "Task Execution Center",
-      "desc": "Manage task creation, task lists, task details, and templates in one place.",
+      "title": "Batch remix",
+      "desc": "Cut videos in bulk from product materials and templates; manage tasks and templates in one place.",
       "taskCount": "{count} tasks",
       "templateCount": "{count} templates",
       "stats": {
@@ -3493,6 +3840,16 @@
         "templates": "Templates"
       },
       "entries": {
+        "mix": {
+          "title": "AI mix studio",
+          "desc": "Pick shots from the clip pool by proven formulas, let AI write voiceovers, batch selling videos.",
+          "metric": "Start mixing"
+        },
+        "pool": {
+          "title": "Clip pool",
+          "desc": "Split real footage and AI videos into shots and let AI label what each shot is for.",
+          "metric": "Manage clips"
+        },
         "create": {
           "title": "Create Task",
           "desc": "Create a production task from a product and template.",
@@ -3524,7 +3881,7 @@
     },
     "create": {
       "kicker": "Production / Create Task",
-      "title": "Create A Task From A Product And Template",
+      "title": "New remix task",
       "desc": "Create tasks here, then review logs and failures in task details.",
       "noProduct": "No Product Selected",
       "product": "Product",
@@ -3544,7 +3901,7 @@
     },
     "tasks": {
       "kicker": "Production / Task List",
-      "title": "Task List And Failure Filters",
+      "title": "Remix tasks",
       "desc": "Review task information, filter execution states, and open task details.",
       "create": "Create Task",
       "pause": "Pause",
@@ -3594,61 +3951,178 @@
   },
   "slicer": {
     "title": "Live Slicer",
-    "desc": "Import a stream recording or long video, identify segments, and split it in one action.",
-    "noVideo": "No Video Selected",
-    "outputAfterSplit": "The output directory appears after slicing",
-    "phase": {
-      "ffmpeg": "Slicing with FFmpeg",
-      "collect": "Collecting output segments",
-      "done": "Generated {count} segments",
-      "failed": "Slicing failed",
-      "ready": "Video imported and ready for analysis",
-      "idle": "Waiting for import"
+    "desc": "Import a live recording or long video, detect the highlights, fine-tune them and batch-export short vertical clips.",
+    "clipPrefix": "Clip",
+    "status": {
+      "idle": "Waiting for video",
+      "ready": "Ready to analyze",
+      "analyzed": "Analyzed",
+      "clips": "{n} clips",
+      "analyzing": "Analyzing {pct}%",
+      "exporting": "Exporting {n}/{total}"
+    },
+    "actions": {
+      "changeVideo": "Change video",
+      "cancel": "Cancel"
     },
     "pickers": {
-      "video": "Choose A Stream Recording Or Long Video",
-      "outputDir": "Choose Slice Output Directory"
+      "video": "Choose a live recording or long video",
+      "outputDir": "Choose the output folder"
     },
     "upload": {
-      "title": "Import A Stream Recording Or Long Video",
-      "formats": "Supports MP4 / MOV / MKV / WEBM",
-      "sizeHint": "Recommended file size: under 10GB",
-      "choose": "Choose Video File",
-      "reselect": "Choose Another Video",
-      "openOriginal": "Open Original Video"
+      "title": "Import a live recording or long video",
+      "formats": "Drop a file here or click to browse · MP4 / MOV / MKV / WEBM / FLV / TS",
+      "choose": "Choose video file"
     },
-    "results": {
-      "title": "Slice Results",
-      "count": "{count} segments",
-      "openDir": "Open Directory",
-      "empty": "Import a video and start analysis. Slice results will appear here."
+    "steps": {
+      "analyzeTitle": "Smart analysis",
+      "analyzeDesc": "Finds the highlights from loudness, energy swings and scene changes",
+      "editTitle": "Timeline editing",
+      "editDesc": "Drag clip edges to trim, mark with I / O, split with S",
+      "exportTitle": "Batch export",
+      "exportDesc": "One click to 9:16 vertical clips with fades and loudness normalization"
+    },
+    "player": {
+      "back5": "Back 5 s",
+      "fwd5": "Forward 5 s",
+      "playPause": "Play / pause (Space)",
+      "markIn": "In",
+      "markOut": "Out",
+      "markInKey": "Set in point at playhead (I)",
+      "markOutKey": "Set out point at playhead (O)",
+      "addClip": "Add clip",
+      "addAtPlayhead": "Add here",
+      "addAtPlayheadHint": "Add a minimum-length clip starting at the playhead",
+      "loop": "Loop clip preview",
+      "speed": "Playback speed"
+    },
+    "timeline": {
+      "title": "Timeline",
+      "energy": "Loudness",
+      "scene": "Scene change",
+      "clip": "Clip",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "noAnalysis": "Run the analysis to see the loudness waveform and scene changes"
+    },
+    "keys": {
+      "play": "Play",
+      "seek": "±1s (Shift ±5s)",
+      "mark": "In / out",
+      "add": "Add clip",
+      "split": "Split at playhead",
+      "delete": "Delete clip",
+      "zoom": "Zoom"
+    },
+    "editor": {
+      "titlePlaceholder": "Clip title (used in the file name)",
+      "start": "In",
+      "end": "Out",
+      "playhead": "Playhead",
+      "fromPlayhead": "Set to the playhead position",
+      "preview": "Preview",
+      "split": "Split",
+      "delete": "Delete clip"
+    },
+    "clips": {
+      "title": "Clips",
+      "selectedMeta": "{n} selected · {dur} total",
+      "sortTime": "By time",
+      "sortScore": "By score",
+      "selectAll": "Select all",
+      "merge": "Merge selected",
+      "copyTimecodes": "Copy timecodes",
+      "removeSelected": "Delete selected",
+      "clear": "Clear",
+      "emptyTitle": "No clips yet",
+      "emptyDesc": "Pick a detection mode on the right and analyze, or mark clips yourself with in / out points.",
+      "manual": "Manual",
+      "exported": "Exported",
+      "failed": "Failed",
+      "scoreHint": "Score: how strong this moment is compared with the rest of the stream",
+      "openFile": "Open file"
+    },
+    "source": {
+      "title": "Source video",
+      "open": "Open original",
+      "duration": "Duration",
+      "resolution": "Resolution",
+      "fps": "Frame rate",
+      "size": "File size",
+      "codec": "Codec",
+      "noAudio": "no audio",
+      "noAudioHint": "This video has no usable audio track, so smart detection can only use scene changes. Fixed length or manual marking works better."
+    },
+    "mode": {
+      "highlight": "Highlights",
+      "highlightDesc": "Find the best moments",
+      "pause": "Speech pauses",
+      "pauseDesc": "Split everything at pauses",
+      "interval": "Fixed length",
+      "intervalDesc": "Equal-length pieces",
+      "manual": "Manual",
+      "manualDesc": "Mark in / out yourself"
     },
     "analysis": {
-      "title": "Analysis Settings",
-      "recommended": "Recommended",
-      "mode": "Detection Mode",
-      "smart": "Smart Detection",
-      "smartDesc": "Detect highlight segments automatically",
-      "manual": "Manual Markers",
-      "manualDesc": "Mark segments manually",
-      "custom": "Custom",
-      "customDesc": "Configure detection rules",
-      "minDuration": "Minimum Segment Duration (seconds)",
-      "maxDuration": "Maximum Segment Duration (seconds)",
-      "durationHint": "Recommended: 15-60 seconds",
-      "fixedDuration": "FFmpeg currently slices at a fixed duration",
-      "working": "Analyzing...",
-      "start": "Start Analysis"
+      "title": "Detection",
+      "reset": "Reset",
+      "minDuration": "Min length (s)",
+      "maxDuration": "Max length (s)",
+      "maxClips": "Max clips",
+      "sensitivity": "Sensitivity",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "sensitivityHint": "Higher sensitivity finds more candidates; raise it if you get too few clips.",
+      "interval": "Clip length (s)",
+      "skipSilence": "Skip silent pieces",
+      "manualTip": "While playing, press I for the in point, O for the out point and Enter to add the clip, or use \"Add here\" and drag it on the timeline.",
+      "analyzingHint": "Extracting loudness and scene changes. Long videos take a few minutes; you can cancel at any time.",
+      "start": "Start smart analysis",
+      "generate": "Generate clips",
+      "reanalyze": "Analyze the video again",
+      "keepManual": "Regenerating only replaces automatic clips; manual clips are kept."
     },
     "export": {
-      "title": "Export Settings",
-      "format": "Output Format",
-      "sourceFormat": "Source Format",
-      "quality": "Quality",
-      "sourceQuality": "Keep Source Quality",
-      "outputDir": "Output Directory",
-      "all": "Export All Segments",
-      "currentDir": "Current Export Directory"
+      "title": "Export",
+      "cutMode": "Cutting",
+      "precise": "Precise",
+      "fast": "Fast lossless",
+      "preciseHint": "Frame-accurate, supports reframing and effects; re-encodes the video.",
+      "fastHint": "Copies the streams and finishes in seconds. Cuts snap to key frames (may drift 1-3 s); no picture or audio processing.",
+      "aspect": "Aspect ratio",
+      "aspectOriginal": "Original",
+      "aspectCrop916": "9:16 crop",
+      "aspectBlur916": "9:16 blur",
+      "resolution": "Resolution",
+      "sourceQuality": "Source",
+      "padding": "Padding",
+      "noPadding": "None",
+      "fade": "Fade in / out (0.35 s)",
+      "loudnorm": "Normalize loudness (-14 LUFS)",
+      "namePrefix": "File name prefix",
+      "outputDir": "Output folder",
+      "subFolder": "Create a new sub folder for each export",
+      "start": "Export {n} clips",
+      "progress": "Exporting {n} of {total}",
+      "resultLine": "Done: {ok} succeeded, {failed} failed",
+      "openDir": "Open output folder"
+    },
+    "toast": {
+      "restored": "Restored your previous slicing session",
+      "unsupported": "Unsupported file format",
+      "manualHint": "Use in / out points or \"Add here\" to mark clips",
+      "noneFound": "No clips matched. Try a higher sensitivity or a shorter minimum length.",
+      "generated": "Generated {n} clips",
+      "analyzeFailed": "Analysis failed: {error}",
+      "removed": "Deleted {n} clips",
+      "splitHint": "Select a clip and move the playhead inside it first",
+      "copied": "Copied {n} timecodes",
+      "copyFailed": "Copy failed",
+      "noOutputDir": "Choose an output folder first",
+      "exportCancelled": "Export cancelled",
+      "exportPartial": "Done: {ok} succeeded, {failed} failed",
+      "exported": "Exported {n} clips"
     }
   },
   "agentOs": {
@@ -3798,7 +4272,10 @@
       "warnings": "{count} warnings",
       "empty": "No runs match this filter"
     },
-    "plan": { "title": "Execution plan", "version": "Version {version}" },
+    "plan": {
+      "title": "Execution plan",
+      "version": "Version {version}"
+    },
     "timeline": {
       "title": "Event timeline",
       "subtitle": "Recoverable run history",
@@ -4368,11 +4845,211 @@
     }
   },
   "gmvMaxV2": {
-    "navigation": { "overview": "Overview", "operations": "Operations", "products": "Products", "campaigns": "Campaigns", "creatives": "Creatives", "profit": "Profit", "decisions": "AI Decisions", "pending": "Pending", "strategies": "Automated Strategies", "growth": "Growth", "audit": "Audit", "settings": "Settings", "help": "Help" },
-    "overview": { "gmv": "GMV", "spend": "Spend", "actualRoi": "Actual ROI", "estimatedProfit": "Estimated profit", "completeDataHint": "Based on complete delivery days", "completeRows": "complete rows", "profitBoundaryHint": "Evaluated with the profit boundary", "estimatedHint": "Model estimate, not guaranteed revenue", "risk": "Business risks", "riskHint": "At-risk spend {spend}", "opportunity": "Scaling opportunities", "opportunityHint": "Ranked by deterministic evidence", "today": "Do first today", "totalHint": "{total} suggestions in total", "topActions": "Today's priorities", "topActionsHint": "Ranked by impact, execution status, freshness, and approval state" },
-    "action": { "impact": "Projected net profit impact", "unavailable": "Not currently estimable", "category": { "high_risk": "High risk", "high_opportunity": "High opportunity", "optimization": "Optimization", "observing": "Observing" }, "categoryHint": { "high_risk": "Protect profit and execution safety first", "high_opportunity": "Suggestions with scaling evidence", "optimization": "Improve efficiency and stability", "observing": "Wait for complete delivery-day results" }, "status": { "needs_action": "Needs action", "pending_approval": "Pending approval", "failed": "Execution failed", "blocked": "Write blocked", "observing": "Three-day observation", "completed": "Completed" } },
-    "strategy": { "profit": "Profit protection", "profitHint": "Protect break-even ROI and profit floor", "budget": "Budget protection", "budgetHint": "Limit budget increases and abnormal spend", "roi": "ROI protection", "roiHint": "Limit each change and enforce observation lock", "data": "Data protection", "dataHint": "Block missing, stale, and incomplete data", "permission": "Execution permissions", "permissionHint": "Every platform change still requires approval" },
-    "audit": { "execution": "Execution records", "results": "Result evaluation", "exceptions": "Exceptions", "before": "Before", "after": "After", "improved": "Effective", "stable": "Stable", "invalid": "Ineffective", "noResults": "No results available", "noExceptions": "No exceptions" },
-    "settings": { "subtitle": "Manage connections, data, costs, strategies, permissions, notifications, and safety status.", "connection": "TikTok connection", "sync": "Data sync", "cost": "Cost and profit", "strategy": "ROI and strategies", "permissions": "Platform permissions", "notifications": "Notifications", "emergency": "Emergency stop", "configured": "Configured", "notConfigured": "Needs setup", "open": "Open settings", "syncNow": "Sync now", "staleItems": "items need fresh data", "emergencyHint": "Platform writes are active and can be stopped immediately", "costHint": "Manage product costs, store defaults, and profit boundaries", "strategyHint": "Manage ROI, budget, and data protection rules", "permissionHint": "{enabled} of {total} capabilities available" }
+    "navigation": {
+      "overview": "Overview",
+      "operations": "Operations",
+      "products": "Products",
+      "campaigns": "Campaigns",
+      "creatives": "Creatives",
+      "profit": "Profit",
+      "decisions": "AI Decisions",
+      "pending": "Pending",
+      "strategies": "Automated Strategies",
+      "growth": "Growth",
+      "audit": "Audit",
+      "settings": "Settings",
+      "help": "Help"
+    },
+    "overview": {
+      "gmv": "GMV",
+      "spend": "Spend",
+      "actualRoi": "Actual ROI",
+      "estimatedProfit": "Estimated profit",
+      "completeDataHint": "Based on complete delivery days",
+      "completeRows": "complete rows",
+      "profitBoundaryHint": "Evaluated with the profit boundary",
+      "estimatedHint": "Model estimate, not guaranteed revenue",
+      "risk": "Business risks",
+      "riskHint": "At-risk spend {spend}",
+      "opportunity": "Scaling opportunities",
+      "opportunityHint": "Ranked by deterministic evidence",
+      "today": "Do first today",
+      "totalHint": "{total} suggestions in total",
+      "topActions": "Today's priorities",
+      "topActionsHint": "Ranked by impact, execution status, freshness, and approval state"
+    },
+    "action": {
+      "impact": "Projected net profit impact",
+      "unavailable": "Not currently estimable",
+      "category": {
+        "high_risk": "High risk",
+        "high_opportunity": "High opportunity",
+        "optimization": "Optimization",
+        "observing": "Observing"
+      },
+      "categoryHint": {
+        "high_risk": "Protect profit and execution safety first",
+        "high_opportunity": "Suggestions with scaling evidence",
+        "optimization": "Improve efficiency and stability",
+        "observing": "Wait for complete delivery-day results"
+      },
+      "status": {
+        "needs_action": "Needs action",
+        "pending_approval": "Pending approval",
+        "failed": "Execution failed",
+        "blocked": "Write blocked",
+        "observing": "Three-day observation",
+        "completed": "Completed"
+      }
+    },
+    "strategy": {
+      "profit": "Profit protection",
+      "profitHint": "Protect break-even ROI and profit floor",
+      "budget": "Budget protection",
+      "budgetHint": "Limit budget increases and abnormal spend",
+      "roi": "ROI protection",
+      "roiHint": "Limit each change and enforce observation lock",
+      "data": "Data protection",
+      "dataHint": "Block missing, stale, and incomplete data",
+      "permission": "Execution permissions",
+      "permissionHint": "Every platform change still requires approval"
+    },
+    "audit": {
+      "execution": "Execution records",
+      "results": "Result evaluation",
+      "exceptions": "Exceptions",
+      "before": "Before",
+      "after": "After",
+      "improved": "Effective",
+      "stable": "Stable",
+      "invalid": "Ineffective",
+      "noResults": "No results available",
+      "noExceptions": "No exceptions"
+    },
+    "settings": {
+      "subtitle": "Manage connections, data, costs, strategies, permissions, notifications, and safety status.",
+      "connection": "TikTok connection",
+      "sync": "Data sync",
+      "cost": "Cost and profit",
+      "strategy": "ROI and strategies",
+      "permissions": "Platform permissions",
+      "notifications": "Notifications",
+      "emergency": "Emergency stop",
+      "configured": "Configured",
+      "notConfigured": "Needs setup",
+      "open": "Open settings",
+      "syncNow": "Sync now",
+      "staleItems": "items need fresh data",
+      "emergencyHint": "Platform writes are active and can be stopped immediately",
+      "costHint": "Manage product costs, store defaults, and profit boundaries",
+      "strategyHint": "Manage ROI, budget, and data protection rules",
+      "permissionHint": "{enabled} of {total} capabilities available"
+    }
+  },
+  "gmvMaxCreativesSimple": {
+    "kpi": {
+      "spend": "Spend",
+      "revenue": "Revenue",
+      "orders": "Orders"
+    },
+    "todo": {
+      "pendingText": "suggestions waiting for you",
+      "noPendingText": "No suggestions to review",
+      "replaceText": "See which videos lost traffic and should be replaced",
+      "setupText": "Costs and test budgets aren't finished, so suggestions may be off",
+      "setupUnknown": "Sync data to check setup",
+      "suggestions": "Suggestions to review",
+      "count": "{count}",
+      "review": "Review",
+      "hide": "Hide",
+      "generate": "Get suggestions",
+      "generating": "Working…",
+      "suggestionsHint": "Swap, boost, or stop suggestions based on your data. Nothing runs until you accept it.",
+      "replace": "Videos to replace",
+      "view": "View",
+      "replaceHint": "Videos that lost traffic, or used their test budget without orders.",
+      "setupMissing": "Setup isn't finished",
+      "setupDone": "Setup complete",
+      "setupSteps": "{count} step(s) left",
+      "ready": "Ready",
+      "setup": "Finish setup",
+      "viewSetup": "View setup",
+      "setupHint": "{costs} campaigns have no costs and {budgets} have no test budget. Fill them in for accurate suggestions.",
+      "setupDoneHint": "Suggestions use your costs and test budgets."
+    },
+    "suggestions": {
+      "title": "Suggestions to review",
+      "hint": "TikTok changes only after you accept. Executed ones can be undone under Advanced."
+    },
+    "operation": {
+      "ADD": "Add new video",
+      "REMOVE": "Stop this video",
+      "ROTATE": "Replace with a new video",
+      "BOOST": "Boost video"
+    },
+    "actions": {
+      "detail": "Details",
+      "accept": "Accept",
+      "ignore": "Ignore",
+      "keep": "Always run",
+      "keepHint": "Won't be stopped automatically",
+      "stop": "Stop",
+      "stopHint": "Stop running this video and queue a stop suggestion",
+      "remove": "Remove from list"
+    },
+    "tabs": {
+      "label": "Filter by status",
+      "all": "All",
+      "good": "Doing well",
+      "testing": "Testing",
+      "replace": "Replace",
+      "waste": "No orders"
+    },
+    "states": {
+      "good": "Doing well",
+      "testing": "Testing",
+      "replace": "Replace",
+      "waste": "No orders",
+      "needsCost": "Not rated",
+      "needsCostHint": "Add costs to rate this video"
+    },
+    "source": "Video source",
+    "sources": {
+      "all": "All sources",
+      "owned": "Own",
+      "affiliate": "Affiliate",
+      "product_card": "Product card"
+    },
+    "columns": {
+      "video": "Video",
+      "status": "Status",
+      "suggestion": "Suggestion"
+    },
+    "days": "{count} days",
+    "unknownCreator": "Unknown source",
+    "untitled": "Video {id}",
+    "productBadge": "Product",
+    "detail": {
+      "campaign": "Campaign",
+      "product": "Product",
+      "authorization": "Authorization",
+      "cpa": "Cost per order",
+      "ctr": "Click rate",
+      "cvr": "Conversion rate",
+      "play2s": "2s view rate",
+      "play6s": "6s view rate",
+      "score": "Quality score",
+      "roiTrend": "ROI change",
+      "id": "Video ID"
+    },
+    "emptyTab": "No videos with this status yet.",
+    "advanced": {
+      "title": "Advanced tools",
+      "hint": "Filters, funnel, test pool, creators, always-run/stop lists, suggestion history",
+      "filters": "Filter by metrics",
+      "creators": "Creators",
+      "lists": "Always run / stop lists",
+      "history": "All suggestions"
+    }
   }
 }

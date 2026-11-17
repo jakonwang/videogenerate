@@ -91,8 +91,15 @@
       "growthStages": "查看增长阶段详情",
       "growthStagesHint": "了解商品从冷启动到成熟、衰退和阻断的分布",
       "productFilters": "筛选商品",
-      "productFiltersHint": "按推广系列、商品状态、流量状态和指标筛选"
-      ,"actionFilters":"筛选审批动作","actionFiltersHint":"按推广系列、动作类型、风险和排序方式筛选","backtest":"查看历史回测","backtestHint":"{count} 次回放，用于验证策略稳定性","auditFilters":"筛选操作记录","auditFiltersHint":"按推广系列、执行状态和动作名称筛选","capabilities":"查看平台权限","capabilitiesHint":"{enabled} / {total} 项能力可用"
+      "productFiltersHint": "按推广系列、商品状态、流量状态和指标筛选",
+      "actionFilters": "筛选审批动作",
+      "actionFiltersHint": "按推广系列、动作类型、风险和排序方式筛选",
+      "backtest": "查看历史回测",
+      "backtestHint": "{count} 次回放，用于验证策略稳定性",
+      "auditFilters": "筛选操作记录",
+      "auditFiltersHint": "按推广系列、执行状态和动作名称筛选",
+      "capabilities": "查看平台权限",
+      "capabilitiesHint": "{enabled} / {total} 项能力可用"
     }
   },
   "gmvMaxSimpleNav": {
@@ -733,7 +740,12 @@
     "dataDate": "数据日期",
     "batchTools": "批量工具",
     "dnaHint": "S 优胜、A 可继续、B 待验证、C 淘汰候选。",
-    "grades": { "s": "优胜", "a": "可继续", "b": "待验证", "c": "淘汰候选" },
+    "grades": {
+      "s": "优胜",
+      "a": "可继续",
+      "b": "待验证",
+      "c": "淘汰候选"
+    },
     "pickerTitle": "选择要操作的商品",
     "pickerEyebrow": "GMV MAX SOP 工作区",
     "pickerHint": "每个商品都明确显示所属推广系列、店铺和当前状态。",
@@ -796,7 +808,10 @@
     "managed": "已接管推广系列",
     "autoStarted": "自动启动",
     "waitingData": "等待成交数据",
-    "sources": { "manual": "人工启动", "automatic": "自动接管" }
+    "sources": {
+      "manual": "人工启动",
+      "automatic": "自动接管"
+    }
   },
   "gmvMaxMatureLabels": {
     "lastReport": "最后报表日",
@@ -933,7 +948,9 @@
       "metricsImported": "已导入 {count} 条补充指标。",
       "draftCreated": "Winner DNA 视频草稿已创建。"
     },
-    "errors": { "campaignRequired": "请先选择已同步的推广系列。" },
+    "errors": {
+      "campaignRequired": "请先选择已同步的推广系列。"
+    },
     "metrics": {
       "spend": "花费",
       "gmv": "GMV",
@@ -993,7 +1010,10 @@
       "notProvided": "待补充",
       "yes": "是",
       "no": "否",
-      "deliveryModes": { "targetRoi": "目标 ROI", "maxDelivery": "最大投放" },
+      "deliveryModes": {
+        "targetRoi": "目标 ROI",
+        "maxDelivery": "最大投放"
+      },
       "sourcePriority": "API 数据优先，CSV 和人工数据保留为备用证据。"
     },
     "automationTasks": {
@@ -1082,7 +1102,9 @@
       "refresh": "刷新工作区"
     }
   },
-  "gmvMaxRecovery": { "acknowledge": "确认并解除阻塞" },
+  "gmvMaxRecovery": {
+    "acknowledge": "确认并解除阻塞"
+  },
   "gmvMaxCampaignRecommendations": {
     "open": "查看该推广系列的待处理建议",
     "title": "待处理建议",
@@ -1093,7 +1115,9 @@
     "period": "所选日期范围的完整数据",
     "realtime": "今日实时"
   },
-  "gmvMaxCoverage": { "exchange": "汇率有效覆盖" },
+  "gmvMaxCoverage": {
+    "exchange": "汇率有效覆盖"
+  },
   "gmvMaxOperations": {
     "netProfit": "预计净利润",
     "estimatedSource": "基于成本模型的预计值",
@@ -1356,7 +1380,10 @@
     "successful": "个盈利结果",
     "empty": "素材动作执行前后各累计三个完整投放日后显示结果。"
   },
-  "gmvMaxCostScope": { "campaign": "系列覆盖", "storeDefault": "店铺默认" },
+  "gmvMaxCostScope": {
+    "campaign": "系列覆盖",
+    "storeDefault": "店铺默认"
+  },
   "gmvMaxRateInput": {
     "percentUnit": "%",
     "placeholder": "例如 30",
@@ -1451,8 +1478,14 @@
     "completed": "素材优化完成，生成 {count} 条补充、加热、轮换或排除建议。",
     "exclusionQueued": "素材已加入排除名单，并生成待审核的排除建议。"
   },
-  "gmvMaxNavigation": { "collapse": "收起功能菜单", "expand": "展开功能菜单" },
-  "appNavigation": { "collapse": "收起主菜单", "expand": "展开主菜单" },
+  "gmvMaxNavigation": {
+    "collapse": "收起功能菜单",
+    "expand": "展开功能菜单"
+  },
+  "appNavigation": {
+    "collapse": "收起主菜单",
+    "expand": "展开主菜单"
+  },
   "gmvMaxOperationStatus": {
     "enable": "已启用",
     "enabled": "已启用",
@@ -1467,7 +1500,9 @@
     "cancelled": "已取消",
     "ended": "已结束"
   },
-  "gmvMaxProfitCoverage": { "label": "利润覆盖" },
+  "gmvMaxProfitCoverage": {
+    "label": "利润覆盖"
+  },
   "gmvMaxProfit": {
     "coverage": "利润覆盖",
     "netProfit": "估算净利润",
@@ -1600,7 +1635,10 @@
     "creativeState": "学习状态",
     "score": "质量评分",
     "roiTrend": "ROI 趋势",
-    "status": { "proposed": "待复核", "blocked": "已保护" },
+    "status": {
+      "proposed": "待复核",
+      "blocked": "已保护"
+    },
     "creativeStates": {
       "new": "新素材",
       "testing": "测试中",
@@ -1640,7 +1678,11 @@
     }
   },
   "gmvMaxAdvanced": {
-    "tabs": { "creatives": "素材", "profit": "利润", "actions": "动作" },
+    "tabs": {
+      "creatives": "素材",
+      "profit": "利润",
+      "actions": "动作"
+    },
     "shadow": "影子运行",
     "actions": {
       "restore": "一键恢复",
@@ -1694,7 +1736,9 @@
       "target": "接收者标识",
       "daily": "每日汇总"
     },
-    "empty": { "creatives": "尚未同步素材表现数据。" }
+    "empty": {
+      "creatives": "尚未同步素材表现数据。"
+    }
   },
   "gmvMaxLearning": {
     "tab": "增长",
@@ -1846,7 +1890,11 @@
       "executed": "已执行",
       "failed": "失败"
     },
-    "flow": { "fast": "偏快", "stable": "稳定", "slow": "偏慢" },
+    "flow": {
+      "fast": "偏快",
+      "stable": "稳定",
+      "slow": "偏慢"
+    },
     "performanceLabel": {
       "winner": "成效出色",
       "testing": "测试中",
@@ -1940,8 +1988,14 @@
       "balanced_growth": "均衡增长",
       "gmv_growth": "GMV 冲量"
     },
-    "types": { "product": "商品", "live": "直播" },
-    "kinds": { "scale_up": "扩量", "scale_down": "收缩" },
+    "types": {
+      "product": "商品",
+      "live": "直播"
+    },
+    "kinds": {
+      "scale_up": "扩量",
+      "scale_down": "收缩"
+    },
     "status": {
       "connected": "已连接",
       "disconnected": "已断开",
@@ -1979,7 +2033,7 @@
   },
   "nav": {
     "home": "首页",
-    "productResearch": "\u9009\u54c1",
+    "productResearch": "选品",
     "products": "生产",
     "templates": "模板",
     "tasks": "任务",
@@ -2118,11 +2172,11 @@
   },
   "titleBar": {
     "ready": "就绪",
-    "refreshStatus": "\u5237\u65b0\u72b6\u6001",
-    "lastRefresh": "\u4e0a\u6b21\u5237\u65b0",
-    "localWorkspace": "\u672c\u5730\u5de5\u4f5c\u533a",
-    "taskCenter": "\u4efb\u52a1\u4e2d\u5fc3",
-    "openDataDirectory": "\u6253\u5f00\u6570\u636e\u76ee\u5f55",
+    "refreshStatus": "刷新状态",
+    "lastRefresh": "上次刷新",
+    "localWorkspace": "本地工作区",
+    "taskCenter": "任务中心",
+    "openDataDirectory": "打开数据目录",
     "minimize": "最小化",
     "maximize": "最大化",
     "close": "关闭",
@@ -2131,33 +2185,33 @@
   "settings": {
     "hero": {
       "kicker": "设置 / 控制中心",
-      "title": "平台与能力设置",
-      "subtitle": "先配置 API Key 和 Base URL，再为视频、图片和对话功能选择平台与模型。"
+      "title": "设置",
+      "subtitle": "配置外观、AI 模型接口、AI 制片人与存储。"
     },
     "appearance": {
-      "title": "\u76ae\u80a4\u8bbe\u7f6e",
-      "subtitle": "\u5207\u6362\u540e\u7acb\u5373\u751f\u6548\uff0c\u5e76\u5728\u4e0b\u6b21\u542f\u52a8\u65f6\u4fdd\u7559\u3002",
+      "title": "皮肤设置",
+      "subtitle": "切换后立即生效，并在下次启动时保留。",
       "themes": {
-        "darkTeal": "\u6697\u8272\u9752\u7eff",
-        "lightTeal": "\u7eff\u767d\u5de5\u4f5c\u53f0",
-        "softMint": "\u67d4\u548c\u62a4\u773c",
-        "warmPaper": "\u6696\u7eb8\u590d\u53e4",
-        "clearSky": "\u6781\u7b80\u6674\u7a7a",
-        "mono": "\u9ed1\u767d\u7b80\u6d01"
+        "darkTeal": "暗色青绿",
+        "lightTeal": "绿白工作台",
+        "softMint": "柔和护眼",
+        "warmPaper": "暖纸复古",
+        "clearSky": "极简晴空",
+        "mono": "黑白简洁"
       }
     },
     "access": {
-      "title": "\u672c\u5730 Key \u8bbe\u7f6e",
-      "subtitle": "\u4e3b\u7a0b\u5e8f\u4e0d\u518d\u4f7f\u7528\u767b\u5f55\u6d41\u7a0b\uff0c\u6682\u65f6\u4fdd\u7559 Key \u914d\u7f6e\u5165\u53e3\u3002",
-      "localMode": "\u672c\u5730\u6a21\u5f0f",
+      "title": "本地 Key 设置",
+      "subtitle": "主程序不再使用登录流程，暂时保留 Key 配置入口。",
+      "localMode": "本地模式",
       "keyLabel": "Access Key",
-      "placeholder": "\u8bf7\u8f93\u5165 Key",
-      "save": "\u4fdd\u5b58",
-      "configured": "\u5df2\u914d\u7f6e",
-      "notConfigured": "\u672a\u914d\u7f6e",
-      "savedLocally": "Key \u5df2\u4fdd\u5b58\u5230\u672c\u673a\u3002",
-      "cleared": "Key \u5df2\u6e05\u9664\u3002",
-      "futureHint": "\u5f53\u524d\u53ea\u4fdd\u5b58\u672c\u5730\u914d\u7f6e\uff0c\u540e\u7eed\u53ef\u5728\u6b64\u5bf9\u63a5\u6821\u9a8c\u670d\u52a1\u3002"
+      "placeholder": "请输入 Key",
+      "save": "保存",
+      "configured": "已配置",
+      "notConfigured": "未配置",
+      "savedLocally": "Key 已保存到本机。",
+      "cleared": "Key 已清除。",
+      "futureHint": "当前只保存本地配置，后续可在此对接校验服务。"
     },
     "hermesManagement": {
       "title": "Hermes 管理中心",
@@ -2262,15 +2316,15 @@
     "navigation": {
       "groups": {
         "general": "常规",
-        "ai": "人工智能",
+        "ai": "AI 模型",
         "hermes": "Hermes",
         "storage": "存储与分发"
       }
     },
     "sections": {
       "appearance": {
-        "label": "外观与本机密钥",
-        "desc": "皮肤、主题和本机访问密钥"
+        "label": "外观",
+        "desc": "皮肤与主题"
       },
       "platforms": {
         "label": "平台密钥",
@@ -2617,7 +2671,10 @@
       "marketDesc": "发现可扩展复刻、生产、导出与发布工作流的工具插件。",
       "installedDesc": "管理已安装工具，并快速进入对应工作台。"
     },
-    "tabs": { "market": "插件市场", "installed": "我的插件" },
+    "tabs": {
+      "market": "插件市场",
+      "installed": "我的插件"
+    },
     "searchPlaceholder": "搜索插件...",
     "status": {
       "notInstalled": "未安装",
@@ -2686,7 +2743,7 @@
         "description": "跟踪 SKU 库存基准，同步发货数量，预测备货风险。"
       },
       "live-photo-generator": {
-        "name": "动态照片生成器",
+        "name": "Live Photo",
         "description": "根据商品参考图片创建兼容 Apple 的动态照片，并提供预览和导出。"
       },
       "tiktok-creative-studio": {
@@ -2706,7 +2763,7 @@
         "description": "完成字幕识别、样式设置、烧录和导出。"
       },
       "tiktok-creator-hub": {
-        "name": "TikTok 达人中心",
+        "name": "达人管理",
         "description": "多店铺达人管理：样品申请、单个达人的履约率与样品成本，从 TikTok Shop 联盟只读同步。"
       },
       "tiktok-listing-helper": {
@@ -2714,7 +2771,12 @@
         "description": "上传商品实拍图后生成 TikTok 上架图片、标题、描述，并批量导出 Excel 模板。"
       }
     },
-    "detail": { "eyebrow": "插件详情", "status": "状态", "category": "分类", "path": "路径" }
+    "detail": {
+      "eyebrow": "插件详情",
+      "status": "状态",
+      "category": "分类",
+      "path": "路径"
+    }
   },
   "productReplacement": {
     "backToPlugins": "返回插件中心",
@@ -2742,7 +2804,7 @@
     "manageVersions": "版本管理",
     "activeVersion": "当前提示词版本",
     "active": "使用中",
-    "promptPlaceholder": "描述商品替换规则。第一张输入图为场景图，后续图片为商品参考图。",
+    "promptPlaceholder": "描述商品替换规则。第一张为场景图，其余为商品参考图。",
     "promptLoadFailed": "无法加载提示词版本，请重启应用后重试。",
     "promptName": "版本名称",
     "saveVersion": "保存版本",
@@ -2792,8 +2854,14 @@
     }
   },
   "productWatermark": {
-    "hero": { "description": "批量裁剪商品图片并叠加可复用的透明品牌水印。" },
-    "sections": { "template": "水印模板", "images": "商品图片", "export": "处理与导出" },
+    "hero": {
+      "description": "批量裁剪商品图片并叠加可复用的透明品牌水印。"
+    },
+    "sections": {
+      "template": "水印模板",
+      "images": "商品图片",
+      "export": "处理与导出"
+    },
     "labels": {
       "savedTemplates": "已保存 {count} 个",
       "chooseSaved": "选择已保存模板",
@@ -2817,7 +2885,11 @@
       "succeeded": "成功 {count}",
       "failed": "失败 {count}"
     },
-    "placeholders": { "template": "选择模板", "templateName": "输入模板名称", "outputFolder": "尚未选择目录" },
+    "placeholders": {
+      "template": "选择模板",
+      "templateName": "输入模板名称",
+      "outputFolder": "尚未选择目录"
+    },
     "actions": {
       "back": "返回插件市场",
       "rename": "重命名",
@@ -2835,9 +2907,18 @@
       "processing": "正在处理...",
       "retryFailed": "重新处理失败项"
     },
-    "empty": { "images": "尚未添加商品图片" },
-    "pickers": { "template": "选择透明水印模板", "images": "选择商品图片", "output": "选择导出目录" },
-    "prompts": { "rename": "模板名称", "delete": "确定删除此模板吗？" },
+    "empty": {
+      "images": "尚未添加商品图片"
+    },
+    "pickers": {
+      "template": "选择透明水印模板",
+      "images": "选择商品图片",
+      "output": "选择导出目录"
+    },
+    "prompts": {
+      "rename": "模板名称",
+      "delete": "确定删除此模板吗？"
+    },
     "errors": {
       "templateFormat": "模板格式必须为 PNG 或 WebP。",
       "templateNameAndFile": "请选择模板图片并输入名称。",
@@ -2846,7 +2927,10 @@
       "selectImages": "请先添加商品图片。",
       "selectOutput": "请先选择导出目录。"
     },
-    "messages": { "templateSaved": "模板已保存。", "processed": "处理完成：成功 {success} 张，失败 {failed} 张。" }
+    "messages": {
+      "templateSaved": "模板已保存。",
+      "processed": "处理完成：成功 {success} 张，失败 {failed} 张。"
+    }
   },
   "livePhoto": {
     "hero": {
@@ -3017,8 +3101,8 @@
   "tiktokCreative": {
     "generationMode": {
       "label": "生成模式",
-      "referenceToVideo": "Reference to video",
-      "imageToVideo": "Image to video",
+      "referenceToVideo": "参考图生视频",
+      "imageToVideo": "首帧生视频",
       "imageToVideoHint": "使用 First and last frame：首帧为当前生成图，尾帧为居中放大 {p0}% 的镜头推进图。",
       "zoomPercentLabel": "尾帧放大比例"
     },
@@ -3163,7 +3247,10 @@
       "running": "进行中",
       "review": "待检查"
     },
-    "runMode": { "auto": "自动运行", "manual": "手动运行" },
+    "runMode": {
+      "auto": "自动运行",
+      "manual": "手动运行"
+    },
     "actions": {
       "exporting": "导出中...",
       "batchExport": "批量导出",
@@ -3179,8 +3266,14 @@
       "delete": "删除",
       "viewError": "查看错误"
     },
-    "selection": { "exportable": "可导出成片", "subtitleReady": "可加字幕" },
-    "sort": { "newest": "最新创建", "oldest": "最早创建" },
+    "selection": {
+      "exportable": "可导出成片",
+      "subtitleReady": "可加字幕"
+    },
+    "sort": {
+      "newest": "最新创建",
+      "oldest": "最早创建"
+    },
     "columns": {
       "preview": "预览",
       "task": "任务信息",
@@ -3196,10 +3289,32 @@
       "wait": "请稍候...",
       "desc": "点击右上角“新建任务”，创建第一个复刻项目。"
     },
-    "pagination": { "summary": "共 {count} 条，当前显示 {start}-{end}" }
+    "pagination": {
+      "summary": "共 {count} 条，当前显示 {start}-{end}"
+    }
   },
   "modelLibrary": {
-    "spec": { "total": "模特总数", "ready": "已就绪", "generating": "生成中", "failed": "生成失败", "profile": "形象档案", "gender": "性别", "age": "年龄段", "market": "目标市场", "skin": "肤色", "hair": "发型", "outfit": "穿搭", "mood": "气质", "scene": "场景", "gallery": "多角度素材", "images": "{count} 张", "copyId": "复制 ID", "meta": "记录信息", "selectHint": "选择一个模特查看详情", "updated": "更新于 {time}" },
+    "spec": {
+      "total": "模特总数",
+      "ready": "已就绪",
+      "generating": "生成中",
+      "failed": "生成失败",
+      "profile": "形象档案",
+      "gender": "性别",
+      "age": "年龄段",
+      "market": "目标市场",
+      "skin": "肤色",
+      "hair": "发型",
+      "outfit": "穿搭",
+      "mood": "气质",
+      "scene": "场景",
+      "gallery": "多角度素材",
+      "images": "{count} 张",
+      "copyId": "复制 ID",
+      "meta": "记录信息",
+      "selectHint": "选择一个模特查看详情",
+      "updated": "更新于 {time}"
+    },
     "title": "模特库",
     "desc": "管理 AI 数字模特，筛选形象与场景，并绑定到复刻项目。",
     "import": "导入模特",
@@ -3222,7 +3337,10 @@
     "modelProvider": "生成模型",
     "defaultName": "AI 模特 {index}",
     "defaultDescription": "当前模特尚未填写简介。",
-    "tabs": { "all": "全部模特", "ready": "已就绪" },
+    "tabs": {
+      "all": "全部模特",
+      "ready": "已就绪"
+    },
     "filters": {
       "allStatuses": "全部状态",
       "allAges": "全部年龄",
@@ -3365,18 +3483,18 @@
     "next": "下一页",
     "perPage": "条 / 页",
     "promptSettings": {
-      "button": "\u591a\u89d2\u5ea6\u56fe\u63d0\u793a\u8bcd",
-      "title": "\u591a\u89d2\u5ea6\u56fe\u63d0\u793a\u8bcd\u7248\u672c\u7ba1\u7406",
-      "desc": "\u7ba1\u7406\u5546\u54c1\u591a\u89d2\u5ea6\u5206\u6790\u753b\u677f\u751f\u6210\u65f6\u4f7f\u7528\u7684\u63d0\u793a\u8bcd\u3002",
-      "version": "\u7248\u672c",
-      "name": "\u7248\u672c\u540d\u79f0",
-      "content": "\u63d0\u793a\u8bcd\u5185\u5bb9",
-      "active": "\u5f53\u524d\u542f\u7528",
-      "save": "\u4fdd\u5b58\u4fee\u6539",
-      "copy": "\u590d\u5236\u65b0\u7248\u672c",
-      "activate": "\u542f\u7528\u6b64\u7248\u672c",
-      "rollback": "\u56de\u6eda\u4e3a\u65b0\u7248\u672c",
-      "close": "\u5173\u95ed"
+      "button": "多角度图提示词",
+      "title": "多角度图提示词版本管理",
+      "desc": "管理商品多角度分析画板生成时使用的提示词。",
+      "version": "版本",
+      "name": "版本名称",
+      "content": "提示词内容",
+      "active": "当前启用",
+      "save": "保存修改",
+      "copy": "复制新版本",
+      "activate": "启用此版本",
+      "rollback": "回滚为新版本",
+      "close": "关闭"
     },
     "types": {
       "phone_case": "手机壳",
@@ -3396,7 +3514,10 @@
       "done": "已完成",
       "failed": "异常"
     },
-    "dna": { "done": "DNA 已生成", "pending": "DNA 待生成" },
+    "dna": {
+      "done": "DNA 已生成",
+      "pending": "DNA 待生成"
+    },
     "stats": {
       "total": "商品总数",
       "allProducts": "全部商品",
@@ -3438,6 +3559,244 @@
     "notesFallback": "当前只完成入口闭环。"
   },
   "production": {
+    "mixInsights": {
+      "title": "混剪效果复盘",
+      "desc": "把混剪出的每条视频和 GMV Max 投放素材关联起来，按真实转化给公式、开头风格和开头镜头打分，下次混剪自动多用赢家。",
+      "back": "返回混剪工作台",
+      "allProducts": "全部商品",
+      "refresh": "同步 GMV Max 数据",
+      "how": "流程：渲染 → 发到发布中心（自动带上关联标记）→ 在 TikTok 投放 → 回到这里同步。系统按发布标题和视频时长自动关联，也可以手动关联。新数据一条只会让分数小幅移动，避免偶然爆款带偏。",
+      "totals": {
+        "rendered": "已渲染",
+        "published": "已送发布",
+        "linked": "已关联素材",
+        "measured": "有投放数据",
+        "winners": "S/A 爆款"
+      },
+      "board": {
+        "formulas": "公式排行",
+        "hookStyles": "开头风格排行",
+        "hookClips": "开头镜头表现（本商品）"
+      },
+      "col": {
+        "name": "名称",
+        "measured": "有数据/总数",
+        "score": "转化分",
+        "share": "下次份额",
+        "video": "视频",
+        "status": "状态",
+        "grade": "评级"
+      },
+      "noData": "待数据",
+      "emptyBoard": "还没有投放数据。发布并投放后点「同步 GMV Max 数据」。",
+      "videos": "混剪视频（{count}）",
+      "publishAll": "未发布的全部送发布中心（{count}）",
+      "status": {
+        "rendered": "未发布",
+        "published": "已送发布",
+        "linkedAuto": "自动关联",
+        "linkedManual": "手动关联"
+      },
+      "remake": "复刻爆款",
+      "publish": "送发布中心",
+      "link": "手动关联素材",
+      "unlink": "取消关联（不再自动关联）",
+      "remove": "删除记录",
+      "removeConfirm": "删除这条记录？视频文件不会被删除。",
+      "linkTitle": "关联 GMV Max 素材",
+      "searchCreative": "按素材名称或 ID 搜索",
+      "alreadyLinked": "已关联其他视频，选择后会改为这条",
+      "noCreatives": "没有可关联的素材。请先在 GMV Max 插件里同步数据。",
+      "noGmvMax": "GMV Max 还没有可用的素材数据（需要先在 GMV Max 插件授权店铺并建立计划）",
+      "refreshed": "读取 {creatives} 条素材，新关联 {linked} 条，更新 {updated} 条数据",
+      "published": "已创建 {count} 个发布草稿，去「发布中心」选择账号和商品后发布",
+      "empty": "还没有混剪视频记录。在混剪工作台渲染完成的视频会出现在这里。"
+    },
+    "mix": {
+      "useInsights": "参考投放数据（表现好的公式和开头多分配）",
+      "learned": "已参考 {measured} 条有投放数据的视频、{winners} 条爆款文案。本批分配：",
+      "winner": {
+        "title": "复刻爆款：",
+        "desc": "沿用它的公式、开头镜头和钩子思路，换中段镜头和文案做变体。",
+        "cancel": "取消复刻"
+      },
+      "title": "AI 混剪工作台",
+      "desc": "按爆款公式从素材池挑选真实镜头，配上钩子标题和口播字幕，每条视频的开头、镜头和文案都不同。",
+      "back": "返回批量混剪",
+      "legacy": "旧版模板随机混剪",
+      "step1": "1. 模式与商品",
+      "step2": "2. 爆款公式",
+      "step3": "3. 文案与输出",
+      "mode": {
+        "ai": "AI 混剪",
+        "aiDesc": "AI 按镜头内容为每条视频写不同的钩子和口播",
+        "auto": "自动混剪",
+        "autoDesc": "不调用大模型，用你的文案池轮换组合，零成本"
+      },
+      "poolLine": "素材池：{clips} 个镜头，已识别 {tagged}，实拍 {real} / AI {ai}",
+      "poolEmpty": "这个商品的素材池还没有足够的已识别镜头（至少 3 个）。",
+      "goPool": "去素材池",
+      "language": "口播语言",
+      "voice": "配音音色",
+      "languages": {
+        "vi-VN": "越南语",
+        "zh-CN": "中文",
+        "en-US": "英语",
+        "th-TH": "泰语",
+        "id-ID": "印尼语"
+      },
+      "formula": {
+        "hint": "多选时轮流使用，一批视频覆盖多个内容角度",
+        "fromReference": "从参考视频提取",
+        "extracting": "AI 分析中…",
+        "namePlaceholder": "公式名称（可选）",
+        "extracted": "已提取公式「{name}」，共 {count} 段",
+        "remove": "删除公式",
+        "removeConfirm": "删除公式「{name}」？",
+        "source": {
+          "builtin": "内置",
+          "reference": "参考视频",
+          "custom": "自定义"
+        }
+      },
+      "sellingPoints": "卖点 / 价格 / 优惠 / 目标人群",
+      "sellingPointsPlaceholder": "例：925 银不过敏；原价 199k 今天 99k；买二送一；适合送女朋友",
+      "sellingPointsHint": "AI 只会使用这里写明的价格和优惠，不会编造。",
+      "lines": {
+        "hook": "钩子开头（每行一条）",
+        "body": "卖点句（每行一条）",
+        "cta": "结尾催单（每行一条）",
+        "hint": "每条视频轮换组合：1 条钩子 + 1~2 条卖点 + 1 条催单。{'{product}'} 会替换成商品名。"
+      },
+      "template": "包装模板（可选）",
+      "templateNone": "不用模板（硬切 + 黄底字幕，带货默认）",
+      "keepOriginalAudio": "保留镜头原声（压低在配音下）",
+      "allowAiClips": "实拍不够时允许用 AI 镜头",
+      "summary": "将生成 {count} 条，轮流使用 {formulas} 个公式",
+      "generate": "生成方案",
+      "generating": "正在选镜头和写文案…",
+      "draftsTitle": "方案预览（{count} 条）",
+      "draftsDesc": "共 {shots} 个镜头，可修改标题和口播后再渲染",
+      "renderAll": "全部渲染（{count} 条）",
+      "removeDraft": "删除这条",
+      "draftTitle": "画面钩子标题",
+      "voiceover": "口播文案（自动生成配音和字幕）",
+      "enqueueNone": "没有任务入队（{skipped} 条与历史成片重复或镜头不足）",
+      "validation": {
+        "product": "请选择商品",
+        "formula": "请至少选择一个公式",
+        "outDir": "请选择输出目录"
+      }
+    },
+    "pool": {
+      "mismatch": {
+        "badge": "非本商品",
+        "hint": "AI 判断画面里是另一款商品，不会用于本商品的混剪；手动指定镜头作用后才会使用。",
+        "notice": "{count} 个镜头被 AI 判断为「不是这款商品」，已从混剪中排除。请检查这些素材是否放错了商品，或在商品详情里更新商品描述。"
+      },
+      "title": "混剪素材池",
+      "desc": "把商品的实拍素材和 AI 生成视频切成单个镜头，由 AI 标注镜头作用、钩子分和画质，供混剪按脚本选片。",
+      "back": "返回批量混剪",
+      "product": "选择商品",
+      "noProducts": "还没有商品",
+      "sync": "同步商品素材",
+      "importReal": "导入实拍视频",
+      "importAi": "导入 AI 视频",
+      "retagAll": "全部重新识别",
+      "process": "切镜并识别（{count}）",
+      "processing": "处理中…",
+      "hint": "“同步商品素材”会拉取商品库里的视频和复刻模块为该商品生成的成片。实拍镜头在混剪中优先使用，转化通常比纯 AI 画面更好。",
+      "progress": {
+        "split": "正在切分镜头 {done}/{total}",
+        "tag": "AI 正在识别镜头 {done}/{total}"
+      },
+      "stats": {
+        "clips": "可用镜头",
+        "tagged": "已识别",
+        "realVsAi": "实拍 / AI",
+        "sources": "源视频"
+      },
+      "missing": {
+        "title": "镜头缺口：",
+        "desc": "混剪一条完整带货视频需要这些镜头，建议补拍或导入。"
+      },
+      "clipsTitle": "镜头",
+      "filters": {
+        "all": "全部"
+      },
+      "sort": {
+        "label": "排序",
+        "hook": "按钩子分",
+        "quality": "按画质",
+        "time": "按时间"
+      },
+      "showDisabled": "显示已停用",
+      "preview": "预览镜头",
+      "close": "关闭",
+      "roles": {
+        "hook": "钩子开头",
+        "pain_point": "痛点",
+        "unboxing": "开箱",
+        "demo": "使用演示",
+        "wear": "上身/场景",
+        "detail": "细节特写",
+        "comparison": "对比",
+        "proof": "信任证明",
+        "cta": "结尾CTA",
+        "broll": "空镜"
+      },
+      "origin": {
+        "real": "实拍",
+        "ai": "AI",
+        "unknown": "未标注"
+      },
+      "clip": {
+        "untagged": "未识别",
+        "manual": "手动",
+        "heuristic": "规则推断",
+        "hook": "钩子",
+        "quality": "画质",
+        "failed": "AI 识别失败，已用规则推断",
+        "auto": "自动识别",
+        "override": "修改镜头作用",
+        "retag": "重新识别",
+        "disable": "停用该镜头",
+        "enable": "恢复该镜头"
+      },
+      "empty": "素材池为空。先点“同步商品素材”或导入视频。",
+      "emptyFiltered": "当前筛选下没有镜头。",
+      "sources": {
+        "title": "源视频",
+        "empty": "还没有源视频。",
+        "file": "文件",
+        "kind": "来源",
+        "origin": "类型",
+        "status": "状态",
+        "clips": "镜头数",
+        "resplit": "重新切镜",
+        "remove": "移出素材池",
+        "removeConfirm": "把“{name}”及其镜头移出素材池？原视频文件不会被删除。"
+      },
+      "sourceKind": {
+        "creative_studio": "TikTok 创意工作室",
+        "live_photo": "Live Photo",
+        "product_asset": "商品素材",
+        "clone_output": "AI 复刻成片",
+        "import": "导入"
+      },
+      "sourceStatus": {
+        "pending": "待处理",
+        "splitting": "切分中",
+        "ready": "已就绪",
+        "failed": "失败"
+      },
+      "toast": {
+        "noneLinked": "这个商品在「商品库素材」「TikTok 创意工作室」「Live Photo」「AI 复刻」里都还没有视频。请点「导入实拍视频」上传拍摄素材，或先用这些模块为它生成视频后再同步。",
+        "synced": "新增 {count} 个源视频，开始切镜识别。",
+        "nothingNew": "没有新的商品素材。",
+        "imported": "已导入 {count} 个视频，开始切镜识别。"
+      }
+    },
     "tabs": {
       "ariaLabel": "生产模块导航",
       "products": {
@@ -3455,8 +3814,8 @@
     },
     "home": {
       "kicker": "生产模块",
-      "title": "任务执行中心",
-      "desc": "统一管理新建任务、任务列表、任务详情和模板。",
+      "title": "批量混剪",
+      "desc": "用商品素材和模板批量剪辑出视频，统一管理任务与模板。",
       "taskCount": "{count} 个任务",
       "templateCount": "{count} 个模板",
       "stats": {
@@ -3466,6 +3825,16 @@
         "templates": "模板总数"
       },
       "entries": {
+        "mix": {
+          "title": "AI 混剪工作台",
+          "desc": "按爆款公式从素材池选镜头，AI 写口播，批量出带货视频。",
+          "metric": "开始混剪"
+        },
+        "pool": {
+          "title": "混剪素材池",
+          "desc": "把实拍和 AI 视频切成镜头，AI 识别每个镜头的用途。",
+          "metric": "管理素材"
+        },
         "create": {
           "title": "新建任务",
           "desc": "从商品和模板创建新的生产任务。",
@@ -3497,7 +3866,7 @@
     },
     "create": {
       "kicker": "生产 / 新建任务",
-      "title": "从商品和模板发起任务",
+      "title": "新建混剪任务",
       "desc": "在此创建任务，任务日志和失败处理在任务详情中查看。",
       "noProduct": "未选择商品",
       "product": "商品",
@@ -3517,7 +3886,7 @@
     },
     "tasks": {
       "kicker": "生产 / 任务列表",
-      "title": "任务列表与失败筛选",
+      "title": "混剪任务",
       "desc": "查看任务信息、筛选执行状态并进入任务详情。",
       "create": "新建任务",
       "pause": "暂停",
@@ -3567,16 +3936,19 @@
   },
   "slicer": {
     "title": "直播切片",
-    "desc": "导入直播录像或长视频，识别片段并一键切片。",
-    "noVideo": "未选择视频",
-    "outputAfterSplit": "切片完成后显示输出目录",
-    "phase": {
-      "ffmpeg": "正在调用 FFmpeg 切片",
-      "collect": "正在整理输出片段",
-      "done": "已生成 {count} 个片段",
-      "failed": "切片失败",
-      "ready": "已导入视频，等待分析",
-      "idle": "等待导入"
+    "desc": "导入直播录像或长视频，智能识别高光片段，精修后批量导出竖屏短视频。",
+    "clipPrefix": "片段",
+    "status": {
+      "idle": "等待导入",
+      "ready": "待分析",
+      "analyzed": "已分析",
+      "clips": "{n} 个片段",
+      "analyzing": "分析中 {pct}%",
+      "exporting": "导出中 {n}/{total}"
+    },
+    "actions": {
+      "changeVideo": "更换视频",
+      "cancel": "取消"
     },
     "pickers": {
       "video": "选择直播录像或长视频",
@@ -3584,44 +3956,158 @@
     },
     "upload": {
       "title": "导入直播录像或长视频",
-      "formats": "支持 MP4 / MOV / MKV / WEBM 格式",
-      "sizeHint": "文件大小建议小于 10GB",
-      "choose": "选择视频文件",
-      "reselect": "重新选择视频",
-      "openOriginal": "打开原视频"
+      "formats": "拖拽文件到此处，或点击选择 · 支持 MP4 / MOV / MKV / WEBM / FLV / TS",
+      "choose": "选择视频文件"
     },
-    "results": {
-      "title": "切片结果",
-      "count": "{count} 个片段",
-      "openDir": "打开目录",
-      "empty": "请先导入视频并开始分析，切片结果会显示在这里。"
+    "steps": {
+      "analyzeTitle": "智能分析",
+      "analyzeDesc": "基于音量能量、情绪起伏与画面切换，自动找出高光时刻",
+      "editTitle": "时间线精修",
+      "editDesc": "拖动片段边缘微调入出点，I / O 键手动打点，S 键分割",
+      "exportTitle": "批量导出",
+      "exportDesc": "一键输出 9:16 竖屏、淡入淡出、响度标准化的成片"
+    },
+    "player": {
+      "back5": "后退 5 秒",
+      "fwd5": "前进 5 秒",
+      "playPause": "播放 / 暂停 (空格)",
+      "markIn": "入点",
+      "markOut": "出点",
+      "markInKey": "在播放头设置入点 (I)",
+      "markOutKey": "在播放头设置出点 (O)",
+      "addClip": "添加片段",
+      "addAtPlayhead": "从此处添加",
+      "addAtPlayheadHint": "从播放头开始添加一个最短时长的片段",
+      "loop": "循环预览片段",
+      "speed": "播放速度"
+    },
+    "timeline": {
+      "title": "时间线",
+      "energy": "音量能量",
+      "scene": "画面切换",
+      "clip": "片段",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "noAnalysis": "开始分析后显示音量波形与画面切换点"
+    },
+    "keys": {
+      "play": "播放",
+      "seek": "±1s（Shift ±5s）",
+      "mark": "入点 / 出点",
+      "add": "添加片段",
+      "split": "在播放头分割",
+      "delete": "删除片段",
+      "zoom": "缩放"
+    },
+    "editor": {
+      "titlePlaceholder": "片段标题（用作文件名）",
+      "start": "起",
+      "end": "止",
+      "playhead": "播放头",
+      "fromPlayhead": "设为当前播放头位置",
+      "preview": "预览",
+      "split": "分割",
+      "delete": "删除片段"
+    },
+    "clips": {
+      "title": "片段列表",
+      "selectedMeta": "已选 {n} 个 · 共 {dur}",
+      "sortTime": "按时间",
+      "sortScore": "按热度",
+      "selectAll": "全选",
+      "merge": "合并所选",
+      "copyTimecodes": "复制时间码",
+      "removeSelected": "删除所选",
+      "clear": "清空",
+      "emptyTitle": "还没有片段",
+      "emptyDesc": "在右侧选择识别模式开始分析，或使用入点 / 出点手动标记片段。",
+      "manual": "手动",
+      "exported": "已导出",
+      "failed": "导出失败",
+      "scoreHint": "热度分：相对整场直播的精彩程度",
+      "openFile": "打开文件"
+    },
+    "source": {
+      "title": "源视频",
+      "open": "打开原片",
+      "duration": "时长",
+      "resolution": "分辨率",
+      "fps": "帧率",
+      "size": "文件大小",
+      "codec": "编码",
+      "noAudio": "无音频",
+      "noAudioHint": "该视频没有可用音轨，智能识别将只依据画面切换，建议使用固定时长或手动标记。"
+    },
+    "mode": {
+      "highlight": "智能高光",
+      "highlightDesc": "找出最精彩的时刻",
+      "pause": "语句停顿",
+      "pauseDesc": "按讲话停顿全程切分",
+      "interval": "固定时长",
+      "intervalDesc": "按固定秒数等分",
+      "manual": "手动标记",
+      "manualDesc": "用入点 / 出点自己切"
     },
     "analysis": {
-      "title": "分析设置",
-      "recommended": "推荐设置",
-      "mode": "识别模式",
-      "smart": "智能识别",
-      "smartDesc": "自动识别精彩片段",
-      "manual": "人工标记",
-      "manualDesc": "手动标记片段",
-      "custom": "自定义",
-      "customDesc": "设置识别规则",
-      "minDuration": "最小片段时长（秒）",
-      "maxDuration": "最大片段时长（秒）",
-      "durationHint": "建议 15-60 秒",
-      "fixedDuration": "当前 FFmpeg 按固定时长切片",
-      "working": "正在智能分析",
-      "start": "开始智能分析"
+      "title": "识别设置",
+      "reset": "恢复默认",
+      "minDuration": "最短时长（秒）",
+      "maxDuration": "最长时长（秒）",
+      "maxClips": "最多片段数",
+      "sensitivity": "识别灵敏度",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "sensitivityHint": "灵敏度越高，候选高光越多；片段过少时可调高。",
+      "interval": "每段时长（秒）",
+      "skipSilence": "跳过静音片段",
+      "manualTip": "播放时按 I 设入点、O 设出点，回车添加片段；也可以点“从此处添加”后在时间线上拖动调整。",
+      "analyzingHint": "正在提取音量能量与画面切换点，长视频需要几分钟，可随时取消。",
+      "start": "开始智能分析",
+      "generate": "生成片段",
+      "reanalyze": "重新分析视频",
+      "keepManual": "重新生成只替换自动片段，手动片段会保留。"
     },
     "export": {
       "title": "导出设置",
-      "format": "输出格式",
-      "sourceFormat": "原格式",
-      "quality": "画质",
+      "cutMode": "切割方式",
+      "precise": "精确切割",
+      "fast": "极速无损",
+      "preciseHint": "逐帧精确、可转竖屏与加效果，需要重新编码。",
+      "fastHint": "直接复制音视频流，秒级完成；切点对齐关键帧，可能偏差 1-3 秒，且不支持画面与音频处理。",
+      "aspect": "画面比例",
+      "aspectOriginal": "原始",
+      "aspectCrop916": "9:16 裁切",
+      "aspectBlur916": "9:16 模糊",
+      "resolution": "分辨率",
       "sourceQuality": "保持原画",
+      "padding": "前后留白",
+      "noPadding": "不留白",
+      "fade": "淡入淡出（0.35 秒）",
+      "loudnorm": "响度标准化（-14 LUFS）",
+      "namePrefix": "文件名前缀",
       "outputDir": "输出目录",
-      "all": "批量导出所有片段",
-      "currentDir": "当前导出目录"
+      "subFolder": "为每次导出新建子文件夹",
+      "start": "导出 {n} 个片段",
+      "progress": "正在导出第 {n} / {total} 个",
+      "resultLine": "导出完成：成功 {ok} 个，失败 {failed} 个",
+      "openDir": "打开输出目录"
+    },
+    "toast": {
+      "restored": "已恢复上次的切片进度",
+      "unsupported": "不支持的文件格式",
+      "manualHint": "使用入点 / 出点或“从此处添加”来标记片段",
+      "noneFound": "没有识别到符合条件的片段，试试调高灵敏度或缩短最短时长",
+      "generated": "已生成 {n} 个片段",
+      "analyzeFailed": "分析失败：{error}",
+      "removed": "已删除 {n} 个片段",
+      "splitHint": "请先选中片段，并把播放头移到片段内部",
+      "copied": "已复制 {n} 条时间码",
+      "copyFailed": "复制失败",
+      "noOutputDir": "请先选择输出目录",
+      "exportCancelled": "已取消导出",
+      "exportPartial": "导出完成：成功 {ok} 个，失败 {failed} 个",
+      "exported": "已导出 {n} 个片段"
     }
   },
   "agentOs": {
@@ -3771,7 +4257,10 @@
       "warnings": "{count} 个警告",
       "empty": "当前筛选条件下没有运行记录"
     },
-    "plan": { "title": "执行计划", "version": "版本 {version}" },
+    "plan": {
+      "title": "执行计划",
+      "version": "版本 {version}"
+    },
     "timeline": {
       "title": "事件时间线",
       "subtitle": "可恢复的运行记录",
@@ -4341,11 +4830,211 @@
     }
   },
   "gmvMaxV2": {
-    "navigation": { "overview": "总览", "operations": "经营", "products": "商品", "campaigns": "推广", "creatives": "素材", "profit": "利润", "decisions": "AI 决策", "pending": "待处理", "strategies": "自动策略", "growth": "增长", "audit": "审计", "settings": "设置", "help": "使用帮助" },
-    "overview": { "gmv": "GMV", "spend": "花费", "actualRoi": "实际 ROI", "estimatedProfit": "预计利润", "completeDataHint": "基于完整投放日", "completeRows": "条完整数据", "profitBoundaryHint": "与利润边界同步判断", "estimatedHint": "模型估算，不代表保证收益", "risk": "经营风险", "riskHint": "风险花费 {spend}", "opportunity": "放量机会", "opportunityHint": "已通过规则证据排序", "today": "今天先做", "totalHint": "共 {total} 项建议", "topActions": "今天优先处理", "topActionsHint": "按影响、执行状态、数据新鲜度和审批状态确定顺序" },
-    "action": { "impact": "预计净利润影响", "unavailable": "暂不可估算", "category": { "high_risk": "高风险", "high_opportunity": "高机会", "optimization": "优化建议", "observing": "观察中" }, "categoryHint": { "high_risk": "优先保护利润和执行安全", "high_opportunity": "具备放量证据的建议", "optimization": "改善效率和稳定性", "observing": "等待完整投放日结果" }, "status": { "needs_action": "需要处理", "pending_approval": "等待审批", "failed": "执行失败", "blocked": "写入被阻断", "observing": "三日观察中", "completed": "已完成" } },
-    "strategy": { "profit": "利润保护", "profitHint": "守住盈亏平衡 ROI 和利润底线", "budget": "预算保护", "budgetHint": "限制单次预算增幅和异常消耗", "roi": "ROI 保护", "roiHint": "限制单次调整并执行观察锁", "data": "数据保护", "dataHint": "阻断缺失、过期和不完整数据", "permission": "执行权限", "permissionHint": "所有平台变更仍需人工审批" },
-    "audit": { "execution": "执行记录", "results": "结果评估", "exceptions": "异常记录", "before": "调整前", "after": "调整后", "improved": "有效", "stable": "稳定", "invalid": "无效", "noResults": "暂无可评估结果", "noExceptions": "暂无异常记录" },
-    "settings": { "subtitle": "集中管理连接、数据、成本、策略、权限、通知和安全状态。", "connection": "TikTok 连接", "sync": "数据同步", "cost": "成本与利润", "strategy": "ROI 与自动策略", "permissions": "平台权限", "notifications": "通知配置", "emergency": "紧急停止", "configured": "已配置", "notConfigured": "待配置", "open": "打开设置", "syncNow": "立即同步", "staleItems": "项数据需要更新", "emergencyHint": "当前平台写入正常，需要时可立即停止", "costHint": "管理商品成本、店铺默认成本和利润边界", "strategyHint": "管理 ROI、预算和数据保护规则", "permissionHint": "{enabled} / {total} 项能力可用" }
+    "navigation": {
+      "overview": "总览",
+      "operations": "经营",
+      "products": "商品",
+      "campaigns": "推广",
+      "creatives": "素材",
+      "profit": "利润",
+      "decisions": "AI 决策",
+      "pending": "待处理",
+      "strategies": "自动策略",
+      "growth": "增长",
+      "audit": "审计",
+      "settings": "设置",
+      "help": "使用帮助"
+    },
+    "overview": {
+      "gmv": "GMV",
+      "spend": "花费",
+      "actualRoi": "实际 ROI",
+      "estimatedProfit": "预计利润",
+      "completeDataHint": "基于完整投放日",
+      "completeRows": "条完整数据",
+      "profitBoundaryHint": "与利润边界同步判断",
+      "estimatedHint": "模型估算，不代表保证收益",
+      "risk": "经营风险",
+      "riskHint": "风险花费 {spend}",
+      "opportunity": "放量机会",
+      "opportunityHint": "已通过规则证据排序",
+      "today": "今天先做",
+      "totalHint": "共 {total} 项建议",
+      "topActions": "今天优先处理",
+      "topActionsHint": "按影响、执行状态、数据新鲜度和审批状态确定顺序"
+    },
+    "action": {
+      "impact": "预计净利润影响",
+      "unavailable": "暂不可估算",
+      "category": {
+        "high_risk": "高风险",
+        "high_opportunity": "高机会",
+        "optimization": "优化建议",
+        "observing": "观察中"
+      },
+      "categoryHint": {
+        "high_risk": "优先保护利润和执行安全",
+        "high_opportunity": "具备放量证据的建议",
+        "optimization": "改善效率和稳定性",
+        "observing": "等待完整投放日结果"
+      },
+      "status": {
+        "needs_action": "需要处理",
+        "pending_approval": "等待审批",
+        "failed": "执行失败",
+        "blocked": "写入被阻断",
+        "observing": "三日观察中",
+        "completed": "已完成"
+      }
+    },
+    "strategy": {
+      "profit": "利润保护",
+      "profitHint": "守住盈亏平衡 ROI 和利润底线",
+      "budget": "预算保护",
+      "budgetHint": "限制单次预算增幅和异常消耗",
+      "roi": "ROI 保护",
+      "roiHint": "限制单次调整并执行观察锁",
+      "data": "数据保护",
+      "dataHint": "阻断缺失、过期和不完整数据",
+      "permission": "执行权限",
+      "permissionHint": "所有平台变更仍需人工审批"
+    },
+    "audit": {
+      "execution": "执行记录",
+      "results": "结果评估",
+      "exceptions": "异常记录",
+      "before": "调整前",
+      "after": "调整后",
+      "improved": "有效",
+      "stable": "稳定",
+      "invalid": "无效",
+      "noResults": "暂无可评估结果",
+      "noExceptions": "暂无异常记录"
+    },
+    "settings": {
+      "subtitle": "集中管理连接、数据、成本、策略、权限、通知和安全状态。",
+      "connection": "TikTok 连接",
+      "sync": "数据同步",
+      "cost": "成本与利润",
+      "strategy": "ROI 与自动策略",
+      "permissions": "平台权限",
+      "notifications": "通知配置",
+      "emergency": "紧急停止",
+      "configured": "已配置",
+      "notConfigured": "待配置",
+      "open": "打开设置",
+      "syncNow": "立即同步",
+      "staleItems": "项数据需要更新",
+      "emergencyHint": "当前平台写入正常，需要时可立即停止",
+      "costHint": "管理商品成本、店铺默认成本和利润边界",
+      "strategyHint": "管理 ROI、预算和数据保护规则",
+      "permissionHint": "{enabled} / {total} 项能力可用"
+    }
+  },
+  "gmvMaxCreativesSimple": {
+    "kpi": {
+      "spend": "花费",
+      "revenue": "收入",
+      "orders": "订单"
+    },
+    "todo": {
+      "pendingText": "条建议等你确认",
+      "noPendingText": "暂时没有要确认的建议",
+      "replaceText": "看看哪些视频没量了、该换掉",
+      "setupText": "成本和测试预算还没填完，建议可能不准",
+      "setupUnknown": "同步数据后检查设置",
+      "suggestions": "待你确认的建议",
+      "count": "{count} 条",
+      "review": "去确认",
+      "hide": "收起",
+      "generate": "生成建议",
+      "generating": "生成中…",
+      "suggestionsHint": "系统根据数据给出的换素材、加热、停投建议，确认后才会执行。",
+      "replace": "该换掉的视频",
+      "view": "查看",
+      "replaceHint": "已经没量、或花完测试预算还不出单的视频。",
+      "setupMissing": "还有设置没完成",
+      "setupDone": "设置已完成",
+      "setupSteps": "还差 {count} 步",
+      "ready": "可以正常判断",
+      "setup": "去设置",
+      "viewSetup": "查看设置",
+      "setupHint": "{costs} 个系列没填成本，{budgets} 个系列没设测试预算，补齐后建议才准。",
+      "setupDoneHint": "建议会按你填写的成本和测试预算计算。"
+    },
+    "suggestions": {
+      "title": "待你确认的建议",
+      "hint": "采纳后才会改动 TikTok 投放，执行过的可以在「高级」里撤销。"
+    },
+    "operation": {
+      "ADD": "加入新视频",
+      "REMOVE": "停投这个视频",
+      "ROTATE": "用新视频替换",
+      "BOOST": "加热视频"
+    },
+    "actions": {
+      "detail": "详情",
+      "accept": "采纳",
+      "ignore": "忽略",
+      "keep": "一直投",
+      "keepHint": "以后不会被自动停投",
+      "stop": "停投",
+      "stopHint": "停止投放这个视频，并生成待确认的停投建议",
+      "remove": "移出名单"
+    },
+    "tabs": {
+      "label": "按状态查看",
+      "all": "全部",
+      "good": "跑得好",
+      "testing": "测试中",
+      "replace": "该换了",
+      "waste": "不出单"
+    },
+    "states": {
+      "good": "跑得好",
+      "testing": "测试中",
+      "replace": "该换了",
+      "waste": "不出单",
+      "needsCost": "待判断",
+      "needsCostHint": "补齐成本后才能判断这条视频好不好"
+    },
+    "source": "视频来源",
+    "sources": {
+      "all": "全部来源",
+      "owned": "自营",
+      "affiliate": "联盟达人",
+      "product_card": "商品卡"
+    },
+    "columns": {
+      "video": "视频",
+      "status": "状态",
+      "suggestion": "建议"
+    },
+    "days": "{count} 天",
+    "unknownCreator": "来源未知",
+    "untitled": "视频 {id}",
+    "productBadge": "商品",
+    "detail": {
+      "campaign": "推广系列",
+      "product": "商品",
+      "authorization": "授权",
+      "cpa": "每单成本",
+      "ctr": "点击率",
+      "cvr": "转化率",
+      "play2s": "2 秒播放率",
+      "play6s": "6 秒播放率",
+      "score": "质量评分",
+      "roiTrend": "ROI 变化",
+      "id": "视频 ID"
+    },
+    "emptyTab": "这个状态下暂时没有视频。",
+    "advanced": {
+      "title": "高级工具",
+      "hint": "数据筛选、流量漏斗、测试池、达人表现、一直投/停投名单、建议记录",
+      "filters": "按数据筛选",
+      "creators": "达人表现",
+      "lists": "一直投 / 停投名单",
+      "history": "全部建议记录"
+    }
   }
 }

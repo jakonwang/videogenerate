@@ -280,7 +280,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="inventory-head__actions">
-        <button class="ghost-button" type="button" @click="router.push('/plugins')"><ChevronLeft class="h-4 w-4" />{{ t('dianxiaomiInventory.back') }}</button>
+        <button class="ghost-button" type="button" @click="router.push('/plugins')"><ChevronLeft class="h-4 w-4" />{{ t('ai.tools.back') }}</button>
       </div>
     </section>
 

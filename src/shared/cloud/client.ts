@@ -26,6 +26,8 @@ import type {
   CloudUserRole,
 } from './types'
 import type { ManagedSoftwareSettings } from './managedSettings'
+import type { AiChatRequest, AiChatResponse, AiUsageResponse } from './ai'
+import type { SyncChange, SyncPullResponse, SyncPushResponse, SyncUploadResponse, SyncUsageResponse } from './sync'
 
 export class CloudClientError extends Error {
   constructor(
@@ -48,7 +50,7 @@ export type CloudClientOptions = {
 export type CloudAdminOrder = CloudOrder & { account: string }
 
 export function createCloudClient(options: CloudClientOptions) {
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
     const base = options.getBaseUrl().replace(/\/+$/, '')
     const headers: Record<string, string> = { Accept: 'application/json' }
     const token = options.getToken?.()
@@ -60,7 +62,7 @@ export function createCloudClient(options: CloudClientOptions) {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(options.timeoutMs ?? 20_000),
+        signal: AbortSignal.timeout(timeoutMs ?? options.timeoutMs ?? 20_000),
       })
     } catch (error) {
       throw new CloudClientError(`无法连接云端服务：${(error as Error)?.message ?? error}`, 0, 'NETWORK')
@@ -85,8 +87,47 @@ export function createCloudClient(options: CloudClientOptions) {
     return text ? `?${text}` : ''
   }
 
+  /** 二进制上传 / 下载（文件同步），不走 JSON 封装 */
+  async function binary(method: 'PUT' | 'GET', path: string, body?: Blob | ArrayBuffer | Uint8Array, mime?: string): Promise<Response> {
+    const base = options.getBaseUrl().replace(/\/+$/, '')
+    const headers: Record<string, string> = {}
+    const token = options.getToken?.()
+    if (token) headers.Authorization = `Bearer ${token}`
+    if (mime) headers['Content-Type'] = mime
+    let res: Response
+    try {
+      res = await fetch(`${base}${path}`, { method, headers, body: body as BodyInit | undefined, signal: AbortSignal.timeout(options.timeoutMs ?? 120_000) })
+    } catch (error) {
+      throw new CloudClientError(`无法连接云端服务：${(error as Error)?.message ?? error}`, 0, 'NETWORK')
+    }
+    if (!res.ok) {
+      if (res.status === 401) options.onUnauthorized?.()
+      let json: any = null
+      try {
+        json = await res.json()
+      } catch {
+        json = null
+      }
+      throw new CloudClientError(String(json?.error || `请求失败（HTTP ${res.status}）`), res.status, json?.code || 'INTERNAL', json?.details)
+    }
+    return res
+  }
+
   return {
     request,
+    sync: {
+      pull: (since: number, collections?: string[], limit?: number) =>
+        request<SyncPullResponse>('GET', `/api/v1/sync/changes${qs({ since, collections: collections?.join(','), limit })}`),
+      push: (changes: SyncChange[]) => request<SyncPushResponse>('POST', '/api/v1/sync/push', { changes }),
+      usage: () => request<SyncUsageResponse>('GET', '/api/v1/sync/usage'),
+      uploadFile: async (body: Blob | ArrayBuffer | Uint8Array, mime: string) =>
+        (await (await binary('PUT', '/api/v1/files', body, mime)).json()) as SyncUploadResponse,
+      downloadFile: async (fileId: string) => (await binary('GET', `/api/v1/files/${encodeURIComponent(fileId)}`)).blob(),
+    },
+    ai: {
+      chat: (input: AiChatRequest) => request<AiChatResponse>('POST', '/api/v1/ai/chat', input, 130_000),
+      usage: () => request<AiUsageResponse>('GET', '/api/v1/ai/usage'),
+    },
     health: () => request<{ status: string }>('GET', '/api/v1/health'),
     getConfig: () => request<{ values: Record<string, unknown>; version: string }>('GET', '/api/v1/client/config'),
     listPlans: () => request<CloudPlansResponse>('GET', '/api/v1/plans'),

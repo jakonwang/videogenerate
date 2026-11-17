@@ -156,93 +156,319 @@ function selectBestVideoUrl(value: unknown): string {
   return findValue(value, ['MainHTTPUrl', 'MainUrl', 'mainUrl'])
 }
 
+type OpenMode = 'reference_to_video' | 'image_to_video'
+
 let sharedBrowser: any
 let sharedBrowserPromise: Promise<any> | undefined
-let contextLifecycleTail: Promise<void> = Promise.resolve()
 let browserStartCount = 0
 let browserStartFailures = 0
+let browserIdleTimer: ReturnType<typeof setTimeout> | undefined
 const MAX_BROWSER_START_FAILURES = 2
+// Keep a warm page per account between polls/creates instead of loading the
+// full Creative Studio SPA for every request. Idle pages are closed after a
+// while, and the browser itself is closed when no page is left.
+const PAGE_IDLE_MS = 3 * 60_000
+const BROWSER_IDLE_MS = 60_000
+const MAX_OPEN_PAGES = 2
+const HEADER_WAIT_MS = 15_000
+const RUNTIME_WAIT_MS = 10_000
+const UPLOADER_WAIT_MS = 20_000
 
-async function acquireContextLock() {
-  const previous = contextLifecycleTail
-  let release!: () => void
-  contextLifecycleTail = new Promise<void>((resolve) => { release = resolve })
-  await previous
-  return release
+type AccountSession = {
+  key: string
+  accountId: string
+  context?: any
+  page?: any
+  mode?: OpenMode
+  opening?: Promise<void>
+  headers: Record<string, string>
+  aid?: string
+  // Set once the Node-side request path was rejected even with captured
+  // headers; status checks then go straight through the warm page.
+  preferPage: boolean
+  users: number
+  lastUsedAt: number
+  idleTimer?: ReturnType<typeof setTimeout>
+  activeClient?: TiktokOfficialClient
 }
 
-async function delay(milliseconds: number) {
-  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+const sessions = new Map<string, AccountSession>()
+
+function cookieFingerprint(cookies: TiktokCookie[]) {
+  let hash = 0
+  const text = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).sort().join(';')
+  for (let index = 0; index < text.length; index += 1) hash = (hash * 31 + text.charCodeAt(index)) | 0
+  return String(hash)
 }
 
-async function launchPage(cookies: TiktokCookie[], accountId: string) {
+function getSession(accountId: string, cookies: TiktokCookie[]) {
+  const key = cookieFingerprint(cookies)
+  const existing = sessions.get(accountId)
+  if (existing && existing.key === key) return existing
+  if (existing) void disposeSessionPage(existing)
+  const session: AccountSession = { key, accountId, headers: {}, preferPage: false, users: 0, lastUsedAt: Date.now() }
+  sessions.set(accountId, session)
+  return session
+}
+
+function sessionPageAlive(session: AccountSession) {
+  return Boolean(session.page && !session.page.isClosed?.() && sharedBrowser?.isConnected?.())
+}
+
+async function disposeSessionPage(session: AccountSession) {
+  if (session.idleTimer) clearTimeout(session.idleTimer)
+  session.idleTimer = undefined
+  const context = session.context
+  session.context = undefined
+  session.page = undefined
+  session.mode = undefined
+  if (context) {
+    await context.close().catch(() => undefined)
+    console.info('[tiktok-creative] contextClosed', { accountId: session.accountId })
+  }
+  scheduleBrowserIdleClose()
+}
+
+function scheduleSessionIdleClose(session: AccountSession) {
+  if (session.idleTimer) clearTimeout(session.idleTimer)
+  session.idleTimer = setTimeout(() => {
+    session.idleTimer = undefined
+    if (session.users > 0) return
+    void disposeSessionPage(session)
+  }, PAGE_IDLE_MS)
+  session.idleTimer.unref?.()
+}
+
+function scheduleBrowserIdleClose() {
+  if (browserIdleTimer) clearTimeout(browserIdleTimer)
+  browserIdleTimer = setTimeout(() => {
+    browserIdleTimer = undefined
+    const hasPage = Array.from(sessions.values()).some((session) => session.context || session.opening)
+    if (hasPage) return
+    void closeTiktokOfficialBrowser()
+  }, BROWSER_IDLE_MS)
+  browserIdleTimer.unref?.()
+}
+
+async function evictIdlePages(keepAccountId: string) {
+  const open = Array.from(sessions.values()).filter((session) => session.context && session.accountId !== keepAccountId)
+  if (open.length < MAX_OPEN_PAGES) return
+  const idle = open.filter((session) => session.users === 0).sort((left, right) => left.lastUsedAt - right.lastUsedAt)
+  for (const session of idle.slice(0, open.length - MAX_OPEN_PAGES + 1)) await disposeSessionPage(session)
+}
+
+async function ensureBrowser() {
+  if (browserIdleTimer) clearTimeout(browserIdleTimer)
+  browserIdleTimer = undefined
+  if (sharedBrowser?.isConnected?.()) {
+    console.info('[tiktok-creative] browserReused', { browserStartCount })
+    return sharedBrowser
+  }
   const { chromium } = await import('playwright')
   const executablePath = findBrowserExecutable(chromium.executablePath())
   if (!executablePath) {
     throw new Error('A supported browser was not found. Install Microsoft Edge or Google Chrome and try again.')
   }
+  // Headed off-screen by default (TikTok's uploader is sensitive to headless
+  // fingerprints). Set TIKTOK_CREATIVE_HEADLESS=1 to run fully headless.
+  const headless = /^(1|true|yes)$/i.test(String(process.env.TIKTOK_CREATIVE_HEADLESS || ''))
   const launchOptions = {
     executablePath,
-    headless: false,
-    args: ['--window-position=-32000,-32000', '--no-first-run', '--no-default-browser-check'],
+    headless,
+    args: [
+      ...(headless ? [] : ['--window-position=-32000,-32000']),
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--mute-audio',
+      '--disable-extensions',
+      '--disable-sync',
+    ],
   }
-  const reusedBrowser = Boolean(sharedBrowser?.isConnected?.())
-  if (!reusedBrowser) {
-    if (!sharedBrowserPromise) {
-      if (browserStartFailures >= MAX_BROWSER_START_FAILURES) {
-        throw new Error('TikTok browser start is paused after repeated failures')
+  if (!sharedBrowserPromise) {
+    if (browserStartFailures >= MAX_BROWSER_START_FAILURES) {
+      throw new Error('TikTok browser start is paused after repeated failures')
+    }
+    sharedBrowserPromise = chromium.launch(launchOptions)
+      .then((browser: any) => {
+        sharedBrowser = browser
+        sharedBrowserPromise = undefined
+        browserStartFailures = 0
+        browserStartCount += 1
+        console.info('[tiktok-creative] browserStarted', { browserStartCount, headless })
+        browser.once('disconnected', () => {
+          if (sharedBrowser === browser) sharedBrowser = undefined
+          for (const session of sessions.values()) {
+            if (session.idleTimer) clearTimeout(session.idleTimer)
+            session.idleTimer = undefined
+            session.context = undefined
+            session.page = undefined
+            session.mode = undefined
+          }
+          console.warn('[tiktok-creative] browserDisconnected')
+        })
+        return browser
+      })
+      .catch((error) => {
+        sharedBrowserPromise = undefined
+        browserStartFailures += 1
+        throw error
+      })
+  }
+  try {
+    await sharedBrowserPromise
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`TikTok browser could not start: ${message}`)
+  }
+  if (!sharedBrowser) throw new Error('TikTok browser could not start: browser instance is unavailable')
+  return sharedBrowser
+}
+
+function traceStageForUrl(url: string) {
+  return url.includes('/i2v/gen_r2v_video') || url.includes('/i2v/create_generate_task')
+    ? 'create' as const
+    : url.includes('/generate-task/check') || url.includes('/video_info')
+      ? 'check' as const
+      : url.includes('/save_to_my_library') || url.includes('/upload')
+        ? 'upload' as const
+        : undefined
+}
+
+function attachPageListeners(session: AccountSession, page: any) {
+  page.on('request', (request: any) => {
+    const requestUrl = request.url()
+    const traceStage = traceStageForUrl(requestUrl)
+    if (traceStage && session.activeClient) {
+      const headers = request.headers()
+      let body: unknown
+      if (requestUrl.includes('/upload-proxy') || !String(headers['content-type'] || '').includes('json')) {
+        body = request.postData() ? '[binary omitted]' : undefined
+      } else {
+        try {
+          body = sanitizeTraceBody(request.postDataJSON())
+        } catch {
+          body = request.postData() || undefined
+        }
       }
-      sharedBrowserPromise = chromium.launch(launchOptions)
-        .then((browser: any) => {
-          sharedBrowser = browser
-          sharedBrowserPromise = undefined
-          browserStartFailures = 0
-          browserStartCount += 1
-          console.info('[tiktok-creative] browserStarted', { browserStartCount })
-          browser.once('disconnected', () => {
-            if (sharedBrowser === browser) sharedBrowser = undefined
-            console.warn('[tiktok-creative] browserDisconnected')
-          })
-          return browser
-        })
-        .catch((error) => {
-          sharedBrowserPromise = undefined
-          browserStartFailures += 1
-          throw error
-        })
+      session.activeClient.pushTrace({
+        stage: traceStage,
+        method: request.method(),
+        url: sanitizeRequestUrl(requestUrl),
+        headers: {
+          'content-type': headers['content-type'] || '',
+          'x-csrftoken': headers['x-csrftoken'] ? '[redacted]' : '',
+          'x-fp-id': headers['x-fp-id'] ? '[redacted]' : '',
+          'x-creative-source': headers['x-creative-source'] || '',
+        },
+        body,
+        capturedAt: Date.now(),
+      })
+    }
+    if (!requestUrl.includes('/creative_bff_i18n/')) return
+    const headers = request.headers()
+    session.headers = {
+      'x-csrftoken': headers['x-csrftoken'] || session.headers['x-csrftoken'] || '',
+      'x-fp-id': headers['x-fp-id'] || session.headers['x-fp-id'] || '',
+      'x-creative-csrf-token': headers['x-creative-csrf-token'] || session.headers['x-creative-csrf-token'] || '',
+      'x-creative-source': 'CreativeStudio/MiniApp/ImageToVideo',
+      'agw-js-conv': 'str',
+      'content-type': 'application/json',
     }
     try {
-      await sharedBrowserPromise
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`TikTok browser could not start: ${message}`)
+      session.aid = new URL(requestUrl).searchParams.get('aid') || session.aid
+    } catch {
+      // Keep the cookie fallback.
     }
-  }
-  const browser = sharedBrowser
-  if (!browser) throw new Error('TikTok browser could not start: browser instance is unavailable')
-  if (reusedBrowser) {
-    console.info('[tiktok-creative] browserReused', { browserStartCount })
-  }
-  const releaseContext = await acquireContextLock()
-  let context: any
-  try {
-    console.info('[tiktok-creative] contextCreated', { accountId })
-    context = await browser.newContext({
-      userAgent: USER_AGENT,
-      extraHTTPHeaders: { Referer: BASE_URL },
-      serviceWorkers: 'block',
+  })
+  page.on('response', async (response: any) => {
+    const responseUrl = response.url()
+    const traceStage = traceStageForUrl(responseUrl)
+    if (!traceStage || !session.activeClient) return
+    const client = session.activeClient
+    client.pushTrace({
+      stage: traceStage,
+      method: `RESPONSE ${response.status()}`,
+      url: sanitizeRequestUrl(responseUrl),
+      headers: {},
+      body: sanitizeTraceBody(await readJsonResponse(response)),
+      capturedAt: Date.now(),
     })
+  })
+  page.on('crash', () => {
+    console.warn('[tiktok-creative] pageCrashed', { accountId: session.accountId })
+    void disposeSessionPage(session)
+  })
+}
+
+async function navigateSessionPage(session: AccountSession, mode: OpenMode) {
+  const page = session.page
+  const headerWait = page.waitForRequest(
+    (request: any) => String(request.url()).includes('/creative_bff_i18n/'),
+    { timeout: HEADER_WAIT_MS },
+  ).catch(() => undefined)
+  await page.goto(mode === 'image_to_video' ? IMAGE_TO_VIDEO_PAGE_URL : PAGE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  session.mode = mode
+  // Wait for real readiness signals instead of a fixed sleep: the first
+  // authenticated BFF request (headers) and the uploader webpack runtime.
+  await headerWait
+  await page.waitForFunction(
+    () => Object.keys(window).some((key) => key.startsWith('@creative-ai/cue:')),
+    null,
+    { timeout: RUNTIME_WAIT_MS },
+  ).catch(() => undefined)
+}
+
+async function openSessionPage(session: AccountSession, cookies: TiktokCookie[], mode: OpenMode | undefined) {
+  if (sessionPageAlive(session)) {
+    if (mode && session.mode !== mode) await navigateSessionPage(session, mode)
+    return
+  }
+  if (session.context) await disposeSessionPage(session)
+  await evictIdlePages(session.accountId)
+  const browser = await ensureBrowser()
+  console.info('[tiktok-creative] contextCreated', { accountId: session.accountId })
+  const context = await browser.newContext({
+    userAgent: USER_AGENT,
+    extraHTTPHeaders: { Referer: BASE_URL },
+    serviceWorkers: 'block',
+  })
+  try {
     await context.addCookies(cookies.map((cookie) => ({ ...cookie, expires: cookie.expires || -1 })))
+    // Demo videos and web fonts are the heaviest part of the SPA and are never
+    // needed for API work. Images stay allowed: the uploader reads them back.
+    await context.route('**/*', async (route: any) => {
+      const type = route.request().resourceType()
+      if (type === 'media' || type === 'font') return await route.abort().catch(() => undefined)
+      return await route.continue().catch(() => undefined)
+    })
     const page = await context.newPage()
-    return { browser, context, page, releaseContext }
+    await page.route('**/creative_bff_i18n/api/cue/upload/token*', async (route: any) => {
+      const headers = {
+        ...route.request().headers(),
+        'x-creative-source': 'CreativeStudio/MiniApp/ImageToVideo',
+      }
+      await route.continue({ headers })
+    })
+    session.context = context
+    session.page = page
+    attachPageListeners(session, page)
+    await navigateSessionPage(session, mode || 'reference_to_video')
   } catch (error) {
-    await context?.close().catch(() => undefined)
-    releaseContext()
+    await disposeSessionPage(session)
     throw error
   }
 }
 
 export async function closeTiktokOfficialBrowser() {
+  if (browserIdleTimer) clearTimeout(browserIdleTimer)
+  browserIdleTimer = undefined
+  for (const session of sessions.values()) {
+    if (session.idleTimer) clearTimeout(session.idleTimer)
+    session.idleTimer = undefined
+    session.context = undefined
+    session.page = undefined
+    session.mode = undefined
+  }
   const browser = sharedBrowser
   sharedBrowser = undefined
   sharedBrowserPromise = undefined
@@ -447,147 +673,128 @@ function extractDraftVideoId(body: unknown): string {
   return ''
 }
 
+async function delay(milliseconds: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+}
+
+type FetchInit = { method?: string; body?: unknown; headers?: Record<string, string> }
+
+// True when the Node-side request was rejected in a way a real page session
+// (fresh csrf / fp headers) is expected to fix.
+function needsPageSession(result: { status: number; body: string }) {
+  if (result.status === 401 || result.status === 403) return true
+  if (result.status >= 400) return false
+  try {
+    const body = JSON.parse(result.body)
+    return Boolean(body && typeof body === 'object' && body.code !== undefined && Number(body.code) !== 0)
+  } catch {
+    // HTML login page or other non-JSON response.
+    return true
+  }
+}
+
 export class TiktokOfficialClient {
-  private browser: any
-  private context: any
-  private page: any
-  private releaseContext: (() => void) | undefined
-  private closed = false
-  private openedMode: 'reference_to_video' | 'image_to_video' | undefined
-  private aid: string
-  private requestHeaders: Record<string, string> = {}
+  private readonly session: AccountSession
+  private holding = false
   private requestTrace: TiktokCreativeRequestTrace[] = []
+  private readonly cookieAid: string
 
   constructor(private readonly options: ClientOptions) {
-    this.aid = aidFromCookies(options.cookies)
+    this.cookieAid = aidFromCookies(options.cookies)
+    this.session = getSession(options.accountId, options.cookies)
   }
 
-  async open(mode: 'reference_to_video' | 'image_to_video' = 'reference_to_video') {
-    if (this.page && this.openedMode === mode) return this.page
-    if (this.page) await this.close()
-    const opened = await launchPage(this.options.cookies, this.options.accountId)
-    this.browser = opened.browser
-    this.context = opened.context
-    this.page = opened.page
-    this.releaseContext = opened.releaseContext
-    this.closed = false
-    this.openedMode = mode
+  private get page() {
+    return this.session.page
+  }
+
+  private get requestHeaders() {
+    return this.session.headers
+  }
+
+  private get aid() {
+    return this.session.aid || this.cookieAid
+  }
+
+  pushTrace(entry: TiktokCreativeRequestTrace) {
+    this.requestTrace.push(entry)
+    if (this.requestTrace.length > 30) this.requestTrace = this.requestTrace.slice(-30)
+  }
+
+  private acquire() {
+    if (this.holding) return
+    this.holding = true
+    this.session.users += 1
+    this.session.lastUsedAt = Date.now()
+    this.session.activeClient = this
+    if (this.session.idleTimer) clearTimeout(this.session.idleTimer)
+    this.session.idleTimer = undefined
+  }
+
+  // `mode` undefined means "any loaded Creative Studio page is fine".
+  async open(mode?: OpenMode) {
+    this.acquire()
+    while (this.session.opening) await this.session.opening.catch(() => undefined)
+    if (sessionPageAlive(this.session) && (!mode || this.session.mode === mode)) return this.page
+    const opening = openSessionPage(this.session, this.options.cookies, mode)
+    this.session.opening = opening
     try {
-      this.page.on('request', (request: any) => {
-        const requestUrl = request.url()
-      const traceStage = requestUrl.includes('/i2v/gen_r2v_video') || requestUrl.includes('/i2v/create_generate_task')
-        ? 'create'
-        : requestUrl.includes('/generate-task/check') || requestUrl.includes('/video_info')
-          ? 'check'
-          : requestUrl.includes('/save_to_my_library') || requestUrl.includes('/upload')
-            ? 'upload'
-            : undefined
-      if (traceStage) {
-        const headers = request.headers()
-        let body: unknown
-        if (requestUrl.includes('/upload-proxy') || !String(headers['content-type'] || '').includes('json')) {
-          body = request.postData() ? '[binary omitted]' : undefined
-        } else {
-          try {
-            body = sanitizeTraceBody(request.postDataJSON())
-          } catch {
-            body = request.postData() || undefined
-          }
-        }
-        this.requestTrace.push({
-          stage: traceStage,
-          method: request.method(),
-          url: sanitizeRequestUrl(requestUrl),
-          headers: {
-            'content-type': headers['content-type'] || '',
-            'x-csrftoken': headers['x-csrftoken'] ? '[redacted]' : '',
-            'x-fp-id': headers['x-fp-id'] ? '[redacted]' : '',
-            'x-creative-source': headers['x-creative-source'] || '',
-          },
-          body,
-          capturedAt: Date.now(),
-        })
-        this.requestTrace = this.requestTrace.slice(-30)
-      }
-      if (!requestUrl.includes('/creative_bff_i18n/')) return
-      const headers = request.headers()
-      this.requestHeaders = {
-        'x-csrftoken': headers['x-csrftoken'] || this.requestHeaders['x-csrftoken'] || '',
-        'x-fp-id': headers['x-fp-id'] || this.requestHeaders['x-fp-id'] || '',
-        'x-creative-csrf-token': headers['x-creative-csrf-token'] || this.requestHeaders['x-creative-csrf-token'] || '',
-        'x-creative-source': 'CreativeStudio/MiniApp/ImageToVideo',
-        'agw-js-conv': 'str',
-        'content-type': 'application/json',
-      }
-      try {
-        this.aid = new URL(request.url()).searchParams.get('aid') || this.aid
-      } catch {
-        // Keep the cookie fallback.
-      }
-      })
-      this.page.on('response', async (response: any) => {
-        const responseUrl = response.url()
-        if (responseUrl.includes('QueryCreditAccount')) {
-          await response.json().catch(() => undefined)
-        }
-      const traceStage = responseUrl.includes('/i2v/gen_r2v_video') || responseUrl.includes('/i2v/create_generate_task')
-        ? 'create'
-        : responseUrl.includes('/generate-task/check') || responseUrl.includes('/video_info')
-          ? 'check'
-          : responseUrl.includes('/save_to_my_library') || responseUrl.includes('/upload')
-            ? 'upload'
-            : undefined
-        if (traceStage) {
-        this.requestTrace.push({
-          stage: traceStage,
-          method: `RESPONSE ${response.status()}`,
-          url: sanitizeRequestUrl(responseUrl),
-          headers: {},
-          body: sanitizeTraceBody(await readJsonResponse(response)),
-          capturedAt: Date.now(),
-        })
-        this.requestTrace = this.requestTrace.slice(-30)
-        }
-      })
-      await this.page.route('**/creative_bff_i18n/api/cue/upload/token*', async (route: any) => {
-        const headers = {
-          ...route.request().headers(),
-          'x-creative-source': 'CreativeStudio/MiniApp/ImageToVideo',
-        }
-        await route.continue({ headers })
-      })
-      await this.page.goto(mode === 'image_to_video' ? IMAGE_TO_VIDEO_PAGE_URL : PAGE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
-      await this.page.waitForTimeout(3000)
-      return this.page
-    } catch (error) {
-      await this.close()
-      throw error
+      await opening
+    } finally {
+      if (this.session.opening === opening) this.session.opening = undefined
     }
+    return this.page
   }
 
+  // Releases this client's hold on the account page. The page itself stays
+  // warm for PAGE_IDLE_MS so the next poll/create does not reload the SPA.
   async close() {
-    if (this.closed) return
-    this.closed = true
-    await this.context?.close().catch(() => undefined)
-    console.info('[tiktok-creative] contextClosed', { accountId: this.options.accountId })
-    this.releaseContext?.()
-    this.browser = undefined
-    this.context = undefined
-    this.page = undefined
-    this.releaseContext = undefined
-    this.openedMode = undefined
+    if (!this.holding) return
+    this.holding = false
+    this.session.users = Math.max(0, this.session.users - 1)
+    this.session.lastUsedAt = Date.now()
+    if (this.session.activeClient === this) this.session.activeClient = undefined
+    if (this.session.users === 0) {
+      if (this.session.context) scheduleSessionIdleClose(this.session)
+      else scheduleBrowserIdleClose()
+    }
   }
 
   getRequestTrace() {
     return this.requestTrace.map((item) => ({ ...item, headers: { ...item.headers } }))
   }
 
-  async queryCredit() {
+  // Node fetch first (no browser). Falls back to the warm page only when the
+  // API rejects the Node request, and remembers that for later checks.
+  private async fetchBest(url: string, init?: FetchInit): Promise<{ status: number; body: string }> {
+    const headersKnown = Boolean(this.session.headers['x-csrftoken'])
+    if (!this.session.preferPage || !sessionPageAlive(this.session)) {
+      try {
+        const result = await apiFetch(this.options.cookies, url, { ...init, headers: { ...this.requestHeaders, ...(init?.headers || {}) } })
+        if (!needsPageSession(result)) return result
+        if (headersKnown) this.session.preferPage = true
+      } catch {
+        // Network-level failure; retry through the page below.
+      }
+    }
     await this.open()
-    await this.page.waitForTimeout(1000)
-    // Always request a fresh value after the session is opened. A response
-    // captured during initial page hydration can be stale or belong to a
-    // previous account state.
+    return await pageFetch(this.page, url, { ...init, headers: { ...this.requestHeaders, ...(init?.headers || {}) } })
+  }
+
+  async queryCredit() {
+    // Try without a browser first; only open the page if the response is not
+    // a usable authenticated credit payload.
+    try {
+      const direct = await apiFetch(this.options.cookies, CREDIT_URL, { method: 'POST', body: {}, headers: this.requestHeaders })
+      if (direct.status < 400) {
+        const account = JSON.parse(direct.body)
+        const credit = extractCreditValue(account)
+        if (credit !== undefined && !responseRequiresLogin(account)) return { credit, authenticated: true }
+      }
+    } catch {
+      // Fall through to the page session.
+    }
+    await this.open()
     const account = await parsePageBody(await pageFetch(this.page, CREDIT_URL, {
       method: 'POST',
       body: {},
@@ -608,7 +815,30 @@ export class TiktokOfficialClient {
     return result.toString()
   }
 
+  // The uploader lives in a lazily loaded webpack chunk that arrives a few
+  // seconds after the runtime itself. Wait for those exact modules; if they
+  // never show up (stale or half-loaded warm page), reload once and wait again.
+  private async waitForUploaderModules() {
+    const ready = () => this.page.waitForFunction(() => {
+      const pageWindow = window as any
+      const chunkKey = Object.keys(pageWindow).find((key) => key.startsWith('@creative-ai/cue:') && Array.isArray(pageWindow[key]))
+      if (!chunkKey) return false
+      let webpackRequire: any
+      pageWindow[chunkKey].push([['videogenerate-probe-' + Date.now()], {}, (runtime: any) => { webpackRequire = runtime }])
+      if (!webpackRequire?.m) return false
+      const sources = Object.keys(webpackRequire.m).map((id) => String(webpackRequire.m[id]))
+      return sources.some((text) => text.includes('UploadConfig must provide getUploadToken or uploader')) &&
+        sources.some((text) => text.includes('/creative_bff_i18n/api/cue/upload'))
+    }, null, { timeout: UPLOADER_WAIT_MS, polling: 500 }).then(() => true).catch(() => false)
+    if (await ready()) return
+    const mode = this.session?.mode || 'reference_to_video'
+    console.warn('[tiktok-creative] uploaderMissingReload', { accountId: this.options.accountId, mode })
+    await navigateSessionPage(this.session!, mode)
+    if (!(await ready())) throw new Error('TikTok official uploader module was not found after reloading the page')
+  }
+
   private async uploadImage(imagePath: string) {
+    await this.waitForUploaderModules()
     const bytes = await readFile(imagePath)
     const payload = {
       base64: bytes.toString('base64'),
@@ -785,46 +1015,12 @@ export class TiktokOfficialClient {
   }
 
   async checkTask(taskId: string) {
+    const checkUrl = CHECK_URL.replace('__AID__', encodeURIComponent(this.aid))
     let responseResult: { status: number; body: string } | undefined
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      let currentResult: { status: number; body: string }
-      try {
-        currentResult = await apiFetch(this.options.cookies, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
-          method: 'POST',
-          body: { taskId },
-          headers: this.requestHeaders,
-        })
-      } catch {
-        await this.open()
-        currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
-          method: 'POST',
-          body: { taskId },
-          headers: this.requestHeaders,
-        })
-      }
-      if (currentResult.status < 400) {
-        let apiBody: any
-        try { apiBody = JSON.parse(currentResult.body) } catch { apiBody = undefined }
-        if (apiBody && Number(apiBody.code) !== 0 && apiBody.code !== undefined) {
-          await this.open()
-          currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
-            method: 'POST',
-            body: { taskId },
-            headers: this.requestHeaders,
-          })
-        }
-      }
-      if (currentResult.status === 401 || currentResult.status === 403) {
-        await this.open()
-        currentResult = await pageFetch(this.page, CHECK_URL.replace('__AID__', encodeURIComponent(this.aid)), {
-          method: 'POST',
-          body: { taskId },
-          headers: this.requestHeaders,
-        })
-      }
-      responseResult = currentResult
-      if (currentResult.status !== 429 && currentResult.status < 500) break
-      if (attempt < 4) await delay(Math.min(60000, 10000 * 2 ** attempt))
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      responseResult = await this.fetchBest(checkUrl, { method: 'POST', body: { taskId } })
+      if (responseResult.status !== 429 && responseResult.status < 500) break
+      if (attempt < 2) await delay(5000 * 2 ** attempt)
     }
     const result = await parsePageBody(responseResult || { status: 500, body: '' })
     const status = findNumber(result, ['renderTaskStatus', 'draftTaskStatus', 'status'])
@@ -864,19 +1060,7 @@ export class TiktokOfficialClient {
     if (effectiveStatus === 0 && videoId) {
       const videoInfoUrl = new URL(this.apiUrl(VIDEO_INFO_URL))
       videoInfoUrl.searchParams.set('vid', videoId)
-      let videoInfoResult: { status: number; body: string }
-      try {
-        videoInfoResult = await apiFetch(this.options.cookies, videoInfoUrl.toString(), { headers: this.requestHeaders })
-      } catch {
-        await this.open()
-        videoInfoResult = await pageFetch(this.page, videoInfoUrl.toString(), { headers: this.requestHeaders })
-      }
-      try {
-        videoInfo = await parsePageBody(videoInfoResult)
-      } catch {
-        await this.open()
-        videoInfo = await parsePageBody(await pageFetch(this.page, videoInfoUrl.toString(), { headers: this.requestHeaders }))
-      }
+      videoInfo = await parsePageBody(await this.fetchBest(videoInfoUrl.toString()))
     }
     const videoUrl = selectBestVideoUrl(videoInfo)
       || selectBestVideoUrl(result)

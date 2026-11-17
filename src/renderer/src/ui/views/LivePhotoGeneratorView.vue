@@ -2111,9 +2111,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <p>{{ uiText.workspaceHint }}</p>
           </div>
           <div class="lp-head__actions">
-            <button class="vg-btn" data-testid="live-photo-back" type="button" @click="router.push('/plugins?tab=installed&plugin=live-photo-generator')">
-              <ChevronLeft :size="15" />{{ t('livePhoto.hero.back') }}
-            </button>
             <button class="vg-btn" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
               <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />{{ t('livePhoto.hero.refresh') }}
             </button>

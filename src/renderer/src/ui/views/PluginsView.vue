@@ -1,682 +1,156 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
+import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
-  AlertTriangle,
   ArrowRight,
-  Check,
+  BarChart3,
+  Captions,
   Download,
-  Power,
-  Puzzle,
+  Images,
+  Package,
+  Replace,
+  Scissors,
   Search,
+  ShoppingBag,
+  Stamp,
   Store,
-  Trash2,
+  Tag,
+  Users,
   Wrench,
-} from "lucide-vue-next";
-import {
-  webApiClient,
-  type PluginDetail,
-  type PluginSummary,
-} from "@/lib/webApiClient";
+} from 'lucide-vue-next'
+import { featureForPath, useCloudAuthStore } from '@/stores/cloudAuth'
 
-type WorkspaceMode = "market" | "installed";
+type Tool = { id: string; route: string; icon: any; tone: string; group: 'source' | 'image' | 'video' | 'operations' }
 
-const route = useRoute();
-const router = useRouter();
-const { t } = useI18n();
+const RECENT_KEY = 'videogenerate:toolbox-recent:v1'
+const { t } = useI18n()
+const router = useRouter()
+const cloudAuth = useCloudAuthStore()
+const keyword = ref('')
+const recentIds = ref<string[]>([])
 
-const loading = ref(false);
-const actionBusy = ref(false);
-const notice = ref("");
-const errorText = ref("");
-const searchKeyword = ref("");
-const workspace = ref<WorkspaceMode>("market");
-const plugins = ref<PluginSummary[]>([]);
-const selectedPluginId = ref("");
+const TOOLS: Tool[] = [
+  { id: 'video-parser-download', route: '/plugins/video-parser-download', icon: Download, tone: 'blue', group: 'source' },
+  { id: 'live-slicer', route: '/live-slicer', icon: Scissors, tone: 'amber', group: 'source' },
+  { id: 'product-image-materials', route: '/plugins/product-image-materials', icon: Images, tone: 'blue', group: 'source' },
+  { id: 'product-replacement', route: '/plugins/product-replacement', icon: Replace, tone: 'green', group: 'image' },
+  { id: 'product-watermark', route: '/plugins/product-watermark', icon: Tag, tone: 'violet', group: 'image' },
+  { id: 'video-batch-subtitle', route: '/plugins/video-batch-subtitle', icon: Captions, tone: 'green', group: 'video' },
+  { id: 'video-batch-watermark', route: '/plugins/video-batch-watermark', icon: Stamp, tone: 'violet', group: 'video' },
+  { id: 'tiktok-listing-helper', route: '/plugins/tiktok-listing-helper', icon: ShoppingBag, tone: 'amber', group: 'operations' },
+  { id: 'tiktok-creator-hub', route: '/plugins/tiktok-creator-hub', icon: Users, tone: 'violet', group: 'operations' },
+  { id: 'tiktok-gmv-max-optimizer', route: '/plugins/tiktok-gmv-max-optimizer', icon: BarChart3, tone: 'accent', group: 'operations' },
+  { id: 'dianxiaomi-inventory', route: '/plugins/dianxiaomi-inventory', icon: Package, tone: 'amber', group: 'operations' },
+]
 
-const fallbackPlugins: PluginSummary[] = [
-  {
-    id: "product-replacement",
-    name: "Product Replacement",
-    category: "video_processing",
-    description: "Replace products in batches of scene images using saved product references and versioned prompts.",
-    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/product-replacement", status: "installed", enabled: true,
-  },
-  {
-    id: "product-watermark",
-    name: "Product Brand Watermark",
-    category: "video_processing",
-    description: "Crop product images to squares and apply reusable transparent brand watermarks.",
-    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/product-watermark", status: "uninstalled", enabled: false,
-  },
-  {
-    id: "tiktok-gmv-max-optimizer",
-    name: "TikTok GMV MAX Optimizer",
-    category: "advertising_optimization",
-    description:
-      "Guarded GMV MAX campaign optimization through TikTok for Business MCP.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-gmv-max-optimizer",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "product-image-materials",
-    name: "Product Image Materials",
-    category: "video_processing",
-    description:
-      "Batch split videos into reusable product image materials with Qiniu upload and usage tracking.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/product-image-materials",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "dianxiaomi-inventory",
-    name: "Dianxiaomi Inventory Analytics",
-    category: "inventory_analysis",
-    description:
-      "Track SKU baselines, sync shipped quantities, forecast stockout dates, and surface reorder risks.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/dianxiaomi-inventory",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "live-photo-generator",
-    name: "Live Photo Generator",
-    category: "video_processing",
-    description:
-      "Create Apple-compatible Live Photo outputs from reference images or clone shots with preview and export tools.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/live-photo-generator",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "tiktok-creative-studio",
-    name: "TikTok Creative Studio",
-    category: "video_processing",
-    description:
-      "Read clone shot assets and prompts, then execute manual Creative Studio batches in an isolated workspace.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-creative-studio",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "tiktok-creator-hub",
-    name: "TikTok Creator Hub",
-    category: "ecommerce_listing",
-    description: "Multi-shop sample management and per-creator fulfillment rate.",
-    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/tiktok-creator-hub", status: "installed", enabled: true,
-  },
-  {
-    id: "video-parser-download",
-    name: "Video Parser Download",
-    category: "video_download",
-    description:
-      "Plugin entry for short-video link parsing and download workflows.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/video-parser-download",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "video-batch-watermark",
-    name: "Video Batch Watermark",
-    category: "video_processing",
-    description:
-      "Plugin entry for watermark parameters and batch processing presets.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/video-batch-watermark",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "video-batch-subtitle",
-    name: "Video Batch Subtitle",
-    category: "video_processing",
-    description:
-      "Subtitle recognition, styling, burn-in, and export workflow plugin.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/video-batch-subtitle",
-    status: "uninstalled",
-    enabled: false,
-  },
-];
+const groups = ['source', 'image', 'video', 'operations'] as const
 
-function mergePluginCatalogWithFallback(source: PluginSummary[]) {
-  const merged = new Map<string, PluginSummary>();
-  for (const item of fallbackPlugins) merged.set(item.id, item);
-  for (const item of source)
-    merged.set(item.id, { ...(merged.get(item.id) || item), ...item });
-  return [...merged.values()];
+const available = computed(() => TOOLS.filter((tool) => cloudAuth.hasFeature(featureForPath(tool.route))))
+const filtered = computed(() => {
+  const needle = keyword.value.trim().toLowerCase()
+  if (!needle) return available.value
+  return available.value.filter((tool) => `${name(tool)} ${desc(tool)}`.toLowerCase().includes(needle))
+})
+const recent = computed(() => recentIds.value.map((id) => available.value.find((tool) => tool.id === id)).filter((tool): tool is Tool => Boolean(tool)).slice(0, 4))
+
+function name(tool: Tool) {
+  return t(`ai.tools.items.${tool.id}.name`)
 }
 
-const filteredPlugins = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase();
-  const source =
-    workspace.value === "installed"
-      ? plugins.value.filter((item) => item.status === "installed")
-      : plugins.value;
-  if (!keyword) return source;
-  return source.filter((item) =>
-    `${item.name} ${item.description}`.toLowerCase().includes(keyword),
-  );
-});
-
-const selectedPlugin = computed(
-  () =>
-    plugins.value.find((item) => item.id === selectedPluginId.value) ??
-    filteredPlugins.value[0] ??
-    null,
-);
-
-function pluginName(plugin: PluginSummary | PluginDetail) {
-  const key = `plugins.catalog.${plugin.id}.name`;
-  return t(key, plugin.name);
+function desc(tool: Tool) {
+  return t(`ai.tools.items.${tool.id}.desc`)
 }
 
-function pluginDescription(plugin: PluginSummary | PluginDetail) {
-  const key = `plugins.catalog.${plugin.id}.description`;
-  return t(key, plugin.description);
-}
-
-function syncRoute() {
-  void router.replace({
-    path: "/plugins",
-    query: {
-      ...(workspace.value === "installed" ? { tab: "installed" } : {}),
-      ...(selectedPluginId.value ? { plugin: selectedPluginId.value } : {}),
-    },
-  });
-}
-
-function pluginStatusText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.status !== "installed") return t("plugins.status.notInstalled");
-  return plugin.enabled
-    ? t("plugins.status.enabled")
-    : t("plugins.status.disabled");
-}
-
-function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") return t("plugins.categories.videoProcessing");
-  if (plugin.id === "product-replacement") return t("plugins.categories.videoProcessing");
-  if (plugin.id === "tiktok-gmv-max-optimizer")
-    return t("plugins.categories.advertisingOptimization");
-  if (plugin.id === "tiktok-creator-hub")
-    return t("plugins.categories.creatorManagement");
-  if (plugin.id === "dianxiaomi-inventory")
-    return t("plugins.categories.inventoryAnalysis");
-  if (plugin.id === "live-photo-generator")
-    return t("plugins.categories.livePhoto");
-  if (plugin.id === "product-image-materials")
-    return t("plugins.categories.videoProcessing");
-  if (plugin.id === "tiktok-creative-studio")
-    return t("plugins.categories.creativeStudio");
-  if (plugin.id === "tiktok-listing-helper")
-    return t("plugins.categories.listing");
-  if (plugin.category === "video_download")
-    return t("plugins.categories.download");
-  return t("plugins.categories.videoProcessing");
-}
-
-function pluginIconText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") return "BW";
-  if (plugin.id === "product-replacement") return "PR";
-  if (plugin.id === "tiktok-gmv-max-optimizer") return "GM";
-  if (plugin.id === "tiktok-creator-hub") return "CH";
-  if (plugin.id === "dianxiaomi-inventory") return "IA";
-  if (plugin.id === "product-image-materials") return "IM";
-  if (plugin.id === "live-photo-generator") return "LP";
-  if (plugin.id === "tiktok-creative-studio") return "TT";
-  if (plugin.id === "video-parser-download") return "DL";
-  if (plugin.id === "video-batch-watermark") return "WM";
-  if (plugin.id === "video-batch-subtitle") return "CC";
-  return "VG";
-}
-
-function pluginCardTone(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") return "tone-blue";
-  if (plugin.id === "product-replacement") return "tone-green";
-  if (plugin.id === "tiktok-gmv-max-optimizer") return "tone-cyan";
-  if (plugin.id === "tiktok-creator-hub") return "tone-violet";
-  if (plugin.id === "dianxiaomi-inventory") return "tone-green";
-  if (plugin.id === "product-image-materials") return "tone-blue";
-  if (plugin.id === "live-photo-generator") return "tone-amber";
-  if (plugin.id === "tiktok-creative-studio") return "tone-green";
-  if (plugin.id === "video-parser-download") return "tone-violet";
-  if (plugin.id === "video-batch-watermark") return "tone-blue";
-  return "tone-green";
-}
-
-function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return [
-    "tiktok-creative-studio",
-    "tiktok-gmv-max-optimizer",
-    "live-photo-generator",
-    "product-image-materials",
-    "video-parser-download",
-    "dianxiaomi-inventory",
-    "product-watermark",
-    "product-replacement",
-  ].includes(plugin.id);
-}
-
-function primaryActionText(plugin: PluginSummary) {
-  if (plugin.id === "product-watermark" || plugin.id === "product-replacement" || plugin.id === "tiktok-creator-hub") return t("plugins.actions.openWorkspace");
-  if (plugin.status !== "installed") return t("plugins.actions.install");
-  if (!plugin.enabled) return t("plugins.actions.enable");
-  return isDirectWorkspacePlugin(plugin)
-    ? t("plugins.actions.openWorkspace")
-    : t("plugins.actions.use");
-}
-
-async function loadPlugins() {
-  loading.value = true;
-  errorText.value = "";
+function open(tool: Tool) {
+  recentIds.value = [tool.id, ...recentIds.value.filter((id) => id !== tool.id)].slice(0, 8)
   try {
-    plugins.value = mergePluginCatalogWithFallback(
-      await webApiClient.listPlugins(),
-    );
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error);
-    plugins.value = fallbackPlugins;
-  } finally {
-    loading.value = false;
-    if (!selectedPlugin.value && filteredPlugins.value.length)
-      selectedPluginId.value = filteredPlugins.value[0].id;
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recentIds.value))
+  } catch {
+    // Recent list is a convenience only.
   }
+  void router.push(tool.route)
 }
 
-async function runPluginAction(
-  action: () => Promise<{ plugin: PluginDetail }>,
-  successMessage: string,
-) {
-  actionBusy.value = true;
-  errorText.value = "";
-  notice.value = "";
+onMounted(() => {
+  void cloudAuth.ensureLoaded()
   try {
-    const result = await action();
-    notice.value = successMessage;
-    selectedPluginId.value = result.plugin.id;
-    await loadPlugins();
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error);
-  } finally {
-    actionBusy.value = false;
+    const stored = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
+    recentIds.value = Array.isArray(stored) ? stored.map(String) : []
+  } catch {
+    recentIds.value = []
   }
-}
-
-async function installPlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.installPlugin(pluginId),
-    t("plugins.messages.installed"),
-  );
-}
-
-async function enablePlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.enablePlugin(pluginId),
-    t("plugins.messages.enabled"),
-  );
-}
-
-async function disablePlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.disablePlugin(pluginId),
-    t("plugins.messages.disabled"),
-  );
-}
-
-async function uninstallPlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.uninstallPlugin(pluginId),
-    t("plugins.messages.uninstalled"),
-  );
-}
-
-function openMarket() {
-  workspace.value = "market";
-}
-
-function openInstalled() {
-  workspace.value = "installed";
-}
-
-function selectPlugin(pluginId: string) {
-  selectedPluginId.value = pluginId;
-}
-
-function usePlugin(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "tiktok-creator-hub") {
-    void router.push("/plugins/tiktok-creator-hub");
-    return;
-  }
-  if (plugin.id === "product-watermark") {
-    void router.push("/plugins/product-watermark");
-    return;
-  }
-  if (plugin.id === "product-replacement") {
-    void router.push("/plugins/product-replacement");
-    return;
-  }
-  if (plugin.status !== "installed") {
-    errorText.value = t("plugins.errors.installFirst");
-    return;
-  }
-  if (!plugin.enabled) {
-    errorText.value = t("plugins.errors.enableFirst");
-    return;
-  }
-  if (plugin.id === "product-image-materials") {
-    void router.push("/plugins/product-image-materials");
-    return;
-  }
-  if (plugin.id === "live-photo-generator") {
-    void router.push("/plugins/live-photo-generator");
-    return;
-  }
-  if (plugin.id === "tiktok-creative-studio") {
-    void router.push("/plugins/tiktok-creative-studio");
-    return;
-  }
-  if (plugin.id === "video-parser-download") {
-    void router.push("/plugins/video-parser-download");
-    return;
-  }
-  if (plugin.id === "dianxiaomi-inventory") {
-    void router.push("/plugins/dianxiaomi-inventory");
-    return;
-  }
-  void router.push(plugin.workspacePath);
-}
-
-function onPrimaryAction(plugin: PluginSummary) {
-  if (plugin.id === "product-watermark" || plugin.id === "product-replacement" || plugin.id === "tiktok-creator-hub") {
-    void router.push(plugin.workspacePath);
-    return;
-  }
-  if (plugin.status !== "installed") {
-    void installPlugin(plugin.id);
-    return;
-  }
-  if (!plugin.enabled) {
-    void enablePlugin(plugin.id);
-    return;
-  }
-  usePlugin(plugin);
-}
-
-watch(
-  () => route.query,
-  () => {
-    workspace.value =
-      String(route.query.tab || "").trim() === "installed"
-        ? "installed"
-        : "market";
-    const pluginId = String(route.query.plugin || "").trim();
-    if (pluginId) selectedPluginId.value = pluginId;
-  },
-  { immediate: true },
-);
-
-watch([workspace, selectedPluginId], () => {
-  syncRoute();
-});
-
-watch(filteredPlugins, (list) => {
-  if (!list.length) return;
-  if (!list.some((item) => item.id === selectedPluginId.value))
-    selectedPluginId.value = list[0].id;
-});
-
-onMounted(async () => {
-  await loadPlugins();
-  const pluginId = String(route.query.plugin || "").trim();
-  if (pluginId) selectedPluginId.value = pluginId;
-  else if (filteredPlugins.value.length)
-    selectedPluginId.value = filteredPlugins.value[0].id;
-});
+})
 </script>
 
 <template>
-  <div class="vg-scope vg-page plugins">
+  <main class="vg-scope vg-page toolbox" data-testid="toolbox">
     <header class="vg-page-head">
-      <span class="vg-page-head__icon"><Puzzle :size="20" /></span>
+      <span class="vg-page-head__icon"><Wrench :size="20" /></span>
       <div class="vg-page-head__text">
-        <h1>{{ workspace === "installed" ? t("plugins.hero.installedTitle") : t("plugins.hero.marketTitle") }}</h1>
-        <p>{{ workspace === "installed" ? t("plugins.hero.installedDesc") : t("plugins.hero.marketDesc") }}</p>
+        <h1>{{ t('ai.tools.title') }}</h1>
+        <p>{{ t('ai.tools.desc') }}</p>
       </div>
       <div class="vg-page-head__actions">
-        <span class="vg-pill vg-pill--accent">{{ t("plugins.hero.eyebrow") }}</span>
+        <label class="vg-search toolbox__search">
+          <Search :size="15" />
+          <input v-model="keyword" class="vg-input" :placeholder="t('ai.tools.search')" />
+        </label>
       </div>
     </header>
 
-    <div class="vg-toolbar">
-      <div class="vg-seg">
-        <button class="vg-seg__btn" :class="{ 'is-active': workspace === 'market' }" type="button" @click="openMarket">
-          <Store :size="15" /> {{ t("plugins.tabs.market") }}
+    <section v-if="recent.length && !keyword" class="vg-stack">
+      <h2 class="vg-section-title"><Store :size="16" /> {{ t('ai.tools.recent') }}</h2>
+      <div class="toolbox__grid">
+        <button v-for="tool in recent" :key="`recent-${tool.id}`" type="button" class="vg-card vg-card--interactive toolbox__tool" :class="`toolbox__tool--${tool.tone}`" @click="open(tool)">
+          <span class="toolbox__icon"><component :is="tool.icon" :size="18" /></span>
+          <span class="toolbox__copy"><strong>{{ name(tool) }}</strong><small>{{ desc(tool) }}</small></span>
+          <ArrowRight :size="15" class="toolbox__arrow" />
         </button>
-        <button class="vg-seg__btn" :class="{ 'is-active': workspace === 'installed' }" type="button" @click="openInstalled">
-          <Download :size="15" /> {{ t("plugins.tabs.installed") }}
-        </button>
-      </div>
-      <span class="vg-toolbar__spacer"></span>
-      <label class="vg-search plugins__search">
-        <Search :size="15" />
-        <input v-model="searchKeyword" class="vg-input" type="text" :placeholder="t('plugins.searchPlaceholder')" />
-      </label>
-    </div>
-
-    <div v-if="notice" class="vg-notice vg-notice--accent"><Check :size="16" /><span>{{ notice }}</span></div>
-    <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
-
-    <section v-if="workspace === 'installed' && !filteredPlugins.length && !loading" class="vg-card">
-      <div class="vg-empty">
-        <span class="vg-empty__icon"><Puzzle :size="24" /></span>
-        <h3>{{ t("plugins.empty.title") }}</h3>
-        <p>{{ t("plugins.empty.desc") }}</p>
-        <button class="vg-btn vg-btn--primary" type="button" @click="openMarket">{{ t("plugins.empty.backToMarket") }}</button>
       </div>
     </section>
 
-    <div v-else class="plugins__body" :class="{ 'has-detail': selectedPlugin }">
-      <section class="vg-grid plugins__grid" :class="{ 'is-loading': loading }">
-        <article
-          v-for="plugin in filteredPlugins"
-          :key="plugin.id"
-          class="vg-card vg-card--interactive plugin"
-          :class="[pluginCardTone(plugin), { 'is-active': selectedPluginId === plugin.id }]"
-          @click="selectPlugin(plugin.id)"
-        >
-          <div class="plugin__top">
-            <span class="plugin__icon">{{ pluginIconText(plugin) }}</span>
-            <span class="vg-pill vg-pill--dot" :class="plugin.status === 'installed' ? (plugin.enabled ? 'vg-pill--green' : 'vg-pill--amber') : ''">
-              {{ pluginStatusText(plugin) }}
-            </span>
-          </div>
-          <div class="plugin__body">
-            <h3>{{ pluginName(plugin) }}</h3>
-            <p>{{ pluginDescription(plugin) }}</p>
-          </div>
-          <div class="plugin__foot">
-            <span class="vg-chip">{{ pluginCategoryText(plugin) }}</span>
-            <button
-              class="vg-btn vg-btn--sm"
-              :class="plugin.status === 'installed' && plugin.enabled ? 'vg-btn--soft' : 'vg-btn--primary'"
-              type="button"
-              :disabled="actionBusy"
-              @click.stop="onPrimaryAction(plugin)"
-            >
-              {{ primaryActionText(plugin) }}
-              <ArrowRight v-if="plugin.status === 'installed' && plugin.enabled" :size="14" />
-            </button>
-          </div>
-        </article>
+    <template v-for="group in groups" :key="group">
+      <section v-if="filtered.some((tool) => tool.group === group)" class="vg-stack">
+        <h2 class="vg-section-title">{{ t(`ai.tools.groups.${group}`) }}</h2>
+        <div class="toolbox__grid">
+          <button
+            v-for="tool in filtered.filter((item) => item.group === group)"
+            :key="tool.id"
+            type="button"
+            class="vg-card vg-card--interactive toolbox__tool"
+            :class="`toolbox__tool--${tool.tone}`"
+            :data-testid="`tool-${tool.id}`"
+            @click="open(tool)"
+          >
+            <span class="toolbox__icon"><component :is="tool.icon" :size="18" /></span>
+            <span class="toolbox__copy"><strong>{{ name(tool) }}</strong><small>{{ desc(tool) }}</small></span>
+            <ArrowRight :size="15" class="toolbox__arrow" />
+          </button>
+        </div>
       </section>
+    </template>
 
-      <aside v-if="selectedPlugin" class="vg-card plugin-detail" :class="pluginCardTone(selectedPlugin)">
-        <div class="plugin-detail__hero">
-          <span class="plugin__icon plugin__icon--lg">{{ pluginIconText(selectedPlugin) }}</span>
-          <div class="plugin-detail__copy">
-            <span class="vg-muted plugin-detail__eyebrow">{{ t("plugins.detail.eyebrow") }}</span>
-            <h2>{{ pluginName(selectedPlugin) }}</h2>
-          </div>
-        </div>
-        <p class="vg-secondary plugin-detail__desc">{{ pluginDescription(selectedPlugin) }}</p>
-
-        <dl class="vg-kv">
-          <dt>{{ t("plugins.detail.status") }}</dt>
-          <dd><span class="vg-pill vg-pill--dot" :class="selectedPlugin.status === 'installed' ? (selectedPlugin.enabled ? 'vg-pill--green' : 'vg-pill--amber') : ''">{{ pluginStatusText(selectedPlugin) }}</span></dd>
-          <dt>{{ t("plugins.detail.category") }}</dt>
-          <dd>{{ pluginCategoryText(selectedPlugin) }}</dd>
-          <dt>{{ t("plugins.detail.path") }}</dt>
-          <dd class="vg-muted plugin-detail__path">{{ selectedPlugin.workspacePath }}</dd>
-        </dl>
-
-        <div class="plugin-detail__actions">
-          <button
-            v-if="selectedPlugin.id === 'product-replacement'"
-            class="vg-btn vg-btn--primary vg-btn--block"
-            type="button"
-            :disabled="actionBusy"
-            @click="router.push('/plugins/product-replacement')"
-          >
-            <Wrench :size="15" /> {{ t("plugins.actions.openWorkspace") }}
-          </button>
-          <button
-            v-else-if="selectedPlugin.status !== 'installed'"
-            class="vg-btn vg-btn--primary vg-btn--block"
-            type="button"
-            :disabled="actionBusy"
-            @click="installPlugin(selectedPlugin.id)"
-          >
-            <Download :size="15" /> {{ t("plugins.actions.installPlugin") }}
-          </button>
-          <button
-            v-else-if="!selectedPlugin.enabled"
-            class="vg-btn vg-btn--primary vg-btn--block"
-            type="button"
-            :disabled="actionBusy"
-            @click="enablePlugin(selectedPlugin.id)"
-          >
-            <Power :size="15" /> {{ t("plugins.actions.enablePlugin") }}
-          </button>
-          <button
-            v-else
-            class="vg-btn vg-btn--primary vg-btn--block"
-            type="button"
-            :disabled="actionBusy"
-            @click="usePlugin(selectedPlugin)"
-          >
-            <Wrench :size="15" /> {{ t("plugins.actions.openWorkspace") }}
-          </button>
-
-          <div class="vg-row">
-            <button
-              v-if="selectedPlugin.status === 'installed' && selectedPlugin.enabled"
-              class="vg-btn"
-              type="button"
-              :disabled="actionBusy"
-              @click="disablePlugin(selectedPlugin.id)"
-            >
-              {{ t("plugins.actions.disable") }}
-            </button>
-            <button
-              v-if="selectedPlugin.status === 'installed' && !selectedPlugin.enabled"
-              class="vg-btn"
-              type="button"
-              :disabled="actionBusy"
-              @click="enablePlugin(selectedPlugin.id)"
-            >
-              {{ t("plugins.actions.enable") }}
-            </button>
-            <button
-              v-if="selectedPlugin.status === 'installed'"
-              class="vg-btn vg-btn--danger"
-              type="button"
-              :disabled="actionBusy"
-              @click="uninstallPlugin(selectedPlugin.id)"
-            >
-              <Trash2 :size="15" /> {{ t("plugins.actions.uninstall") }}
-            </button>
-          </div>
-        </div>
-      </aside>
+    <div v-if="!filtered.length" class="vg-empty">
+      <span class="vg-empty__icon"><Search :size="22" /></span>
+      <p>{{ t('ai.tools.noMatch') }}</p>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>
-.plugins { width: min(1408px, 100%); margin: 0 auto; }
-.plugins__search { width: min(320px, 100%); }
-
-.plugins__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
-.plugins__body.has-detail { grid-template-columns: minmax(0, 1fr) 320px; }
-.plugins__grid { --vg-grid-min: 260px; transition: opacity .15s; }
-.plugins__grid.is-loading { opacity: .55; pointer-events: none; }
-
-/* Tone per plugin, mapped to theme tone tokens */
-.plugin, .plugin-detail { --tone: var(--vg-accent); }
-.tone-blue { --tone: var(--vg-blue); }
-.tone-green { --tone: var(--vg-green); }
-.tone-cyan { --tone: var(--vg-accent); }
-.tone-amber { --tone: var(--vg-amber); }
-.tone-violet { --tone: var(--vg-violet); }
-
-.plugin { display: flex; flex-direction: column; gap: 12px; min-height: 196px; }
-.plugin__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.plugin__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  flex-shrink: 0;
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone) 32%, transparent);
-  color: var(--tone);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: .02em;
-}
-.plugin__icon--lg { width: 52px; height: 52px; border-radius: 14px; font-size: 15px; }
-.plugin__body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-.plugin__body h3 { font-size: 15px; font-weight: 700; color: var(--theme-text); }
-.plugin__body p {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--theme-text-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.plugin__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--theme-divider); }
-
-.plugin-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; }
-.plugin-detail__hero { display: flex; align-items: center; gap: 12px; }
-.plugin-detail__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.plugin-detail__eyebrow { font-size: 11px; }
-.plugin-detail__copy h2 { font-size: 17px; font-weight: 800; }
-.plugin-detail__desc { font-size: 13px; line-height: 1.6; }
-.plugin-detail__path { font-size: 12px; }
-.plugin-detail__actions { display: flex; flex-direction: column; gap: 8px; }
-
-@media (max-width: 1100px) {
-  .plugins__body.has-detail { grid-template-columns: minmax(0, 1fr); }
-  .plugin-detail { position: static; }
-}
+.toolbox { width: min(1400px, 100%); margin: 0 auto; gap: 18px; }
+.toolbox__search { width: 280px; }
+.toolbox__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.toolbox__tool { --tone: var(--vg-accent); display: flex; align-items: flex-start; gap: 12px; padding: 14px; color: var(--theme-text); text-align: left; min-width: 0; }
+.toolbox__tool--blue { --tone: var(--vg-blue); }
+.toolbox__tool--amber { --tone: var(--vg-amber); }
+.toolbox__tool--violet { --tone: var(--vg-violet); }
+.toolbox__tool--green { --tone: var(--vg-green); }
+.toolbox__icon { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tone) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
+.toolbox__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.toolbox__copy strong { font-size: 14px; }
+.toolbox__copy small { font-size: 12px; color: var(--theme-text-secondary); line-height: 1.5; }
+.toolbox__arrow { color: var(--theme-text-muted); flex-shrink: 0; margin-top: 10px; transition: transform .15s, color .15s; }
+.toolbox__tool:hover .toolbox__arrow { color: var(--tone); transform: translateX(2px); }
 </style>

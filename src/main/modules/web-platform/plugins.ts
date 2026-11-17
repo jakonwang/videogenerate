@@ -321,8 +321,9 @@ export function defaultPluginRecord(
   return {
     pluginId,
     userId,
-    status: "uninstalled",
-    runtimeState: "disabled",
+    // Desktop tools are built in; access is controlled by membership features, not by installation.
+    status: "installed",
+    runtimeState: "enabled",
     config: {},
     updatedAt: Date.now(),
   };

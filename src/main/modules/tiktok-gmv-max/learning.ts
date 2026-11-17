@@ -69,7 +69,7 @@ export function analyzeGmvMaxLifecycle(input: {
   const creatives = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.creativeMetrics) {
     if (!recentDates.has(metricDate(metric.statDate))) continue
-    creatives.set(metric.creativeId, [...(creatives.get(metric.creativeId) || []), metric])
+    { const bucket = creatives.get(metric.creativeId); if (bucket) bucket.push(metric); else creatives.set(metric.creativeId, [metric]) }
   }
   const winners = [...creatives.values()].filter((items) => {
     const cost = sum(items.map((item) => gmvMaxDecimal.parse(item.cost)))

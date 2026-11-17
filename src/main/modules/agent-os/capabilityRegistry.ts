@@ -18,6 +18,8 @@ import { taskQueue } from '../tasks/queue'
 import { templatesRepo } from '../templates/repo'
 import type { Template, TransitionConfig } from '../templates/types'
 import { MODEL_PROFILE_OPTION_GROUPS, type ModelProfileOptions } from '../../../shared/modelProfileOptions'
+import { contentHubCapabilityDefinitions, contentHubIntentCapabilities } from './contentHubCapabilities'
+import { pipelineProductIds, pipelineReferenceVideos } from './pipelineContext'
 import type {
   AgentArtifact,
   AgentCapabilityBinding,
@@ -54,7 +56,8 @@ const intentCapabilities: Record<AgentIntentType, AgentCapabilityId> = {
   'Intent.TemplateManage': 'Template.Manage',
   'Intent.ArtifactInspect': 'Artifact.Read',
   'Intent.ArtifactExport': 'Artifact.Export',
-}
+  ...(contentHubIntentCapabilities as Record<string, AgentCapabilityId>),
+} as unknown as Record<AgentIntentType, AgentCapabilityId>
 
 type AgentCapabilityDependencies = {
   importShareUrls: typeof videoParserDownloadService.importShareUrls
@@ -503,7 +506,24 @@ const productAnalyzeBinding: AgentCapabilityBinding = {
   estimateCost: async () => ({ quantity: 1, unit: 'product_analysis' }),
   getModelSnapshot: safeModelSnapshot,
   execute: async (input, context) => {
-    const productId = text(input.productId)
+    // Pipelines: analyse every product an earlier step created (research winners, link imports).
+    const pipelineIds = pipelineProductIds(input, context)
+    if (pipelineIds.length > 1) {
+      const results: AgentToolResult[] = []
+      for (const id of pipelineIds.slice(0, 12)) {
+        results.push(await productAnalyzeBinding.execute({ ...input, productId: id, productIds: [] }, { ...context, dependencyArtifacts: [], upstreamArtifacts: [] }))
+      }
+      const ok = results.filter((result) => result.success)
+      return completed({
+        success: ok.length > 0,
+        status: ok.length === results.length ? 'completed' : ok.length ? 'partial' : 'failed',
+        artifactIds: results.flatMap((result) => result.artifactIds),
+        logs: results.flatMap((result) => result.logs),
+        warnings: results.flatMap((result) => result.error ? [result.error.message] : result.warnings),
+        ...(ok.length ? {} : { error: results[0]?.error }),
+      })
+    }
+    const productId = pipelineIds[0] || ''
     if (!productId) return failed('missing_product', 'Select a product before refreshing its analysis.')
     const current = (await productsRepo.list()).find((item) => item.id === productId)
     if (!current) return failed('product_not_found', 'The selected product does not exist.')
@@ -702,16 +722,87 @@ const videoCloneBinding: AgentCapabilityBinding = {
   estimateCost: async (input) => ({ quantity: Math.max(1, Number(input.quantity || 1)), unit: 'video' }),
   getModelSnapshot: safeModelSnapshot,
   execute: async (input, context) => {
-    const referenceVideoPath = text(input.referenceVideoPath) || strings(input.videoPaths)[0]
+    // Batch mode (recipes): several reference videos and/or several products → one project per pair.
+    const batchReferences = Array.from(new Set([
+      ...strings(input.referenceVideoPaths),
+      ...context.dependencyArtifacts
+        .filter((artifact) => (artifact.kind === 'source_video' || artifact.kind === 'video') && artifact.localPath && existsSync(artifact.localPath))
+        .map((artifact) => text(artifact.localPath)),
+      ...pipelineReferenceVideos(context),
+    ]))
+    // Products created earlier in the same run are used when the request names none.
+    const inherited = strings(input.productIds).length || text(input.productId) ? [] : pipelineProductIds(input, context)
+    const batchProducts = strings(input.productIds).length ? strings(input.productIds) : inherited
+    if (inherited.length === 1) input = { ...input, productId: inherited[0] }
+    if (batchReferences.length > 1 || batchProducts.length > 1 || (batchReferences.length && !text(input.referenceVideoPath) && !strings(input.videoPaths).length)) {
+      const references = batchReferences.length ? batchReferences : [text(input.referenceVideoPath) || strings(input.videoPaths)[0]].filter(Boolean)
+      if (!references.length) return failed('missing_reference_video', 'Add a reference video before creating a video.')
+      const productIds = batchProducts.length ? batchProducts : [text(input.productId)]
+      const pairs = references.flatMap((reference) => productIds.map((productId) => ({ reference, productId }))).slice(0, 12)
+      const results: AgentToolResult[] = []
+      for (const pair of pairs) {
+        results.push(await videoCloneBinding.execute({
+          ...input,
+          referenceVideoPath: pair.reference,
+          videoPaths: [pair.reference],
+          referenceVideoPaths: [],
+          productIds: [],
+          productId: pair.productId || input.productId,
+          quantity: input.variantCount || input.quantity,
+        }, { ...context, dependencyArtifacts: [], upstreamArtifacts: [] }))
+      }
+      const ok = results.filter((result) => result.success)
+      return completed({
+        success: ok.length > 0,
+        status: ok.length === results.length ? (results.every((result) => result.status === 'completed') ? 'completed' : 'accepted') : ok.length ? 'partial' : 'failed',
+        artifactIds: results.flatMap((result) => result.artifactIds),
+        logs: results.flatMap((result) => result.logs),
+        warnings: results.flatMap((result) => result.warnings),
+        retryable: results.some((result) => result.retryable),
+        externalRefs: { projectIds: results.map((result) => result.externalRefs.projectId).filter(Boolean).join(',') },
+        ...(ok.length ? {} : { error: results[0]?.error || { code: 'clone_failed', message: 'All clone projects failed.' } }),
+      })
+    }
+    // Variants of a sales-proven project: one new project per variant, each told which scripts already exist.
+    const variantOfProjectId = text(input.variantOfProjectId)
+    const variantProjects = Math.max(1, Math.min(4, Math.floor(Number(input.variantProjects || 1)) || 1))
+    if (variantOfProjectId && variantProjects > 1) {
+      const results: AgentToolResult[] = []
+      // Sequential on purpose: each draft must see the previous one to count as an earlier variant.
+      for (let index = 0; index < variantProjects; index += 1) {
+        results.push(await videoCloneBinding.execute({ ...input, variantProjects: 1 }, context))
+      }
+      const ok = results.filter((result) => result.success)
+      return completed({
+        success: ok.length > 0,
+        status: ok.length === results.length ? (results.every((result) => result.status === 'completed') ? 'completed' : 'accepted') : ok.length ? 'partial' : 'failed',
+        artifactIds: results.flatMap((result) => result.artifactIds),
+        logs: results.flatMap((result) => result.logs),
+        warnings: results.flatMap((result) => result.warnings),
+        retryable: results.some((result) => result.retryable),
+        externalRefs: { projectIds: results.map((result) => result.externalRefs.projectId).filter(Boolean).join(',') },
+        ...(ok.length ? {} : { error: results[0]?.error || { code: 'clone_failed', message: 'All variant projects failed.' } }),
+      })
+    }
+    let variantDraft: Awaited<ReturnType<typeof cloneService.createVariantDraftFromProject>> | null = null
+    if (variantOfProjectId) {
+      try {
+        variantDraft = await cloneService.createVariantDraftFromProject({ sourceProjectId: variantOfProjectId })
+      } catch (error) {
+        return failed('variant_source_unavailable', String((error as Error)?.message || error))
+      }
+      if (!text(input.productId) && variantDraft.productId) input = { ...input, productId: variantDraft.productId }
+    }
+    const referenceVideoPath = variantDraft ? text(variantDraft.project.referenceVideoPath) : text(input.referenceVideoPath) || strings(input.videoPaths)[0]
     if (!referenceVideoPath) return failed('missing_reference_video', 'Add a reference video before creating a video.')
     const product = await resolveProduct(input)
     const productImagePaths = Array.from(new Set([...strings(input.productImagePaths), ...(product ? imagePathsFromProduct(product) : [])]))
-    const draft = await cloneService.createDraftProject({
+    const draft = variantDraft ?? await cloneService.createDraftProject({
       locale: 'zh-CN',
       runMode: 'auto',
       title: text(input.request).slice(0, 48) || 'Agent video task',
     })
-    await cloneService.bindProjectReferenceVideo({ cloneProjectId: draft.project.id, videoPath: referenceVideoPath })
+    if (!variantDraft) await cloneService.bindProjectReferenceVideo({ cloneProjectId: draft.project.id, videoPath: referenceVideoPath })
     if (product?.id) {
       await cloneService.bindProjectProduct({ cloneProjectId: draft.project.id, productId: product.id })
     } else if (productImagePaths.length) {
@@ -731,6 +822,8 @@ const videoCloneBinding: AgentCapabilityBinding = {
         variantCount: Math.max(1, Math.min(6, Number(input.quantity || 3))),
         productReferenceImagePaths: productImagePaths,
         autoBindModelPack: true,
+        // A variant keeps the proven video's model so the script is the only thing under test.
+        ...(variantDraft?.selectedModelIdentityId ? { selectedModelIdentityId: variantDraft.selectedModelIdentityId } : {}),
       })
       const project = result.project
       const finalPath = text(project?.finalCompose?.outputPath)
@@ -979,7 +1072,7 @@ const modelIdentityManageBinding: AgentCapabilityBinding = {
       const generated = await capabilityDependencies.generateModelIdentity({
         purpose: 'model_library',
         productType: ['earrings', 'phone_case', 'clothes', 'toy', 'general'].includes(text(input.productType))
-          ? text(input.productType) as 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+          ? text(input.productType) as 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
           : 'general',
         productPoints: text(input.productPoints) || undefined,
         modelProfileOptions: modelProfileOptions(input.profile),
@@ -1085,11 +1178,17 @@ const livePhotoBinding: AgentCapabilityBinding = {
   execute: async (input, context) => {
     const product = await resolveProduct(input)
     if (!product) return failed('missing_product', 'Select a product before creating a live photo.')
-    const referenceImagePaths = Array.from(new Set([...strings(input.productImagePaths), ...imagePathsFromProduct(product)]))
+    // Scene images (recipes / asset library) take precedence; otherwise fall back to product references.
+    const sceneImagePaths = Array.from(new Set(strings(input.referenceImagePaths).filter((path) => existsSync(path))))
+    const referenceImagePaths = sceneImagePaths.length
+      ? sceneImagePaths
+      : Array.from(new Set([...strings(input.productImagePaths), ...imagePathsFromProduct(product)]))
     if (!referenceImagePaths.length) return failed('missing_reference_image', 'The selected product has no reference images.')
     const created = await livePhotoService.createFromReference({
       productId: product.id,
-      referenceImagePaths: referenceImagePaths.slice(0, Math.max(1, Number(input.quantity || 1))),
+      referenceImagePaths: sceneImagePaths.length
+        ? referenceImagePaths.slice(0, 50)
+        : referenceImagePaths.slice(0, Math.max(1, Number(input.quantity || 1))),
     })
     const items = Array.isArray(created) ? created : [created]
     const artifactIds = items.filter(Boolean).map((item: any) => {
@@ -2255,6 +2354,7 @@ export const capabilityDefinitions: AgentCapabilityDefinition[] = [
   { id: 'Template.Manage', version: 1, title: 'Manage production template', description: 'Duplicate, delete, or edit an existing production template.', intentType: 'Intent.TemplateManage', expectedArtifacts: ['template'], bindings: [templateManageBinding] },
   { id: 'Artifact.Read', version: 1, title: 'Inspect artifacts', description: 'Read existing artifacts without changing them.', intentType: 'Intent.ArtifactInspect', expectedArtifacts: ['video'], bindings: [artifactReadBinding] },
   { id: 'Artifact.Export', version: 1, title: 'Export artifacts', description: 'Export existing artifacts.', intentType: 'Intent.ArtifactExport', expectedArtifacts: [], bindings: [exportBinding] },
+  ...contentHubCapabilityDefinitions,
 ]
 
 export function capabilityForIntent(intentType: AgentIntentType) {

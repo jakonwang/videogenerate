@@ -1,225 +1,250 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
   AlertTriangle,
   ArrowRight,
-  CheckCircle2,
-  ListChecks,
-  Loader,
   BarChart3,
   Captions,
+  CheckCircle2,
+  Clapperboard,
   Download,
   Images,
+  Inbox,
   LayoutGrid,
+  Loader2,
   Package,
   PlaySquare,
-  Plus,
+  RefreshCcw,
+  Rocket,
+  Scissors,
+  Search,
+  SendHorizontal,
+  ShieldCheck,
   Sparkles,
   Users,
-  WandSparkles,
+  Wand2,
+  XCircle,
 } from 'lucide-vue-next'
 import heroImage from '@/assets/home-hero.png'
+import { thumbnailUrl } from '@/lib/localMedia'
+import { useAiProducerStore } from '@/stores/aiProducer'
 
-const { t, locale } = useI18n()
+type BriefItem = { kind: string; level: 'ok' | 'warning' | 'error'; title: string; detail: string; route?: string; aiPrompt?: string; count?: number }
+type Brief = { headline: string; summary?: string; items: BriefItem[]; createdAt: number }
+type Project = { ref: string; line: string; title: string; productName?: string; status: string; stage?: string; progress?: number; readyCount: number; failedCount: number; route: string; previewPath?: string; updatedAt: number }
+
+const { t } = useI18n()
 const router = useRouter()
+const ai = useAiProducerStore()
 
-type ProductionTask = {
-  id: string
-  createdAt: number
-  productId?: string
-  status?: string
-  progress?: number
-}
-
-type Product = { id: string; name?: string }
-
-const tasks = ref<ProductionTask[]>([])
-const products = ref<Product[]>([])
+const brief = ref<Brief | null>(null)
+const projects = ref<Project[]>([])
+const goal = ref('')
 const loading = ref(false)
-let unsubscribeTaskEvents: (() => void) | null = null
+const regenerating = ref(false)
+let unsubscribe: (() => void) | null = null
+
+const lines = computed(() => [
+  { key: 'clone', icon: Clapperboard, tone: 'accent', title: t('ai.home.lines.clone.title'), desc: t('ai.home.lines.clone.desc'), to: '/clone', recipe: 'product-content-pack' },
+  { key: 'creative', icon: Wand2, tone: 'violet', title: t('ai.home.lines.creative.title'), desc: t('ai.home.lines.creative.desc'), to: '/plugins/tiktok-creative-studio', recipe: 'scene-images' },
+  { key: 'livephoto', icon: PlaySquare, tone: 'red', title: t('ai.home.lines.livephoto.title'), desc: t('ai.home.lines.livephoto.desc'), to: '/plugins/live-photo-generator', recipe: 'scene-images' },
+])
+
+// Stations of the autopilot pipeline; each one opens the workspace where that stage can be done by hand.
+const autopilotStages = computed(() => [
+  { key: 'research', icon: Search, to: '/product-research' },
+  { key: 'product', icon: Package, to: '/products' },
+  { key: 'reference', icon: Download, to: '/plugins/video-parser-download' },
+  { key: 'video', icon: Clapperboard, to: '/clone' },
+  { key: 'review', icon: ShieldCheck, to: '/inbox' },
+  { key: 'publish', icon: SendHorizontal, to: '/publish' },
+  { key: 'insights', icon: BarChart3, to: '/insights' },
+].map((stage) => ({ ...stage, title: t(`ai.home.autopilot.stages.${stage.key}.title`), sub: t(`ai.home.autopilot.stages.${stage.key}.sub`) })))
 
 const tools = computed(() => [
-  { to: '/plugins/tiktok-gmv-max-optimizer', icon: BarChart3, title: 'GMV MAX 优化器', description: '优化投放参数，提升 GMV 效果', tone: 'accent' },
-  { to: '/plugins/product-image-materials', icon: Images, title: '商品图片素材', description: '批量处理商品图片素材', tone: 'blue' },
-  { to: '/plugins/dianxiaomi-inventory', icon: Package, title: '店小秘库存分析', description: '跟踪 SKU 库存，预警风险', tone: 'amber' },
-  { to: '/plugins/live-photo-generator', icon: PlaySquare, title: '动态照片生成器', description: '将静态图生成 Live Photo', tone: 'red' },
-  { to: '/plugins/tiktok-creative-studio', icon: WandSparkles, title: 'TikTok 创意工作室', description: '一键生成创意视频脚本', tone: 'violet' },
-  { to: '/plugins/tiktok-creator-hub', icon: Users, title: '达人管理', description: '寄样管理与达人履约率', tone: 'violet' },
-  { to: '/plugins/video-parser-download', icon: Download, title: '视频解析下载', description: '解析下载无水印视频', tone: 'blue' },
-  { to: '/plugins/video-batch-subtitle', icon: Captions, title: '视频批量字幕', description: '自动识别并生成多语言字幕', tone: 'green' },
+  { to: '/plugins/video-parser-download', icon: Download, title: t('ai.home.tools.parser'), tone: 'blue' },
+  { to: '/plugins/video-batch-subtitle', icon: Captions, title: t('ai.home.tools.subtitle'), tone: 'green' },
+  { to: '/plugins/product-image-materials', icon: Images, title: t('ai.home.tools.materials'), tone: 'blue' },
+  { to: '/production', icon: Scissors, title: t('ai.home.tools.production'), tone: 'amber' },
+  { to: '/plugins/tiktok-creator-hub', icon: Users, title: t('ai.home.tools.creators'), tone: 'violet' },
+  { to: '/plugins/tiktok-gmv-max-optimizer', icon: BarChart3, title: t('ai.home.tools.gmv'), tone: 'accent' },
+  { to: '/plugins/dianxiaomi-inventory', icon: Package, title: t('ai.home.tools.inventory'), tone: 'amber' },
+  { to: '/plugins', icon: LayoutGrid, title: t('ai.home.tools.all'), tone: 'gray' },
 ])
 
-const productNameMap = computed(() => new Map(products.value.map((item) => [item.id, item.name || item.id])))
-const recentTasks = computed(() => tasks.value.slice(0, 5))
-const todayStart = computed(() => {
-  const value = new Date()
-  value.setHours(0, 0, 0, 0)
-  return value.getTime()
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 6) return t('ai.home.greeting.night')
+  if (hour < 12) return t('ai.home.greeting.morning')
+  if (hour < 18) return t('ai.home.greeting.afternoon')
+  return t('ai.home.greeting.evening')
 })
-const todayTasks = computed(() => tasks.value.filter((item) => Number(item.createdAt || 0) >= todayStart.value))
-const runningTaskCount = computed(() => tasks.value.filter((item) => ['running', 'queued', 'paused'].includes(String(item.status || ''))).length)
-const doneTaskCount = computed(() => todayTasks.value.filter((item) => item.status === 'done').length)
-const failedTaskCount = computed(() => todayTasks.value.filter((item) => item.status === 'error').length)
-const currentDateLabel = computed(() => new Date().toLocaleDateString(locale.value))
-const stats = computed(() => [
-  { value: todayTasks.value.length, label: '今日任务', trend: `${tasks.value.length} 总计`, tone: 'accent', icon: ListChecks },
-  { value: runningTaskCount.value, label: '处理中', trend: '实时', tone: 'blue', icon: Loader },
-  { value: doneTaskCount.value, label: '今日完成', trend: '已完成', tone: 'accent', icon: CheckCircle2 },
-  { value: failedTaskCount.value, label: '今日失败', trend: '需处理', tone: 'red', icon: AlertTriangle },
-])
 
-function formatTime(timestamp: number) {
-  if (!timestamp) return '-'
-  return new Date(timestamp).toLocaleString(locale.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-function taskTitle(task: ProductionTask) {
-  return task.productId ? (productNameMap.value.get(task.productId) || task.productId) : `任务 ${task.id.slice(0, 8)}`
-}
-
-function taskProgress(task: ProductionTask) {
-  return Math.max(0, Math.min(100, Math.round(Number(task.progress || 0) * 100)))
-}
-
-function statusTone(status?: string) {
-  if (status === 'done') return 'green'
-  if (status === 'error') return 'red'
-  if (status === 'paused') return 'amber'
-  if (status === 'running') return 'blue'
-  return 'gray'
-}
-
-function statusLabel(status?: string) {
-  const value = String(status || 'queued')
-  const translated = t(`production.tasks.status.${value}`)
-  return translated === `production.tasks.status.${value}` ? value : translated
-}
-
-async function refresh() {
+async function load() {
   loading.value = true
   try {
-    const [taskRows, productRows] = await Promise.all([window.api.tasks.list(), window.api.products.list()])
-    tasks.value = ((taskRows as ProductionTask[]) || []).slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-    products.value = (productRows as Product[]) || []
+    const [briefs, recent] = await Promise.all([window.api.contentHub.latestBriefs(), window.api.contentHub.recentProjects(8)])
+    brief.value = (briefs as { daily: Brief | null }).daily
+    projects.value = recent as Project[]
+  } catch {
+    // Home must render even if the hub is unavailable.
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
-  void refresh()
-  unsubscribeTaskEvents = window.api.tasks.onEvent(() => void refresh())
-})
-
-onUnmounted(() => {
-  unsubscribeTaskEvents?.()
-  unsubscribeTaskEvents = null
-})
-
-function open(path: string) {
-  void router.push(path)
+async function regenerate() {
+  regenerating.value = true
+  try {
+    brief.value = (await window.api.contentHub.generateBrief('daily')) as Brief
+  } finally {
+    regenerating.value = false
+  }
 }
+
+function askGoal() {
+  const text = goal.value.trim()
+  if (!text) {
+    void ai.open()
+    return
+  }
+  goal.value = ''
+  void ai.open({ fresh: true, prompt: text, send: true })
+}
+
+function briefAction(item: BriefItem) {
+  if (item.aiPrompt) void ai.open({ fresh: true, prompt: item.aiPrompt, send: true })
+  else if (item.route) void router.push(item.route)
+}
+
+function formatTime(value: number) {
+  return new Date(value).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+onMounted(() => {
+  void load()
+  unsubscribe = window.api.contentHub.onChanged(() => void load())
+})
+onBeforeUnmount(() => unsubscribe?.())
 </script>
 
 <template>
-  <main class="vg-scope vg-page home">
+  <main class="vg-scope vg-page home" data-testid="home-view">
     <section class="home-hero" :style="{ '--hero-image': `url(${heroImage})` }">
       <div class="home-hero__copy">
-        <span class="vg-pill vg-pill--accent">AI 驱动 · 高效 · 专业</span>
-        <h1>一站式 <strong>TikTok</strong> 视频生产平台</h1>
-        <p>从商品到成片，助你快速打造爆款视频</p>
-        <div class="home-hero__actions">
-          <button type="button" class="vg-btn vg-btn--primary vg-btn--lg" @click="open('/production/create')">
-            开始创作 <ArrowRight :size="16" />
+        <span class="vg-pill vg-pill--accent"><Sparkles :size="12" /> {{ t('ai.home.kicker') }}</span>
+        <h1>{{ greeting }}<strong>{{ t('ai.home.headline') }}</strong></h1>
+        <p>{{ t('ai.home.sub') }}</p>
+        <form class="home-goal" @submit.prevent="askGoal">
+          <Wand2 :size="16" class="home-goal__icon" />
+          <input v-model="goal" class="home-goal__input" data-testid="home-goal-input" :placeholder="t('ai.home.goalPlaceholder')" />
+          <button type="submit" class="vg-btn vg-btn--primary vg-btn--sm" data-testid="home-goal-submit">{{ t('ai.home.goalSubmit') }} <ArrowRight :size="14" /></button>
+        </form>
+      </div>
+    </section>
+
+    <section class="vg-card home-auto" data-testid="home-autopilot">
+      <div class="home-auto__head">
+        <span class="home-auto__icon"><Rocket :size="20" /></span>
+        <div class="home-auto__copy">
+          <strong>{{ t('ai.home.autopilot.title') }} <span class="vg-pill vg-pill--accent">{{ t('ai.home.autopilot.badge') }}</span></strong>
+          <small>{{ t('ai.home.autopilot.desc') }}</small>
+        </div>
+        <button type="button" class="vg-btn vg-btn--primary" data-testid="home-autopilot-start" @click="ai.open({ recipeId: 'autopilot' })">
+          <Rocket :size="15" /> {{ t('ai.home.autopilot.cta') }}
+        </button>
+      </div>
+      <ol class="home-auto__stages">
+        <li v-for="(stage, index) in autopilotStages" :key="stage.key" class="home-auto__stage">
+          <button type="button" class="home-auto__stop" :data-testid="`home-autopilot-stage-${stage.key}`" @click="router.push(stage.to)">
+            <span class="home-auto__dot"><component :is="stage.icon" :size="16" /></span>
+            <span class="home-auto__label">
+              <strong>{{ index + 1 }}. {{ stage.title }}</strong>
+              <small>{{ stage.sub }}</small>
+            </span>
           </button>
-          <span class="home-hero__feature"><Sparkles :size="15" /> AI 智能生成</span>
-          <span class="home-hero__feature"><PlaySquare :size="15" /> 高质量视频</span>
-          <span class="home-hero__feature"><Images :size="15" /> 批量高效处理</span>
+        </li>
+      </ol>
+    </section>
+
+    <section class="home-lines">
+      <article v-for="line in lines" :key="line.key" class="vg-card home-line" :class="`home-line--${line.tone}`" :data-testid="`home-line-${line.key}`">
+        <span class="home-line__icon"><component :is="line.icon" :size="20" /></span>
+        <div class="home-line__copy">
+          <strong>{{ line.title }}</strong>
+          <small>{{ line.desc }}</small>
+        </div>
+        <div class="home-line__actions">
+          <button type="button" class="vg-btn vg-btn--sm" @click="router.push(line.to)">{{ t('ai.home.openWorkspace') }}</button>
+          <button type="button" class="vg-btn vg-btn--sm vg-btn--soft" @click="ai.open({ recipeId: line.recipe, context: line.key === 'livephoto' ? { recipePreset: { engine: 'livephoto' } } : undefined })"><Wand2 :size="13" /> {{ t('ai.home.letAi') }}</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="home-lower">
+      <div class="vg-card home-brief" data-testid="home-brief">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><Sparkles :size="16" /> {{ t('ai.home.brief') }} <small>{{ brief?.headline }}</small></span>
+          <div class="vg-card__actions">
+            <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost" :disabled="regenerating" :title="t('ai.home.refreshBrief')" @click="regenerate"><RefreshCcw :size="14" :class="{ 'vg-spin': regenerating }" /></button>
+          </div>
+        </div>
+        <p v-if="brief?.summary" class="home-brief__summary">{{ brief.summary }}</p>
+        <div class="vg-list">
+          <button v-for="item in brief?.items || []" :key="item.kind + item.title" type="button" class="vg-list__item vg-list__item--button" @click="briefAction(item)">
+            <CheckCircle2 v-if="item.level === 'ok'" :size="16" class="home-brief__ok" />
+            <AlertTriangle v-else-if="item.level === 'warning'" :size="16" class="home-brief__warn" />
+            <XCircle v-else :size="16" class="home-brief__err" />
+            <span class="vg-list__main">
+              <span class="vg-list__title">{{ item.title }}</span>
+              <span class="vg-list__sub">{{ item.detail }}</span>
+            </span>
+            <span v-if="item.aiPrompt" class="vg-pill vg-pill--accent"><Wand2 :size="11" /> {{ t('ai.home.handToAi') }}</span>
+            <ArrowRight v-else :size="14" class="home-brief__arrow" />
+          </button>
+          <div v-if="!brief && loading" class="home-brief__loading"><Loader2 :size="16" class="vg-spin" /></div>
+        </div>
+      </div>
+
+      <div class="vg-card home-continue">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><Inbox :size="16" /> {{ t('ai.home.continue') }}</span>
+          <div class="vg-card__actions">
+            <button type="button" class="vg-btn vg-btn--sm" @click="router.push('/inbox')">{{ t('ai.nav.inbox') }} <span v-if="ai.pendingReviews" class="vg-count">{{ ai.pendingReviews }}</span></button>
+          </div>
+        </div>
+        <div v-if="projects.length" class="vg-list">
+          <button v-for="project in projects" :key="project.ref" type="button" class="vg-list__item vg-list__item--button" @click="router.push(project.route)">
+            <img v-if="project.previewPath" class="vg-thumb" :src="thumbnailUrl(project.previewPath, 88)" alt="" loading="lazy" />
+            <span v-else class="vg-thumb"><Clapperboard :size="16" /></span>
+            <span class="vg-list__main">
+              <span class="vg-list__title">{{ project.title }}</span>
+              <span class="vg-list__sub">{{ t(`ai.line.${project.line}`) }}<template v-if="project.productName"> · {{ project.productName }}</template> · {{ formatTime(project.updatedAt) }}</span>
+            </span>
+            <span class="vg-pill vg-pill--dot" :class="{ 'vg-pill--green': project.status === 'ready', 'vg-pill--blue': project.status === 'running', 'vg-pill--red': project.status === 'failed' }">
+              {{ t(`ai.contentStatus.${project.status}`) }}
+            </span>
+          </button>
+        </div>
+        <div v-else class="vg-empty">
+          <span class="vg-empty__icon"><Clapperboard :size="22" /></span>
+          <h3>{{ t('ai.home.noProjects') }}</h3>
+          <p>{{ t('ai.home.noProjectsHint') }}</p>
         </div>
       </div>
     </section>
 
     <section class="vg-stack">
       <div class="vg-page-head">
-        <h2 class="vg-section-title"><LayoutGrid :size="16" /> 常用工具 <small>快速进入你需要的功能，开始高效创作</small></h2>
-        <div class="vg-page-head__actions">
-          <button type="button" class="vg-btn vg-btn--sm" @click="open('/plugins')">插件中心 <ArrowRight :size="14" /></button>
-        </div>
+        <h2 class="vg-section-title"><LayoutGrid :size="16" /> {{ t('ai.home.toolsTitle') }}</h2>
       </div>
       <div class="vg-grid home-tools">
-        <button
-          v-for="tool in tools"
-          :key="tool.to"
-          type="button"
-          class="vg-card vg-card--interactive home-tool"
-          :class="`home-tool--${tool.tone}`"
-          @click="open(tool.to)"
-        >
-          <span class="home-tool__icon"><component :is="tool.icon" :size="20" /></span>
-          <span class="home-tool__copy">
-            <strong>{{ tool.title }}</strong>
-            <small>{{ tool.description }}</small>
-          </span>
+        <button v-for="tool in tools" :key="tool.to" type="button" class="vg-card vg-card--interactive home-tool" :class="`home-tool--${tool.tone}`" @click="router.push(tool.to)">
+          <span class="home-tool__icon"><component :is="tool.icon" :size="18" /></span>
+          <span class="home-tool__copy"><strong>{{ tool.title }}</strong></span>
           <ArrowRight class="home-tool__arrow" :size="16" />
-        </button>
-      </div>
-    </section>
-
-    <section class="home-lower">
-      <div class="vg-card">
-        <div class="vg-card__head">
-          <span class="vg-card__title"><ListChecks :size="16" /> 最近任务 <small>最近 5 个生产任务</small></span>
-          <div class="vg-card__actions">
-            <button type="button" class="vg-btn vg-btn--sm" @click="open('/production/tasks')">全部任务</button>
-            <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" @click="open('/production/create')"><Plus :size="14" /> 新建项目</button>
-          </div>
-        </div>
-        <div v-if="recentTasks.length" class="vg-list">
-          <button
-            v-for="task in recentTasks"
-            :key="task.id"
-            type="button"
-            class="vg-list__item vg-list__item--button"
-            @click="open(`/production/tasks/${task.id}`)"
-          >
-            <span class="vg-list__main">
-              <span class="vg-list__title">{{ taskTitle(task) }}</span>
-              <span class="vg-list__sub">{{ formatTime(task.createdAt) }}</span>
-            </span>
-            <span class="vg-progress home-task__progress">
-              <span class="vg-progress__bar">
-                <span class="vg-progress__fill" :class="{ 'vg-progress__fill--fail': task.status === 'error' }" :style="{ width: `${taskProgress(task)}%` }"></span>
-              </span>
-              <span>{{ taskProgress(task) }}%</span>
-            </span>
-            <span class="vg-pill vg-pill--dot" :class="`vg-pill--${statusTone(task.status)}`">{{ statusLabel(task.status) }}</span>
-          </button>
-        </div>
-        <div v-else class="vg-empty">
-          <span class="vg-empty__icon"><PlaySquare :size="24" /></span>
-          <h3>{{ loading ? '正在加载任务...' : '暂无生产任务' }}</h3>
-          <p v-if="!loading">开始创建你的第一个视频吧</p>
-        </div>
-      </div>
-
-      <div class="vg-card">
-        <div class="vg-card__head">
-          <span class="vg-card__title"><BarChart3 :size="16" /> 今日数据</span>
-          <span class="vg-chip">{{ currentDateLabel }}</span>
-        </div>
-        <div class="vg-grid vg-grid--2 home-stats">
-          <div v-for="stat in stats" :key="stat.label" class="vg-stat">
-            <span class="vg-stat__icon" :class="stat.tone !== 'accent' ? `vg-stat__icon--${stat.tone}` : ''"><component :is="stat.icon" :size="17" /></span>
-            <span class="vg-stat__body">
-              <span class="vg-stat__label">{{ stat.label }}</span>
-              <span class="vg-stat__value">{{ stat.value }} <small>{{ stat.trend }}</small></span>
-            </span>
-          </div>
-        </div>
-        <button type="button" class="vg-btn vg-btn--soft vg-btn--block home-stats__link" @click="open('/production/tasks')">
-          查看完整数据 <ArrowRight :size="14" />
         </button>
       </div>
     </section>
@@ -227,89 +252,91 @@ function open(path: string) {
 </template>
 
 <style scoped>
-.home { width: min(1408px, 100%); margin: 0 auto; gap: 18px; }
+.home { width: min(1408px, 100%); margin: 0 auto; gap: 16px; }
 
-/* Hero: image on the right; a panel-coloured gradient keeps the copy readable in every theme. */
 .home-hero {
   position: relative;
   overflow: hidden;
-  min-height: 228px;
   border: 1px solid var(--vg-accent-line);
   border-radius: var(--vg-radius-lg);
   background:
     linear-gradient(90deg,
       var(--theme-panel) 0%,
-      color-mix(in srgb, var(--theme-panel) 92%, transparent) 38%,
-      color-mix(in srgb, var(--theme-panel) 20%, transparent) 72%,
+      color-mix(in srgb, var(--theme-panel) 94%, transparent) 46%,
+      color-mix(in srgb, var(--theme-panel) 25%, transparent) 78%,
       transparent 100%),
     radial-gradient(120% 140% at 0% 0%, var(--vg-accent-soft), transparent 60%),
     var(--hero-image) right center / cover no-repeat,
     var(--theme-panel);
 }
-.home-hero__copy {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 10px;
-  max-width: 640px;
-  min-height: 228px;
-  padding: 28px 36px;
-}
-.home-hero h1 { font-size: clamp(26px, 2.6vw, 36px); font-weight: 800; line-height: 1.2; color: var(--theme-text); }
+.home-hero__copy { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; max-width: 720px; padding: 26px 32px; }
+.home-hero h1 { font-size: clamp(22px, 2.3vw, 30px); font-weight: 800; line-height: 1.25; color: var(--theme-text); }
 .home-hero h1 strong { color: var(--vg-accent); }
-.home-hero p { font-size: 15px; color: var(--theme-text-secondary); }
-.home-hero__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin-top: 8px; }
-.home-hero__feature { display: inline-flex; align-items: center; gap: 6px; color: var(--theme-text-secondary); font-size: 12px; }
-.home-hero__feature svg { color: var(--vg-accent); }
+.home-hero p { font-size: 14px; color: var(--theme-text-secondary); }
+.home-goal { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 6px; padding: 6px 6px 6px 12px; border: 1px solid var(--theme-border-control); border-radius: 12px; background: var(--theme-shell); box-shadow: 0 6px 20px rgba(0, 0, 0, .08); }
+.home-goal:focus-within { border-color: var(--vg-accent-line); box-shadow: 0 0 0 3px var(--vg-accent-soft); }
+.home-goal__icon { color: var(--vg-accent); flex-shrink: 0; }
+.home-goal__input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text); font-size: 14px; }
 
-/* Tools */
-.home-tools { --vg-grid-min: 250px; }
-.home-tool {
-  --tone: var(--vg-accent);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-  color: var(--theme-text);
-  text-align: left;
-}
+.home-auto { display: flex; flex-direction: column; gap: 16px; padding: 18px 20px; border-color: var(--vg-accent-line); background: linear-gradient(180deg, var(--vg-accent-soft), transparent 70%), var(--theme-panel); }
+.home-auto__head { display: flex; align-items: center; gap: 14px; }
+.home-auto__icon { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex-shrink: 0; border-radius: 12px; background: var(--vg-accent); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--vg-accent) 35%, transparent); }
+.home-auto__copy { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.home-auto__copy strong { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 16px; font-weight: 700; }
+.home-auto__copy small { font-size: 12.5px; line-height: 1.55; color: var(--theme-text-secondary); }
+.home-auto__stages { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; }
+.home-auto__stage { position: relative; min-width: 0; }
+/* Connector between two stations, drawn from this dot to the next one. */
+.home-auto__stage:not(:last-child)::after { content: ''; position: absolute; top: 17px; left: calc(50% + 22px); right: calc(-50% + 22px); height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--vg-accent-line), color-mix(in srgb, var(--vg-accent-line) 35%, transparent)); }
+.home-auto__stop { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; padding: 0 4px; border: 0; background: transparent; color: var(--theme-text); cursor: pointer; text-align: center; }
+.home-auto__dot { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--vg-accent-line); background: var(--theme-panel); color: var(--vg-accent); transition: background .15s, color .15s, transform .15s; }
+.home-auto__stop:hover .home-auto__dot, .home-auto__stop:focus-visible .home-auto__dot { background: var(--vg-accent); color: #fff; transform: translateY(-1px); }
+.home-auto__stop:focus-visible { outline: none; }
+.home-auto__label { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
+.home-auto__label strong { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-auto__label small { font-size: 11.5px; color: var(--theme-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.home-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.home-line { --tone: var(--vg-accent); display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.home-line--violet { --tone: var(--vg-violet); }
+.home-line--red { --tone: var(--vg-red); }
+.home-line__icon { width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tone) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
+.home-line__copy { display: flex; flex-direction: column; gap: 4px; }
+.home-line__copy strong { font-size: 15px; }
+.home-line__copy small { font-size: 12.5px; color: var(--theme-text-secondary); line-height: 1.55; }
+.home-line__actions { display: flex; gap: 8px; margin-top: auto; }
+
+.home-lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.home-brief__summary { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--vg-radius-sm); background: var(--vg-accent-soft); font-size: 13px; line-height: 1.6; }
+.home-brief__ok { color: var(--vg-green); flex-shrink: 0; }
+.home-brief__warn { color: var(--vg-amber); flex-shrink: 0; }
+.home-brief__err { color: var(--vg-red); flex-shrink: 0; }
+.home-brief__arrow { color: var(--theme-text-muted); flex-shrink: 0; }
+.home-brief__loading { display: flex; justify-content: center; padding: 20px; color: var(--theme-text-muted); }
+
+.home-tools { --vg-grid-min: 210px; }
+.home-tool { --tone: var(--vg-accent); display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; color: var(--theme-text); text-align: left; }
 .home-tool--blue { --tone: var(--vg-blue); }
 .home-tool--amber { --tone: var(--vg-amber); }
-.home-tool--red { --tone: var(--vg-red); }
 .home-tool--violet { --tone: var(--vg-violet); }
 .home-tool--green { --tone: var(--vg-green); }
-.home-tool__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent);
-  color: var(--tone);
-}
-.home-tool__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-.home-tool__copy strong { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-tool__copy small { font-size: 12px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-tool--gray { --tone: var(--vg-gray); }
+.home-tool__icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: color-mix(in srgb, var(--tone) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
+.home-tool__copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.home-tool__copy strong { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-tool__arrow { color: var(--theme-text-muted); flex-shrink: 0; transition: transform .15s, color .15s; }
 .home-tool:hover .home-tool__arrow { color: var(--tone); transform: translateX(2px); }
-
-/* Lower panels */
-.home-lower { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); gap: 14px; align-items: start; }
-.home-task__progress { width: 160px; flex: 0 0 auto; }
-.home-stats .vg-stat { background: var(--theme-panel-soft); }
-.home-stats__link { margin-top: 12px; }
 
 @media (max-width: 1120px) {
   .home-lower { grid-template-columns: 1fr; }
 }
+@media (max-width: 860px) {
+  .home-auto__head { flex-wrap: wrap; }
+  .home-auto__stages { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 14px; }
+  .home-auto__stage::after { display: none; }
+  .home-lines { grid-template-columns: 1fr; }
+}
 @media (max-width: 760px) {
-  .home-hero__copy { padding: 24px; }
-  .home-hero__feature, .home-task__progress { display: none; }
+  .home-hero__copy { padding: 20px; }
 }
 </style>

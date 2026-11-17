@@ -14,9 +14,12 @@ export function partitionFor(id: string) {
 }
 
 export function affiliateUrl(target: ShopTarget, path = 'affiliate/platform/homepage') {
-  const params = new URLSearchParams({ shop_region: (target.region || 'VN').toUpperCase() })
+  // The path may carry its own query (e.g. `affiliate/creator/detail?cid=...`).
+  const [pathname, query = ''] = path.replace(/^\/+/, '').split('?')
+  const params = new URLSearchParams(query)
+  params.set('shop_region', (target.region || 'VN').toUpperCase())
   if (target.shopId) params.set('shop_id', target.shopId)
-  return `${AFFILIATE_ORIGIN}/${path.replace(/^\/+/, '')}?${params.toString()}`
+  return `${AFFILIATE_ORIGIN}/${pathname}?${params.toString()}`
 }
 
 function isAffiliatePage(url: string) {

@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
-import { generateChatCompletion } from './unifiedChat'
+import { generateChatCompletion, type ChatImageInput } from './unifiedChat'
 import { buildGenerationPromptRestraintText, buildSilentCommercialGlobalRule, sanitizeJewelryGenerationPrompt } from './prompt'
 import type { CloneGlobalScript, CloneLocale, ModelCredentials, ScriptRole, ShotSpec } from './types'
 import { inferStoryboardReferenceDecision } from './storyboardReference'
+import { normalizeCloneProductType } from './productCategory'
+import { fillClonePromptTemplate, getActiveClonePromptTemplate } from './promptTemplateRegistry'
 
 type FrameSet = {
   start?: string
@@ -603,20 +605,17 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
   return { globalScript, shots }
 }
 
-function buildInstruction(input: AnalyzeInput) {
-  const language = 'English'
-  const timeline = input.shots
-    .map(
-      (shot) =>
-        `${shot.id}: ${Number(shot.startSec || 0).toFixed(2)}-${Number(shot.endSec ?? 0).toFixed(2)}s, role=${shot.role || 'unknown'}, motion=${shot.cameraMovement || shot.motion || 'static'}, hint=${shot.visualPrompt || ''}`,
-    )
-    .join('\n')
-
+/**
+ * Built-in analysis guidance, shown in prompt management as the default version.
+ * The JSON output contract and the shot timeline are appended by code and are
+ * not part of the editable template, so an edited template cannot break parsing.
+ */
+export function getDefaultScriptAnalysisPromptTemplate() {
   return [
     buildSilentCommercialGlobalRule(),
     'You are a strict reference-video forensic analyst for storyboard reconstruction.',
-    `Output language: ${language}.`,
-    `Target market: ${input.targetMarket || input.locale}. Product category: ${input.productCategory || 'general'}.`,
+    'Output language: English.',
+    'Target market: {{targetMarket}}. Product category: {{productCategory}}.',
     'Analyze the uploaded reference video shot by shot and reconstruct only what is actually visible or reliably inferable from the video and sampled frames.',
     'Your job is faithful reconstruction, not creative improvement, not ad strategy optimization, and not rewriting the video into a stronger ecommerce script.',
     'If a detail is unclear, keep it minimal and conservative. Do not invent marketing claims, sales hooks, CTA language, or story beats that are not supported by the source video.',
@@ -633,6 +632,25 @@ function buildInstruction(input: AnalyzeInput) {
     'The generation_prompt field must be a factual reconstruction prompt for this exact shot, written in this order: subject + product state + scene + action + camera + lighting/color.',
     'The generation_prompt must stay grounded in observed content. Do not inject unobserved selling claims, conversion strategy, beautification instructions, or cinematic reinterpretation.',
     'Do not copy the original account identity, watermark, platform UI, or brand logo. Do not preserve the original real-person identity. If speech or text is unclear, leave it empty or minimal instead of guessing persuasive copy.',
+  ].join('\n')
+}
+
+function buildInstruction(input: AnalyzeInput) {
+  const timeline = input.shots
+    .map(
+      (shot) =>
+        `${shot.id}: ${Number(shot.startSec || 0).toFixed(2)}-${Number(shot.endSec ?? 0).toFixed(2)}s, role=${shot.role || 'unknown'}, motion=${shot.cameraMovement || shot.motion || 'static'}, hint=${shot.visualPrompt || ''}`,
+    )
+    .join('\n')
+
+  const productCategory = String(input.productCategory || 'general')
+  // A user-managed template (scoped to this category, else to all categories) replaces the built-in guidance.
+  const guidance = fillClonePromptTemplate(
+    getActiveClonePromptTemplate('script_analysis', normalizeCloneProductType(productCategory)) ?? getDefaultScriptAnalysisPromptTemplate(),
+    { targetMarket: String(input.targetMarket || input.locale), productCategory },
+  )
+  return [
+    guidance,
     'Return ONLY valid JSON. No markdown. No explanation outside JSON.',
     'Use script_role values only from: hook,pain_point,solution,show,detail,proof,offer,cta,transition,unknown.',
     'Prefer omission over hallucination. Factual alignment to the reference video is the top priority.',
@@ -641,6 +659,59 @@ function buildInstruction(input: AnalyzeInput) {
     'Shot timeline:',
     timeline,
   ].join('\n')
+}
+
+/** Most chat endpoints cap the number of images per request; stay well under it. */
+const MAX_REFERENCE_FRAME_IMAGES = 90
+
+async function collectReferenceFrameImages(shots: AnalyzeInput['shots']): Promise<ChatImageInput[]> {
+  const perShot = shots.map((shot) => {
+    const frames = shot.referenceFramePaths ?? {}
+    return {
+      shotId: shot.id,
+      frames: (['start', 'mid', 'end'] as const)
+        .map((kind) => ({ kind, filePath: String(frames[kind] || '').trim() }))
+        .filter((item) => item.filePath),
+    }
+  })
+  const total = perShot.reduce((sum, item) => sum + item.frames.length, 0)
+  // Too many frames for one request: keep one representative frame per shot.
+  const selected =
+    total <= MAX_REFERENCE_FRAME_IMAGES
+      ? perShot
+      : perShot.map((item) => ({
+          shotId: item.shotId,
+          frames: item.frames.filter((frame, _index, all) => frame === (all.find((x) => x.kind === 'mid') ?? all[0])),
+        }))
+  const images: ChatImageInput[] = []
+  for (const item of selected) {
+    for (const frame of item.frames) {
+      if (images.length >= MAX_REFERENCE_FRAME_IMAGES) return images
+      try {
+        const buf = await readFile(frame.filePath)
+        images.push({
+          label: `${item.shotId} ${frame.kind} frame`,
+          mimeType: mimeForImage(frame.filePath),
+          base64: buf.toString('base64'),
+        })
+      } catch {
+        // A missing frame file must not fail the whole analysis.
+      }
+    }
+  }
+  return images
+}
+
+function buildFrameAttachmentInstruction(imageCount: number) {
+  return [
+    `Attached reference frames: ${imageCount} sampled frames from the reference video follow this instruction.`,
+    'Each image is preceded by a caption "<shot_id> start frame", "<shot_id> mid frame" or "<shot_id> end frame".',
+    'Treat these frames as the visual evidence for each shot. Describe only what they show.',
+  ].join('\n')
+}
+
+function buildNoFrameInstruction() {
+  return 'No reference frames are attached. Keep every description minimal and conservative, set script_confidence at or below 0.3, and say in analysis_notes that the shot was not visually verified.'
 }
 
 export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promise<ScriptAnalysisResult> {
@@ -658,17 +729,42 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
   }
 
   if (input.credentials.chatProviderPrimary === 'apifox_hub') {
-    const apifox = await generateChatCompletion({
-      credentials: input.credentials,
-      system: 'You are a strict JSON-only multimodal video script analyst.',
-      prompt: buildInstruction(input),
-    })
+    // This channel used to receive text only, so the model had to guess what the
+    // reference video looked like. Send the sampled shot frames with the prompt.
+    const frameImages = await collectReferenceFrameImages(input.shots)
+    const visualNotes: string[] = []
+    if (!frameImages.length) {
+      visualNotes.push('No reference frames were available; this analysis is based on shot timing and local hints only.')
+    }
+    const requestChat = (images: ChatImageInput[]) =>
+      generateChatCompletion({
+        credentials: input.credentials,
+        system: 'You are a strict JSON-only multimodal video script analyst.',
+        prompt: [buildInstruction(input), images.length ? buildFrameAttachmentInstruction(images.length) : buildNoFrameInstruction()].join('\n'),
+        images,
+      })
+    let apifox: Awaited<ReturnType<typeof generateChatCompletion>>
+    try {
+      apifox = await requestChat(frameImages)
+    } catch (error: any) {
+      const message = String(error?.message ?? error)
+      // A chat model without vision support rejects the image payload. Fall back
+      // to text-only instead of failing, but record that the result is blind.
+      if (!frameImages.length || !/HTTP (?:400|413|415|422)\b/.test(message)) throw error
+      visualNotes.push(`Reference frames were rejected by the chat model, so this analysis did not see the video. Use a vision-capable chat model. reason=${cleanAsciiEnglishText(message, '').slice(0, 200)}`)
+      apifox = await requestChat([])
+    }
     if (!apifox.content) {
       return fallbackAnalysisResult(input, `VectorEngine 閼存碍婀伴崚鍡樼€芥潻鏂挎礀娑撹櫣鈹栭妴淇籸ovider=${apifox.provider} model=${apifox.model}`)
     }
     try {
       const parsed = parseModelJsonPayload(apifox.content).parsed
-      return normalizeResult(parsed, input)
+      const normalized = normalizeResult(parsed, input)
+      if (!visualNotes.length) return normalized
+      return {
+        ...normalized,
+        shots: normalized.shots.map((shot) => ({ ...shot, analysisNotes: [...visualNotes, ...shot.analysisNotes] })),
+      }
     } catch (e: any) {
       return fallbackAnalysisResult(
         input,

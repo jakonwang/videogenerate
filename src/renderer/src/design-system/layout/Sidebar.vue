@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 
-type NavItem = { to: string; label: string; active?: boolean; icon?: any }
+type NavItem = { to: string; label: string; active?: boolean; icon?: any; badge?: number }
 
 defineProps<{
   items: NavItem[]
@@ -32,7 +32,7 @@ function navigate(to: string) {
         <span v-if="item.icon" class="vg-nav__tile">
           <component :is="item.icon" class="vg-nav__icon" />
         </span>
-        <span class="vg-nav__label">{{ item.label }}</span>
+        <span class="vg-nav__label">{{ item.label }}</span><span v-if="item.badge" class="vg-nav__badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
       </button>
 
       <div v-for="section in sections || []" :key="section.title" class="vg-nav__section">
@@ -50,7 +50,7 @@ function navigate(to: string) {
           <span v-if="item.icon" class="vg-nav__tile">
             <component :is="item.icon" class="vg-nav__icon" />
           </span>
-          <span class="vg-nav__label">{{ item.label }}</span>
+          <span class="vg-nav__label">{{ item.label }}</span><span v-if="item.badge" class="vg-nav__badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
         </button>
       </div>
     </nav>
@@ -61,6 +61,9 @@ function navigate(to: string) {
 </template>
 
 <style scoped>
+.vg-nav__badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--theme-tone-red, #f87171); color: #fff; font-size: 10.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.vg-nav.is-collapsed .vg-nav__badge { position: absolute; top: 2px; right: 4px; min-width: 14px; height: 14px; font-size: 9px; padding: 0 3px; }
+
 .vg-nav {
   --nav-ink: color-mix(in srgb, var(--theme-text) 86%, transparent);
   --nav-hover: color-mix(in srgb, var(--theme-text) 5%, transparent);
@@ -96,7 +99,7 @@ function navigate(to: string) {
   align-items: center;
   gap: 11px;
   width: 100%;
-  height: 40px;
+  height: 36px;
   padding: 0 8px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -168,8 +171,8 @@ function navigate(to: string) {
 .vg-nav__section {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 18px;
+  gap: 2px;
+  margin-top: 12px;
 }
 .vg-nav__section-title {
   display: flex;

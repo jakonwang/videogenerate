@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
     <header class="pr-hero">
       <div class="pr-hero__icon"><ShoppingCart :size="34" /></div>
       <div class="pr-hero__copy">
-        <h1>选品中心</h1>
+        <h1>{{ $t('ai.pages.productResearch') }}</h1>
         <p>管理选品方案，按标准 SOP 完成从需求收集、采集、筛选到输出的全流程选品。</p>
       </div>
       <div class="pr-hero__side">

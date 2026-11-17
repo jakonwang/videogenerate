@@ -3,10 +3,10 @@ import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 
 const props = defineProps<{
-  navItems: Array<{ to: string; label: string; active?: boolean; icon?: any }>
+  navItems: Array<{ to: string; label: string; active?: boolean; icon?: any; badge?: number }>
   sections?: Array<{
     title: string
-    items: Array<{ to: string; label: string; active?: boolean; icon?: any }>
+    items: Array<{ to: string; label: string; active?: boolean; icon?: any; badge?: number }>
   }>
   title?: string
   subtitle?: string

@@ -149,7 +149,7 @@ export default function AdminUserDetailPage() {
               <span className="vg-stat__body">
                 <span className="vg-stat__label">设备</span>
                 <span className="vg-stat__value text-[16px]">
-                  {data.devices.length} <small>/ {ent.maxDevices === 0 ? '不限' : ent.maxDevices}</small>
+                  {data.devices.filter((d) => d.kind !== 'mobile').length} <small>/ {ent.maxDevices === 0 ? '不限' : ent.maxDevices} 台电脑</small> · {data.devices.filter((d) => d.kind === 'mobile').length} <small>/ {ent.maxMobileDevices === 0 ? '不限' : (ent.maxMobileDevices ?? 1)} 部手机</small>
                 </span>
               </span>
             </div>

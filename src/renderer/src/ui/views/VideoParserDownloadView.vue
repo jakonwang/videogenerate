@@ -271,7 +271,7 @@ onUnmounted(() => {
           <p>{{ copy.subtitle }}</p>
         </div>
         <div class="vpd-workspace-actions">
-          <button class="vpd-ghost-button" type="button" @click="router.push('/plugins?tab=installed&plugin=video-parser-download')">
+          <button class="vpd-ghost-button" type="button" @click="router.push('/plugins')">
             <ChevronLeft class="icon" />
             {{ copy.back }}
           </button>

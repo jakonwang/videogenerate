@@ -39,6 +39,34 @@ function looksLikeAudioOnlyExt(filePath: string): boolean {
   return ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'wma'].includes(e)
 }
 
+/**
+ * Voiceover longer than the cut would be chopped by the renderer: grow every segment proportionally
+ * (staying inside its source file) until picture covers the voice plus a short tail. Returns new total.
+ */
+function extendPlanToVoice(plan: VideoTask['plan'], voiceSec: number) {
+  const target = voiceSec + 0.5
+  let total = plan.segments.reduce((a, s) => a + s.durationSec, 0)
+  for (let it = 0; it < 4 && total < target - 0.05; it++) {
+    const growable = plan.segments.filter((s) => {
+      const speed = s.jitter?.speed || 1
+      const src = Number(s.sourceDurationSec || 0)
+      return src > 0 && s.startSec + (s.durationSec + 0.05) * speed < src - 0.05
+    })
+    if (!growable.length) break
+    const each = (target - total) / growable.length
+    for (const s of growable) {
+      const speed = s.jitter?.speed || 1
+      const maxOut = (Number(s.sourceDurationSec) - 0.05 - s.startSec) / speed
+      const next = Math.min(maxOut, s.durationSec + each)
+      s.durationSec = Number(next.toFixed(3))
+      s.inputDurationSec = Number((next * speed).toFixed(3))
+    }
+    total = plan.segments.reduce((a, s) => a + s.durationSec, 0)
+  }
+  plan.totalDurationSec = Number(total.toFixed(3))
+  return plan.totalDurationSec
+}
+
 class TaskQueue {
   private q = new PQueue({ concurrency: 3 })
   private tasks: VideoTask[] = []
@@ -245,6 +273,13 @@ class TaskQueue {
           })
           const ttsMeta = await probeMedia(mp3Path)
           const audioDur = Math.max(0.2, Number(ttsMeta.durationSec ?? 0))
+          if (t.plan.fitToVoice) {
+            const before = t.plan.totalDurationSec
+            const after = extendPlanToVoice(t.plan, audioDur)
+            if (after > before + 0.01) {
+              t.logs = [`配音 ${audioDur.toFixed(1)}s 长于画面 ${before.toFixed(1)}s，已延长镜头到 ${after.toFixed(1)}s`, ...t.logs].slice(0, 200)
+            }
+          }
           const parts = wantTimedSubs ? await readTtsPartsJson(subtitlesJsonPath) : null
           timedSpeech = wantTimedSubs
             ? {

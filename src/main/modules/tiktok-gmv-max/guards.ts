@@ -218,7 +218,7 @@ export function evaluateGmvMaxCreativeGuard(input: {
   const grouped = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.metrics) {
     const key = `${metric.creativeId}:${metric.itemGroupId || 'unscoped'}`
-    grouped.set(key, [...(grouped.get(key) || []), metric])
+    { const bucket = grouped.get(key); if (bucket) bucket.push(metric); else grouped.set(key, [metric]) }
   }
   const testBudget = gmvMaxDecimal.parse(input.policy.creativeTestBudget)
   const floor = gmvMaxDecimal.parse(input.profitGuard.effectiveRoiFloor)
@@ -425,7 +425,7 @@ export function evaluateGmvMaxSessionGuard(input: {
   for (const metric of input.metrics) {
     if (!metric.itemId || metric.itemId === '-1' || metric.creativeId.startsWith('product-card:') || !metric.itemGroupId) continue
     const key = `${metric.creativeId}:${metric.itemGroupId}`
-    grouped.set(key, [...(grouped.get(key) || []), metric])
+    { const bucket = grouped.get(key); if (bucket) bucket.push(metric); else grouped.set(key, [metric]) }
   }
   const winner = [...grouped.values()].map((values) => {
     const recent = [...values].sort((a, b) => a.statDate.localeCompare(b.statDate)).slice(-2)

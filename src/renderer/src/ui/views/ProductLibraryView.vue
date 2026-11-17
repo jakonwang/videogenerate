@@ -6,7 +6,6 @@ import { useI18n } from 'vue-i18n'
 import {
   AlertTriangle,
   ArrowRight,
-  Boxes,
   ChevronLeft,
   ChevronRight,
   Dna,
@@ -246,14 +245,6 @@ function productBusinessStatusLabel(product: Product) {
   return t(`productLibrary.status.${key}`)
 }
 
-function productBusinessStatusTone(product: Product) {
-  const key = productBusinessStatusKey(product)
-  if (key === 'done') return 'success'
-  if (key === 'processing') return 'info'
-  if (key === 'failed') return 'danger'
-  return 'warning'
-}
-
 function matchStatusFilter(product: Product, filter: ProductStatusFilter) {
   if (filter === 'all') return true
   return productBusinessStatusKey(product) === filter
@@ -265,15 +256,6 @@ function productAnalysisSummary(product: Product) {
 
 function productAnalysisStatusLabel(product: Product) {
   return productAnalysisSummary(product) ? t('productLibrary.dna.done') : t('productLibrary.dna.pending')
-}
-
-/** Map legacy chip tones to vg-pill tones. */
-function chipTone(tone: string) {
-  if (tone === 'success') return 'green'
-  if (tone === 'info') return 'blue'
-  if (tone === 'danger') return 'red'
-  if (tone === 'warning') return 'amber'
-  return 'gray'
 }
 
 function productUpdatedAt(product: Product) {
@@ -425,201 +407,183 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="vg-scope vg-page pl" data-testid="product-library-page">
-    <header class="vg-page-head">
-      <span class="vg-page-head__icon"><Boxes :size="20" /></span>
-      <div class="vg-page-head__text">
-        <h1>{{ t('productLibrary.title') }}</h1>
+    <header class="pl-head">
+      <div class="pl-head__text">
+        <h1>
+          {{ t('productLibrary.title') }}
+          <span class="pl-head__count vg-num" data-testid="product-library-total">{{ list.length }}</span>
+        </h1>
         <p>{{ t('productLibrary.desc') }}</p>
       </div>
-      <div class="vg-page-head__actions">
-        <button class="vg-btn" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
-          <Settings2 :size="15" /> {{ t('productLibrary.promptSettings.button') }}
+      <div class="pl-head__actions">
+        <button class="vg-btn vg-btn--ghost" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
+          <SlidersHorizontal :size="15" /> {{ t('productLibrary.promptSettings.button') }}
         </button>
+        <div class="pl-create">
+          <button class="vg-btn vg-btn--primary" data-testid="product-create-open" type="button" :aria-expanded="createOpen" @click="openCreate">
+            <Plus :size="15" /> {{ t('productLibrary.create') }}
+          </button>
+          <form v-show="createOpen" class="pl-create__pop" @submit.prevent="createProduct">
+            <label class="vg-field">
+              <span class="vg-field__label">{{ t('productLibrary.namePlaceholder') }}</span>
+              <input
+                ref="createNameInput"
+                v-model="creating.name"
+                class="vg-input"
+                data-testid="product-create-name-input"
+                type="text"
+                maxlength="80"
+                :placeholder="t('productLibrary.unnamed')"
+                @keydown.esc="createOpen = false"
+              />
+            </label>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ t('productLibrary.productType') }}</span>
+              <select v-model="creating.type" class="vg-select" data-testid="product-create-type-select">
+                <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <button class="vg-btn vg-btn--primary vg-btn--block" data-testid="product-create-submit" type="submit">
+              {{ t('productLibrary.create') }} <ArrowRight :size="14" />
+            </button>
+          </form>
+        </div>
       </div>
     </header>
 
-    <!-- Quick create -->
-    <section class="vg-card pl-create">
-      <span class="pl-create__icon"><Plus :size="18" /></span>
-      <input
-        v-model="creating.name"
-        class="vg-input pl-create__name"
-        data-testid="product-create-name-input"
-        type="text"
-        maxlength="80"
-        :placeholder="t('productLibrary.namePlaceholder')"
-        @keydown.enter.prevent="createProduct"
-      />
-      <label class="pl-create__type">
-        <span class="vg-muted">{{ t('productLibrary.productType') }}</span>
-        <select v-model="creating.type" class="vg-select" data-testid="product-create-type-select">
-          <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-      </label>
-      <button class="vg-btn vg-btn--primary" data-testid="product-create-submit" type="button" @click="createProduct">
-        <Plus :size="15" /> {{ t('productLibrary.create') }}
-      </button>
-    </section>
-
-    <section class="vg-stats">
-      <div class="vg-stat">
-        <span class="vg-stat__icon vg-stat__icon--violet"><Boxes :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.stats.total') }}</span><span class="vg-stat__value" data-testid="product-library-total">{{ list.length }}</span></span>
-      </div>
-      <div class="vg-stat">
-        <span class="vg-stat__icon vg-stat__icon--amber"><Clock3 :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.status.pending') }}</span><span class="vg-stat__value">{{ pendingCount }}</span></span>
-      </div>
-      <div class="vg-stat">
-        <span class="vg-stat__icon"><CheckCircle2 :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.status.done') }}</span><span class="vg-stat__value">{{ readyCount }}</span></span>
-      </div>
-      <div class="vg-stat">
-        <span class="vg-stat__icon vg-stat__icon--red"><AlertTriangle :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.status.failed') }}</span><span class="vg-stat__value">{{ issueOnlyCount }}</span></span>
-      </div>
-      <div class="vg-stat">
-        <span class="vg-stat__icon vg-stat__icon--blue"><RefreshCw :size="17" /></span>
-        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('productLibrary.stats.recent') }}</span><span class="vg-stat__value">{{ recentCount }}</span></span>
-      </div>
-    </section>
-
-    <section class="vg-card pl-board">
-      <div class="vg-toolbar">
-        <label class="vg-search pl-search">
-          <Search :size="15" />
-          <input v-model="query" class="vg-input" :placeholder="t('productLibrary.searchPlaceholder')" data-testid="product-library-search-input" />
-        </label>
-        <select v-model="typeFilter" class="vg-select" :title="t('productLibrary.productType')" data-testid="product-library-type-filter-select">
-          <option value="all">{{ t('productLibrary.allTypes') }}</option>
-          <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-        <span class="vg-toolbar__spacer"></span>
-        <select v-model="sortMode" class="vg-select" data-testid="product-library-sort-select">
-          <option value="updated_desc">{{ t('productLibrary.sort.updated') }}</option>
-          <option value="name_asc">{{ t('productLibrary.sort.name') }}</option>
-          <option value="analysis_board_status">{{ t('productLibrary.sort.analysis') }}</option>
-        </select>
-        <div class="vg-seg">
-          <button type="button" class="vg-icon-btn" :class="{ 'is-active': viewMode === 'grid' }" :aria-pressed="viewMode === 'grid'" @click="viewMode = 'grid'"><Grid2X2 :size="16" /></button>
-          <button type="button" class="vg-icon-btn" :class="{ 'is-active': viewMode === 'list' }" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'"><List :size="16" /></button>
-        </div>
-      </div>
-
-      <div class="vg-seg vg-seg--sm pl-tabs">
+    <div class="pl-bar">
+      <nav class="pl-tabs" role="tablist">
         <button
           v-for="tab in statusTabs"
           :key="tab.key"
-          class="vg-seg__btn"
+          class="pl-tab"
           :class="{ 'is-active': statusFilter === tab.key }"
           type="button"
+          role="tab"
+          :aria-selected="statusFilter === tab.key"
           @click="statusFilter = tab.key"
         >
-          {{ tab.label }} <span class="vg-count">{{ tab.count }}</span>
+          <span v-if="tab.key !== 'all'" class="pl-dot" :class="`pl-dot--${tab.key}`"></span>
+          {{ tab.label }}
+          <span class="pl-tab__count vg-num">{{ tab.count }}</span>
         </button>
+      </nav>
+      <span class="vg-toolbar__spacer"></span>
+      <label class="vg-search pl-search">
+        <Search :size="14" />
+        <input v-model="query" class="vg-input vg-input--sm" :placeholder="t('productLibrary.searchPlaceholder')" data-testid="product-library-search-input" />
+      </label>
+      <select v-model="typeFilter" class="vg-select vg-select--sm" :title="t('productLibrary.productType')" data-testid="product-library-type-filter-select">
+        <option value="all">{{ t('productLibrary.allTypes') }}</option>
+        <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
+      </select>
+      <select v-model="sortMode" class="vg-select vg-select--sm" data-testid="product-library-sort-select">
+        <option value="updated_desc">{{ t('productLibrary.sort.updated') }}</option>
+        <option value="name_asc">{{ t('productLibrary.sort.name') }}</option>
+        <option value="analysis_board_status">{{ t('productLibrary.sort.analysis') }}</option>
+      </select>
+      <div class="pl-view">
+        <button type="button" :class="{ 'is-active': viewMode === 'grid' }" :aria-pressed="viewMode === 'grid'" @click="viewMode = 'grid'"><LayoutGrid :size="15" /></button>
+        <button type="button" :class="{ 'is-active': viewMode === 'list' }" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'"><List :size="15" /></button>
       </div>
+    </div>
 
-      <div
-        v-if="filteredProducts.length"
-        class="pl-grid"
-        :class="{ 'pl-grid--list': viewMode === 'list' }"
-        data-testid="product-library-grid"
+    <div
+      v-if="filteredProducts.length"
+      class="pl-grid"
+      :class="{ 'pl-grid--list': viewMode === 'list' }"
+      data-testid="product-library-grid"
+    >
+      <article
+        v-for="product in pagedProducts"
+        :key="product.id"
+        class="pl-card"
+        :class="{ 'is-menu-open': actionMenuOpenId === product.id }"
+        tabindex="0"
+        :data-testid="`product-library-item-${product.id}`"
+        @click="openDetail(product.id)"
+        @keydown.enter.self="openDetail(product.id)"
       >
-        <article
-          v-for="product in pagedProducts"
-          :key="product.id"
-          class="pl-card"
-          :data-testid="`product-library-item-${product.id}`"
-        >
-          <button class="pl-card__media" type="button" @click="openDetail(product.id)">
-            <img
-              v-if="resolveProductCoverPath(product)"
-              :src="thumbnailUrl(resolveProductCoverPath(product), 320)"
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
-            <FileImage v-else :size="30" />
-          </button>
+        <div class="pl-card__media">
+          <img
+            v-if="resolveProductCoverPath(product)"
+            :src="thumbnailUrl(resolveProductCoverPath(product), 320)"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+          <FileImage v-else :size="26" />
+          <span class="pl-status" :class="`pl-status--${productBusinessStatusKey(product)}`">
+            <span class="pl-dot" :class="`pl-dot--${productBusinessStatusKey(product)}`"></span>{{ productBusinessStatusLabel(product) }}
+          </span>
+        </div>
 
-          <div class="pl-card__body">
-            <div class="pl-card__title">
-              <strong :title="product.name">{{ product.name }}</strong>
-              <span class="vg-muted vg-num">ID {{ product.id.slice(0, 8) }}</span>
-            </div>
-
-            <div class="vg-row pl-card__chips">
-              <span class="vg-chip">{{ productTypeLabelV2(product.type) }}</span>
-              <span class="vg-pill vg-pill--dot" :class="`vg-pill--${chipTone(productBusinessStatusTone(product))}`">{{ productBusinessStatusLabel(product) }}</span>
-              <span class="vg-pill" :class="`vg-pill--${chipTone(productAnalysisTone(product))}`">{{ productAnalysisStatusLabel(product) }}</span>
-            </div>
-
-            <div class="pl-card__analysis">
-              <span>{{ t('productLibrary.analysisSummary') }}</span>
-              <p>{{ productAnalysisSummary(product) || t('productLibrary.analysisEmpty') }}</p>
-            </div>
-
-            <div class="pl-card__meta">
-              <span><FileImage :size="13" /> {{ t('productLibrary.imageCount', { count: productImageCount(product) }) }}</span>
-              <span><Clock3 :size="13" /> {{ formatDateTime(product.analysisBoardUpdatedAt ?? product.canonicalSourceUpdatedAt ?? product.updatedAt) }}</span>
-            </div>
-
-            <div class="pl-card__actions">
-              <button class="vg-btn vg-btn--primary vg-btn--sm" type="button" @click="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
-              <button class="vg-btn vg-btn--sm" type="button" @click="openDetail(product.id)">{{ t('productLibrary.continue') }}</button>
-              <div class="vg-menu-wrap pl-card__more">
-                <button class="vg-icon-btn" type="button" :aria-label="t('productLibrary.moreActions')" @click.stop="toggleActionMenu(product.id)">
-                  <MoreHorizontal :size="16" />
-                </button>
-                <div v-if="actionMenuOpenId === product.id" class="vg-menu vg-menu--up">
-                  <button type="button" @click.stop="openDetail(product.id)">{{ t('productLibrary.openDetail') }}</button>
-                  <button type="button" class="danger" @click.stop="removeProduct(product)"><Trash2 :size="14" /> {{ t('productLibrary.delete') }}</button>
-                </div>
+        <div class="pl-card__body">
+          <div class="pl-card__title">
+            <strong :title="product.name">{{ product.name }}</strong>
+            <span class="pl-card__type">{{ productTypeLabelV2(product.type) }}</span>
+          </div>
+          <p class="pl-card__summary" :class="{ 'is-empty': !productAnalysisSummary(product) }" :title="productAnalysisSummary(product)">
+            {{ productAnalysisSummary(product) || t('productLibrary.dna.pending') }}
+          </p>
+          <div class="pl-card__foot">
+            <span class="pl-card__state"><span class="pl-dot" :class="`pl-dot--${productBusinessStatusKey(product)}`"></span>{{ productBusinessStatusLabel(product) }}</span>
+            <span class="pl-card__dna" :class="{ 'is-done': productAnalysisSummary(product) }" :title="productAnalysisStatusLabel(product)"><Dna :size="13" /></span>
+            <span class="vg-num"><FileImage :size="12" /> {{ productImageCount(product) }}</span>
+            <span class="vg-num">{{ formatDateTime(productUpdatedAt(product)) }}</span>
+            <span class="pl-card__id vg-num">#{{ product.id.slice(0, 8) }}</span>
+            <div class="vg-menu-wrap pl-card__more" @click.stop>
+              <button class="vg-icon-btn vg-icon-btn--sm" type="button" :aria-label="t('productLibrary.moreActions')" @click="toggleActionMenu(product.id)">
+                <MoreHorizontal :size="15" />
+              </button>
+              <div v-if="actionMenuOpenId === product.id" class="vg-menu vg-menu--up">
+                <button type="button" @click="openDetail(product.id)"><ArrowRight :size="14" /> {{ t('productLibrary.openDetail') }}</button>
+                <button type="button" class="danger" @click="removeProduct(product)"><Trash2 :size="14" /> {{ t('productLibrary.delete') }}</button>
               </div>
             </div>
           </div>
-        </article>
-      </div>
-
-      <div v-else class="vg-empty" data-testid="product-library-empty">
-        <span class="vg-empty__icon"><FolderOpen :size="24" /></span>
-        <h3>{{ query ? t('productLibrary.empty.noMatch') : t('productLibrary.empty.title') }}</h3>
-        <p>{{ query ? t('productLibrary.empty.noMatchDesc') : t('productLibrary.empty.desc') }}</p>
-        <button class="vg-btn vg-btn--primary" type="button" @click="createProduct"><Plus :size="15" /> {{ t('productLibrary.create') }}</button>
-      </div>
-
-      <footer v-if="filteredProducts.length" class="vg-pager">
-        <div class="vg-pager__group">
-          <span>{{ t('productLibrary.perPage') }}</span>
-          <select v-model.number="pageSize" class="vg-select vg-select--sm">
-            <option :value="12">12</option>
-            <option :value="24">24</option>
-            <option :value="48">48</option>
-          </select>
         </div>
-        <div class="vg-pager__group">
-          <button class="vg-pg" type="button" :disabled="currentPage <= 1" :aria-label="t('productLibrary.previous')" @click="prevPage"><ChevronLeft :size="15" /></button>
-          <button
-            v-for="page in visiblePages"
-            :key="page"
-            class="vg-pg"
-            :class="{ 'is-active': currentPage === page }"
-            type="button"
-            @click="setPage(page)"
-          >
-            {{ page }}
-          </button>
-          <button class="vg-pg" type="button" :disabled="currentPage >= totalPages" :aria-label="t('productLibrary.next')" @click="nextPage"><ChevronRight :size="15" /></button>
-        </div>
-      </footer>
-    </section>
+      </article>
+    </div>
+
+    <div v-else class="vg-empty pl-empty" data-testid="product-library-empty">
+      <span class="vg-empty__icon"><FolderOpen :size="24" /></span>
+      <h3>{{ query ? t('productLibrary.empty.noMatch') : t('productLibrary.empty.title') }}</h3>
+      <p>{{ query ? t('productLibrary.empty.noMatchDesc') : t('productLibrary.empty.desc') }}</p>
+      <button class="vg-btn vg-btn--primary" type="button" @click.stop="openCreate"><Plus :size="15" /> {{ t('productLibrary.create') }}</button>
+    </div>
+
+    <footer v-if="filteredProducts.length > 12" class="vg-pager pl-pager">
+      <div class="vg-pager__group">
+        <select v-model.number="pageSize" class="vg-select vg-select--sm">
+          <option :value="12">12</option>
+          <option :value="24">24</option>
+          <option :value="48">48</option>
+        </select>
+        <span>{{ t('productLibrary.perPage') }}</span>
+      </div>
+      <div class="vg-pager__group">
+        <button class="vg-pg" type="button" :disabled="currentPage <= 1" :aria-label="t('productLibrary.previous')" @click="prevPage"><ChevronLeft :size="15" /></button>
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          class="vg-pg"
+          :class="{ 'is-active': currentPage === page }"
+          type="button"
+          @click="setPage(page)"
+        >
+          {{ page }}
+        </button>
+        <button class="vg-pg" type="button" :disabled="currentPage >= totalPages" :aria-label="t('productLibrary.next')" @click="nextPage"><ChevronRight :size="15" /></button>
+      </div>
+    </footer>
 
     <Teleport to="body">
       <div v-if="promptDialogOpen" class="vg-scope vg-backdrop" data-testid="product-prompt-dialog" @click.self="promptDialogOpen = false">
         <section class="vg-dialog vg-dialog--wide" role="dialog" aria-modal="true" :aria-label="t('productLibrary.promptSettings.title')">
           <header class="vg-dialog__head">
             <div class="vg-dialog__title">
-              <span class="vg-dialog__title-icon"><Settings2 :size="19" /></span>
+              <span class="vg-dialog__title-icon"><SlidersHorizontal :size="19" /></span>
               <div>
                 <h2>{{ t('productLibrary.promptSettings.title') }}</h2>
                 <p>{{ t('productLibrary.promptSettings.desc') }}</p>
@@ -663,47 +627,95 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.pl { width: min(1408px, 100%); margin: 0 auto; }
+.pl { width: min(1440px, 100%); margin: 0 auto; gap: 16px; padding-top: 18px; }
 
-/* Quick create bar */
-.pl-create { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; }
-.pl-create__icon { width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--vg-accent-soft); color: var(--vg-accent); flex-shrink: 0; }
-.pl-create__name { flex: 1 1 260px; }
-.pl-create__type { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
+/* Header */
+.pl-head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.pl-head__text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pl-head h1 { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; }
+.pl-head__count { height: 20px; padding: 0 7px; border-radius: 6px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; color: var(--theme-text-secondary); background: var(--theme-panel-soft); border: 1px solid var(--theme-border); }
+.pl-head p { font-size: 12.5px; color: var(--theme-text-muted); }
+.pl-head__actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 
-/* Board */
-.pl-board { display: flex; flex-direction: column; gap: 12px; }
-.pl-search { flex: 1 1 280px; max-width: 420px; }
-.pl-tabs { padding-bottom: 12px; border-bottom: 1px solid var(--theme-divider); }
+/* Create popover */
+.pl-create { position: relative; }
+.pl-create__pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 280px; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: var(--vg-radius); background: var(--theme-panel); border: 1px solid var(--theme-border-control); box-shadow: var(--theme-shadow-float); }
+
+/* Filter bar */
+.pl-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--theme-divider); }
+.pl-tabs { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); }
+.pl-tab { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: color .15s, background .15s; }
+.pl-tab:hover { color: var(--theme-text); }
+.pl-tab.is-active { background: var(--theme-panel); color: var(--theme-text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--theme-border-control); }
+.pl-tab__count { font-size: 11px; color: var(--theme-text-muted); font-weight: 500; }
+.pl-tab.is-active .pl-tab__count { color: var(--vg-accent); }
+.pl-search { flex: 0 1 260px; }
+.pl-view { display: inline-flex; padding: 2px; border-radius: 8px; border: 1px solid var(--theme-border); background: var(--theme-panel-soft); }
+.pl-view button { width: 28px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; }
+.pl-view button:hover { color: var(--theme-text); }
+.pl-view button.is-active { background: var(--theme-panel); color: var(--vg-accent); box-shadow: inset 0 0 0 1px var(--theme-border-control); }
+
+/* Status dots */
+.pl-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--vg-gray); }
+.pl-dot--done { background: var(--vg-green); }
+.pl-dot--processing { background: var(--vg-blue); }
+.pl-dot--pending { background: var(--vg-amber); }
+.pl-dot--failed { background: var(--vg-red); }
 
 /* Grid */
-.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.pl-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel); transition: border-color .15s, box-shadow .15s; }
-.pl-card:hover { border-color: var(--vg-accent-line); box-shadow: var(--theme-shadow-float); }
-.pl-card__media { display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 10; padding: 0; border: 0; border-bottom: 1px solid var(--theme-border); background: var(--theme-panel-soft); color: var(--theme-text-muted); cursor: pointer; overflow: hidden; }
-.pl-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s; }
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 14px; }
+.pl-card { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel); cursor: pointer; outline: none; transition: border-color .15s, box-shadow .15s; }
+.pl-card:hover, .pl-card:focus-visible { border-color: var(--vg-accent-line); box-shadow: var(--theme-shadow-float); }
+.pl-card.is-menu-open { z-index: 5; }
+.pl-card__media { position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 1 / 1; border-radius: calc(var(--vg-radius) - 1px) calc(var(--vg-radius) - 1px) 0 0; background: var(--theme-panel-soft); color: var(--theme-text-muted); overflow: hidden; }
+.pl-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease; }
 .pl-card:hover .pl-card__media img { transform: scale(1.03); }
-.pl-card__body { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; flex: 1; min-width: 0; }
-.pl-card__title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
-.pl-card__title strong { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-card__title span { font-size: 11px; flex-shrink: 0; }
-.pl-card__chips { gap: 6px; }
-.pl-card__analysis { padding: 8px 10px; border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); }
-.pl-card__analysis span { font-size: 11px; font-weight: 600; color: var(--theme-text-muted); }
-.pl-card__analysis p { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--theme-text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.pl-card__meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--theme-text-muted); }
-.pl-card__meta span { display: inline-flex; align-items: center; gap: 4px; }
-.pl-card__actions { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--theme-divider); }
+.pl-status { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 500; color: #fff; background: rgb(10 12 16 / .62); backdrop-filter: blur(6px); }
+/* "Done" is the normal state: only surface it on hover so problems stand out. */
+.pl-status--done { opacity: 0; transition: opacity .15s; }
+.pl-card:hover .pl-status--done { opacity: 1; }
+
+.pl-card__body { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 8px; flex: 1; min-width: 0; }
+.pl-card__title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.pl-card__title strong { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-card__type { flex-shrink: 0; font-size: 11px; color: var(--theme-text-muted); }
+.pl-card__summary { font-size: 12px; line-height: 1.5; color: var(--theme-text-secondary); min-height: 36px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pl-card__summary.is-empty { color: var(--theme-text-muted); }
+.pl-card__foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 7px; border-top: 1px solid var(--theme-divider); font-size: 11px; color: var(--theme-text-muted); }
+.pl-card__foot > span { display: inline-flex; align-items: center; gap: 3px; }
+.pl-card__foot > .pl-card__state { display: none; width: 64px; gap: 6px; color: var(--theme-text-secondary); }
+.pl-card__dna { opacity: .5; }
+.pl-card__dna.is-done { color: var(--vg-accent); opacity: 1; }
+.pl-card__id { opacity: 0; transition: opacity .15s; }
+.pl-card:hover .pl-card__id { opacity: .8; }
 .pl-card__more { margin-left: auto; }
+.pl-card__more .vg-icon-btn { opacity: .55; }
+.pl-card:hover .pl-card__more .vg-icon-btn, .pl-card.is-menu-open .pl-card__more .vg-icon-btn { opacity: 1; }
 
 /* List view */
-.pl-grid--list { grid-template-columns: 1fr; gap: 8px; }
-.pl-grid--list .pl-card { flex-direction: row; }
-.pl-grid--list .pl-card__media { width: 168px; aspect-ratio: auto; border-bottom: 0; border-right: 1px solid var(--theme-border); flex-shrink: 0; }
-.pl-grid--list .pl-card__body { flex-direction: row; flex-wrap: wrap; align-items: center; }
-.pl-grid--list .pl-card__title { flex: 1 1 220px; flex-direction: column; align-items: flex-start; gap: 2px; }
-.pl-grid--list .pl-card__analysis { flex: 1 1 100%; order: 5; }
-.pl-grid--list .pl-card__actions { margin-top: 0; padding-top: 0; border-top: 0; }
+.pl-grid--list { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel); }
+.pl-grid--list .pl-card { flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.pl-grid--list .pl-card + .pl-card { border-top: 1px solid var(--theme-divider); }
+.pl-grid--list .pl-card:hover { background: var(--theme-panel-soft); }
+.pl-grid--list .pl-card:first-child { border-radius: var(--vg-radius) var(--vg-radius) 0 0; }
+.pl-grid--list .pl-card:last-child { border-radius: 0 0 var(--vg-radius) var(--vg-radius); }
+.pl-grid--list .pl-card__media { width: 44px; height: 44px; aspect-ratio: auto; border-radius: 8px; flex-shrink: 0; }
+.pl-grid--list .pl-card:hover .pl-card__media img { transform: none; }
+.pl-grid--list .pl-status { display: none; }
+.pl-grid--list .pl-card__body { flex-direction: row; align-items: center; gap: 16px; padding: 0; }
+.pl-grid--list .pl-card__title { flex: 0 0 200px; flex-direction: column; align-items: flex-start; gap: 1px; }
+.pl-grid--list .pl-card__summary { flex: 1 1 auto; min-height: 0; -webkit-line-clamp: 1; }
+.pl-grid--list .pl-card__foot { flex: 0 0 auto; margin: 0; padding: 0; border: 0; }
+.pl-grid--list .pl-card__id { opacity: .8; }
+.pl-grid--list .pl-card__foot > .pl-card__state { display: inline-flex; }
 
+.pl-pager { padding-top: 4px; }
+.pl-empty { padding: 56px 20px; border: 1px dashed var(--theme-border); border-radius: var(--vg-radius); }
 .pl-prompt__text { min-height: 280px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+
+@media (max-width: 900px) {
+  .pl-search { flex: 1 1 100%; order: 10; }
+  .pl-grid--list .pl-card__title { flex-basis: 140px; }
+  .pl-grid--list .pl-card__summary { display: none; }
+}
 </style>

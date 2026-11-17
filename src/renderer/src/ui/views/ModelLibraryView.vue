@@ -1667,7 +1667,8 @@ watch([activeTab, statusFilter, search], () => {
 
 /* Detail */
 .ml-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; padding: 14px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); max-height: calc(100vh - var(--app-titlebar-height) - 40px); overflow-y: auto; scrollbar-width: thin; }
-.ml-detail__hero { position: relative; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--theme-panel-soft); }
+.ml-detail > * { flex-shrink: 0; }
+.ml-detail__hero { position: relative; aspect-ratio: 4 / 5; border-radius: 12px; overflow: hidden; background: var(--theme-panel-soft); }
 .ml-detail__hero img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
 .ml-detail__close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; color: #fff; background: rgba(15, 18, 24, .5); backdrop-filter: blur(8px); cursor: pointer; }
 .ml-detail__close:hover { background: rgba(15, 18, 24, .75); }

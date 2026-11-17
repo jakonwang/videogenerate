@@ -1,9 +1,17 @@
 import { safeStorage } from 'electron'
 import { randomUUID } from 'node:crypto'
 import type {
+  CreatorHubContactChannel,
+  CreatorHubContactInput,
+  CreatorHubFetchContactsResult,
+  CreatorHubMessageTemplate,
+  CreatorHubCreatorDetail,
   CreatorHubCreatorPerf,
   CreatorHubCreatorProfile,
+  CreatorHubDiscoverQuery,
+  CreatorHubDiscoverResult,
   CreatorHubImportCookiesInput,
+  CreatorHubPoolCreator,
   CreatorHubProductCost,
   CreatorHubSettings,
   CreatorHubShop,
@@ -12,8 +20,11 @@ import type {
   CreatorHubSyncStage,
   CreatorHubVideo,
 } from '../../../shared/creatorHub'
-import { CREATOR_HUB_SYNC_STAGES } from '../../../shared/creatorHub'
+import { CREATOR_HUB_CONTACT_STATUSES, CREATOR_HUB_MARKET_CATEGORIES, CREATOR_HUB_SYNC_STAGES } from '../../../shared/creatorHub'
 import { buildCrm, buildOverview, linkVideosToSamples } from '../../../shared/creatorHubAnalytics'
+import { buildPool } from '../../../shared/creatorHubDiscovery'
+import { DISCOVER_MAX_PAGES, discoverBody, discoverLabel, parseDiscoverPage, parseProfile, profileBody, type DiscoverCursor } from './discoverParser'
+import { applyContactInput, DEFAULT_TEMPLATES, mergeBioContact } from '../../../shared/creatorHubContacts'
 import { analyticsWindow, creatorListBody, orderListBody, parseCreatorPage, parseOrderPage, parseVideoPage, videoListBody } from './analyticsParser'
 import { clearShopSession, closeBackend, openBackend, pageApi, replaceCookies, withAffiliatePage, type ShopTarget } from './browser'
 import { parseCookieEditorJson } from './cookies'
@@ -27,6 +38,7 @@ const MAX_ORDER_PAGES = 400
 const PAGE_DELAY_MS = 1000
 
 const progress = new Map<string, CreatorHubSyncProgress>()
+const discovering = new Set<string>()
 let interruptedChecked = false
 
 function publicShop(shop: StoredShop): CreatorHubShop {
@@ -438,5 +450,199 @@ export const creatorHubService = {
     const settings = creatorHubRepo.getSettings()
     const stats = creatorStats(creatorHubRepo.listSamples(shopId), creatorHubRepo.listCosts(shopId), settings)
     return { settings, creators: stats, summary: summarize(stats) }
+  },
+
+  // ===== Creator discovery (read-only marketplace search) =====
+
+  /**
+   * Runs one marketplace search inside the shop's logged-in affiliate page and stores the
+   * creators it returns in the shop's pool. Read-only: nothing is sent to creators.
+   */
+  async discoverCreators(query: CreatorHubDiscoverQuery): Promise<CreatorHubDiscoverResult> {
+    ensureStartup()
+    const shop = requireShop(query.shopId)
+    if (discovering.has(shop.id)) throw new Error('CREATOR_HUB_DISCOVER_RUNNING')
+    const pages = Math.min(DISCOVER_MAX_PAGES, Math.max(1, Math.round(Number(query.pages) || 3)))
+    const label = discoverLabel(query, (id) => CREATOR_HUB_MARKET_CATEGORIES.find((item) => item.id === id)?.name || id)
+    discovering.add(shop.id)
+    try {
+      const params: Record<string, string> = { shop_region: shop.region }
+      if (shop.shopId) params.oec_seller_id = shop.shopId
+      const result = await withAffiliatePage(target(shop), 'affiliate/creator', async (contents) => {
+        const seen = new Map<string, CreatorHubPoolCreator>()
+        let cursor: DiscoverCursor | undefined = { page: 0 }
+        let fetchedPages = 0
+        let hasMore = false
+        for (let index = 0; index < pages && cursor; index += 1) {
+          if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1200 + Math.round(Math.random() * 800)))
+          const json = await pageApi(contents, { method: 'POST', path: '/api/v1/oec/affiliate/creator/marketplace/find', query: params, body: discoverBody(query, cursor) })
+          const parsed = parseDiscoverPage(json, shop.id)
+          fetchedPages += 1
+          parsed.rows.forEach((row) => seen.set(row.id, row))
+          hasMore = parsed.hasMore
+          cursor = parsed.rows.length ? parsed.cursor : undefined
+        }
+        const rows = [...seen.values()]
+        const saved = rows.length ? creatorHubRepo.upsertPool(rows, label) : { added: 0, updated: 0 }
+        return { fetched: rows.length, ...saved, pages: fetchedPages, hasMore }
+      })
+      creatorHubRepo.saveShop({ ...requireShop(shop.id), loginState: 'valid', lastVerifiedAt: Date.now(), updatedAt: Date.now() })
+      return result
+    } catch (error) {
+      if (String((error as Error)?.message).includes('LOGIN_EXPIRED')) await markLogin(requireShop(shop.id), 'expired')
+      throw error
+    } finally {
+      discovering.delete(shop.id)
+    }
+  },
+
+  /** Pool creators of one shop (or all shops), scored against the shop's own history. */
+  listPool(shopId?: string) {
+    return buildPool({
+      pool: creatorHubRepo.listPool(shopId),
+      crm: creatorHubService.listCrm(shopId),
+      profiles: creatorHubRepo.listProfiles(shopId),
+      samples: creatorHubRepo.listSamples(shopId),
+      contacts: creatorHubRepo.listContacts(shopId),
+    })
+  },
+
+  // ===== Creator contacts (Zalo outreach; nothing is sent from here) =====
+
+  /**
+   * Reads the profile (bio + "shared contact info" flag) of up to 50 creators inside the shop's
+   * logged-in backend, one request every 1.5-2.5 s, and keeps any Zalo / phone / email found in the bio.
+   */
+  async fetchContacts(payload: { shopId: string; creators: Array<{ creatorId: string; handle: string }> }): Promise<CreatorHubFetchContactsResult> {
+    ensureStartup()
+    const shop = requireShop(payload.shopId)
+    const creators = (payload.creators || []).filter((item) => /^\d+$/.test(String(item.creatorId || ''))).slice(0, 50)
+    if (!creators.length) throw new Error('CREATOR_HUB_CREATOR_REQUIRED')
+    if (discovering.has(shop.id)) throw new Error('CREATOR_HUB_DISCOVER_RUNNING')
+    discovering.add(shop.id)
+    const result: CreatorHubFetchContactsResult = { checked: 0, failed: 0, withZalo: 0, withPhone: 0, withEmail: 0, onBackend: 0 }
+    try {
+      const params: Record<string, string> = { shop_region: shop.region }
+      if (shop.shopId) params.oec_seller_id = shop.shopId
+      await withAffiliatePage(target(shop), 'affiliate/creator', async (contents) => {
+        for (const [index, creator] of creators.entries()) {
+          if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1500 + Math.round(Math.random() * 1000)))
+          try {
+            const parsed = parseProfile(await pageApi(contents, { method: 'POST', path: '/api/v1/oec/affiliate/creator/marketplace/profile', query: params, body: profileBody(creator.creatorId) }))
+            const id = `${shop.id}:${creator.creatorId}`
+            const contact = creatorHubRepo.saveContact(mergeBioContact(creatorHubRepo.getContact(id), { shopId: shop.id, creatorId: creator.creatorId, handle: parsed.handle || creator.handle, bio: parsed.bio, contactInfoAvailable: parsed.contactInfoAvailable, now: Date.now() }))
+            result.checked += 1
+            if (contact.zalo) result.withZalo += 1
+            if (contact.phone) result.withPhone += 1
+            if (contact.email) result.withEmail += 1
+            if (contact.contactInfoAvailable) result.onBackend += 1
+          } catch (error) {
+            if (String((error as Error)?.message).includes('LOGIN_EXPIRED')) throw error
+            console.warn('[creator-hub] profile read failed', { message: (error as Error)?.message })
+            result.failed += 1
+          }
+        }
+      })
+      return result
+    } catch (error) {
+      if (String((error as Error)?.message).includes('LOGIN_EXPIRED')) await markLogin(requireShop(shop.id), 'expired')
+      throw error
+    } finally {
+      discovering.delete(shop.id)
+    }
+  },
+
+  saveContact(input: CreatorHubContactInput) {
+    requireShop(input.shopId)
+    const creatorId = String(input.creatorId || '').trim()
+    if (!creatorId) throw new Error('CREATOR_HUB_CREATOR_REQUIRED')
+    const status = input.status && CREATOR_HUB_CONTACT_STATUSES.includes(input.status) ? input.status : undefined
+    const id = `${input.shopId}:${creatorId}`
+    return creatorHubRepo.saveContact(applyContactInput(creatorHubRepo.getContact(id), { ...input, creatorId, status }, Date.now()))
+  },
+
+  /** Records that a message went out (the user sends it in Zalo); a new contact moves to "contacted". */
+  logContact(payload: { shopId: string; creatorId: string; handle: string; channel: CreatorHubContactChannel; note?: string }) {
+    requireShop(payload.shopId)
+    const creatorId = String(payload.creatorId || '').trim()
+    if (!creatorId) throw new Error('CREATOR_HUB_CREATOR_REQUIRED')
+    const now = Date.now()
+    const id = `${payload.shopId}:${creatorId}`
+    const previous = creatorHubRepo.getContact(id) || applyContactInput(undefined, { shopId: payload.shopId, creatorId, handle: payload.handle }, now)
+    const channel: CreatorHubContactChannel = ['zalo', 'email', 'phone', 'other'].includes(payload.channel) ? payload.channel : 'other'
+    return creatorHubRepo.saveContact({
+      ...previous,
+      status: previous.status === 'none' ? 'contacted' : previous.status,
+      lastContactAt: now,
+      log: [{ at: now, channel, note: payload.note ? String(payload.note).slice(0, 200) : undefined }, ...previous.log].slice(0, 50),
+      updatedAt: now,
+    })
+  },
+
+  listTemplates(): CreatorHubMessageTemplate[] {
+    return creatorHubRepo.getTemplates() ?? DEFAULT_TEMPLATES.map((item) => ({ ...item, updatedAt: 0 }))
+  },
+
+  saveTemplate(payload: { id?: string; name: string; body: string }) {
+    const name = String(payload.name || '').trim().slice(0, 40)
+    const body = String(payload.body || '').trim().slice(0, 2000)
+    if (!name || !body) throw new Error('CREATOR_HUB_TEMPLATE_REQUIRED')
+    const list = creatorHubService.listTemplates()
+    const id = payload.id && list.some((item) => item.id === payload.id) ? payload.id : randomUUID()
+    const next = { id, name, body, updatedAt: Date.now() }
+    return creatorHubRepo.saveTemplates(list.some((item) => item.id === id) ? list.map((item) => (item.id === id ? next : item)) : [...list, next])
+  },
+
+  removeTemplate(id: string) {
+    return creatorHubRepo.saveTemplates(creatorHubService.listTemplates().filter((item) => item.id !== id))
+  },
+
+  /** Opens the creator's page in the shop's backend window (to read contact info the platform shows there). */
+  async openCreatorBackend(payload: { shopId: string; creatorId: string }) {
+    const creatorId = String(payload.creatorId || '')
+    if (!/^\d+$/.test(creatorId)) throw new Error('CREATOR_HUB_CREATOR_REQUIRED')
+    return creatorHubService.openBackend(payload.shopId, `affiliate/creator/detail?cid=${creatorId}`)
+  },
+
+  setPoolStar(payload: { ids: string[]; starred: boolean }) {
+    const ids = (payload.ids || []).map(String).filter(Boolean)
+    creatorHubRepo.setPoolStar(ids, Boolean(payload.starred))
+    return { ok: true as const, count: ids.length }
+  },
+
+  removePool(ids: string[]) {
+    const list = (ids || []).map(String).filter(Boolean)
+    creatorHubRepo.removePool(list)
+    return { ok: true as const, count: list.length }
+  },
+
+  /** Everything known about one creator in one shop: pool data, CRM row, samples, videos and orders. */
+  getCreatorDetail(payload: { shopId: string; creatorId?: string; handle?: string }): CreatorHubCreatorDetail {
+    const shopId = requireShop(payload.shopId).id
+    const creatorId = String(payload.creatorId || '').trim()
+    const handle = String(payload.handle || '').trim().toLowerCase()
+    if (!creatorId && !handle) throw new Error('CREATOR_HUB_CREATOR_REQUIRED')
+    const matches = (row: { creatorId: string; creatorHandle?: string; handle?: string }) =>
+      (creatorId && row.creatorId === creatorId) || (handle && String(row.creatorHandle ?? row.handle ?? '').toLowerCase() === handle)
+    const pool = creatorHubService.listPool(shopId).find((row) => matches(row))
+    const crm = creatorHubService.listCrm(shopId).find((row) => matches(row))
+    const samples = creatorHubRepo.listSamples(shopId).filter((row) => matches(row) || (pool && row.creatorHandle.toLowerCase() === pool.handle.toLowerCase()))
+    const videos = creatorHubRepo.listVideos(shopId).filter((row) => matches(row) || (pool && (row.creatorId === pool.creatorId || row.creatorHandle.toLowerCase() === pool.handle.toLowerCase())))
+    const orders = creatorHubRepo.listOrders(shopId).filter((row) => matches(row) || (pool && row.creatorId === pool.creatorId))
+    const contact = creatorHubRepo.listContacts(shopId).find((row) => matches(row) || (pool && row.creatorId === pool.creatorId))
+    return {
+      pool,
+      crm,
+      contact,
+      samples,
+      videos,
+      orders: {
+        count: orders.length,
+        amount: orders.reduce((sum, order) => sum + order.amount, 0),
+        commission: orders.reduce((sum, order) => sum + (order.actualCommission ?? order.estCommission), 0),
+        refunded: orders.filter((order) => order.refundQuantity > 0 || order.returnQuantity > 0).length,
+        lastAt: orders.reduce<number | undefined>((latest, order) => (latest == null || order.createdAt > latest ? order.createdAt : latest), undefined),
+      },
+    }
   },
 }
