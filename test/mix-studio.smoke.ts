@@ -1,17 +1,41 @@
 /**
  * End-to-end smoke for the mix studio (auto mode, no LLM): product footage → clip pool → drafts → render.
  * Needs Electron's Node ABI (better-sqlite3 is built for it):
- *   ELECTRON_RUN_AS_NODE=1 npx electron -r tsx/cjs test/mix-studio.smoke.ts <video1.mp4> [video2.mp4 ...]
- * Edge TTS needs network access.
+ *   ELECTRON_RUN_AS_NODE=1 npx electron --import tsx test/mix-studio.smoke.ts <video1.mp4> [video2.mp4 ...]
+ * Edge TTS needs network access. The temp data dir is deleted on success; SMOKE_KEEP=1 keeps it.
  */
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 
 const dataDir = mkdtempSync(join(tmpdir(), 'mixstudio-'))
 process.env.VIDEOGENERATE_DATA_DIR = dataDir
+
+/**
+ * Each run renders ~300 MB into dataDir, so remove it on success (set SMOKE_KEEP=1 to inspect the
+ * output). On failure it is kept for debugging. On Windows the SQLite file is still locked by this
+ * process, so if the in-process delete fails a detached helper retries once we have exited.
+ */
+function finish(code: number): never {
+  if (code !== 0 || process.env.SMOKE_KEEP === '1') {
+    console.log('data dir kept:', dataDir)
+    process.exit(code)
+  }
+  try {
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 3 })
+  } catch {
+    const script = `const fs=require('fs');let n=0;const t=setInterval(()=>{try{fs.rmSync(${JSON.stringify(dataDir)},{recursive:true,force:true});clearInterval(t)}catch{if(++n>=30)clearInterval(t)}},500)`
+    spawn(process.execPath, ['-e', script], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    }).unref()
+  }
+  process.exit(0)
+}
 
 async function main() {
   const videos = process.argv.slice(2).filter((p) => p.endsWith('.mp4'))
@@ -90,11 +114,11 @@ async function main() {
     if (process.env.SMOKE_NO_TTS !== '1') assert.ok(meta.hasAudio)
     assert.ok(t.mix?.formulaName)
   }
-  console.log('OK data dir:', dataDir)
-  process.exit(0)
+  console.log('OK')
+  finish(0)
 }
 
 main().catch((e) => {
   console.error(e)
-  process.exit(1)
+  finish(1)
 })
