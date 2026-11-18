@@ -10,6 +10,7 @@ import { createGenerationService, type GenerationProviders } from './generate'
 import { createHash } from 'node:crypto'
 import { createCloneEngine } from './cloneEngine'
 import { createRelay } from './relay'
+import { createAiProxy } from './aiProxy'
 import { applyManagedSettings } from '../../../src/shared/cloud/managedSettings'
 import { normalizeCredentials } from '../../../src/main/modules/clone/credentials'
 
@@ -44,6 +45,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     readManagedSettings: service.readManagedSettings,
     files: { read: (userId, fileId) => sync.readFile(userId, fileId), store: (userId, body, mime) => sync.uploadFile(userId, body, mime) },
     quota: ai.quota,
+    billing: service.billing,
     publicBaseUrl: () => config.publicBaseUrl,
     // Signing key for reference-image links, derived from the private key so it needs no extra setup.
     linkSecret: createHash('sha256').update(`public-files:${privateKey}`).digest('hex'),
@@ -67,7 +69,17 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     maxWorkers: Math.max(1, config.cloneEngineMaxWorkers),
     idleMs: Math.max(1, config.cloneEngineIdleMinutes) * 60_000,
   })
-  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine)
+  const aiProxy = createAiProxy({
+    db,
+    readManagedSettings: service.readManagedSettings,
+    verifyToken: service.verifyAiProxyToken,
+    billing: service.billing,
+    fetchImpl: options.fetchImpl,
+    now: options.now ?? Date.now,
+    tikhubBaseUrl: config.tikhubBaseUrl,
+    maxBodyBytes: Math.max(1, config.aiProxyMaxBodyMb) * 1024 * 1024,
+  })
+  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy)
   const server = http.createServer((req, res) => void handler(req, res))
 
   // Storage housekeeping: files no record points to are removed after CLOUD_ORPHAN_FILE_DAYS.

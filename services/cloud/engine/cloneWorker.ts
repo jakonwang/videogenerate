@@ -94,6 +94,9 @@ async function init(message: InitMessage) {
   ])
   const client = createCloudClient({ getBaseUrl: () => message.baseUrl, getToken: () => message.token })
   ;(globalThis as { __cloneEngineClient?: unknown }).__cloneEngineClient = client
+  // 服务器复刻用的是后台的平台密钥：每次视频 / 图片生成都按这个用户的套餐扣点
+  const { setUsageMeter, createCloudUsageMeter } = await import('../../../src/main/modules/clone/usageMeter')
+  setUsageMeter(createCloudUsageMeter({ client: () => client, clientKind: 'web' }))
   sync.setCloudSyncMode('clone-engine')
   sync.setCloudSyncSessionSource(() => ({ client, userId: message.userId, canWrite: true }))
   await cloneService.setModelCredentials(message.credentials)

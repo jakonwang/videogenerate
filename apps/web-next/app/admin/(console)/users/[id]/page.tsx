@@ -3,10 +3,11 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowLeft, Crown, Laptop, ReceiptText, ShieldCheck, UserRound } from 'lucide-react'
+import { ArrowLeft, Coins, Crown, Laptop, ReceiptText, ShieldCheck, UserRound } from 'lucide-react'
 
 import { formatFen } from '@shared/cloud/client'
 import type { CloudAdminUserPatch, CloudUserRole } from '@shared/cloud/types'
+import { BILLING_CAPABILITY_LABELS, CREDIT_LEDGER_LABELS } from '@shared/cloud/billing'
 import {
   AdminAvatar,
   AdminError,
@@ -45,6 +46,26 @@ export default function AdminUserDetailPage() {
   const [extendDays, setExtendDays] = useState('30')
   const [expireDate, setExpireDate] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [creditDelta, setCreditDelta] = useState('')
+  const [creditNote, setCreditNote] = useState('')
+
+  const adjustCredits = async () => {
+    const delta = Math.trunc(Number(creditDelta))
+    if (!delta) return
+    if (!window.confirm(`${delta > 0 ? '增加' : '扣减'} ${Math.abs(delta)} 点，原因：${creditNote}。确定？`)) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      detail.setData(await adminClient.admin.adjustCredits(userId, delta, creditNote))
+      setNotice({ tone: 'success', text: `点数已${delta > 0 ? '增加' : '扣减'} ${Math.abs(delta)}` })
+      setCreditDelta('')
+      setCreditNote('')
+    } catch (err) {
+      setNotice({ tone: 'danger', text: (err as Error).message })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const patch = async (input: CloudAdminUserPatch, success: string) => {
     setBusy(true)
@@ -230,6 +251,70 @@ export default function AdminUserDetailPage() {
               </div>
             </AdminPanel>
           </div>
+
+          <AdminPanel icon={Coins} title="点数" subtitle={`当前余额 ${data.credits} 点`}>
+            <div className="grid gap-4">
+              <div className="admin-form-grid">
+                <AdminField label="调整数量" hint="正数加点，负数扣点（最多扣到 0）。仅超级管理员可操作">
+                  <Input type="number" step="1" value={creditDelta} onChange={(e) => setCreditDelta(e.target.value)} placeholder="如 100 或 -50" />
+                </AdminField>
+                <AdminField label="原因" hint="必填，记在流水和操作日志里">
+                  <div className="flex gap-2">
+                    <Input value={creditNote} maxLength={200} onChange={(e) => setCreditNote(e.target.value)} placeholder="如：补偿生成失败" />
+                    <Button variant="secondary" disabled={busy || !Math.trunc(Number(creditDelta)) || !creditNote.trim()} onClick={() => void adjustCredits()}>
+                      调整
+                    </Button>
+                  </div>
+                </AdminField>
+              </div>
+              <AdminTable head={['时间', '类型', { label: '变动', align: 'right' }, { label: '余额', align: 'right' }, '说明']} empty={!data.ledger.length} emptyText="还没有点数变动">
+                {data.ledger.map((e) => (
+                  <tr key={e.id}>
+                    <td className="whitespace-nowrap text-[var(--theme-text-muted)]">{formatDateTime(e.createdAt)}</td>
+                    <td>{CREDIT_LEDGER_LABELS[e.kind] ?? e.kind}</td>
+                    <td className={`num font-semibold ${e.delta > 0 ? 'text-[var(--theme-success,#16a34a)]' : ''}`}>{e.delta > 0 ? `+${e.delta}` : e.delta}</td>
+                    <td className="num">{e.balance}</td>
+                    <td className="text-[var(--theme-text-secondary)]">{[e.note, e.kind === 'charge' || e.kind === 'refund' ? '' : e.ref].filter(Boolean).join(' · ') || '—'}</td>
+                  </tr>
+                ))}
+              </AdminTable>
+            </div>
+          </AdminPanel>
+
+          <AdminPanel flush icon={Coins} title="最近生成" subtitle="每次视频 / 图片生成的计费记录（最近 50 条）">
+            <AdminTable head={['时间', '类型', '模型', '来源', '计费', '状态', '说明']} empty={!data.holds.length} emptyText="还没有生成记录">
+              {data.holds.map((h) => (
+                <tr key={h.id}>
+                  <td className="whitespace-nowrap text-[var(--theme-text-muted)]">{formatDateTime(h.createdAt)}</td>
+                  <td>{BILLING_CAPABILITY_LABELS[h.capability] ?? h.capability}</td>
+                  <td>
+                    <span className="admin-mono">{h.model || '—'}</span>
+                    <span className="admin-sub">{h.platform || '—'}</span>
+                  </td>
+                  <td>{{ desktop: '电脑端', web: '网页', mobile: '手机', server: '云端' }[h.client] ?? h.client}{h.feature ? <span className="admin-sub">{h.feature}</span> : null}</td>
+                  <td>{h.source === 'credits' ? `${h.points} 点` : { unlimited: '不受限', included: '套餐包含', free: '每月免费' }[h.source] ?? h.source}</td>
+                  <td>
+                    {h.status === 'released' ? (
+                      <AdminTag tone="warning" dot>
+                        失败已退回
+                      </AdminTag>
+                    ) : h.status === 'held' ? (
+                      <AdminTag tone="info" dot>
+                        生成中
+                      </AdminTag>
+                    ) : (
+                      <AdminTag tone="success" dot>
+                        已完成
+                      </AdminTag>
+                    )}
+                  </td>
+                  <td className="max-w-[260px] truncate text-[var(--theme-text-secondary)]" title={h.reason}>
+                    {h.reason || '—'}
+                  </td>
+                </tr>
+              ))}
+            </AdminTable>
+          </AdminPanel>
 
           <AdminPanel flush icon={Laptop} title="绑定设备" subtitle={`${data.devices.length} 台`}>
             <AdminTable head={['设备', '机器码', '客户端版本', '绑定时间', '最近活跃', { label: '', align: 'right' }]} empty={!data.devices.length} emptyText="还没有设备登录过">

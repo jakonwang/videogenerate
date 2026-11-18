@@ -5,9 +5,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  Coins,
   FileClock,
   KeyRound,
   LayoutDashboard,
+  LockKeyhole,
   LogOut,
   Megaphone,
   Package,
@@ -19,6 +21,7 @@ import {
 
 import type { CloudPayChannel, CloudUser } from '@shared/cloud/types'
 import { AdminThemeToggle } from '@/components/admin/admin-theme'
+import { AdminPasswordPanel } from '@/components/admin/admin-password'
 import { AdminAvatar, roleLabel } from '@/components/admin/admin-ui'
 import { adminClient, getAdminToken, setAdminToken } from '@/lib/admin-client'
 import { cn } from '@/lib/utils'
@@ -38,7 +41,8 @@ const NAV: ReadonlyArray<{ section: string; items: NavItem[] }> = [
     section: '收费',
     items: [
       { href: '/admin/plans', title: '套餐与价格', icon: Package },
-      { href: '/admin/redeem-codes', title: '兑换码', icon: KeyRound },
+      { href: '/admin/billing', title: '计费与模型', icon: Coins },
+      { href: '/admin/redeem-codes', title: '卡密', icon: KeyRound },
     ],
   },
   {
@@ -66,6 +70,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [me, setMe] = useState<CloudUser | null>(null)
   const [channels, setChannels] = useState<CloudPayChannel[]>([])
+  const [changingPassword, setChangingPassword] = useState(false)
 
   useEffect(() => {
     if (!getAdminToken()) {
@@ -81,6 +86,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           return
         }
         setMe(result.user)
+        // 初始管理员改密码前，后台接口都会被拒绝，不用去拉统计
+        if (result.user.mustChangePassword) return
         adminClient.admin
           .stats()
           .then((r) => setChannels(r.channels))
@@ -136,6 +143,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <span className="max-w-[160px] truncate">{me.displayName || me.account}</span>
                 <small>{roleLabel(me.role)}</small>
               </span>
+              <button type="button" className="vg-icon-btn" onClick={() => setChangingPassword(true)} title="修改密码" aria-label="修改密码">
+                <LockKeyhole size={16} />
+              </button>
               <button type="button" className="vg-icon-btn" onClick={() => void logout()} title="退出登录" aria-label="退出登录">
                 <LogOut size={16} />
               </button>
@@ -170,7 +180,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
         <main className="admin-main">
-          {me ? (
+          {me && (me.mustChangePassword || changingPassword) ? (
+            <AdminPasswordPanel
+              forced={me.mustChangePassword}
+              onCancel={() => setChangingPassword(false)}
+              onDone={() => {
+                setChangingPassword(false)
+                setMe({ ...me, mustChangePassword: false })
+                adminClient.admin
+                  .stats()
+                  .then((r) => setChannels(r.channels))
+                  .catch(() => {})
+              }}
+            />
+          ) : me ? (
             children
           ) : (
             <div className="vg-page">

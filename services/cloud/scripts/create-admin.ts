@@ -20,7 +20,7 @@ async function main() {
   const passwordHash = await hashPassword(password)
   const existing = repo.getUserByAccount(account)
   if (existing) {
-    repo.updateUser(existing.id, { role: 'super_admin', status: 'active', passwordHash }, now)
+    repo.updateUser(existing.id, { role: 'super_admin', status: 'active', passwordHash, mustChangePassword: false }, now)
     repo.revokeUserSessions(existing.id, now)
     console.log(`已把 ${account} 设为超级管理员并重置密码`)
   } else {

@@ -12,6 +12,8 @@ import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTa
 import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
 import type { CloudSyncStatus } from '../main/modules/cloud-sync/service'
 import type { CloudDevice, CloudMeResponse, CloudOrder, CloudPage, CloudPayChannel, CloudPlansResponse } from '../shared/cloud/types'
+import type { CloudRedeemResult } from '../shared/cloud/client'
+import type { CreditsResponse } from '../shared/cloud/billing'
 
 type CloudIpcResult<T> = ({ ok: true } & T) | { ok: false; error: string; code: string; details?: unknown }
 type CloudActivation = { ok: true } | { ok: false; reason: CloudLicenseStatus['reason']; message: string; devices?: CloudDevice[]; maxDevices?: number }
@@ -1412,7 +1414,9 @@ const api = {
     getOrder: (orderNo: string) => ipcRenderer.invoke('cloud:getOrder', orderNo) as Promise<CloudIpcResult<{ order: CloudOrder; status: CloudLicenseStatus }>>,
     mockPay: (orderNo: string) => ipcRenderer.invoke('cloud:mockPay', orderNo) as Promise<CloudIpcResult<{ order: CloudOrder; status: CloudLicenseStatus }>>,
     listOrders: () => ipcRenderer.invoke('cloud:listOrders') as Promise<CloudIpcResult<CloudPage<CloudOrder>>>,
-    redeem: (code: string) => ipcRenderer.invoke('cloud:redeem', code) as Promise<CloudIpcResult<{ status: CloudLicenseStatus }>>,
+    redeem: (code: string) =>
+      ipcRenderer.invoke('cloud:redeem', code) as Promise<CloudIpcResult<{ status: CloudLicenseStatus; redeemed: CloudRedeemResult['redeemed']; credits: number }>>,
+    credits: (page?: number) => ipcRenderer.invoke('cloud:credits', page) as Promise<CloudIpcResult<CreditsResponse>>,
     getConfig: () => ipcRenderer.invoke('cloud:getConfig') as Promise<CloudIpcResult<{ values: Record<string, unknown>; version: string }>>,
     onStatusChanged: (handler: (status: CloudLicenseStatus) => void) => {
       const listener = (_event: unknown, status: CloudLicenseStatus) => handler(status)

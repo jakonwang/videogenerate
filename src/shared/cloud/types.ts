@@ -26,6 +26,8 @@ export const CLOUD_FEATURES = [
 ] as const
 export type CloudFeature = (typeof CLOUD_FEATURES)[number] | '*'
 
+import type { CloudRedeemKind, CreditLedgerEntry, PlanQuotas, UsageHold } from './billing'
+
 export type CloudApiOk<T> = { ok: true } & T
 export type CloudApiError = { ok: false; error: string; code?: CloudErrorCode; details?: unknown }
 
@@ -40,6 +42,7 @@ export type CloudErrorCode =
   | 'ACCOUNT_DISABLED'
   | 'CONFLICT'
   | 'QUOTA_EXCEEDED'
+  | 'INSUFFICIENT_CREDITS'
   | 'DESKTOP_OFFLINE'
   | 'RELAY_FAILED'
   /** 服务器复刻引擎 */
@@ -60,6 +63,8 @@ export type CloudUser = {
   unlimited: boolean
   createdAt: number
   lastLoginAt: number | null
+  /** 首次部署自动创建的管理员：改密码前不能使用后台 */
+  mustChangePassword?: boolean
 }
 
 export type CloudEntitlement = {
@@ -111,6 +116,10 @@ export type CloudPlan = {
   features: CloudFeature[]
   active: boolean
   sort: number
+  /** 每次购买 / 兑换该套餐赠送的点数 */
+  credits: number
+  /** 视频 / 图片生成的计费方式 */
+  quotas: PlanQuotas
 }
 
 export type CloudOrder = {
@@ -129,12 +138,23 @@ export type CloudOrder = {
   createdAt: number
   refundedAt: number | null
   note: string
+  /** 支付成功后发放的点数（下单时按套餐记下） */
+  credits: number
 }
 
 export type CloudRedeemCode = {
   code: string
+  /** plan：套餐卡（时长 + 套餐赠送点数）；credits：点数卡 */
+  kind: CloudRedeemKind
+  /** 点数卡为空字符串 */
   planCode: string
   days: number
+  /** 兑换后发放的点数 */
+  credits: number
+  /** 必须在此时间前兑换，null 表示不限 */
+  expiresAt: number | null
+  /** 销售渠道 / 代理备注 */
+  channel: string
   status: CloudRedeemStatus
   batchId: string
   note: string
@@ -246,6 +266,9 @@ export type CloudAdminUserDetail = {
   entitlement: CloudEntitlement
   devices: CloudDevice[]
   orders: CloudOrder[]
+  credits: number
+  ledger: CreditLedgerEntry[]
+  holds: UsageHold[]
 }
 
 export type CloudAdminUserPatch = {

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { CalendarClock, Crown, LaptopMinimal, LoaderCircle, LogOut, ReceiptText, RefreshCw, ShieldCheck, UserRound, WifiOff } from 'lucide-vue-next'
 import type { CloudDevice, CloudOrder } from '../../../../shared/cloud/types'
 import CloudPurchasePanel from '../components/cloud/CloudPurchasePanel.vue'
+import CloudCreditsPanel from '../components/cloud/CloudCreditsPanel.vue'
 import { useCloudAuthStore } from '@/stores/cloudAuth'
 
 const PERMANENT_AT = 253402214400000
@@ -22,6 +23,8 @@ const orders = ref<CloudOrder[]>([])
 const supportContact = ref('')
 const message = ref<{ tone: 'accent' | 'danger'; text: string } | null>(null)
 const unbinding = ref('')
+const creditsKey = ref(0)
+const membershipActive = computed(() => Boolean(status.value?.unlimited || (status.value?.planExpiresAt ?? 0) > Date.now()))
 
 const status = computed(() => cloudAuth.status)
 const lockedFeature = computed(() => (typeof route.query.feature === 'string' ? route.query.feature : ''))
@@ -52,6 +55,7 @@ async function load() {
   try {
     await cloudAuth.refresh()
     if (!status.value?.loggedIn) return
+    creditsKey.value += 1
     const [me, orderList, config] = await Promise.all([window.api.cloud.me(), window.api.cloud.listOrders(), window.api.cloud.getConfig()])
     if (me.ok) {
       devices.value = me.devices
@@ -141,6 +145,7 @@ onMounted(() => void load())
     <div class="vg-split membership__layout">
       <div class="vg-stack">
         <CloudPurchasePanel v-if="status?.loggedIn && !status.unlimited" @activated="load" />
+        <CloudCreditsPanel v-if="status?.loggedIn && creditsKey > 0" :refresh-key="creditsKey" :membership-active="membershipActive" />
 
         <section v-if="status?.loggedIn" class="vg-card vg-card--flush">
           <div class="vg-card__head">

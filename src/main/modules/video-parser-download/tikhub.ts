@@ -3,6 +3,18 @@
  */
 
 export const TIKHUB_FETCH_ONE_BY_SHARE_URL = 'https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_one_video_by_share_url'
+const TIKHUB_FETCH_ONE_PATH = '/api/v1/tiktok/app/v3/fetch_one_video_by_share_url'
+
+/** 商业版托管模式：TikHub 请求改走云端代理（TikHub Key 只在服务器）。null 表示直连官方地址 */
+let tikhubBaseUrlOverride: string | null = null
+
+export function setTikhubBaseUrlOverride(baseUrl: string | null) {
+  tikhubBaseUrlOverride = baseUrl ? baseUrl.replace(/\/+$/, '') : null
+}
+
+export function tikhubFetchOneUrl() {
+  return tikhubBaseUrlOverride ? `${tikhubBaseUrlOverride}${TIKHUB_FETCH_ONE_PATH}` : TIKHUB_FETCH_ONE_BY_SHARE_URL
+}
 
 export function isHttpUrl(value: string) {
   return /^https?:\/\//i.test(String(value || '').trim())

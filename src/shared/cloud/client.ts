@@ -28,6 +28,41 @@ import type {
 import type { ManagedSoftwareSettings } from './managedSettings'
 import type { AiChatRequest, AiChatResponse, AiGenerationJob, AiGenerationRequest, AiUsageResponse } from './ai'
 import type { SyncChange, SyncPullResponse, SyncPushResponse, SyncUploadResponse, SyncUsageResponse } from './sync'
+import type {
+  AiModelEntry,
+  BillingCapability,
+  BillingDefaults,
+  CloudRedeemKind,
+  CreditsResponse,
+  PricingResponse,
+  UsageHold,
+  UsageHoldRequest,
+} from './billing'
+
+export type CloudRedeemResult = {
+  entitlement: CloudEntitlement
+  redeemed: { kind: CloudRedeemKind; days: number; credits: number; planName: string | null }
+  credits: number
+}
+
+export type CloudGenerateRedeemInput = {
+  kind: CloudRedeemKind
+  planCode?: string
+  days?: number | null
+  credits?: number | null
+  count: number
+  note?: string
+  channel?: string
+  expiresAt?: number | null
+}
+
+export type CloudBillingOverview = { defaults: BillingDefaults; models: AiModelEntry[] }
+
+export type CloudUsageStats = {
+  days: number
+  outstandingCredits: number
+  models: Array<{ capability: BillingCapability; platform: string; model: string; calls: number; failed: number; points: number; users: number }>
+}
 
 export class CloudClientError extends Error {
   constructor(
@@ -162,8 +197,18 @@ export function createCloudClient(options: CloudClientOptions) {
     listOrders: (page = 1) => request<CloudPage<CloudOrder>>('GET', `/api/v1/orders${qs({ page })}`),
     mockPay: (orderNo: string) => request<{ order: CloudOrder }>('POST', `/api/v1/orders/${encodeURIComponent(orderNo)}/mock-pay`),
     getManagedSettings: (machineId: string) =>
-      request<{ settings: ManagedSoftwareSettings | null; version: string }>('GET', `/api/v1/client/managed-settings${qs({ machineId })}`),
-    redeem: (code: string) => request<{ entitlement: CloudEntitlement }>('POST', '/api/v1/redeem', { code }),
+      request<{ settings: ManagedSoftwareSettings | null; version: string; proxyToken: string | null }>('GET', `/api/v1/client/managed-settings${qs({ machineId })}`),
+    /** 托管模式：向云端要七牛单次上传凭证（七牛 AK/SK 不下发到电脑） */
+    qiniuUploadGrant: (input: { machineId: string; fileName: string; keyPrefix?: string }) =>
+      request<{ token: string; key: string; uploadHost: string; domain: string }>('POST', '/api/v1/client/qiniu-upload-grant', input),
+    redeem: (code: string) => request<CloudRedeemResult>('POST', '/api/v1/redeem', { code }),
+
+    /* 点数计费 */
+    pricing: () => request<PricingResponse>('GET', '/api/v1/pricing'),
+    credits: (page = 1) => request<CreditsResponse>('GET', `/api/v1/credits${qs({ page })}`),
+    holdUsage: (input: UsageHoldRequest) => request<{ hold: UsageHold }>('POST', '/api/v1/usage/hold', input),
+    settleUsage: (holdId: string, ok: boolean, reason?: string) =>
+      request<{ hold: UsageHold }>('POST', `/api/v1/usage/holds/${encodeURIComponent(holdId)}/settle`, { ok, reason }),
 
     admin: {
       stats: () => request<{ stats: CloudAdminStats; channels: CloudPayChannel[] }>('GET', '/api/v1/admin/stats'),
@@ -183,8 +228,17 @@ export function createCloudClient(options: CloudClientOptions) {
         request<{ order: CloudOrder }>('POST', `/api/v1/admin/orders/${encodeURIComponent(orderNo)}/refund`, input),
       listRedeemCodes: (q: { keyword?: string; status?: string; batchId?: string; page?: number }) =>
         request<CloudPage<CloudRedeemCode>>('GET', `/api/v1/admin/redeem-codes${qs(q)}`),
-      generateRedeemCodes: (input: { planCode: string; days?: number; count: number; note?: string }) =>
-        request<{ batchId: string; codes: string[] }>('POST', '/api/v1/admin/redeem-codes', input),
+      generateRedeemCodes: (input: CloudGenerateRedeemInput) => request<{ batchId: string; codes: string[] }>('POST', '/api/v1/admin/redeem-codes', input),
+      exportRedeemBatch: (batchId: string) => request<{ codes: CloudRedeemCode[] }>('GET', `/api/v1/admin/redeem-batches/${encodeURIComponent(batchId)}`),
+      setRedeemBatchStatus: (batchId: string, status: 'unused' | 'disabled') =>
+        request<{ changed: number }>('PATCH', `/api/v1/admin/redeem-batches/${encodeURIComponent(batchId)}`, { status }),
+      adjustCredits: (userId: string, delta: number, note: string) =>
+        request<CloudAdminUserDetail>('POST', `/api/v1/admin/users/${encodeURIComponent(userId)}/credits`, { delta, note }),
+      getBilling: () => request<CloudBillingOverview>('GET', '/api/v1/admin/billing'),
+      saveBillingDefaults: (defaults: BillingDefaults) => request<CloudBillingOverview>('PUT', '/api/v1/admin/billing/defaults', defaults),
+      saveModel: (model: Partial<AiModelEntry>) => request<CloudBillingOverview>('POST', '/api/v1/admin/billing/models', model),
+      deleteModel: (id: string) => request<CloudBillingOverview>('DELETE', `/api/v1/admin/billing/models/${encodeURIComponent(id)}`),
+      usageStats: (days = 30) => request<CloudUsageStats>('GET', `/api/v1/admin/billing/usage${qs({ days })}`),
       setRedeemStatus: (code: string, status: 'unused' | 'disabled') =>
         request<{ code: CloudRedeemCode }>('PATCH', `/api/v1/admin/redeem-codes/${encodeURIComponent(code)}`, { status }),
       listConfig: () => request<{ entries: CloudConfigEntry[] }>('GET', '/api/v1/admin/config'),

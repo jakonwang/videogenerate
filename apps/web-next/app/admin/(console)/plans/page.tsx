@@ -5,7 +5,15 @@ import { Package, Pencil, Plus, X } from 'lucide-react'
 
 import { formatFen } from '@shared/cloud/client'
 import { CLOUD_FEATURES, type CloudFeature, type CloudPlan } from '@shared/cloud/types'
-import { AdminError, AdminField, AdminLoading, AdminNotice, AdminPage, AdminPageHeader, AdminPanel, AdminTable, AdminTag, useAdminData } from '@/components/admin/admin-ui'
+import {
+  BILLING_CAPABILITIES,
+  BILLING_CAPABILITY_LABELS,
+  BILLING_MODE_LABELS,
+  defaultPlanQuotas,
+  type BillingMode,
+  type PlanQuotas,
+} from '@shared/cloud/billing'
+import { AdminError, AdminField, AdminLoading, AdminNotice, AdminPage, AdminPageHeader, AdminPanel, AdminTable, AdminTag, selectClass, useAdminData } from '@/components/admin/admin-ui'
 import { Button, Input, Switch } from '@/components/admin/controls'
 import { adminClient } from '@/lib/admin-client'
 import { cn } from '@/lib/utils'
@@ -22,9 +30,33 @@ const FEATURE_LABELS: Record<string, string> = {
   'creator-hub': '达人中心',
 }
 
-type PlanForm = { code: string; name: string; description: string; days: string; price: string; maxDevices: string; features: CloudFeature[]; active: boolean; sort: string; isNew: boolean }
+type PlanForm = {
+  code: string
+  name: string
+  description: string
+  days: string
+  price: string
+  maxDevices: string
+  features: CloudFeature[]
+  active: boolean
+  sort: string
+  credits: string
+  quotas: PlanQuotas
+  isNew: boolean
+}
 
-const emptyForm: PlanForm = { code: '', name: '', description: '', days: '30', price: '', maxDevices: '1', features: ['*'], active: true, sort: '0', isNew: true }
+const emptyForm: PlanForm = { code: '', name: '', description: '', days: '30', price: '', maxDevices: '1', features: ['*'], active: true, sort: '0', credits: '0', quotas: defaultPlanQuotas(), isNew: true }
+
+const MODES = Object.keys(BILLING_MODE_LABELS) as BillingMode[]
+
+/** 表格里的一行计费说明，例如「视频：每次扣点 · 图片：每月免费 20 次」 */
+function describeQuotas(quotas: PlanQuotas) {
+  return BILLING_CAPABILITIES.map((cap) => {
+    const rule = quotas[cap]
+    const text = rule.mode === 'free_then_credits' ? `每月免费 ${rule.freePerMonth} 次，超出扣点` : BILLING_MODE_LABELS[rule.mode]
+    return { cap, label: BILLING_CAPABILITY_LABELS[cap], text, mode: rule.mode }
+  })
+}
 
 function toForm(plan: CloudPlan): PlanForm {
   return {
@@ -37,6 +69,8 @@ function toForm(plan: CloudPlan): PlanForm {
     features: plan.features,
     active: plan.active,
     sort: String(plan.sort),
+    credits: String(plan.credits ?? 0),
+    quotas: plan.quotas ?? defaultPlanQuotas(),
     isNew: false,
   }
 }
@@ -65,6 +99,8 @@ export default function AdminPlansPage() {
     try {
       const amountFen = Math.round(Number(form.price) * 100)
       if (!Number.isFinite(amountFen) || amountFen <= 0) throw new Error('请填写正确的价格')
+      const credits = Math.floor(Number(form.credits || 0))
+      if (!Number.isFinite(credits) || credits < 0) throw new Error('赠送点数必须是 0 或正整数')
       await adminClient.admin.savePlan({
         code: form.code.trim(),
         name: form.name,
@@ -75,6 +111,8 @@ export default function AdminPlansPage() {
         features: form.features,
         active: form.active,
         sort: Number(form.sort),
+        credits,
+        quotas: form.quotas,
       })
       setNotice({ tone: 'success', text: `套餐「${form.name}」已保存` })
       setForm(null)
@@ -123,6 +161,50 @@ export default function AdminPlansPage() {
                 <Input type="number" value={form.sort} onChange={(e) => setForm({ ...form, sort: e.target.value })} />
               </AdminField>
             </div>
+            <div className="vg-divider" />
+            <div className="grid gap-3">
+              <div>
+                <div className="font-semibold">生成计费</div>
+                <span className="admin-sub">每次视频 / 图片生成怎么算。扣点的价格在「计费与模型」里按模型设置。</span>
+              </div>
+              <div className="admin-form-grid">
+                <AdminField label="购买 / 兑换赠送点数" hint="每买一次或兑换一张该套餐卡，送这么多点">
+                  <Input type="number" min="0" step="1" value={form.credits} onChange={(e) => setForm({ ...form, credits: e.target.value })} />
+                </AdminField>
+                {BILLING_CAPABILITIES.map((cap) => {
+                  const rule = form.quotas[cap]
+                  const setRule = (next: Partial<typeof rule>) => setForm({ ...form, quotas: { ...form.quotas, [cap]: { ...rule, ...next } } })
+                  return (
+                    <AdminField key={cap} label={BILLING_CAPABILITY_LABELS[cap]}>
+                      <div className="grid gap-2">
+                        <select className={selectClass} value={rule.mode} onChange={(e) => setRule({ mode: e.target.value as BillingMode })}>
+                          {MODES.map((mode) => (
+                            <option key={mode} value={mode}>
+                              {BILLING_MODE_LABELS[mode]}
+                            </option>
+                          ))}
+                        </select>
+                        {rule.mode === 'free_then_credits' ? (
+                          <label className="flex items-center gap-2 text-[13px]">
+                            每月免费
+                            <Input
+                              type="number"
+                              min="0"
+                              className="w-24"
+                              aria-label="每月免费次数"
+                              value={String(rule.freePerMonth)}
+                              onChange={(e) => setRule({ freePerMonth: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                            />
+                            次
+                          </label>
+                        ) : null}
+                      </div>
+                    </AdminField>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="vg-divider" />
             <AdminField label="描述" hint="展示在价格卡片上">
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </AdminField>
@@ -161,7 +243,7 @@ export default function AdminPlansPage() {
         {plans.loading && !plans.data ? <AdminLoading /> : null}
         {plans.data ? (
           <AdminTable
-            head={['套餐', { label: '价格', align: 'right' }, '时长', '设备', '功能', '状态', { label: '', align: 'right' }]}
+            head={['套餐', { label: '价格', align: 'right' }, '时长', '设备', '生成计费', '功能', '状态', { label: '', align: 'right' }]}
             empty={!plans.data.plans.length}
             emptyText="还没有套餐"
           >
@@ -177,6 +259,16 @@ export default function AdminPlansPage() {
                 <td className="num text-[15px] font-bold">{formatFen(p.amountFen)}</td>
                 <td>{p.days === 0 ? '永久' : `${p.days} 天`}</td>
                 <td>{p.maxDevices === 0 ? '不限' : `${p.maxDevices} 台`}</td>
+                <td>
+                  <div className="grid gap-0.5 text-[13px]">
+                    {describeQuotas(p.quotas).map((q) => (
+                      <span key={q.cap} className={q.mode === 'disabled' ? 'admin-sub' : undefined}>
+                        {q.label}：{q.text}
+                      </span>
+                    ))}
+                    {p.credits > 0 ? <span className="admin-sub">送 {p.credits} 点</span> : null}
+                  </div>
+                </td>
                 <td>
                   <div className="flex max-w-[280px] flex-wrap gap-1">
                     {p.features.map((f) => (

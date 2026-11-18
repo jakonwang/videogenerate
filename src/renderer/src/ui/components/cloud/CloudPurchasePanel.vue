@@ -112,6 +112,17 @@ async function mockPay() {
   }
 }
 
+/** 兑换成功提示：说清楚加了多少天、多少点（老版本云端没有 redeemed 时用原来的提示） */
+function redeemedText(redeemed?: { kind: 'plan' | 'credits'; days: number; credits: number; planName: string | null }) {
+  if (!redeemed) return t('cloud.membership.redeemed')
+  if (redeemed.kind === 'credits') return t('cloud.membership.redeemedCredits', { credits: redeemed.credits })
+  const duration = redeemed.days === 0 ? t('cloud.membership.durationForever') : t('cloud.membership.durationDays', { days: redeemed.days })
+  const plan = redeemed.planName ?? ''
+  return redeemed.credits > 0
+    ? t('cloud.membership.redeemedPlanCredits', { plan, duration, credits: redeemed.credits })
+    : t('cloud.membership.redeemedPlan', { plan, duration })
+}
+
 async function redeem() {
   const code = redeemCode.value.trim()
   if (!code) return
@@ -125,7 +136,7 @@ async function redeem() {
     }
     cloudAuth.setStatus(result.status)
     redeemCode.value = ''
-    message.value = { tone: 'accent', text: t('cloud.membership.redeemed') }
+    message.value = { tone: 'accent', text: redeemedText(result.redeemed) }
     emit('activated')
   } finally {
     redeeming.value = false
@@ -169,6 +180,7 @@ onBeforeUnmount(stopPolling)
             <b>{{ formatFen(plan.amountFen) }}</b>
             <span>/ {{ plan.days === 0 ? t('cloud.membership.forever') : t('cloud.membership.days', { count: plan.days }) }}</span>
           </div>
+          <span v-if="plan.credits > 0" class="vg-pill vg-pill--accent">{{ t('cloud.membership.planCredits', { credits: plan.credits }) }}</span>
           <span class="vg-chip">{{ plan.maxDevices === 0 ? t('cloud.membership.deviceUnlimited', { mobile: mobileSlots }) : t('cloud.membership.deviceCount', { count: plan.maxDevices, mobile: mobileSlots }) }}</span>
           <button class="vg-btn vg-btn--primary vg-btn--block" type="button" :disabled="!selectedChannel || busyPlan === plan.code" @click="buy(plan)">
             <LoaderCircle v-if="busyPlan === plan.code" :size="15" class="vg-spin" />

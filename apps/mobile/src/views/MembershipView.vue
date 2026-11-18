@@ -136,10 +136,12 @@ async function redeem() {
   if (!value) return
   redeeming.value = true
   try {
-    await cloud.redeem(value)
+    const { redeemed } = await cloud.redeem(value)
     code.value = ''
     await refreshAccount()
-    toast('兑换成功')
+    const duration = redeemed.days === 0 ? '（永久）' : ` ${redeemed.days} 天`
+    const credits = redeemed.credits > 0 ? `，到账 ${redeemed.credits} 点` : ''
+    toast(redeemed.kind === 'credits' ? `兑换成功${credits}` : `兑换成功，已开通「${redeemed.planName ?? ''}」${duration}${credits}`)
   } catch (error) {
     toast(errorMessage(error))
   } finally {

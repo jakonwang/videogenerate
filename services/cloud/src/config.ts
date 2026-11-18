@@ -43,6 +43,9 @@ export function loadCloudConfig() {
     /** 云端 AI 网关：每个账号每分钟 / 每天最多调用次数 */
     aiPerMinute: envInt('CLOUD_AI_PER_MINUTE', 20),
     aiPerDay: envInt('CLOUD_AI_PER_DAY', 500),
+    /** 电脑端 AI 代理：TikHub 上游地址、单个请求体上限（含 base64 参考图） */
+    tikhubBaseUrl: env('CLOUD_TIKHUB_BASE_URL', 'https://api.tikhub.io').replace(/\/+$/, ''),
+    aiProxyMaxBodyMb: envInt('CLOUD_AI_PROXY_MAX_BODY_MB', 64),
     /** 水印、字幕用的中文字体目录（部署时运行 npm run setup:fonts 准备） */
     fontsDir: resolve(env('CLOUD_FONTS_DIR', join(process.cwd(), 'resources', 'fonts'))),
     /** 云端同时执行的图片 / 视频生成任务数 */

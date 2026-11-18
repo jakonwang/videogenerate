@@ -1,4 +1,5 @@
 import type { ModelCredentials } from './types'
+import { withUsageCharge } from './usageMeter'
 
 export type GrsAiResult = {
   outputUrl: string
@@ -157,7 +158,7 @@ export function pickOutputUrl(json: any): string {
   return ''
 }
 
-export async function createGrsImageTask(input: {
+async function createGrsImageTaskUnmetered(input: {
   credentials: ModelCredentials
   prompt: string
   negativePrompt?: string
@@ -187,7 +188,7 @@ export async function createGrsImageTask(input: {
   return { taskId, directUrl, model: body.model, raw: json }
 }
 
-export async function createGrsVideoTask(input: {
+async function createGrsVideoTaskUnmetered(input: {
   credentials: ModelCredentials
   model?: string
   prompt: string
@@ -258,4 +259,16 @@ export async function queryGrsCredits(credentials: ModelCredentials): Promise<Gr
   const json = await postJson(`${host}/client/grsai/getCredits`, key, {})
   const n = Number(json?.data?.credits ?? json?.credits ?? json?.data?.balance ?? json?.balance)
   return { available: Number.isFinite(n) ? n : undefined, raw: json }
+}
+
+/* ------------------------------------------------------------------ 点数计费：提交任务前冻结，提交失败退回 */
+
+export async function createGrsImageTask(input: Parameters<typeof createGrsImageTaskUnmetered>[0]) {
+  const model = String(input.credentials.grsaiImageModel || '').trim() || 'gpt-image-2'
+  return await withUsageCharge({ capability: 'image', platform: 'grsai', model }, () => createGrsImageTaskUnmetered(input))
+}
+
+export async function createGrsVideoTask(input: Parameters<typeof createGrsVideoTaskUnmetered>[0]) {
+  const model = String(input.model || input.credentials.grsaiVideoModel || '').trim() || 'veo3.1-fast'
+  return await withUsageCharge({ capability: 'video', platform: 'grsai', model }, () => createGrsVideoTaskUnmetered(input))
 }

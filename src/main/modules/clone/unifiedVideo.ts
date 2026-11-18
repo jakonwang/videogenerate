@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl } from './atlasRetry'
 import { resolveApifoxHubCredentials, resolveApifoxHubProfile } from './apifoxProfile'
 import type { ModelCredentials, UnifiedCapability } from './types'
+import { withUsageCharge, type UsageCharge } from './usageMeter'
 
 const VECTOR_ENGINE_LABEL = 'VectorEngine'
 
@@ -877,7 +878,7 @@ export async function recoverTaskById(input: {
   return await syncRemoteTaskResult(input)
 }
 
-export async function createVideoTask(input: {
+async function createVideoTaskUnmetered(input: {
   credentials: ModelCredentials
   capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
   prompt: string
@@ -1187,7 +1188,7 @@ export async function createVideoTask(input: {
   throw new Error(`${providerName} 视频请求失败 HTTP ${lastFailureStatus || 503}: ${String(lastFailureText || '所有候选模型通道不可用').slice(0, 500)}`)
 }
 
-export async function generateVideo(input: {
+async function generateVideoUnmetered(input: {
   credentials: ModelCredentials
   capability: Extract<UnifiedCapability, 'video_text_to_video' | 'video_image_to_video' | 'video_start_end_to_video' | 'video_reference_to_video'>
   prompt: string
@@ -1517,4 +1518,21 @@ export async function generateVideo(input: {
     lastTransientError = String((error as any)?.message ?? error)
   }
   throw new Ai666TaskTimeoutError(providerName, taskId, lastTransientError || undefined)
+}
+
+/* ------------------------------------------------------------------ 点数计费 */
+
+function videoUsageCharge(credentials: ModelCredentials, capability: UnifiedCapability): UsageCharge {
+  const cfg = resolveApifoxHubCredentials(credentials, 'video')
+  return { capability: 'video', platform: resolveApifoxHubProfile(credentials, 'video'), model: cfg ? modelForCapability(cfg, capability) : '' }
+}
+
+/** 提交视频任务（之后另行查询结果）：提交前冻结点数，提交失败退回 */
+export async function createVideoTask(input: Parameters<typeof createVideoTaskUnmetered>[0]) {
+  return await withUsageCharge(videoUsageCharge(input.credentials, input.capability), () => createVideoTaskUnmetered(input))
+}
+
+/** 生成视频并下载到本地：开始前冻结点数，失败退回 */
+export async function generateVideo(input: Parameters<typeof generateVideoUnmetered>[0]) {
+  return await withUsageCharge(videoUsageCharge(input.credentials, input.capability), () => generateVideoUnmetered(input))
 }

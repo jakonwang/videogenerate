@@ -179,6 +179,72 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
     id: 5,
     sql: `ALTER TABLE ai_jobs ADD COLUMN result TEXT;`,
   },
+  {
+    // 点数计费：钱包、流水、生成冻结记录、模型价目；套餐 / 订单 / 卡密带上点数
+    id: 6,
+    sql: `
+      ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE plans ADD COLUMN credits INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE plans ADD COLUMN quotas TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE orders ADD COLUMN credits INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE redeem_codes ADD COLUMN kind TEXT NOT NULL DEFAULT 'plan';
+      ALTER TABLE redeem_codes ADD COLUMN credits INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE redeem_codes ADD COLUMN expires_at INTEGER;
+      ALTER TABLE redeem_codes ADD COLUMN channel TEXT NOT NULL DEFAULT '';
+      ALTER TABLE ai_jobs ADD COLUMN hold_id TEXT;
+      CREATE TABLE credit_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        delta INTEGER NOT NULL,
+        balance INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        ref TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        actor_user_id TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_credit_ledger_user ON credit_ledger(user_id, id);
+      CREATE TABLE usage_holds (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        capability TEXT NOT NULL,
+        platform TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        client TEXT NOT NULL DEFAULT '',
+        feature TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL,
+        points INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        month TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        settled_at INTEGER
+      );
+      CREATE INDEX idx_usage_holds_user_month ON usage_holds(user_id, month, capability);
+      CREATE INDEX idx_usage_holds_status ON usage_holds(status, created_at);
+      CREATE INDEX idx_usage_holds_created ON usage_holds(created_at);
+      CREATE TABLE ai_models (
+        id TEXT PRIMARY KEY,
+        capability TEXT NOT NULL,
+        platform TEXT NOT NULL DEFAULT '*',
+        model TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        points INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        plan_codes TEXT NOT NULL DEFAULT '[]',
+        sort INTEGER NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (capability, platform, model)
+      );
+    `,
+  },
+  {
+    // 首次部署自动创建的管理员：登录后必须先改密码
+    id: 7,
+    sql: `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;`,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

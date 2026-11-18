@@ -6,6 +6,7 @@ import { downloadAtlasToBuffer, pickAtlasOutputUrl } from './atlasRetry'
 import { resolveApifoxHubCredentials, resolveApifoxHubProfile } from './apifoxProfile'
 import { toPublicUrlViaQiniu } from './qiniu'
 import type { ModelCredentials, UnifiedCapability } from './types'
+import { withUsageCharge } from './usageMeter'
 
 function providerLabel(credentials: ModelCredentials) {
   return resolveApifoxHubProfile(credentials, 'image') === 'ai666' ? 'AI666' : 'VectorEngine'
@@ -208,7 +209,7 @@ async function saveOutputBase64(input: { base64: string; outDir: string; filePre
   return filePath
 }
 
-export async function generateImage(input: {
+async function generateImageUnmetered(input: {
   credentials: ModelCredentials
   prompt: string
   negativePrompt?: string
@@ -439,4 +440,11 @@ export async function generateImage(input: {
       : await saveOutputBase64({ base64: outBase64, outDir: input.outDir, filePrefix: input.filePrefix }),
     raw: json,
   }
+}
+
+/** 生成 / 编辑一张图片：开始前冻结点数，失败退回 */
+export async function generateImage(input: Parameters<typeof generateImageUnmetered>[0]) {
+  const cfg = resolveApifoxHubCredentials(input.credentials, 'image')
+  const model = String((input.capability === 'image_edit' ? cfg?.imageEditModel || cfg?.imageModel : cfg?.imageModel) || '').trim()
+  return await withUsageCharge({ capability: 'image', platform: resolveApifoxHubProfile(input.credentials, 'image'), model }, () => generateImageUnmetered(input))
 }

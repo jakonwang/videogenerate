@@ -2,6 +2,8 @@ import { createCloudApp } from './src/app'
 
 async function main() {
   const app = createCloudApp()
+  // 首次部署没有超级管理员时自动创建（账号 / 密码可用 CLOUD_ADMIN_ACCOUNT / CLOUD_ADMIN_PASSWORD 指定）
+  await app.service.ensureDefaultAdmin({ account: process.env.CLOUD_ADMIN_ACCOUNT, password: process.env.CLOUD_ADMIN_PASSWORD })
   const port = await app.listen()
   console.log(`[videogen-cloud] listening on http://${app.config.host}:${port}`)
   console.log(`[videogen-cloud] data dir: ${app.config.dataDir}`)

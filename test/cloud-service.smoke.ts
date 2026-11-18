@@ -14,7 +14,7 @@ import { buildAlipaySignContent } from '../services/cloud/src/payments/alipay'
 import { buildWechatResponseMessage } from '../services/cloud/src/payments/wechatPayV3'
 import { hashPassword, newId } from '../services/cloud/src/security'
 import { checkEntitlementToken } from '../src/shared/cloud/entitlementToken'
-import { applyManagedSettings, createDefaultManagedSettings } from '../src/shared/cloud/managedSettings'
+import { applyManagedSettings, createDefaultManagedSettings, toProxiedManagedSettings } from '../src/shared/cloud/managedSettings'
 
 const dir = mkdtempSync(join(tmpdir(), 'vg-cloud-'))
 const pem = (key: any, type: 'pkcs8' | 'spki') => key.export({ type, format: 'pem' }).toString()
@@ -393,14 +393,17 @@ async function main() {
     assert.ok(!JSON.stringify(cfgList.json).includes('sk-ai666'))
     assert.ok(!JSON.stringify(await call('GET', '/api/v1/client/config')).includes('sk-ai666'))
 
-    // 客户端：本机未激活被拒，激活设备可拿到明文（之前停用过账号，会话已失效，重新登录）
+    // 客户端：本机未激活被拒；激活设备拿到去密钥的设置 + 代理令牌，明文密钥不下发（之前停用过账号，会话已失效，重新登录）
     const relogin = await call('POST', '/api/v1/auth/login', { body: { account: 'buyer@example.com', password: 'password123', client: 'desktop', machineId: 'machine-bbbb' } })
     userToken = relogin.json.sessionToken
     assert.equal((await call('GET', '/api/v1/client/managed-settings?machineId=unknown', { token: userToken })).status, 403)
     const client = await call('GET', '/api/v1/client/managed-settings?machineId=machine-bbbb', { token: userToken })
     assert.equal(client.status, 200)
-    assert.equal(client.json.settings.platforms.ai666.apiKey, 'sk-ai666-secret-1234')
-    assert.equal(client.json.settings.qiniu.accessKey, 'AK-SECRET')
+    assert.ok(!JSON.stringify(client.json).includes('sk-ai666-secret'), '平台 Key 不能下发')
+    assert.ok(!JSON.stringify(client.json).includes('AK-SECRET') && !JSON.stringify(client.json).includes('SK-SECRET'), '七牛密钥不能下发')
+    assert.ok(!JSON.stringify(client.json).includes('tikhub-secret'), 'TikHub Key 不能下发')
+    assert.equal(client.json.settings.platforms.ai666.baseUrl, '', '真实平台地址也不下发')
+    assert.match(client.json.proxyToken, /^vgp1\./)
     assert.equal(client.json.settings.capabilities.image.model, 'gpt-image-1')
     assert.ok(client.json.version)
     assert.equal((await call('GET', '/api/v1/client/managed-settings?machineId=machine-bbbb')).status, 401)
@@ -412,10 +415,15 @@ async function main() {
     assert.equal((await call('PUT', '/api/v1/admin/software-settings', { token: ops.json.sessionToken, body: { settings } })).status, 403)
 
     // 映射到桌面端本地凭据
-    const applied = applyManagedSettings({ videoProviderPrimary: 'grsai', ai666Hub: { enabled: false, chatModel: 'keep-me' }, someLocalField: 'x' }, client.json.settings)
+    const proxied = toProxiedManagedSettings(client.json.settings, { cloudBaseUrl: 'https://cloud.example.com/', token: client.json.proxyToken })
+    const applied = applyManagedSettings({ videoProviderPrimary: 'grsai', ai666Hub: { enabled: false, chatModel: 'keep-me' }, someLocalField: 'x' }, proxied)
     assert.equal(applied.videoProviderPrimary, 'apifox_hub')
     assert.equal(applied.videoApifoxHubProfile, 'ai666')
-    assert.equal(applied.ai666Hub?.apiKey, 'sk-ai666-secret-1234')
+    assert.equal(applied.ai666Hub?.apiKey, client.json.proxyToken)
+    assert.equal(applied.ai666Hub?.baseUrl, 'https://cloud.example.com/api/v1/ai-proxy/ai666')
+    assert.equal(applied.vectorEngineHub?.apiKey, '', '后台没配 Key 的平台不给令牌')
+    assert.equal(applied.tikhubApiKey, client.json.proxyToken)
+    assert.equal(applied.qiniuAccessKey, '')
     assert.equal(applied.ai666Hub?.enabled, true)
     assert.equal(applied.ai666Hub?.startEndVideoModel, 'veo3-fast')
     assert.equal(applied.ai666Hub?.chatModel, 'keep-me')
@@ -424,7 +432,7 @@ async function main() {
     assert.equal(applied.openaiImageQuality, 'medium')
     assert.equal(applied.qiniuBucket, 'b1')
     assert.equal(applied.someLocalField, 'x')
-    assert.equal(applied.apifoxHub?.apiKey, 'sk-ai666-secret-1234')
+    assert.equal(applied.apifoxHub?.apiKey, client.json.proxyToken)
   })
 
   await app.close()

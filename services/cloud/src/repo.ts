@@ -15,6 +15,7 @@ import type {
   CloudUserStatus,
 } from '../../../src/shared/cloud/types'
 import type { CloudDb } from './db'
+import { normalizePlanQuotas, type CloudRedeemKind } from '../../../src/shared/cloud/billing'
 
 type Row = Record<string, any>
 
@@ -44,6 +45,7 @@ function mapUser(row: Row): UserRow {
     unlimited: Number(row.unlimited) === 1,
     createdAt: Number(row.created_at),
     lastLoginAt: num(row.last_login_at),
+    mustChangePassword: Number(row.must_change_password ?? 0) === 1,
     passwordHash: String(row.password_hash),
   }
 }
@@ -77,6 +79,8 @@ function mapPlan(row: Row): CloudPlan {
     features: parseJson<CloudFeature[]>(row.features, []),
     active: Number(row.active) === 1,
     sort: Number(row.sort ?? 0),
+    credits: Number(row.credits ?? 0),
+    quotas: normalizePlanQuotas(parseJson<unknown>(row.quotas, {})),
   }
 }
 
@@ -97,14 +101,19 @@ function mapOrder(row: Row): CloudOrder {
     createdAt: Number(row.created_at),
     refundedAt: num(row.refunded_at),
     note: String(row.note ?? ''),
+    credits: Number(row.credits ?? 0),
   }
 }
 
 function mapRedeem(row: Row): CloudRedeemCode {
   return {
     code: String(row.code),
-    planCode: String(row.plan_code),
+    kind: (row.kind === 'credits' ? 'credits' : 'plan') as CloudRedeemKind,
+    planCode: String(row.plan_code ?? ''),
     days: Number(row.days),
+    credits: Number(row.credits ?? 0),
+    expiresAt: num(row.expires_at),
+    channel: String(row.channel ?? ''),
     status: row.status as CloudRedeemStatus,
     batchId: String(row.batch_id),
     note: String(row.note ?? ''),
@@ -170,6 +179,7 @@ export function createRepo(db: CloudDb) {
       planExpiresAt: number | null
       passwordHash: string
       lastLoginAt: number
+      mustChangePassword: boolean
     }>, now: number) {
       const columns: Record<string, string> = {
         displayName: 'display_name',
@@ -180,6 +190,7 @@ export function createRepo(db: CloudDb) {
         planExpiresAt: 'plan_expires_at',
         passwordHash: 'password_hash',
         lastLoginAt: 'last_login_at',
+        mustChangePassword: 'must_change_password',
       }
       const sets: string[] = []
       const values: Array<string | number | null> = []
@@ -301,11 +312,11 @@ export function createRepo(db: CloudDb) {
     },
     upsertPlan(plan: CloudPlan, now: number) {
       db.prepare(
-        `INSERT INTO plans (code, name, description, days, amount_fen, max_devices, features, active, sort, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO plans (code, name, description, days, amount_fen, max_devices, features, active, sort, credits, quotas, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(code) DO UPDATE SET name = excluded.name, description = excluded.description, days = excluded.days,
            amount_fen = excluded.amount_fen, max_devices = excluded.max_devices, features = excluded.features,
-           active = excluded.active, sort = excluded.sort, updated_at = excluded.updated_at`,
+           active = excluded.active, sort = excluded.sort, credits = excluded.credits, quotas = excluded.quotas, updated_at = excluded.updated_at`,
       ).run(
         plan.code,
         plan.name,
@@ -316,6 +327,8 @@ export function createRepo(db: CloudDb) {
         JSON.stringify(plan.features),
         plan.active ? 1 : 0,
         plan.sort,
+        Math.max(0, Math.floor(plan.credits ?? 0)),
+        JSON.stringify(normalizePlanQuotas(plan.quotas)),
         now,
         now,
       )
@@ -327,8 +340,8 @@ export function createRepo(db: CloudDb) {
     /* ---------------------------------------------------------- orders */
     insertOrder(order: CloudOrder, now: number) {
       db.prepare(
-        `INSERT INTO orders (order_no, user_id, plan_code, plan_name, days, amount_fen, channel, status, qr_content, expire_at, created_at, updated_at, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO orders (order_no, user_id, plan_code, plan_name, days, amount_fen, channel, status, qr_content, expire_at, created_at, updated_at, note, credits)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         order.orderNo,
         order.userId,
@@ -343,6 +356,7 @@ export function createRepo(db: CloudDb) {
         now,
         now,
         order.note,
+        Math.max(0, Math.floor(order.credits ?? 0)),
       )
     },
     getOrder(orderNo: string): CloudOrder | null {
@@ -406,11 +420,23 @@ export function createRepo(db: CloudDb) {
     },
 
     /* ---------------------------------------------------------- redeem codes */
-    insertRedeemCode(input: { code: string; planCode: string; days: number; batchId: string; note: string; createdBy: string; now: number }) {
+    insertRedeemCode(input: {
+      code: string
+      kind: CloudRedeemKind
+      planCode: string
+      days: number
+      credits: number
+      expiresAt: number | null
+      channel: string
+      batchId: string
+      note: string
+      createdBy: string
+      now: number
+    }) {
       db.prepare(
-        `INSERT INTO redeem_codes (code, plan_code, days, status, batch_id, note, created_by, created_at)
-         VALUES (?, ?, ?, 'unused', ?, ?, ?, ?)`,
-      ).run(input.code, input.planCode, input.days, input.batchId, input.note, input.createdBy, input.now)
+        `INSERT INTO redeem_codes (code, kind, plan_code, days, credits, expires_at, channel, status, batch_id, note, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'unused', ?, ?, ?, ?)`,
+      ).run(input.code, input.kind, input.planCode, input.days, input.credits, input.expiresAt, input.channel, input.batchId, input.note, input.createdBy, input.now)
     },
     getRedeemCode(code: string): CloudRedeemCode | null {
       const row = db.prepare('SELECT * FROM redeem_codes WHERE code = ?').get(code) as Row | undefined
@@ -422,6 +448,13 @@ export function createRepo(db: CloudDb) {
     },
     setRedeemStatus(code: string, status: CloudRedeemStatus) {
       db.prepare("UPDATE redeem_codes SET status = ? WHERE code = ? AND status != 'used'").run(status, code)
+    },
+    /** 导出一个批次的全部卡密（单批最多 1000 个） */
+    listRedeemBatch(batchId: string): CloudRedeemCode[] {
+      return (db.prepare('SELECT * FROM redeem_codes WHERE batch_id = ? ORDER BY code LIMIT 1000').all(batchId) as Row[]).map(mapRedeem)
+    },
+    setRedeemBatchStatus(batchId: string, status: CloudRedeemStatus): number {
+      return Number(db.prepare("UPDATE redeem_codes SET status = ? WHERE batch_id = ? AND status != 'used'").run(status, batchId).changes)
     },
     listRedeemCodes(input: { batchId?: string; status?: string; keyword?: string; page: number; pageSize: number }) {
       const where: string[] = []
@@ -435,8 +468,8 @@ export function createRepo(db: CloudDb) {
         values.push(input.status)
       }
       if (input.keyword) {
-        where.push("(code LIKE ? ESCAPE '\\' OR note LIKE ? ESCAPE '\\')")
-        values.push(likeTerm(input.keyword), likeTerm(input.keyword))
+        where.push("(code LIKE ? ESCAPE '\\' OR note LIKE ? ESCAPE '\\' OR channel LIKE ? ESCAPE '\\')")
+        values.push(likeTerm(input.keyword), likeTerm(input.keyword), likeTerm(input.keyword))
       }
       const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
       const total = Number((db.prepare(`SELECT COUNT(*) AS n FROM redeem_codes ${clause}`).get(...values) as Row).n)

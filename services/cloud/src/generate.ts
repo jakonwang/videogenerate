@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import type { CloudDb } from './db'
+import type { BillingService } from './billing'
 import { badRequest, CloudError } from './security'
 import { applyManagedSettings, type ManagedSoftwareSettings } from '../../../src/shared/cloud/managedSettings'
 import type { AiGenerationJob, AiGenerationKind, AiGenerationRequest } from '../../../src/shared/cloud/ai'
@@ -36,6 +37,7 @@ type JobRow = {
   error: string | null
   created_at: number
   updated_at: number
+  hold_id: string | null
 }
 
 type Quota = { assert: (userId: string) => void; record: (userId: string, purpose: string, ok: boolean) => void }
@@ -86,6 +88,8 @@ export function createGenerationService(deps: {
   readManagedSettings: () => ManagedSoftwareSettings
   files: FileStore
   quota: Quota
+  /** 点数计费：图片 / 视频任务创建时冻结，结束时结算 */
+  billing?: Pick<BillingService, 'hold' | 'settle'>
   /** 对外访问地址（如 https://api.example.com），GRS.AI 和视频平台下载参考图要用 */
   publicBaseUrl: () => string
   linkSecret: string
@@ -114,7 +118,9 @@ export function createGenerationService(deps: {
   const laneOf = (kind: AiGenerationKind) => (FFMPEG_KINDS.has(kind) ? lanes.ffmpeg : lanes.ai)
 
   // Jobs interrupted by a restart cannot resume (their provider task handles are gone).
+  const interrupted = db.prepare("SELECT hold_id FROM ai_jobs WHERE status IN ('queued', 'running') AND hold_id IS NOT NULL").all() as Array<{ hold_id: string }>
   db.prepare("UPDATE ai_jobs SET status = 'failed', error = '服务重启，任务中断，请重新生成', updated_at = ? WHERE status IN ('queued', 'running')").run(now())
+  for (const row of interrupted) settleHold(row.hold_id, false, '服务重启，任务中断')
 
   function toJob(row: JobRow): AiGenerationJob {
     const input = JSON.parse(row.input) as AiGenerationRequest
@@ -144,6 +150,17 @@ export function createGenerationService(deps: {
       now(),
       id,
     )
+    // 任务结束时结算点数：成功确认，失败退回
+    if (row.hold_id && (patch.status === 'succeeded' || patch.status === 'failed')) settleHold(row.hold_id, patch.status === 'succeeded', patch.error ?? '')
+  }
+
+  function settleHold(holdId: string, ok: boolean, reason: string) {
+    if (!deps.billing) return
+    try {
+      deps.billing.settle(null, holdId, ok, reason.slice(0, 200))
+    } catch (error) {
+      console.warn('[cloud-generate] 点数结算失败', holdId, (error as Error).message)
+    }
   }
 
   const VIDEO_TOOLS: VideoToolKind[] = ['watermark', 'subtitle', 'slice', 'mix', 'parse-link', 'frames', 'live-analyze', 'live-export']
@@ -384,7 +401,18 @@ export function createGenerationService(deps: {
     }
     const id = `job_${randomUUID()}`
     const t = now()
-    db.prepare('INSERT INTO ai_jobs (id, user_id, kind, status, input, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, userId, kind, 'queued', JSON.stringify(input), t, t)
+    // 图片 / 视频生成先冻结点数（点数不足、套餐不含时在这里直接报错，不排队）
+    let holdId: string | null = null
+    if ((kind === 'image' || kind === 'video') && deps.billing) {
+      const cap = deps.readManagedSettings().capabilities[kind]
+      holdId = deps.billing.hold(userId, { capability: kind, platform: cap.platform, model: cap.model, client: 'server', feature: input.purpose }).id
+    }
+    try {
+      db.prepare('INSERT INTO ai_jobs (id, user_id, kind, status, input, created_at, updated_at, hold_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, kind, 'queued', JSON.stringify(input), t, t, holdId)
+    } catch (error) {
+      if (holdId) settleHold(holdId, false, '任务创建失败')
+      throw error
+    }
     laneOf(kind).queue.push(id)
     pump()
     return get(userId, id)

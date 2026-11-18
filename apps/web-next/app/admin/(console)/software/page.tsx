@@ -82,7 +82,7 @@ export default function AdminSoftwareSettingsPage() {
       <AdminPageHeader
         icon={SlidersHorizontal}
         title="软件设置"
-        description="统一配置所有客户端使用的 AI 平台、默认模型和存储。开启下发后，用户无需自己填写 Key，客户端对应设置变为只读。"
+        description="统一配置所有客户端使用的 AI 平台、默认模型和存储。开启后，用户无需自己填写 Key，客户端对应设置变为只读；Key 只在服务器，生成请求经云端转发。"
         actions={
           <>
             {remote.data?.updatedAt ? <span className="vg-muted text-[12px]">最近保存 {formatDateTime(remote.data.updatedAt)}</span> : null}
@@ -103,7 +103,7 @@ export default function AdminSoftwareSettingsPage() {
               checked={form.enabled}
               onChange={(v) => setForm({ ...form, enabled: v })}
               label={<b>统一下发到客户端</b>}
-              hint="只下发给会员有效且已激活的设备；退出登录或会员失效时自动从电脑上清除"
+              hint="只对会员有效且已激活的设备生效；退出登录、解绑或会员失效时立即停用"
             />
             <div className="ml-auto flex items-center gap-2">
               <AdminTag tone={configuredCount ? 'success' : 'idle'}>{configuredCount} / {MANAGED_PLATFORM_KEYS.length} 个平台已配置</AdminTag>
@@ -119,7 +119,7 @@ export default function AdminSoftwareSettingsPage() {
 
           <div className="vg-notice vg-notice--warning">
             <ShieldAlert size={15} />
-            <span>Key 会下发到用户电脑上使用，懂技术的用户仍可能获取。建议给客户端单独开 Key、在平台侧设置额度上限，并定期轮换。</span>
+            <span>Key 只保存在服务器，不会发到用户电脑：电脑端的生成请求由云端带上 Key 转发并扣点。仍建议在平台侧设置额度上限，并定期轮换。</span>
           </div>
 
           <AdminPanel icon={KeyRound} title="AI 平台密钥" subtitle="显示为 •••• 的表示已设置，保持不动即不修改">

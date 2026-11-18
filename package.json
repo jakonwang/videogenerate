@@ -135,6 +135,9 @@
     "test:tiktok-listing-grs-image-aspect-ratio": "tsx test/tiktok-listing-grs-image-aspect-ratio.smoke.ts",
     "test:tiktok-listing-prompts": "tsx test/tiktok-listing-prompts.smoke.ts",
     "test:cloud": "tsx test/cloud-service.smoke.ts",
+    "test:cloud-billing": "tsx test/cloud-billing.smoke.ts",
+    "test:cloud-ai-proxy": "tsx test/cloud-ai-proxy.smoke.ts",
+    "test:cloud-default-admin": "tsx test/cloud-default-admin.smoke.ts",
     "test:cloud-license:e2e": "node test/cloud-license-electron.e2e.cjs"
   },
   "dependencies": {

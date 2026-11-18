@@ -15,8 +15,10 @@ import { CloudClientError, createCloudClient } from '../../shared/cloud/client'
 import { checkEntitlementToken } from '../../shared/cloud/entitlementToken'
 import { ENTITLEMENT_PUBLIC_KEY_PEM } from '../../shared/cloud/entitlementPublicKey'
 import type { CloudDevice, CloudEntitlement, CloudFeature, CloudPayChannel, CloudUser, EntitlementTokenPayload } from '../../shared/cloud/types'
-import { applyManagedSettings, SECRET_MASK_PREFIX, type LocalModelCredentials, type ManagedSoftwareSettings } from '../../shared/cloud/managedSettings'
+import { AI_PROXY_PATH, applyManagedSettings, SECRET_MASK_PREFIX, toProxiedManagedSettings, type LocalModelCredentials, type ManagedSoftwareSettings } from '../../shared/cloud/managedSettings'
 import { decryptRuntimeString, encryptRuntimeString } from './runtimeCrypto'
+import { setQiniuUploadGrantProvider } from '../modules/clone/qiniu'
+import { setTikhubBaseUrlOverride } from '../modules/video-parser-download/tikhub'
 
 declare const __VG_LICENSE_MODE__: string | undefined
 declare const __VG_CLOUD_API_BASE__: string | undefined
@@ -274,6 +276,24 @@ export function overlayManagedCredentials(payload: Record<string, unknown>): Rec
   return applyManagedSettings(payload as LocalModelCredentials, managedCache)
 }
 
+/** 托管模式下，七牛上传凭证和 TikHub 请求都改走云端（AK/SK、TikHub Key 不在本机） */
+function installManagedProxyHooks(active: boolean) {
+  if (!active) {
+    setQiniuUploadGrantProvider(null)
+    setTikhubBaseUrlOverride(null)
+    return
+  }
+  setQiniuUploadGrantProvider(async (input) => {
+    if (!state?.sessionToken) throw new Error('请先登录账号再上传素材')
+    return await client.qiniuUploadGrant({ machineId: getMachineId(), fileName: input.fileName, keyPrefix: input.keyPrefix })
+  })
+  setTikhubBaseUrlOverride(`${getCloudApiBase().replace(/\/+$/, '')}${AI_PROXY_PATH}/tikhub`)
+}
+
+/**
+ * 拉取后台设置。平台 Key 不会下发：云端返回去密钥的设置 + 代理令牌，
+ * 本机把各平台地址改成云端代理地址、Key 改成代理令牌，生成请求由云端转发并扣点。
+ */
 async function syncManagedSettings() {
   if (!state?.entitlementToken) return
   if (!managedBridge) {
@@ -284,12 +304,14 @@ async function syncManagedSettings() {
   try {
     const result = await client.getManagedSettings(getMachineId())
     if (!state) return
-    if (result.settings) {
-      managedCache = result.settings
+    if (result.settings && result.proxyToken) {
+      const proxied = toProxiedManagedSettings(result.settings, { cloudBaseUrl: getCloudApiBase(), token: result.proxyToken })
+      managedCache = proxied
       const current = (await managedBridge.load()) as LocalModelCredentials
-      await managedBridge.save(applyManagedSettings(current, result.settings))
+      await managedBridge.save(applyManagedSettings(current, proxied))
       state.managedActive = true
       state.managedVersion = result.version
+      installManagedProxyHooks(true)
       await saveState()
     } else if (state.managedActive) {
       await clearManagedCredentials()
@@ -302,10 +324,11 @@ async function syncManagedSettings() {
   }
 }
 
-/** 退出登录 / 授权失效 / 后台关闭下发时，从本机删除后台下发的密钥 */
+/** 退出登录 / 授权失效 / 后台关闭下发时，从本机删除代理令牌和代理地址 */
 async function clearManagedCredentials() {
   const wasActive = Boolean(state?.managedActive)
   managedCache = null
+  installManagedProxyHooks(false)
   if (state) {
     state.managedActive = false
     state.managedVersion = undefined
@@ -313,11 +336,17 @@ async function clearManagedCredentials() {
   if (!wasActive || !managedBridge) return
   try {
     const current = (await managedBridge.load()) as Record<string, any>
+    const proxyRoot = `${getCloudApiBase().replace(/\/+$/, '')}${AI_PROXY_PATH}`
+    const isProxyUrl = (value: unknown) => String(value || '').startsWith(proxyRoot)
     for (const field of FLAT_SECRET_FIELDS) current[field] = ''
-    for (const field of HUB_FIELDS) if (current[field] && typeof current[field] === 'object') current[field] = { ...current[field], apiKey: '' }
+    if (isProxyUrl(current.grsaiHost)) current.grsaiHost = ''
+    for (const field of HUB_FIELDS) {
+      if (!current[field] || typeof current[field] !== 'object') continue
+      current[field] = { ...current[field], apiKey: '', ...(isProxyUrl(current[field].baseUrl) ? { baseUrl: '' } : {}) }
+    }
     await managedBridge.save(current)
   } catch (error) {
-    console.warn('[cloud-license] 清除下发的密钥失败', (error as Error)?.message ?? error)
+    console.warn('[cloud-license] 清除下发的设置失败', (error as Error)?.message ?? error)
   }
 }
 
@@ -428,6 +457,9 @@ export function getCloudSyncSession(): { client: typeof client; userId: string; 
 
 export async function initCloudLicense() {
   await loadState()
+  // 商业版托管模式：生成请求走云端代理，由云端扣点（本机不再持有平台密钥，也不在本机计费）。
+  // 上次退出时仍是托管状态：先装上七牛 / TikHub 的云端钩子，同步完成前也能用。
+  installManagedProxyHooks(Boolean(state?.managedActive))
   if (refreshTimer) clearInterval(refreshTimer)
   refreshTimer = setInterval(() => void refreshCloudLicense(), REFRESH_INTERVAL_MS)
   refreshTimer.unref?.()
@@ -549,9 +581,17 @@ export function registerCloudLicenseIpc() {
 
   ipcMain.handle('cloud:redeem', async (_e, code: string) => {
     try {
-      await client.redeem(String(code))
+      const result = await client.redeem(String(code))
       const status = await refreshCloudLicense()
-      return { ok: true as const, status }
+      return { ok: true as const, status, redeemed: result.redeemed, credits: result.credits }
+    } catch (error) {
+      return errorPayload(error)
+    }
+  })
+
+  ipcMain.handle('cloud:credits', async (_e, page?: number) => {
+    try {
+      return { ok: true as const, ...(await client.credits(Math.max(1, Math.floor(Number(page) || 1)))) }
     } catch (error) {
       return errorPayload(error)
     }

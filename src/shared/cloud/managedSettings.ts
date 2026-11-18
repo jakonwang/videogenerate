@@ -255,3 +255,40 @@ export function applyManagedSettings(current: LocalModelCredentials, managed: Ma
 
 /** 后台负责的本地字段：托管模式下这些字段在客户端只读、对渲染进程打码 */
 export const MANAGED_SECRET_FIELDS = ['grsaiApiKey', 'tikhubApiKey', 'qiniuAccessKey', 'qiniuSecretKey'] as const
+
+/* ------------------------------------------------------------------ 云端代理（密钥只在服务器） */
+
+/** 经过云端 AI 代理的平台：后台的平台 Key 只保存在服务器，电脑端拿到的是代理地址 + 代理令牌 */
+export const AI_PROXY_PLATFORMS = [...MANAGED_PLATFORM_KEYS, 'tikhub'] as const
+export type AiProxyPlatform = (typeof AI_PROXY_PLATFORMS)[number]
+export const AI_PROXY_PATH = '/api/v1/ai-proxy'
+export const TIKHUB_DEFAULT_BASE_URL = 'https://api.tikhub.io'
+/** 下发给客户端的设置里，「后台已配置这个密钥」用这个占位，真实密钥不出服务器 */
+export const PROXY_KEY_PLACEHOLDER = '__cloud_proxy__'
+
+/** 服务器 → 客户端：去掉所有密钥（平台 Key、TikHub、七牛 AK/SK），已配置的平台 Key 换成占位符 */
+export function stripManagedSecretsForClient(settings: ManagedSoftwareSettings): ManagedSoftwareSettings {
+  const copy = normalizeManagedSettings(settings)
+  for (const key of MANAGED_PLATFORM_KEYS) {
+    copy.platforms[key] = { apiKey: copy.platforms[key].apiKey ? PROXY_KEY_PLACEHOLDER : '', baseUrl: '' }
+  }
+  copy.tikhubApiKey = copy.tikhubApiKey ? PROXY_KEY_PLACEHOLDER : ''
+  copy.qiniu = { ...copy.qiniu, accessKey: '', secretKey: '' }
+  return copy
+}
+
+/**
+ * 客户端：把去密钥的设置换成「走云端代理」的版本——每个已配置平台的地址改成
+ * `${cloudBase}/api/v1/ai-proxy/<平台>`、Key 改成代理令牌。之后照常交给 applyManagedSettings。
+ */
+export function toProxiedManagedSettings(settings: ManagedSoftwareSettings, input: { cloudBaseUrl: string; token: string }): ManagedSoftwareSettings {
+  const copy = normalizeManagedSettings(settings)
+  const root = `${String(input.cloudBaseUrl || '').replace(/\/+$/, '')}${AI_PROXY_PATH}`
+  for (const key of MANAGED_PLATFORM_KEYS) {
+    const configured = Boolean(copy.platforms[key].apiKey)
+    copy.platforms[key] = configured ? { apiKey: input.token, baseUrl: `${root}/${key}` } : { apiKey: '', baseUrl: '' }
+  }
+  copy.tikhubApiKey = copy.tikhubApiKey ? input.token : ''
+  copy.qiniu = { ...copy.qiniu, accessKey: '', secretKey: '' }
+  return copy
+}

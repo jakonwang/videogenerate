@@ -9,6 +9,7 @@ import type { AiService } from './ai'
 import type { GenerationService } from './generate'
 import { SYNC_MAX_FILE_BYTES } from '../../../src/shared/cloud/sync'
 import { CloudError, badRequest } from './security'
+import type { AiProxy } from './aiProxy'
 
 const MAX_BODY_BYTES = 1024 * 1024
 
@@ -58,7 +59,7 @@ function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   return String(req.socket.remoteAddress || '').slice(0, 64)
 }
 
-export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine) {
+export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy) {
   const routes: Array<{ method: string; pattern: RegExp; keys: string[]; handler: Handler; options: RouteOptions }> = []
 
   function route(method: string, path: string, handler: Handler, options: RouteOptions = {}) {
@@ -73,14 +74,22 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   }
 
   const user = (ctx: Ctx) => service.authenticate(ctx.token).user
-  const admin = (ctx: Ctx) => ({ user: service.authenticate(ctx.token, { admin: true }).user, ip: ctx.ip })
+  const admin = (ctx: Ctx) => {
+    const current = service.authenticate(ctx.token, { admin: true }).user
+    if (current.mustChangePassword) throw new CloudError('FORBIDDEN', '请先修改初始密码再使用管理后台', 403, { reason: 'password_change_required' })
+    return { user: current, ip: ctx.ip }
+  }
   const query = (ctx: Ctx) => Object.fromEntries(ctx.url.searchParams.entries())
 
   /* ---------------------------------------------------------------- 公共 */
   route('GET', '/api/v1/health', () => ({ status: 'up', time: Date.now() }))
   route('GET', '/api/v1/client/config', () => service.publicConfig())
   route('GET', '/api/v1/plans', () => service.listPlans())
-  route('GET', '/api/v1/client/managed-settings', (ctx) => service.clientManagedSettings(user(ctx), String(ctx.url.searchParams.get('machineId') || '')))
+  route('GET', '/api/v1/client/managed-settings', (ctx) => {
+    const auth = service.authenticate(ctx.token)
+    return service.clientManagedSettings(auth.user, String(ctx.url.searchParams.get('machineId') || ''), auth.tokenHash)
+  })
+  route('POST', '/api/v1/client/qiniu-upload-grant', (ctx) => service.qiniuUploadGrant(user(ctx), String(ctx.body.machineId || ''), ctx.body))
 
   /* ---------------------------------------------------------------- 账号 */
   route('POST', '/api/v1/auth/register', (ctx) => service.register(ctx.body as any, ctx.ip))
@@ -155,7 +164,19 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   route('GET', '/api/v1/orders', (ctx) => service.listOwnOrders(user(ctx), ctx.url.searchParams.get('page'), ctx.url.searchParams.get('pageSize')))
   route('GET', '/api/v1/orders/:orderNo', async (ctx) => ({ order: await service.getOwnOrder(user(ctx), ctx.params.orderNo) }))
   route('POST', '/api/v1/orders/:orderNo/mock-pay', (ctx) => ({ order: service.mockPay(user(ctx), ctx.params.orderNo) }))
-  route('POST', '/api/v1/redeem', (ctx) => ({ entitlement: service.redeem(user(ctx), ctx.body.code, ctx.ip) }))
+  route('POST', '/api/v1/redeem', (ctx) => service.redeemDetailed(user(ctx), ctx.body.code, ctx.ip))
+
+  /* ---------------------------------------------------------------- 点数计费 */
+  route('GET', '/api/v1/pricing', () => service.billing.pricing())
+  route('GET', '/api/v1/credits', (ctx) => {
+    const page = Math.max(1, Number.parseInt(String(ctx.url.searchParams.get('page') || '1'), 10) || 1)
+    return service.billing.credits(user(ctx), page, 20)
+  })
+  // 电脑端 / 服务器复刻引擎每次向 AI 平台发起视频 / 图片生成前冻结点数，结束后结算
+  route('POST', '/api/v1/usage/hold', (ctx) => ({ hold: service.billing.hold(user(ctx).id, ctx.body as any) }))
+  route('POST', '/api/v1/usage/holds/:id/settle', (ctx) => ({
+    hold: service.billing.settle(user(ctx).id, ctx.params.id, ctx.body.ok === true, String(ctx.body.reason || '')),
+  }))
 
   /* ---------------------------------------------------------------- 支付回调（不鉴权，靠验签） */
   route('POST', '/api/v1/pay/notify/wechat', (ctx) => {
@@ -183,7 +204,15 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   }))
   route('GET', '/api/v1/admin/redeem-codes', (ctx) => (admin(ctx), service.admin.listRedeemCodes(query(ctx))))
   route('POST', '/api/v1/admin/redeem-codes', (ctx) => service.admin.generateRedeemCodes(admin(ctx), ctx.body as any))
-  route('PATCH', '/api/v1/admin/redeem-codes/:code', (ctx) => ({ code: service.admin.setRedeemStatus(admin(ctx), ctx.params.code, ctx.body.status === 'disabled' ? 'disabled' : 'unused') }))
+  route('GET', '/api/v1/admin/redeem-batches/:batchId', (ctx) => (admin(ctx), service.admin.exportRedeemBatch(ctx.params.batchId)))
+  route('PATCH', '/api/v1/admin/redeem-batches/:batchId', (ctx) => service.admin.setRedeemBatchStatus(admin(ctx), ctx.params.batchId, ctx.body.status === 'disabled' ? 'disabled' : 'unused'))
+  route('POST', '/api/v1/admin/users/:id/credits', (ctx) => service.admin.adjustCredits(admin(ctx), ctx.params.id, ctx.body as any))
+  route('GET', '/api/v1/admin/billing', (ctx) => (admin(ctx), service.admin.billing()))
+  route('PUT', '/api/v1/admin/billing/defaults', (ctx) => service.admin.saveBillingDefaults(admin(ctx), ctx.body))
+  route('POST', '/api/v1/admin/billing/models', (ctx) => service.admin.upsertModel(admin(ctx), ctx.body))
+  route('DELETE', '/api/v1/admin/billing/models/:id', (ctx) => service.admin.deleteModel(admin(ctx), ctx.params.id))
+  route('GET', '/api/v1/admin/billing/usage', (ctx) => (admin(ctx), service.admin.usageStats(ctx.url.searchParams.get('days'))))
+  route('PATCH', '/api/v1/admin/redeem-codes/:code',(ctx) => ({ code: service.admin.setRedeemStatus(admin(ctx), ctx.params.code, ctx.body.status === 'disabled' ? 'disabled' : 'unused') }))
   route('GET', '/api/v1/admin/config', (ctx) => (admin(ctx), { entries: service.admin.listConfig() }))
   route('PUT', '/api/v1/admin/config/:key', (ctx) => ({ entry: service.admin.upsertConfig(admin(ctx), { value: ctx.body.value, scope: ctx.body.scope, description: ctx.body.description, key: ctx.params.key }) }))
   route('DELETE', '/api/v1/admin/config/:key', (ctx) => (service.admin.deleteConfig(admin(ctx), ctx.params.key), {}))
@@ -216,6 +245,8 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     try {
       const pathname = new URL(req.url || '/', 'http://cloud.local').pathname
       if (await webApp(req, res, pathname)) return
+      // 电脑端 AI 请求代理（自己处理请求体与流式响应，不走下面的 JSON 路由）
+      if (aiProxy && (await aiProxy.handle(req, res, pathname))) return
     } catch (error) {
       console.error('[cloud] 网页版文件读取失败', error)
       if (!res.headersSent) {

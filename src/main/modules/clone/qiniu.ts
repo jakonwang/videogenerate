@@ -38,6 +38,19 @@ function mimeByPath(filePath: string) {
   return 'image/png'
 }
 
+/**
+ * 商业版托管模式：七牛 AK/SK 只在云端，电脑端每次上传前向云端要「只能写这一个文件」的上传凭证。
+ * 由 cloudLicense 在托管模式下注册；云端 / 内部版不注册，继续用本地 AK/SK 签名。
+ */
+export type QiniuUploadGrant = { token: string; key: string; uploadHost: string; domain: string }
+type QiniuUploadGrantProvider = (input: { fileName: string; keyPrefix?: string }) => Promise<QiniuUploadGrant>
+let uploadGrantProvider: QiniuUploadGrantProvider | null = null
+
+export function setQiniuUploadGrantProvider(next: QiniuUploadGrantProvider | null) {
+  uploadGrantProvider = next
+  publicUrlCache.clear()
+}
+
 function requireQiniuConfig(credentials: ModelCredentials) {
   const accessKey = String(credentials.qiniuAccessKey || '').trim()
   const secretKey = String(credentials.qiniuSecretKey || '').trim()
@@ -52,11 +65,31 @@ function requireQiniuConfig(credentials: ModelCredentials) {
     bucket,
     domain,
     uploadHost: cleanUploadHost(String(credentials.qiniuUploadHost || '').trim()),
-    prefix: String(credentials.qiniuPrefix || '').trim().replace(/^\/+|\/+$/g, '') || 'videogenerate/clone',
+    prefix: qiniuPrefixOf(credentials.qiniuPrefix),
   }
 }
 
-function uploadToken(input: { accessKey: string; secretKey: string; bucket: string; key: string }) {
+export function qiniuPrefixOf(prefix: unknown) {
+  return String(prefix || '').trim().replace(/^\/+|\/+$/g, '') || 'videogenerate/clone'
+}
+
+/** 生成对象名：前缀 / 子目录 / 时间_随机_文件名（云端签发上传凭证时也用这个规则） */
+export function qiniuObjectKey(input: { prefix: string; keyPrefix?: string; fileName: string }) {
+  const ext = extname(input.fileName).toLowerCase() || '.png'
+  const safeName = basename(input.fileName).replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80)
+  const keyPrefix = String(input.keyPrefix || '').replace(/[^a-zA-Z0-9/_-]+/g, '_').replace(/^\/+|\/+$/g, '').replace(/\/{2,}/g, '/').slice(0, 80)
+  return [input.prefix, keyPrefix, `${Date.now()}_${randomUUID()}_${safeName || `asset${ext}`}`].filter(Boolean).join('/')
+}
+
+export function qiniuDomainOf(domain: unknown) {
+  return cleanDomain(String(domain || ''))
+}
+
+export function qiniuUploadHostOf(host: unknown) {
+  return cleanUploadHost(String(host || ''))
+}
+
+export function qiniuUploadToken(input: { accessKey: string; secretKey: string; bucket: string; key: string }) {
   const deadline = Math.floor(Date.now() / 1000) + 3600
   const policy = base64Url(JSON.stringify({ scope: `${input.bucket}:${input.key}`, deadline }))
   const sign = createHmac('sha1', input.secretKey).update(policy).digest()
@@ -64,13 +97,25 @@ function uploadToken(input: { accessKey: string; secretKey: string; bucket: stri
 }
 
 export async function uploadToQiniu(input: { credentials: ModelCredentials; filePath: string; keyPrefix?: string }) {
-  const cfg = requireQiniuConfig(input.credentials)
   const ext = extname(input.filePath).toLowerCase() || '.png'
   const safeName = basename(input.filePath).replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80)
-  const key = [cfg.prefix, input.keyPrefix, `${Date.now()}_${randomUUID()}_${safeName || `asset${ext}`}`]
-    .filter(Boolean)
-    .join('/')
-  const token = uploadToken({ accessKey: cfg.accessKey, secretKey: cfg.secretKey, bucket: cfg.bucket, key })
+  let key: string
+  let token: string
+  let domain: string
+  let cfg: { uploadHost: string }
+  if (uploadGrantProvider && !String(input.credentials.qiniuSecretKey || '').trim()) {
+    const grant = await uploadGrantProvider({ fileName: safeName || `asset${ext}`, keyPrefix: input.keyPrefix })
+    key = grant.key
+    token = grant.token
+    domain = cleanDomain(grant.domain)
+    cfg = { uploadHost: cleanUploadHost(grant.uploadHost) }
+  } else {
+    const local = requireQiniuConfig(input.credentials)
+    key = qiniuObjectKey({ prefix: local.prefix, keyPrefix: input.keyPrefix, fileName: safeName || `asset${ext}` })
+    token = qiniuUploadToken({ accessKey: local.accessKey, secretKey: local.secretKey, bucket: local.bucket, key })
+    domain = local.domain
+    cfg = local
+  }
   const buf = await readFile(input.filePath)
 
   const makeForm = () => {
@@ -103,7 +148,7 @@ export async function uploadToQiniu(input: { credentials: ModelCredentials; file
     json = { raw: text }
   }
   const returnedKey = String(json?.key || key)
-  return `${cfg.domain}/${returnedKey.split('/').map(encodeURIComponent).join('/')}`
+  return `${domain}/${returnedKey.split('/').map(encodeURIComponent).join('/')}`
 }
 
 export async function toPublicUrlViaQiniu(credentials: ModelCredentials, value: string, keyPrefix?: string) {

@@ -6,6 +6,23 @@
 ${DOMAIN} {
 	encode zstd gzip
 
+	# 电脑端 AI 代理：平台 Key 只在服务器，生成请求经这里转发并扣点。
+	# 请求体含 base64 参考图（最多 64MB）；同步出图可能要好几分钟；对话是流式输出
+	@aiproxy path /api/v1/ai-proxy/*
+	handle @aiproxy {
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy ${MS_PROJECT}-cloud:18300 {
+			flush_interval -1
+			lb_try_duration 10s
+			transport http {
+				read_timeout 900s
+				write_timeout 900s
+			}
+		}
+	}
+
 	@cloud path /api/v1/* /app /app/*
 	handle @cloud {
 		# 上传最大 210MB；电脑代办长轮询需要不缓冲

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
-  TIKHUB_FETCH_ONE_BY_SHARE_URL,
+  tikhubFetchOneUrl,
   isHttpUrl,
   isKnownNonVideoAssetUrl,
   resolveAuthor,
@@ -108,7 +108,7 @@ async function downloadBinaryFile(url: string, targetPath: string) {
 }
 
 async function fetchTikHubPayload(apiKey: string, shareUrl: string) {
-  const url = new URL(TIKHUB_FETCH_ONE_BY_SHARE_URL)
+  const url = new URL(tikhubFetchOneUrl())
   url.searchParams.set('share_url', shareUrl)
   const response = await deps.fetchImpl(url.toString(), {
     headers: {
